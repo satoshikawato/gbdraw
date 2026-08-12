@@ -7,11 +7,23 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
 const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
+const serviceNames = [
+  'session-feature-metadata.js',
+  'svg-result-normalization.js',
+  'svg-result-ingestion.js',
+  'svg-sanitization.js',
+  'svg-serialization.js'
+];
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
+await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
+await Promise.all(serviceNames.map(async (name) => {
+  const servicePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', name);
+  await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
+}));
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 
@@ -88,6 +100,23 @@ assert.equal(runtime.flushActiveResult(), true);
 assert.equal(serializeCount, 1);
 assert.equal(state.results.value[0].content, '<svg data-count="1" data-elements="3"></svg>');
 assert.equal(state.skipCaptureBaseConfig.value, true);
+
+state.skipCaptureBaseConfig.value = false;
+assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), false);
+assert.equal(runtime.applyFeatureFillChanges([{ featureId: 'feature-b', color: '#111111' }]), false);
+featureBBlock.setAttribute('stroke', '#222222');
+featureBBlock.setAttribute('stroke-width', '3');
+featureBConnector.setAttribute('stroke', '#222222');
+featureBConnector.setAttribute('stroke-width', '3');
+assert.equal(runtime.applyFeatureStrokeChanges([{
+  featureId: 'feature-b',
+  strokeColor: '#222222',
+  strokeWidth: 3
+}]), false);
+assert.equal(runtime.getActiveRuntime().dirty, false);
+assert.equal(runtime.flushActiveResult(), false);
+assert.equal(serializeCount, 1);
+assert.equal(state.skipCaptureBaseConfig.value, false);
 state.skipCaptureBaseConfig.value = false;
 assert.equal(runtime.flushActiveResult(), false);
 assert.equal(serializeCount, 1);

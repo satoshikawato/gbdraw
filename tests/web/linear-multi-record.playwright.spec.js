@@ -128,10 +128,11 @@ test('Pairwise match popup selects the active SVG match until closed', async ({ 
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
+    const { ingestSvgResult } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
     app.mode = 'linear';
-    app.results.splice(0, app.results.length, {
+    app.results.splice(0, app.results.length, ingestSvgResult({
       name: 'pairwise-selection.svg',
       content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
         <path data-gbdraw-pairwise-match-id="match-1" data-match-kind="pairwise"
@@ -139,7 +140,7 @@ test('Pairwise match popup selects the active SVG match until closed', async ({ 
           data-qstart="1" data-qend="20" data-sstart="5" data-send="24"
           fill="#94a3b8" d="M 10 20 L 40 20 L 45 60 L 15 60 Z" />
       </svg>`
-    });
+    }));
     app.selectedResultIndex = 0;
   });
 

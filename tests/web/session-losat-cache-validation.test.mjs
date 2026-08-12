@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
+import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
   Vue: {
@@ -13,6 +14,7 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+installFakeSvgDom();
 let restoredPrimaryTextReads = 0;
 let restoredPrimaryArrayBufferReads = 0;
 globalThis.File = class File extends Blob {
@@ -460,7 +462,7 @@ ORIGIN
     ui: { mode: 'linear', selectedResultIndex: 0 },
     results: [{
       name: 'catalog-session',
-      content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+      content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g id="diagram"></g></svg>'
     }],
     features: {},
     editorState: {

@@ -71,7 +71,6 @@ import {
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout
 } from './current-option-values.js';
-import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
 import {
   discoverGffFastaRecords,
   discoverSequenceRecords
@@ -102,7 +101,10 @@ import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups
 } from '../services/orthogroup-feature-metadata.js';
-import { prepareCandidateRenderCommit } from './candidate-render.js';
+import {
+  prepareCandidateRenderCommit,
+  prepareReflowResultCommit
+} from './candidate-render.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('circular')
@@ -800,7 +802,8 @@ export const createRunAnalysis = ({
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
   losatExecutor = runLosatPairsParallel,
-  prepareCandidateCommit = prepareCandidateRenderCommit
+  prepareCandidateCommit = prepareCandidateRenderCommit,
+  prepareReflowCommit = prepareReflowResultCommit
 }) => {
   const {
     pyodideReady,
@@ -825,6 +828,7 @@ export const createRunAnalysis = ({
     featureColorOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
+    legendStrokeOverrides,
     selectedPalette,
     currentColors,
     paletteDefinitions,
@@ -1370,31 +1374,6 @@ export const createRunAnalysis = ({
     );
   };
 
-  const removePairwiseIdentityLegendFromSvgContent = (content) => {
-    if (typeof content !== 'string') return content;
-    const doc = new DOMParser().parseFromString(content, 'image/svg+xml');
-    const parseError = doc.querySelector('parsererror');
-    if (parseError) return content;
-    let removed = false;
-    doc.querySelectorAll(PAIRWISE_LEGEND_SELECTOR).forEach((legend) => {
-      legend.remove();
-      removed = true;
-    });
-    if (!removed) return content;
-    return new XMLSerializer().serializeToString(doc.documentElement);
-  };
-
-  const stripPairwiseIdentityLegendsFromResults = (items) => {
-    if (!Array.isArray(items)) return items;
-    return items.map((item) => {
-      if (!item || typeof item.content !== 'string') return item;
-      return {
-        ...item,
-        content: removePairwiseIdentityLegendFromSvgContent(item.content)
-      };
-    });
-  };
-
   const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
@@ -1697,7 +1676,7 @@ export const createRunAnalysis = ({
         };
     const restoreManualCancelSnapshot = () => {
       if (!manualCancelSnapshot) return;
-      applyGeneratedArtifactSnapshot(manualCancelSnapshot.artifact);
+      applyGeneratedArtifactSnapshot(manualCancelSnapshot.artifact, { restoreResults: false });
       results.value = manualCancelSnapshot.resultIdentity;
       extractedFeatures.value = manualCancelSnapshot.extractedFeatureIdentity;
       if (biologicalFeatures) {
@@ -4037,27 +4016,39 @@ export const createRunAnalysis = ({
         skipPositionReapply.value = true;
       }
 
-      const candidateResults = shouldSuppressPairwiseIdentityLegend(activeComparisonPlanSnapshot)
-        ? stripPairwiseIdentityLegendsFromResults(res)
-        : res;
+      const suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend(
+        activeComparisonPlanSnapshot
+      );
       const candidateCatalog = isReflow
         ? null
-        : validateFeatureCatalog(generationMetadata.featureCatalog, candidateResults);
-      const candidateCommit = candidateCatalog
+        : validateFeatureCatalog(generationMetadata.featureCatalog, res);
+      const candidateCommit = isReflow
         ? measureTiming(
+            postGbdrawTimingEntries,
+            'run-analysis commit sanitized reflow results',
+            () => prepareReflowCommit({
+              results: res,
+              suppressPairwiseIdentityLegend,
+              features: extractedFeatures.value,
+              featureStrokeOverrides,
+              legendStrokeOverrides
+            })
+          )
+        : measureTiming(
             postGbdrawTimingEntries,
             'run-analysis sanitize and reapply editor overrides',
             () => prepareCandidateCommit({
-              results: candidateResults,
+              results: res,
               catalog: candidateCatalog,
               mode: mode.value,
               featureColorOverrides,
               featureStrokeOverrides,
+              legendStrokeOverrides,
               manualSpecificRules,
-              legacyFeatures: manualCancelSnapshot?.artifact?.features?.extractedFeatures || []
+              legacyFeatures: manualCancelSnapshot?.artifact?.features?.extractedFeatures || [],
+              suppressPairwiseIdentityLegend
             })
-          )
-        : null;
+          );
 
       if (generationToken !== latestGenerationToken) {
         if (
@@ -4075,7 +4066,7 @@ export const createRunAnalysis = ({
       }
 
       measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
-        if (isReflow) results.value = candidateResults;
+        if (isReflow) results.value = candidateCommit.results;
       });
       let candidateRunInfo = null;
       let candidateCliHelpers = null;

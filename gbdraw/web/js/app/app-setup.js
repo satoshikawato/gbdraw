@@ -52,11 +52,7 @@ import { createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
-import {
-  COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE,
-  compositionUserDeltas
-} from './legend-layout/composition-actions.js';
+import { compositionUserDeltas } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
@@ -1032,7 +1028,8 @@ export const createAppSetup = () => {
     state,
     watch,
     nextTick,
-    legendActions
+    legendActions,
+    previewRuntime
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
@@ -1830,7 +1827,7 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, legendActions, svgActions, history });
+  const legendLayout = createLegendLayout({ state, legendActions, history });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
@@ -1910,7 +1907,7 @@ export const createAppSetup = () => {
     }
   });
 
-  const refreshLoadedSessionSvgLayout = async ({ ui = {} } = {}) => {
+  const refreshLoadedSessionSvgLayout = async () => {
     await nextTick();
     await new Promise((resolve) => {
       if (typeof window.requestAnimationFrame === 'function') {
@@ -1923,33 +1920,9 @@ export const createAppSetup = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
     try {
-      const hasSchema = svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null;
-      const hasMetadata = svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null;
-      if (!hasSchema && !hasMetadata) {
-        legendLayout.normalizeLegacySvg({
-          legendSide: form.legend || 'none',
-          titleSide: adv.plot_title_position || 'none',
-          userDeltas: {
-            primary: ui.diagramOffset
-              ? [ui.diagramOffset.x, ui.diagramOffset.y]
-              : null,
-            legend: ui.legendCurrentOffset
-              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
-              : null,
-            lengthBar: ui.lengthBarUserOffset
-              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
-              : null,
-            title: ui.plotTitleUserOffset
-              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
-              : null
-          }
-        });
-      } else {
-        legendLayout.captureBaseConfig();
-      }
+      legendLayout.captureBaseConfig();
       legendActions.setupLegendDrag();
       legendLayout.setupDiagramDrag(false);
-      legendLayout.persistCurrentSvg();
     } catch (error) {
       errorLog.value = {
         summary: error?.message || 'The saved SVG composition metadata is invalid.',
@@ -1959,20 +1932,8 @@ export const createAppSetup = () => {
     }
   };
 
-  const restoreLoadedSessionLegendEntries = async (editorState) => {
-    const entries = Array.isArray(editorState?.legend?.entries)
-      ? editorState.legend.entries
-          .map((entry) => ({
-            ...entry,
-            caption: String(entry?.caption || '').trim(),
-            color: String(entry?.color || '').trim()
-          }))
-          .filter((entry) => entry.caption && entry.color)
-      : [];
-    if (!entries.length || !svgContent.value) return;
-
-    if (!pyodideReady.value) await pyodideManager.initPyodide();
-    if (!pyodideReady.value) return;
+  const synchronizeLoadedSessionLegendEntries = async () => {
+    if (!svgContent.value) return;
 
     let svgReady = false;
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1985,25 +1946,9 @@ export const createAppSetup = () => {
     }
     if (!svgReady) return;
 
+    // The admitted, sanitized Result is the sole visual authority. Extraction
+    // only carries nonvisual metadata when both its caption and color match.
     legendActions.extractLegendEntries();
-
-    const expectedCaptions = new Set(entries.map((entry) => entry.caption));
-    for (const entry of [...legendEntries.value]) {
-      const caption = String(entry?.caption || '').trim();
-      if (caption && !expectedCaptions.has(caption)) {
-        legendActions.removeLegendEntry(caption);
-      }
-    }
-
-    for (const entry of entries) {
-      await legendActions.addLegendEntry(entry.caption, entry.color);
-    }
-
-    legendEntries.value = entries.map((entry) => ({
-      ...entry,
-      showStroke: Boolean(entry.showStroke),
-      featureIds: Array.isArray(entry.featureIds) ? entry.featureIds : []
-    }));
   };
 
   const importSession = async (event) => {
@@ -2020,7 +1965,7 @@ export const createAppSetup = () => {
     if (result?.status === 'ok' || result?.status === 'legacy') {
       await nextTick();
       if (result?.status === 'ok') {
-        await restoreLoadedSessionLegendEntries(result.data?.editorState);
+        await synchronizeLoadedSessionLegendEntries();
       }
       await history.captureBaseline('Loaded session');
     }

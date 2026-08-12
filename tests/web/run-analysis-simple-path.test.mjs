@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import test from 'node:test';
+import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -13,6 +14,7 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+installFakeSvgDom();
 globalThis.alert = () => {};
 globalThis.confirm = () => true;
 if (!globalThis.crypto) globalThis.crypto = webcrypto;

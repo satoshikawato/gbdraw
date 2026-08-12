@@ -809,11 +809,6 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
     name: `renamed-cache-input-${index + 1}.gbk`,
     lastModified: 0
   })));
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.pyodideReady === true,
-    null,
-    { timeout: 240000 }
-  );
   const legacyUiBeforeCancel = await migrationUiSnapshot(page);
   const canceledLegacyRun = await cancelDuringRender(page);
   await settleAppRender(page);
@@ -854,11 +849,6 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, migratedPath);
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.pyodideReady === true,
-    null,
-    { timeout: 240000 }
-  );
   const regeneratedRun = await generateWithTelemetry(page);
   await settleAppRender(page);
   assertExpectedTelemetry(regeneratedRun);

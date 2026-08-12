@@ -1,5 +1,5 @@
 import {
-  buildFeatureElementIndex,
+  getFeatureElementIndex,
   getFeatureElements
 } from '../feature-editor/svg-actions.js';
 import { setClassToken } from '../../services/svg-serialization.js';
@@ -33,7 +33,7 @@ export const stripPreviewFeatureSearchClasses = (svg) => {
   });
 };
 
-export const getPreviewFeatureElementIndex = (svg) => buildFeatureElementIndex(svg, { rebuild: true });
+export const getPreviewFeatureElementIndex = (svg) => getFeatureElementIndex(svg);
 
 export const createPreviewFeatureSearchDomState = () => ({
   svg: null,

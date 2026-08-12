@@ -199,3 +199,61 @@ test('the embedded Python render bridge has no alternate production caller', () 
     new Map([['app/python-helpers.js', 1]])
   );
 });
+
+test('History intent and SVG admission have one production ownership path', () => {
+  assert.deepEqual(
+    importersOf('services/svg-sanitization.js'),
+    ['services/svg-result-ingestion.js']
+  );
+  assert.deepEqual(
+    occurrenceOwners(/\bsanitizeSvgContent\s*\(/g),
+    new Map([['services/svg-result-ingestion.js', 1]])
+  );
+  assert.deepEqual(importersOf('services/svg-result-ingestion.js'), [
+    'app/candidate-render.js',
+    'app/preview-runtime.js',
+    'app/session-feature-metadata.js',
+    'app/watchers.js',
+    'services/config.js',
+    'state.js'
+  ]);
+  assert.deepEqual(importersOf('services/session-feature-metadata.js'), [
+    'app/session-feature-metadata.js',
+    'services/svg-result-ingestion.js'
+  ]);
+  assert.deepEqual(importersOf('services/svg-result-normalization.js'), [
+    'app/svg-styles.js',
+    'services/config.js',
+    'services/svg-result-ingestion.js'
+  ]);
+  assert.doesNotMatch(
+    productionSources.get('app/session-feature-metadata.js'),
+    /DOMParser|parseFromString|result\?\.content/
+  );
+  assert.match(
+    productionSources.get('app/feature-search/preview-svg.js'),
+    /getPreviewFeatureElementIndex\s*=\s*\(svg\)\s*=>\s*getFeatureElementIndex\(svg\)/
+  );
+  assert.doesNotMatch(
+    productionSources.get('app/feature-search/preview-svg.js'),
+    /rebuild\s*:\s*true|buildFeatureElementIndex/
+  );
+  assert.doesNotMatch(
+    productionSources.get('app/watchers.js'),
+    /ensureUniqueSkewClipPathIds|ensureUniquePairwiseGradientIds|reapplyStrokeOverrides/
+  );
+  assert.doesNotMatch(
+    productionSources.get('app/legend/entry-actions.js'),
+    /normalizeLegacyLegendEntryGroups/
+  );
+  assert.doesNotMatch(
+    productionSources.get('app/app-setup.js'),
+    /normalizeLegacySvg|normalizeLegacyComposition/
+  );
+  assert.match(
+    productionSources.get('services/config.js'),
+    /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+normalizeLegacyComposition\(svg,/
+  );
+  assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
+  assert.deepEqual(occurrenceOwners(/\bapplyHistorySnapshot\b/g), new Map());
+});

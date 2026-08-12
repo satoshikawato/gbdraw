@@ -14,8 +14,9 @@ import {
   migrateLegacyFeatureOverrides
 } from '../services/feature-override-identity.js';
 import { cloneJsonValue } from '../services/json-clone.js';
-import { serializeCleanSvg } from '../services/svg-serialization.js';
-import { sanitizeSvgContent } from '../services/svg-sanitization.js';
+import { ingestSvgResults } from '../services/svg-result-ingestion.js';
+import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
+import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
 
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
@@ -73,27 +74,13 @@ const featureElementsById = (svg) => {
   return index;
 };
 
-const parseSanitizedSvg = (content, sanitizer) => {
-  const sanitized = sanitizeSvgContent(content, sanitizer);
-  if (typeof DOMParser !== 'function') {
-    throw new Error('SVG parsing is unavailable.');
-  }
-  const document = new DOMParser().parseFromString(sanitized, 'image/svg+xml');
-  if (
-    document.querySelector('parsererror')
-    || String(document.documentElement?.localName || '').toLowerCase() !== 'svg'
-  ) {
-    throw new Error('The diagram engine returned malformed SVG content.');
-  }
-  return document.documentElement;
-};
-
 const applyItemFeatureOverrides = ({
   svg,
   item,
   fillOverrides,
   strokeOverrides
 }) => {
+  let changed = false;
   const elementsById = featureElementsById(svg);
   item.features.forEach((rendered) => {
     const renderedId = text(rendered.svgId);
@@ -114,7 +101,10 @@ const applyItemFeatureOverrides = ({
     );
     if (fillValue) {
       filterFeatureFillTargets(elements).forEach((element) => {
-        element.setAttribute('fill', fillValue);
+        if (element.getAttribute('fill') !== fillValue) {
+          element.setAttribute('fill', fillValue);
+          changed = true;
+        }
       });
     }
 
@@ -128,11 +118,55 @@ const applyItemFeatureOverrides = ({
       : null;
     if (!strokeValue && strokeWidth === null) return;
     elements.forEach((element) => {
-      if (strokeValue) element.setAttribute('stroke', strokeValue);
-      if (strokeWidth !== null) element.setAttribute('stroke-width', strokeWidth);
+      if (strokeValue && element.getAttribute('stroke') !== strokeValue) {
+        element.setAttribute('stroke', strokeValue);
+        changed = true;
+      }
+      if (
+        strokeWidth !== null
+        && element.getAttribute('stroke-width') !== String(strokeWidth)
+      ) {
+        element.setAttribute('stroke-width', strokeWidth);
+        changed = true;
+      }
     });
   });
+  return changed;
 };
+
+const removePairwiseIdentityLegend = (svg) => {
+  let changed = false;
+  svg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR).forEach((legend) => {
+    legend.remove();
+    changed = true;
+  });
+  return changed;
+};
+
+export const prepareReflowResultCommit = ({
+  results,
+  suppressPairwiseIdentityLegend = false,
+  features = [],
+  featureStrokeOverrides = {},
+  legendStrokeOverrides = {},
+  sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
+}) => ({
+  results: ingestSvgResults(results, {
+    sanitizer,
+    transformSvg: (svg) => {
+      const legendChanged = suppressPairwiseIdentityLegend
+        ? removePairwiseIdentityLegend(svg)
+        : false;
+      const strokeChanged = applyStrokeOverridesToSvg({
+        svg,
+        features,
+        featureStrokeOverrides,
+        legendStrokeOverrides
+      }) > 0;
+      return legendChanged || strokeChanged;
+    }
+  })
+});
 
 export const prepareCandidateRenderCommit = ({
   results,
@@ -140,11 +174,15 @@ export const prepareCandidateRenderCommit = ({
   mode = '',
   featureColorOverrides,
   featureStrokeOverrides,
+  legendStrokeOverrides = {},
   manualSpecificRules = [],
   legacyFeatures = [],
-  sanitizer = globalThis.DOMPurify
+  preparedFeatureState = null,
+  suppressPairwiseIdentityLegend = false,
+  transformSvg = null,
+  sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
 }) => {
-  const featureState = featureStateFromCatalog(catalog, { mode });
+  const featureState = preparedFeatureState || featureStateFromCatalog(catalog, { mode });
   const fillOverrides = cloneJsonValue(featureColorOverrides, {});
   const strokeOverrides = cloneJsonValue(featureStrokeOverrides, {});
   const migrationOptions = { legacyFeatures };
@@ -168,22 +206,33 @@ export const prepareCandidateRenderCommit = ({
   const itemsByIndex = new Map(
     catalog.items.map((item) => [item.resultIndex, item])
   );
-  const processedResults = results.map((result, resultIndex) => {
-    const item = itemsByIndex.get(resultIndex);
-    if (!item) {
-      throw new Error('The diagram engine returned incomplete feature metadata.');
+  const processedResults = ingestSvgResults(results, {
+    sanitizer,
+    transformSvg: (svg, { resultIndex }) => {
+      const item = itemsByIndex.get(resultIndex);
+      if (!item) {
+        throw new Error('The diagram engine returned incomplete feature metadata.');
+      }
+      const legendChanged = suppressPairwiseIdentityLegend
+        ? removePairwiseIdentityLegend(svg)
+        : false;
+      const overridesChanged = applyItemFeatureOverrides({
+        svg,
+        item,
+        fillOverrides,
+        strokeOverrides
+      });
+      const legendStrokeChanged = applyStrokeOverridesToSvg({
+        svg,
+        features: featureState.extractedFeatures,
+        legendStrokeOverrides,
+        featureStrokeOverrides: {}
+      }) > 0;
+      const callerChanged = typeof transformSvg === 'function'
+        ? Boolean(transformSvg(svg, { resultIndex }))
+        : false;
+      return legendChanged || overridesChanged || legendStrokeChanged || callerChanged;
     }
-    const svg = parseSanitizedSvg(result?.content, sanitizer);
-    applyItemFeatureOverrides({
-      svg,
-      item,
-      fillOverrides,
-      strokeOverrides
-    });
-    return {
-      ...result,
-      content: serializeCleanSvg(svg)
-    };
   });
 
   return {

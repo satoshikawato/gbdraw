@@ -5,6 +5,11 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await page.waitForFunction(
+    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    null,
+    { timeout: 180000 }
+  );
 
   const imported = await page.evaluate(async () => {
     const inspectSettings = (app) => ({
@@ -57,11 +62,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   });
 
   expect(imported.result).toBe('ok');
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.pyodideReady === true,
-    null,
-    { timeout: 180000 }
-  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__?.pyodideReady)).toBe(false);
   expect(imported.settings.cdsColor).toBe('#dddddd');
   expect(imported.settings.labels).toBe('first');
   expect(imported.settings.recordLabels[0]).toContain('Streptomyces lividus');

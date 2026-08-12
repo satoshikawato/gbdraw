@@ -21,6 +21,7 @@ import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE
 } from './legend-layout/composition-actions.js';
+import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
@@ -60,6 +61,7 @@ export const setupWatchers = ({
     addedLegendCaptions,
     layoutRepositionMode,
     editableLabels,
+    results,
     svgContent,
     selectedResultIndex,
     form,
@@ -133,16 +135,10 @@ export const setupWatchers = ({
     extractLegendEntries,
     setupLegendDrag,
     refreshLegendDragAffordances,
-    reapplyStrokeOverrides,
     syncFileLegendEntries
   } = legendActions;
 
-  const {
-    applyPaletteToSvg,
-    applySpecificRulesToSvg,
-    ensureUniquePairwiseGradientIds,
-    ensureUniqueSkewClipPathIds
-  } = svgActions;
+  const { applyPaletteToSvg, applySpecificRulesToSvg } = svgActions;
   const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
@@ -357,23 +353,6 @@ export const setupWatchers = ({
         previewRuntime?.clearActiveRuntime?.();
       }
 
-      if (svg && !isIncrementalEdit) {
-        const normalizedSvgChanged = measureTiming(timingEntries, 'watch(svgContent) normalize unique SVG ids', () => {
-          const skewChanged = ensureUniqueSkewClipPathIds(svg);
-          const gradientChanged = ensureUniquePairwiseGradientIds(svg);
-          return Boolean(skewChanged || gradientChanged);
-        });
-
-        if (normalizedSvgChanged) {
-          previewRuntime?.markActiveResultDirty?.('svg-normalization');
-          timingEntries.push({
-            label: 'watch(svgContent) persist normalized SVG',
-            ms: 0,
-            details: 'live DOM only'
-          });
-        }
-      }
-
       if (!skipExtractOnSvgChange.value) {
         measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
       }
@@ -410,12 +389,23 @@ export const setupWatchers = ({
         canvasPadding.bottom = 0;
         canvasPadding.left = 0;
 
-        measureTiming(timingEntries, 'watch(svgContent) reapplyStrokeOverrides', reapplyStrokeOverrides);
       }
 
       logPostGbdrawTimings(timingEntries);
     });
   });
+
+  // Persisting the current live DOM changes Result text but deliberately leaves the
+  // mounted root in place. Consume the old remount-only flags at that boundary.
+  watch(
+    () => results.value[selectedResultIndex.value]?.content,
+    () => {
+      const result = results.value[selectedResultIndex.value];
+      if (!isCommittedSvgResultMounted(result)) return;
+      skipCaptureBaseConfig.value = false;
+      skipPositionReapply.value = false;
+    }
+  );
 
   watch(extractedFeatures, () => {
     if (semanticFileWatchersSuppressed.value) return;

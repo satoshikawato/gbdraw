@@ -19,36 +19,9 @@ import { ruleMatchesFeature } from './feature-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
+import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
-export const getGroupsByBaseIds = (svg, baseIds, slotRenderers = []) => {
-  if (!svg) return [];
-  const seen = new Set();
-  const groups = [];
-  const addGroups = (selector) => {
-    svg.querySelectorAll(selector).forEach((group) => {
-      if (seen.has(group)) return;
-      seen.add(group);
-      groups.push(group);
-    });
-  };
-
-  if (Array.isArray(slotRenderers)) {
-    slotRenderers.forEach((renderer) => {
-      if (!renderer) return;
-      addGroups(`g[data-gbdraw-slot-renderer="${renderer}"]`);
-    });
-  }
-  if (groups.length > 0) return groups;
-
-  // Persisted SVGs created before semantic track hooks still need ID lookup.
-  if (Array.isArray(baseIds)) {
-    baseIds.forEach((baseId) => {
-      if (!baseId) return;
-      addGroups(`g[id="${baseId}"], g[id^="${baseId}_"]`);
-    });
-  }
-  return groups;
-};
+export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
 const normalizeComparableColor = (value) => String(value || '').trim().toLowerCase();
 
@@ -71,7 +44,7 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
+export const createSvgStyles = ({ state, watch, nextTick, legendActions, previewRuntime = null }) => {
   const {
     svgContent,
     extractedFeatures,
@@ -92,111 +65,13 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
 
   const { getAllFeatureLegendGroups } = legendActions;
 
-  const ensureUniqueSkewClipPathIds = (svg) => {
-    if (!svg) return false;
-
-    const skewGroups = getGroupsByBaseIds(
-      svg,
-      ['skew', 'gc_skew'],
-      ['dinucleotide_skew']
-    );
-    if (skewGroups.length === 0) return false;
-    let changed = false;
-
-    const idCounts = new Map();
-    svg.querySelectorAll('[id]').forEach((el) => {
-      const id = el.getAttribute('id');
-      if (!id) return;
-      idCounts.set(id, (idCounts.get(id) || 0) + 1);
-    });
-
-    const usedIds = new Set();
-    svg.querySelectorAll('[id]').forEach((el) => {
-      const id = el.getAttribute('id');
-      if (id) usedIds.add(id);
-    });
-
-    skewGroups.forEach((skewGroup, groupIndex) => {
-      const groupId = skewGroup.getAttribute('id') || `skew_group_${groupIndex}`;
-      const clipPaths = skewGroup.querySelectorAll('clipPath[id]');
-
-      clipPaths.forEach((clipPath, clipIndex) => {
-        const oldId = clipPath.getAttribute('id');
-        if (!oldId) return;
-
-        const isDuplicateId = (idCounts.get(oldId) || 0) > 1;
-        if (!isDuplicateId) return;
-
-        const baseNewId = `${oldId}_${groupId}_${clipIndex}`;
-        let newId = baseNewId;
-        let suffix = 1;
-        while (usedIds.has(newId) && newId !== oldId) {
-          newId = `${baseNewId}_${suffix}`;
-          suffix += 1;
-        }
-
-        if (newId === oldId) return;
-
-        clipPath.setAttribute('id', newId);
-        usedIds.add(newId);
-        changed = true;
-
-        const clipPathUrl = `url(#${oldId})`;
-        const newClipPathUrl = `url(#${newId})`;
-        skewGroup.querySelectorAll('[clip-path], [clipPath]').forEach((element) => {
-          if (element.getAttribute('clip-path') === clipPathUrl) {
-            element.setAttribute('clip-path', newClipPathUrl);
-            changed = true;
-          }
-          if (element.getAttribute('clipPath') === clipPathUrl) {
-            element.setAttribute('clipPath', newClipPathUrl);
-            changed = true;
-          }
-        });
-      });
-    });
-    return changed;
-  };
-
-  const ensureUniquePairwiseGradientIds = (svg) => {
-    if (!svg) return false;
-
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return false;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-
-    if (!horizontalLegend || !verticalLegend) return false;
-    let changed = false;
-
-    const fixGradientId = (legend, suffix) => {
-      const pairwiseLegend = legend.querySelector(PAIRWISE_LEGEND_SELECTOR);
-      if (!pairwiseLegend) return;
-
-      pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
-        const currentId = gradient.id;
-        if (!currentId || currentId.endsWith(`_${suffix}`)) return;
-
-        const baseId = currentId.replace(/_[hv]$/, '');
-        const newId = `${baseId}_${suffix}`;
-        gradient.setAttribute('id', newId);
-        changed = true;
-
-        const paths = pairwiseLegend.querySelectorAll('path');
-        paths.forEach((path) => {
-          const fill = path.getAttribute('fill');
-          if (fill === `url(#${currentId})`) {
-            path.setAttribute('fill', `url(#${newId})`);
-            changed = true;
-          }
-        });
-      });
-    };
-
-    fixGradientId(horizontalLegend, 'h');
-    fixGradientId(verticalLegend, 'v');
-    return changed;
+  const persistSvgEdit = (svg, reason) => {
+    skipCaptureBaseConfig.value = true;
+    if (previewRuntime?.markActiveResultDirty?.(reason)) return;
+    const idx = selectedResultIndex.value;
+    if (idx >= 0 && results.value.length > idx) {
+      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+    }
   };
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
@@ -226,11 +101,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
-    ensureUniqueSkewClipPathIds(svg);
-    ensureUniquePairwiseGradientIds(svg);
-
     const colors = appliedPaletteColors.value;
-    const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
+    const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
     const featureLookup = featuresBySvgId?.value || new Map();
     let updatedCount = 0;
 
@@ -449,11 +321,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     }
 
     if (updatedCount > 0) {
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      }
+      persistSvgEdit(svg, 'palette-style');
     }
   };
 
@@ -504,11 +372,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     });
 
     if (updatedCount > 0) {
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      }
+      persistSvgEdit(svg, 'specific-rule-style');
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
   };
@@ -646,11 +510,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     }
 
     if (updatedCount > 0) {
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      }
+      persistSvgEdit(svg, 'diagram-style');
       console.log(`Applied styles: updated ${updatedCount} elements`);
     }
   };
@@ -718,11 +578,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     }
 
     if (updated) {
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      }
+      persistSvgEdit(svg, 'track-visibility');
       console.log('Track visibility updated');
     }
   };
@@ -780,8 +636,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
   );
 
   return {
-    ensureUniqueSkewClipPathIds,
-    ensureUniquePairwiseGradientIds,
     applyPaletteToSvg,
     applySpecificRulesToSvg,
     applyStylesToSvg,

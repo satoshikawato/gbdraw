@@ -1,4 +1,14 @@
 const { test, expect } = require('@playwright/test');
+const { join, resolve } = require('node:path');
+
+const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
+const frozenV39Session = join(
+  repoRoot,
+  'tests',
+  'fixtures',
+  'sessions',
+  'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'
+);
 
 test('schema 1 composition survives browser edit, drag, history, reset, export, and sanitization boundaries', async ({ page }) => {
   const runtimeRequests = [];
@@ -161,22 +171,49 @@ test('legacy normalization is explicit and malformed current metadata never fall
   const origin = new URL(page.url()).origin;
   const result = await page.evaluate(async ({ origin }) => {
     const composition = await import(`${origin}/gbdraw/web/js/app/legend-layout/composition-actions.js`);
-    document.body.innerHTML = [
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">',
+    const legacyDocument = new DOMParser().parseFromString([
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120"',
+      ' data-horizontal-viewbox="0 0 200 120" data-vertical-viewbox="0 0 160 100">',
       '<g id="record" transform="translate(10,20) scale(1)"><rect width="40" height="20"/></g>',
-      '<g id="legend" transform="translate(100,5) rotate(0)"><rect width="30" height="15"/></g>',
+      '<g id="legend" transform="translate(75,92) rotate(0)"><rect width="60" height="20"/></g>',
       '</svg>'
-    ].join('');
-    const legacy = document.querySelector('svg');
+    ].join(''), 'image/svg+xml');
+    const legacy = legacyDocument.documentElement;
+    const detachedNativeBounds = (() => {
+      try {
+        const bounds = legacy.getElementById('record').getBBox();
+        return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+      } catch (error) {
+        return { error: String(error?.message || error) };
+      }
+    })();
     const normalized = composition.normalizeLegacyComposition(legacy, {
-      legendSide: 'right',
+      legendSide: 'bottom',
       userDeltas: { primary: [3, -4], legend: [5, 2] }
     });
     const normalizedResult = {
       legacyNormalized: normalized.metadata.legacyNormalized,
+      admissionPrimary: normalized.metadata.primary.finalBounds,
+      admissionLegend: normalized.metadata.legend.localBounds,
       deltas: composition.compositionUserDeltas(legacy),
-      primaryTransform: document.getElementById('record').getAttribute('transform'),
-      legendTransform: document.getElementById('legend').getAttribute('transform')
+      primaryTransform: legacy.getElementById('record').getAttribute('transform'),
+      legendTransform: legacy.getElementById('legend').getAttribute('transform')
+    };
+
+    document.body.replaceChildren(document.adoptNode(legacy));
+    const liveRecord = legacy.getElementById('record');
+    const liveBox = liveRecord.getBBox();
+    const liveMatrix = liveRecord.getCTM();
+    const liveNativeGeometry = {
+      bounds: { x: liveBox.x, y: liveBox.y, width: liveBox.width, height: liveBox.height },
+      matrix: Object.fromEntries(['a', 'b', 'c', 'd', 'e', 'f'].map((key) => [key, liveMatrix[key]]))
+    };
+    const edited = composition.applyCompositionEdit(legacy, { legendSide: 'right' });
+    const editedResult = {
+      primary: edited.metadata.primary.finalBounds,
+      legend: edited.metadata.legend.localBounds,
+      legacyNormalized: edited.metadata.legacyNormalized,
+      deltas: composition.compositionUserDeltas(legacy)
     };
 
     const malformed = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -189,19 +226,121 @@ test('legacy normalization is explicit and malformed current metadata never fall
     }
     return {
       ...normalizedResult,
+      detachedNativeBounds,
+      liveNativeGeometry,
+      edited: editedResult,
       malformedError: error,
       malformedHasMetadata: malformed.hasAttribute(composition.COMPOSITION_METADATA_ATTRIBUTE)
     };
   }, { origin });
 
   expect(result.legacyNormalized).toBe(true);
+  expect(result.detachedNativeBounds).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+  expect(result.liveNativeGeometry.bounds).toEqual({ x: 0, y: 0, width: 40, height: 20 });
+  expect(result.admissionPrimary).toEqual({ x: 0, y: 0, width: 200, height: 100 });
+  expect(result.admissionLegend).toEqual({ x: 70, y: 90, width: 60, height: 20 });
   expect(result.deltas).toEqual({ primary: [[3, -4]], legend: [5, 2], title: null });
   expect(result.primaryTransform).toBe('translate(3,-4) translate(7,24) scale(1)');
-  expect(result.legendTransform).toBe('translate(5,2) translate(95,3) rotate(0)');
+  expect(result.legendTransform).toBe('translate(5,2) translate(70,90) rotate(0)');
+  expect(result.edited.primary).toMatchObject({ width: 40, height: 20 });
+  expect(result.edited.legend.x).toBeCloseTo(70, 8);
+  expect(result.edited.legend.y).toBeCloseTo(90, 8);
+  expect(result.edited.legend.width).toBeCloseTo(60, 8);
+  expect(result.edited.legend.height).toBeCloseTo(20, 8);
+  expect(result.edited.legacyNormalized).toBeUndefined();
+  expect(result.edited.deltas).toEqual(result.deltas);
   expect(result.malformedError).toMatchObject({
     name: 'CompositionMetadataError',
     code: 'INVALID_COMPOSITION_METADATA'
   });
   expect(result.malformedError.message).toMatch(/incomplete/i);
   expect(result.malformedHasMetadata).toBe(false);
+});
+
+test('frozen v39 session is admitted once with usable composition geometry', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const input = page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  );
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+  await input.setInputFiles(frozenV39Session);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+
+  await page.waitForFunction(() => {
+    const app = window.__GBDRAW_APP__;
+    return Boolean(
+      app?.results?.length === 1
+      && document.querySelector('svg[data-gbdraw-composition-schema="1"]')
+    );
+  }, null, { timeout: 120000 });
+
+  const admitted = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const content = String(app.results[0].content || '');
+    const resultDocument = new DOMParser().parseFromString(content, 'image/svg+xml');
+    const resultSvg = resultDocument.documentElement;
+    const metadata = JSON.parse(resultSvg.getAttribute('data-gbdraw-composition'));
+    const liveSvg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
+    const liveRecordBounds = liveSvg.querySelector('g[data-gbdraw-record-index="0"]').getBBox();
+    return {
+      pyodideReady: app.pyodideReady,
+      viewBox: resultSvg.getAttribute('viewBox'),
+      metadata,
+      liveRecordBounds: {
+        width: liveRecordBounds.width,
+        height: liveRecordBounds.height
+      }
+    };
+  });
+
+  expect(admitted.pyodideReady).toBe(false);
+  expect(admitted.viewBox).toBe('0 0 2480.0 718.8395510426063');
+  expect(admitted.metadata.legacyNormalized).toBe(true);
+  expect(admitted.metadata.primary.finalBounds).toEqual({
+    x: 0,
+    y: 0,
+    width: 2480,
+    height: 661.849967709273
+  });
+  expect(admitted.metadata.legend.localBounds.x).toBeCloseTo(1063.1019345238096, 8);
+  expect(admitted.metadata.legend.localBounds.y).toBeCloseTo(590.0791343759396, 8);
+  expect(admitted.metadata.legend.localBounds.width).toBeCloseTo(353.79613095238096, 8);
+  expect(admitted.metadata.legend.localBounds.height).toBeCloseTo(56.98958333333337, 8);
+  expect(admitted.liveRecordBounds.width).toBeGreaterThan(0);
+  expect(admitted.liveRecordBounds.height).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.form.legend = 'right';
+  });
+  await page.waitForFunction(() => {
+    const app = window.__GBDRAW_APP__;
+    const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
+    if (!svg || app?.form?.legend !== 'right') return false;
+    const metadata = JSON.parse(svg.getAttribute('data-gbdraw-composition'));
+    return metadata.legendSide === 'right' && metadata.legacyNormalized !== true;
+  }, null, { timeout: 120000 });
+
+  const edited = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const liveSvg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
+    const liveMetadata = JSON.parse(liveSvg.getAttribute('data-gbdraw-composition'));
+    const resultDocument = new DOMParser().parseFromString(
+      String(app.results[0].content || ''),
+      'image/svg+xml'
+    );
+    const resultMetadata = JSON.parse(
+      resultDocument.documentElement.getAttribute('data-gbdraw-composition')
+    );
+    return { liveMetadata, resultMetadata, errorLog: app.errorLog };
+  });
+  expect(edited.errorLog).toBeNull();
+  expect(edited.liveMetadata.legendSide).toBe('right');
+  expect(edited.liveMetadata.legacyNormalized).toBeUndefined();
+  expect(edited.liveMetadata.primary.finalBounds.width).toBeCloseTo(2280, 3);
+  expect(edited.liveMetadata.primary.finalBounds.height).toBeCloseTo(568.1312770843506, 3);
+  expect(edited.resultMetadata).toEqual(edited.liveMetadata);
 });

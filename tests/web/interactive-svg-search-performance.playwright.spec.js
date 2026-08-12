@@ -368,6 +368,7 @@ test('preview search renderer applies result and active differences only', async
     };
     const state = preview.createPreviewFeatureSearchDomState();
     const featureIndex = preview.getPreviewFeatureElementIndex(svg);
+    const repeatedFeatureIndex = preview.getPreviewFeatureElementIndex(svg);
     const matches = ['f1', 'f21', 'f41', 'f61', 'f81'];
     preview.schedulePreviewFeatureSearchClasses({
       svg, matches, activeId: 'f1', queryActive: true, featureIndex, appliedState: state
@@ -381,6 +382,7 @@ test('preview search renderer applies result and active differences only', async
     return {
       resultMutationCount,
       navigationMutationCount,
+      featureIndexReused: repeatedFeatureIndex === featureIndex,
       matchCount: svg.querySelectorAll('.gbdraw-preview-feature-search-match').length,
       dimmedCount: svg.querySelectorAll('.gbdraw-preview-feature-search-dimmed').length,
       rootActive: svg.classList.contains('gbdraw-preview-feature-search-results-active')
@@ -390,6 +392,7 @@ test('preview search renderer applies result and active differences only', async
   expect(result).toEqual({
     resultMutationCount: 6,
     navigationMutationCount: 2,
+    featureIndexReused: true,
     matchCount: 5,
     dimmedCount: 0,
     rootActive: true

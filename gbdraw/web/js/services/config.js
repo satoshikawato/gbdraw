@@ -85,6 +85,10 @@ import { buildSessionResources as assembleSessionResources } from './session-res
 import { base64ToBytes, bytesToBase64, readFileBytes } from './file-content-cache.js';
 import { normalizeLogicalResults } from './result-normalization.js';
 import {
+  ingestSvgResults,
+  isCommittedSvgResult
+} from './svg-result-ingestion.js';
+import {
   featureStateFromCatalog,
   validateFeatureCatalog
 } from './feature-catalog.js';
@@ -108,6 +112,14 @@ import {
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
+import { prepareCandidateRenderCommit } from '../app/candidate-render.js';
+import { applyStrokeOverridesToSvg } from '../app/legend/stroke-actions.js';
+import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
+import {
+  COMPOSITION_METADATA_ATTRIBUTE,
+  COMPOSITION_SCHEMA_ATTRIBUTE,
+  normalizeLegacyComposition
+} from '../app/legend-layout/composition-actions.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   classifyRawLosatCacheEntry,
@@ -679,6 +691,45 @@ const normalizeOptionalHexColor = (value) => {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
 };
 
+const normalizeSessionLegendColor = (value) => {
+  const color = String(value || '').trim();
+  if (!color) return null;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)) {
+    return color.toLowerCase();
+  }
+  if (/^[a-z]+$/i.test(color)) return color.toLowerCase();
+  if (/^rgba?\(\s*[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*[-+.\d%]+)?\s*\)$/i.test(color)) {
+    return color;
+  }
+  if (/^hsla?\(\s*[-+.\d]+(?:deg|grad|rad|turn)?(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*|\s+)[-+.\d%]+(?:\s*[,/]\s*[-+.\d%]+)?\s*\)$/i.test(color)) {
+    return color;
+  }
+  return null;
+};
+
+const normalizeSessionLegendEntries = (entries) => {
+  if (!Array.isArray(entries)) return [];
+  const normalized = [];
+  const captions = new Set();
+  entries.forEach((entry) => {
+    if (!isPlainObject(entry)) return;
+    const caption = String(entry.caption || '').trim();
+    const color = normalizeSessionLegendColor(entry.color);
+    if (!caption || !color || captions.has(caption)) return;
+    captions.add(caption);
+    normalized.push({
+      ...cloneJsonData(entry),
+      caption,
+      color,
+      showStroke: Boolean(entry.showStroke),
+      featureIds: Array.isArray(entry.featureIds)
+        ? entry.featureIds.map((id) => String(id || '').trim()).filter(Boolean)
+        : []
+    });
+  });
+  return normalized;
+};
+
 const normalizeStrokeWidth = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
@@ -978,8 +1029,8 @@ const normalizeEditorStateData = (editorState = {}) => {
 
   return {
     legend: {
-      entries: cloneJsonArray(legend.entries),
-      deletedEntries: cloneJsonArray(legend.deletedEntries),
+      entries: normalizeSessionLegendEntries(legend.entries),
+      deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries),
       originalOrder: normalizeStringArray(legend.originalOrder),
       originalColors: normalizeLegendColorOverrides(legend.originalColors),
       colorOverrides: normalizeLegendColorOverrides(legend.colorOverrides),
@@ -3290,13 +3341,15 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
 
 export const applyResultsData = (resultsData = [], ui = {}) => {
   if (Array.isArray(resultsData)) {
-    state.results.value = normalizeLogicalResults(resultsData.map((res, idx) => ({
-      name: res?.name || `Result ${idx + 1}`,
-      content: res?.content || ''
-    }))).map((res) => ({
-      name: res.name,
-      content: res.content || ''
-    }));
+    const logicalResults = normalizeLogicalResults(resultsData.map((res, idx) => (
+      isCommittedSvgResult(res)
+        ? { ...res, name: res?.name || `Result ${idx + 1}` }
+        : {
+            name: res?.name || `Result ${idx + 1}`,
+            content: res?.content || ''
+          }
+    )));
+    state.results.value = ingestSvgResults(logicalResults);
   } else {
     state.results.value = [];
   }
@@ -3812,17 +3865,17 @@ export const importSession = async (e, options = {}) => {
       ? projectionResult.artifactState.editorState
       : data.editorState;
     let currentCatalogFeatureState = null;
+    let validatedSessionCatalog = null;
     let restoredEditorState = storedEditorState;
     if (sourceSessionVersion === SESSION_VERSION) {
-      let validatedCatalog = null;
       if (storedEditorState?.featureCatalog) {
         try {
-          validatedCatalog = validateFeatureCatalog(
+          validatedSessionCatalog = validateFeatureCatalog(
             storedEditorState.featureCatalog,
             logicalImportedResults
           );
           currentCatalogFeatureState = featureStateFromCatalog(
-            validatedCatalog,
+            validatedSessionCatalog,
             { mode: state.mode.value }
           );
         } catch (catalogError) {
@@ -3831,7 +3884,7 @@ export const importSession = async (e, options = {}) => {
       }
       restoredEditorState = {
         ...(isPlainObject(storedEditorState) ? storedEditorState : {}),
-        featureCatalog: validatedCatalog
+        featureCatalog: validatedSessionCatalog
       };
     }
 
@@ -3929,10 +3982,64 @@ export const importSession = async (e, options = {}) => {
     );
     applyEditorStateData(restoredEditorState);
 
+    const restoredFeatureState = currentCatalogFeatureState || features || {};
+    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
+      const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
+      let compositionChanged = false;
+      if (
+        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
+        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
+      ) {
+        normalizeLegacyComposition(svg, {
+          legendSide: state.form.legend || 'none',
+          titleSide: state.adv.plot_title_position || 'none',
+          userDeltas: {
+            primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
+            legend: ui.legendCurrentOffset
+              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+              : null,
+            lengthBar: ui.lengthBarUserOffset
+              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+              : null,
+            title: ui.plotTitleUserOffset
+              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+              : null
+          }
+        });
+        compositionChanged = true;
+      }
+      const strokeCount = applyStrokes
+        ? applyStrokeOverridesToSvg({
+            svg,
+            features: restoredFeatureState.extractedFeatures || [],
+            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
+            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+          })
+        : 0;
+      return legendGroupsChanged || compositionChanged || strokeCount > 0;
+    };
+
+    const committedImportedResults = validatedSessionCatalog
+      ? prepareCandidateRenderCommit({
+          results: logicalImportedResults,
+          catalog: validatedSessionCatalog,
+          mode: state.mode.value,
+          featureColorOverrides: state.featureColorOverrides,
+          featureStrokeOverrides: state.featureStrokeOverrides,
+          legendStrokeOverrides: state.legendStrokeOverrides,
+          manualSpecificRules: state.manualSpecificRules,
+          legacyFeatures: features?.extractedFeatures || [],
+          preparedFeatureState: currentCatalogFeatureState,
+          transformSvg: (svg) => transformRestoredSessionSvg(svg, { applyStrokes: false })
+        }).results
+      : ingestSvgResults(logicalImportedResults, {
+          transformSvg: transformRestoredSessionSvg
+        });
+
     await nextTick();
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
-    applyResultsData(logicalImportedResults, ui);
+    applyResultsData(committedImportedResults, ui);
     await nextTick();
 
     if (typeof options?.afterLoad === 'function') {

@@ -64,7 +64,7 @@ fallback.
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
 | LOSAT dispatch and workers | `js/services/losat.js`, `js/workers/losat-*` |
 | SVG/PNG/PDF downloads | `js/services/export.js` |
-| Preview SVG sanitization | `js/state.js` |
+| SVG Result admission and sanitization | `js/services/svg-result-ingestion.js` |
 | Feature-editor entry point | `js/app/feature-editor.js` |
 | Feature-editor helpers | `js/app/feature-editor/` |
 | Legend entry point | `js/app/legend.js` |

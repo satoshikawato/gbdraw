@@ -1,8 +1,7 @@
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
-  compositionUserDeltas,
-  normalizeLegacyComposition
+  compositionUserDeltas
 } from './composition-actions.js';
 
 export const createLegendCanvasActions = ({ state }) => {
@@ -140,24 +139,10 @@ export const createLegendCanvasActions = ({ state }) => {
     return binding;
   };
 
-  const normalizeLegacySvg = ({ legendSide, titleSide, userDeltas = null } = {}) => {
-    const svg = currentSvg();
-    if (!svg) return null;
-    const binding = normalizeLegacyComposition(svg, {
-      legendSide: legendSide || generatedLegendPosition.value || 'none',
-      titleSide: titleSide || 'none',
-      userDeltas
-    });
-    captureBaseConfig();
-    persistCurrentSvg(svg);
-    return binding;
-  };
-
   return {
     applyCanvasPadding,
     captureBaseConfig,
     captureOriginalStroke,
-    normalizeLegacySvg,
     persistCurrentSvg,
     resetCanvasPadding
   };

@@ -31,11 +31,8 @@ import {
   trackDefaultsForMode
 } from './mode-profiles.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
-import { sanitizeSvgContent } from './services/svg-sanitization.js';
+import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
 const { ref, reactive, computed } = window.Vue;
-const DOMPurify = window.DOMPurify;
-const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
-const formatTimingMs = (ms) => `${ms.toFixed(1)}ms`;
 
 // System State
 const pyodideReady = ref(false);
@@ -61,18 +58,8 @@ const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
 const matchSequenceRegistry = createSequenceSourceRegistry();
 const svgContent = computed(() => {
-  if (results.value.length > 0) {
-    const rawSvg = results.value[selectedResultIndex.value].content;
-
-    // Sanitize the SVG output from svgwrite to ensure safety and prevent DOMXSS
-    const sanitizeStartedAt = getNow();
-    const sanitizedSvg = sanitizeSvgContent(rawSvg, DOMPurify);
-    console.info(
-      `post-gbdraw timing: DOMPurify.sanitize SVG: ${formatTimingMs(getNow() - sanitizeStartedAt)} (${String(rawSvg || '').length} chars)`
-    );
-    return sanitizedSvg;
-  }
-  return null;
+  if (results.value.length === 0) return null;
+  return getCommittedSvgContent(results.value[selectedResultIndex.value]);
 });
 
 const zoom = ref(1.0);

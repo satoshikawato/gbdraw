@@ -32,16 +32,26 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/pyodide-assets.js', 'services/pyodide-assets.js');
 await copyModule('gbdraw/web/js/services/runtime-capabilities.js', 'services/runtime-capabilities.js');
+await copyModule('gbdraw/web/js/services/session-feature-metadata.js', 'services/session-feature-metadata.js');
+await copyModule('gbdraw/web/js/services/svg-result-ingestion.js', 'services/svg-result-ingestion.js');
+await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');
+await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-sanitization.js');
+await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
 
 const {
   alignRecoveredFeatureIdsToRenderedSvg,
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
-  collectRenderedFeatureIdentitiesFromSvg,
   migrateFeatureOverrideState,
   normalizeRecordIndex
 } = await import(pathToFileURL(join(tempDir, 'app', 'session-feature-metadata.js')));
+const { collectRenderedFeatureIdentitiesFromSvgRoot } = await import(
+  pathToFileURL(join(tempDir, 'services', 'session-feature-metadata.js'))
+);
+const { ingestSvgResult } = await import(
+  pathToFileURL(join(tempDir, 'services', 'svg-result-ingestion.js'))
+);
 const { extractFeatureMetadataForPreview } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-metadata-extraction.js'))
 );
@@ -141,6 +151,14 @@ class FakeElement {
   getAttribute(name) {
     return Object.hasOwn(this.attrs, name) ? this.attrs[name] : null;
   }
+
+  setAttribute(name, value) {
+    this.attrs[name] = String(value);
+  }
+
+  removeAttribute(name) {
+    delete this.attrs[name];
+  }
 }
 
 class FakeDocument {
@@ -152,7 +170,13 @@ class FakeDocument {
     return selector === 'parsererror' ? null : null;
   }
 
-  querySelectorAll() {
+  querySelectorAll(selector) {
+    if (selector === '[id]') {
+      return this.elements.filter((element) => element.getAttribute('id'));
+    }
+    if (!String(selector).includes('data-gbdraw-feature-id') && !String(selector).includes('[id^="f"]')) {
+      return [];
+    }
     return this.elements.filter((element) => {
       if (element.getAttribute('data-gbdraw-feature-id')) return true;
       const id = element.getAttribute('id') || '';
@@ -170,6 +194,43 @@ globalThis.DOMParser = class {
     return new FakeDocument(elements);
   }
 };
+
+const parsedFeatureRoot = (source) => {
+  const parsed = new globalThis.DOMParser().parseFromString(source, 'image/svg+xml');
+  return {
+    localName: 'svg',
+    content: source,
+    cloneNode() { return this; },
+    getAttribute() { return null; },
+    setAttribute() {},
+    removeAttribute() {},
+    querySelectorAll: (selector) => parsed.querySelectorAll(selector)
+  };
+};
+
+const collectRenderedFeatureIdentitiesFromSvg = (source) =>
+  collectRenderedFeatureIdentitiesFromSvgRoot(parsedFeatureRoot(source));
+
+class IngressDomParser {
+  parseFromString(source) {
+    return {
+      documentElement: parsedFeatureRoot(source),
+      querySelector: () => null
+    };
+  }
+}
+
+globalThis.XMLSerializer = class {
+  serializeToString(root) { return root.content; }
+};
+
+const committedResults = (content) => [ingestSvgResult(
+  { name: 'preview.svg', content },
+  {
+    sanitizer: { sanitize: (value) => value },
+    parser: IngressDomParser
+  }
+)];
 
 const svgWithFeature = ({
   renderedId = 'rendered-a',
@@ -242,7 +303,7 @@ const svgWithFeature = ({
   assert.equal(aligned.svgIdMap['rendered-r'], undefined);
 
   const state = classifyFeatureMetadataState({
-    results: [{ content: ambiguousSvg }],
+    results: committedResults(ambiguousSvg),
     selectedResultIndex: 0,
     extractedFeatures: [recovered]
   });
@@ -258,7 +319,7 @@ const svgWithFeature = ({
       mode: 'circular',
       cInputType: 'gff',
       selectedResultIndex: 0,
-      results: [{ content: ambiguousSvg }],
+      results: committedResults(ambiguousSvg),
       featureState: { extractedFeatures: [recovered], biologicalFeatures: [] },
       editorState: {}
     },
@@ -281,7 +342,7 @@ const svgWithFeature = ({
 
 {
   const state = classifyFeatureMetadataState({
-    results: [{ content: svgWithFeature({ renderedId: 'rendered-a' }) }],
+    results: committedResults(svgWithFeature({ renderedId: 'rendered-a' })),
     selectedResultIndex: 0,
     extractedFeatures: [{ id: 'feature-a', svg_id: 'rendered-a' }]
   });
@@ -292,7 +353,7 @@ const svgWithFeature = ({
 
 {
   const state = classifyFeatureMetadataState({
-    results: [{ content: svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' }) }],
+    results: committedResults(svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' })),
     selectedResultIndex: 0,
     extractedFeatures: [{ id: 'feature-a', svg_id: 'stable-a', stable_svg_id: 'stable-a' }]
   });
@@ -524,7 +585,7 @@ for (const invalidRecordIndex of [
       mode: 'linear',
       lInputType: 'gb',
       selectedResultIndex: 0,
-      results: [{ content: svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' }) }],
+      results: committedResults(svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' })),
       featureState: {
         extractedFeatures: [visible, hidden],
         biologicalFeatures: [visible, hidden]
@@ -550,7 +611,7 @@ for (const invalidRecordIndex of [
       mode: 'linear',
       lInputType: 'gb',
       selectedResultIndex: 0,
-      results: [{ content: svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' }) }],
+      results: committedResults(svgWithFeature({ renderedId: 'rendered-a', stableId: 'stable-a' })),
       featureState: {
         extractedFeatures: [visible],
         biologicalFeatures: []

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
+globalThis.CSS = { escape: (value) => String(value) };
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-legend-sync-'));
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'app'), join(tempRoot, 'app'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services'), join(tempRoot, 'services'), { recursive: true });
@@ -23,6 +24,12 @@ const {
   parseTransformXY
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'utils.js'))
+);
+const { createLegendEntryActions } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'legend', 'entry-actions.js'))
+);
+const { createLegendStrokeActions } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
 assert.equal(SPECIFIC_COLOR_FILE_OWNER, 'specific-color-file');
 assert.deepEqual(parseTransformXY('translate(12.5,-3.25)'), { x: 12.5, y: -3.25 });
@@ -71,6 +78,14 @@ assert.match(
   /bind composition metadata[\s\S]+captureBaseConfig/
 );
 assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+state\.skipPositionReapply\.value = true;\s+applyResultsData/);
+const sessionLegendSyncSource = appSetupSource.match(
+  /const synchronizeLoadedSessionLegendEntries[\s\S]*?\n  const importSession/
+)?.[0] || '';
+assert.match(sessionLegendSyncSource, /extractLegendEntries\(\)/);
+assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
+assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
+assert.match(configSource, /entries: normalizeSessionLegendEntries\(legend\.entries\)/);
+assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries\)/);
 
 const rules = [
   { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },
@@ -109,3 +124,239 @@ assert.deepEqual(
     }]
   }
 );
+
+class MockElement {
+  constructor(tagName, attributes = {}, textContent = '') {
+    this.tagName = tagName;
+    this.attributes = new Map(Object.entries(attributes));
+    this.children = [];
+    this.parentElement = null;
+    this.textContent = textContent;
+  }
+
+  get id() { return this.getAttribute('id') || ''; }
+  getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
+  hasAttribute(name) { return this.attributes.has(name); }
+  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  removeAttribute(name) { this.attributes.delete(name); }
+  appendChild(child) {
+    if (child.parentElement) {
+      child.parentElement.children = child.parentElement.children.filter((entry) => entry !== child);
+    }
+    child.parentElement = this;
+    this.children.push(child);
+    return child;
+  }
+  remove() {
+    if (!this.parentElement) return;
+    this.parentElement.children = this.parentElement.children.filter((entry) => entry !== this);
+    this.parentElement = null;
+  }
+  cloneNode(deep = false) {
+    const clone = new MockElement(this.tagName, Object.fromEntries(this.attributes), this.textContent);
+    if (deep) this.children.forEach((child) => clone.appendChild(child.cloneNode(true)));
+    return clone;
+  }
+  matchesSelector(selector) {
+    if (selector === 'text' || selector === 'path') return this.tagName === selector;
+    if (selector === '[transform]') return this.hasAttribute('transform');
+    if (selector === 'g[data-legend-key]') {
+      return this.tagName === 'g' && this.hasAttribute('data-legend-key');
+    }
+    if (selector.startsWith('#')) return this.id === selector.slice(1);
+    return false;
+  }
+  querySelectorAll(selector) {
+    const matches = [];
+    const visit = (node) => {
+      node.children.forEach((child) => {
+        if (child.matchesSelector(selector)) matches.push(child);
+        visit(child);
+      });
+    };
+    visit(this);
+    return matches;
+  }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+  getElementById(id) { return this.id === id ? this : this.querySelector(`#${id}`); }
+}
+
+const mockLegendEntry = (caption, color, x) => {
+  const group = new MockElement('g', { 'data-legend-key': caption });
+  group.appendChild(new MockElement('path', { fill: color, transform: `translate(${x},7)` }));
+  group.appendChild(new MockElement('text', { transform: `translate(${x + 22},7)` }, caption));
+  return group;
+};
+
+{
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  featureLegend.appendChild(mockLegendEntry('Alpha', '#112233', 0));
+  featureLegend.appendChild(mockLegendEntry('Beta', '#445566', 70));
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+
+  let pyodideInitializations = 0;
+  let dirtyMarks = 0;
+  let layoutRefreshes = 0;
+  const state = {
+    pyodideReady: ref(false),
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([
+      { caption: 'Alpha', color: '#112233' },
+      { caption: 'Beta', color: '#445566' }
+    ]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref(['Alpha', 'Beta']),
+    originalLegendColors: ref({ Alpha: '#112233', Beta: '#445566' }),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state,
+    getPyodide: () => null,
+    ensurePyodide: async () => { pyodideInitializations += 1; },
+    layoutActions: {
+      compactLegendEntries: () => {},
+      reflowDualLegendLayout: () => { layoutRefreshes += 1; },
+      updatePairwiseLegendPositions: () => { layoutRefreshes += 1; }
+    },
+    previewRuntime: {
+      applyLegendChanges: () => {
+        dirtyMarks += 1;
+        return true;
+      }
+    }
+  });
+
+  assert.equal(actions.reconcileLegendEntries(), false);
+  assert.equal(pyodideInitializations, 0);
+  assert.equal(dirtyMarks, 0);
+
+  state.legendEntries.value = [
+    { caption: 'Beta', color: '#abcdef' },
+    { caption: 'Gamma', color: '#778899' }
+  ];
+  assert.equal(actions.reconcileLegendEntries(), true);
+  assert.deepEqual(
+    featureLegend.children.map((entry) => entry.getAttribute('data-legend-key')),
+    ['Beta', 'Gamma']
+  );
+  assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef');
+  assert.equal(dirtyMarks, 1);
+  assert.equal(layoutRefreshes, 1);
+  assert.equal(pyodideInitializations, 0);
+  assert.equal(state.results.value[0].content, 'unchanged');
+
+  state.legendEntries.value = [{ caption: 'Beta', color: '#abcdef' }];
+  assert.equal(actions.reconcileLegendEntries(), true);
+  state.legendEntries.value.push({ caption: 'Gamma', color: '#778899' });
+  assert.equal(actions.reconcileLegendEntries(), true);
+  assert.deepEqual(
+    featureLegend.children.map((entry) => entry.getAttribute('data-legend-key')),
+    ['Beta', 'Gamma']
+  );
+  assert.equal(dirtyMarks, 3);
+  assert.equal(pyodideInitializations, 0);
+
+  state.legendEntries.value = [
+    {
+      caption: 'Beta',
+      color: '#abcdef',
+      showStroke: true,
+      featureIds: ['feature-safe']
+    },
+    {
+      caption: 'Gamma',
+      color: 'url(javascript:unsafe)',
+      showStroke: true,
+      featureIds: ['feature-unsafe']
+    }
+  ];
+  actions.extractLegendEntries();
+  assert.deepEqual(
+    state.legendEntries.value.map((entry) => ({
+      caption: entry.caption,
+      color: entry.color,
+      showStroke: entry.showStroke,
+      featureIds: entry.featureIds
+    })),
+    [
+      {
+        caption: 'Beta',
+        color: '#abcdef',
+        showStroke: true,
+        featureIds: ['feature-safe']
+      },
+      {
+        caption: 'Gamma',
+        color: '#778899',
+        showStroke: false,
+        featureIds: []
+      }
+    ],
+    'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
+  );
+  assert.equal(pyodideInitializations, 0);
+
+  const noOpDirtyMarks = dirtyMarks;
+  assert.equal(actions.updateLegendEntryColor(0, '#abcdef'), false);
+  assert.equal(actions.updateLegendEntryCaption(0, 'Beta'), false);
+  assert.equal(dirtyMarks, noOpDirtyMarks);
+
+  state.extractedFeatures = ref([]);
+  state.featureStrokeOverrides = {};
+  state.originalSvgStroke = ref({ color: null, width: null });
+  const strokeActions = createLegendStrokeActions({
+    state,
+    previewRuntime: {
+      markActiveResultDirty: () => {
+        dirtyMarks += 1;
+        return true;
+      }
+    }
+  });
+  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
+  const strokeColorDirtyMarks = dirtyMarks;
+  assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), false);
+  assert.equal(dirtyMarks, strokeColorDirtyMarks);
+  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), true);
+  const strokeWidthDirtyMarks = dirtyMarks;
+  assert.equal(strokeActions.updateLegendEntryStrokeWidth(0, 2), false);
+  assert.equal(dirtyMarks, strokeWidthDirtyMarks);
+
+  const betaSwatch = featureLegend.children[0].querySelector('path');
+  betaSwatch.setAttribute('stroke', '#222222');
+  betaSwatch.setAttribute('stroke-width', '2');
+  assert.equal(strokeActions.resetLegendEntryStroke(0), true);
+  assert.equal(betaSwatch.getAttribute('stroke'), null);
+  assert.equal(betaSwatch.getAttribute('stroke-width'), null);
+  assert.equal(dirtyMarks, strokeWidthDirtyMarks + 1);
+  const resetDirtyMarks = dirtyMarks;
+  assert.equal(strokeActions.resetLegendEntryStroke(0), false);
+  assert.equal(dirtyMarks, resetDirtyMarks);
+
+  state.legendStrokeOverrides.Beta = { strokeColor: '#222222', strokeWidth: 2 };
+  assert.equal(strokeActions.resetLegendEntryStroke(0), true);
+  assert.deepEqual(state.legendStrokeOverrides, {});
+  assert.equal(
+    dirtyMarks,
+    resetDirtyMarks,
+    'removing a semantic override from an already-default SVG does not dirty the artifact'
+  );
+  assert.equal(strokeActions.resetAllStrokes(), false);
+  assert.equal(dirtyMarks, resetDirtyMarks);
+  state.featureStrokeOverrides['record:0:feature:1'] = { strokeColor: '#222222' };
+  assert.equal(strokeActions.resetAllStrokes(), true);
+  assert.deepEqual(state.featureStrokeOverrides, {});
+  assert.equal(dirtyMarks, resetDirtyMarks);
+}

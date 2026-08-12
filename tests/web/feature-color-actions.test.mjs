@@ -10,9 +10,10 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-color-actions-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8');
 await writeFile(
   join(tempDir, 'app', 'feature-editor', 'color-actions.js'),
-  await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8'),
+  colorActionsSource,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'app', 'feature-utils.js'), 'utf8'), 'utf8');
@@ -28,6 +29,8 @@ const { createFeatureColorActions } = await import(
 );
 const { getFeatureGenerationHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
 const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'app', 'feature-selector.js')));
+
+assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
 const ref = (value) => ({ value });
 
@@ -94,7 +97,42 @@ const colorScopeDialog = {
 let addLegendEntryCount = 0;
 let applySpecificRulesCount = 0;
 let legendGeometryChangedCount = 0;
+const addLegendEntryOptions = [];
+const removeLegendEntryOptions = [];
+const updateLegendEntryColorOptions = [];
+const previewFillColors = new Map();
+const featureElementsById = new Map();
+let previewFillApplyCount = 0;
+let previewFlushCount = 0;
+let previewDirty = false;
 const svgContainer = ref(null);
+const clickedFeature = ref(null);
+const originalSvgStroke = ref({ color: null, width: null });
+const featureStrokeOverrides = {};
+const previewRuntime = {
+  applyFeatureFillChanges: (changes) => {
+    let updated = false;
+    for (const change of changes) {
+      if (previewFillColors.get(change.featureId) === change.color) continue;
+      previewFillColors.set(change.featureId, change.color);
+      previewFillApplyCount += 1;
+      updated = true;
+    }
+    if (updated) previewDirty = true;
+    return updated;
+  },
+  flushActiveResult: () => {
+    if (!previewDirty) return false;
+    previewDirty = false;
+    previewFlushCount += 1;
+    return true;
+  },
+  getActiveRuntime: () => ({ dirty: previewDirty }),
+  markActiveResultDirty: () => {
+    previewDirty = true;
+    return true;
+  }
+};
 
 const actions = createFeatureColorActions({
   state: {
@@ -107,7 +145,7 @@ const actions = createFeatureColorActions({
     biologicalFeatures,
     featureColorOverrides,
     svgContainer,
-    clickedFeature: ref(null),
+    clickedFeature,
     colorScopeDialog,
     resetColorDialog: {},
     legendRenameDialog: {},
@@ -116,22 +154,29 @@ const actions = createFeatureColorActions({
     legendColorOverrides: {},
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
-    originalSvgStroke: ref({ color: null, width: null }),
-    featureStrokeOverrides: {},
+    originalSvgStroke,
+    featureStrokeOverrides,
     skipCaptureBaseConfig: ref(false),
     skipExtractOnSvgChange: ref(false),
     addedLegendCaptions: ref(new Set())
   },
   nextTick: async () => {},
   legendActions: {
-    addLegendEntry: async () => {
+    addLegendEntry: async (_caption, _color, options = {}) => {
       addLegendEntryCount += 1;
+      addLegendEntryOptions.push(options);
       return '';
     },
-    removeLegendEntry: () => {},
-    updateLegendEntryColorByCaption: (caption, color) => {
+    removeLegendEntry: (_caption, options = {}) => {
+      removeLegendEntryOptions.push(options);
+      return false;
+    },
+    updateLegendEntryColorByCaption: (caption, color, options = {}) => {
+      updateLegendEntryColorOptions.push(options);
       const entry = legendEntries.value.find((candidate) => candidate.caption === caption);
-      if (entry) entry.color = color;
+      if (!entry || entry.color === color) return false;
+      entry.color = color;
+      return true;
     },
     compactLegendEntries: () => {},
     onLegendGeometryChanged: () => {
@@ -178,9 +223,10 @@ const actions = createFeatureColorActions({
   },
   featureSvgActions: {
     applyInstantPreview: () => {},
-    getFeatureElements: () => [],
-    getFeatureFillElements: () => []
-  }
+    getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
+    getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
+  },
+  previewRuntime
 });
 
 await actions.handleColorScopeChoice('caption');
@@ -298,6 +344,20 @@ assert.deepEqual(manualSpecificRules, [{
   cap: 'single feature'
 }]);
 assert.equal(getFeatureGenerationHash(labelFeatureA), 'f11111111');
+
+legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds: ['f11111111_record_1'] }];
+const noOpFillCount = previewFillApplyCount;
+const noOpFlushCount = previewFlushCount;
+assert.equal(await actions.setFeatureColor(labelFeatureA, '#123456', 'single feature'), false);
+assert.equal(previewFillApplyCount, noOpFillCount);
+assert.equal(previewFlushCount, noOpFlushCount);
+
+const compoundFlushCount = previewFlushCount;
+assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
+assert.equal(previewFlushCount - compoundFlushCount, 1);
+assert.equal(addLegendEntryOptions.at(-1)?.commit, false);
+assert.equal(removeLegendEntryOptions.at(-1)?.commit, false);
+legendEntries.value = [];
 
 const outsideLabelGroup = {
   ...labelFeatureB,
@@ -484,6 +544,73 @@ assert.deepEqual(featureColorOverrides[stableColorKey], {
 });
 assert.equal(manualSpecificRules[0].color, 'none');
 
+const strokeAttributes = new Map([
+  ['stroke', '#111111'],
+  ['stroke-width', '1']
+]);
+let strokeMutationCount = 0;
+const strokeElement = {
+  getAttribute: (name) => strokeAttributes.has(name) ? strokeAttributes.get(name) : null,
+  setAttribute: (name, value) => {
+    strokeAttributes.set(name, String(value));
+    strokeMutationCount += 1;
+  },
+  removeAttribute: (name) => {
+    strokeAttributes.delete(name);
+    strokeMutationCount += 1;
+  }
+};
+const strokeFeature = {
+  id: 'stroke-feature',
+  svg_id: 'stroke-feature-svg',
+  type: 'CDS',
+  product: 'Stroke feature'
+};
+const strokeSvg = { legendGroups: [] };
+svgContainer.value = { querySelector: (selector) => selector === 'svg' ? strokeSvg : null };
+featureElementsById.set(strokeFeature.svg_id, [strokeElement]);
+clickedFeature.value = {
+  svg_id: strokeFeature.svg_id,
+  feat: strokeFeature,
+  color: '#cccccc',
+  strokeColor: '#111111',
+  strokeWidth: 1,
+  originalStrokeColor: '#111111',
+  originalStrokeWidth: 1
+};
+originalSvgStroke.value = { color: '#111111', width: 1 };
+
+const sameStrokeFlushCount = previewFlushCount;
+assert.equal(await actions.updateClickedFeatureStroke('#111111', 1), false);
+assert.equal(strokeMutationCount, 0);
+assert.equal(previewFlushCount, sameStrokeFlushCount);
+
+assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), true);
+assert.equal(strokeMutationCount, 2);
+assert.equal(previewFlushCount - sameStrokeFlushCount, 1);
+const changedStrokeFlushCount = previewFlushCount;
+assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), false);
+assert.equal(strokeMutationCount, 2);
+assert.equal(previewFlushCount, changedStrokeFlushCount);
+
+assert.equal(await actions.resetClickedFeatureStroke(), true);
+const resetStrokeMutationCount = strokeMutationCount;
+const resetStrokeFlushCount = previewFlushCount;
+assert.equal(await actions.resetClickedFeatureStroke(), false);
+assert.equal(strokeMutationCount, resetStrokeMutationCount);
+assert.equal(previewFlushCount, resetStrokeFlushCount);
+assert.equal(await actions.applyStrokeToSelectedFeatures([strokeFeature], '#111111', 1), false);
+legendEntries.value = [{
+  caption: 'Stroke feature',
+  color: '#cccccc',
+  featureIds: [strokeFeature.svg_id]
+}];
+assert.equal(await actions.applyStrokeToAllSiblings(), false);
+assert.equal(previewFlushCount, resetStrokeFlushCount);
+
+clickedFeature.value = null;
+featureElementsById.clear();
+
 globalThis.CSS = { escape: (value) => String(value) };
 const legendText = { textContent: 'Short caption' };
 const legendPath = {
@@ -511,3 +638,9 @@ await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
 assert.equal(legendGeometryChangedCount, 1);
 assert.equal(legendText.textContent, 'Oxidative phosphorylation');
 assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation');
+assert.equal(addLegendEntryOptions.length > 0, true);
+assert.equal(removeLegendEntryOptions.length > 0, true);
+assert.equal(updateLegendEntryColorOptions.length > 0, true);
+assert.equal(addLegendEntryOptions.every((options) => options.commit === false), true);
+assert.equal(removeLegendEntryOptions.every((options) => options.commit === false), true);
+assert.equal(updateLegendEntryColorOptions.every((options) => options.commit === false), true);

@@ -761,51 +761,7 @@ json.dumps({"width": width})
 
     const entries = [];
 
-    let entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
-    if (entryGroups.length === 0) {
-      const texts = Array.from(targetGroup.querySelectorAll('text'));
-      const allPaths = Array.from(targetGroup.querySelectorAll('path'));
-      const groupsToAdd = [];
-
-      texts.forEach((textEl) => {
-        const caption = textEl.textContent?.trim();
-        if (!caption) return;
-
-        const textPos = parseTransformXY(textEl.getAttribute('transform'));
-        let bestPath = null;
-        let bestX = -Infinity;
-
-        for (const path of allPaths) {
-          const fill = path.getAttribute('fill');
-          if (!fill || fill === 'none' || fill.startsWith('url(')) continue;
-          const pathPos = parseTransformXY(path.getAttribute('transform'));
-          if (Math.abs(pathPos.y - textPos.y) < 2 && pathPos.x < textPos.x) {
-            if (pathPos.x > bestX) {
-              bestX = pathPos.x;
-              bestPath = path;
-            }
-          }
-        }
-
-        if (bestPath) {
-          const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-          entryGroup.setAttribute('data-legend-key', caption);
-          entryGroup.appendChild(bestPath);
-          entryGroup.appendChild(textEl);
-          groupsToAdd.push(entryGroup);
-        }
-      });
-
-      if (groupsToAdd.length > 0) {
-        groupsToAdd.forEach((group) => targetGroup.appendChild(group));
-        skipCaptureBaseConfig.value = true;
-        const resultIdx = selectedResultIndex.value;
-        if (resultIdx >= 0 && results.value.length > resultIdx) {
-          results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-        }
-        entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
-      }
-    }
+    const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
 
     entryGroups.forEach((entryGroup) => {
       const caption = entryGroup.getAttribute('data-legend-key');
@@ -834,7 +790,10 @@ json.dumps({"width": width})
         yPos = groupTransform.y;
       }
 
-      const existingEntry = legendEntries.value.find((e) => e.caption === caption);
+      const existingEntry = legendEntries.value.find((entry) => (
+        entry.caption === caption
+        && normalizedColor(entry.color) === normalizedColor(color)
+      ));
       const showStroke = existingEntry?.showStroke || false;
       const existingFeatureIds = existingEntry?.featureIds || [];
       const originalCaption = existingEntry?.originalCaption || caption;
