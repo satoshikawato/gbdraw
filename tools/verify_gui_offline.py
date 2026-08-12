@@ -291,15 +291,233 @@ def _ensure_playwright_available() -> None:
         ) from exc
 
 
-def smoke_test() -> None:
+OFFLINE_GUI_BROWSER_CONTRACTS = (
+    "offline-initialization",
+    "palette-preview",
+    "exports",
+    "linear-losat",
+)
+
+
+def _wait_for_semantic_state(
+    page,
+    predicate: str,
+    *,
+    timeout: int,
+    label: str,
+    snapshot: str,
+) -> None:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    try:
+        page.wait_for_function(predicate, timeout=timeout)
+    except PlaywrightTimeoutError as exc:
+        try:
+            state = page.evaluate(snapshot)
+        except Exception as snapshot_exc:  # pragma: no cover - diagnostic fallback
+            state = {"snapshotError": str(snapshot_exc)}
+        raise RuntimeError(
+            f"{label} timed out after {timeout} ms:\n"
+            f"{json.dumps(state, indent=2, sort_keys=True)}"
+        ) from exc
+
+
+def _finish_browser_contract(
+    context,
+    browser,
+    external_requests: list[str],
+    contract: str,
+) -> None:
+    context.close()
+    browser.close()
+    if external_requests:
+        raise RuntimeError(
+            f"External network requests were attempted during {contract}:\n"
+            + "\n".join(external_requests)
+        )
+
+
+def _verify_exports(page) -> None:
+    download_dir = Path(tempfile.mkdtemp(prefix="gbdraw-offline-downloads-"))
+    try:
+        for method_name, extension in [
+            ("downloadSVG", ".svg"),
+            ("downloadPNG", ".png"),
+            ("downloadPDF", ".pdf"),
+        ]:
+            with page.expect_download(timeout=120000) as download_info:
+                page.evaluate(f"() => window.__GBDRAW_APP__.{method_name}()")
+            download = download_info.value
+            target = download_dir / download.suggested_filename
+            download.save_as(target)
+            if target.suffix.lower() != extension:
+                raise RuntimeError(
+                    f"{method_name} produced unexpected filename {download.suggested_filename}"
+                )
+            if target.stat().st_size <= 0:
+                raise RuntimeError(f"{method_name} produced an empty {extension} file.")
+    finally:
+        shutil.rmtree(download_dir, ignore_errors=True)
+
+
+def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
+    setup_state = page.evaluate(
+        """
+        ({ leftText, rightText }) => {
+          const app = window.__GBDRAW_APP__;
+          app.mode = 'linear';
+          app.lInputType = 'gb';
+          if (app.linearSeqs.length < 2) {
+            app.addLinearSeq();
+          }
+          app.setLinearSeqPrimaryFile(
+            0,
+            'gb',
+            new File([leftText], 'MERS-CoV.gbk', { type: 'text/plain' })
+          );
+          app.setLinearSeqPrimaryFile(
+            1,
+            'gb',
+            new File([rightText], 'SARS-CoV-1.gbk', { type: 'text/plain' })
+          );
+          app.setLinearComparisonGlobalAction('losat');
+          if (!app.setLinearComparisonLosatMode('blastn')) {
+            throw new Error('Could not select the current Linear LOSAT nucleotide mode.');
+          }
+          const run = {
+            status: 'running',
+            error: '',
+            startedResultCount: Array.isArray(app.results) ? app.results.length : 0,
+            startedCacheCount: Array.isArray(app.losatCacheInfo)
+              ? app.losatCacheInfo.length
+              : 0
+          };
+          window.__GBDRAW_OFFLINE_CONTRACT_RUN__ = run;
+          void (async () => {
+            try {
+              await app.runAnalysis();
+              run.status = 'fulfilled';
+            } catch (error) {
+              run.status = 'rejected';
+              run.error = String(error?.stack || error?.message || error);
+            }
+          })();
+          return {
+            comparisonMode: app.linearComparisonPlan?.mode || '',
+            comparisonDefaultSource: app.linearComparisonPlan?.defaultSource || '',
+            comparisonGlobalAction: app.linearComparisonGlobalAction,
+            hasActiveLosatIntent: app.hasActiveLinearLosatIntent === true,
+            losatProgram: app.losatProgram
+          };
+        }
+        """,
+        {"leftText": left_gbk, "rightText": right_gbk},
+    )
+    if setup_state != {
+        "comparisonMode": "adjacent",
+        "comparisonDefaultSource": "losat",
+        "comparisonGlobalAction": "losat",
+        "hasActiveLosatIntent": True,
+        "losatProgram": "blastn",
+    }:
+        raise RuntimeError(
+            "Linear LOSAT comparison intent was not activated before generation: "
+            f"{setup_state}"
+        )
+    _wait_for_semantic_state(
+        page,
+        """
+        () => {
+          const app = window.__GBDRAW_APP__;
+          const run = window.__GBDRAW_OFFLINE_CONTRACT_RUN__;
+          if (!app || !run) return false;
+          return Boolean(app.errorLog) || (
+            run.status === 'rejected'
+          ) || (
+            run.status === 'fulfilled' &&
+            Array.isArray(app.results) &&
+            app.results.length > run.startedResultCount &&
+            Array.isArray(app.losatCacheInfo) &&
+            app.losatCacheInfo.length > run.startedCacheCount
+          );
+        }
+        """,
+        timeout=120000,
+        label="Linear LOSAT generation and cache readiness",
+        snapshot="""
+        () => {
+          const app = window.__GBDRAW_APP__;
+          if (!app) return { appMounted: false };
+          return {
+            appMounted: true,
+            run: window.__GBDRAW_OFFLINE_CONTRACT_RUN__ || null,
+            mode: app.mode,
+            inputType: app.lInputType,
+            errorLog: app.errorLog,
+            resultCount: Array.isArray(app.results) ? app.results.length : 0,
+            losatCacheEntries: Array.isArray(app.losatCacheInfo)
+              ? app.losatCacheInfo.length
+              : 0,
+            comparisonMode: app.linearComparisonPlan?.mode || '',
+            comparisonDefaultSource: app.linearComparisonPlan?.defaultSource || '',
+            comparisonGlobalAction: app.linearComparisonGlobalAction,
+            hasActiveLosatIntent: app.hasActiveLinearLosatIntent === true,
+            comparisonEdgeCount: app.linearComparisonResolution?.edges?.length || 0,
+            comparisonErrors: app.linearComparisonResolution?.errors || [],
+            losatProgram: app.losatProgram,
+            losatThreadingStatus: app.losatThreadingStatus
+          };
+        }
+        """,
+    )
+    linear_state = page.evaluate(
+        """
+        () => ({
+          errorLog: window.__GBDRAW_APP__.errorLog,
+          runStatus: window.__GBDRAW_OFFLINE_CONTRACT_RUN__?.status || '',
+          runError: window.__GBDRAW_OFFLINE_CONTRACT_RUN__?.error || '',
+          resultCount: window.__GBDRAW_APP__.results.length,
+          losatCacheEntries: window.__GBDRAW_APP__.losatCacheInfo.length,
+          comparisonMode: window.__GBDRAW_APP__.linearComparisonPlan?.mode || '',
+          comparisonDefaultSource:
+            window.__GBDRAW_APP__.linearComparisonPlan?.defaultSource || '',
+          hasActiveLosatIntent:
+            window.__GBDRAW_APP__.hasActiveLinearLosatIntent === true
+        })
+        """
+    )
+    if linear_state["errorLog"]:
+        raise RuntimeError(
+            f"Linear LOSAT offline generation failed:\n{linear_state['errorLog']}"
+        )
+    if linear_state["runStatus"] != "fulfilled":
+        raise RuntimeError(
+            "Linear LOSAT generation did not settle successfully: "
+            f"{linear_state}"
+        )
+    if (
+        linear_state["comparisonMode"] != "adjacent"
+        or linear_state["comparisonDefaultSource"] != "losat"
+        or not linear_state["hasActiveLosatIntent"]
+    ):
+        raise RuntimeError(
+            "Linear LOSAT comparison intent changed during generation: "
+            f"{linear_state}"
+        )
+    if linear_state["resultCount"] < 1 or linear_state["losatCacheEntries"] < 1:
+        raise RuntimeError(
+            "Linear LOSAT offline generation did not populate expected outputs: "
+            f"{linear_state}"
+        )
+
+
+def _run_browser_contract(contract: str) -> None:
+    if contract not in OFFLINE_GUI_BROWSER_CONTRACTS:
+        raise ValueError(f"Unknown offline GUI browser contract: {contract}")
     _assert_packaged_assets()
     _ensure_playwright_available()
 
-    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
-
-    circular_gbk = (REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk").read_text(encoding="utf-8")
-    linear_left_gbk = (REPO_ROOT / "tests" / "test_inputs" / "MERS-CoV.gbk").read_text(encoding="utf-8")
-    linear_right_gbk = (REPO_ROOT / "tests" / "test_inputs" / "SARS-CoV-1.gbk").read_text(encoding="utf-8")
+    from playwright.sync_api import sync_playwright
 
     with _serve_web_root() as base_url, sync_playwright() as p:
         try:
@@ -331,56 +549,43 @@ def smoke_test() -> None:
                 "GUI local server did not enable browser isolation for threaded LOSAT: "
                 f"{isolation_state}"
             )
-        try:
-            page.wait_for_function(
-                """
-                () => {
-                  const app = window.__GBDRAW_APP__;
-                  if (!app) return false;
-                  const loadingStatus = String(app.loadingStatus || '');
-                  return (
-                    (
-                      app.diagramGenerationWorkerReady === true &&
-                      Object.keys(app.paletteDefinitions || {}).length > 0
-                    ) ||
-                    loadingStatus.startsWith('Startup Error:') ||
-                    Boolean(app.diagramGenerationWorkerError)
-                  );
-                }
-                """,
-                timeout=120000,
-            )
-        except PlaywrightTimeoutError as exc:
-            startup_state = page.evaluate(
-                """
-                () => {
-                  const app = window.__GBDRAW_APP__;
-                  if (!app) return { appMounted: false };
-                  return {
-                    appMounted: true,
-                    pyodideReady: app.pyodideReady,
-                    paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length,
-                    loadingStatus: app.loadingStatus,
-                    diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
-                    diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
-                    diagramGenerationWorkerError: app.diagramGenerationWorkerError
-                  };
-                }
-                """
-            )
-            raise RuntimeError(f"GUI startup timed out offline: {startup_state}") from exc
-        startup_state = page.evaluate(
+        startup_snapshot = """
+            () => {
+              const app = window.__GBDRAW_APP__;
+              if (!app) return { appMounted: false };
+              return {
+                appMounted: true,
+                pyodideReady: app.pyodideReady,
+                paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length,
+                loadingStatus: app.loadingStatus,
+                diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
+                diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
+                diagramGenerationWorkerError: app.diagramGenerationWorkerError
+              };
+            }
+        """
+        _wait_for_semantic_state(
+            page,
             """
-            () => ({
-              pyodideReady: window.__GBDRAW_APP__.pyodideReady,
-              paletteDefinitionCount: Object.keys(window.__GBDRAW_APP__.paletteDefinitions || {}).length,
-              loadingStatus: window.__GBDRAW_APP__.loadingStatus,
-              diagramGenerationWorkerReady: window.__GBDRAW_APP__.diagramGenerationWorkerReady,
-              diagramGenerationWorkerStatus: window.__GBDRAW_APP__.diagramGenerationWorkerStatus,
-              diagramGenerationWorkerError: window.__GBDRAW_APP__.diagramGenerationWorkerError
-            })
-            """
+            () => {
+              const app = window.__GBDRAW_APP__;
+              if (!app) return false;
+              const loadingStatus = String(app.loadingStatus || '');
+              return (
+                (
+                  app.diagramGenerationWorkerReady === true &&
+                  Object.keys(app.paletteDefinitions || {}).length > 0
+                ) ||
+                loadingStatus.startsWith('Startup Error:') ||
+                Boolean(app.diagramGenerationWorkerError)
+              );
+            }
+            """,
+            timeout=120000,
+            label="Offline GUI startup",
+            snapshot=startup_snapshot,
         )
+        startup_state = page.evaluate(startup_snapshot)
         if not startup_state["diagramGenerationWorkerReady"]:
             raise RuntimeError(
                 "GUI diagram engine failed offline: "
@@ -393,42 +598,103 @@ def smoke_test() -> None:
                 f"{startup_state['loadingStatus']}"
             )
 
+        if contract == "offline-initialization":
+            _finish_browser_contract(context, browser, external_requests, contract)
+            return
+
+        if contract == "linear-losat":
+            linear_left_gbk = (
+                REPO_ROOT / "tests" / "test_inputs" / "MERS-CoV.gbk"
+            ).read_text(encoding="utf-8")
+            linear_right_gbk = (
+                REPO_ROOT / "tests" / "test_inputs" / "SARS-CoV-1.gbk"
+            ).read_text(encoding="utf-8")
+            _verify_linear_losat(page, linear_left_gbk, linear_right_gbk)
+            _finish_browser_contract(context, browser, external_requests, contract)
+            return
+
+        circular_gbk = (
+            REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"
+        ).read_text(encoding="utf-8")
         page.evaluate(
             """
-            async ({ gbText }) => {
+            ({ gbText }) => {
               const app = window.__GBDRAW_APP__;
               app.mode = 'circular';
               app.cInputType = 'gb';
               app.files.c_gb = new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' });
               app.files.c_gff = null;
               app.files.c_fasta = null;
-              await app.runAnalysis();
+              const run = { status: 'running', error: '' };
+              window.__GBDRAW_OFFLINE_CONTRACT_RUN__ = run;
+              void (async () => {
+                try {
+                  await app.runAnalysis();
+                  run.status = 'fulfilled';
+                } catch (error) {
+                  run.status = 'rejected';
+                  run.error = String(error?.stack || error?.message || error);
+                }
+              })();
             }
             """,
             {"gbText": circular_gbk},
         )
-        page.wait_for_function(
+        _wait_for_semantic_state(
+            page,
             """
             () => {
               const app = window.__GBDRAW_APP__;
-              return (app.results && app.results.length > 0) || Boolean(app.errorLog);
+              const run = window.__GBDRAW_OFFLINE_CONTRACT_RUN__;
+              if (!app || !run) return false;
+              return run.status === 'rejected' || Boolean(app.errorLog) || (
+                run.status === 'fulfilled' &&
+                Array.isArray(app.results) &&
+                app.results.length > 0
+              );
             }
             """,
             timeout=120000,
+            label="Circular diagram generation",
+            snapshot="""
+            () => {
+              const app = window.__GBDRAW_APP__;
+              return {
+                run: window.__GBDRAW_OFFLINE_CONTRACT_RUN__ || null,
+                errorLog: app?.errorLog || '',
+                resultCount: Array.isArray(app?.results) ? app.results.length : 0,
+                loadingStatus: app?.loadingStatus || ''
+              };
+            }
+            """,
         )
         circular_state = page.evaluate(
             """
             () => ({
               errorLog: window.__GBDRAW_APP__.errorLog,
+              runStatus: window.__GBDRAW_OFFLINE_CONTRACT_RUN__?.status || '',
+              runError: window.__GBDRAW_OFFLINE_CONTRACT_RUN__?.error || '',
               resultCount: window.__GBDRAW_APP__.results.length
             })
             """
         )
         if circular_state["errorLog"]:
             raise RuntimeError(f"Circular offline generation failed:\n{circular_state['errorLog']}")
+        if circular_state["runStatus"] != "fulfilled":
+            raise RuntimeError(
+                "Circular offline generation did not settle successfully: "
+                f"{circular_state}"
+            )
         if circular_state["resultCount"] < 1:
             raise RuntimeError("Circular offline generation produced no SVG results.")
-        page.wait_for_function(
+
+        if contract == "exports":
+            _verify_exports(page)
+            _finish_browser_contract(context, browser, external_requests, contract)
+            return
+
+        _wait_for_semantic_state(
+            page,
             """
             () => {
               const app = window.__GBDRAW_APP__;
@@ -438,6 +704,19 @@ def smoke_test() -> None:
             }
             """,
             timeout=120000,
+            label="Circular feature extraction",
+            snapshot="""
+            () => {
+              const app = window.__GBDRAW_APP__;
+              return {
+                featureExtractionError: app?.featureExtractionError || '',
+                extractedFeatureCount: Array.isArray(app?.extractedFeatures)
+                  ? app.extractedFeatures.length
+                  : 0,
+                resultCount: Array.isArray(app?.results) ? app.results.length : 0
+              };
+            }
+            """,
         )
         feature_extraction_state = page.evaluate(
             """
@@ -663,88 +942,18 @@ def smoke_test() -> None:
                 f"{deferred_palette_state}"
             )
 
-        download_dir = Path(tempfile.mkdtemp(prefix="gbdraw-offline-downloads-"))
-        try:
-            for method_name, extension in [
-                ("downloadSVG", ".svg"),
-                ("downloadPNG", ".png"),
-                ("downloadPDF", ".pdf"),
-            ]:
-                with page.expect_download(timeout=120000) as download_info:
-                    page.evaluate(f"() => window.__GBDRAW_APP__.{method_name}()")
-                download = download_info.value
-                target = download_dir / download.suggested_filename
-                download.save_as(target)
-                if target.suffix.lower() != extension:
-                    raise RuntimeError(
-                        f"{method_name} produced unexpected filename {download.suggested_filename}"
-                    )
-                if target.stat().st_size <= 0:
-                    raise RuntimeError(f"{method_name} produced an empty {extension} file.")
-        finally:
-            shutil.rmtree(download_dir, ignore_errors=True)
+        _finish_browser_contract(context, browser, external_requests, contract)
+        return
 
-        page.evaluate(
-            """
-            async ({ leftText, rightText }) => {
-              const app = window.__GBDRAW_APP__;
-              app.mode = 'linear';
-              app.lInputType = 'gb';
-              app.blastSource = 'losat';
-              if (app.linearSeqs.length < 2) {
-                app.addLinearSeq();
-              }
-              app.linearSeqs[0].gb = new File([leftText], 'MERS-CoV.gbk', { type: 'text/plain' });
-              app.linearSeqs[0].gff = null;
-              app.linearSeqs[0].fasta = null;
-              app.linearSeqs[0].blast = null;
-              app.linearSeqs[0].losat_filename = '';
-              app.linearSeqs[1].gb = new File([rightText], 'SARS-CoV-1.gbk', { type: 'text/plain' });
-              app.linearSeqs[1].gff = null;
-              app.linearSeqs[1].fasta = null;
-              await app.runAnalysis();
-            }
-            """,
-            {"leftText": linear_left_gbk, "rightText": linear_right_gbk},
-        )
-        page.wait_for_function(
-            """
-            () => {
-              const app = window.__GBDRAW_APP__;
-              return Boolean(app.errorLog) || (
-                app.results &&
-                app.results.length > 0 &&
-                app.losatCacheInfo &&
-                app.losatCacheInfo.length > 0
-              );
-            }
-            """,
-            timeout=180000,
-        )
-        linear_state = page.evaluate(
-            """
-            () => ({
-              errorLog: window.__GBDRAW_APP__.errorLog,
-              resultCount: window.__GBDRAW_APP__.results.length,
-              losatCacheEntries: window.__GBDRAW_APP__.losatCacheInfo.length
-            })
-            """
-        )
-        if linear_state["errorLog"]:
-            raise RuntimeError(f"Linear LOSAT offline generation failed:\n{linear_state['errorLog']}")
-        if linear_state["resultCount"] < 1 or linear_state["losatCacheEntries"] < 1:
-            raise RuntimeError(
-                f"Linear LOSAT offline generation did not populate expected outputs: {linear_state}"
-            )
 
-        if external_requests:
-            raise RuntimeError(
-                "External network requests were attempted during offline GUI startup:\n"
-                + "\n".join(external_requests)
-            )
-
-        context.close()
-        browser.close()
+def smoke_test(contract: str = "all") -> None:
+    contracts = (
+        OFFLINE_GUI_BROWSER_CONTRACTS
+        if contract == "all"
+        else (contract,)
+    )
+    for browser_contract in contracts:
+        _run_browser_contract(browser_contract)
 
 
 def inspect_wheel(wheel_path: Path) -> None:
@@ -849,7 +1058,16 @@ def main() -> int:
 
     subparsers.add_parser("vendor-assets", help="Download and vendor third-party browser assets.")
     subparsers.add_parser("check-assets", help="Validate the prepared browser wheel and required offline assets.")
-    subparsers.add_parser("smoke-test", help="Run an offline GUI startup smoke test with Playwright.")
+    smoke_parser = subparsers.add_parser(
+        "smoke-test",
+        help="Run one or all independent offline GUI browser contracts with Playwright.",
+    )
+    smoke_parser.add_argument(
+        "--contract",
+        choices=("all", *OFFLINE_GUI_BROWSER_CONTRACTS),
+        default="all",
+        help="Select one browser contract; the default runs every contract in a fresh context.",
+    )
 
     inspect_parser = subparsers.add_parser("inspect-wheel", help="Inspect a built wheel for offline GUI assets.")
     inspect_parser.add_argument("wheel_path", type=Path)
@@ -862,7 +1080,7 @@ def main() -> int:
         elif args.command == "check-assets":
             check_assets()
         elif args.command == "smoke-test":
-            smoke_test()
+            smoke_test(args.contract)
         elif args.command == "inspect-wheel":
             inspect_wheel(args.wheel_path)
         else:

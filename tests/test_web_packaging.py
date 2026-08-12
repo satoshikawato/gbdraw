@@ -1451,9 +1451,7 @@ def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
     assert any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names)
 
 
-@pytest.mark.slow
-@pytest.mark.browser
-def test_offline_gui_smoke_test_covers_palette_preview_behavior() -> None:
+def _run_offline_gui_browser_contract(contract: str) -> None:
     if importlib.util.find_spec("playwright") is None:
         pytest.skip("playwright is not available in this environment")
     if not _can_bind_loopback():
@@ -1461,7 +1459,37 @@ def test_offline_gui_smoke_test_covers_palette_preview_behavior() -> None:
 
     ensure_prepared_browser_wheel()
     subprocess.run(
-        [sys.executable, "tools/verify_gui_offline.py", "smoke-test"],
+        [
+            sys.executable,
+            "tools/verify_gui_offline.py",
+            "smoke-test",
+            "--contract",
+            contract,
+        ],
         cwd=REPO_ROOT,
         check=True,
     )
+
+
+@pytest.mark.slow
+@pytest.mark.browser
+def test_offline_gui_initializes_without_external_network_requests() -> None:
+    _run_offline_gui_browser_contract("offline-initialization")
+
+
+@pytest.mark.slow
+@pytest.mark.browser
+def test_offline_gui_palette_preview_behavior() -> None:
+    _run_offline_gui_browser_contract("palette-preview")
+
+
+@pytest.mark.slow
+@pytest.mark.browser
+def test_offline_gui_exports_svg_png_and_pdf() -> None:
+    _run_offline_gui_browser_contract("exports")
+
+
+@pytest.mark.slow
+@pytest.mark.browser
+def test_offline_gui_linear_losat_generation_populates_cache() -> None:
+    _run_offline_gui_browser_contract("linear-losat")
