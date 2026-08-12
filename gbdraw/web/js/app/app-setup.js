@@ -1,5 +1,4 @@
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
-import { downloadSVG, downloadInteractiveSVG, downloadPNG, downloadPDF } from '../services/export.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyConfigData,
@@ -62,6 +61,7 @@ import {
   createOrthogroupEditor,
   resolveUniqueOrthogroupMemberForFeature
 } from './orthogroups.js';
+import { createRightDrawerController } from './right-drawer.js';
 import {
   createCircularTrackSlotEditor,
   estimateCircularConservationLayoutWarning
@@ -143,6 +143,13 @@ import {
 } from './depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
+
+let exportServicePromise = null;
+
+const loadExportService = () => {
+  exportServicePromise ??= import('../services/export.js');
+  return exportServicePromise;
+};
 
 export const createSessionImportRollbackState = ({
   depthTrackUiCounts,
@@ -268,7 +275,6 @@ export const createAppSetup = () => {
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    showFeaturePanel,
     featurePanelTab,
     featureSearchInput,
     featureSearch,
@@ -331,7 +337,6 @@ export const createAppSetup = () => {
     globalLabelModeDialog,
     sidebarWidth,
     isResizing,
-    showLegendPanel,
     legendEntries,
     deletedLegendEntries,
     originalLegendOrder,
@@ -369,6 +374,7 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  const rightDrawerActions = createRightDrawerController({ state, watch });
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -1093,7 +1099,12 @@ export const createAppSetup = () => {
   );
 
   let disposeHistoryInputs = null;
-  setupGlobalUiEvents({ state, onMounted, onUnmounted });
+  setupGlobalUiEvents({
+    state,
+    onMounted,
+    onUnmounted,
+    closeRightDrawer: rightDrawerActions.closeRightDrawer
+  });
   setupHistoryShortcuts({ history, onMounted, onUnmounted });
   onMounted(async () => {
     disposeHistoryInputs = setupHistoryInputs({
@@ -1886,6 +1897,7 @@ export const createAppSetup = () => {
     refreshCircularRecordOrder,
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     resetPreviewViewport,
+    resetRightDrawer: rightDrawerActions.resetRightDrawer,
     previewRuntime,
     preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
     prepareDiagramGenerationWorker: async () => {
@@ -2252,7 +2264,6 @@ export const createAppSetup = () => {
     state,
     runAnalysis
   });
-
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
     return Boolean(
@@ -2317,10 +2328,15 @@ export const createAppSetup = () => {
     orthogroupActions.clearOrthogroupHighlight();
   };
 
+  const openOrthogroupInDrawer = (orthogroupId) => {
+    if (!orthogroupActions.selectOrthogroup(orthogroupId)) return false;
+    rightDrawerActions.openRightDrawerTab('orthogroups');
+    return true;
+  };
+
   const openClickedOrthogroupInEditor = () => {
     const orthogroupId = String(clickedFeature.value?.orthogroupId || '').trim();
-    if (!orthogroupId) return;
-    orthogroupActions.openOrthogroupInDrawer(orthogroupId);
+    if (!openOrthogroupInDrawer(orthogroupId)) return;
     clickedFeature.value = null;
   };
 
@@ -2697,6 +2713,32 @@ export const createAppSetup = () => {
     if (!value) return;
     downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
+
+  const runExportAction = async (methodName, label) => {
+    try {
+      const exportService = await loadExportService();
+      const exportMethod = exportService?.[methodName];
+      if (typeof exportMethod !== 'function') {
+        throw new Error('The export service did not provide the requested action.');
+      }
+      return await exportMethod();
+    } catch (error) {
+      const normalized = normalizeUserFacingError(error);
+      errorLog.value = {
+        type: 'Export error',
+        message: `${label} export failed: ${normalized?.summary || 'Unknown export error.'}`,
+        details: normalized?.details || []
+      };
+      return { status: 'error' };
+    }
+  };
+
+  const downloadSVG = () => runExportAction('downloadSVG', 'SVG');
+  const downloadInteractiveSVG = () => (
+    runExportAction('downloadInteractiveSVG', 'Interactive SVG')
+  );
+  const downloadPNG = () => runExportAction('downloadPNG', 'PNG');
+  const downloadPDF = () => runExportAction('downloadPDF', 'PDF');
 
   const specificRuleLegendOptions = computed(() => {
     const byCaption = new Map();
@@ -3276,9 +3318,11 @@ export const createAppSetup = () => {
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
     alignOrthogroupById: orthogroupActions.alignOrthogroupById,
-    openRightDrawerTab: orthogroupActions.openRightDrawerTab,
-    closeRightDrawer: orthogroupActions.closeRightDrawer,
-    openOrthogroupInDrawer: orthogroupActions.openOrthogroupInDrawer,
+    isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
+    openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
+    toggleRightDrawer: rightDrawerActions.toggleRightDrawer,
+    closeRightDrawer: rightDrawerActions.closeRightDrawer,
+    openOrthogroupInDrawer,
     circularRecordList,
     paletteDefinitions,
     paletteNames,
@@ -3341,7 +3385,6 @@ export const createAppSetup = () => {
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    showFeaturePanel,
     featurePanelTab,
     featureSearchInput,
     featureSearch,
@@ -3493,7 +3536,6 @@ export const createAppSetup = () => {
     loadLabelOverrideTable: loadLabelOverrideTableWithHistory,
     syncLabelEditor,
     openFeatureEditorFromList,
-    showLegendPanel,
     legendEntries,
     newLegendCaption,
     newLegendColor,

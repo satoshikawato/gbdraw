@@ -176,15 +176,17 @@ export const createSidebarResize = (state) => {
   return { startResizing };
 };
 
-export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
+export const setupGlobalUiEvents = ({
+  state,
+  onMounted,
+  onUnmounted,
+  closeRightDrawer
+}) => {
   const {
     clickedFeature,
     clickedPairwiseMatch,
     clickedLabel,
-    showCanvasControls,
-    showLegendPanel,
-    showFeaturePanel,
-    showRightDrawer
+    showCanvasControls
   } = state;
 
   const closeFeaturePopup = (e) => {
@@ -201,9 +203,7 @@ export const setupGlobalUiEvents = ({ state, onMounted, onUnmounted }) => {
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;
       if (showCanvasControls.value) showCanvasControls.value = false;
-      if (showLegendPanel.value) showLegendPanel.value = false;
-      if (showFeaturePanel.value) showFeaturePanel.value = false;
-      if (showRightDrawer.value) showRightDrawer.value = false;
+      closeRightDrawer();
     }
   };
 

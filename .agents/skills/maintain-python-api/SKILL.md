@@ -11,9 +11,13 @@ public contracts and default diagrams remain stable.
 
 ## Inspect the contract first
 
-1. Read `CLAUDE.md`, `docs/PYTHON_API.md`, `docs/CLI_Reference.md`, the
-   current public-contract tests, and any related ADR that is present. Do not
-   assume an old plan or ADR still exists.
+1. Read `CLAUDE.md`, `docs/scenarios/manifest.json`, the affected reference named
+   in its `public_owners` map, the current public-contract and recipe-contract
+   tests, and any related ADR that is present. For the simple API this is
+   `docs/REFERENCE/python-api.md`; typed requests and sessions have separate
+   reference owners. Treat `docs/PYTHON_API.md` as a link-preserving legacy
+   router and `docs/CLI_Reference.md` as generated help inventory, not as public
+   behavior owners. Do not assume an old plan or ADR still exists.
 2. Inspect `git status` and the affected diff before editing. In this repository,
    dirty in-scope code is not protected: replace it when the requested fix requires
    a different implementation. Leave unrelated files outside the change.
@@ -116,7 +120,18 @@ public contracts and default diagrams remain stable.
 
 ## Keep documentation executable
 
-- Add capability-oriented recipes to `docs/PYTHON_API.md` using public imports.
+- Route exact public behavior through the `public_owners` map in
+  `docs/scenarios/manifest.json`. Simple API behavior belongs in
+  `docs/REFERENCE/python-api.md`; typed requests, sessions, and cross-cutting
+  capabilities may have different reference owners.
+- Put a warranted user-facing Python recipe in the manifest's `surface: python`,
+  `role: tutorial` destination. Put non-public Python capability evidence in an
+  `H-PY-*` scenario owned by `docs/internal/SCENARIO_EVIDENCE.md`. Do not add
+  runnable blocks to the legacy `docs/PYTHON_API.md` router.
+- Keep the scenario manifest truthful about the destination, fixtures, execution
+  kind, runner, expected outputs, and assertions. Use
+  `docs/recipes/run_python_scenarios.py` as the `python-recipe` runner and keep
+  one marked executable block in the manifest-owned document.
 - Use `canonical` only when it is part of a named contract in the code. Otherwise,
   state the exact schema version, field, precedence rule, or behavior.
 - Do not call a check a `smoke test`. Name the feature and expected result, and
@@ -124,14 +139,22 @@ public contracts and default diagrams remain stable.
 - Inspect every fixture used by an example. Show only options that affect the
   fixture and output; do not list feature types absent from the input record.
 - Make optional-tool examples deterministic with fixtures or precomputed data.
-- Remember that `tests/test_api_library_usage.py` executes every Python code block
-  sequentially in one namespace. Make each block valid in that execution model.
+- Run `python docs/recipes/run_python_scenarios.py --scenario <ID> --check` for
+  each changed recipe. The runner extracts the literal marked block and executes
+  each scenario in its own clean temporary directory; do not rely on state from
+  another block or scenario.
+- Run ownership contracts in `tests/test_documentation_scenario_contracts.py`,
+  `tests/test_documentation_reference_contracts.py`, and
+  `tests/test_documented_recipes.py`. For executable recipes, also run the
+  relevant `tests/test_onboarding_recipe_contracts.py`,
+  `tests/test_python_tutorial_recipe_contracts.py`, or
+  `tests/test_python_howto_recipe_contracts.py` test.
 - Explain intentional low-level or non-public boundaries instead of implying that
   an unstable workflow is supported.
-- When `docs/CLI_Reference.md` reproduces command help, compare the sorted
-  `--option` sets from live Circular and Linear help with the corresponding
-  documented blocks. Report missing and extra options; visual inspection is not
-  enough.
+- Put CLI behavior in `docs/REFERENCE/command-line.md`. When checking the
+  generated `docs/CLI_Reference.md` inventory, compare the sorted `--option` sets
+  from live Circular and Linear help with the corresponding generated blocks.
+  Report missing and extra options; visual inspection is not enough.
 - Check relative Markdown links in every touched document and fail the review for
   links to absent repository files.
 

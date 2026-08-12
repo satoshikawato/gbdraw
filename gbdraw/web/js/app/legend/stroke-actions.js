@@ -114,7 +114,10 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
 
   const persistStrokeEdit = (svg, reason = 'feature-stroke') => {
     skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.markActiveResultDirty?.(reason)) return;
+    if (previewRuntime?.markActiveResultDirty?.(reason)) {
+      previewRuntime.flushActiveResult?.();
+      return;
+    }
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
       results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };

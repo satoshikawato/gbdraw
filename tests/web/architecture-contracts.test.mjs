@@ -18,6 +18,10 @@ import { fileURLToPath } from 'node:url';
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const JAVASCRIPT_ROOT = join(REPOSITORY_ROOT, 'gbdraw/web/js');
 const APP_ENTRY = join(JAVASCRIPT_ROOT, 'app.js');
+const INDEX_HTML = readFileSync(
+  join(REPOSITORY_ROOT, 'gbdraw/web/index.html'),
+  'utf8'
+);
 
 const normalizePath = (path) => path.split(sep).join('/');
 const relativeModulePath = (path) => normalizePath(relative(JAVASCRIPT_ROOT, path));
@@ -42,6 +46,18 @@ const literalImportSpecifiers = (source) => {
     /(?:^|\n)\s*(?:import|export)\s+[^;]*?\s+from\s+(['"])([^'"]+)\1\s*;?/g,
     /(?:^|\n)\s*import\s*(['"])([^'"]+)\1\s*;?/g,
     /\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) specifiers.push(match[2]);
+  }
+  return specifiers;
+};
+
+const staticImportSpecifiers = (source) => {
+  const specifiers = [];
+  const patterns = [
+    /(?:^|\n)\s*(?:import|export)\s+[^;]*?\s+from\s+(['"])([^'"]+)\1\s*;?/g,
+    /(?:^|\n)\s*import\s*(['"])([^'"]+)\1\s*;?/g
   ];
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) specifiers.push(match[2]);
@@ -75,14 +91,25 @@ const directImports = new Map(
   })
 );
 
-const reachableModules = (entryPath) => {
+const staticDirectImports = new Map(
+  [...productionSources].map(([owner, source]) => {
+    const ownerPath = join(JAVASCRIPT_ROOT, owner);
+    const imports = staticImportSpecifiers(source)
+      .map((specifier) => resolveRelativeImport(ownerPath, specifier))
+      .filter(Boolean)
+      .map(relativeModulePath);
+    return [owner, new Set(imports)];
+  })
+);
+
+const reachableModules = (entryPath, importGraph = directImports) => {
   const visited = new Set();
   const pending = [relativeModulePath(entryPath)];
   while (pending.length) {
     const current = pending.pop();
     if (visited.has(current)) continue;
     visited.add(current);
-    for (const dependency of directImports.get(current) || []) pending.push(dependency);
+    for (const dependency of importGraph.get(current) || []) pending.push(dependency);
   }
   return visited;
 };
@@ -161,6 +188,30 @@ test('Pyodide initialization remains on its explicit main and Worker owners', ()
   assert.deepEqual(
     [...occurrenceOwners(/\bloadPyodide\s*\(/g).keys()].filter((path) => reachable.has(path)),
     ['app/pyodide.js']
+  );
+});
+
+test('export payloads stay outside the eager application graph', () => {
+  const eagerModules = reachableModules(APP_ENTRY, staticDirectImports);
+  const appSetupSource = productionSources.get('app/app-setup.js');
+  const exportSource = productionSources.get('services/export.js');
+
+  assert.ok(eagerModules.has('app/app-setup.js'));
+  assert.equal(eagerModules.has('services/export.js'), false);
+  assert.equal(eagerModules.has('services/standalone-interactivity.js'), false);
+  assert.equal(eagerModules.has('services/standalone-interactivity-assets.js'), false);
+  assert.match(
+    appSetupSource,
+    /exportServicePromise\s*\?\?=\s*import\(\s*['"]\.\.\/services\/export\.js['"]\s*\)/
+  );
+  assert.match(
+    exportSource,
+    /standaloneInteractivityPromise\s*\?\?=\s*import\(\s*['"]\.\/standalone-interactivity\.js['"]\s*\)/
+  );
+  assert.match(exportSource, /pdfLibrariesPromise\s*\?\?=/);
+  assert.doesNotMatch(
+    INDEX_HTML,
+    /<script\b[^>]*\bsrc\s*=\s*['"][^'"]*(?:jspdf|svg2pdf)[^'"]*['"][^>]*>/i
   );
 });
 
@@ -256,4 +307,22 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
   assert.deepEqual(occurrenceOwners(/\bapplyHistorySnapshot\b/g), new Map());
+});
+
+test('right drawer availability and transitions have one production owner', () => {
+  const transitionOwners = [
+    ...occurrenceOwners(/\b(?:showRightDrawer|rightDrawerTab)\.value\s*=(?!=)/g).keys()
+  ];
+
+  assert.deepEqual(transitionOwners, ['app/right-drawer.js']);
+  assert.deepEqual(
+    occurrenceOwners(/\b(?:showFeaturePanel|showLegendPanel)\b/g),
+    new Map()
+  );
+  assert.match(INDEX_HTML, /@click="toggleRightDrawer"/);
+  assert.match(
+    INDEX_HTML,
+    /:disabled="!isRightDrawerTabAvailable\('orthogroups'\)"/
+  );
+  assert.doesNotMatch(INDEX_HTML, /rightDrawerTab\s*\|\|/);
 });

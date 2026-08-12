@@ -67,6 +67,7 @@ fallback.
 | SVG Result admission and sanitization | `js/services/svg-result-ingestion.js` |
 | Feature-editor entry point | `js/app/feature-editor.js` |
 | Feature-editor helpers | `js/app/feature-editor/` |
+| Right-side editor drawer state and transitions | `js/app/right-drawer.js` |
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
@@ -75,6 +76,44 @@ fallback.
 Keep top-level `create*` entry points in `js/app/*.js`. Put larger,
 single-purpose helpers in the matching subfolder instead of growing another
 general utility module.
+
+## Reactive availability and live-edit invariants
+
+Treat a UI selection from a dynamic domain as valid state, not as an unchecked
+preference.
+
+- Keep one canonical visibility value and one canonical selected value. Do not
+  add per-tab visibility flags or other mirrors of those values.
+- Give one feature owner all open, toggle, close, reset, restore, availability,
+  and reconciliation transitions. Templates, lifecycle code, session code, and
+  global events call those transitions; they do not assign the refs.
+- Use the same availability predicate for enabled rendering and action
+  resolution. An unavailable or unknown request resolves to a deterministic
+  available fallback. An enabled action must not silently return without a
+  state change.
+- Keep the selected value valid while the control is open or closed. Reconcile
+  capability loss synchronously. Capability gain does not replace a currently
+  valid selection.
+- Close and Escape change visibility only. Successful document replacement
+  resets transient UI state. Failed replacement restores source data first,
+  then restores and reconciles transient UI state against that data.
+- A watcher may invoke the owner reconciler for external mutations, but watcher
+  execution is not an invariant mechanism. Bulk operations may suppress or
+  coalesce watchers and must call the same transition explicitly when needed.
+- Derive mount and visibility conditions from canonical state. Do not introduce
+  a second ref solely to trigger editor synchronization.
+
+The right-side editor is a live-edit boundary. A single Feature, Label, Legend,
+or visibility edit must commit its canonical override state before returning;
+Generate, session save, and drawer close are never live-edit triggers. Route the
+mutation through the owning editor action so History records the same operation.
+If a mounted target exists, update it and the current Result synchronously before
+optional geometry reflow. If canonical output requires creating or removing
+geometry and no mounted target exists, queue the owning automatic rerender in
+the same action and replace the Result when it completes. A rerender failure must
+keep any direct edit already applied and report the failure. Metadata-only edits
+with no static SVG target, such as Similarity group names and descriptions,
+update canonical state only.
 
 ## Request and session boundary
 
@@ -141,6 +180,9 @@ Before adding or changing a control, trace its complete lifecycle:
    behavior changes.
 7. Update Gallery tutorial captures when the control is part of a documented
    workflow.
+
+For a dynamically available control, also identify its availability, fallback,
+reconciliation, and live-edit owner under the invariants above.
 
 Do not add a diagram argv builder. Project each control once at the canonical
 request boundary instead of duplicating it in configuration and session modules.

@@ -571,7 +571,6 @@ const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const resultGenerationKey = ref(0);
-const showFeaturePanel = ref(false);
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
 const featureSearch = ref('');
@@ -710,7 +709,6 @@ const sidebarWidth = ref(320); // Initial width in pixels
 const isResizing = ref(false);
 
 // Legend Editor state
-const showLegendPanel = ref(false);
 const legendEntries = ref([]); // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
 const deletedLegendEntries = ref([]); // Track deleted entries for restoration
 const originalLegendOrder = ref([]); // Store original order from generation
@@ -1036,7 +1034,6 @@ export const state = {
   featureRecordIds,
   selectedFeatureRecordIdx,
   resultGenerationKey,
-  showFeaturePanel,
   featurePanelTab,
   featureSearchInput,
   featureSearch,
@@ -1102,7 +1099,6 @@ export const state = {
   globalLabelModeDialog,
   sidebarWidth,
   isResizing,
-  showLegendPanel,
   legendEntries,
   deletedLegendEntries,
   originalLegendOrder,

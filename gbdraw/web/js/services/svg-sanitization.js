@@ -38,6 +38,7 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-label-feature-id',
     'data-label-source-text',
     'data-label-editable',
+    'data-gbdraw-label-visibility-preview',
     'data-collinearity-block-id',
     'data-collinearity-block-kind',
     'data-collinearity-orientation',

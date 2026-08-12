@@ -22,8 +22,6 @@
     <script src="./vendor/vue/vue.global.js"></script>
     <script src="./vendor/tailwindcss/tailwindcss-play.js"></script>
     <script src="./vendor/pyodide/v0.29.0/full/pyodide.js"></script>
-    <script src="./vendor/jspdf/jspdf.umd.min.js"></script>
-    <script src="./vendor/svg2pdf.js/svg2pdf.umd.min.js"></script>
     <script src="./vendor/dompurify/purify.min.js"></script>
     <!-- GOOGLE_ANALYTICS_SCRIPT -->
     <style>
@@ -5721,7 +5719,7 @@
 
                 <!-- Right-side editor drawer -->
                 <button v-if="svgContent && resultPanelTab === 'preview'"
-                        @click="showRightDrawer ? closeRightDrawer() : openRightDrawerTab(rightDrawerTab || (orthogroupCount > 0 ? 'orthogroups' : 'features'))"
+                        @click="toggleRightDrawer"
                         class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-20 transition-all"
                         :aria-expanded="showRightDrawer"
                         :title="showRightDrawer ? 'Close editor' : 'Open editor'">
@@ -5759,11 +5757,11 @@
                             <span>Features</span>
                         </button>
                         <button @click="openRightDrawerTab('orthogroups')"
-                                :disabled="orthogroupCount === 0"
+                                :disabled="!isRightDrawerTabAvailable('orthogroups')"
                                 :class="[
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'orthogroups' ? 'bg-emerald-100 text-emerald-700 font-semibold' : 'text-slate-500 hover:bg-slate-100',
-                                  orthogroupCount === 0 ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
+                                  !isRightDrawerTabAvailable('orthogroups') ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
                                 ]">
                             <i class="ph ph-tree-structure"></i>
                             <span>Similarity groups</span>

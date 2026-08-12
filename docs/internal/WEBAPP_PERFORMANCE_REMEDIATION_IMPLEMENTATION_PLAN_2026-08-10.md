@@ -1,7 +1,7 @@
 # Webアプリ性能改修計画
 
 Date: 2026-08-10  
-Status: planned  
+Status: active; Phases 0–3 completed/superseded by PR #320 (`6811f42178823cac614aa2f2d37748b22331b18d`); Phase 4 is next; Phase 5 remains measurement-conditional.<br>
 Baseline: `docs_renovation` / `48973a0376f8` と、その時点の未コミット変更を含むcurrent worktree  
 Scope: `gbdraw/web` の起動、session復元、Undo/Redo、SVG preview、補助Pyodide、色ルール、export読込
 
@@ -94,7 +94,7 @@ Scope: `gbdraw/web` の起動、session復元、Undo/Redo、SVG preview、補助
 
 ## 5. Phase 0: 再現手順とbaselineを固定する
 
-Status: pending
+Status: completed/superseded by PR #320 (`6811f42178823cac614aa2f2d37748b22331b18d`)
 
 ### 作業
 
@@ -133,7 +133,7 @@ Status: pending
 
 ## 6. Phase 1: Historyを全artifact snapshotから分離する（P0）
 
-Status: pending
+Status: completed/superseded by PR #320 (`6811f42178823cac614aa2f2d37748b22331b18d`)
 
 ### 対象owner
 
@@ -182,7 +182,7 @@ npx playwright test tests/web/webapp-performance.playwright.spec.js
 
 ## 7. Phase 2: SVGを一度だけsanitizeして一度だけcommitする（P0）
 
-Status: pending
+Status: completed/superseded by PR #320 (`6811f42178823cac614aa2f2d37748b22331b18d`)
 
 ### 対象owner
 
@@ -240,7 +240,7 @@ npx playwright test tests/web/webapp-performance.playwright.spec.js
 
 ## 8. Phase 3: No-op session復元でmain-thread Pyodideを起動しない（P0）
 
-Status: pending
+Status: completed/superseded by PR #320 (`6811f42178823cac614aa2f2d37748b22331b18d`)
 
 ### 対象owner
 
@@ -274,7 +274,7 @@ npx playwright test tests/web/webapp-performance.playwright.spec.js
 
 ## 9. Phase 4: 開発用runtimeと未使用export payloadを初期経路から外す（P1）
 
-Status: pending
+Status: next (current scope: 4C / P1-1a lazy export payload loading only)
 
 ### 4A. Vue production build
 
@@ -314,7 +314,7 @@ python tools/verify_gui_offline.py
 
 ## 10. Phase 5: 色ルール走査を一回にまとめる（P1、測定条件付き）
 
-Status: pending
+Status: measurement-conditional
 
 Phase 2完了後、large feature fixtureで色ルール処理が残りのlong task上位にある場合だけ実行する。
 
