@@ -1119,16 +1119,16 @@
                     </button>
                 </div>
                 <div class="app-file-actions flex gap-0.5">
-                    <button @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
+                    <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
                     </button>
                     <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
                         <i class="ph ph-archive"></i> Save Session
                     </button>
-                    <button @click="$refs.sessionInput.click()" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Load Session" aria-label="Load Session">
+                    <button data-history-managed @click="$refs.sessionInput.click()" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
-                    <input type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
+                    <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                 </div>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
                     <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
@@ -1904,7 +1904,7 @@
                 <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                 <span>{{ circularConservationLayoutWarning }}</span>
             </div>
-            <button type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="processing"
+            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="processing"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>

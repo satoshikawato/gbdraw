@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'history-inputs.js');
+const indexPath = join(repoRoot, 'gbdraw', 'web', 'index.html');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-inputs-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
@@ -22,5 +23,20 @@ assert.equal(isIgnoredTarget({ closest: () => null }), false);
 assert.equal(isIgnoredTarget(targetMatching('data-history-ignore')), true);
 assert.equal(isIgnoredTarget(targetMatching('data-history-managed')), true);
 assert.equal(isIgnoredTarget(targetMatching('data-history-scope="transient"')), true);
+
+const indexHtml = await readFile(indexPath, 'utf8');
+[
+  '@click="resetSettings"',
+  '@click="runAnalysis"',
+  '@click="$refs.sessionInput.click()"',
+  '@change="importSession"'
+].forEach((handler) => {
+  const escapedHandler = handler.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(
+    indexHtml,
+    new RegExp(`<(?:button|input)(?=[^>]*${escapedHandler})(?=[^>]*data-history-managed)[^>]*>`),
+    `${handler} must bypass the generic input adapter and retain its explicit History boundary`
+  );
+});
 
 console.log('history input tests passed');

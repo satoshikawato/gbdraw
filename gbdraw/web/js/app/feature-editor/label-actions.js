@@ -337,7 +337,7 @@ const buildContextKey = (svg, mode) => {
   return `${mode}:${ids.join(',')}`;
 };
 
-export const createFeatureLabelActions = ({ state }) => {
+export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   const {
     mode,
     form,
@@ -375,6 +375,10 @@ export const createFeatureLabelActions = ({ state }) => {
   };
 
   const serializeCurrentSvg = (svg) => {
+    if (previewRuntime?.markActiveResultDirty?.('feature-label')) {
+      skipCaptureBaseConfig.value = true;
+      return;
+    }
     const index = selectedResultIndex.value;
     if (index < 0 || index >= results.value.length) return;
     const serialized = serializeCleanSvg(svg);
@@ -613,6 +617,17 @@ export const createFeatureLabelActions = ({ state }) => {
     if (changed) {
       serializeCurrentSvg(svg);
     }
+  };
+
+  const reconcileLabelOverrides = () => {
+    const svg = svgContainer.value?.querySelector?.('svg');
+    if (!svg) return false;
+    const resetChanged = resetLabelsToSourceText(svg);
+    const overrideChanged = applyStoredOverridesToSvg(svg);
+    refreshEditableList(svg);
+    syncClickedFeatureLabelState();
+    if (resetChanged || overrideChanged) serializeCurrentSvg(svg);
+    return resetChanged || overrideChanged;
   };
 
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
@@ -1039,6 +1054,7 @@ export const createFeatureLabelActions = ({ state }) => {
     handleLabelTextScopeChoice,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
+    reconcileLabelOverrides,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,

@@ -54,7 +54,8 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE
+  COMPOSITION_SCHEMA_ATTRIBUTE,
+  compositionUserDeltas
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
@@ -965,6 +966,15 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
+    buildCompositionIntent: () => {
+      const svg = svgContainer.value?.querySelector?.('svg') || null;
+      if (!svg) return null;
+      try {
+        return compositionUserDeltas(svg);
+      } catch (_error) {
+        return null;
+      }
+    },
     buildFeatureStateData,
     applyFeatureStateData,
     buildEditorStateData,
@@ -977,9 +987,11 @@ export const createAppSetup = () => {
     applyRunStateData
   });
   const history = createHistoryManager({
-    buildSnapshot: historySnapshots.buildHistorySnapshot,
-    applySnapshot: historySnapshots.applyHistorySnapshot,
-    snapshotSignature: historySnapshots.snapshotSignature,
+    buildIntent: historySnapshots.buildHistoryIntent,
+    applyIntent: historySnapshots.applyHistoryIntent,
+    buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
+    applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     makeRef: ref
   });
@@ -1013,7 +1025,8 @@ export const createAppSetup = () => {
     state,
     getPyodide,
     ensurePyodide: pyodideManager.initPyodide,
-    history
+    history,
+    previewRuntime
   });
   const svgActions = createSvgStyles({
     state,
@@ -2028,6 +2041,8 @@ export const createAppSetup = () => {
     setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
+    reconcileLegendEntries,
+    reconcileStrokeOverrides,
     resetLegendEntryStroke,
     resetAllStrokes
   } = legendActions;
@@ -2091,8 +2106,32 @@ export const createAppSetup = () => {
     handleGlobalLabelModeChoice,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
+    reconcileFeatureVisibility,
+    reconcileLabelOverrides,
     resetAllLabelTextOverrides
   } = featureActions;
+
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains } = {}) => {
+    if (!svgContainer.value?.querySelector?.('svg')) return;
+    const changedDomains = domains instanceof Set ? domains : new Set();
+    if (changedDomains.has('ui')) {
+      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
+    }
+    if (changedDomains.has('config') || changedDomains.has('features')) {
+      svgActions.applyPaletteToSvg();
+      svgActions.applySpecificRulesToSvg();
+    }
+    if (changedDomains.has('features')) {
+      reconcileFeatureVisibility();
+      reconcileLabelOverrides();
+    }
+    if (changedDomains.has('editorState')) {
+      reconcileLegendEntries();
+      reconcileStrokeOverrides();
+      reconcileLabelOverrides();
+    }
+    await nextTick();
+  });
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
@@ -2233,7 +2272,7 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = async () => history.runUndoable('Generate diagram', async () => {
+  const runAnalysis = async () => history.runUndoableCheckpoint('Generate diagram', async () => {
     cancelDefinitionUpdate();
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
@@ -2346,16 +2385,19 @@ export const createAppSetup = () => {
     const proceed = window.confirm(
       'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
     );
-    if (!proceed) return;
+    if (!proceed) return false;
 
-    cancelDefinitionUpdate();
-    resetSettingsState(state);
-    invalidateLinearComparisonArtifacts();
-    matchSequenceRegistry?.reset?.();
-    circularTrackNewRenderer.value = 'dinucleotide_skew';
-    linearTrackNewRenderer.value = 'dinucleotide_skew';
-    depthTrackUiCounts.circular = 1;
-    ensureDepthTrackConfigCount(activeDepthTrackCount());
+    return history.runUndoableCheckpoint('Reset settings', async () => {
+      cancelDefinitionUpdate();
+      resetSettingsState(state);
+      invalidateLinearComparisonArtifacts();
+      matchSequenceRegistry?.reset?.();
+      circularTrackNewRenderer.value = 'dinucleotide_skew';
+      linearTrackNewRenderer.value = 'dinucleotide_skew';
+      depthTrackUiCounts.circular = 1;
+      ensureDepthTrackConfigCount(activeDepthTrackCount());
+      return true;
+    });
   };
 
   const resetLayout = () => {

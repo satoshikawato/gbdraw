@@ -870,6 +870,44 @@ export const resetCompositionUserDeltas = (svg) => {
   return binding;
 };
 
+export const applyCompositionUserDeltas = (svg, deltas = {}) => {
+  const binding = bindCompositionMetadata(svg);
+  let changed = false;
+
+  const applyDelta = (target, automaticTranslation, requested) => {
+    if (!target || !Array.isArray(requested) || requested.length !== 2) return;
+    const x = Number(requested[0]);
+    const y = Number(requested[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const current = targetLeadingTranslate(target, target.getAttribute?.(COMPOSITION_ROLE_ATTRIBUTE) || 'unknown');
+    const nextX = automaticTranslation[0] + x;
+    const nextY = automaticTranslation[1] + y;
+    if (current.x === nextX && current.y === nextY) return;
+    setLeading(target, automaticTranslation, [x, y]);
+    changed = true;
+  };
+
+  binding.primary.targets.forEach((target, index) => {
+    applyDelta(target, binding.metadata.primary.automaticTranslation, deltas.primary?.[index]);
+  });
+  if (binding.legend.metadata) {
+    applyDelta(
+      binding.legend.targets[0],
+      binding.legend.metadata.automaticTranslation,
+      deltas.legend
+    );
+  }
+  if (binding.title.metadata) {
+    applyDelta(
+      binding.title.targets[0],
+      binding.title.metadata.automaticTranslation,
+      deltas.title
+    );
+  }
+
+  return { binding, changed };
+};
+
 const elementTag = (element) => String(element?.tagName || '').toLowerCase().replace(/^.*:/, '');
 const discoverLegacyTargets = (svg) => {
   const legend = svg.getElementById?.('legend') || null;

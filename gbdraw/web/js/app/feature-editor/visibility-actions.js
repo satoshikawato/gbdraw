@@ -477,6 +477,14 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     return '';
   };
 
+  const reconcileFeatureVisibility = () => applyVisibilityPreviewChanges(
+    uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
+      .map((feature) => ({
+        featureId: normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id),
+        mode: getFeatureVisibility(feature)
+      }))
+  );
+
   return {
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
@@ -487,6 +495,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
+    reconcileFeatureVisibility,
     removeFeatureVisibilityRule,
     setFeatureVisibility,
     setSelectedFeaturesVisibility,

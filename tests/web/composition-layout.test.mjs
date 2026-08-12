@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 
 import {
   applyCompositionEdit,
+  applyCompositionUserDeltas,
   bindCompositionMetadata,
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_ROLE_ATTRIBUTE,
@@ -350,6 +351,18 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
   assert.equal(svg.getAttribute('viewBox'), `0 0 ${next.metadata.primary.finalBounds.width + 32} ${Number.parseFloat(svg.getAttribute('height'))}`);
   assert.equal(svg.getAttribute('data-horizontal-viewbox'), null);
   assert.equal(svg.getAttribute('data-vertical-viewbox'), null);
+}
+
+{
+  const { svg } = schemaOneSvg();
+  const desired = {
+    primary: [[8, 3], [-4, 2]],
+    legend: [-6, 7],
+    title: [9, -5]
+  };
+  assert.equal(applyCompositionUserDeltas(svg, desired).changed, true);
+  assert.deepEqual(compositionUserDeltas(svg), desired);
+  assert.equal(applyCompositionUserDeltas(svg, desired).changed, false);
 }
 
 {

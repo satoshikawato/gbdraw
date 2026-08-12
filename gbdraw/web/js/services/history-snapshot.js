@@ -26,6 +26,101 @@ const replacePlainObject = (target, source) => {
   });
 };
 
+const replaceRefArray = (target, source) => {
+  if (!target || typeof target !== 'object' || !Object.prototype.hasOwnProperty.call(target, 'value')) return;
+  target.value = Array.isArray(source) ? cloneJsonData(source) : [];
+};
+
+const buildFeatureIntentData = (features = {}) => ({
+  selectedFeatureRecordIdx: Number.isInteger(features.selectedFeatureRecordIdx)
+    ? features.selectedFeatureRecordIdx
+    : 0,
+  featureColorOverrides: clonePlainObject(features.featureColorOverrides),
+  featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
+  featureVisibilityOverrides: cloneFeatureVisibilityOverrides(features.featureVisibilityOverrides),
+  labelTextFeatureOverrides: clonePlainObject(features.labelTextFeatureOverrides),
+  labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides),
+  labelTextFeatureOverrideSources: clonePlainObject(features.labelTextFeatureOverrideSources),
+  labelVisibilityOverrides: clonePlainObject(features.labelVisibilityOverrides),
+  labelOverrideContextKey: String(features.labelOverrideContextKey || '')
+});
+
+const buildEditorIntentData = (editorState = {}) => ({
+  legend: {
+    entries: cloneJsonData(editorState?.legend?.entries) || [],
+    deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
+    colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
+    strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
+    addedCaptions: cloneJsonData(editorState?.legend?.addedCaptions) || []
+  },
+  featureStrokes: {
+    overrides: clonePlainObject(editorState?.featureStrokes?.overrides)
+  }
+});
+
+const buildOrthogroupIntentData = (orthogroupState = {}) => ({
+  selectedOrthogroupId: String(orthogroupState.selectedOrthogroupId || ''),
+  selectedOrthogroupAlignmentFeature: String(orthogroupState.selectedOrthogroupAlignmentFeature || ''),
+  orthogroupNameOverrides: clonePlainObject(orthogroupState.orthogroupNameOverrides),
+  orthogroupDescriptionOverrides: clonePlainObject(orthogroupState.orthogroupDescriptionOverrides)
+});
+
+const buildUiIntentData = (ui = {}) => {
+  const intent = clonePlainObject(ui);
+  delete intent.generatedLegendPosition;
+  delete intent.generatedMode;
+  delete intent.generatedMultiRecordCanvas;
+  delete intent.generatedCircularPlotTitlePosition;
+  return intent;
+};
+
+const applyFeatureIntentData = (state, features = {}) => {
+  setRef(
+    state.selectedFeatureRecordIdx,
+    Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
+  );
+  replacePlainObject(state.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
+  replaceFeatureVisibilityState(state, features);
+  replacePlainObject(state.labelTextFeatureOverrides, clonePlainObject(features.labelTextFeatureOverrides));
+  replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
+  replacePlainObject(
+    state.labelTextFeatureOverrideSources,
+    clonePlainObject(features.labelTextFeatureOverrideSources)
+  );
+  replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
+  setRef(state.labelOverrideContextKey, String(features.labelOverrideContextKey || ''));
+};
+
+const applyEditorIntentData = (state, editorState = {}) => {
+  const legend = editorState.legend || {};
+  replaceRefArray(state.legendEntries, legend.entries);
+  replaceRefArray(state.deletedLegendEntries, legend.deletedEntries);
+  replacePlainObject(state.legendColorOverrides, clonePlainObject(legend.colorOverrides));
+  replacePlainObject(state.legendStrokeOverrides, clonePlainObject(legend.strokeOverrides));
+  if (state.addedLegendCaptions?.value !== undefined) {
+    state.addedLegendCaptions.value = new Set(
+      Array.isArray(legend.addedCaptions) ? legend.addedCaptions.map((entry) => String(entry || '')) : []
+    );
+  }
+  replacePlainObject(
+    state.featureStrokeOverrides,
+    clonePlainObject(editorState?.featureStrokes?.overrides)
+  );
+};
+
+const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
+  setRef(state.selectedOrthogroupId, String(orthogroupState.selectedOrthogroupId || ''));
+  setRef(
+    state.selectedOrthogroupAlignmentFeature,
+    String(orthogroupState.selectedOrthogroupAlignmentFeature || '')
+  );
+  replacePlainObject(state.orthogroupNameOverrides, clonePlainObject(orthogroupState.orthogroupNameOverrides));
+  replacePlainObject(
+    state.orthogroupDescriptionOverrides,
+    clonePlainObject(orthogroupState.orthogroupDescriptionOverrides)
+  );
+};
+
 const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
   mode: String(plan?.mode || 'adjacent'),
   defaultSource: String(plan?.defaultSource || 'losat'),
@@ -108,6 +203,40 @@ const getRef = (target, fallback = null) => (
     ? target.value
     : fallback
 );
+
+const buildDraftIntentData = (state) => ({
+  selectedAnnotation: cloneJsonData(getRef(state.selectedAnnotation, null)),
+  selectedSpecificPreset: String(getRef(state.selectedSpecificPreset, '') || ''),
+  newSpecRule: clonePlainObject(state.newSpecRule),
+  newPriorityRule: clonePlainObject(state.newPriorityRule),
+  newColorFeat: String(getRef(state.newColorFeat, '') || ''),
+  newColorVal: String(getRef(state.newColorVal, '') || ''),
+  newFeatureToAdd: String(getRef(state.newFeatureToAdd, '') || ''),
+  newLegendCaption: String(getRef(state.newLegendCaption, '') || ''),
+  newLegendColor: String(getRef(state.newLegendColor, '') || ''),
+  fileLegendCaptions: Array.from(getRef(state.fileLegendCaptions, new Set()) || [])
+    .map((caption) => String(caption || '').trim())
+    .filter(Boolean)
+});
+
+const applyDraftIntentData = (state, drafts = {}) => {
+  setRef(state.selectedAnnotation, cloneJsonData(drafts.selectedAnnotation) || null);
+  setRef(state.selectedSpecificPreset, String(drafts.selectedSpecificPreset || ''));
+  replacePlainObject(state.newSpecRule, clonePlainObject(drafts.newSpecRule));
+  replacePlainObject(state.newPriorityRule, clonePlainObject(drafts.newPriorityRule));
+  setRef(state.newColorFeat, String(drafts.newColorFeat || ''));
+  setRef(state.newColorVal, String(drafts.newColorVal || ''));
+  setRef(state.newFeatureToAdd, String(drafts.newFeatureToAdd || ''));
+  setRef(state.newLegendCaption, String(drafts.newLegendCaption || ''));
+  setRef(state.newLegendColor, String(drafts.newLegendColor || ''));
+  if (state.fileLegendCaptions?.value !== undefined) {
+    state.fileLegendCaptions.value = new Set(
+      Array.isArray(drafts.fileLegendCaptions)
+        ? drafts.fileLegendCaptions.map((caption) => String(caption || '').trim()).filter(Boolean)
+        : []
+    );
+  }
+};
 
 const nextFrame = () => new Promise((resolve) => {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -333,6 +462,46 @@ const buildFilesData = (state, fileStore) => ({
   }))
 });
 
+const buildIntentFilesData = (state, fileStore) => {
+  const files = {
+    c_gb: fileStore.describeValue(state.files?.c_gb),
+    c_gff: fileStore.describeValue(state.files?.c_gff),
+    c_fasta: fileStore.describeValue(state.files?.c_fasta),
+    c_depth: fileStore.describeValue(state.files?.c_depth),
+    c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
+      ? 'losat-cache'
+      : null,
+    c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
+    d_color: fileStore.describeValue(state.files?.d_color),
+    t_color: fileStore.describeValue(state.files?.t_color),
+    blacklist: fileStore.describeValue(state.files?.blacklist),
+    whitelist: fileStore.describeValue(state.files?.whitelist),
+    qualifier_priority: fileStore.describeValue(state.files?.qualifier_priority),
+    linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
+      uid: seq.uid,
+      gb: fileStore.describeValue(seq.gb),
+      gff: fileStore.describeValue(seq.gff),
+      fasta: fileStore.describeValue(seq.fasta),
+      depth: fileStore.describeValue(seq.depth),
+      losat_gencode: seq.losat_gencode ?? 1,
+      definition: seq.definition ?? '',
+      record_subtitle: seq.record_subtitle ?? '',
+      region_record_id: seq.region_record_id ?? '',
+      region_start: seq.region_start ?? null,
+      region_end: seq.region_end ?? null,
+      region_reverse: Boolean(seq.region_reverse)
+    })),
+    linearComparisons: Array.from(state.linearComparisonPlan?.edges || []).map((edge) => ({
+      id: String(edge?.id || ''),
+      file: fileStore.describeValue(edge?.file)
+    }))
+  };
+  if (state.files?.c_conservation_blasts_source !== 'losat-cache') {
+    files.c_conservation_blasts = fileStore.describeValue(state.files?.c_conservation_blasts || []);
+  }
+  return files;
+};
+
 const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = null) => {
   if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
@@ -341,25 +510,33 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
   state.files.c_gff = restore(filesData?.c_gff);
   state.files.c_fasta = restore(filesData?.c_fasta);
   state.files.c_depth = restore(filesData?.c_depth);
-  state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-    ? restore(filesData.c_conservation_blasts).filter(Boolean)
-    : [];
-  state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
-    ? 'losat-cache'
-    : null;
+  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_blasts')) {
+    state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
+      ? restore(filesData.c_conservation_blasts).filter(Boolean)
+      : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_blasts_source')) {
+    state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
+      ? 'losat-cache'
+      : null;
+  }
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
     ? restore(filesData.c_conservation_fastas)
     : [];
-  state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
-    ? restore(filesData.c_conservation_sequence_sources)
-    : [];
-  state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
-    ? filesData.linearCanonicalComparisons.map((comparison) => (
-        isResourceBackedCanonicalComparison(comparison)
-          ? mapResourceBackedCanonicalComparison(comparison, restore)
-          : cloneJsonData(comparison)
-      ))
-    : [];
+  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_sequence_sources')) {
+    state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
+      ? restore(filesData.c_conservation_sequence_sources)
+      : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
+    state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
+      ? filesData.linearCanonicalComparisons.map((comparison) => (
+          isResourceBackedCanonicalComparison(comparison)
+            ? mapResourceBackedCanonicalComparison(comparison, restore)
+            : cloneJsonData(comparison)
+        ))
+      : [];
+  }
   state.files.d_color = restore(filesData?.d_color);
   state.files.t_color = restore(filesData?.t_color);
   state.files.blacklist = restore(filesData?.blacklist);
@@ -407,6 +584,7 @@ export const createHistorySnapshotService = ({
   applyConfigData = null,
   buildUiStateData = null,
   applyUiStateData = null,
+  buildCompositionIntent = null,
   buildFeatureStateData = null,
   applyFeatureStateData = null,
   buildEditorStateData = null,
@@ -421,6 +599,12 @@ export const createHistorySnapshotService = ({
   if (!state || !fileStore) {
     throw new Error('createHistorySnapshotService requires state and fileStore.');
   }
+
+  let afterApplyHistoryIntent = null;
+
+  const setAfterApplyHistoryIntent = (callback) => {
+    afterApplyHistoryIntent = typeof callback === 'function' ? callback : null;
+  };
 
   const buildGeneratedArtifactSnapshot = ({ includePreviewNavigation = true } = {}) => {
     const ui = typeof buildUiStateData === 'function'
@@ -455,13 +639,18 @@ export const createHistorySnapshotService = ({
     });
   };
 
-  const applyArtifactDomains = (snapshot, { trusted = false } = {}) => {
+  const applyArtifactDomains = (
+    snapshot,
+    { trusted = false, restoreResults = true } = {}
+  ) => {
     const ui = snapshot?.ui || {};
-    if (typeof applyResultsData === 'function') {
-      applyResultsData(snapshot?.results || [], ui);
-    } else {
-      applyFallbackResultsData(state, snapshot?.results || []);
-      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
+    if (restoreResults) {
+      if (typeof applyResultsData === 'function') {
+        applyResultsData(snapshot?.results || [], ui);
+      } else {
+        applyFallbackResultsData(state, snapshot?.results || []);
+        applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
+      }
     }
 
     if (typeof applyFeatureStateData === 'function') {
@@ -488,11 +677,11 @@ export const createHistorySnapshotService = ({
     }
   };
 
-  const applyGeneratedArtifactSnapshot = (snapshot) => {
+  const applyGeneratedArtifactSnapshot = (snapshot, { restoreResults = true } = {}) => {
     if (!snapshot || typeof snapshot !== 'object') return;
     if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
     if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    applyArtifactDomains(snapshot, { trusted: true });
+    applyArtifactDomains(snapshot, { trusted: true, restoreResults });
     if (typeof applyUiStateData === 'function') {
       applyUiStateData(snapshot.ui || {});
     } else {
@@ -500,7 +689,145 @@ export const createHistorySnapshotService = ({
     }
   };
 
-  const buildHistorySnapshot = async () => {
+  const buildHistoryIntent = async () => {
+    const config = typeof buildConfigData === 'function'
+      ? buildConfigData()
+      : {
+          form: state.form,
+          adv: state.adv,
+          linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
+        };
+    const ui = typeof buildUiStateData === 'function'
+      ? buildUiStateData({ includePreviewNavigation: false })
+      : buildFallbackUiStateData(state);
+    const features = {
+      selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
+      featureColorOverrides: state.featureColorOverrides,
+      featureVisibilityManualRules: state.featureVisibilityManualRules,
+      featureVisibilityOverrides: state.featureVisibilityOverrides,
+      labelTextFeatureOverrides: state.labelTextFeatureOverrides,
+      labelTextBulkOverrides: state.labelTextBulkOverrides,
+      labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
+      labelVisibilityOverrides: state.labelVisibilityOverrides,
+      labelOverrideContextKey: getRef(state.labelOverrideContextKey, '')
+    };
+    const editorState = {
+      legend: {
+        entries: getRef(state.legendEntries, []),
+        deletedEntries: getRef(state.deletedLegendEntries, []),
+        colorOverrides: state.legendColorOverrides,
+        strokeOverrides: state.legendStrokeOverrides,
+        addedCaptions: Array.from(getRef(state.addedLegendCaptions, new Set()) || [])
+      },
+      featureStrokes: { overrides: state.featureStrokeOverrides }
+    };
+    const orthogroupState = {
+      selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
+      selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
+      orthogroupNameOverrides: state.orthogroupNameOverrides,
+      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides
+    };
+
+    const uiIntent = buildUiIntentData(ui);
+    const compositionDeltas = typeof buildCompositionIntent === 'function'
+      ? cloneJsonData(buildCompositionIntent())
+      : null;
+    if (compositionDeltas) uiIntent.compositionUserDeltas = compositionDeltas;
+
+    return cloneJsonData({
+      config,
+      files: buildIntentFilesData(state, fileStore),
+      ui: uiIntent,
+      drafts: buildDraftIntentData(state),
+      features: buildFeatureIntentData(features),
+      editorState: buildEditorIntentData(editorState),
+      orthogroupState: buildOrthogroupIntentData(orthogroupState)
+    });
+  };
+
+  const applyHistoryIntent = async (intent, context = {}) => {
+    if (!intent || typeof intent !== 'object') return;
+    closeTransientState(state);
+
+    const domains = new Set(
+      Array.isArray(context.changes) && context.changes.length > 0
+        ? context.changes.map((change) => change?.path?.[0]).filter(Boolean)
+        : ['config', 'files', 'ui', 'drafts', 'features', 'editorState', 'orthogroupState']
+    );
+    const retainedComparisonFiles = domains.has('config') && !domains.has('files')
+      ? new Map(
+          (Array.isArray(state.linearComparisonPlan?.edges)
+            ? state.linearComparisonPlan.edges
+            : []
+          )
+            .map((edge) => [String(edge?.id || ''), edge?.file ?? null])
+            .filter(([edgeId]) => edgeId)
+        )
+      : null;
+    const suppressRef = state.semanticFileWatchersSuppressed;
+    const previousSuppressed = getRef(suppressRef, false);
+    setRef(suppressRef, true);
+    try {
+      if (domains.has('ui')) {
+        const ui = intent.ui || {};
+        if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+        if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
+        if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+        await nextTick();
+      }
+
+      if (domains.has('config')) {
+        if (typeof applyConfigData === 'function' && intent.config) {
+          applyConfigData(intent.config);
+        } else if (intent.config?.linearComparisonPlan) {
+          replaceLinearComparisonPlan(state.linearComparisonPlan, intent.config.linearComparisonPlan);
+        }
+        if (retainedComparisonFiles) {
+          (state.linearComparisonPlan?.edges || []).forEach((edge) => {
+            const edgeId = String(edge?.id || '');
+            if (edgeId && retainedComparisonFiles.has(edgeId)) {
+              edge.file = retainedComparisonFiles.get(edgeId);
+            }
+          });
+        }
+      }
+
+      if (domains.has('ui')) {
+        if (typeof applyUiStateData === 'function') {
+          applyUiStateData(intent.ui || {}, { restorePreviewNavigation: false });
+        } else {
+          applyFallbackUiStateData(state, intent.ui || {});
+        }
+        if (Number.isInteger(intent.ui?.selectedResultIndex)) {
+          const resultCount = Array.isArray(getRef(state.results, []))
+            ? getRef(state.results, []).length
+            : 0;
+          setRef(
+            state.selectedResultIndex,
+            resultCount > 0
+              ? Math.max(0, Math.min(intent.ui.selectedResultIndex, resultCount - 1))
+              : 0
+          );
+        }
+      }
+
+      if (domains.has('files')) {
+        applyFilesData(state, intent.files || {}, fileStore, normalizeLinearSeqList);
+      }
+      if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
+      if (domains.has('features')) applyFeatureIntentData(state, intent.features || {});
+      if (domains.has('editorState')) applyEditorIntentData(state, intent.editorState || {});
+      if (domains.has('orthogroupState')) {
+        applyOrthogroupIntentData(state, intent.orthogroupState || {});
+      }
+      await nextTick();
+      if (afterApplyHistoryIntent) await afterApplyHistoryIntent(intent, { ...context, domains });
+    } finally {
+      setRef(suppressRef, previousSuppressed);
+    }
+  };
+
+  const buildArtifactCheckpoint = () => {
     const config = typeof buildConfigData === 'function'
       ? buildConfigData()
       : {
@@ -512,11 +839,12 @@ export const createHistorySnapshotService = ({
     return cloneJsonData({
       config,
       files: buildFilesData(state, fileStore),
+      drafts: buildDraftIntentData(state),
       ...buildGeneratedArtifactSnapshot({ includePreviewNavigation: false })
     });
   };
 
-  const applyHistorySnapshot = async (snapshot) => {
+  const applyArtifactCheckpoint = async (snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
     closeTransientState(state);
 
@@ -536,6 +864,7 @@ export const createHistorySnapshotService = ({
         snapshot.config.linearComparisonPlan
       );
     }
+    applyDraftIntentData(state, snapshot.drafts || {});
 
     if (typeof applyUiStateData === 'function') {
       applyUiStateData(ui, { restorePreviewNavigation: false });
@@ -564,10 +893,13 @@ export const createHistorySnapshotService = ({
   const snapshotSignature = (snapshot) => JSON.stringify(snapshot);
 
   return {
+    applyArtifactCheckpoint,
     applyGeneratedArtifactSnapshot,
-    applyHistorySnapshot,
+    applyHistoryIntent,
+    buildArtifactCheckpoint,
     buildGeneratedArtifactSnapshot,
-    buildHistorySnapshot,
+    buildHistoryIntent,
+    setAfterApplyHistoryIntent,
     snapshotSignature
   };
 };
