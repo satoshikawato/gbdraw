@@ -246,10 +246,6 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     orthogroupSortMode,
     selectedOrthogroupAlignmentFeature,
     svgContainer,
-    showRightDrawer,
-    rightDrawerTab,
-    showFeaturePanel,
-    showLegendPanel,
     linearSeqs,
     extractedFeatures,
     biologicalFeatures
@@ -541,8 +537,9 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
 
   const selectOrthogroup = (orthogroupId) => {
     const id = normalizeText(orthogroupId);
-    if (!id || !getOrthogroupById(id)) return;
+    if (!id || !getOrthogroupById(id)) return false;
     selectedOrthogroupId.value = id;
+    return true;
   };
 
   const setOrthogroupNameOverride = (orthogroupId, value) => {
@@ -630,27 +627,6 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     if (typeof runAnalysis === 'function') await runAnalysis();
   };
 
-  const openRightDrawerTab = (tab) => {
-    const normalized = ['legend', 'features', 'orthogroups'].includes(tab) ? tab : 'features';
-    if (normalized === 'orthogroups' && orthogroupCount.value === 0) return;
-    rightDrawerTab.value = normalized;
-    showRightDrawer.value = true;
-    showFeaturePanel.value = normalized === 'features';
-    showLegendPanel.value = normalized === 'legend';
-  };
-
-  const closeRightDrawer = () => {
-    showRightDrawer.value = false;
-    showFeaturePanel.value = false;
-    showLegendPanel.value = false;
-  };
-
-  const openOrthogroupInDrawer = (orthogroupId) => {
-    const id = normalizeText(orthogroupId);
-    if (id && getOrthogroupById(id)) selectedOrthogroupId.value = id;
-    openRightDrawerTab('orthogroups');
-  };
-
   return {
     orthogroupCount,
     selectedAlignmentTargetLabel,
@@ -679,9 +655,6 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     highlightOrthogroupById,
     clearOrthogroupHighlight,
     alignOrthogroupById,
-    resetOrthogroupAlignment,
-    openRightDrawerTab,
-    closeRightDrawer,
-    openOrthogroupInDrawer
+    resetOrthogroupAlignment
   };
 };

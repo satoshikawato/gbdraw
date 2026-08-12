@@ -340,22 +340,51 @@ def _finish_browser_contract(
 def _verify_exports(page) -> None:
     download_dir = Path(tempfile.mkdtemp(prefix="gbdraw-offline-downloads-"))
     try:
-        for method_name, extension in [
+        for method_name, filename_suffix in [
             ("downloadSVG", ".svg"),
             ("downloadPNG", ".png"),
             ("downloadPDF", ".pdf"),
+            ("downloadInteractiveSVG", ".interactive.svg"),
         ]:
             with page.expect_download(timeout=120000) as download_info:
                 page.evaluate(f"() => window.__GBDRAW_APP__.{method_name}()")
             download = download_info.value
             target = download_dir / download.suggested_filename
             download.save_as(target)
-            if target.suffix.lower() != extension:
+            if not target.name.lower().endswith(filename_suffix):
                 raise RuntimeError(
                     f"{method_name} produced unexpected filename {download.suggested_filename}"
                 )
             if target.stat().st_size <= 0:
-                raise RuntimeError(f"{method_name} produced an empty {extension} file.")
+                raise RuntimeError(
+                    f"{method_name} produced an empty {filename_suffix} file."
+                )
+
+            content = target.read_bytes()
+            if method_name == "downloadPNG" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise RuntimeError("downloadPNG did not produce a PNG payload.")
+            if method_name == "downloadPDF" and not content.startswith(b"%PDF-"):
+                raise RuntimeError("downloadPDF did not produce a PDF payload.")
+            if method_name in {"downloadSVG", "downloadInteractiveSVG"}:
+                svg_text = content.decode("utf-8")
+                if "<svg" not in svg_text:
+                    raise RuntimeError(f"{method_name} did not produce an SVG payload.")
+                metadata_marker = 'id="gbdraw-interactive-feature-metadata"'
+                if method_name == "downloadSVG" and metadata_marker in svg_text:
+                    raise RuntimeError("downloadSVG unexpectedly included interactive metadata.")
+                if method_name == "downloadInteractiveSVG":
+                    required_markers = (
+                        metadata_marker,
+                        'id="gbdraw-interactive-feature-style"',
+                        'id="gbdraw-interactive-feature-script"',
+                        'data-gbdraw-interactive-svg="true"',
+                    )
+                    missing = [value for value in required_markers if value not in svg_text]
+                    if missing:
+                        raise RuntimeError(
+                            "downloadInteractiveSVG omitted standalone assets or metadata: "
+                            + ", ".join(missing)
+                        )
     finally:
         shutil.rmtree(download_dir, ignore_errors=True)
 

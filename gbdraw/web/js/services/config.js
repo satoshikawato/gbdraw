@@ -1,5 +1,10 @@
 import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
+import {
+  captureRightDrawerState,
+  resetRightDrawerState,
+  restoreRightDrawerState
+} from '../app/right-drawer.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
@@ -2990,8 +2995,7 @@ const captureSessionImportTransientState = () => ({
     state.suppressCircularMultiRecordDefaults.value
   ),
   linearReorderNotice: state.linearReorderNotice.value,
-  showFeaturePanel: Boolean(state.showFeaturePanel.value),
-  showLegendPanel: Boolean(state.showLegendPanel.value),
+  rightDrawer: captureRightDrawerState(state),
   showCanvasControls: Boolean(state.showCanvasControls.value),
   isPanning: Boolean(state.isPanning.value),
   panStart: cloneJsonData(state.panStart),
@@ -3052,8 +3056,7 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.suppressCircularMultiRecordDefaults.value =
     snapshot.suppressCircularMultiRecordDefaults;
   state.linearReorderNotice.value = snapshot.linearReorderNotice;
-  state.showFeaturePanel.value = snapshot.showFeaturePanel;
-  state.showLegendPanel.value = snapshot.showLegendPanel;
+  restoreRightDrawerState(state, snapshot.rightDrawer);
   state.showCanvasControls.value = snapshot.showCanvasControls;
   state.isPanning.value = snapshot.isPanning;
   Object.assign(state.panStart, cloneJsonData(snapshot.panStart));
@@ -3185,6 +3188,7 @@ const resetSessionBaseline = () => {
   committedCanonicalSession = null;
   resetSettingsState(state);
   resetLayoutState(state);
+  resetRightDrawerState(state);
   state.mode.value = 'circular';
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
@@ -3229,8 +3233,6 @@ const resetSessionBaseline = () => {
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
   state.generatedCircularPlotTitlePosition.value = 'none';
-  state.showFeaturePanel.value = false;
-  state.showLegendPanel.value = false;
 };
 
 export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {

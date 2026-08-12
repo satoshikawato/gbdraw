@@ -61,6 +61,7 @@ import {
   createOrthogroupEditor,
   resolveUniqueOrthogroupMemberForFeature
 } from './orthogroups.js';
+import { createRightDrawerController } from './right-drawer.js';
 import {
   createCircularTrackSlotEditor,
   estimateCircularConservationLayoutWarning
@@ -274,7 +275,6 @@ export const createAppSetup = () => {
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    showFeaturePanel,
     featurePanelTab,
     featureSearchInput,
     featureSearch,
@@ -337,7 +337,6 @@ export const createAppSetup = () => {
     globalLabelModeDialog,
     sidebarWidth,
     isResizing,
-    showLegendPanel,
     legendEntries,
     deletedLegendEntries,
     originalLegendOrder,
@@ -375,6 +374,7 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  const rightDrawerActions = createRightDrawerController({ state, watch });
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -1099,7 +1099,12 @@ export const createAppSetup = () => {
   );
 
   let disposeHistoryInputs = null;
-  setupGlobalUiEvents({ state, onMounted, onUnmounted });
+  setupGlobalUiEvents({
+    state,
+    onMounted,
+    onUnmounted,
+    closeRightDrawer: rightDrawerActions.closeRightDrawer
+  });
   setupHistoryShortcuts({ history, onMounted, onUnmounted });
   onMounted(async () => {
     disposeHistoryInputs = setupHistoryInputs({
@@ -1892,6 +1897,7 @@ export const createAppSetup = () => {
     refreshCircularRecordOrder,
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     resetPreviewViewport,
+    resetRightDrawer: rightDrawerActions.resetRightDrawer,
     previewRuntime,
     preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
     prepareDiagramGenerationWorker: async () => {
@@ -2258,7 +2264,6 @@ export const createAppSetup = () => {
     state,
     runAnalysis
   });
-
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
     return Boolean(
@@ -2323,10 +2328,15 @@ export const createAppSetup = () => {
     orthogroupActions.clearOrthogroupHighlight();
   };
 
+  const openOrthogroupInDrawer = (orthogroupId) => {
+    if (!orthogroupActions.selectOrthogroup(orthogroupId)) return false;
+    rightDrawerActions.openRightDrawerTab('orthogroups');
+    return true;
+  };
+
   const openClickedOrthogroupInEditor = () => {
     const orthogroupId = String(clickedFeature.value?.orthogroupId || '').trim();
-    if (!orthogroupId) return;
-    orthogroupActions.openOrthogroupInDrawer(orthogroupId);
+    if (!openOrthogroupInDrawer(orthogroupId)) return;
     clickedFeature.value = null;
   };
 
@@ -3308,9 +3318,11 @@ export const createAppSetup = () => {
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
     alignOrthogroupById: orthogroupActions.alignOrthogroupById,
-    openRightDrawerTab: orthogroupActions.openRightDrawerTab,
-    closeRightDrawer: orthogroupActions.closeRightDrawer,
-    openOrthogroupInDrawer: orthogroupActions.openOrthogroupInDrawer,
+    isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
+    openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
+    toggleRightDrawer: rightDrawerActions.toggleRightDrawer,
+    closeRightDrawer: rightDrawerActions.closeRightDrawer,
+    openOrthogroupInDrawer,
     circularRecordList,
     paletteDefinitions,
     paletteNames,
@@ -3373,7 +3385,6 @@ export const createAppSetup = () => {
     featureExtractionError,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    showFeaturePanel,
     featurePanelTab,
     featureSearchInput,
     featureSearch,
@@ -3525,7 +3536,6 @@ export const createAppSetup = () => {
     loadLabelOverrideTable: loadLabelOverrideTableWithHistory,
     syncLabelEditor,
     openFeatureEditorFromList,
-    showLegendPanel,
     legendEntries,
     newLegendCaption,
     newLegendColor,

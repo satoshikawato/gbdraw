@@ -121,7 +121,10 @@ export const createLegendEntryActions = ({
 
   const persistLegendReconciliation = (svg) => {
     skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.applyLegendChanges?.([], { reason: 'history-legend-reconcile' })) return;
+    if (previewRuntime?.applyLegendChanges?.([], { reason: 'history-legend-reconcile' })) {
+      previewRuntime.flushActiveResult?.();
+      return;
+    }
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
       results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };

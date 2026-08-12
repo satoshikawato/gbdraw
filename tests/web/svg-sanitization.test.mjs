@@ -14,6 +14,7 @@ const trustedRendererSemanticAttributes = [
   'data-gbdraw-composition-role',
   'data-gbdraw-composition-schema',
   'data-gbdraw-feature-offset-y',
+  'data-gbdraw-label-visibility-preview',
   'data-gbdraw-slot-id',
   'data-gbdraw-slot-renderer',
   'data-ortholog-path-id',

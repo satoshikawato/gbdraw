@@ -1215,10 +1215,6 @@ const state = {
   orthogroupSortMode: ref('id'),
   selectedOrthogroupAlignmentFeature: ref(''),
   svgContainer: ref({ querySelector: () => svg }),
-  showRightDrawer: ref(false),
-  rightDrawerTab: ref('orthogroups'),
-  showFeaturePanel: ref(false),
-  showLegendPanel: ref(false),
   linearSeqs: [
     { definition: 'record-a' },
     { definition: 'record-b' },
@@ -1285,10 +1281,9 @@ assert.equal(editor.getOrthogroupById('og_editor_duplicate'), null);
 assert.deepEqual(editor.getEnrichedOrthogroupMembers('og_editor_duplicate'), []);
 assert.equal(editor.orthogroupCount.value, 0);
 state.orthogroups.value = [group];
-editor.openOrthogroupInDrawer(generatedFeatures[1].orthogroupId);
+assert.equal(editor.selectOrthogroup(generatedFeatures[1].orthogroupId), true);
 assert.equal(state.selectedOrthogroupId.value, 'og_1');
-assert.equal(state.rightDrawerTab.value, 'orthogroups');
-assert.equal(state.showRightDrawer.value, true);
+assert.equal(editor.selectOrthogroup('missing-group'), false);
 const members = editor.getEnrichedOrthogroupMembers(group);
 assert.deepEqual(members.map((member) => member.nucleotideSequence), ['AAAA', 'CCCC', 'GGGG']);
 assert.deepEqual(members.map((member) => member.displayProteinId), ['LOC_A', 'LOC_B', 'CAG34720.1']);

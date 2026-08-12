@@ -1315,6 +1315,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "record-options.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
+        build_root / "gbdraw" / "web" / "js" / "app" / "right-drawer.js",
         build_root
         / "gbdraw"
         / "web"
@@ -1411,6 +1412,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
         assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
+        assert "gbdraw/web/js/app/right-drawer.js" in outer_names
         assert "gbdraw/web/js/services/canonical-comparisons.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-catalog.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-selector.js" in outer_names
@@ -1485,7 +1487,7 @@ def test_offline_gui_palette_preview_behavior() -> None:
 
 @pytest.mark.slow
 @pytest.mark.browser
-def test_offline_gui_exports_svg_png_and_pdf() -> None:
+def test_offline_gui_exports_svg_png_pdf_and_interactive_svg() -> None:
     _run_offline_gui_browser_contract("exports")
 
 

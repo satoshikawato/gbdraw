@@ -350,6 +350,14 @@ assert.deepEqual(state.layoutPreferences, {
   linear: { legend: 'top', plotTitlePosition: 'bottom' }
 });
 
+state.orthogroups.value = [{ id: 'stale-drawer-group', members: [] }];
+state.rightDrawerTab.value = 'orthogroups';
+state.showRightDrawer.value = false;
+const groupFreeDrawerImport = await importPayload(partialLayoutSession);
+assert.equal(groupFreeDrawerImport.status, 'ok');
+assert.equal(state.showRightDrawer.value, false);
+assert.equal(state.rightDrawerTab.value, 'features');
+
 const modeBeforeRollbackSetup = state.mode.value;
 state.mode.value = 'circular';
 state.modeProfileStateManager.transition(
@@ -369,8 +377,8 @@ state.skipCaptureBaseConfig.value = false;
 state.skipPositionReapply.value = false;
 state.suppressCircularMultiRecordDefaults.value = true;
 state.linearReorderNotice.value = 'keep reorder notice';
-state.showFeaturePanel.value = true;
-state.showLegendPanel.value = true;
+state.showRightDrawer.value = true;
+state.rightDrawerTab.value = 'legend';
 state.showCanvasControls.value = true;
 state.isPanning.value = true;
 Object.assign(state.panStart, { x: 1, y: 2, panX: 3, panY: 4 });
@@ -502,8 +510,8 @@ const rollbackState = () => ({
   skipPositionReapply: state.skipPositionReapply.value,
   suppressCircularMultiRecordDefaults: state.suppressCircularMultiRecordDefaults.value,
   linearReorderNotice: state.linearReorderNotice.value,
-  showFeaturePanel: state.showFeaturePanel.value,
-  showLegendPanel: state.showLegendPanel.value,
+  showRightDrawer: state.showRightDrawer.value,
+  rightDrawerTab: state.rightDrawerTab.value,
   showCanvasControls: state.showCanvasControls.value,
   isPanning: state.isPanning.value,
   panStart: { ...state.panStart },

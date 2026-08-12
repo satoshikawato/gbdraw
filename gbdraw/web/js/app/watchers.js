@@ -49,6 +49,7 @@ export const setupWatchers = ({
   refreshCircularRecordOrder,
   refreshLinearRecordSelectors,
   resetPreviewViewport,
+  resetRightDrawer,
   previewRuntime = null,
   preparePaletteDefinitions = null,
   prepareDiagramGenerationWorker
@@ -93,8 +94,6 @@ export const setupWatchers = ({
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
-    showRightDrawer,
-    rightDrawerTab,
     labelOverrideContextKey,
     labelTextBulkOverrides,
     labelTextFeatureOverrides,
@@ -102,7 +101,7 @@ export const setupWatchers = ({
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
     labelOverrideBuildWarning,
-    showFeaturePanel,
+    isFeatureDrawerMounted,
     clickedFeature,
     clickedPairwiseMatch,
     clickedLabel,
@@ -180,7 +179,7 @@ export const setupWatchers = ({
     Object.keys(labelVisibilityOverrides).length > 0;
 
   const shouldSyncLabelEditor = () =>
-    showFeaturePanel.value ||
+    isFeatureDrawerMounted.value ||
     Boolean(clickedFeature.value) ||
     labelTextScopeDialog.show ||
     globalLabelModeDialog.show ||
@@ -501,9 +500,7 @@ export const setupWatchers = ({
       globalLabelModeDialog.featureId = '';
       globalLabelModeDialog.featureType = '';
       globalLabelModeDialog.resolve = null;
-      showFeaturePanel.value = false;
-      showRightDrawer.value = false;
-      rightDrawerTab.value = 'features';
+      resetRightDrawer();
       linearReorderNotice.value = '';
     }
   );
@@ -606,7 +603,7 @@ export const setupWatchers = ({
   });
 
   watch(
-    () => showFeaturePanel.value,
+    () => isFeatureDrawerMounted.value,
     (visible) => {
       if (!visible) return;
       nextTick(() => {
