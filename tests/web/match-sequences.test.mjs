@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
@@ -34,6 +35,7 @@ await writeFile(
 );
 
 const {
+  analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
   buildMatchSequenceBundle,
   createSequenceSourceRegistry,
@@ -159,6 +161,88 @@ test('registry validates every supplied source identity field and duplicate key'
     }).source?.sequence,
     'AAAA'
   );
+});
+
+test('real Vibrio catalog covers every consumer without a source for its unused record', async () => {
+  const fixture = JSON.parse(gunzipSync(await readFile(
+    'gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
+  )));
+  const coverage = analyzeCatalogSequenceSourceCoverage({
+    mode: fixture.renderRequest.mode,
+    catalogFeatureState: fixture.editorState.featureCatalog,
+    renderRequest: fixture.renderRequest
+  });
+
+  assert.equal(coverage.complete, true);
+  assert.deepEqual(coverage.consumerCounts, {
+    biologicalFeatures: 49612,
+    matchEndpoints: 1266
+  });
+  assert.equal(coverage.requiredConsumers.length, 10);
+  assert.equal(coverage.resolvedConsumers.length, 10);
+  assert.deepEqual(coverage.missingConsumers, []);
+  assert.deepEqual(coverage.invalidCatalogSources, []);
+  assert.deepEqual(
+    coverage.resolvedConsumers.map(({ expectedSource }) => expectedSource.recordIndex),
+    [0, 1, 3, 4, 5, 6, 7, 8, 9, 10]
+  );
+  assert.deepEqual(coverage.displayedRecordsWithoutConsumers, [{
+    recordIndex: 2,
+    recordKey: 'record-3'
+  }]);
+});
+
+test('coverage reports a match endpoint whose displayed record source is missing', () => {
+  const source = {
+    key: 'linear:record:0',
+    recordId: 'record-a',
+    aliases: ['record-a'],
+    sequence: 'AACCGGTT',
+    origin: 'linear-record',
+    recordIndex: 0
+  };
+  const coverage = analyzeCatalogSequenceSourceCoverage({
+    mode: 'linear',
+    renderRequest: {
+      records: [{ recordKey: 'record-a' }, { recordKey: 'record-b' }]
+    },
+    catalogFeatureState: {
+      items: [{
+        recordKeys: ['record-a', 'record-b'],
+        sequenceSources: [source],
+        biologicalFeatures: [{
+          recordKey: 'record-a',
+          biologicalFeatureId: 'feature-a',
+          sequenceSourceIndex: 0
+        }],
+        comparisonMatches: [{
+          id: 'match-a-b',
+          match_kind: 'pairwise',
+          query_record_id: 'record-a',
+          query_record_index: 0,
+          subject_record_id: 'record-b',
+          subject_record_index: 1
+        }]
+      }]
+    }
+  });
+
+  assert.equal(coverage.complete, false);
+  assert.deepEqual(coverage.consumerCounts, {
+    biologicalFeatures: 1,
+    matchEndpoints: 2
+  });
+  assert.equal(coverage.resolvedConsumers.length, 1);
+  assert.equal(coverage.missingConsumers.length, 1);
+  assert.equal(
+    coverage.missingConsumers[0].expectedSource.key,
+    'linear:record:1'
+  );
+  assert.deepEqual(
+    coverage.missingConsumers[0].exampleConsumers,
+    [{ kind: 'match-endpoint', id: 'match-a-b/subject' }]
+  );
+  assert.match(coverage.missingConsumers[0].reasons[0], /unavailable/);
 });
 
 test('builds deterministic single and combined FASTA in query-subject order', () => {

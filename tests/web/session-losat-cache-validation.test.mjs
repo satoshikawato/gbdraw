@@ -339,7 +339,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   );
 });
 
-test('current session restores match sequences from the catalog without rereading primary files', async () => {
+test('current session recovers files only when a sequence consumer is missing', async () => {
   alerts.length = 0;
   restoredPrimaryTextReads = 0;
   restoredPrimaryArrayBufferReads = 0;
@@ -509,19 +509,19 @@ ORIGIN
   const secondGenbank = genbank
     .replaceAll('CATALOG', 'SECOND')
     .replace('aaccggtt', 'ttggccaa');
-  const incompletePayload = structuredClone(payload);
-  incompletePayload.renderRequest.records.push({
+  const sparsePayload = structuredClone(payload);
+  sparsePayload.renderRequest.records.push({
     ...structuredClone(renderRequest.records[0]),
     recordKey: 'second-record',
     source: { kind: 'genbank', resourceId: 'second-record' }
   });
-  incompletePayload.resources['second-record'] = canonicalResource(
+  sparsePayload.resources['second-record'] = canonicalResource(
     'genbank',
     'second-primary.gbk',
     secondGenbank
   );
-  incompletePayload.webFiles.bindings.linearSeqs.push({
-    ...structuredClone(incompletePayload.webFiles.bindings.linearSeqs[0]),
+  sparsePayload.webFiles.bindings.linearSeqs.push({
+    ...structuredClone(sparsePayload.webFiles.bindings.linearSeqs[0]),
     uid: 'second-record',
     gb: {
       resourceId: 'second-record',
@@ -530,18 +530,48 @@ ORIGIN
       lastModified: 8
     }
   });
-  incompletePayload.editorState.featureCatalog.items[0].recordKeys.push(
+  sparsePayload.editorState.featureCatalog.items[0].recordKeys.push(
     'second-record'
   );
   restoredPrimaryTextReads = 0;
-  const incompleteResult = await importSession({
+  restoredPrimaryArrayBufferReads = 0;
+  const sparseResult = await importSession({
     target: {
-      files: [new Blob([JSON.stringify(incompletePayload)], { type: 'application/json' })],
+      files: [new Blob([JSON.stringify(sparsePayload)], { type: 'application/json' })],
       value: 'selected'
     }
   });
 
-  assert.equal(incompleteResult.status, 'ok');
+  assert.equal(sparseResult.status, 'ok');
+  assert.equal(restoredPrimaryTextReads, 0);
+  assert.equal(restoredPrimaryArrayBufferReads, 0);
+  assert.deepEqual(
+    state.matchSequenceRegistry.values().map((source) => source.recordId),
+    ['CATALOG.1']
+  );
+
+  const missingPayload = structuredClone(sparsePayload);
+  missingPayload.editorState.featureCatalog.items[0].comparisonMatches.push({
+    id: 'missing-source-match',
+    match_kind: 'pairwise',
+    query_record_id: 'CATALOG.1',
+    query_record_index: 0,
+    subject_record_id: 'SECOND.1',
+    subject_record_index: 1,
+    qstart: 1,
+    qend: 4,
+    sstart: 1,
+    send: 4
+  });
+  restoredPrimaryTextReads = 0;
+  const missingResult = await importSession({
+    target: {
+      files: [new Blob([JSON.stringify(missingPayload)], { type: 'application/json' })],
+      value: 'selected'
+    }
+  });
+
+  assert.equal(missingResult.status, 'ok');
   assert.equal(restoredPrimaryTextReads, 2);
   assert.deepEqual(
     state.matchSequenceRegistry.values().map((source) => source.recordId),

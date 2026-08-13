@@ -73,7 +73,10 @@ import {
   classifyFeatureMetadataState,
   hasUsableBiologicalFeatureCatalog
 } from '../app/session-feature-metadata.js';
-import { buildRestoredMatchSequenceSources } from '../app/match-sequences.js';
+import {
+  analyzeCatalogSequenceSourceCoverage,
+  buildRestoredMatchSequenceSources
+} from '../app/match-sequences.js';
 import {
   buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
@@ -3915,29 +3918,18 @@ export const importSession = async (e, options = {}) => {
     const catalogSequenceSources = sourceSessionVersion === SESSION_VERSION
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
-    const primarySequenceOrigin = state.mode.value === 'linear'
-      ? 'linear-record'
-      : 'circular-reference';
-    const canonicalRecordCount = Array.isArray(data.renderRequest?.records)
-      ? data.renderRequest.records.length
-      : 0;
-    const circularComparisonFiles = state.circularConservation?.source === 'upload'
-      ? state.files?.c_conservation_sequence_sources
-      : state.files?.c_conservation_fastas;
-    const catalogComparisonIndexes = new Set(
-      catalogSequenceSources
-        .filter((source) => source?.origin === 'homology-comparison')
-        .map((source) => source?.sourceIndex)
-        .filter(Number.isInteger)
-    );
+    const catalogSequenceSourceCoverage = (
+      sourceSessionVersion === SESSION_VERSION
+      && validatedSessionCatalog
+    )
+      ? analyzeCatalogSequenceSourceCoverage({
+          mode: state.mode.value,
+          catalogFeatureState: validatedSessionCatalog,
+          renderRequest: data.renderRequest
+        })
+      : null;
     const missingCatalogSequenceSources = sourceSessionVersion !== SESSION_VERSION
-      || catalogSequenceSources.filter(
-        (source) => source?.origin === primarySequenceOrigin
-      ).length < canonicalRecordCount || (
-      state.mode.value === 'circular'
-      && (circularComparisonFiles || []).filter(Boolean).length
-        > catalogComparisonIndexes.size
-    );
+      || !catalogSequenceSourceCoverage?.complete;
     let restoredFileSequenceSources = [];
     if (missingCatalogSequenceSources) {
       try {

@@ -191,6 +191,368 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
   return { sources, register, reset, resolve, values: () => Array.from(sources.values()) };
 };
 
+const sourceIdentity = (source, overrides = {}) => {
+  const recordIndex = optionalNonnegativeIntegerStatus(
+    overrides.recordIndex ?? source?.recordIndex
+  );
+  const sourceIndex = optionalNonnegativeIntegerStatus(
+    overrides.sourceIndex ?? source?.sourceIndex
+  );
+  return {
+    key: text(overrides.key ?? source?.key),
+    recordId: text(overrides.recordId ?? source?.recordId),
+    origin: text(overrides.origin ?? source?.origin),
+    recordIndex: recordIndex.valid && recordIndex.supplied ? recordIndex.value : null,
+    sourceIndex: sourceIndex.valid && sourceIndex.supplied ? sourceIndex.value : null
+  };
+};
+
+const sourceIdentityKey = (identity) => JSON.stringify([
+  identity.origin,
+  identity.recordIndex,
+  identity.sourceIndex,
+  identity.recordId,
+  identity.key
+]);
+
+const consistentTextAlias = (value, keys, fallback = '') => {
+  const values = new Set(
+    keys
+      .filter((key) => Object.prototype.hasOwnProperty.call(value || {}, key))
+      .map((key) => text(value?.[key]))
+      .filter(Boolean)
+  );
+  return {
+    valid: values.size <= 1,
+    value: values.size ? Array.from(values)[0] : fallback
+  };
+};
+
+const consistentIntegerAlias = (value, keys) => {
+  const statuses = keys
+    .filter((key) => Object.prototype.hasOwnProperty.call(value || {}, key))
+    .map((key) => optionalNonnegativeIntegerStatus(value?.[key]));
+  const supplied = statuses.filter((status) => status.supplied);
+  const values = new Set(supplied.filter((status) => status.valid).map((status) => status.value));
+  return {
+    valid: statuses.every((status) => status.valid) && values.size <= 1,
+    supplied: supplied.length > 0,
+    value: values.size === 1 ? Array.from(values)[0] : null
+  };
+};
+
+const sourceResolutionContext = (identity) => ({
+  origin: identity.origin,
+  ...(identity.recordIndex === null ? {} : { recordIndex: identity.recordIndex }),
+  ...(identity.sourceIndex === null ? {} : { sourceIndex: identity.sourceIndex })
+});
+
+const invalidCatalogSourceReason = (source, identity) => {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return 'The catalog sequence source is not an object.';
+  }
+  if (!identity.key) return 'The catalog sequence source key is empty.';
+  if (!identity.recordId) return 'The catalog sequence source record ID is empty.';
+  if (
+    typeof source.sequence !== 'string'
+    || !source.sequence
+    || /\s/.test(source.sequence)
+  ) {
+    return 'The catalog sequence source has no canonical nucleotide sequence.';
+  }
+  if (!['linear-record', 'circular-reference', 'homology-comparison'].includes(identity.origin)) {
+    return 'The catalog sequence source origin is invalid.';
+  }
+  const recordIndex = optionalNonnegativeIntegerStatus(source.recordIndex);
+  const sourceIndex = optionalNonnegativeIntegerStatus(source.sourceIndex);
+  if (!recordIndex.valid || !sourceIndex.valid) {
+    return 'The catalog sequence source index identity is invalid.';
+  }
+  if (
+    ['linear-record', 'circular-reference'].includes(identity.origin)
+    && (!recordIndex.supplied || identity.recordIndex === null)
+  ) {
+    return 'The catalog primary sequence source has no record index.';
+  }
+  if (
+    identity.origin === 'homology-comparison'
+    && (!sourceIndex.supplied || identity.sourceIndex === null)
+  ) {
+    return 'The catalog comparison sequence source has no source index.';
+  }
+  return '';
+};
+
+/**
+ * Decide whether a current feature catalog already contains every sequence
+ * source that its feature and match-popup consumers require.
+ */
+export const analyzeCatalogSequenceSourceCoverage = ({
+  mode,
+  catalogFeatureState,
+  renderRequest
+} = {}) => {
+  const normalizedMode = text(mode).toLowerCase();
+  const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
+  const displayedRecords = records.map((record, recordIndex) => ({
+    recordIndex,
+    recordKey: text(record?.recordKey)
+  }));
+  const displayedIndexByKey = new Map(
+    displayedRecords.map((record) => [record.recordKey, record.recordIndex])
+  );
+  const items = Array.isArray(catalogFeatureState?.items)
+    ? catalogFeatureState.items
+    : null;
+  const invalidCatalogSources = [];
+  if (!['linear', 'circular'].includes(normalizedMode)) {
+    invalidCatalogSources.push({ reason: 'The diagram mode is invalid.' });
+  }
+  if (!items) {
+    invalidCatalogSources.push({ reason: 'The current feature catalog has no item list.' });
+  }
+
+  const catalogItems = items || [];
+  const sourceEntries = [];
+  catalogItems.forEach((item, itemIndex) => {
+    const sources = Array.isArray(item?.sequenceSources) ? item.sequenceSources : [];
+    sources.forEach((source, sequenceSourceIndex) => {
+      sourceEntries.push({ itemIndex, sequenceSourceIndex, source });
+    });
+  });
+  const registry = createSequenceSourceRegistry(
+    sourceEntries.map((entry) => entry.source)
+  );
+  sourceEntries.forEach(({ itemIndex, sequenceSourceIndex, source }) => {
+    const identity = sourceIdentity(source);
+    let reason = invalidCatalogSourceReason(source, identity);
+    if (!reason) {
+      const resolution = registry.resolve(
+        identity.key,
+        identity.recordId,
+        sourceResolutionContext(identity)
+      );
+      if (!resolution.source) reason = resolution.reason;
+    }
+    if (reason) {
+      invalidCatalogSources.push({
+        itemIndex,
+        sequenceSourceIndex,
+        source: identity,
+        reason
+      });
+    }
+  });
+
+  const comparisonSourceIndexes = new Set(
+    sourceEntries
+      .map(({ source }) => sourceIdentity(source))
+      .filter((identity) => (
+        identity.origin === 'homology-comparison'
+        && identity.sourceIndex !== null
+      ))
+      .map((identity) => identity.sourceIndex)
+  );
+  const requirements = new Map();
+  const failedRequirementKeys = new Set();
+  const failureReasons = new Map();
+  const usedDisplayedRecordKeys = new Set();
+  const consumerCounts = { biologicalFeatures: 0, matchEndpoints: 0 };
+
+  const addConsumer = ({ kind, id, recordKey = '', expectedSource, resolution }) => {
+    const key = sourceIdentityKey(expectedSource);
+    if (!requirements.has(key)) {
+      requirements.set(key, {
+        expectedSource,
+        consumerCount: 0,
+        biologicalFeatureCount: 0,
+        matchEndpointCount: 0,
+        exampleConsumers: []
+      });
+    }
+    const requirement = requirements.get(key);
+    requirement.consumerCount += 1;
+    if (kind === 'biological-feature') {
+      requirement.biologicalFeatureCount += 1;
+      consumerCounts.biologicalFeatures += 1;
+    } else {
+      requirement.matchEndpointCount += 1;
+      consumerCounts.matchEndpoints += 1;
+    }
+    if (requirement.exampleConsumers.length < 3) {
+      requirement.exampleConsumers.push({ kind, id });
+    }
+    if (recordKey) usedDisplayedRecordKeys.add(recordKey);
+    if (resolution?.source) return;
+    failedRequirementKeys.add(key);
+    if (!failureReasons.has(key)) failureReasons.set(key, new Set());
+    failureReasons.get(key).add(
+      text(resolution?.reason) || 'The required sequence source is unavailable.'
+    );
+  };
+
+  catalogItems.forEach((item, itemIndex) => {
+    const recordKeys = Array.isArray(item?.recordKeys)
+      ? item.recordKeys.map(text)
+      : [];
+    const itemSources = Array.isArray(item?.sequenceSources) ? item.sequenceSources : [];
+    const expectedPrimaryOrigin = normalizedMode === 'linear'
+      ? 'linear-record'
+      : 'circular-reference';
+    (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).forEach(
+      (feature) => {
+        if (!Object.prototype.hasOwnProperty.call(feature || {}, 'sequenceSourceIndex')) return;
+        const sequenceSourceIndex = feature.sequenceSourceIndex;
+        const recordKey = text(feature?.recordKey);
+        const itemRecordIndex = recordKeys.indexOf(recordKey);
+        const source = Number.isInteger(sequenceSourceIndex)
+          ? itemSources[sequenceSourceIndex]
+          : null;
+        const expectedSource = sourceIdentity(source, {
+          key: source?.key || (
+            itemRecordIndex >= 0
+              ? `${normalizedMode === 'linear' ? 'linear' : 'circular'}:record:${itemRecordIndex}`
+              : ''
+          ),
+          recordId: source?.recordId || feature?.record_id || feature?.recordId,
+          origin: expectedPrimaryOrigin,
+          recordIndex: itemRecordIndex
+        });
+        let resolution = { source: null, reason: '' };
+        if (
+          !Number.isInteger(sequenceSourceIndex)
+          || sequenceSourceIndex < 0
+          || !source
+        ) {
+          resolution.reason = 'The biological feature references a missing catalog source index.';
+        } else if (itemRecordIndex < 0 || !displayedIndexByKey.has(recordKey)) {
+          resolution.reason = 'The biological feature record is not displayed by the render request.';
+        } else if (
+          text(source.origin) !== expectedPrimaryOrigin
+          || source.recordIndex !== itemRecordIndex
+        ) {
+          resolution.reason = 'The biological feature source conflicts with its record identity.';
+        } else {
+          resolution = registry.resolve(
+            expectedSource.key,
+            expectedSource.recordId,
+            sourceResolutionContext(expectedSource)
+          );
+        }
+        addConsumer({
+          kind: 'biological-feature',
+          id: `${recordKey}/${text(feature?.biologicalFeatureId)}`,
+          recordKey,
+          expectedSource,
+          resolution
+        });
+      }
+    );
+
+    (Array.isArray(item?.comparisonMatches) ? item.comparisonMatches : []).forEach(
+      (match, matchIndex) => {
+        const matchId = consistentTextAlias(match, ['id', 'matchId', 'match_id'], `match-${matchIndex + 1}`);
+        const matchKind = consistentTextAlias(match, ['match_kind', 'matchKind'], 'pairwise');
+        const normalizedMatchKind = matchKind.value.toLowerCase();
+        if (matchKind.valid && normalizedMatchKind === 'orthogroup') return;
+        const referenceSide = consistentTextAlias(match, ['reference_side', 'referenceSide']);
+        const normalizedReferenceSide = referenceSide.value.toLowerCase();
+        const sourceIndex = consistentIntegerAlias(match, ['source_index', 'sourceIndex']);
+        ['query', 'subject'].forEach((role) => {
+          const recordId = consistentTextAlias(
+            match,
+            [`${role}_record_id`, `${role}RecordId`]
+          );
+          const recordIndex = consistentIntegerAlias(
+            match,
+            [`${role}_record_index`, `${role}RecordIndex`]
+          );
+          const homology = normalizedMatchKind === 'homology';
+          const referenceIdentityValid = ['query', 'subject'].includes(normalizedReferenceSide);
+          const expectedOrigin = homology
+            ? (role === normalizedReferenceSide ? 'circular-reference' : 'homology-comparison')
+            : 'linear-record';
+          if (
+            expectedOrigin === 'homology-comparison'
+            && sourceIndex.valid
+            && sourceIndex.supplied
+            && !comparisonSourceIndexes.has(sourceIndex.value)
+          ) {
+            return;
+          }
+          const displayedRecord = recordIndex.value === null
+            ? null
+            : displayedRecords[recordIndex.value] || null;
+          const expectedSource = sourceIdentity(null, {
+            key: expectedOrigin === 'linear-record' && recordIndex.value !== null
+              ? `linear:record:${recordIndex.value}`
+              : '',
+            recordId: recordId.value,
+            origin: expectedOrigin,
+            recordIndex: expectedOrigin === 'linear-record' ? recordIndex.value : null,
+            sourceIndex: expectedOrigin === 'homology-comparison' ? sourceIndex.value : null
+          });
+          let resolution = { source: null, reason: '' };
+          if (!matchId.valid || !matchKind.valid || !recordId.valid) {
+            resolution.reason = 'The match endpoint has conflicting sequence identity aliases.';
+          } else if (homology && !referenceIdentityValid) {
+            resolution.reason = 'The homology match reference side is invalid.';
+          } else if (
+            expectedOrigin === 'linear-record'
+            && (!recordIndex.valid || !recordIndex.supplied || !displayedRecord)
+          ) {
+            resolution.reason = 'The match endpoint record index is invalid or not displayed.';
+          } else if (
+            expectedOrigin === 'homology-comparison'
+            && (!sourceIndex.valid || !sourceIndex.supplied)
+          ) {
+            resolution.reason = 'The homology comparison source index is invalid.';
+          } else {
+            resolution = registry.resolve(
+              expectedSource.key,
+              expectedSource.recordId,
+              sourceResolutionContext(expectedSource)
+            );
+          }
+          addConsumer({
+            kind: 'match-endpoint',
+            id: `${matchId.value}/${role}`,
+            recordKey: displayedRecord?.recordKey || '',
+            expectedSource,
+            resolution
+          });
+        });
+      }
+    );
+  });
+
+  const requiredConsumers = Array.from(requirements.entries()).map(([key, value]) => ({
+    key,
+    ...value
+  }));
+  const missingConsumers = requiredConsumers
+    .filter(({ key }) => failedRequirementKeys.has(key))
+    .map((requirement) => ({
+      ...requirement,
+      reasons: Array.from(failureReasons.get(requirement.key) || [])
+    }));
+  const resolvedConsumers = requiredConsumers.filter(
+    ({ key }) => !failedRequirementKeys.has(key)
+  );
+  const displayedRecordsWithoutConsumers = displayedRecords.filter(
+    ({ recordKey }) => !usedDisplayedRecordKeys.has(recordKey)
+  );
+  return {
+    complete: invalidCatalogSources.length === 0 && missingConsumers.length === 0,
+    requiredConsumers,
+    resolvedConsumers,
+    missingConsumers,
+    invalidCatalogSources,
+    consumerCounts,
+    displayedRecordsWithoutConsumers
+  };
+};
+
 const normalizeResolution = (resolved) => {
   if (!resolved) return { source: null, reason: '' };
   if (resolved.source !== undefined) return resolved;
