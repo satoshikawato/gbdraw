@@ -12,6 +12,8 @@ import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
+from .instance_identity import FeatureInstanceIdentity
+from .semantic_selectors import FeatureSemanticSelectorContext
 from .selector_values import (
     _matches_constraint,
     feature_matches_specific_color_rule,
@@ -318,6 +320,8 @@ def should_render_feature(
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     record_id: Optional[str] = None,
     specific_color_rules: Optional[dict] = None,
+    feature_instance_identity: FeatureInstanceIdentity | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> bool:
     feature_type = get_feature_type(feature)
     selected_set = {str(feature_name) for feature_name in (selected_features_set or [])}
@@ -332,6 +336,8 @@ def should_render_feature(
                 feature,
                 specific_color_rules,
                 record_id=record_id,
+                feature_instance_identity=feature_instance_identity,
+                feature_semantic_selector_context=feature_semantic_selector_context,
             )
 
     rule = _first_matching_visibility_rule(

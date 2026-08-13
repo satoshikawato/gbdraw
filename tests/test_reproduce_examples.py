@@ -462,9 +462,9 @@ def test_gallery_session_arrow_geometry_variants_reproduce_tracked_svgs(
 ) -> None:
     for figure_id, generated in reproduced_arrow_geometry_variants.items():
         tracked = PROJECT_ROOT / _figure_specs()[figure_id].output_path
-        assert generated.read_text(encoding="utf-8") == tracked.read_text(
-            encoding="utf-8"
-        )
+        assert ElementTree.canonicalize(
+            from_file=generated
+        ) == ElementTree.canonicalize(from_file=tracked)
 
 
 def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(

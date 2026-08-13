@@ -49,6 +49,7 @@ if __package__:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        normalized_artifact_payload,
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
@@ -64,6 +65,7 @@ else:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        normalized_artifact_payload,
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
@@ -76,6 +78,17 @@ SCENARIO_IDS = verified_scenario_ids(
     expected_kind="python-recipe",
     runner_path=RUNNER_PATH,
 )
+
+
+def _artifact_comparison_error(
+    expected_path: Path,
+    actual_path: Path,
+) -> str | None:
+    if normalized_artifact_payload(expected_path) == normalized_artifact_payload(
+        actual_path
+    ):
+        return None
+    return "normalized payload differs"
 
 
 def run_scenario(
@@ -139,6 +152,7 @@ def run_scenario(
                 generated_path=generated_path,
                 output_root=output_root,
                 check=check,
+                compare=_artifact_comparison_error,
             )
             for generated_path in generated_paths
         )

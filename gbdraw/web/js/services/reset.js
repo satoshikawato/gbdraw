@@ -93,6 +93,8 @@ const resetEditorDraftState = (state) => {
   clearReactiveObject(state.featureStrokeOverrides);
   clearReactiveObject(state.legendColorOverrides);
   clearReactiveObject(state.legendStrokeOverrides);
+  state.manualLegendEntries.value = [];
+  if (state.legendOrderIntent) state.legendOrderIntent.value = [];
   state.deletedLegendEntries.value = [];
   state.newLegendCaption.value = editorDefaults.newLegendCaption;
   state.newLegendColor.value = editorDefaults.newLegendColor;

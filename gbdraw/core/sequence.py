@@ -6,6 +6,8 @@ from typing import List, Union
 from Bio.SeqRecord import SeqRecord
 
 from ..features.visibility import should_render_feature
+from ..features.instance_identity import FeatureInstanceIdentityPlan
+from ..features.semantic_selectors import FeatureSemanticSelectorContext
 
 
 def create_dict_for_sequence_lengths(records: list[SeqRecord]) -> dict[str, int]:
@@ -23,6 +25,8 @@ def check_feature_presence(
     features_list: List[str],
     feature_visibility_rules=None,
     specific_color_rules=None,
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> list[str]:
     if isinstance(records, SeqRecord):
         records = [records]
@@ -32,12 +36,19 @@ def check_feature_presence(
 
     for record in records:
         for feature in record.features:
+            feature_instance_identity = (
+                feature_instance_identity_plan.identity_for_feature(feature)
+                if feature_instance_identity_plan is not None
+                else None
+            )
             if not should_render_feature(
                 feature,
                 features_list,
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=record.id,
                 specific_color_rules=specific_color_rules,
+                feature_instance_identity=feature_instance_identity,
+                feature_semantic_selector_context=feature_semantic_selector_context,
             ):
                 continue
             if feature.type in seen_feature_types:

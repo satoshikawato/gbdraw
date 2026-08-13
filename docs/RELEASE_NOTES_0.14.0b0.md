@@ -98,10 +98,10 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   `--gc_content_tick_interval` alias for
   `--gc_content_large_tick_interval` are unchanged and are not removals.
 - The private `__gbdraw_legacy_spacing` transport is confined to canonical
-  request schema 1 and 2 readers and is never emitted by the current schema 5
+  request schema 1 and 2 readers and is never emitted by the current schema 6
   writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
   Factor-based spacing can still be replayed, but it cannot be re-saved
-  losslessly by the current schema 5 writer; replace it with explicit
+  losslessly by the current schema 6 writer; replace it with explicit
   `inner_gap_px` and `outer_gap_px` first.
 - `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
   `gbdraw.circular_diagram_components` were thin compatibility modules and have
@@ -142,8 +142,8 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   session sidecars use a same-directory staged commit. Multi-format generation
   remains sequential rather than transactional, so completed formats survive a
   later conversion failure.
-- Canonical `renderRequest` schema 5 persists explicit `single`, `grid`, or
-  `batch` grouping. Schema 5 stores one output
+- Canonical `renderRequest` schemas 5 and 6 persist explicit `single`, `grid`, or
+  `batch` grouping. They store one output
   object for a single diagram or grid and an output array for Circular batch.
   Record loading is mode-neutral; planners own topology warnings and mode,
   comparison, and cardinality policy.
@@ -151,7 +151,7 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 Active and public runtime collinearity configuration uses
 `LosslessCollinearityParameters`; canonical request schemas 1 and 2 privately
 migrate legacy `standard` parameter payloads while preserving their effective
-fields. Current schema 5 accepts only the lossless form.
+fields. Schemas 5 and 6 accept only the lossless form.
 
 Phase 2 completes the internal state/planner consolidation:
 
@@ -170,11 +170,40 @@ Phase 2 completes the internal state/planner consolidation:
   implementation bridge is removed. Builders accept only the mode-specific
   typed option contracts.
 
-## Python/Web session version 40
+## Python/Web session version 41
 
-- gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest`
-  schema 5. Readers accept session versions 27–33 and 39–40; the public typed
-  bridge accepts versions 31–33 and 39–40.
+- gbdraw 0.14.0b0 writes session version 41 and canonical `renderRequest`
+  schema 6. Readers accept session versions 27–33 and 39–41 and request schemas
+  1, 2, 5, and 6. The public typed bridge accepts session versions 31–33 and
+  39–41.
+- Schema 6 reserves `__gbdraw_instance_hash__` as a case-sensitive literal
+  selector for one rendered Feature instance. Session version 41 requires an
+  `instanceHash` for every biological Feature in a saved Result catalogue.
+- Schema 6 also reserves `__gbdraw_semantic_scope__` for opaque Feature-group
+  literals. Type, rendered/source-label, legend-caption, and Similarity-group
+  edits persist as semantic rules that continue matching after regeneration;
+  only one-Feature and explicit-selection edits materialize exact instance rows.
+- Feature fill editing now presents inherited colors as editable values. The
+  scope dialog offers only choices supported by the clicked Feature, including
+  its type, shared rendered or source label, Similarity group, selection, and
+  the individual Feature. Confirmed group edits update every affected Result,
+  its Feature-derived legend, History, and saved color resources as one
+  operation. A failed or stale edit restores the prior state.
+- Session export and Generate bind rules, applied default colors, and Result
+  artifacts to one style fingerprint. A concurrent edit causes the pending
+  operation to fail before adoption or download instead of producing a mixed
+  revision.
+- Version 40 remains readable. The compatibility boundary repairs a stale
+  canonical color resource only when saved editor state provides unambiguous
+  support. Exact scopes remain disabled for a legacy catalogue that cannot be
+  upgraded from canonical record and Feature pairs until Generate creates
+  current metadata.
+
+## Session version 40 compatibility
+
+- Session version 40 and canonical `renderRequest` schema 5 remain supported
+  read inputs. Current writers promote them to version 41 and schema 6 after
+  compatibility recovery and validation.
 - Version 40 stores file bytes once under `resources`, with `webFiles` binding
   them to active and inactive inputs. Version 39 sessions with legacy embedded
   `files` remain readable.
@@ -190,8 +219,8 @@ Phase 2 completes the internal state/planner consolidation:
 ## Compact LOSATP runtime handles
 
 - Session version 39 introduced compact runtime handles with canonical
-  `renderRequest` schema 5, and version 40 retains them. Public typed
-  conversion is available for canonical session versions 31–33 and 39–40;
+  `renderRequest` schema 5, and version 40 retained them. Public typed
+  conversion is available for canonical session versions 31–33 and 39–41;
   versions 27–30 remain CLI replay inputs.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
 - Current protein raw cache entries use schema 4, derived comparison payloads use schema 3, and the protein identity manifest uses schema 2. The manifest remains the authority for complete feature identity and display metadata and separates runtime binding from display binding. Nucleotide raw cache entries intentionally remain schema 2, and mixed protein/nucleotide caches are validated by entry type.
@@ -207,7 +236,7 @@ Phase 2 completes the internal state/planner consolidation:
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
-- Session version 40 and canonical request schema 5 record the new default.
+- Session version 41 and canonical request schema 6 record the new default.
   Supported older sessions and schema 1/2 requests with no repeat assignment
   migrate to `repeat_region=rectangle` so visual replay remains stable.
 
@@ -261,8 +290,7 @@ reported by record assembly instead of serializing and reparsing intermediate
 SVG. Generated SVGs carry internal composition metadata schema 1. The Web
 editor uses that metadata for legend and title reflow, then applies any saved
 user drag offset. Supported older SVG results without the metadata pass through
-one explicit legacy adapter when loaded. Request schema 5 and session schema 40
-are unchanged.
+one explicit legacy adapter when loaded.
 
 ### Web session restore now follows canonical authority
 
@@ -440,15 +468,15 @@ New drawing code should prefer the top-level interface described above.
 ## Session API boundary
 
 The gbdraw 0.14.0b0 public session bridge accepts canonical documents from
-versions 31–33 and 39–40.
+versions 31–33 and 39–41.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest` schema
-5. Version 39 introduced the canonical `ui.layoutPreferences` tree for
+gbdraw 0.14.0b0 writes session version 41 and canonical `renderRequest` schema
+6. Version 39 introduced the canonical `ui.layoutPreferences` tree for
 Circular-single, Circular-multi, and Linear legend/title preferences; version
-40 retains it, and supported older fields migrate on load. Schema 5 persists
+41 retains it, and supported older fields migrate on load. Schemas 5 and 6 persist
 explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
 array with one resolved entry per record, while other requests use one output
 object. `renderRequest.output.prefix` is the sole output-prefix owner; schema 1

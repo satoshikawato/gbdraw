@@ -8,3 +8,16 @@ Its decompressed SHA-256 is
 
 The schema-v2 fixture is the older supported compatibility case. Its expected
 projection is recorded in the adjacent `.expected.json` file.
+
+`feature-style-v40-gallery-minimal.gbdraw-session.json` is a hand-minimized
+subset of the version-40 Gallery session at first-parent commit
+`c71d998b5362e556ce003ab5c615127dc7fca577`. The source file's SHA-256 is
+`5e566c305535bb4caccf50723158462471ecf82ce5f71ecc2fda57f91e80f937`.
+The fixture retains the stale canonical default-color table, the matching
+editor table, two broad rules, their derived overrides and captions, the
+schema-3 catalogue identities, and the corresponding saved SVG fills. The
+adjacent expected file is the shared normalized Web/Python projection.
+
+The `.ambiguous-mutation.json` fixture describes the single negative mutation:
+duplicating the saved default-color resource. A reader must reject that input
+because neither resource is uniquely authoritative.

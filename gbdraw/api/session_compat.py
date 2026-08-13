@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import copy
+import csv
+import io
 import json
 import re
 from dataclasses import dataclass, field, fields, is_dataclass, replace
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -22,6 +25,8 @@ from gbdraw.analysis.protein_colinearity import (
     validate_protein_raw_entry_references,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.instance_identity import FEATURE_INSTANCE_HASH_QUALIFIER
+from gbdraw.features.semantic_selectors import FEATURE_SEMANTIC_SCOPE_QUALIFIER
 from gbdraw.session_io import (
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
@@ -49,10 +54,39 @@ from .requests import (
 
 _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
 _LEGACY_MULTILINE_CONSERVATION_LABEL_SESSION_VERSION = 39
+_STALE_COLOR_OVERLAY_SESSION_VERSION = 40
+_SPECIFIC_COLOR_HEADER = (
+    "feature_type",
+    "qualifier_key",
+    "value",
+    "color",
+    "caption",
+)
+_DEFAULT_COLOR_HEADER = ("feature_type", "color")
+_COLOR_PATTERN = re.compile(
+    r"^(?:none|#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})|[a-z]+)$",
+    re.IGNORECASE,
+)
+_COMPARISON_DEFAULT_COLORS = {
+    "pairwise_match": "#d3d3d3",
+    "pairwise_match_min": "#ffe7e7",
+    "pairwise_match_max": "#ff7272",
+    "collinear_block_plus_min": "#f0f1f5",
+    "collinear_block_plus": "#8b9cc1",
+    "collinear_block_minus_min": "#ffe7e7",
+    "collinear_block_minus": "#e15759",
+}
 _LEGACY_PROTEIN_REFERENCE_RE = re.compile(
     r"p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}"
     r"(?:_[2-9][0-9]*)?"
 )
+
+
+@dataclass(frozen=True)
+class _V40ColorRecoveryPlan:
+    specific_resource_id: str | None
+    default_resource_id: str | None
+    recovered_palette_name: str | None
 _FEATURE_ANALYSIS_REFERENCE_RE = re.compile(r"f_[0-9a-f]{64}")
 
 
@@ -862,6 +896,934 @@ def canonical_payload_for_session_decode(
         _migrate_legacy_linear_track_slot(slot) for slot in slots
     ]
     return detached
+
+
+def canonical_projection_for_session_decode(
+    session_version: int,
+    session: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    temp_directory: str | Path,
+) -> tuple[dict[str, Any], dict[str, str | Path]]:
+    """Project one full session envelope to a detached canonical decode basis.
+
+    Version 40 Web sessions could retain an older canonical color resource after
+    accepting editor-owned rules or palette colors.  Recovery is deliberately
+    narrow: it requires independent editor sources to agree, prepares both
+    overlays before writing either one, and never changes the caller's document
+    or materialized-resource mapping.
+    """
+
+    raw_payload = session.get("renderRequest")
+    if not isinstance(raw_payload, Mapping):
+        raise ValidationError("Session renderRequest must be an object.")
+    payload = canonical_payload_for_session_decode(session_version, raw_payload)
+    projected_paths: dict[str, str | Path] = dict(resource_paths)
+    if (
+        session_version != _STALE_COLOR_OVERLAY_SESSION_VERSION
+        or payload.get("schema") != 5
+    ):
+        return payload, projected_paths
+
+    diagram_options = payload.get("diagramOptions")
+    colors_value = (
+        diagram_options.get("colors")
+        if isinstance(diagram_options, Mapping)
+        else None
+    )
+    if colors_value is None:
+        from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+
+        payload["schema"] = CANONICAL_REQUEST_SCHEMA
+        return payload, projected_paths
+
+    plan = _plan_v40_color_resource_recovery(
+        session,
+        payload,
+        resource_paths=resource_paths,
+    )
+    colors = _detached_color_options(payload)
+    if plan.specific_resource_id is not None:
+        colors["colorTable"] = None
+        colors["colorTableFile"] = _recovered_resource_reference(
+            session,
+            plan.specific_resource_id,
+        )
+    if plan.default_resource_id is not None:
+        colors["defaultColors"] = None
+        colors["defaultColorsFile"] = _recovered_resource_reference(
+            session,
+            plan.default_resource_id,
+        )
+        colors["defaultColorsPalette"] = plan.recovered_palette_name
+
+    # Keep the temporary-directory argument in this compatibility boundary so
+    # callers do not gain a second projection API. Recovery reuses the one
+    # deterministic saved resource proved by the full envelope.
+    del temp_directory
+    from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+
+    payload["schema"] = CANONICAL_REQUEST_SCHEMA
+    return payload, projected_paths
+
+
+def _detached_color_options(payload: dict[str, Any]) -> dict[str, Any]:
+    diagram_options = payload.get("diagramOptions")
+    if not isinstance(diagram_options, Mapping):
+        raise ValidationError("Session renderRequest.diagramOptions must be an object.")
+    detached_diagram_options = dict(diagram_options)
+    payload["diagramOptions"] = detached_diagram_options
+    colors = detached_diagram_options.get("colors")
+    if not isinstance(colors, Mapping):
+        raise ValidationError(
+            "Session renderRequest.diagramOptions.colors must be an object."
+        )
+    detached_colors = dict(colors)
+    detached_diagram_options["colors"] = detached_colors
+    return detached_colors
+
+
+def _plan_v40_color_resource_recovery(
+    session: Mapping[str, Any],
+    payload: dict[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+) -> _V40ColorRecoveryPlan:
+    colors = _detached_color_options(payload)
+    canonical_specific_id = _canonical_color_resource_id(
+        colors,
+        primary_field="colorTableFile",
+        fallback_field="colorTable",
+        label="specific-color",
+    )
+    canonical_default_id = _canonical_color_resource_id(
+        colors,
+        primary_field="defaultColorsFile",
+        fallback_field="defaultColors",
+        label="default-color",
+    )
+    canonical_rules = _read_optional_color_rows(
+        canonical_specific_id,
+        header=_SPECIFIC_COLOR_HEADER,
+        resource_paths=resource_paths,
+    )
+    canonical_defaults = _read_optional_color_rows(
+        canonical_default_id,
+        header=_DEFAULT_COLOR_HEADER,
+        resource_paths=resource_paths,
+    )
+
+    config_value = session.get("config")
+    config = config_value if isinstance(config_value, Mapping) else {}
+    ui_value = session.get("ui")
+    ui = ui_value if isinstance(ui_value, Mapping) else {}
+    normalized_editor_rules = _normalize_editor_rules(config.get("rules"))
+    editor_rules = normalized_editor_rules if normalized_editor_rules else None
+    config_defaults = _normalize_editor_defaults(config.get("colors"))
+    ui_defaults = _normalize_editor_defaults(ui.get("appliedPaletteColors"))
+
+    effective_rules = editor_rules or canonical_rules or ()
+    reserved_qualifier = next(
+        (
+            rule[1]
+            for rule in effective_rules
+            if rule[1]
+            in {
+                FEATURE_INSTANCE_HASH_QUALIFIER,
+                FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+            }
+        ),
+        None,
+    )
+    if reserved_qualifier is not None:
+        selector_label = (
+            "instance"
+            if reserved_qualifier == FEATURE_INSTANCE_HASH_QUALIFIER
+            else "semantic"
+        )
+        raise ValidationError(
+            "Session v40 cannot safely promote a schema-5 reserved "
+            f"{selector_label} selector; Generate again."
+        )
+    _validate_v40_caption_colors(
+        effective_rules,
+        session.get("editorState"),
+    )
+
+    specific_mismatch = editor_rules is not None and editor_rules != (canonical_rules or ())
+    supported_defaults = (
+        config_defaults
+        if config_defaults is not None and config_defaults == ui_defaults
+        else None
+    )
+    if (
+        config_defaults is not None
+        and ui_defaults is not None
+        and config_defaults != ui_defaults
+        and (
+            config_defaults != (canonical_defaults or ())
+            or ui_defaults != (canonical_defaults or ())
+        )
+    ):
+        raise ValidationError(
+            "Session v40 color recovery found conflicting applied color authorities."
+        )
+    config_palette_name = _normalized_text(config.get("palette"))
+    applied_palette_name = _normalized_text(ui.get("appliedPaletteName"))
+    canonical_palette_name = _normalized_text(colors.get("defaultColorsPalette")) or "default"
+    supported_palette_name = (
+        config_palette_name
+        if config_palette_name
+        and config_palette_name == applied_palette_name
+        else None
+    )
+    default_mismatch = supported_defaults is not None and (
+        supported_defaults != (canonical_defaults or ())
+        or (
+            supported_palette_name is not None
+            and supported_palette_name != canonical_palette_name
+        )
+    )
+
+    specific_resource_id = None
+    if specific_mismatch:
+        specific_resource_id = _require_unique_recovery_resource(
+            session,
+            payload,
+            resource_paths=resource_paths,
+            kind_pattern=re.compile(r"(?:specific.*color|color.*table)", re.IGNORECASE),
+            header=_SPECIFIC_COLOR_HEADER,
+            expected=effective_rules,
+            label="specific-color",
+        )
+
+    default_resource_id = None
+    if default_mismatch:
+        if supported_palette_name is None:
+            raise ValidationError(
+                "Session v40 default-color recovery found conflicting palette names."
+            )
+        assert supported_defaults is not None
+        default_resource_id = _require_unique_recovery_resource(
+            session,
+            payload,
+            resource_paths=resource_paths,
+            kind_pattern=re.compile(r"(?:default.*color|color.*default)", re.IGNORECASE),
+            header=_DEFAULT_COLOR_HEADER,
+            expected=supported_defaults,
+            label="default-color",
+        )
+
+    if specific_mismatch or default_mismatch:
+        _validate_v40_saved_color_evidence(
+            session,
+            expected_rules=effective_rules,
+            canonical_defaults=canonical_defaults or (),
+            recovered_defaults=supported_defaults or canonical_defaults or (),
+        )
+
+    return _V40ColorRecoveryPlan(
+        specific_resource_id=specific_resource_id,
+        default_resource_id=default_resource_id,
+        recovered_palette_name=(supported_palette_name if default_mismatch else None),
+    )
+
+
+def _canonical_color_resource_id(
+    colors: Mapping[str, Any],
+    *,
+    primary_field: str,
+    fallback_field: str,
+    label: str,
+) -> str | None:
+    resource_ids: list[str] = []
+    for field_name in (primary_field, fallback_field):
+        reference = colors.get(field_name)
+        if reference is None:
+            continue
+        if not isinstance(reference, Mapping):
+            raise ValidationError(
+                f"Session color reference {field_name} is invalid."
+            )
+        resource_id = _normalized_text(reference.get("resourceId"))
+        if not resource_id:
+            raise ValidationError(
+                f"Session color reference {field_name} has no resourceId."
+            )
+        resource_ids.append(resource_id)
+    if len(set(resource_ids)) > 1:
+        raise ValidationError(
+            f"Legacy color recovery found ambiguous canonical {label} resources."
+        )
+    return resource_ids[0] if resource_ids else None
+
+
+def _read_optional_color_rows(
+    resource_id: str | None,
+    *,
+    header: tuple[str, ...],
+    resource_paths: Mapping[str, str | Path],
+) -> tuple[tuple[str, ...], ...] | None:
+    if resource_id is None:
+        return None
+    return _read_named_color_rows(
+        resource_id,
+        header=header,
+        resource_paths=resource_paths,
+        required=True,
+    )
+
+
+def _read_named_color_rows(
+    resource_id: str,
+    *,
+    header: tuple[str, ...],
+    resource_paths: Mapping[str, str | Path],
+    required: bool,
+) -> tuple[tuple[str, ...], ...] | None:
+    raw_path = resource_paths.get(resource_id)
+    if raw_path is None:
+        if required:
+            raise ValidationError(
+                f"Session color resource {resource_id!r} is not materialized."
+            )
+        return None
+    try:
+        text = Path(raw_path).read_text(encoding="utf-8-sig")
+        parsed = [
+            tuple(cell.strip() for cell in row)
+            for row in csv.reader(io.StringIO(text), delimiter="\t")
+            if row and any(cell.strip() for cell in row)
+        ]
+    except (OSError, UnicodeError, csv.Error) as exc:
+        raise ValidationError(
+            f"Could not inspect v40 color resource {resource_id!r}."
+        ) from exc
+    if parsed and parsed[0] == header:
+        parsed = parsed[1:]
+    normalized: list[tuple[str, ...]] = []
+    for index, row in enumerate(parsed, start=1):
+        if len(row) != len(header):
+            raise ValidationError(
+                f"V40 color resource {resource_id!r} row {index} must contain "
+                f"{len(header)} columns."
+            )
+        if header == _SPECIFIC_COLOR_HEADER:
+            normalized.append(_normalize_specific_row(row, context=resource_id))
+        else:
+            normalized.append(_normalize_default_row(row, context=resource_id))
+    if header == _DEFAULT_COLOR_HEADER:
+        if len({row[0] for row in normalized}) != len(normalized):
+            raise ValidationError(
+                f"V40 color resource {resource_id!r} contains duplicate feature types."
+            )
+        normalized_by_type = dict(normalized)
+        _normalize_comparison_default_colors(normalized_by_type)
+        normalized = list(normalized_by_type.items())
+        normalized.sort(key=lambda row: row[0])
+    return tuple(normalized)
+
+
+def _referenced_resource_ids(value: Any, target: set[str] | None = None) -> set[str]:
+    result = target if target is not None else set()
+    if isinstance(value, list):
+        for entry in value:
+            _referenced_resource_ids(entry, result)
+        return result
+    if not isinstance(value, Mapping):
+        return result
+    resource_id = _normalized_text(value.get("resourceId"))
+    if resource_id:
+        result.add(resource_id)
+    for entry in value.values():
+        _referenced_resource_ids(entry, result)
+    return result
+
+
+def _require_unique_recovery_resource(
+    session: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    kind_pattern: re.Pattern[str],
+    header: tuple[str, ...],
+    expected: tuple[tuple[str, ...], ...],
+    label: str,
+) -> str:
+    resources_value = session.get("resources")
+    resources = resources_value if isinstance(resources_value, Mapping) else {}
+    referenced = _referenced_resource_ids(payload)
+    matches: list[str] = []
+    for raw_resource_id, resource in resources.items():
+        resource_id = str(raw_resource_id)
+        if resource_id in referenced or not isinstance(resource, Mapping):
+            continue
+        identity = " ".join(
+            (
+                _normalized_text(resource.get("kind")),
+                _normalized_text(resource.get("name")),
+            )
+        )
+        if kind_pattern.search(identity) is None:
+            continue
+        try:
+            rows = _read_named_color_rows(
+                resource_id,
+                header=header,
+                resource_paths=resource_paths,
+                required=True,
+            )
+        except ValidationError:
+            continue
+        if rows == expected:
+            matches.append(resource_id)
+    matches.sort()
+    if len(matches) != 1:
+        evidence = "no deterministic" if not matches else "ambiguous"
+        raise ValidationError(
+            f"Session v40 {label} mismatch has {evidence} saved resource support."
+        )
+    return matches[0]
+
+
+def _recovered_resource_reference(
+    session: Mapping[str, Any],
+    resource_id: str,
+) -> dict[str, str]:
+    resources = session.get("resources")
+    resource = resources.get(resource_id) if isinstance(resources, Mapping) else None
+    if not isinstance(resource, Mapping):
+        raise ValidationError(
+            f"Session v40 recovery resource {resource_id!r} is missing."
+        )
+    kind = _normalized_text(resource.get("kind"))
+    return {
+        "resourceId": resource_id,
+        "representation": "canonicalTsv" if "canonical" in kind.lower() else "file",
+    }
+
+
+def _validate_v40_caption_colors(
+    rules: tuple[tuple[str, str, str, str, str], ...],
+    editor_state_value: Any,
+) -> None:
+    caption_colors: dict[str, str] = {}
+    for _, _, _, color, caption in rules:
+        if not caption:
+            continue
+        previous = caption_colors.setdefault(caption, color)
+        if previous != color:
+            raise ValidationError(
+                f"Legacy color recovery found conflicting colors for caption {caption!r}."
+            )
+
+    editor_state = (
+        editor_state_value if isinstance(editor_state_value, Mapping) else {}
+    )
+    legend_value = editor_state.get("legend")
+    legend = legend_value if isinstance(legend_value, Mapping) else {}
+    entries_value = legend.get("entries")
+    entries = entries_value if isinstance(entries_value, list) else []
+    saved_colors: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            continue
+        caption = _normalized_text(entry.get("caption"))
+        if not caption:
+            continue
+        color = _normalize_color(_normalized_text(entry.get("color")))
+        previous = saved_colors.setdefault(caption, color)
+        if previous != color or (
+            caption in caption_colors and caption_colors[caption] != color
+        ):
+            raise ValidationError(
+                "Legacy color recovery found conflicting saved legend state "
+                f"for {caption!r}."
+            )
+
+
+def _validate_v40_saved_color_evidence(
+    session: Mapping[str, Any],
+    *,
+    expected_rules: tuple[tuple[str, str, str, str, str], ...],
+    canonical_defaults: tuple[tuple[str, str], ...],
+    recovered_defaults: tuple[tuple[str, str], ...],
+) -> None:
+    editor_state_value = session.get("editorState")
+    editor_state = (
+        editor_state_value if isinstance(editor_state_value, Mapping) else {}
+    )
+    catalog = editor_state.get("featureCatalog")
+    results = session.get("results")
+    if (
+        not isinstance(catalog, Mapping)
+        or catalog.get("schema") != 3
+        or not isinstance(catalog.get("items"), list)
+        or not isinstance(results, list)
+        or len(catalog["items"]) != len(results)
+    ):
+        raise ValidationError(
+            "Legacy color recovery requires a complete schema-3 Feature catalogue."
+        )
+
+    global_record_keys: list[str] = []
+    for item in catalog["items"]:
+        if not isinstance(item, Mapping) or not isinstance(item.get("recordKeys"), list):
+            raise ValidationError(
+                "Legacy color recovery found incomplete catalogue record identity."
+            )
+        for raw_record_key in item["recordKeys"]:
+            record_key = _normalized_text(raw_record_key)
+            if not record_key:
+                raise ValidationError(
+                    "Legacy color recovery found incomplete catalogue record identity."
+                )
+            if record_key not in global_record_keys:
+                global_record_keys.append(record_key)
+
+    canonical_default_map = dict(canonical_defaults)
+    recovered_default_map = dict(recovered_defaults)
+    feature_by_alias: dict[str, set[tuple[str, str]]] = {}
+    expected_by_feature: dict[tuple[str, str], tuple[str, str]] = {}
+    matched_features: set[tuple[str, str]] = set()
+    global_biological_keys: set[tuple[str, str]] = set()
+    observed_default_sources: dict[str, set[str]] = {}
+
+    def add_alias(alias: Any, feature_key: tuple[str, str]) -> None:
+        normalized = _normalized_text(alias)
+        if normalized:
+            feature_by_alias.setdefault(normalized, set()).add(feature_key)
+
+    for result_index, (item_value, result_value) in enumerate(
+        zip(catalog["items"], results, strict=True)
+    ):
+        if not isinstance(item_value, Mapping) or not isinstance(result_value, Mapping):
+            raise ValidationError(
+                "Legacy color recovery found ambiguous catalogue Result ownership."
+            )
+        if (
+            item_value.get("resultIndex") != result_index
+            or _normalized_text(item_value.get("resultName"))
+            != _normalized_text(result_value.get("name"))
+            or not isinstance(item_value.get("biologicalFeatures"), list)
+            or not isinstance(item_value.get("features"), list)
+        ):
+            raise ValidationError(
+                "Legacy color recovery found ambiguous catalogue Result ownership."
+            )
+
+        biological_by_key: dict[tuple[str, str], Mapping[str, Any]] = {}
+        for biological in item_value["biologicalFeatures"]:
+            if not isinstance(biological, Mapping):
+                raise ValidationError(
+                    "Legacy color recovery found ambiguous biological Feature identity."
+                )
+            feature_key = _biological_feature_key(biological)
+            if (
+                feature_key is None
+                or feature_key in biological_by_key
+                or feature_key in global_biological_keys
+            ):
+                raise ValidationError(
+                    "Legacy color recovery found ambiguous biological Feature identity."
+                )
+            biological_by_key[feature_key] = biological
+            global_biological_keys.add(feature_key)
+
+        rendered_keys: set[tuple[str, str]] = set()
+        for rendered in item_value["features"]:
+            if not isinstance(rendered, Mapping):
+                raise ValidationError(
+                    "Legacy color recovery found an unresolved rendered Feature."
+                )
+            feature_key = _biological_feature_key(rendered)
+            biological = biological_by_key.get(feature_key) if feature_key else None
+            svg_id = _normalized_text(rendered.get("svgId"))
+            if biological is None or not svg_id or feature_key in rendered_keys:
+                raise ValidationError(
+                    "Legacy color recovery found an unresolved rendered Feature."
+                )
+            assert feature_key is not None
+            rendered_keys.add(feature_key)
+            matched_rule = _resolve_v40_specific_rule(biological, expected_rules)
+            catalog_fill = _normalize_color(_normalized_text(rendered.get("fillColor")))
+            result_fill = _saved_svg_fill(result_value.get("content"), svg_id)
+            if not catalog_fill or catalog_fill != result_fill:
+                raise ValidationError(
+                    "Legacy color recovery found conflicting catalogue and Result "
+                    "Feature fills."
+                )
+            if matched_rule is not None:
+                expected_color = matched_rule[3]
+                if catalog_fill != expected_color:
+                    raise ValidationError(
+                        "Legacy color recovery found a saved Result that conflicts "
+                        "with editor rules."
+                    )
+                matched_features.add(feature_key)
+                expected_by_feature[feature_key] = (expected_color, matched_rule[4])
+            else:
+                feature_type = _normalized_text(biological.get("type"))
+                canonical_color = _feature_default_color(
+                    canonical_default_map,
+                    feature_type,
+                )
+                recovered_color = _feature_default_color(
+                    recovered_default_map,
+                    feature_type,
+                )
+                if catalog_fill == canonical_color and catalog_fill == recovered_color:
+                    source = "both"
+                elif catalog_fill == canonical_color:
+                    source = "canonical"
+                elif catalog_fill == recovered_color:
+                    source = "recovered"
+                else:
+                    raise ValidationError(
+                        "Legacy color recovery found an unexplained saved default "
+                        "Feature fill."
+                    )
+                observed_default_sources.setdefault(feature_type, set()).add(source)
+
+            add_alias(f"{feature_key[0]}\0{feature_key[1]}", feature_key)
+            add_alias(svg_id, feature_key)
+            add_alias(biological.get("stableFeatureId"), feature_key)
+            try:
+                record_index = global_record_keys.index(feature_key[0])
+            except ValueError:
+                record_index = -1
+            source_feature_index = biological.get("sourceFeatureIndex")
+            if (
+                record_index >= 0
+                and type(source_feature_index) is int
+                and source_feature_index >= 0
+            ):
+                add_alias(
+                    f"file{record_index}_f{source_feature_index}",
+                    feature_key,
+                )
+
+    for sources in observed_default_sources.values():
+        if "canonical" in sources and "recovered" in sources:
+            raise ValidationError(
+                "Legacy color recovery found mixed default-color revisions in "
+                "saved Results."
+            )
+
+    features_value = session.get("features")
+    features = features_value if isinstance(features_value, Mapping) else {}
+    overrides = features.get("featureColorOverrides")
+    if not isinstance(overrides, Mapping):
+        if matched_features:
+            raise ValidationError(
+                "Legacy color recovery is missing its derived Feature override evidence."
+            )
+        return
+
+    override_features: set[tuple[str, str]] = set()
+    for alias, override in overrides.items():
+        targets = feature_by_alias.get(str(alias))
+        if targets is None or len(targets) != 1 or not isinstance(override, Mapping):
+            raise ValidationError(
+                "Legacy color recovery found an ambiguous derived Feature override."
+            )
+        feature_key = next(iter(targets))
+        expected = expected_by_feature.get(feature_key)
+        actual = (
+            _normalize_color(_normalized_text(override.get("color"))),
+            _normalized_text(override.get("caption")),
+        )
+        if (
+            expected is None
+            or expected != actual
+            or feature_key in override_features
+        ):
+            raise ValidationError(
+                "Legacy color recovery found a conflicting derived Feature override."
+            )
+        override_features.add(feature_key)
+    if override_features != matched_features:
+        raise ValidationError(
+            "Legacy color recovery found incomplete derived Feature override evidence."
+        )
+
+
+def _biological_feature_key(feature: Mapping[str, Any]) -> tuple[str, str] | None:
+    record_key = _normalized_text(feature.get("recordKey"))
+    biological_feature_id = _normalized_text(feature.get("biologicalFeatureId"))
+    if not record_key or not biological_feature_id:
+        return None
+    return record_key, biological_feature_id
+
+
+def _feature_default_color(colors: Mapping[str, str], feature_type: str) -> str:
+    return _normalize_color(colors.get(feature_type) or colors.get("default") or "")
+
+
+def _saved_svg_fill(content: Any, svg_id: str) -> str:
+    if not svg_id or any(token in svg_id for token in ('"', "<", ">")):
+        raise ValidationError(
+            "Legacy color recovery found an invalid rendered Feature ID."
+        )
+    expression = re.compile(
+        rf'<[^>]*\sid="{re.escape(svg_id)}"[^>]*>',
+        re.IGNORECASE,
+    )
+    matches = expression.findall(str(content or ""))
+    if len(matches) != 1:
+        raise ValidationError(
+            f"Legacy color recovery could not resolve saved Feature {svg_id!r}."
+        )
+    fill_match = re.search(r'\bfill="([^"]+)"', matches[0], re.IGNORECASE)
+    if fill_match is None:
+        raise ValidationError(
+            f"Legacy color recovery found a saved Feature without fill: {svg_id!r}."
+        )
+    return _normalize_color(fill_match.group(1))
+
+
+def _resolve_v40_specific_rule(
+    feature: Mapping[str, Any],
+    rules: tuple[tuple[str, str, str, str, str], ...],
+) -> tuple[str, str, str, str, str] | None:
+    feature_type = _normalized_text(feature.get("type"))
+    for candidate_type in (feature_type, "*"):
+        if not candidate_type:
+            continue
+        for priority in range(5):
+            for rule in rules:
+                if (
+                    rule[0] == candidate_type
+                    and _v40_rule_priority(rule[1]) == priority
+                    and _v40_rule_matches_feature(feature, rule)
+                ):
+                    return rule
+    return None
+
+
+def _v40_rule_priority(qualifier: str) -> int:
+    if qualifier in {
+        FEATURE_INSTANCE_HASH_QUALIFIER,
+        FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+    }:
+        return 0
+    normalized = qualifier.lower()
+    if normalized == "hash":
+        return 1
+    if normalized == "record_location":
+        return 2
+    if normalized == "location":
+        return 4
+    return 3
+
+
+def _v40_rule_matches_feature(
+    feature: Mapping[str, Any],
+    rule: tuple[str, str, str, str, str],
+) -> bool:
+    feature_type, qualifier, pattern, _, _ = rule
+    if feature_type not in {_normalized_text(feature.get("type")), "*"}:
+        return False
+    if not pattern:
+        return False
+    if qualifier in {
+        FEATURE_INSTANCE_HASH_QUALIFIER,
+        FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+    }:
+        return _normalized_text(feature.get("instanceHash")) == pattern
+
+    normalized_qualifier = qualifier.lower()
+    if normalized_qualifier == "hash":
+        selector_value = feature.get("selector")
+        selector = selector_value if isinstance(selector_value, Mapping) else {}
+        candidates = (
+            selector.get("hash"),
+            feature.get("hash"),
+            feature.get("stableFeatureId"),
+            feature.get("stable_feature_id"),
+            feature.get("renderedFeatureSvgId"),
+            feature.get("rendered_feature_svg_id"),
+            feature.get("svgId"),
+            feature.get("svg_id"),
+        )
+        return _regex_matches_any(pattern, candidates)
+    if normalized_qualifier == "record_location":
+        return _regex_matches_any(pattern, (_v40_record_location(feature),))
+    if normalized_qualifier == "location":
+        return _regex_matches_any(pattern, (_v40_feature_location(feature),))
+
+    qualifiers_value = feature.get("qualifiers")
+    qualifiers = qualifiers_value if isinstance(qualifiers_value, Mapping) else {}
+    values: Any = None
+    for key, candidate_values in qualifiers.items():
+        if str(key).lower() == normalized_qualifier:
+            values = candidate_values
+            break
+    if values is None:
+        for key, candidate_value in feature.items():
+            if str(key).lower() == normalized_qualifier:
+                values = candidate_value
+                break
+    candidates = values if isinstance(values, list) else [values]
+    return _regex_matches_any(pattern, candidates)
+
+
+def _regex_matches_any(pattern: str, candidates: Sequence[Any]) -> bool:
+    try:
+        expression = re.compile(pattern, re.IGNORECASE)
+    except re.error:
+        return False
+    return any(
+        expression.search(str(candidate if candidate is not None else "")) is not None
+        for candidate in candidates
+    )
+
+
+def _v40_feature_location(feature: Mapping[str, Any]) -> str:
+    selector_value = feature.get("selector")
+    selector = selector_value if isinstance(selector_value, Mapping) else {}
+    for value in (selector.get("location"), feature.get("location")):
+        normalized = _normalized_text(value)
+        if normalized:
+            return normalized
+    start = feature.get("start")
+    end = feature.get("end")
+    return f"{start}..{end}" if start is not None and end is not None else ""
+
+
+def _v40_record_location(feature: Mapping[str, Any]) -> str:
+    selector_value = feature.get("selector")
+    selector = selector_value if isinstance(selector_value, Mapping) else {}
+    for value in (
+        selector.get("record_location"),
+        selector.get("recordLocation"),
+        feature.get("record_location"),
+        feature.get("recordLocation"),
+    ):
+        normalized = _normalized_text(value)
+        if normalized:
+            return normalized
+    record_id = next(
+        (
+            normalized
+            for normalized in (
+                _normalized_text(feature.get("record_id")),
+                _normalized_text(feature.get("recordId")),
+                _normalized_text(feature.get("record")),
+            )
+            if normalized
+        ),
+        "",
+    )
+    location = _v40_feature_location(feature)
+    strand_value = _normalized_text(feature.get("strand")).lower()
+    if strand_value in {"1", "positive", "plus", "forward"}:
+        strand = "+"
+    elif strand_value in {"-1", "negative", "minus", "reverse"}:
+        strand = "-"
+    else:
+        strand = strand_value
+    return f"{record_id}:{location}:{strand}" if record_id and location and strand else ""
+
+
+def _normalized_text(value: Any) -> str:
+    return str(value if value is not None else "").strip()
+
+
+def _normalize_editor_rules(
+    value: Any,
+) -> tuple[tuple[str, str, str, str, str], ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValidationError("Session config.rules must be an array when present.")
+    result: list[tuple[str, str, str, str, str]] = []
+    for index, rule in enumerate(value):
+        if not isinstance(rule, Mapping):
+            raise ValidationError(f"Session config.rules[{index}] must be an object.")
+        row = (
+            rule.get("feat"),
+            rule.get("qual"),
+            rule.get("val"),
+            rule.get("color"),
+            rule.get("cap", ""),
+        )
+        result.append(_normalize_specific_row(row, context=f"config.rules[{index}]"))
+    return tuple(result)
+
+
+def _normalize_editor_defaults(
+    value: Any,
+) -> tuple[tuple[str, str], ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValidationError(
+            "Saved applied default colors must be an object when present."
+        )
+    normalized_by_type = {
+        feature_type: color
+        for feature_type, color in (
+            _normalize_default_row((feature_type, color), context="applied colors")
+            for feature_type, color in value.items()
+        )
+        if re.fullmatch(r"collinear_block_\d+", feature_type) is None
+    }
+    _normalize_comparison_default_colors(normalized_by_type)
+    normalized = list(normalized_by_type.items())
+    normalized.sort(key=lambda row: row[0])
+    if len({row[0] for row in normalized}) != len(normalized):
+        raise ValidationError("Saved applied default colors contain duplicate types.")
+    return tuple(normalized)
+
+
+def _normalize_comparison_default_colors(colors: dict[str, str]) -> None:
+    plus_max = colors.get("collinear_block_plus_max")
+    if plus_max and "collinear_block_plus" not in colors:
+        colors["collinear_block_plus"] = plus_max
+    for key, color in _COMPARISON_DEFAULT_COLORS.items():
+        colors.setdefault(key, color)
+
+
+def _normalize_specific_row(
+    row: Sequence[Any],
+    *,
+    context: str,
+) -> tuple[str, str, str, str, str]:
+    feature_type, qualifier, value, color, caption = (
+        _clean_color_cell(cell, context=context) for cell in row
+    )
+    if not feature_type or not qualifier or not value or not color:
+        raise ValidationError(f"{context} contains an incomplete specific-color rule.")
+    return feature_type, qualifier, value, _normalize_color(color), caption
+
+
+def _normalize_default_row(
+    row: Sequence[Any],
+    *,
+    context: str,
+) -> tuple[str, str]:
+    feature_type, color = (_clean_color_cell(cell, context=context) for cell in row)
+    if not feature_type or not color:
+        raise ValidationError(f"{context} contains an incomplete default-color row.")
+    return feature_type, _normalize_color(color)
+
+
+def _clean_color_cell(value: Any, *, context: str) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValidationError(f"{context} color-table values must be strings.")
+    return value.strip()
+
+
+def _normalize_color(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized and _COLOR_PATTERN.fullmatch(normalized) is None:
+        raise ValidationError(
+            f"Legacy color recovery found an invalid color value: {value!r}."
+        )
+    return normalized
 
 
 def _migrate_legacy_multiline_conservation_labels(

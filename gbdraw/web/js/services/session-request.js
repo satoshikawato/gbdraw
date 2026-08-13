@@ -94,9 +94,9 @@ import {
   textToBytes
 } from './file-content-cache.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 5;
+export const CANONICAL_REQUEST_SCHEMA = 6;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, CANONICAL_REQUEST_SCHEMA
 ]);
 
 // Canonical schemas 1-2 omitted values that matched the former shared API
@@ -742,16 +742,24 @@ const buildConfigOverrides = (
   );
 };
 
-const addGeneratedTableResources = (state, resources, diagramOptions) => {
-  const paletteName = String(state.selectedPalette.value || 'default');
+const addGeneratedTableResources = (state, resources, diagramOptions, styleSnapshot = null) => {
+  const paletteName = String(
+    styleSnapshot?.paletteName ?? state.selectedPalette.value ?? 'default'
+  );
   const paletteColors = state.normalizePaletteColors(
-    state.paletteDefinitions.value?.[paletteName] || state.paletteDefinitions.value?.default || {}
+    styleSnapshot?.paletteColors
+      ?? state.paletteDefinitions.value?.[paletteName]
+      ?? state.paletteDefinitions.value?.default
+      ?? {}
   );
   const defaultColors = buildDefaultColorOverrideTsv({
-    colors: state.currentColors.value,
+    colors: styleSnapshot?.colors ?? state.currentColors.value,
     paletteColors
   });
-  const specificColors = serializeSpecificRules(state.manualSpecificRules);
+  const specificColors = serializeSpecificRules(
+    styleSnapshot?.rules ?? state.manualSpecificRules,
+    { schema: CANONICAL_REQUEST_SCHEMA }
+  );
   let defaultColorsFile = null;
   let colorTableFile = null;
   if (defaultColors.trim()) {
@@ -1617,7 +1625,8 @@ export const buildCanonicalRenderRequest = ({
   filesData,
   comparisonPlanSnapshot = null,
   resolvedComparisons = [],
-  resolvedCircularConservation = []
+  resolvedCircularConservation = [],
+  styleSnapshot = null
 }) => {
   requireCurrentWebStateFieldNames(state);
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
@@ -1840,7 +1849,7 @@ export const buildCanonicalRenderRequest = ({
     diagramOptions.pairwiseMatchStyle = String(state.adv.pairwise_match_style || 'ribbon');
   }
 
-  addGeneratedTableResources(state, resources, diagramOptions);
+  addGeneratedTableResources(state, resources, diagramOptions, styleSnapshot);
   if (trackPlan.depthRequested) {
     buildDepthResources({
       state,
@@ -2334,6 +2343,134 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
 const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
+
+const canonicalTextResource = (resourceId, kind, name, text) => {
+  const bytes = textToBytes(text);
+  return {
+    kind,
+    name: normalizeResourceName(resourceId, name),
+    type: 'text/tab-separated-values',
+    size: bytes.byteLength,
+    lastModified: 0,
+    encoding: 'base64',
+    data: textToBase64(text)
+  };
+};
+
+const nextColorResourceId = (resources, preferredId, currentRef) => {
+  const currentId = String(currentRef?.resourceId || '');
+  if (currentId && currentId.startsWith(preferredId)) return currentId;
+  if (!Object.prototype.hasOwnProperty.call(resources, preferredId)) return preferredId;
+  let suffix = 2;
+  while (Object.prototype.hasOwnProperty.call(resources, `${preferredId}-${suffix}`)) suffix += 1;
+  return `${preferredId}-${suffix}`;
+};
+
+const overlayCanonicalColorResource = ({
+  resources,
+  currentRef,
+  text,
+  preferredId,
+  kind,
+  name
+}) => {
+  if (!text) return { resources, ref: null, changed: Boolean(currentRef?.resourceId) };
+  if (currentRef?.resourceId && resourceTextFromRef(resources, currentRef) === text) {
+    return { resources, ref: currentRef, changed: false };
+  }
+  const resourceId = nextColorResourceId(resources, preferredId, currentRef);
+  return {
+    resources: {
+      ...resources,
+      [resourceId]: canonicalTextResource(resourceId, kind, name, text)
+    },
+    ref: fileRef(resourceId),
+    changed: true
+  };
+};
+
+/**
+ * Project editor-owned color semantics onto a committed canonical basis.
+ * Unrelated request branches and resource entries retain their object identity.
+ */
+export const overlayCanonicalColorSemantics = (canonical, {
+  rules = [],
+  appliedColors = {},
+  paletteColors = {},
+  paletteName = 'default'
+} = {}) => {
+  if (
+    !canonical || typeof canonical !== 'object' || Array.isArray(canonical) ||
+    !canonical.renderRequest || !canonical.resources
+  ) {
+    throw new Error('A canonical render request is required for the color overlay.');
+  }
+  const request = canonical.renderRequest;
+  const diagramOptions = request.diagramOptions;
+  if (!diagramOptions || typeof diagramOptions !== 'object' || Array.isArray(diagramOptions)) {
+    throw new Error('Canonical diagramOptions are required for the color overlay.');
+  }
+  const currentColors = diagramOptions.colors && typeof diagramOptions.colors === 'object'
+    ? diagramOptions.colors
+    : {};
+  const specificText = serializeSpecificRules(rules, { schema: CANONICAL_REQUEST_SCHEMA });
+  const defaultRows = buildDefaultColorOverrideTsv({
+    colors: appliedColors,
+    paletteColors
+  });
+  const defaultText = defaultRows.trim() ? `${defaultRows}\n` : '';
+
+  const specificRef = currentColors.colorTableFile || currentColors.colorTable || null;
+  const specific = overlayCanonicalColorResource({
+    resources: canonical.resources,
+    currentRef: specificRef,
+    text: specificText,
+    preferredId: 'colors-color-table-editor-v6',
+    kind: 'colors-color-table-editor-v6',
+    name: 'specific-colors.tsv'
+  });
+  const defaultRef = currentColors.defaultColorsFile || currentColors.defaultColors || null;
+  const defaults = overlayCanonicalColorResource({
+    resources: specific.resources,
+    currentRef: defaultRef,
+    text: defaultText,
+    preferredId: 'colors-default-colors-editor-v6',
+    kind: 'colors-default-colors-editor-v6',
+    name: 'default-colors.tsv'
+  });
+
+  const specificUnchanged = !specific.changed;
+  const defaultUnchanged = !defaults.changed;
+  const schemaUnchanged = request.schema === CANONICAL_REQUEST_SCHEMA;
+  const paletteUnchanged = currentColors.defaultColorsPalette === String(paletteName || 'default');
+  if (specificUnchanged && defaultUnchanged && schemaUnchanged && paletteUnchanged) {
+    return canonical;
+  }
+
+  return {
+    ...canonical,
+    renderRequest: {
+      ...request,
+      schema: CANONICAL_REQUEST_SCHEMA,
+      diagramOptions: {
+        ...diagramOptions,
+        colors: {
+          ...currentColors,
+          colorTable: specificUnchanged ? currentColors.colorTable ?? null : null,
+          colorTableFile: specificUnchanged
+            ? currentColors.colorTableFile ?? null
+            : specific.ref,
+          defaultColors: defaultUnchanged ? currentColors.defaultColors ?? null : null,
+          defaultColorsFile: defaultUnchanged
+            ? currentColors.defaultColorsFile ?? null
+            : defaults.ref,
+          defaultColorsPalette: String(paletteName || 'default')
+        }
+      }
+    },
+    resources: defaults.resources
+  };
+};
 
 const nestedConfigValue = (config, path) => {
   let current = config;
@@ -2940,7 +3077,8 @@ export const projectCanonicalSessionRequest = ({
   if (colorTableRef?.resourceId) {
     files.t_color = resourceAsLegacyFile(resources, colorTableRef.resourceId);
     projectedSpecificRules = parseSpecificRules(
-      resourceTextFromRef(resources, colorTableRef)
+      resourceTextFromRef(resources, colorTableRef),
+      { schema: renderRequest.schema }
     ).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
   }
   let projectedWhitelist = [];

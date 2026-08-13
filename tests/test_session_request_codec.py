@@ -233,7 +233,7 @@ def _table() -> pd.DataFrame:
     )
 
 
-def test_schema5_round_trips_circular_batch_grouping_and_outputs(
+def test_current_schema_round_trips_circular_batch_grouping_and_outputs(
     tmp_path: Path,
 ) -> None:
     sources = (
@@ -253,7 +253,7 @@ def test_schema5_round_trips_circular_batch_grouping_and_outputs(
         )
     )
 
-    assert encoded.payload["schema"] == 5
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["grouping"] == "batch"
     assert [item["prefix"] for item in encoded.payload["output"]] == [
         "same-id",
@@ -2259,7 +2259,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=6), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=7), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),

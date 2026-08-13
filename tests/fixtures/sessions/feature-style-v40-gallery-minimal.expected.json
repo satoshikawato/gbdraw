@@ -1,0 +1,52 @@
+{
+  "sourceCommit": "c71d998b5362e556ce003ab5c615127dc7fca577",
+  "sourcePath": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+  "sourceSha256": "5e566c305535bb4caccf50723158462471ecf82ce5f71ecc2fda57f91e80f937",
+  "sessionVersion": 40,
+  "renderRequestSchema": 5,
+  "normalizedProjection": {
+    "requestSchema": 6,
+    "specificStatus": "consistent",
+    "defaultStatus": "recovered",
+    "specificResourceId": "colors-color-table",
+    "defaultResourceId": "colors-default-colors-file",
+    "defaultResourceRepresentation": "file",
+    "defaultColorsPalette": "orange",
+    "rules": [
+      {
+        "feat": "CDS",
+        "qual": "gene_kind",
+        "val": "biosynthetic$",
+        "color": "#d03535",
+        "cap": "Core biosynthetic genes"
+      },
+      {
+        "feat": "CDS",
+        "qual": "gene_kind",
+        "val": "transport",
+        "color": "#577edb",
+        "cap": "Transport-related genes"
+      }
+    ],
+    "appliedDefaultColors": {
+      "CDS": "#dddddd",
+      "default": "#d3d3d3",
+      "tRNA": "#9cd9cf"
+    },
+    "derivedOverrides": {
+      "record-1\u0000f4ff32855": {
+        "color": "#577edb",
+        "caption": "Transport-related genes"
+      },
+      "record-1\u0000fed46a3a6": {
+        "color": "#d03535",
+        "caption": "Core biosynthetic genes"
+      }
+    },
+    "projectedResultFills": {
+      "fd4ab5f0c_record_1": "#dddddd",
+      "f4ff32855_record_1": "#577edb",
+      "fed46a3a6_record_1": "#d03535"
+    }
+  }
+}

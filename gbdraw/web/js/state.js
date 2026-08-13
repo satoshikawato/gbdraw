@@ -571,6 +571,13 @@ const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const resultGenerationKey = ref(0);
+// Transient concurrency tokens. Session files persist the semantic inputs, not these counters.
+const documentEpoch = ref(0);
+const semanticStyleRevision = ref(0);
+const semanticStyleFingerprint = ref('');
+const validatedStyleFingerprintByResultKey = ref(Object.freeze({}));
+const featureExactScopeAvailable = ref(false);
+const featureExactScopeDiagnostic = ref('Generate to enable exact feature edits');
 const featurePanelTab = ref(defaultEditorDraftState.featurePanelTab); // 'colors' | 'labels'
 const featureSearchInput = ref('');
 const featureSearch = ref('');
@@ -642,52 +649,17 @@ const clickedLabel = ref(null); // { key, text, sourceText, featureId }
 const clickedLabelPos = reactive({ x: 0, y: 0 });
 
 // Color Change Scope Dialog state
-const colorScopeDialog = reactive({
-  show: false,
-  feat: null,
-  color: null,
-  matchingRule: null, // Existing regex rule from -t table
-  ruleMatchCount: 0, // Number of features matching the rule
-  legendName: null,
-  siblingCount: 0, // Number of other features with same caption
-  displayLabel: null, // Current rendered label text in SVG (edited label)
-  displayLabelSiblingCount: 0, // Number of other features sharing display label
-  annotationLabel: null, // Feature's source annotation label (product/gene/locus_tag)
-  annotationLabelSiblingCount: 0, // Number of other features sharing source annotation label
-  existingCaptionRule: null, // Existing hash rule for same caption (already colored)
-  existingCaptionColor: null, // Color of existing caption rule
-  resolve: null // Promise resolver
-});
-
-// Reset Color Dialog state
-const resetColorDialog = reactive({
-  show: false,
-  caption: '',
-  defaultColor: '',
-  siblingCount: 0
-});
-
-const legendRenameDialog = reactive({
-  show: false,
-  mode: 'scope', // 'scope' | 'target'
-  oldCaption: '',
-  newCaption: '',
-  targetCaption: '',
-  targetColor: '',
-  currentColor: '',
-  siblingCount: 0,
-  pendingRequest: null
-});
-
-// Label text scope dialog state
-const labelTextScopeDialog = reactive({
-  show: false,
-  labelKey: '',
-  newText: '',
-  sourceText: '',
-  featureId: '',
-  matchingCount: 0
-});
+// Phase-1/2 command boundary. Dialogs retain only this immutable plan token and
+// candidate snapshot; feature/rule objects remain outside transient UI state.
+const pendingFeatureFillPlan = ref(null);
+const featureFillPlanStatus = ref('idle');
+const featureFillPlanProgress = ref(null);
+const pendingFeatureStrokePlan = ref(null);
+const featureStrokePlanStatus = ref('idle');
+const featureStrokePlanProgress = ref(null);
+const pendingFeatureLabelPlan = ref(null);
+const featureLabelPlanStatus = ref('idle');
+const featureLabelPlanProgress = ref(null);
 
 const featureVisibilityScopeDialog = reactive({
   show: false,
@@ -710,6 +682,10 @@ const isResizing = ref(false);
 
 // Legend Editor state
 const legendEntries = ref([]); // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
+// Document-global manual legend intent. Feature-owned entries are derived per Result.
+const manualLegendEntries = ref([]);
+// Document-global caption precedence. Each Result projects only captions that it owns.
+const legendOrderIntent = ref([]);
 const deletedLegendEntries = ref([]); // Track deleted entries for restoration
 const originalLegendOrder = ref([]); // Store original order from generation
 const originalLegendColors = ref({}); // Store original colors: { caption: color }
@@ -777,10 +753,6 @@ const skipCaptureBaseConfig = ref(false);
 // Flag to skip position reapply after repositionForLegendChange is called
 // This prevents infinite loop when repositionForLegendChange triggers watch(svgContent)
 const skipPositionReapply = ref(false);
-
-// Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
-// This prevents race condition where watcher overwrites correct legend state
-const skipExtractOnSvgChange = ref(false);
 
 const featureKeys = [
   'assembly_gap',
@@ -1034,6 +1006,12 @@ export const state = {
   featureRecordIds,
   selectedFeatureRecordIdx,
   resultGenerationKey,
+  documentEpoch,
+  semanticStyleRevision,
+  semanticStyleFingerprint,
+  validatedStyleFingerprintByResultKey,
+  featureExactScopeAvailable,
+  featureExactScopeDiagnostic,
   featurePanelTab,
   featureSearchInput,
   featureSearch,
@@ -1091,15 +1069,22 @@ export const state = {
   featurePopupResize,
   clickedLabel,
   clickedLabelPos,
-  colorScopeDialog,
-  resetColorDialog,
-  legendRenameDialog,
-  labelTextScopeDialog,
+  pendingFeatureFillPlan,
+  featureFillPlanStatus,
+  featureFillPlanProgress,
+  pendingFeatureStrokePlan,
+  featureStrokePlanStatus,
+  featureStrokePlanProgress,
+  pendingFeatureLabelPlan,
+  featureLabelPlanStatus,
+  featureLabelPlanProgress,
   featureVisibilityScopeDialog,
   globalLabelModeDialog,
   sidebarWidth,
   isResizing,
   legendEntries,
+  manualLegendEntries,
+  legendOrderIntent,
   deletedLegendEntries,
   originalLegendOrder,
   originalLegendColors,
@@ -1136,7 +1121,6 @@ export const state = {
   shouldDeferCircularPreviewUpdates,
   skipCaptureBaseConfig,
   skipPositionReapply,
-  skipExtractOnSvgChange,
   normalizePaletteColors,
   normalizePaletteDefinitions,
   featureKeys,

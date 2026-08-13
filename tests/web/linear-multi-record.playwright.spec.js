@@ -1410,7 +1410,7 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
   })).toBeEnabled();
 });
 
-test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
+test('Candidate render admission keeps renderer-owned fills and rebuilds the replay cache', async ({ page }) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
@@ -1481,6 +1481,10 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
       featureColorOverrides: {
         [stableKey]: { color: '#ff00ff', caption: 'Candidate style' }
       },
+      manualSpecificRules: [{
+        feat: 'CDS', qual: 'hash', val: '^stable-feature-1$',
+        color: '#000000', cap: 'Renderer group'
+      }],
       featureStrokeOverrides: {
         [stableKey]: { strokeColor: '#ff00ff', strokeWidth: 5 }
       }
@@ -1500,6 +1504,7 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
       stroke: feature?.getAttribute('stroke'),
       strokeWidth: feature?.getAttribute('stroke-width'),
       siblingFill: sibling?.getAttribute('fill'),
+      rebuiltFillCache: prepared.featureColorOverrides[stableKey],
       renderedBindingPreserved:
         feature?.getAttribute('data-gbdraw-rendered-feature-id') === 'rendered-1',
       featureCount: prepared.featureState.extractedFeatures.length
@@ -1509,10 +1514,11 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
   expect(outcome).toEqual({
     sourceUnchanged: true,
     scriptRemoved: true,
-    fill: '#ff00ff',
+    fill: '#000000',
     stroke: '#ff00ff',
     strokeWidth: '5',
     siblingFill: '#000000',
+    rebuiltFillCache: { color: '#000000', caption: 'Renderer group' },
     renderedBindingPreserved: true,
     featureCount: 2
   });
@@ -1579,37 +1585,40 @@ ${origin}
     const app = window.__GBDRAW_APP__;
     const target = app.extractedFeatures.find((feature) => feature.product === 'wsv360-like protein');
     if (!target) throw new Error('Expected product feature was not extracted.');
-    await app.requestFeatureColorChange(target, '#ff00ff');
-    const dialog = {
-      displayLabel: app.colorScopeDialog.displayLabel,
-      displayLabelSiblingCount: app.colorScopeDialog.displayLabelSiblingCount
-    };
-    await app.handleColorScopeChoice('displayLabel');
-    app.extractedFeatures
-      .filter((feature) => feature.product === 'wsv360-like protein')
-      .forEach((feature) => {
-        const key = String(feature.stable_override_key || feature.id || '');
-        if (!key) throw new Error('Expected a stable feature override key.');
-        app.featureStrokeOverrides[key] = {
-          strokeColor: '#ff00ff',
-          strokeWidth: 5
-        };
+    await app.requestFeatureFillChange(
+      target,
+      { kind: 'color', color: '#ff00ff' },
+      'wsv360-like protein',
+      { source: 'feature-list', semanticScope: 'source-annotation-label' }
+    );
+    const matchingCount = app.extractedFeatures.filter(
+      (feature) => feature.product === 'wsv360-like protein'
+    ).length;
+    for (const feature of app.extractedFeatures.filter(
+      (entry) => entry.product === 'wsv360-like protein'
+    )) {
+      const committed = await app.requestFeatureStrokeChange(feature, {
+        kind: 'stroke',
+        strokeColor: '#ff00ff',
+        strokeWidth: 5
+      }, {
+        source: 'feature-list',
+        semanticScope: 'single'
       });
+      if (!committed) throw new Error('Expected the exact Feature stroke command to commit.');
+    }
     return {
-      dialog,
+      matchingCount,
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))
     };
   });
-  expect(edited.dialog).toEqual({
-    displayLabel: 'wsv360-like protein',
-    displayLabelSiblingCount: 1
-  });
+  expect(edited.matchingCount).toBe(2);
   expect(edited.rules).toEqual([{
-    feat: 'CDS',
-    qual: 'product',
-    val: '^wsv360-like protein$',
+    feat: '*',
+    qual: '__gbdraw_semantic_scope__',
+    val: 'fs1:source-annotation-label:wsv360-like%20protein',
     color: '#ff00ff',
     cap: 'wsv360-like protein'
   }]);
@@ -1827,17 +1836,26 @@ ${origin}
     const target = app.extractedFeatures.find((feature) => feature.product === 'wsv360-like protein');
     if (!target) throw new Error('Expected a feature to reset.');
     const defaultColor = app.appliedPaletteColors.CDS;
-    app.clickedFeature = {
-      svg_id: target.svg_id,
-      feat: target,
-      color: '#ff00ff'
-    };
-    app.resetColorDialog.defaultColor = defaultColor;
-    app.resetColorDialog.caption = 'wsv360-like protein';
-    await app.handleResetColorChoice('this');
+    let committed = await app.requestFeatureFillChange(
+      target,
+      { kind: 'color', color: defaultColor },
+      'wsv360-like protein',
+      { source: 'feature-list', semanticScope: 'single' }
+    );
+    if (!committed) {
+      const plan = app.pendingFeatureFillPlan;
+      const single = plan?.candidates?.find((candidate) => candidate.semanticScope === 'single');
+      committed = Boolean(single) && await app.resolveFeatureFillScope(
+        plan.token,
+        single.id,
+        'separate-caption'
+      );
+    }
+    if (!committed) throw new Error('Expected the exact Feature fill command to commit.');
     return {
       defaultColor,
       targetId: target.svg_id,
+      targetInstanceHash: target.instanceHash,
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))
@@ -1845,12 +1863,18 @@ ${origin}
   });
   expect(reset.rules).toContainEqual({
     feat: 'CDS',
-    qual: 'hash',
-    val: reset.targetId.replace(/_record_\d+$/i, ''),
+    qual: '__gbdraw_instance_hash__',
+    val: reset.targetInstanceHash,
     color: reset.defaultColor,
-    cap: 'other proteins'
+    cap: 'wsv360-like protein (2)'
   });
-  expect(reset.rules).toContainEqual(edited.rules[0]);
+  expect(reset.rules.filter((rule) => (
+    rule.feat === '*'
+    && rule.qual === '__gbdraw_semantic_scope__'
+    && rule.val === 'fs1:source-annotation-label:wsv360-like%20protein'
+    && rule.color === '#ff00ff'
+    && rule.cap === 'wsv360-like protein'
+  ))).toHaveLength(1);
 
   const thirdRun = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1877,6 +1901,50 @@ ${origin}
     .filter(([featureId]) => featureId !== reset.targetId)
     .flatMap(([, fills]) => fills);
   expect(siblingFills).toContain('#ff00ff');
+
+  const inherited = await page.evaluate(async (instanceHash) => {
+    const app = window.__GBDRAW_APP__;
+    const target = app.extractedFeatures.find(
+      (feature) => feature.instanceHash === instanceHash
+    );
+    if (!target) throw new Error('Expected the exact Feature identity after regeneration.');
+    const committed = await app.requestFeatureFillChange(
+      target,
+      { kind: 'inherit' },
+      '',
+      { source: 'feature-list', semanticScope: 'single' }
+    );
+    return {
+      committed,
+      hasExactRule: app.manualSpecificRules.some((rule) => (
+        rule.qual === '__gbdraw_instance_hash__' && rule.val === instanceHash
+      ))
+    };
+  }, reset.targetInstanceHash);
+  expect(inherited).toEqual({ committed: true, hasExactRule: false });
+
+  const fourthRun = await page.evaluate(async (instanceHash) => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    const target = app.extractedFeatures.find(
+      (feature) => feature.instanceHash === instanceHash
+    );
+    const svg = new DOMParser().parseFromString(
+      app.results?.[0]?.content || '',
+      'image/svg+xml'
+    ).documentElement;
+    const roots = [...svg.querySelectorAll('[data-gbdraw-feature-id]')]
+      .filter((element) => (
+        element.getAttribute('data-gbdraw-feature-id') === target?.svg_id
+      ));
+    const fills = [...roots, ...roots.flatMap((root) => [...root.querySelectorAll('[fill]')])]
+      .map((element) => String(element.getAttribute('fill') || '').toLowerCase())
+      .filter((fill) => fill && fill !== 'none');
+    return { result, errorLog: app.errorLog, fills };
+  }, reset.targetInstanceHash);
+  expect(fourthRun.result).toEqual({ status: 'ok' });
+  expect(fourthRun.errorLog).toBeNull();
+  expect(fourthRun.fills).toContain('#ff00ff');
 });
 
 test('Region annotations expose and persist an explicit target-record selection', async ({ page }) => {

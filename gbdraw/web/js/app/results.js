@@ -68,7 +68,8 @@ export const createResultsManager = ({
   ensurePyodide = null,
   writeFileToFs = null,
   legendLayout,
-  rerenderLinearDefinitions = null
+  rerenderLinearDefinitions = null,
+  bulkStyleActions = null
 }) => {
   const {
     pyodideReady,
@@ -117,10 +118,6 @@ export const createResultsManager = ({
     const allPalettes = getPaletteMap();
     return normalizePaletteColors(cloneColors(allPalettes[paletteName] || {}));
   };
-  const setAppliedPaletteState = (paletteName, colors = currentColors.value) => {
-    appliedPaletteName.value = String(paletteName || selectedPalette.value || 'default');
-    appliedPaletteColors.value = cloneColors(colors);
-  };
   const setPendingPaletteState = (paletteName, colors = currentColors.value) => {
     pendingPaletteName.value = String(paletteName || selectedPalette.value || '');
     pendingPaletteColors.value = cloneColors(colors);
@@ -129,22 +126,101 @@ export const createResultsManager = ({
     pendingPaletteName.value = '';
     pendingPaletteColors.value = {};
   };
-  const applyPaletteDraftToPreview = () => {
-    setAppliedPaletteState(selectedPalette.value, currentColors.value);
-    clearPendingPaletteDraft();
+  const paletteColorSignature = (colors) => JSON.stringify(
+    Object.entries(normalizePaletteColors(cloneColors(colors)))
+      .map(([key, value]) => [String(key), String(value ?? '').trim().toLowerCase()])
+      .filter(([key, value]) => key && value)
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+  const paletteChangeIsApplied = (paletteName, colors) => (
+    String(paletteName || 'default') === String(appliedPaletteName.value || 'default')
+    && paletteColorSignature(colors) === paletteColorSignature(appliedPaletteColors.value)
+  );
+  const convergeAppliedPaletteUi = (paletteName, colors) => {
+    const name = String(paletteName || 'default');
+    if (String(selectedPalette.value || '') !== name) selectedPalette.value = name;
+    if (paletteColorSignature(currentColors.value) !== paletteColorSignature(colors)) {
+      currentColors.value = cloneColors(colors);
+    }
+    if (
+      String(pendingPaletteName.value || '').trim() !== ''
+      || Object.keys(pendingPaletteColors.value || {}).length > 0
+    ) clearPendingPaletteDraft();
   };
-  const syncPaletteDraftState = () => {
+  const requestAppliedPaletteChange = async (paletteName, colors, label) => {
+    if (paletteChangeIsApplied(paletteName, colors)) {
+      convergeAppliedPaletteUi(paletteName, colors);
+      return false;
+    }
+    if (typeof bulkStyleActions?.requestFeatureBulkStyleChange !== 'function') {
+      throw new Error('Bulk Feature style actions are unavailable.');
+    }
+    return bulkStyleActions.requestFeatureBulkStyleChange({
+      writerKind: 'palette-default-acceptance',
+      label,
+      replacement: {
+        appliedPaletteName: String(paletteName || 'default'),
+        appliedPaletteColors: cloneColors(colors)
+      }
+    });
+  };
+
+  const applyPaletteDraftToPreview = async () => {
+    const committed = await requestAppliedPaletteChange(
+      selectedPalette.value,
+      currentColors.value,
+      'Apply feature color palette'
+    );
+    return committed;
+  };
+  const syncPaletteDraftState = async () => {
     if (paletteInstantPreviewEnabled.value) {
-      applyPaletteDraftToPreview();
-      return;
+      return applyPaletteDraftToPreview();
     }
 
     if (String(pendingPaletteName.value || '').trim() !== '') {
       setPendingPaletteState(selectedPalette.value, currentColors.value);
-      return;
+      return false;
     }
 
-    setAppliedPaletteState(selectedPalette.value, currentColors.value);
+    return requestAppliedPaletteChange(
+      selectedPalette.value,
+      currentColors.value,
+      'Change default feature color'
+    );
+  };
+
+  const acceptDefaultColor = async (featureType, value) => {
+    const key = String(featureType || '').trim();
+    if (!key) return false;
+    const previous = cloneColors(currentColors.value);
+    currentColors.value = { ...previous, [key]: value };
+    const isLiveAcceptance = paletteInstantPreviewEnabled.value
+      || String(pendingPaletteName.value || '').trim() === '';
+    try {
+      const committed = await syncPaletteDraftState();
+      if (isLiveAcceptance && !committed && !paletteChangeIsApplied(
+        selectedPalette.value,
+        currentColors.value
+      )) {
+        currentColors.value = previous;
+      }
+      return committed;
+    } catch (error) {
+      if (isLiveAcceptance) currentColors.value = previous;
+      throw error;
+    }
+  };
+
+  const addCustomColor = () => acceptDefaultColor(
+    state.newColorFeat?.value,
+    state.newColorVal?.value
+  );
+
+  const handlePaletteInstantPreviewChange = async () => {
+    if (!paletteInstantPreviewEnabled.value) return false;
+    if (String(pendingPaletteName.value || '').trim() === '') return false;
+    return applyPaletteDraftToPreview();
   };
 
   const cancelDefinitionUpdate = () => {
@@ -154,7 +230,7 @@ export const createResultsManager = ({
     }
   };
 
-  const updatePalette = () => {
+  const updatePalette = async () => {
     const selectedName = String(selectedPalette.value || '').trim() || 'default';
 
     if (!paletteInstantPreviewEnabled.value && selectedName === appliedPaletteName.value) {
@@ -163,29 +239,44 @@ export const createResultsManager = ({
       return;
     }
 
-    currentColors.value = getPaletteBaseColors(selectedName);
+    const nextColors = getPaletteBaseColors(selectedName);
     if (paletteInstantPreviewEnabled.value) {
-      applyPaletteDraftToPreview();
-      return;
+      const committed = await requestAppliedPaletteChange(
+        selectedName,
+        nextColors,
+        'Apply feature color palette'
+      );
+      return committed;
     }
 
+    currentColors.value = nextColors;
     setPendingPaletteState(selectedName, currentColors.value);
+    return false;
   };
 
-  const resetColors = () => {
+  const resetColors = async () => {
     const selectedName = String(selectedPalette.value || '').trim() || 'default';
-    currentColors.value = getPaletteBaseColors(selectedName);
+    const nextColors = getPaletteBaseColors(selectedName);
     if (paletteInstantPreviewEnabled.value) {
-      applyPaletteDraftToPreview();
-      return;
+      const committed = await requestAppliedPaletteChange(
+        selectedName,
+        nextColors,
+        'Reset default feature colors'
+      );
+      return committed;
     }
 
+    currentColors.value = nextColors;
     if (String(pendingPaletteName.value || '').trim() !== '') {
       setPendingPaletteState(selectedName, currentColors.value);
-      return;
+      return false;
     }
 
-    setAppliedPaletteState(selectedName, currentColors.value);
+    return requestAppliedPaletteChange(
+      selectedName,
+      currentColors.value,
+      'Reset default feature colors'
+    );
   };
 
   const parseMixedContentText = (inputText) => {
@@ -499,9 +590,11 @@ export const createResultsManager = ({
   return {
     updatePalette,
     resetColors,
+    acceptDefaultColor,
+    addCustomColor,
+    handlePaletteInstantPreviewChange,
     applyPaletteDraftToPreview,
     clearPendingPaletteDraft,
-    setAppliedPaletteState,
     setPendingPaletteState,
     syncPaletteDraftState,
     scheduleDefinitionUpdate,

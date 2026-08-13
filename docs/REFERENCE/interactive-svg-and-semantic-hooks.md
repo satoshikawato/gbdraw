@@ -19,6 +19,13 @@ Every identity field supplied for one endpoint, including a rendered ID, stable 
 source feature index, must resolve to the same feature in the same record. Do not recover a failed
 identity lookup by matching a public protein label.
 
+Schema-3 feature catalogues may carry `biologicalFeatures[].instanceHash`, an
+opaque `fi1_...` digest of the canonical pair. Session v41 writers require it
+for non-empty generated Results. Older schema-3 assets remain readable, but an
+editor disables exact single-feature scopes when the pair is missing or
+ambiguous. `instanceHash` is a selector token, not a biological annotation or a
+display identifier.
+
 Interactive SVG adds embedded controls, searchable metadata, feature and match popups, group inspection, and supported sequence downloads. Static SVG may retain semantic groups without embedding the interactive application.
 
 Generated interactive output sanitizes input-derived text and markup. Untrusted input must not become executable `<script>` content or `on*` event-handler attributes. Species text accepts the documented limited markup for display, not arbitrary HTML execution.

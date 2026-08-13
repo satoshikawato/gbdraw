@@ -172,9 +172,13 @@ def prepare_legend_table(
                 feature_specific_colors[feature_type] = []
             feature_specific_colors[feature_type].append((row["caption"], row["color"]))
     for selected_feature in features_present:
-        if selected_feature in feature_specific_colors.keys():
+        matching_feature_entries = [
+            *feature_specific_colors.get(selected_feature, []),
+            *feature_specific_colors.get("*", []),
+        ]
+        if matching_feature_entries:
             has_matching_rules = False
-            for entry in feature_specific_colors[selected_feature]:
+            for entry in matching_feature_entries:
                 specific_caption = entry[0]
                 specific_fill_color = entry[1]
                 # Only add to legend if this rule was actually used (or if used_color_rules not provided)

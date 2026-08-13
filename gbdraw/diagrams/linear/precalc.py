@@ -129,6 +129,12 @@ def _precalculate_feature_layers(
             feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             compute_label_text=compute_label_text,
+            feature_instance_identity_plan=(
+                feature_config.feature_instance_identity_plan
+            ),
+            feature_semantic_selector_context=(
+                feature_config.feature_semantic_selector_context
+            ),
         )
         feature_layers.append(result)
     return feature_layers
@@ -192,6 +198,12 @@ def _precalculate_label_dimensions(
                 label_filtering,
                 feature_shapes=feature_config.feature_shapes,
                 feature_visibility_rules=feature_config.feature_visibility_rules,
+                feature_instance_identity_plan=(
+                    feature_config.feature_instance_identity_plan
+                ),
+                feature_semantic_selector_context=(
+                    feature_config.feature_semantic_selector_context
+                ),
             )
             feature_dict = feature_result.foreground_features
 

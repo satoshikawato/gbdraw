@@ -1,4 +1,22 @@
 import { resolveColorToHex } from './color-utils.js';
+import {
+  FEATURE_INSTANCE_HASH_PATTERN,
+  FEATURE_INSTANCE_HASH_QUALIFIER
+} from '../services/feature-instance-identity.js';
+import {
+  FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+  isFeatureSemanticSelector
+} from './feature-editor/semantic-fill-selectors.js';
+
+export const INSTANCE_HASH_QUALIFIER = FEATURE_INSTANCE_HASH_QUALIFIER;
+export const INSTANCE_HASH_PATTERN = FEATURE_INSTANCE_HASH_PATTERN;
+export const CURRENT_SPECIFIC_RULE_SCHEMA = 6;
+
+const normalizeRuleColor = (value) => {
+  const raw = String(value ?? '').trim();
+  if (raw.toLowerCase() === 'none') return 'none';
+  return String(resolveColorToHex(raw) || '').toLowerCase();
+};
 
 export const parseColorTable = (text) => {
   const colors = {};
@@ -21,7 +39,10 @@ export const parseColorTable = (text) => {
   return { colors, count };
 };
 
-export const parseSpecificRules = (text) => {
+export const parseSpecificRules = (
+  text,
+  { schema = CURRENT_SPECIFIC_RULE_SCHEMA } = {}
+) => {
   const rules = [];
   const rulesWithCaptions = [];
   const identities = new Set();
@@ -50,13 +71,31 @@ export const parseSpecificRules = (text) => {
         `Invalid specific-color TSV at line ${lineNo}: column ${missingIndex + 1} is required.`
       );
     }
-    try {
-      new RegExp(val);
-    } catch (error) {
-      throw new Error(`Invalid specific-color regex at line ${lineNo}: ${error.message}`);
+    const schema6ReservedLiteral = Number(schema) >= 6 && (
+      qual === INSTANCE_HASH_QUALIFIER || qual === FEATURE_SEMANTIC_SCOPE_QUALIFIER
+    );
+    const instanceLiteral = schema6ReservedLiteral && qual === INSTANCE_HASH_QUALIFIER;
+    const semanticLiteral = schema6ReservedLiteral && qual === FEATURE_SEMANTIC_SCOPE_QUALIFIER;
+    if (instanceLiteral) {
+      if (!INSTANCE_HASH_PATTERN.test(val)) {
+        throw new Error(`Invalid feature-instance hash at line ${lineNo}: ${val}`);
+      }
+    } else if (semanticLiteral) {
+      if (!isFeatureSemanticSelector(val)) {
+        throw new Error(`Invalid Feature semantic selector at line ${lineNo}: ${val}`);
+      }
+    } else {
+      try {
+        new RegExp(val);
+      } catch (error) {
+        throw new Error(`Invalid specific-color regex at line ${lineNo}: ${error.message}`);
+      }
     }
-    const color = String(resolveColorToHex(colorRaw) || '').toLowerCase();
-    if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)) {
+    const color = normalizeRuleColor(colorRaw);
+    if (
+      color !== 'none' &&
+      !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)
+    ) {
       throw new Error(`Invalid specific-color value at line ${lineNo}: ${colorRaw}`);
     }
 
@@ -66,6 +105,9 @@ export const parseSpecificRules = (text) => {
       val,
       color,
       cap: captionRaw,
+      ...([INSTANCE_HASH_QUALIFIER, FEATURE_SEMANTIC_SCOPE_QUALIFIER].includes(qual)
+        ? { match: schema6ReservedLiteral ? 'literal' : 'regex' }
+        : {}),
       fromFile: true
     };
     const identity = JSON.stringify([rule.feat, rule.qual, rule.val, rule.color, rule.cap]);
@@ -80,15 +122,37 @@ export const parseSpecificRules = (text) => {
 
 const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
 
-export const serializeSpecificRules = (rules) => {
+export const serializeSpecificRules = (
+  rules,
+  { schema = CURRENT_SPECIFIC_RULE_SCHEMA } = {}
+) => {
   const rows = (Array.isArray(rules) ? rules : [])
-    .map((rule) => [
-      normalizeTsvCell(rule?.feat),
-      normalizeTsvCell(rule?.qual),
-      normalizeTsvCell(rule?.val),
-      normalizeTsvCell(rule?.color),
-      normalizeTsvCell(rule?.cap)
-    ])
+    .map((rule) => {
+      const fields = [
+        normalizeTsvCell(rule?.feat),
+        normalizeTsvCell(rule?.qual),
+        normalizeTsvCell(rule?.val),
+        normalizeTsvCell(rule?.color),
+        normalizeTsvCell(rule?.cap)
+      ];
+      if (fields[1] === INSTANCE_HASH_QUALIFIER) {
+        if (Number(schema) < 6) {
+          throw new Error('Feature-instance selectors require canonical request schema 6.');
+        }
+        if (!INSTANCE_HASH_PATTERN.test(fields[2])) {
+          throw new Error(`Invalid feature-instance hash: ${fields[2]}`);
+        }
+      }
+      if (fields[1] === FEATURE_SEMANTIC_SCOPE_QUALIFIER) {
+        if (Number(schema) < 6) {
+          throw new Error('Feature semantic selectors require canonical request schema 6.');
+        }
+        if (!isFeatureSemanticSelector(fields[2])) {
+          throw new Error(`Invalid Feature semantic selector: ${fields[2]}`);
+        }
+      }
+      return fields;
+    })
     .filter((fields) => fields.slice(0, 4).every(Boolean))
     .map((fields) => fields.join('\t'));
 

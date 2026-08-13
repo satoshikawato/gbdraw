@@ -72,6 +72,64 @@ const currentSession = {
 };
 delete currentSession.files;
 assert.doesNotThrow(() => validateSessionAuthorityInventory(currentSession, 40));
+const currentWriterSession = {
+  ...currentSession,
+  version: 41,
+  renderRequest: { schema: 6 },
+  editorState: {
+    ...currentSession.editorState,
+    featureCatalog: {
+      schema: 3,
+      items: [{
+        biologicalFeatures: [{
+          recordKey: 'record-1',
+          biologicalFeatureId: 'feature-1',
+          instanceHash: 'fi1_abcdefghijklmnopqrstuvwxyz'
+        }]
+      }]
+    }
+  }
+};
+assert.doesNotThrow(() => validateSessionAuthorityInventory(currentWriterSession, 41));
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWriterSession,
+    renderRequest: { schema: 5 }
+  }, 41),
+  /requires canonical renderRequest schema 6/
+);
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWriterSession,
+    editorState: {
+      ...currentWriterSession.editorState,
+      featureCatalog: {
+        schema: 3,
+        items: [{ biologicalFeatures: [{
+          recordKey: 'record-1', biologicalFeatureId: 'feature-1'
+        }] }]
+      }
+    }
+  }, 41),
+  /requires instanceHash for every biological Feature/
+);
+assert.throws(
+  () => validateSessionAuthorityInventory({
+    ...currentWriterSession,
+    editorState: {
+      ...currentWriterSession.editorState,
+      featureCatalog: {
+        schema: 3,
+        items: [{ biologicalFeatures: [{
+          instanceHash: 'fi1_abcdefghijklmnopqrstuvwxyz'
+        }, {
+          instanceHash: 'fi1_abcdefghijklmnopqrstuvwxyz'
+        }] }]
+      }
+    }
+  }, 41),
+  /ambiguous duplicate instanceHash/
+);
 const currentWebDraft = {
   ...currentSession,
   resources: {

@@ -1,0 +1,89 @@
+{
+  "feature": {
+    "type": "CDS",
+    "recordId": "duplicate",
+    "recordKey": "record-a",
+    "start": 10,
+    "end": 40,
+    "strand": "+",
+    "publicHash": "f8a8c2162",
+    "instanceHash": "fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "qualifiers": {
+      "gene": ["target-gene"],
+      "product": ["target-product"],
+      "__gbdraw_instance_hash__": ["legacy-biological-value"],
+      "__gbdraw_semantic_scope__": ["bio-value"]
+    }
+  },
+  "cases": [
+    {
+      "id": "exact-type-hash-before-wildcard-instance",
+      "rules": [
+        ["*", "__gbdraw_instance_hash__", "fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa", "#111111", "wildcard instance", "literal"],
+        ["CDS", "hash", "^f8a8c2162$", "#222222", "exact hash", "regex"]
+      ],
+      "expectedCaption": "exact hash"
+    },
+    {
+      "id": "exact-instance-before-hash",
+      "rules": [
+        ["CDS", "hash", "^f8a8c2162$", "#222222", "hash", "regex"],
+        ["CDS", "__gbdraw_instance_hash__", "fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa", "#333333", "instance", "literal"]
+      ],
+      "expectedCaption": "instance"
+    },
+    {
+      "id": "record-location-before-source-qualifier",
+      "rules": [
+        ["CDS", "gene", "^target-gene$", "#444444", "gene", "regex"],
+        ["CDS", "record_location", "^duplicate:10\\.\\.40:\\+$", "#555555", "record location", "regex"]
+      ],
+      "expectedCaption": "record location"
+    },
+    {
+      "id": "source-qualifier-order-before-rule-row-order",
+      "rules": [
+        ["CDS", "product", "^target-product$", "#666666", "product", "regex"],
+        ["CDS", "gene", "^target-gene$", "#777777", "gene", "regex"]
+      ],
+      "expectedCaption": "gene"
+    },
+    {
+      "id": "source-qualifier-before-location",
+      "rules": [
+        ["CDS", "location", "^10\\.\\.40$", "#888888", "location", "regex"],
+        ["CDS", "product", "^target-product$", "#999999", "product", "regex"]
+      ],
+      "expectedCaption": "product"
+    },
+    {
+      "id": "schema5-reserved-looking-biological-qualifier",
+      "rules": [
+        ["CDS", "__gbdraw_instance_hash__", "^legacy-biological-value$", "#aaaaaa", "legacy biological", "regex"]
+      ],
+      "expectedCaption": "legacy biological"
+    },
+    {
+      "id": "schema5-semantic-spelling-remains-a-biological-qualifier",
+      "rules": [
+        ["CDS", "__gbdraw_semantic_scope__", "^bio.*$", "#bbbbbb", "legacy semantic spelling", "regex"]
+      ],
+      "expectedCaption": "legacy semantic spelling"
+    },
+    {
+      "id": "semantic-base-caption-overlays-the-underlying-legacy-rule",
+      "rules": [
+        ["CDS", "__gbdraw_semantic_scope__", "fs1:base-legend-caption:Hash%20group", "#cccccc", "semantic override", "literal"],
+        ["CDS", "hash", "^f8a8c2162$", "#dddddd", "Hash group", "regex"]
+      ],
+      "expectedCaption": "semantic override"
+    },
+    {
+      "id": "semantic-base-caption-falls-back-to-feature-type",
+      "rules": [
+        ["CDS", "__gbdraw_semantic_scope__", "fs1:base-legend-caption:CDS", "#eeeeee", "feature type group", "literal"]
+      ],
+      "expectedCaption": "feature type group"
+    }
+  ]
+}

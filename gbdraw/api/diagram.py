@@ -99,6 +99,7 @@ from gbdraw.config.models import (  # type: ignore[reportMissingImports]
 from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
 from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+    preprocess_label_filtering,
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
@@ -135,6 +136,15 @@ from gbdraw.mode_profiles import (
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
+from gbdraw.features.instance_identity import (
+    FeatureInstanceIdentityPlan,
+    build_feature_instance_identity_plan,
+)
+from gbdraw.features.semantic_selectors import (  # type: ignore[reportMissingImports]
+    FeatureSemanticSelectorContext,
+    build_feature_semantic_selector_context,
+    feature_semantic_rules_require_context,
+)
 from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
@@ -1427,6 +1437,42 @@ def _resolve_feature_render_inputs(
     )
 
 
+def _resolve_feature_instance_identity_plan(
+    records: Sequence[SeqRecord],
+    plan: FeatureInstanceIdentityPlan | None,
+) -> FeatureInstanceIdentityPlan:
+    if plan is None:
+        return build_feature_instance_identity_plan(records)
+    if not isinstance(plan, FeatureInstanceIdentityPlan):
+        raise ValidationError(
+            "_feature_instance_identity_plan must be "
+            "FeatureInstanceIdentityPlan or None"
+        )
+    for record in records:
+        plan.record_key_for_record(record)
+    return plan
+
+
+def _build_feature_semantic_selector_context(
+    records: Sequence[SeqRecord],
+    *,
+    cfg: GbdrawConfig,
+    specific_color_rules: Mapping[str, Any],
+    orthogroups: OrthogroupResult | None = None,
+) -> FeatureSemanticSelectorContext | None:
+    """Build semantic context only when schema-6 rules require it."""
+
+    if not feature_semantic_rules_require_context(specific_color_rules):
+        return None
+    return build_feature_semantic_selector_context(
+        records,
+        label_filtering=preprocess_label_filtering(
+            copy.deepcopy(cfg.labels.filtering.as_dict())
+        ),
+        orthogroups=orthogroups,
+    )
+
+
 def _web_safe_cache_filename(name: object, fallback: str = "losat") -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or "")).strip("_")
     return cleaned or fallback
@@ -1531,6 +1577,7 @@ def assemble_linear_diagram_from_records(
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
     _return_build_result: bool = False,
 ) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
@@ -1671,6 +1718,10 @@ def assemble_linear_diagram_from_records(
     default_colors = resolved_feature_inputs.default_colors
     feature_table = resolved_feature_inputs.feature_visibility_table
     feature_visibility_rules = resolved_feature_inputs.feature_visibility_rules
+    feature_instance_identity_plan = _resolve_feature_instance_identity_plan(
+        records,
+        _feature_instance_identity_plan,
+    )
 
     if normalized_pairwise_match_style == "ribbon":
         normalized_pairwise_match_style = normalize_pairwise_match_style(
@@ -1939,6 +1990,13 @@ def assemble_linear_diagram_from_records(
         additional_color_modes=additional_color_modes,
     )
 
+    feature_semantic_selector_context = _build_feature_semantic_selector_context(
+        records,
+        cfg=cfg,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        orthogroups=resolved_orthogroups,
+    )
+
     canvas_config = LinearCanvasConfigurator(
         num_of_entries=len(records),
         longest_genome=longest_genome,
@@ -1959,6 +2017,8 @@ def assemble_linear_diagram_from_records(
         feature_visibility_rules=feature_visibility_rules,
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
+        feature_instance_identity_plan=feature_instance_identity_plan,
+        feature_semantic_selector_context=feature_semantic_selector_context,
         canvas_config=canvas_config,
     )
     gc_config = GcContentConfigurator(
@@ -2094,6 +2154,8 @@ def assemble_circular_diagram_from_record(
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    _feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
@@ -2132,6 +2194,10 @@ def assemble_circular_diagram_from_record(
     color_table = resolved_feature_inputs.color_table
     default_colors = resolved_feature_inputs.default_colors
     feature_table = resolved_feature_inputs.feature_visibility_table
+    feature_instance_identity_plan = _resolve_feature_instance_identity_plan(
+        [gb_record],
+        _feature_instance_identity_plan,
+    )
 
     cfg = _apply_circular_plot_title_font_size_override(
         cfg=cfg,
@@ -2411,6 +2477,15 @@ def assemble_circular_diagram_from_record(
         legend=legend_effective,
         gb_record=gb_record,
     )
+    feature_semantic_selector_context = (
+        _feature_semantic_selector_context
+        if _feature_semantic_selector_context is not None
+        else _build_feature_semantic_selector_context(
+            [gb_record],
+            cfg=cfg,
+            specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        )
+    )
     feature_config = FeatureDrawingConfigurator(
         color_table=color_table,
         default_colors=default_colors,
@@ -2421,6 +2496,8 @@ def assemble_circular_diagram_from_record(
         feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
+        feature_instance_identity_plan=feature_instance_identity_plan,
+        feature_semantic_selector_context=feature_semantic_selector_context,
         canvas_config=canvas_config,
     )
     legend_config = LegendDrawingConfigurator(
@@ -2547,6 +2624,7 @@ def assemble_circular_diagram_from_records(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
     if not isinstance(cfg, GbdrawConfig):
@@ -2600,6 +2678,10 @@ def assemble_circular_diagram_from_records(
     color_table = resolved_feature_inputs.color_table
     default_colors = resolved_feature_inputs.default_colors
     feature_table = resolved_feature_inputs.feature_visibility_table
+    feature_instance_identity_plan = _resolve_feature_instance_identity_plan(
+        records,
+        _feature_instance_identity_plan,
+    )
 
     cfg = _apply_circular_plot_title_font_size_override(
         cfg=cfg,
@@ -2610,6 +2692,11 @@ def assemble_circular_diagram_from_records(
         selected_features_set = DEFAULT_SELECTED_FEATURES
 
     records = list(records)
+    feature_semantic_selector_context = _build_feature_semantic_selector_context(
+        records,
+        cfg=cfg,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+    )
     record_depth_tracks = normalize_depth_tracks(
         records,
         depth_tracks=depth_tracks,
@@ -2880,6 +2967,8 @@ def assemble_circular_diagram_from_records(
             _precomputed_depth_track_count=available_depth_track_count,
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
+            _feature_instance_identity_plan=feature_instance_identity_plan,
+            _feature_semantic_selector_context=feature_semantic_selector_context,
         )
         result = _require_circular_assembly_result(sub_canvas)
         record_results.append(result)
@@ -2977,6 +3066,8 @@ def assemble_circular_diagram_from_records(
             feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
             specific_color_rules=resolved_feature_inputs.specific_color_rules,
             default_color_map=resolved_feature_inputs.default_color_map,
+            feature_instance_identity_plan=feature_instance_identity_plan,
+            feature_semantic_selector_context=feature_semantic_selector_context,
             canvas_config=legend_canvas_config,
         )
         color_map = feature_config.specific_color_rules
@@ -2986,6 +3077,8 @@ def assemble_circular_diagram_from_records(
             list(selected_features_set),
             feature_visibility_rules=feature_config.feature_visibility_rules,
             specific_color_rules=color_map,
+            feature_instance_identity_plan=feature_instance_identity_plan,
+            feature_semantic_selector_context=feature_semantic_selector_context,
         )
         used_color_rules, default_used_features = precompute_used_color_rules(
             list(records),
@@ -2993,6 +3086,8 @@ def assemble_circular_diagram_from_records(
             default_color_map,
             set(feature_config.selected_features_set),
             feature_visibility_rules=feature_config.feature_visibility_rules,
+            feature_instance_identity_plan=feature_instance_identity_plan,
+            feature_semantic_selector_context=feature_semantic_selector_context,
         )
         legend_table = prepare_legend_table(
             gc_config,
@@ -3200,6 +3295,7 @@ def build_circular_diagram(
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
@@ -3268,6 +3364,7 @@ def build_circular_diagram(
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _feature_instance_identity_plan=_feature_instance_identity_plan,
     )
 
 
@@ -3279,6 +3376,7 @@ def _build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
     _return_build_result: bool = False,
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
@@ -3364,6 +3462,7 @@ def _build_linear_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _feature_instance_identity_plan=_feature_instance_identity_plan,
         _return_build_result=_return_build_result,
     )
 
@@ -3376,6 +3475,7 @@ def build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3386,6 +3486,7 @@ def build_linear_diagram(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _feature_instance_identity_plan=_feature_instance_identity_plan,
     )
     return cast(Drawing, result)
 
@@ -3398,6 +3499,7 @@ def build_linear_diagram_result(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
 
@@ -3408,6 +3510,7 @@ def build_linear_diagram_result(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _feature_instance_identity_plan=_feature_instance_identity_plan,
         _return_build_result=True,
     )
     if not isinstance(result, LinearDiagramBuildResult):  # pragma: no cover
@@ -3421,6 +3524,7 @@ def build_circular_multi_diagram(
     options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -3497,6 +3601,7 @@ def build_circular_multi_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _feature_instance_identity_plan=_feature_instance_identity_plan,
     )
 
 

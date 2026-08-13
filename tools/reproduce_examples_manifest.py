@@ -106,6 +106,7 @@ class SessionVariantRecipe:
     source_session_path: str
     feature_shapes: tuple[tuple[str, str], ...] = ()
     config_overrides: tuple[tuple[str, str | float | int | bool], ...] = ()
+    replay_canonical_color_resources: bool = False
 
 
 @dataclass(frozen=True)
@@ -1887,6 +1888,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                     0.75,
                 ),
             ),
+            replay_canonical_color_resources=True,
         ),
         required_inputs=(
             "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
@@ -1910,6 +1912,7 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                     0.5,
                 ),
             ),
+            replay_canonical_color_resources=True,
         ),
         required_inputs=(
             "gbdraw/web/gallery/sessions/"

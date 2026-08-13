@@ -13,6 +13,8 @@ from ..core.record_metadata import (
     _source_feature_index,
 )
 from .objects import GeneObject, RepeatObject, FeatureObject
+from .instance_identity import FeatureInstanceIdentity, FeatureInstanceIdentityPlan
+from .semantic_selectors import FeatureSemanticSelectorContext
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
@@ -38,6 +40,8 @@ def create_repeat_object(
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
+    feature_instance_identity: FeatureInstanceIdentity | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -47,7 +51,14 @@ def create_repeat_object(
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color: str = get_color(
+        feature,
+        color_table,
+        default_colors,
+        record_id=record_id,
+        feature_instance_identity=feature_instance_identity,
+        feature_semantic_selector_context=feature_semantic_selector_context,
+    )
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
 
@@ -80,6 +91,8 @@ def create_feature_object(
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
+    feature_instance_identity: FeatureInstanceIdentity | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -87,7 +100,14 @@ def create_feature_object(
     coordinates = feature.location.parts
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color: str = get_color(
+        feature,
+        color_table,
+        default_colors,
+        record_id=record_id,
+        feature_instance_identity=feature_instance_identity,
+        feature_semantic_selector_context=feature_semantic_selector_context,
+    )
     feature_type = feature.type
     label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
 
@@ -118,6 +138,8 @@ def create_gene_object(
     record_id: Optional[str] = None,
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
+    feature_instance_identity: FeatureInstanceIdentity | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -129,7 +151,14 @@ def create_gene_object(
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color: str = get_color(
+        feature,
+        color_table,
+        default_colors,
+        record_id=record_id,
+        feature_instance_identity=feature_instance_identity,
+        feature_semantic_selector_context=feature_semantic_selector_context,
+    )
     label_text = get_label_text(feature, label_filtering, record_id=record_id) if compute_label_text else ""
 
     gene_object = GeneObject(
@@ -172,6 +201,8 @@ def _build_feature_layers(
     split_overlaps_by_strand: bool = False,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> FeatureBuildResult:
     foreground_features: Dict[str, FeatureObject] = {}
     underlay_features: list[FeatureObject] = []
@@ -183,17 +214,31 @@ def _build_feature_layers(
     source_indexes = _feature_source_index_map(gb_record.features)
 
     for feature in gb_record.features:
+        feature_instance_identity = (
+            feature_instance_identity_plan.identity_for_feature(feature)
+            if feature_instance_identity_plan is not None
+            else None
+        )
         if not should_render_feature(
             feature,
             selected_features_set,
             feature_visibility_rules=feature_visibility_rules,
             record_id=gb_record.id,
             specific_color_rules=color_table,
+            feature_instance_identity=feature_instance_identity,
+            feature_semantic_selector_context=feature_semantic_selector_context,
         ):
             continue
 
         # Track which color rules are actually used
-        color, caption = get_color_with_info(feature, color_table, default_colors, record_id=gb_record.id)
+        color, caption = get_color_with_info(
+            feature,
+            color_table,
+            default_colors,
+            record_id=gb_record.id,
+            feature_instance_identity=feature_instance_identity,
+            feature_semantic_selector_context=feature_semantic_selector_context,
+        )
         if caption:
             used_color_rules.add((caption, color))
         rendering = rendering_resolver(str(feature.type))
@@ -216,6 +261,8 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
+                feature_instance_identity=feature_instance_identity,
+                feature_semantic_selector_context=feature_semantic_selector_context,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -232,6 +279,8 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
+                feature_instance_identity=feature_instance_identity,
+                feature_semantic_selector_context=feature_semantic_selector_context,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
@@ -248,6 +297,8 @@ def _build_feature_layers(
                 record_id=gb_record.id,
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
+                feature_instance_identity=feature_instance_identity,
+                feature_semantic_selector_context=feature_semantic_selector_context,
             )
         source_feature_index = _source_feature_index(feature)
         feature_object.source_feature_index = (
@@ -255,6 +306,15 @@ def _build_feature_layers(
             if source_feature_index is None
             else source_feature_index
         )
+        if feature_instance_identity is not None:
+            feature_object.record_key = feature_instance_identity.record_key
+            feature_object.stable_feature_id = (
+                feature_instance_identity.stable_feature_id
+            )
+            feature_object.biological_feature_id = (
+                feature_instance_identity.biological_feature_id
+            )
+            feature_object.instance_hash = feature_instance_identity.instance_hash
         if rendering == "underlay":
             underlay_features.append(feature_object)
         else:
@@ -286,6 +346,8 @@ def create_feature_layers(
     feature_shapes: Mapping[str, str] | None = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> FeatureBuildResult:
     """Build visible features using the current rendering contract."""
 
@@ -305,6 +367,8 @@ def create_feature_layers(
         split_overlaps_by_strand=split_overlaps_by_strand,
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
+        feature_instance_identity_plan=feature_instance_identity_plan,
+        feature_semantic_selector_context=feature_semantic_selector_context,
     )
 
 
@@ -320,6 +384,8 @@ def create_feature_dict(
     directional_feature_types: Optional[Set[str]] = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> Tuple[Dict[str, FeatureObject], Set[Tuple[str, str]]]:
     """Build the legacy foreground-only feature dictionary.
 
@@ -347,6 +413,8 @@ def create_feature_dict(
         split_overlaps_by_strand=split_overlaps_by_strand,
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
+        feature_instance_identity_plan=feature_instance_identity_plan,
+        feature_semantic_selector_context=feature_semantic_selector_context,
     )
     return result.foreground_features, set(result.used_color_rules)
 

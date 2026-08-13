@@ -74,6 +74,40 @@ const isPlainObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
 
+const FEATURE_INSTANCE_HASH_PATTERN = /^fi1_[a-z2-7]{26}$/;
+
+const validateCurrentFeatureInstanceHashes = (catalog, version) => {
+  if (!Array.isArray(catalog?.items)) {
+    throw new Error(
+      `Session version ${String(version)} requires a complete schema-3 Feature catalogue.`
+    );
+  }
+  const hashes = new Set();
+  catalog.items.forEach((item) => {
+    if (!Array.isArray(item?.biologicalFeatures)) {
+      throw new Error(
+        `Session version ${String(version)} requires catalogue biological Features.`
+      );
+    }
+    item.biologicalFeatures.forEach((feature) => {
+      const instanceHash = isPlainObject(feature) && typeof feature.instanceHash === 'string'
+        ? feature.instanceHash.trim()
+        : '';
+      if (!FEATURE_INSTANCE_HASH_PATTERN.test(instanceHash)) {
+        throw new Error(
+          `Session version ${String(version)} requires instanceHash for every biological Feature.`
+        );
+      }
+      if (hashes.has(instanceHash)) {
+        throw new Error(
+          `Session version ${String(version)} contains an ambiguous duplicate instanceHash.`
+        );
+      }
+      hashes.add(instanceHash);
+    });
+  });
+};
+
 const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze([
   'extractedFeatures',
   'biologicalFeatures',
@@ -284,6 +318,12 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (Number(version) >= 40) {
     validateCurrentComparisonAuthority(sessionData);
     if (
+      Number(version) >= 41
+      && (!isPlainObject(sessionData.renderRequest) || sessionData.renderRequest.schema !== 6)
+    ) {
+      throw new Error('Session version 41 requires canonical renderRequest schema 6.');
+    }
+    if (
       Object.prototype.hasOwnProperty.call(sessionData, 'features')
       && !isPlainObject(sessionData.features)
     ) {
@@ -360,6 +400,9 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
       throw new Error(
         `Session version ${String(version)} requires a feature catalog for saved results.`
       );
+    }
+    if (Number(version) >= 41 && featureCatalog !== null) {
+      validateCurrentFeatureInstanceHashes(featureCatalog, version);
     }
   }
   const unknown = Object.keys(sessionData).filter(

@@ -7,7 +7,19 @@ from typing import Any, Optional
 
 from Bio.SeqFeature import SeqFeature
 
+from gbdraw.exceptions import ValidationError
+
 from .ids import compute_feature_hash, compute_feature_object_hash
+from .instance_identity import (
+    FEATURE_INSTANCE_HASH_QUALIFIER,
+    FeatureInstanceIdentity,
+    is_feature_instance_hash,
+)
+from .semantic_selectors import (
+    FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+    FeatureSemanticSelectorContext,
+    feature_semantic_selector_matches,
+)
 
 
 def normalize_qualifier_values(raw_values: Any) -> list[str]:
@@ -248,44 +260,148 @@ def _unpack_color_rule(rule) -> tuple[Any, str, Optional[str]]:
     return rule[0], rule[1], None
 
 
+def _find_legacy_rule_in_set(
+    feature: SeqFeature,
+    rules_for_feature_type: dict,
+    *,
+    record_id: Optional[str],
+) -> tuple[str, Optional[str]] | None:
+    if "hash" in rules_for_feature_type:
+        feature_hash = get_feature_hash(feature, record_id=record_id)
+        for rule in rules_for_feature_type["hash"]:
+            pattern, color, caption = _unpack_color_rule(rule)
+            if feature_hash and pattern.search(feature_hash):
+                return color, caption
+
+    if "record_location" in rules_for_feature_type:
+        record_location = get_feature_record_location_str(feature, record_id)
+        for rule in rules_for_feature_type["record_location"]:
+            pattern, color, caption = _unpack_color_rule(rule)
+            if record_location and pattern.search(record_location):
+                return color, caption
+
+    qualifiers = get_feature_qualifiers(feature)
+    for qualifier_key in qualifiers:
+        if qualifier_key in rules_for_feature_type:
+            for rule in rules_for_feature_type[qualifier_key]:
+                pattern, color, caption = _unpack_color_rule(rule)
+                # Schema-5 rows using a now-reserved spelling remain ordinary
+                # biological regex qualifiers. Schema-6 literals are strings
+                # or parsed tuples and are handled by their dedicated passes.
+                if not hasattr(pattern, "search"):
+                    continue
+                for value in get_qualifier_values(qualifiers, qualifier_key):
+                    if pattern.search(value):
+                        return color, caption
+
+    if "location" in rules_for_feature_type:
+        location_str = get_feature_location_str(feature)
+        for rule in rules_for_feature_type["location"]:
+            pattern, color, caption = _unpack_color_rule(rule)
+            if location_str and pattern.search(location_str):
+                return color, caption
+    return None
+
+
+def _base_legend_caption(
+    feature: SeqFeature,
+    rule_sets: list[dict],
+    *,
+    record_id: Optional[str],
+) -> str:
+    for rules_for_feature_type in rule_sets:
+        matched = _find_legacy_rule_in_set(
+            feature,
+            rules_for_feature_type,
+            record_id=record_id,
+        )
+        if matched is not None:
+            return str(matched[1] or get_feature_type(feature))
+    return get_feature_type(feature)
+
+
 def find_specific_color_rule(
     feature: SeqFeature,
     color_map: dict,
     record_id: Optional[str] = None,
+    feature_instance_identity: FeatureInstanceIdentity | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> tuple[str, Optional[str]] | None:
     """Return the first matching specific color rule, if any."""
 
     feature_type = get_feature_type(feature)
-    for rules_for_feature_type in _iter_color_rule_sets(color_map, feature_type):
-        if "hash" in rules_for_feature_type:
-            feature_hash = get_feature_hash(feature, record_id=record_id)
-            for rule in rules_for_feature_type["hash"]:
-                pattern, color, caption = _unpack_color_rule(rule)
-                if feature_hash and pattern.search(feature_hash):
+    rule_sets = list(_iter_color_rule_sets(color_map, feature_type))
+    has_instance_rule = any(
+        any(
+            isinstance(_unpack_color_rule(rule)[0], str)
+            for rule in rules.get(FEATURE_INSTANCE_HASH_QUALIFIER, ())
+        )
+        for rules in rule_sets
+    )
+    instance_hash = (
+        feature_instance_identity.instance_hash
+        if feature_instance_identity is not None
+        else str(getattr(feature, "instance_hash", "") or "")
+    )
+    if has_instance_rule and not is_feature_instance_hash(instance_hash):
+        raise ValidationError(
+            f"{FEATURE_INSTANCE_HASH_QUALIFIER} requires a shared feature "
+            "instance identity plan. Regenerate the diagram from canonical "
+            "record inputs."
+        )
+
+    for rules_for_feature_type in rule_sets:
+        if has_instance_rule and FEATURE_INSTANCE_HASH_QUALIFIER in rules_for_feature_type:
+            for rule in rules_for_feature_type[FEATURE_INSTANCE_HASH_QUALIFIER]:
+                literal, color, caption = _unpack_color_rule(rule)
+                if not isinstance(literal, str):
+                    continue
+                if not is_feature_instance_hash(literal):
+                    raise ValidationError(
+                        f"{FEATURE_INSTANCE_HASH_QUALIFIER} rules must contain "
+                        "canonical literal fi1_ tokens."
+                    )
+                if instance_hash == literal:
                     return color, caption
 
-        if "record_location" in rules_for_feature_type:
-            record_location = get_feature_record_location_str(feature, record_id)
-            for rule in rules_for_feature_type["record_location"]:
-                pattern, color, caption = _unpack_color_rule(rule)
-                if record_location and pattern.search(record_location):
-                    return color, caption
+        semantic_rules = rules_for_feature_type.get(
+            FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+            (),
+        )
+        for rule in semantic_rules:
+            selector, color, caption = _unpack_color_rule(rule)
+            if hasattr(selector, "search"):
+                # Schema 5 did not reserve this spelling. Its compiled regex
+                # remains an ordinary biological source qualifier below.
+                continue
+            if (
+                not isinstance(selector, tuple)
+                or len(selector) != 2
+                or not all(isinstance(part, str) for part in selector)
+            ):
+                raise ValidationError(
+                    f"{FEATURE_SEMANTIC_SCOPE_QUALIFIER} rules require canonical "
+                    "schema-6 literals."
+                )
+            if feature_semantic_selector_matches(
+                feature,
+                selector,
+                context=feature_semantic_selector_context,
+                base_legend_caption=_base_legend_caption(
+                    feature,
+                    rule_sets,
+                    record_id=record_id,
+                ),
+            ):
+                return color, caption
 
-        qualifiers = get_feature_qualifiers(feature)
-        for qualifier_key in qualifiers:
-            if qualifier_key in rules_for_feature_type:
-                for rule in rules_for_feature_type[qualifier_key]:
-                    pattern, color, caption = _unpack_color_rule(rule)
-                    for value in get_qualifier_values(qualifiers, qualifier_key):
-                        if pattern.search(value):
-                            return color, caption
-
-        if "location" in rules_for_feature_type:
-            location_str = get_feature_location_str(feature)
-            for rule in rules_for_feature_type["location"]:
-                pattern, color, caption = _unpack_color_rule(rule)
-                if location_str and pattern.search(location_str):
-                    return color, caption
+        matched = _find_legacy_rule_in_set(
+            feature,
+            rules_for_feature_type,
+            record_id=record_id,
+        )
+        if matched is not None:
+            return matched
     return None
 
 
@@ -293,8 +409,19 @@ def feature_matches_specific_color_rule(
     feature: SeqFeature,
     color_map: dict,
     record_id: Optional[str] = None,
+    feature_instance_identity: FeatureInstanceIdentity | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> bool:
-    return find_specific_color_rule(feature, color_map, record_id=record_id) is not None
+    return (
+        find_specific_color_rule(
+            feature,
+            color_map,
+            record_id=record_id,
+            feature_instance_identity=feature_instance_identity,
+            feature_semantic_selector_context=feature_semantic_selector_context,
+        )
+        is not None
+    )
 
 
 def build_feature_selector_values(

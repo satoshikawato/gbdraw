@@ -227,21 +227,30 @@ Similarity-group and Collinear popups add member or anchor context. Sequence
 downloads are available only when the required source sequence and metadata
 are present.
 
-Ctrl-click selects features for bulk color, legend-caption, visibility, and
-stroke edits. Use the visible **Apply** action to make an edit part of the
-editor state. **Apply to all label** and **Apply to all source label** become
-one anchored qualifier rule only when the selected features share one feature
-type, qualifier, and value and that rule matches exactly the intended loaded
-features. Otherwise the editor keeps one exact `hash` rule per biological
-feature. Identical duplicate records can share the same hash, so a regenerated
-diagram cannot preserve a one-instance-only rule for indistinguishable
-duplicates.
+Ctrl-click selects features for bulk fill, legend-caption, visibility, and
+stroke edits. A normal click opens the Feature popup, where the fill control
+shows the effective color even when it comes from a rule or the active palette.
+Changing it opens a scope dialog containing only choices that apply to the
+clicked Feature. Depending on the loaded data, those choices can include the
+matching rule, all Features of the same type, a shared legend caption, a shared
+rendered or source-annotation label, a Similarity group, the selected Features,
+or only the clicked Feature. Each choice reports its Feature and output counts.
+
+Group choices cover every affected Result, including Results that are not
+currently displayed. The Feature fills and their derived legends are staged
+together and committed as one undoable change; cancelling the dialog changes
+nothing. **Inherit** removes the explicit Feature override, while **No fill**
+keeps an explicit transparent-fill choice. Newly generated diagrams and safely
+upgraded sessions carry a stable per-instance identity, so **Only this Feature**
+continues to address the same biological Feature after save, load, and
+regeneration. If an older session cannot be upgraded unambiguously, exact
+scopes stay unavailable until the diagram is generated again.
 
 **Layout edit** moves supported legends and other layout objects without
 changing record geometry. **Undo** and **Redo** traverse supported form and
-editor changes. **Reset Settings** is broader than undo and requires
-confirmation. Regenerate after rule-backed edits when the exported figure must
-match the current form state.
+editor changes. **Reset Settings** is broader than undo, requires confirmation,
+and clears generated Results while retaining uploaded inputs. Generate a new
+diagram before continuing to edit or export after a reset.
 
 The export actions and session handoff rules are documented in [Output formats
 and export](output-formats-and-export.md) and [Session and request

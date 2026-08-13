@@ -48,6 +48,7 @@ const buildFeatureIntentData = (features = {}) => ({
 const buildEditorIntentData = (editorState = {}) => ({
   legend: {
     entries: cloneJsonData(editorState?.legend?.entries) || [],
+    orderIntent: cloneJsonData(editorState?.legend?.orderIntent) || [],
     deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
     colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
     strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
@@ -94,6 +95,7 @@ const applyFeatureIntentData = (state, features = {}) => {
 const applyEditorIntentData = (state, editorState = {}) => {
   const legend = editorState.legend || {};
   replaceRefArray(state.legendEntries, legend.entries);
+  if (state.legendOrderIntent) replaceRefArray(state.legendOrderIntent, legend.orderIntent);
   replaceRefArray(state.deletedLegendEntries, legend.deletedEntries);
   replacePlainObject(state.legendColorOverrides, clonePlainObject(legend.colorOverrides));
   replacePlainObject(state.legendStrokeOverrides, clonePlainObject(legend.strokeOverrides));
@@ -250,10 +252,6 @@ const closeTransientState = (state) => {
   setRef(state.clickedFeature, null);
   setRef(state.clickedPairwiseMatch, null);
   setRef(state.clickedLabel, null);
-  if (state.colorScopeDialog) state.colorScopeDialog.show = false;
-  if (state.resetColorDialog) state.resetColorDialog.show = false;
-  if (state.legendRenameDialog) state.legendRenameDialog.show = false;
-  if (state.labelTextScopeDialog) state.labelTextScopeDialog.show = false;
   if (state.featureVisibilityScopeDialog) state.featureVisibilityScopeDialog.show = false;
   if (state.globalLabelModeDialog) state.globalLabelModeDialog.show = false;
   if (state.featurePopupDrag) state.featurePopupDrag.active = false;
@@ -714,6 +712,7 @@ export const createHistorySnapshotService = ({
     const editorState = {
       legend: {
         entries: getRef(state.legendEntries, []),
+        orderIntent: getRef(state.legendOrderIntent, []),
         deletedEntries: getRef(state.deletedLegendEntries, []),
         colorOverrides: state.legendColorOverrides,
         strokeOverrides: state.legendStrokeOverrides,
@@ -877,7 +876,6 @@ export const createHistorySnapshotService = ({
 
     if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
     if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
     applyArtifactDomains(snapshot);
 

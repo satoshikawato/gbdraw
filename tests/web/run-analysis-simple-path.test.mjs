@@ -101,13 +101,16 @@ class AuditSimplePathWorker {
       return;
     }
     if (message.type === 'run') {
-      const response = workerResponses.shift();
-      queueMicrotask(() => this.emit('message', {
+      const queued = workerResponses.shift();
+      const response = queued?.response ?? queued;
+      const emitResponse = () => this.emit('message', {
         type: 'run',
         requestId: message.requestId,
         ok: true,
         results: structuredClone(response)
-      }));
+      });
+      if (queued?.waitForRelease) queued.waitForRelease.then(emitResponse);
+      else queueMicrotask(emitResponse);
       return;
     }
     throw new Error(`unexpected worker message: ${String(message.type)}`);
@@ -209,6 +212,25 @@ const validCatalog = (name) => ({
   }]
 });
 
+const validBatchCatalog = (names) => ({
+  schema: 3,
+  items: names.map((name, resultIndex) => {
+    const item = structuredClone(validCatalog(name).items[0]);
+    const recordKey = `record-${resultIndex + 1}`;
+    const biologicalFeatureId = `biological-feature-${resultIndex + 1}`;
+    item.resultIndex = resultIndex;
+    item.resultName = name;
+    item.recordKeys = [recordKey];
+    item.features[0].svgId = `rendered-feature-${resultIndex + 1}`;
+    item.features[0].recordKey = recordKey;
+    item.features[0].biologicalFeatureId = biologicalFeatureId;
+    item.biologicalFeatures[0].recordKey = recordKey;
+    item.biologicalFeatures[0].record_id = recordKey;
+    item.biologicalFeatures[0].biologicalFeatureId = biologicalFeatureId;
+    return item;
+  })
+});
+
 const response = (logicalResult, featureCatalog) => ({
   results: [logicalResult],
   metadata: featureCatalog === undefined ? {} : { featureCatalog }
@@ -297,6 +319,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
   let cancelDuringCandidate = false;
+  let projectLegendOrder = false;
+  const preparedLegendOrders = [];
   let runner;
   runner = createRunAnalysis({
     ...generatedArtifactSnapshotOptions,
@@ -321,10 +345,22 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       results,
       catalog,
       featureColorOverrides,
-      featureStrokeOverrides
+      featureStrokeOverrides,
+      legendOrderIntent
     }) => {
+      preparedLegendOrders.push(structuredClone(legendOrderIntent || []));
       const candidate = {
-        results: structuredClone(results),
+        results: structuredClone(results).map((entry, resultIndex) => (
+          projectLegendOrder
+            ? {
+                ...entry,
+                content: entry.content.replace(
+                  '<svg',
+                  `<svg data-legend-order="${legendOrderIntent.join('|')}" data-result-index="${resultIndex}"`
+                )
+              }
+            : entry
+        )),
         featureState: featureStateFromCatalog(catalog),
         featureColorOverrides: structuredClone(featureColorOverrides),
         featureStrokeOverrides: structuredClone(featureStrokeOverrides)
@@ -352,6 +388,35 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
   assert.equal(state.extractedFeatures.value.length, 1);
   assert.equal(state.biologicalFeatures.value.length, 1);
+
+  const beforeInterleavingResults = state.results.value;
+  const beforeInterleavingAdoptions = adoptedArtifacts;
+  let releaseStyleInterleaving;
+  const waitForStyleInterleaving = new Promise((resolve) => {
+    releaseStyleInterleaving = resolve;
+  });
+  const interleavingResult = result('interleaving.svg', 'interleaving');
+  workerResponses.push({
+    response: response(interleavingResult, validCatalog(interleavingResult.name)),
+    waitForRelease: waitForStyleInterleaving
+  });
+  const interleavedGeneration = runner.runAnalysis();
+  while (workerMessages.filter(({ type }) => type === 'run').length < 2) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  state.manualSpecificRules.push({
+    feat: 'CDS',
+    qual: 'product',
+    val: '^latest style$',
+    color: '#123456',
+    cap: 'Latest style'
+  });
+  state.semanticStyleRevision.value += 1;
+  releaseStyleInterleaving();
+  assert.deepEqual(await interleavedGeneration, { status: 'stale-style' });
+  assert.equal(state.results.value, beforeInterleavingResults);
+  assert.equal(adoptedArtifacts, beforeInterleavingAdoptions);
+  assert.match(state.errorLog.value?.summary || '', /style changed while Generate/i);
 
   const committedState = committedFeatureState();
   const committedExtractedFeatureIdentity = state.extractedFeatures.value;
@@ -415,7 +480,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 1);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 5);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 6);
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -561,6 +626,33 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
   Object.defineProperty(primary, 'text', { value: primaryText, configurable: true });
   state.semanticFileWatchersSuppressed.value = false;
+
+  state.form.multi_record_canvas = false;
+  state.adv.circular_grouping_intent = 'batch';
+  state.circularRecordList.value = [{ selector: '#1', record_id: 'first' }, {
+    selector: '#2', record_id: 'second'
+  }];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'ready', error: '', inputType: 'gb', primaryFile: primary, pairedFile: null
+  });
+  state.legendOrderIntent.value = ['Beta', 'Alpha'];
+  projectLegendOrder = true;
+  const batchResults = [result('ordered-a.svg', 'ordered-a'), result('ordered-b.svg', 'ordered-b')];
+  workerResponses.push({
+    results: batchResults,
+    metadata: { featureCatalog: validBatchCatalog(batchResults.map((entry) => entry.name)) }
+  });
+  assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
+  assert.deepEqual(preparedLegendOrders.at(-1), ['Beta', 'Alpha']);
+  assert.equal(state.results.value.length, 2);
+  for (const resultIndex of [0, 1]) {
+    state.selectedResultIndex.value = resultIndex;
+    assert.match(
+      state.results.value[state.selectedResultIndex.value].content,
+      new RegExp(`data-legend-order="Beta\\|Alpha" data-result-index="${resultIndex}"`)
+    );
+  }
+  projectLegendOrder = false;
 });
 
 test('Linear mode none ignores dormant comparison state while active depth and annotations render', async () => {

@@ -28,7 +28,10 @@ from gbdraw.session_io import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
     SUPPORTED_SESSION_VERSIONS,
 )
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA,
+    SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +77,8 @@ GALLERY_SESSION_FILES = [
     "majanivirus_orthogroup.gbdraw-session.json.gz",
     "lambda_basic_linear.gbdraw-session.json",
 ]
+PINNED_GALLERY_SESSION_VERSION = 40
+PINNED_GALLERY_REQUEST_SCHEMA = 5
 GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
@@ -682,9 +687,12 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
             re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text)
         )
 
-        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        assert PINNED_GALLERY_SESSION_VERSION in SUPPORTED_SESSION_VERSIONS
+        assert PINNED_GALLERY_REQUEST_SCHEMA in SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+        assert session.get("version") == PINNED_GALLERY_SESSION_VERSION, session_name
         assert (
-            session.get("renderRequest", {}).get("schema") == CANONICAL_REQUEST_SCHEMA
+            session.get("renderRequest", {}).get("schema")
+            == PINNED_GALLERY_REQUEST_SCHEMA
         ), session_name
         assert (
             session.get("proteinIdentityManifest", {}).get("schema")

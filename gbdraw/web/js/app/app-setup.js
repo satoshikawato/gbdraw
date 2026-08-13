@@ -1,6 +1,7 @@
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
+  clearCanonicalRenderArtifacts,
   applyConfigData,
   applyEditorStateData,
   applyFeatureStateData,
@@ -25,6 +26,8 @@ import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
+import { catalogResultKey } from '../services/feature-catalog.js';
+import { advanceDocumentEpoch } from '../services/style-revision.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
@@ -41,6 +44,7 @@ import {
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
+import { resolveFeatureStrokeViewModel } from './feature-editor/stroke-view-model.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
@@ -329,11 +333,7 @@ export const createAppSetup = () => {
     featurePopupResize,
     clickedLabel,
     clickedLabelPos,
-    colorScopeDialog,
     featureVisibilityScopeDialog,
-    legendRenameDialog,
-    resetColorDialog,
-    labelTextScopeDialog,
     globalLabelModeDialog,
     sidebarWidth,
     isResizing,
@@ -362,7 +362,6 @@ export const createAppSetup = () => {
     generatedLegendPosition,
     skipCaptureBaseConfig,
     skipPositionReapply,
-    skipExtractOnSvgChange,
     featureKeys,
     defaultColorKeys,
     newColorFeat,
@@ -1044,7 +1043,8 @@ export const createAppSetup = () => {
     legendActions,
     svgActions,
     featureSelection,
-    previewRuntime
+    previewRuntime,
+    history
   });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
@@ -1057,9 +1057,15 @@ export const createAppSetup = () => {
 
   watch(selectedResultIndex, (newIndex, oldIndex) => {
     if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
+    featureActions.cancelFeatureFillScope();
+    featureActions.cancelFeatureStrokeScope();
+    featureActions.cancelFeatureLabelScope();
     featureSelection.clearFeatureSelection({ clearStatus: true });
   });
   watch(mode, () => {
+    featureActions.cancelFeatureFillScope();
+    featureActions.cancelFeatureStrokeScope();
+    featureActions.cancelFeatureLabelScope();
     featureSelection.clearFeatureSelection({ clearStatus: true });
   });
   watch(svgContent, () => {
@@ -1880,7 +1886,8 @@ export const createAppSetup = () => {
     ensurePyodide: pyodideManager.initPyodide,
     writeFileToFs: pyodideManager.writeFileToFs,
     legendLayout,
-    rerenderLinearDefinitions: runLabelReflow
+    rerenderLinearDefinitions: runLabelReflow,
+    bulkStyleActions: featureActions
   });
 
   setupWatchers({
@@ -1889,7 +1896,6 @@ export const createAppSetup = () => {
     nextTick,
     onMounted,
     legendActions,
-    svgActions,
     featureActions,
     legendLayout,
     resultsManager,
@@ -1899,6 +1905,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     previewRuntime,
+    bulkStyleActions: featureActions,
     preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
     prepareDiagramGenerationWorker: async () => {
       diagramGenerationWorkerReady.value = false;
@@ -1986,26 +1993,21 @@ export const createAppSetup = () => {
 
   const {
     addNewLegendEntry,
-    updateLegendEntryColor,
     deleteLegendEntry,
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,
     sortLegendEntriesByDefault,
     resetLegendPosition,
-    getLegendEntryStrokeColor,
-    getLegendEntryStrokeWidth,
-    setLegendEntryStrokeColorValue,
-    updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth,
+    setBuiltInLegendIntentHandler,
+    setFeatureLegendIntentHandler,
+    requestManualLegendIntent,
+    updateLegendEntryCaption,
+    updateLegendEntryColor,
     reconcileLegendEntries,
-    reconcileStrokeOverrides,
-    resetLegendEntryStroke,
-    resetAllStrokes
   } = legendActions;
 
   const {
-    addCustomColor,
     addPriorityRule,
     addFeature,
     removeFeature,
@@ -2015,6 +2017,8 @@ export const createAppSetup = () => {
     applySpecificRulePreset,
     clearAllSpecificRules,
     downloadSpecificRulesTsv,
+    canMoveSpecificRule,
+    isOpaqueSpecificRule,
     moveSpecificRuleDown,
     moveSpecificRuleUp,
     removeSpecificRule,
@@ -2025,6 +2029,7 @@ export const createAppSetup = () => {
     featureVisibilityRuleDetail,
     getFeatureColor,
     getFeatureColorValue,
+    getFeatureFillViewModel,
     canEditFeatureColor,
     getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
@@ -2034,39 +2039,135 @@ export const createAppSetup = () => {
     setFeatureVisibility,
     setFeatureVisibilityRuleField,
     updateClickedFeatureVisibility,
-    requestFeatureColorChange,
-    setFeatureColorValue,
-    updateClickedFeatureColor,
-    handleColorScopeChoice,
+    requestFeatureFillChange,
+    resolveFeatureFillScope,
+    cancelFeatureFillScope,
+    requestSelectedFeatureFillChange,
     handleLegendNameCommit,
-    handleLegendRenameChoice,
     selectLegendNameOption,
-    renameLegendEntry,
-    handleResetColorChoice,
-    resetClickedFeatureFillColor,
-    getFeatureStrokeColorValue,
-    setClickedFeatureStrokeColorValue,
-    updateClickedFeatureStroke,
-    resetClickedFeatureStroke,
-    applyStrokeToAllSiblings,
-    applyColorToSelectedFeatures,
-    applyStrokeToSelectedFeatures,
+    getFeatureStrokeViewModel,
+    requestFeatureStrokeChange,
+    resolveFeatureStrokeScope,
+    cancelFeatureStrokeScope,
+    requestSelectedFeatureStrokeChange,
     buildSelectedFeaturesVisibilityCommand,
-    setFeatureColor,
     openFeatureEditorForFeature,
     getEditableLabelByFeatureId,
     syncLabelEditor,
     downloadLabelOverrideTable,
     loadLabelOverrideTable,
-    updateClickedFeatureLabelText,
-    handleLabelTextScopeChoice,
+    getFeatureLabelViewModel,
+    requestFeatureLabelTextChange,
+    requestSelectedFeatureLabelTextChange,
+    resolveFeatureLabelScope,
+    cancelFeatureLabelScope,
     handleGlobalLabelModeChoice,
-    requestLabelTextChangeByFeatureId,
-    requestLabelTextChangeByKey,
+    updateClickedFeatureLabelVisibility,
     reconcileFeatureVisibility,
     reconcileLabelOverrides,
     resetAllLabelTextOverrides
   } = featureActions;
+
+  const featureForLegendEntry = (entry) => {
+    const renderedIds = new Set(Array.isArray(entry?.featureIds) ? entry.featureIds.map(String) : []);
+    const resultIndex = Number(selectedResultIndex.value || 0);
+    const item = state.featureCatalog.value?.items?.[resultIndex];
+    if (!item || renderedIds.size === 0) return null;
+    const rendered = item.features?.find((feature) => renderedIds.has(String(feature?.svgId || '')));
+    if (!rendered) return null;
+    const resultKey = catalogResultKey(item);
+    const recordKey = String(rendered.recordKey || '');
+    const biologicalFeatureId = String(rendered.biologicalFeatureId || '');
+    return extractedFeatures.value.find((feature) => (
+      String(feature?.resultKey || feature?.result_key || '') === resultKey
+      && String(feature?.recordKey || feature?.record_key || '') === recordKey
+      && String(feature?.biologicalFeatureId || feature?.biological_feature_id || '')
+        === biologicalFeatureId
+    )) || null;
+  };
+  const requestClickedFeatureLabelTextChange = () => {
+    const clicked = clickedFeature.value;
+    if (!clicked?.feat || !clicked.hasEditableLabel) return false;
+    return requestFeatureLabelTextChange(clicked.feat, clicked.labelText, { source: 'popup' });
+  };
+  const getLegendEntryStrokeViewModel = (index) => {
+    const entry = legendEntries.value[index];
+    if (!entry) return null;
+    const feature = featureForLegendEntry(entry);
+    if (feature) return getFeatureStrokeViewModel(feature);
+    return resolveFeatureStrokeViewModel({
+      exactOverride: {
+        ...(entry.strokeColor ? { strokeColor: entry.strokeColor } : {}),
+        ...(entry.strokeWidth !== null && entry.strokeWidth !== undefined
+          ? { strokeWidth: entry.strokeWidth }
+          : {})
+      },
+      legendCaption: entry.caption,
+      svgDefaultStroke: originalSvgStroke.value
+    });
+  };
+  const requestLegendEntryStrokeChange = (index, value) => {
+    const entry = legendEntries.value[index];
+    if (!entry) return false;
+    const feature = featureForLegendEntry(entry);
+    if (feature) {
+      return requestFeatureStrokeChange(feature, value, {
+        source: 'legend-editor',
+        semanticScope: 'legend-caption'
+      });
+    }
+    return requestManualLegendIntent(
+      { kind: 'stroke', caption: entry.caption, value },
+      'Change manual legend stroke'
+    );
+  };
+  setFeatureLegendIntentHandler((intent) => {
+    const feature = featureForLegendEntry(intent?.entry);
+    if (!feature) return false;
+    if (intent.kind === 'color') {
+      return requestFeatureFillChange(
+        feature,
+        { kind: intent.color === 'none' ? 'none' : 'color', ...(intent.color === 'none' ? {} : { color: intent.color }) },
+        intent.entry.caption,
+        { source: 'legend-editor', semanticScope: 'legend-caption' }
+      );
+    }
+    if (intent.kind === 'rename') {
+      const color = getFeatureFillViewModel(feature)?.effectiveColor || '#cccccc';
+      return requestFeatureFillChange(
+        feature,
+        color === 'none' ? { kind: 'none' } : { kind: 'color', color },
+        intent.newCaption,
+        { source: 'legend-editor', semanticScope: 'legend-caption' }
+      );
+    }
+    if (intent.kind === 'remove') {
+      return requestFeatureFillChange(
+        feature,
+        { kind: 'inherit' },
+        '',
+        { source: 'legend-editor', semanticScope: 'legend-caption' }
+      );
+    }
+    return false;
+  });
+  setBuiltInLegendIntentHandler((intent) => {
+    if (intent?.kind !== 'color' || !intent?.paletteKey) return false;
+    const color = String(intent.color || '').trim().toLowerCase();
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return false;
+    const nextColors = {
+      ...(appliedPaletteColors.value || {}),
+      [intent.paletteKey]: color
+    };
+    return featureActions.requestFeatureBulkStyleChange({
+      writerKind: 'built-in-legend-color',
+      label: 'Change built-in legend color',
+      replacement: {
+        appliedPaletteName: appliedPaletteName.value || 'default',
+        appliedPaletteColors: nextColors
+      }
+    });
+  });
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
@@ -2074,23 +2175,25 @@ export const createAppSetup = () => {
     if (changedDomains.has('ui')) {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
-    if (changedDomains.has('config') || changedDomains.has('features')) {
-      svgActions.applyPaletteToSvg();
-      svgActions.applySpecificRulesToSvg();
-    }
     if (changedDomains.has('features')) {
       reconcileFeatureVisibility();
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
       reconcileLegendEntries();
-      reconcileStrokeOverrides();
       reconcileLabelOverrides();
     }
     await nextTick();
   });
 
-  const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+  const {
+    updatePalette,
+    resetColors,
+    acceptDefaultColor,
+    addCustomColor,
+    handlePaletteInstantPreviewChange,
+    cancelDefinitionUpdate
+  } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
   const moveFeatureVisibilityRuleDownWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleDown);
@@ -2109,40 +2212,22 @@ export const createAppSetup = () => {
     'Change feature visibility',
     handleFeatureVisibilityScopeChoice
   );
-  const requestFeatureColorChangeWithHistory = undoableAction('Change feature color', requestFeatureColorChange);
-  const setFeatureColorValueWithHistory = undoableAction('Change feature color', setFeatureColorValue);
-  const updateClickedFeatureColorWithHistory = undoableAction('Change feature color', updateClickedFeatureColor);
-  const setLegendEntryStrokeColorValueWithHistory = undoableAction(
-    'Change legend stroke color',
-    setLegendEntryStrokeColorValue
-  );
-  const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
-  const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
-  const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
-  const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
-  const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
-  const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
-  const setClickedFeatureStrokeColorValueWithHistory = undoableAction(
-    'Change feature stroke',
-    setClickedFeatureStrokeColorValue
-  );
-  const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
-  const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
-  const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
+  const handleLegendNameCommitWithHistory = handleLegendNameCommit;
   const selectedFeatureBulkColor = ref('#2563eb');
   const selectedFeatureBulkCaption = ref('Selected features');
   const selectedFeatureBulkVisibility = ref('off');
   const selectedFeatureBulkStrokeColor = ref('#1f2937');
   const selectedFeatureBulkStrokeWidth = ref(1.5);
-  const applySelectedFeatureColor = () => history.runUndoable('Change selected feature color', async () => {
-    const changed = await applyColorToSelectedFeatures(
+  const selectedFeatureBulkLabelText = ref('');
+  const applySelectedFeatureColor = async () => {
+    const changed = await requestSelectedFeatureFillChange(
       selectedFeatures.value,
-      selectedFeatureBulkColor.value,
+      { kind: 'color', color: selectedFeatureBulkColor.value },
       selectedFeatureBulkCaption.value
     );
     if (changed) featureSelection.syncFeatureSelectionClasses();
     return changed;
-  });
+  };
   const applySelectedFeatureVisibility = async () => {
     const changed = await history.runUndoableCommand('Change selected feature visibility', () =>
       buildSelectedFeaturesVisibilityCommand(selectedFeatures.value, selectedFeatureBulkVisibility.value)
@@ -2150,28 +2235,35 @@ export const createAppSetup = () => {
     if (changed) featureSelection.clearFeatureSelection({ clearStatus: true });
     return changed;
   };
-  const applySelectedFeatureStroke = () => history.runUndoable('Change selected feature stroke', async () => {
-    const changed = applyStrokeToSelectedFeatures(
+  const applySelectedFeatureStroke = async () => {
+    const changed = await requestSelectedFeatureStrokeChange(
       selectedFeatures.value,
-      selectedFeatureBulkStrokeColor.value,
-      selectedFeatureBulkStrokeWidth.value
+      {
+        kind: 'stroke',
+        strokeColor: selectedFeatureBulkStrokeColor.value,
+        strokeWidth: selectedFeatureBulkStrokeWidth.value
+      }
     );
     if (changed) featureSelection.syncFeatureSelectionClasses();
     return changed;
-  });
+  };
+  const applySelectedFeatureLabelText = async () => {
+    const changed = await requestSelectedFeatureLabelTextChange(
+      selectedFeatures.value,
+      selectedFeatureBulkLabelText.value
+    );
+    if (changed) featureSelection.syncFeatureSelectionClasses();
+    return changed;
+  };
   const openFirstSelectedFeature = (event = null) => {
     const first = selectedFeatures.value[0] || null;
     if (!first) return null;
     return openFeatureEditorForFeature(first, event);
   };
-  const updateClickedFeatureLabelTextWithHistory = undoableAction('Change label text', updateClickedFeatureLabelText);
-  const handleLabelTextScopeChoiceWithHistory = undoableAction('Change label text', handleLabelTextScopeChoice);
-  const handleGlobalLabelModeChoiceWithHistory = undoableAction('Change label visibility', handleGlobalLabelModeChoice);
-  const requestLabelTextChangeByFeatureIdWithHistory = undoableAction(
-    'Change label text',
-    requestLabelTextChangeByFeatureId
+  const updateClickedFeatureLabelVisibilityWithHistory = undoableAction(
+    'Change label visibility',
+    updateClickedFeatureLabelVisibility
   );
-  const requestLabelTextChangeByKeyWithHistory = undoableAction('Change label text', requestLabelTextChangeByKey);
   const resetAllLabelTextOverridesWithHistory = undoableAction('Reset label edits', resetAllLabelTextOverrides);
   const loadLabelOverrideTableWithHistory = undoableAction('Load label edits', loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
@@ -2342,23 +2434,51 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
-  const resetSettings = () => {
+  const resetSettings = async () => {
     const proceed = window.confirm(
-      'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
+      'Reset all settings to the webapp defaults?\n\nUploaded files will be kept. Current results will be cleared.'
     );
     if (!proceed) return false;
 
-    return history.runUndoableCheckpoint('Reset settings', async () => {
-      cancelDefinitionUpdate();
-      resetSettingsState(state);
-      invalidateLinearComparisonArtifacts();
-      matchSequenceRegistry?.reset?.();
-      circularTrackNewRenderer.value = 'dinucleotide_skew';
-      linearTrackNewRenderer.value = 'dinucleotide_skew';
-      depthTrackUiCounts.circular = 1;
-      ensureDepthTrackConfigCount(activeDepthTrackCount());
-      return true;
-    });
+    cancelDefinitionUpdate();
+    cancelFeatureFillScope();
+    cancelFeatureStrokeScope();
+    cancelFeatureLabelScope();
+    handleFeatureVisibilityScopeChoice('cancel');
+    handleGlobalLabelModeChoice('cancel');
+    previewRuntime?.clearActiveRuntime?.();
+    resetSettingsState(state);
+    invalidateLinearComparisonArtifacts();
+    matchSequenceRegistry?.reset?.();
+    clearCanonicalRenderArtifacts();
+    state.results.value = [];
+    state.selectedResultIndex.value = 0;
+    state.resultPanelTab.value = 'preview';
+    state.lastRunInfo.value = null;
+    state.featureCatalog.value = null;
+    state.extractedFeatures.value = [];
+    state.biologicalFeatures.value = [];
+    state.featureSelectorSafetyScope.value = [];
+    state.featureRecordIds.value = [];
+    state.selectedFeatureRecordIdx.value = 0;
+    state.selectedFeatureIds.value = new Set();
+    state.editableLabels.value = [];
+    state.canonicalLabelOverrideRows.value = [];
+    state.legendEntries.value = [];
+    state.orthogroups.value = [];
+    state.featureOrthogroupIndex.value = new Map();
+    state.featureExactScopeAvailable.value = false;
+    state.featureExactScopeDiagnostic.value = 'Generate to enable exact feature edits';
+    state.featureExtractionPending.value = false;
+    state.featureExtractionError.value = null;
+    circularTrackNewRenderer.value = 'dinucleotide_skew';
+    linearTrackNewRenderer.value = 'dinucleotide_skew';
+    depthTrackUiCounts.circular = 1;
+    ensureDepthTrackConfigCount(activeDepthTrackCount());
+    advanceDocumentEpoch(state);
+    await nextTick();
+    await history.captureBaseline('Reset settings');
+    return true;
   };
 
   const resetLayout = () => {
@@ -3336,6 +3456,8 @@ export const createAppSetup = () => {
     hasPendingPaletteDraft,
     updatePalette,
     resetColors,
+    acceptDefaultColor,
+    handlePaletteInstantPreviewChange,
     downloadLosatCache,
     downloadLosatPair,
     setLosatPairFilename,
@@ -3429,9 +3551,11 @@ export const createAppSetup = () => {
     selectedFeatureBulkVisibility,
     selectedFeatureBulkStrokeColor,
     selectedFeatureBulkStrokeWidth,
+    selectedFeatureBulkLabelText,
     applySelectedFeatureColor,
     applySelectedFeatureVisibility,
     applySelectedFeatureStroke,
+    applySelectedFeatureLabelText,
     visibleFeatureRows,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,
@@ -3465,15 +3589,18 @@ export const createAppSetup = () => {
     featureVisibilityRuleDetail,
     getFeatureColor,
     getFeatureColorValue,
+    getFeatureFillViewModel,
+    canMoveSpecificRule,
+    isOpaqueSpecificRule,
     getFeatureVisibility,
     moveFeatureVisibilityRuleDown: moveFeatureVisibilityRuleDownWithHistory,
     moveFeatureVisibilityRuleUp: moveFeatureVisibilityRuleUpWithHistory,
     removeFeatureVisibilityRule: removeFeatureVisibilityRuleWithHistory,
     setFeatureVisibility: setFeatureVisibilityWithHistory,
     setFeatureVisibilityRuleField: setFeatureVisibilityRuleFieldWithHistory,
-    requestFeatureColorChange: requestFeatureColorChangeWithHistory,
-    setFeatureColorValue: setFeatureColorValueWithHistory,
-    setFeatureColor: setFeatureColorWithHistory,
+    requestFeatureFillChange,
+    resolveFeatureFillScope,
+    cancelFeatureFillScope,
     canEditFeatureColor,
     getEditableLabelByFeatureId,
     svgContainer,
@@ -3506,31 +3633,32 @@ export const createAppSetup = () => {
     resetOrthogroupAlignment,
     openClickedOrthogroupInEditor,
     specificRuleLegendOptions,
-    updateClickedFeatureColor: updateClickedFeatureColorWithHistory,
     updateClickedFeatureVisibility: updateClickedFeatureVisibilityWithHistory,
     handleFeatureVisibilityScopeChoice: handleFeatureVisibilityScopeChoiceWithHistory,
     handleLegendNameCommit: handleLegendNameCommitWithHistory,
     selectLegendNameOption,
-    resetClickedFeatureFillColor: resetClickedFeatureFillColorWithHistory,
-    updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
-    getFeatureStrokeColorValue,
-    setClickedFeatureStrokeColorValue: setClickedFeatureStrokeColorValueWithHistory,
-    resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
-    applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
-    colorScopeDialog,
+    getFeatureStrokeViewModel,
+    requestFeatureStrokeChange,
+    resolveFeatureStrokeScope,
+    cancelFeatureStrokeScope,
     featureVisibilityScopeDialog,
-    handleColorScopeChoice: handleColorScopeChoiceWithHistory,
-    legendRenameDialog,
-    handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
-    resetColorDialog,
-    handleResetColorChoice: handleResetColorChoiceWithHistory,
-    labelTextScopeDialog,
+    pendingFeatureFillPlan: state.pendingFeatureFillPlan,
+    featureFillPlanStatus: state.featureFillPlanStatus,
+    featureFillPlanProgress: state.featureFillPlanProgress,
+    pendingFeatureStrokePlan: state.pendingFeatureStrokePlan,
+    featureStrokePlanStatus: state.featureStrokePlanStatus,
+    featureStrokePlanProgress: state.featureStrokePlanProgress,
+    pendingFeatureLabelPlan: state.pendingFeatureLabelPlan,
+    featureLabelPlanStatus: state.featureLabelPlanStatus,
+    featureLabelPlanProgress: state.featureLabelPlanProgress,
     globalLabelModeDialog,
-    updateClickedFeatureLabelText: updateClickedFeatureLabelTextWithHistory,
-    handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
-    handleGlobalLabelModeChoice: handleGlobalLabelModeChoiceWithHistory,
-    requestLabelTextChangeByFeatureId: requestLabelTextChangeByFeatureIdWithHistory,
-    requestLabelTextChangeByKey: requestLabelTextChangeByKeyWithHistory,
+    requestClickedFeatureLabelTextChange,
+    requestFeatureLabelTextChange,
+    getFeatureLabelViewModel,
+    resolveFeatureLabelScope,
+    cancelFeatureLabelScope,
+    handleGlobalLabelModeChoice,
+    updateClickedFeatureLabelVisibility: updateClickedFeatureLabelVisibilityWithHistory,
     resetAllLabelTextOverrides: resetAllLabelTextOverridesWithHistory,
     downloadLabelOverrideTable,
     loadLabelOverrideTable: loadLabelOverrideTableWithHistory,
@@ -3539,8 +3667,8 @@ export const createAppSetup = () => {
     legendEntries,
     newLegendCaption,
     newLegendColor,
+    updateLegendEntryCaption,
     updateLegendEntryColor,
-    renameLegendEntry,
     deleteLegendEntry,
     addNewLegendEntry,
     moveLegendEntryUp,
@@ -3548,13 +3676,8 @@ export const createAppSetup = () => {
     sortLegendEntries,
     sortLegendEntriesByDefault,
     resetLegendPosition,
-    getLegendEntryStrokeColor,
-    getLegendEntryStrokeWidth,
-    setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
-    updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth,
-    resetLegendEntryStroke,
-    resetAllStrokes,
+    getLegendEntryStrokeViewModel,
+    requestLegendEntryStrokeChange,
     resetAllPositions,
     resetLayout,
     canvasPadding,

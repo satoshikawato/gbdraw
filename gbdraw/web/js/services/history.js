@@ -2,6 +2,17 @@ import { collectHistoryFileIds } from './history-files.js';
 
 const DEFAULT_MAX_ACTIONS = 30;
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
+const COMMAND_TOO_LARGE_MESSAGE =
+  'This edit is too large to undo and was not applied.';
+const HISTORY_INTEGRITY_MESSAGE =
+  'History integrity could not be restored. Further History actions are disabled.';
+
+class HistoryCommandTooLargeError extends Error {
+  constructor() {
+    super(COMMAND_TOO_LARGE_MESSAGE);
+    this.name = 'HistoryCommandTooLargeError';
+  }
+}
 
 const makeBox = (value) => ({ value });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -139,6 +150,7 @@ export const createHistoryManager = ({
   const restoring = makeRef(false);
   const capturing = makeRef(false);
   const historyLimitMessage = makeRef('');
+  const integrityError = makeRef('');
   const diagnostics = {
     intentBuilds: 0,
     artifactCheckpointBuilds: 0,
@@ -153,6 +165,8 @@ export const createHistoryManager = ({
   let currentFileIds = new Set();
   let totalEntryBytes = 0;
   let activeTransaction = null;
+
+  const historyIsBlocked = () => Boolean(integrityError.value);
 
   const touch = () => {
     revision.value += 1;
@@ -254,6 +268,75 @@ export const createHistoryManager = ({
     fileStore.retainOnly(collectRetainedFileIds());
   };
 
+  const retainedFileIdsFor = (intentFileIds, undoEntries, redoEntries) => {
+    const ids = new Set(intentFileIds || []);
+    undoEntries.forEach((entry) => entryFileIds(entry).forEach((id) => ids.add(id)));
+    redoEntries.forEach((entry) => entryFileIds(entry).forEach((id) => ids.add(id)));
+    return ids;
+  };
+
+  const entryBytesFor = (entries) => entries.reduce(
+    (total, entry) => total + (Number(entry?.byteSize) || 0),
+    0
+  );
+
+  const retainedFileBytesFor = (fileIds) => (
+    fileStore?.estimateBytes ? fileStore.estimateBytes(fileIds) : 0
+  );
+
+  const snapshotCommandHistoryState = () => ({
+    undoEntries: [...undoStack],
+    redoEntries: [...redoStack],
+    currentIntent: cloneIntentValue(currentIntent),
+    currentIntentSignature,
+    currentFileIds: new Set(currentFileIds),
+    totalEntryBytes,
+    historyLimitMessage: historyLimitMessage.value,
+    revision: revision.value,
+    retainedFileIds: collectRetainedFileIds()
+  });
+
+  const replaceStackEntries = (target, entries) => {
+    target.splice(0, target.length, ...entries);
+  };
+
+  const restoreCommandHistoryState = (snapshot) => {
+    replaceStackEntries(undoStack, snapshot.undoEntries);
+    replaceStackEntries(redoStack, snapshot.redoEntries);
+    currentIntent = cloneIntentValue(snapshot.currentIntent);
+    currentIntentSignature = snapshot.currentIntentSignature;
+    currentFileIds = new Set(snapshot.currentFileIds);
+    totalEntryBytes = snapshot.totalEntryBytes;
+    historyLimitMessage.value = snapshot.historyLimitMessage;
+    revision.value = snapshot.revision;
+    if (fileStore?.retainOnly) {
+      fileStore.retainOnly(new Set(snapshot.retainedFileIds));
+    }
+  };
+
+  const blockHistoryAfterCompensationFailure = (action, originalError, failures) => {
+    const detail = failures
+      .map((failure) => failure?.message || String(failure))
+      .filter(Boolean)
+      .join('; ');
+    const message = detail
+      ? `${HISTORY_INTEGRITY_MESSAGE} ${detail}`
+      : HISTORY_INTEGRITY_MESSAGE;
+    integrityError.value = message;
+    emitHistoryDiagnostic({
+      type: 'integrity-error',
+      action,
+      message,
+      originalError: originalError?.message || String(originalError || '')
+    });
+    console.error(message, ...failures);
+    touch();
+    const error = new Error(message);
+    error.name = 'HistoryIntegrityError';
+    error.cause = originalError;
+    return error;
+  };
+
   const addEntryBytes = (entry) => {
     totalEntryBytes += Number(entry?.byteSize) || 0;
   };
@@ -294,7 +377,7 @@ export const createHistoryManager = ({
   };
 
   const captureBaseline = async (_label = 'Baseline') => {
-    if (restoring.value) return;
+    if (restoring.value || historyIsBlocked()) return false;
     const checkpointRecord = await captureCheckpoint();
     const intentRecord = await captureIntent();
     clearStack(undoStack);
@@ -306,7 +389,7 @@ export const createHistoryManager = ({
   };
 
   const begin = async (label = 'Edit', options = {}) => {
-    if (restoring.value || capturing.value) return null;
+    if (restoring.value || capturing.value || historyIsBlocked()) return null;
     if (activeTransaction && !activeTransaction.closed) return activeTransaction;
 
     const before = await captureIntent();
@@ -348,7 +431,7 @@ export const createHistoryManager = ({
   };
 
   const commit = async (transaction, options = {}) => {
-    if (!transaction || transaction.closed) return false;
+    if (!transaction || transaction.closed || historyIsBlocked()) return false;
     const afterRecord = await captureIntent();
     transaction.closed = true;
     if (activeTransaction === transaction) activeTransaction = null;
@@ -379,6 +462,7 @@ export const createHistoryManager = ({
 
   const runUndoable = async (label, fn, options = {}) => {
     if (typeof fn !== 'function') return undefined;
+    if (historyIsBlocked()) return false;
     if (restoring.value || capturing.value) return fn();
 
     const usesActiveTransaction = Boolean(activeTransaction && !activeTransaction.closed);
@@ -396,7 +480,7 @@ export const createHistoryManager = ({
   };
 
   const beginCheckpoint = (label = 'Artifact change', options = {}) => {
-    if (restoring.value || capturing.value) return null;
+    if (restoring.value || capturing.value || historyIsBlocked()) return null;
     const createTransaction = (before) => {
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
       return {
@@ -427,7 +511,7 @@ export const createHistoryManager = ({
   };
 
   const commitCheckpoint = async (transaction, options = {}) => {
-    if (!transaction || transaction.closed) return false;
+    if (!transaction || transaction.closed || historyIsBlocked()) return false;
     const after = await captureCheckpoint();
     const intent = await captureIntent();
     transaction.closed = true;
@@ -472,6 +556,7 @@ export const createHistoryManager = ({
 
   const runUndoableCheckpoint = (label, fn, options = {}) => {
     if (typeof fn !== 'function') return undefined;
+    if (historyIsBlocked()) return false;
     if (restoring.value || capturing.value) return fn();
     const execute = async (tx) => {
       try {
@@ -498,15 +583,21 @@ export const createHistoryManager = ({
       throw new Error('Undoable command requires revert().');
     }
     diagnostics.byteEstimateComputations += 1;
-    const byteSize = typeof command.estimateBytes === 'function'
-      ? Number(command.estimateBytes()) || 0
+    const estimatedBytes = typeof command.estimateBytes === 'function'
+      ? Number(command.estimateBytes())
       : JSON.stringify(command.metadata || {}).length * 2;
+    if (!Number.isFinite(estimatedBytes) || estimatedBytes < 0) {
+      throw new Error('Undoable command estimateBytes() must return a non-negative finite number.');
+    }
+    const byteSize = estimatedBytes;
     emitHistoryDiagnostic({ type: 'size', scope: 'command', bytes: byteSize });
     return {
       type: 'command',
       label: command.label || label || 'Edit',
       apply: command.apply,
       revert: command.revert,
+      snapshot: typeof command.snapshot === 'function' ? command.snapshot : null,
+      compensate: typeof command.compensate === 'function' ? command.compensate : null,
       byteSize,
       fileIds: collectHistoryFileIds(command.metadata || {}, new Set())
     };
@@ -523,8 +614,212 @@ export const createHistoryManager = ({
     setCurrentIntent(await captureIntent());
   };
 
+  const commandOwnRetainedBytes = (command) => (
+    command.byteSize + retainedFileBytesFor(command.fileIds)
+  );
+
+  const rejectOversizedCommand = (command) => {
+    if (maxActions < 1 || commandOwnRetainedBytes(command) > maxBytes) {
+      historyLimitMessage.value = COMMAND_TOO_LARGE_MESSAGE;
+      emitHistoryDiagnostic({
+        type: 'reject',
+        scope: 'command',
+        reason: 'too-large',
+        bytes: command.byteSize
+      });
+      warnCommandNotApplied(command, 'apply because it is too large to undo');
+      return true;
+    }
+    return false;
+  };
+
+  const removeOldestUnprotectedEntry = (entries, protectedEntry) => {
+    const index = entries.findIndex((entry) => entry !== protectedEntry);
+    if (index < 0) return false;
+    entries.splice(index, 1);
+    return true;
+  };
+
+  const stageCommandHistoryTransition = ({
+    undoEntries,
+    redoEntries,
+    intentRecord,
+    protectedEntry = null,
+    clearRedoForNewCommand = false
+  }) => {
+    const nextUndo = [...undoEntries];
+    let nextRedo = clearRedoForNewCommand ? [] : [...redoEntries];
+    let evicted = false;
+
+    while (nextUndo.length > maxActions) {
+      if (!removeOldestUnprotectedEntry(nextUndo, protectedEntry)) {
+        throw new HistoryCommandTooLargeError();
+      }
+      evicted = true;
+    }
+
+    const retainedSize = () => {
+      const retainedIds = retainedFileIdsFor(intentRecord.fileIds, nextUndo, nextRedo);
+      return {
+        ids: retainedIds,
+        entryBytes: entryBytesFor([...nextUndo, ...nextRedo]),
+        fileBytes: retainedFileBytesFor(retainedIds)
+      };
+    };
+
+    let size = retainedSize();
+    while (size.entryBytes + size.fileBytes > maxBytes) {
+      if (!removeOldestUnprotectedEntry(nextUndo, protectedEntry)) break;
+      evicted = true;
+      size = retainedSize();
+    }
+    if (size.entryBytes + size.fileBytes > maxBytes && nextRedo.length > 0) {
+      nextRedo = [];
+      size = retainedSize();
+    }
+    if (size.entryBytes + size.fileBytes > maxBytes) {
+      throw new HistoryCommandTooLargeError();
+    }
+
+    return {
+      undoEntries: nextUndo,
+      redoEntries: nextRedo,
+      intentRecord,
+      retainedFileIds: size.ids,
+      totalEntryBytes: size.entryBytes,
+      historyLimitMessage: evicted
+        ? 'Older undo history was discarded to stay within the history limit.'
+        : ''
+    };
+  };
+
+  const commitCommandHistoryTransition = (transition) => {
+    if (fileStore?.retainOnly) {
+      fileStore.retainOnly(new Set(transition.retainedFileIds));
+    }
+    replaceStackEntries(undoStack, transition.undoEntries);
+    replaceStackEntries(redoStack, transition.redoEntries);
+    setCurrentIntent(transition.intentRecord);
+    totalEntryBytes = transition.totalEntryBytes;
+    historyLimitMessage.value = transition.historyLimitMessage;
+    touch();
+  };
+
+  const commandMethodFor = (entry, direction) => (
+    direction === 'undo' ? entry.revert : entry.apply
+  );
+
+  const inverseCommandMethodFor = (entry, direction) => (
+    direction === 'undo' ? entry.apply : entry.revert
+  );
+
+  const captureCommandCompensationSnapshot = async (entry, direction) => (
+    entry.snapshot ? entry.snapshot({ direction }) : undefined
+  );
+
+  const applyCommandOperation = async (entry, direction) => {
+    const method = commandMethodFor(entry, direction);
+    const markRestoring = direction === 'undo' || direction === 'redo';
+    if (markRestoring) restoring.value = true;
+    try {
+      return commandSucceeded(await method({ direction, compensation: false }));
+    } finally {
+      if (markRestoring) restoring.value = false;
+    }
+  };
+
+  const compensateCommandOperation = async (
+    entry,
+    direction,
+    compensationSnapshot,
+    originalError
+  ) => {
+    restoring.value = true;
+    try {
+      const result = entry.compensate
+        ? await entry.compensate({
+            direction,
+            snapshot: compensationSnapshot,
+            error: originalError
+          })
+        : await inverseCommandMethodFor(entry, direction)({
+            direction,
+            compensation: true,
+            error: originalError
+          });
+      if (!commandSucceeded(result)) {
+        throw new Error(`History compensation for ${direction} was rejected.`);
+      }
+    } finally {
+      restoring.value = false;
+    }
+  };
+
+  const compensateFailedCommandTransaction = async ({
+    entry,
+    direction,
+    compensationSnapshot,
+    historySnapshot,
+    originalError
+  }) => {
+    const failures = [];
+    try {
+      await compensateCommandOperation(
+        entry,
+        direction,
+        compensationSnapshot,
+        originalError
+      );
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      restoreCommandHistoryState(historySnapshot);
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length > 0) {
+      throw blockHistoryAfterCompensationFailure(
+        direction,
+        originalError,
+        failures
+      );
+    }
+  };
+
+  const runCommandTransaction = async ({ entry, direction, buildTransition }) => {
+    const historySnapshot = snapshotCommandHistoryState();
+    const compensationSnapshot = await captureCommandCompensationSnapshot(entry, direction);
+    let operationApplied = false;
+    try {
+      operationApplied = await applyCommandOperation(entry, direction);
+      if (!operationApplied) return { status: 'rejected' };
+      const intentRecord = await captureIntent();
+      const transition = stageCommandHistoryTransition(
+        buildTransition(intentRecord)
+      );
+      commitCommandHistoryTransition(transition);
+      return { status: 'committed' };
+    } catch (error) {
+      if (!operationApplied) throw error;
+      await compensateFailedCommandTransaction({
+        entry,
+        direction,
+        compensationSnapshot,
+        historySnapshot,
+        originalError: error
+      });
+      if (error instanceof HistoryCommandTooLargeError) {
+        historyLimitMessage.value = COMMAND_TOO_LARGE_MESSAGE;
+        return { status: 'too-large' };
+      }
+      throw error;
+    }
+  };
+
   const runUndoableCommand = async (label, buildCommand) => {
     if (typeof buildCommand !== 'function') return false;
+    if (historyIsBlocked()) return false;
     if (!restoring.value && !capturing.value && activeTransaction && !activeTransaction.closed) {
       await commit(activeTransaction);
     }
@@ -537,17 +832,23 @@ export const createHistoryManager = ({
       return applied;
     }
 
-    const applied = commandSucceeded(await command.apply());
-    if (!applied) {
+    if (rejectOversizedCommand(command)) return false;
+    const result = await runCommandTransaction({
+      entry: command,
+      direction: 'apply',
+      buildTransition: (intentRecord) => ({
+        undoEntries: [...undoStack, command],
+        redoEntries: redoStack,
+        intentRecord,
+        protectedEntry: command,
+        clearRedoForNewCommand: true
+      })
+    });
+    if (result.status === 'rejected') {
       warnCommandNotApplied(command, 'apply');
       return false;
     }
-    await refreshCurrentIntent();
-    pushUndoEntry(command);
-    clearRedo();
-    enforceLimits();
-    touch();
-    return true;
+    return result.status === 'committed';
   };
 
   const applyIntentEntry = async (entry, direction) => {
@@ -577,26 +878,24 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
   };
 
-  const applyCommandWithFlag = async (entry, direction) => {
-    restoring.value = true;
-    try {
-      const result = direction === 'undo' ? await entry.revert() : await entry.apply();
-      return commandSucceeded(result);
-    } finally {
-      restoring.value = false;
-    }
-  };
-
   const undo = async () => {
-    if (restoring.value || undoStack.length === 0) return false;
+    if (restoring.value || historyIsBlocked() || undoStack.length === 0) return false;
     const entry = undoStack[undoStack.length - 1];
     if (entry.type === 'command') {
-      const reverted = await applyCommandWithFlag(entry, 'undo');
-      if (!reverted) {
+      const result = await runCommandTransaction({
+        entry,
+        direction: 'undo',
+        buildTransition: (intentRecord) => ({
+          undoEntries: undoStack.slice(0, -1),
+          redoEntries: [...redoStack, entry],
+          intentRecord
+        })
+      });
+      if (result.status === 'rejected') {
         warnCommandNotApplied(entry, 'undo');
         return false;
       }
-      await refreshCurrentIntent();
+      return result.status === 'committed';
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.before);
     } else {
@@ -610,15 +909,24 @@ export const createHistoryManager = ({
   };
 
   const redo = async () => {
-    if (restoring.value || redoStack.length === 0) return false;
+    if (restoring.value || historyIsBlocked() || redoStack.length === 0) return false;
     const entry = redoStack[redoStack.length - 1];
     if (entry.type === 'command') {
-      const applied = await applyCommandWithFlag(entry, 'redo');
-      if (!applied) {
+      const result = await runCommandTransaction({
+        entry,
+        direction: 'redo',
+        buildTransition: (intentRecord) => ({
+          undoEntries: [...undoStack, entry],
+          redoEntries: redoStack.slice(0, -1),
+          intentRecord,
+          protectedEntry: entry
+        })
+      });
+      if (result.status === 'rejected') {
         warnCommandNotApplied(entry, 'redo');
         return false;
       }
-      await refreshCurrentIntent();
+      return result.status === 'committed';
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.after);
     } else {
@@ -631,8 +939,8 @@ export const createHistoryManager = ({
     return true;
   };
 
-  const canUndo = () => undoStack.length > 0 && !restoring.value;
-  const canRedo = () => redoStack.length > 0 && !restoring.value;
+  const canUndo = () => undoStack.length > 0 && !restoring.value && !historyIsBlocked();
+  const canRedo = () => redoStack.length > 0 && !restoring.value && !historyIsBlocked();
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
@@ -653,6 +961,7 @@ export const createHistoryManager = ({
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
     historyLimitMessage,
+    integrityError,
     redo,
     redoLabel,
     restoring,

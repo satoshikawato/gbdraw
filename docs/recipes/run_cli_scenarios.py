@@ -20,6 +20,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from xml.etree import ElementTree
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+
 if __package__:
     from ._scenario_support import (
         PUBLISHED_IMAGE_ROOT,
@@ -30,6 +33,7 @@ if __package__:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        normalized_artifact_payload,
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
@@ -45,6 +49,7 @@ else:
         extract_executable_block,
         inspect_standard_svg,
         load_chapter,
+        normalized_artifact_payload,
         parse_translate_chain,
         publish_output,
         validate_standard_svg,
@@ -434,13 +439,14 @@ def _normalized_artifact_payload(scenario_id: str, path: Path) -> bytes:
             payload,
             flags=re.MULTILINE,
         )
-        return re.sub(
+        payload = re.sub(
             rb"^(%%Creator: cairo )\d+(?:\.\d+)+(?=[ )])",
             rb"\1normalized",
             payload,
             flags=re.MULTILINE,
         )
-    return payload
+        return payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return normalized_artifact_payload(path)
 
 
 def _png_visual_comparison_error(
@@ -2112,8 +2118,9 @@ def _assert_session_roundtrip(
     for payload in (plain, compressed):
         if (
             payload.get("format") != "gbdraw-session"
-            or payload.get("version") != 40
-            or payload.get("renderRequest", {}).get("schema") != 5
+            or payload.get("version") != CURRENT_SESSION_VERSION
+            or payload.get("renderRequest", {}).get("schema")
+            != CANONICAL_REQUEST_SCHEMA
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):
             raise RecipeContractError("H-CLI-12 session schema changed.")
@@ -2336,8 +2343,9 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
     resources = session.get("resources", {})
     if (
         session.get("format") != "gbdraw-session"
-        or session.get("version") != 40
-        or session.get("renderRequest", {}).get("schema") != 5
+        or session.get("version") != CURRENT_SESSION_VERSION
+        or session.get("renderRequest", {}).get("schema")
+        != CANONICAL_REQUEST_SCHEMA
         or session.get("renderRequest", {}).get("mode") != "circular"
         or len(resources) < 2
         or not any(

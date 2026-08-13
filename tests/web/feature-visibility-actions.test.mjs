@@ -19,6 +19,11 @@ await writeFile(join(tempDir, 'app', 'feature-visibility.js'), await readFile(jo
 await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'feature-selector.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'feature-utils.js'), 'utf8'), 'utf8');
 await writeFile(
+  join(tempDir, 'app', 'feature-editor', 'semantic-fill-selectors.js'),
+  await readFile(join(sourceDir, 'feature-editor', 'semantic-fill-selectors.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'services', 'text-download.js'),
   await readFile(join(sourceDir, '..', 'services', 'text-download.js'), 'utf8'),
   'utf8'
@@ -26,6 +31,16 @@ await writeFile(
 await writeFile(
   join(tempDir, 'services', 'feature-identity.js'),
   await readFile(join(sourceDir, '..', 'services', 'feature-identity.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'feature-instance-identity.js'),
+  await readFile(join(sourceDir, '..', 'services', 'feature-instance-identity.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'json-clone.js'),
+  await readFile(join(sourceDir, '..', 'services', 'json-clone.js'), 'utf8'),
   'utf8'
 );
 

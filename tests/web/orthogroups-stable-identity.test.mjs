@@ -8,6 +8,7 @@ const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
+await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'feature-search'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
@@ -21,6 +22,10 @@ const copyModule = async (sourceRelative, targetRelative) => {
 };
 
 await copyModule('gbdraw/web/js/app/feature-utils.js', 'app/feature-utils.js');
+await copyModule(
+  'gbdraw/web/js/app/feature-editor/semantic-fill-selectors.js',
+  'app/feature-editor/semantic-fill-selectors.js'
+);
 await copyModule('gbdraw/web/js/app/feature-sequence-fasta.js', 'app/feature-sequence-fasta.js');
 await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
@@ -37,6 +42,11 @@ await copyModule(
   'services/orthogroup-feature-metadata.js'
 );
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
+await copyModule(
+  'gbdraw/web/js/services/feature-instance-identity.js',
+  'services/feature-instance-identity.js'
+);
+await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 const standaloneSource = await readFile(

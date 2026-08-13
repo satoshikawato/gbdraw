@@ -262,6 +262,14 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   assert.deepEqual(importersOf('services/svg-result-ingestion.js'), [
     'app/candidate-render.js',
+    'app/feature-editor/bulk-style-actions.js',
+    'app/feature-editor/fill-actions.js',
+    'app/feature-editor/fill-result-projection.js',
+    'app/feature-editor/label-result-projection.js',
+    'app/feature-editor/label-style-actions.js',
+    'app/feature-editor/stroke-actions.js',
+    'app/feature-editor/stroke-result-projection.js',
+    'app/legend/manual-intent-command.js',
     'app/preview-runtime.js',
     'app/session-feature-metadata.js',
     'app/watchers.js',
@@ -325,4 +333,117 @@ test('right drawer availability and transitions have one production owner', () =
     /:disabled="!isRightDrawerTabAvailable\('orthogroups'\)"/
   );
   assert.doesNotMatch(INDEX_HTML, /rightDrawerTab\s*\|\|/);
+});
+
+test('Feature fill UI exposes only planned request operations', () => {
+  const editorSource = productionSources.get('app/feature-editor.js');
+  const setupSource = productionSources.get('app/app-setup.js');
+  const fillSource = productionSources.get('app/feature-editor/fill-actions.js');
+
+  assert.doesNotMatch(
+    INDEX_HTML,
+    /\b(?:setFeatureColor|setFeatureColorValue|handleColorScopeChoice|resetClickedFeatureColor)\b/
+  );
+  assert.doesNotMatch(
+    `${editorSource}\n${setupSource}`,
+    /\b(?:setFeatureColor|setFeatureColorValue|handleColorScopeChoice|resetClickedFeatureColor)\s*[:,]/
+  );
+  assert.match(INDEX_HTML, /<feature-fill-color-control[\s\S]+@request="requestFeatureFillChange/);
+  assert.match(INDEX_HTML, /v-for="candidate in pendingFeatureFillPlan\.candidates"/);
+  assert.match(fillSource, /state\.manualLegendEntries\?\.value/);
+  assert.doesNotMatch(fillSource, /featureIds\.length\s*===\s*0/);
+});
+
+test('atomic Feature fill preparation is browser-owned and has no Pyodide path', () => {
+  for (const owner of [
+    'app/feature-editor/fill-actions.js',
+    'app/feature-editor/fill-command.js',
+    'app/feature-editor/fill-result-projection.js',
+    'app/legend/feature-fill-projection.js'
+  ]) {
+    assert.doesNotMatch(
+      productionSources.get(owner),
+      /\b(?:getPyodide|ensurePyodide|loadPyodide|runPython)\b/,
+      owner
+    );
+  }
+});
+
+test('Feature style UI exposes planned facades and no retired raw setters', () => {
+  const editorSource = productionSources.get('app/feature-editor.js');
+  const setupSource = productionSources.get('app/app-setup.js');
+  const publicSources = `${INDEX_HTML}\n${editorSource}\n${setupSource}`;
+  assert.doesNotMatch(
+    publicSources,
+    /\b(?:setFeatureColor|setFeatureColorValue|handleColorScopeChoice|resetClickedFeatureColor|setClickedFeatureStrokeColorValue|updateClickedFeatureStroke|resetClickedFeatureStroke|applyStrokeToAllSiblings|applyStrokeToSelectedFeatures|handleLegendRenameChoice)\b/
+  );
+  assert.match(INDEX_HTML, /<feature-stroke-color-control[\s\S]+@request="requestFeatureStrokeChange/);
+  assert.match(INDEX_HTML, /v-for="candidate in pendingFeatureStrokePlan\.candidates"/);
+  assert.match(setupSource, /setFeatureLegendIntentHandler\(\(intent\) =>/);
+  assert.match(setupSource, /requestManualLegendIntent\(/);
+  assert.equal(productionSources.has('app/feature-editor/color-actions.js'), false);
+});
+
+test('Feature style command owners do not initialize Pyodide', () => {
+  for (const owner of [
+    'app/feature-editor/bulk-style-actions.js',
+    'app/feature-editor/bulk-style-command.js',
+    'app/feature-editor/stroke-actions.js',
+    'app/feature-editor/stroke-command.js',
+    'app/feature-editor/stroke-result-projection.js',
+    'app/legend/manual-intent-command.js'
+  ]) {
+    assert.doesNotMatch(
+      productionSources.get(owner),
+      /\b(?:getPyodide|ensurePyodide|loadPyodide|runPython)\b/,
+      owner
+    );
+  }
+});
+
+test('bulk rule and palette writers use the atomic snapshot facade', () => {
+  const rules = productionSources.get('app/feature-editor/rule-actions.js');
+  const watchers = productionSources.get('app/watchers.js');
+  const results = productionSources.get('app/results.js');
+  assert.match(rules, /requestFeatureBulkStyleChange/);
+  assert.match(watchers, /writerKind: 'specific-color-tsv-import'/);
+  assert.match(watchers, /writerKind: 'default-color-tsv-import'/);
+  assert.match(results, /writerKind: 'palette-default-acceptance'/);
+  assert.doesNotMatch(
+    watchers,
+    /watch\(\(\) => \[\.\.\.manualSpecificRules\][\s\S]{0,500}applySpecificRulesToSvg/
+  );
+});
+
+test('managed exact and semantic Feature rules are read-only in the generic editor', () => {
+  const rules = productionSources.get('app/feature-editor/rule-actions.js');
+  const editor = productionSources.get('app/feature-editor.js');
+  const setup = productionSources.get('app/app-setup.js');
+
+  assert.match(rules, /isExactFeatureRule\(rule\) \|\| isFeatureSemanticScopeRule\(rule\)/);
+  assert.match(rules, /if \(isOpaqueSpecificRule\(current\)\) return false/);
+  assert.match(rules, /manualSpecificRules\.filter\(isOpaqueSpecificRule\)/);
+  assert.match(`${editor}\n${setup}`, /canMoveSpecificRule/);
+  assert.match(`${editor}\n${setup}`, /isOpaqueSpecificRule/);
+  assert.match(INDEX_HTML, /data-managed-specific-rule/);
+  assert.match(INDEX_HTML, /:disabled="isOpaqueSpecificRule\(rule\)"/);
+  assert.match(INDEX_HTML, /:disabled="!canMoveSpecificRule\(i, -1\)"/);
+  assert.match(INDEX_HTML, /:disabled="!canMoveSpecificRule\(i, 1\)"/);
+});
+
+test('legend order is document-global intent projected only by atomic owners', () => {
+  const sortActions = productionSources.get('app/legend/sort-actions.js');
+  const command = productionSources.get('app/legend/manual-intent-command.js');
+  const candidate = productionSources.get('app/candidate-render.js');
+  const config = productionSources.get('services/config.js');
+
+  assert.match(sortActions, /requestLegendOrderIntent\(\{ kind: 'order', order: normalized \}/);
+  assert.doesNotMatch(sortActions, /setAttribute|serializeCleanSvg|results\.value/);
+  assert.match(command, /prepareLegendOrderResultProjection/);
+  assert.match(command, /writeRef\(state\.results, prepared\.projection\.nextResults/);
+  assert.match(command, /owner: isOrderIntent \? ORDER_OWNER : MANUAL_OWNER/);
+  assert.doesNotMatch(command, /\b(?:getPyodide|ensurePyodide|loadPyodide|runPython)\b/);
+  assert.match(candidate, /applyLegendOrderToSvg\(svg, legendOrderIntent\)/);
+  assert.match(config, /orderIntent: cloneJsonArray\(state\.legendOrderIntent\?\.value\)/);
+  assert.match(config, /orderIntent: normalizeStringArray\(legend\.orderIntent\)/);
 });

@@ -37,11 +37,19 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 40
+CURRENT_SESSION_VERSION = 41
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, CURRENT_SESSION_VERSION}
 )
+CANONICAL_REQUEST_SCHEMAS_BY_SESSION_VERSION = {
+    31: frozenset({1}),
+    32: frozenset({1, 2}),
+    33: frozenset({2}),
+    39: frozenset({5}),
+    40: frozenset({5}),
+    CURRENT_SESSION_VERSION: frozenset({6}),
+}
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
 NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2
@@ -567,6 +575,13 @@ def validate_session(session: Mapping[str, Any]) -> None:
             raise ValidationError(
                 f"Unsupported canonical renderRequest schema: {request_schema}."
             )
+        compatible_schemas = CANONICAL_REQUEST_SCHEMAS_BY_SESSION_VERSION.get(version)
+        if compatible_schemas is None or request_schema not in compatible_schemas:
+            expected = ", ".join(str(schema) for schema in sorted(compatible_schemas or ()))
+            raise ValidationError(
+                f"Session version {version} is incompatible with canonical "
+                f"renderRequest schema {request_schema}; expected schema {expected}."
+            )
         if not isinstance(resources, Mapping):
             raise ValidationError(
                 f"Session version {version} requires a canonical resources object."
@@ -580,6 +595,10 @@ def validate_session(session: Mapping[str, Any]) -> None:
         if files is not None and not isinstance(files, Mapping):
             raise ValidationError("Session files must be an object when present.")
     else:
+        if "renderRequest" in session:
+            raise ValidationError(
+                f"Session version {version} predates canonical renderRequest schemas."
+            )
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
@@ -593,7 +612,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 def _validate_current_comparison_authority(
     session: Mapping[str, Any],
 ) -> None:
-    """Reject retired v40 comparison fields and validate an optional Web draft."""
+    """Reject retired comparison fields and validate an optional Web draft."""
 
     config_value = session.get("config")
     config = config_value if isinstance(config_value, Mapping) else {}
@@ -615,15 +634,17 @@ def _validate_current_comparison_authority(
 
     if "blastSource" in config or "blastSource" in adv:
         raise ValidationError(
-            "Session version 40 cannot contain retired blastSource state."
+            f"Session version {CURRENT_SESSION_VERSION} cannot contain retired "
+            "blastSource state."
         )
     if "blastSource" in ui:
         raise ValidationError(
-            "Session version 40 cannot contain ui.blastSource."
+            f"Session version {CURRENT_SESSION_VERSION} cannot contain "
+            "ui.blastSource."
         )
     if layout is not None and "comparisons" in layout:
         raise ValidationError(
-            "Session version 40 cannot contain "
+            f"Session version {CURRENT_SESSION_VERSION} cannot contain "
             "config.linearRecordLayout.comparisons."
         )
 
@@ -634,11 +655,13 @@ def _validate_current_comparison_authority(
                 continue
             if "blast" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record BLAST bindings."
+                    f"Session version {CURRENT_SESSION_VERSION} cannot contain "
+                    "per-record BLAST bindings."
                 )
             if "losat_filename" in sequence:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {CURRENT_SESSION_VERSION} cannot contain "
+                    "per-record LOSAT filenames."
                 )
     linear_metadata = web_files.get("linearRecordMetadata")
     if isinstance(linear_metadata, list):
@@ -647,11 +670,13 @@ def _validate_current_comparison_authority(
                 continue
             if "losatFilename" in metadata or "losat_filename" in metadata:
                 raise ValidationError(
-                    "Session version 40 cannot contain per-record LOSAT filenames."
+                    f"Session version {CURRENT_SESSION_VERSION} cannot contain "
+                    "per-record LOSAT filenames."
                 )
     if "linearCanonicalComparisons" in bindings:
         raise ValidationError(
-            "Session version 40 cannot bind comparison artifacts outside "
+            f"Session version {CURRENT_SESSION_VERSION} cannot bind comparison "
+            "artifacts outside "
             "the committed request."
         )
 
@@ -784,7 +809,7 @@ def _validate_current_comparison_authority(
 def _validate_current_feature_catalog_authority(
     session: Mapping[str, Any],
 ) -> None:
-    """Require the v40 schema-3 catalog and reject duplicated derived payloads."""
+    """Require the current schema-3 catalog and reject duplicated derived payloads."""
 
     unknown_fields = sorted(
         str(field)
@@ -803,7 +828,7 @@ def _validate_current_feature_catalog_authority(
         duplicated = CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS & set(features)
         if duplicated:
             raise ValidationError(
-                "Session version 40 cannot contain derived feature payloads in "
+                f"Session version {CURRENT_SESSION_VERSION} cannot contain derived feature payloads in "
                 f"features: {', '.join(sorted(duplicated))}."
             )
     elif "features" in session:
@@ -813,7 +838,7 @@ def _validate_current_feature_catalog_authority(
     if isinstance(orthogroup_state, Mapping):
         if "groups" in orthogroup_state:
             raise ValidationError(
-                "Session version 40 cannot contain derived orthogroupState.groups."
+                f"Session version {CURRENT_SESSION_VERSION} cannot contain derived orthogroupState.groups."
             )
     elif "orthogroupState" in session:
         raise ValidationError(
@@ -822,14 +847,16 @@ def _validate_current_feature_catalog_authority(
 
     results = session.get("results")
     if "results" not in session or not isinstance(results, list):
-        raise ValidationError("Session version 40 requires a results array.")
+        raise ValidationError(
+            f"Session version {CURRENT_SESSION_VERSION} requires a results array."
+        )
     editor_state = session.get("editorState")
     if (
         not isinstance(editor_state, Mapping)
         or "featureCatalog" not in editor_state
     ):
         raise ValidationError(
-            "Session version 40 "
+            f"Session version {CURRENT_SESSION_VERSION} "
             + (
                 "Results require editorState.featureCatalog."
                 if results
@@ -853,7 +880,7 @@ def _validate_current_feature_catalog_authority(
         return
     if not isinstance(catalog, Mapping):
         raise ValidationError(
-            "Session version 40 Results require editorState.featureCatalog."
+            f"Session version {CURRENT_SESSION_VERSION} Results require editorState.featureCatalog."
         )
     items = catalog.get("items")
     if (
@@ -894,13 +921,23 @@ def _validate_current_feature_catalog_authority(
                 "Current Session Results must contain plain SVG only."
             )
         try:
-            select_feature_catalog_item(
+            catalog_item = select_feature_catalog_item(
                 catalog,
                 result_index=result_index,
                 result_name=result_name,
             )
         except GbdrawError as exc:
             raise ValidationError(str(exc)) from exc
+        biological_features = catalog_item.get("biologicalFeatures")
+        if not isinstance(biological_features, list) or any(
+            not isinstance(feature, Mapping)
+            or not str(feature.get("instanceHash") or "").strip()
+            for feature in biological_features
+        ):
+            raise ValidationError(
+                f"Session version {CURRENT_SESSION_VERSION} Results require "
+                "featureCatalog biologicalFeatures[].instanceHash."
+            )
 
 
 def empty_protein_identity_manifest() -> dict[str, Any]:
@@ -3841,6 +3878,7 @@ def _as_list(value: Any) -> list[Any]:
 
 
 __all__ = [
+    "CANONICAL_REQUEST_SCHEMAS_BY_SESSION_VERSION",
     "CURRENT_SESSION_VERSION",
     "CANONICAL_SESSION_MIN_VERSION",
     "DEPTH_FILE_ENCODING",

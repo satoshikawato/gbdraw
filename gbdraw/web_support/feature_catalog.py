@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 
 from gbdraw.exceptions import GbdrawError
+from gbdraw.features.instance_identity import compute_feature_instance_hash
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
     _add_class_token,
@@ -41,6 +42,12 @@ _BIOLOGICAL_ALIAS_KEYS = {
     "stable_feature_svg_id",
     "featureSvgId",
     "feature_svg_id",
+    "record_key",
+    "recordKey",
+    "biological_feature_id",
+    "biologicalFeatureId",
+    "instance_hash",
+    "instanceHash",
     "rendered_svg_id",
     "renderedSvgId",
     "rendered_feature_svg_id",
@@ -406,6 +413,17 @@ def _biological_feature_id_alias(
     return (next(iter(values), ""), len(values) <= 1)
 
 
+def _instance_hash_alias(
+    feature: Mapping[str, object],
+) -> tuple[str, bool]:
+    values = {
+        _text(feature.get(key))
+        for key in ("instance_hash", "instanceHash")
+        if key in feature and _text(feature.get(key))
+    }
+    return (next(iter(values), ""), len(values) <= 1)
+
+
 def _rendered_svg_id(feature: Mapping[str, object]) -> str:
     rendered_id, rendered_valid = _feature_rendered_id_status(feature)
     svg_aliases = {
@@ -589,6 +607,34 @@ def _normalized_biological_features(
             )
         used.add((record_key, biological_feature_id))
 
+        supplied_record_key, record_key_valid = _record_key_alias(feature)
+        supplied_biological_id, biological_id_valid = (
+            _biological_feature_id_alias(feature)
+        )
+        supplied_instance_hash, instance_hash_valid = _instance_hash_alias(feature)
+        expected_instance_hash = compute_feature_instance_hash(
+            record_key,
+            biological_feature_id,
+        )
+        if (
+            not record_key_valid
+            or not biological_id_valid
+            or not instance_hash_valid
+            or (supplied_record_key and supplied_record_key != record_key)
+            or (
+                supplied_biological_id
+                and supplied_biological_id != biological_feature_id
+            )
+            or (
+                supplied_instance_hash
+                and supplied_instance_hash != expected_instance_hash
+            )
+        ):
+            raise GbdrawError(
+                "Feature metadata contains conflicting canonical feature-instance "
+                "identity."
+            )
+
         payload = dict(feature)
         for key in _BIOLOGICAL_ALIAS_KEYS | _ORTHOGROUP_FEATURE_KEYS:
             payload.pop(key, None)
@@ -602,6 +648,7 @@ def _normalized_biological_features(
             payload.pop(fasta_key, None)
         payload["biologicalFeatureId"] = biological_feature_id
         payload["recordKey"] = record_key
+        payload["instanceHash"] = expected_instance_hash
         for record_index_key in ("record_idx", "recordIndex", "record_index"):
             payload.pop(record_index_key, None)
         for feature_index_key in (
@@ -1816,6 +1863,24 @@ def select_feature_catalog_item(
             raise GbdrawError(
                 "Feature catalog contains an invalid biological feature "
                 "reference."
+            )
+        instance_hash, instance_hash_valid = _instance_hash_alias(feature)
+        has_instance_hash = any(
+            key in feature for key in ("instance_hash", "instanceHash")
+        )
+        if (
+            not instance_hash_valid
+            or (
+                has_instance_hash
+                and (
+                    not instance_hash
+                    or instance_hash
+                    != compute_feature_instance_hash(reference[0], reference[1])
+                )
+            )
+        ):
+            raise GbdrawError(
+                "Feature catalog contains an invalid feature instance hash."
             )
         if "sourceFeatureIndex" in feature and (
             type(feature.get("sourceFeatureIndex")) is not int

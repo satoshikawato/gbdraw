@@ -133,10 +133,8 @@ def test_dead_web_style_module_and_color_dialog_aliases_are_removed() -> None:
     web_root = Path(__file__).parents[1] / "gbdraw" / "web"
 
     assert not (web_root / "js" / "app" / "annotations" / "style-actions.js").exists()
-    for relative_path in (
-        Path("js/state.js"),
-        Path("js/app/feature-editor/color-actions.js"),
-    ):
+    assert not (web_root / "js" / "app" / "feature-editor" / "color-actions.js").exists()
+    for relative_path in (Path("js/state.js"),):
         source = (web_root / relative_path).read_text(encoding="utf-8")
         assert "individualLabel" not in source
 

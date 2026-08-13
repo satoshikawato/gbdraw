@@ -418,6 +418,8 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
     base_request = _linear_request(tmp_path)
     session = build_session_document(base_request).to_dict()
     session["version"] = 33
+    session["renderRequest"]["schema"] = 2
+    session["renderRequest"].pop("grouping", None)
     feature_analysis_id = f"f_{'a' * 64}"
     value = (
         f"record@instance|alias~{feature_analysis_id}"
@@ -569,6 +571,8 @@ def test_supported_v32_session_replays_through_compatibility_adapter(
     }
     data = build_session_document(_linear_request(tmp_path)).to_dict()
     data["version"] = 32
+    data["renderRequest"]["schema"] = 2
+    data["renderRequest"].pop("grouping", None)
     data["losatCache"] = {"entries": [legacy_raw]}
     data["losatDerivedCache"] = {"entries": [legacy_derived]}
     document = load_session_document(data)
@@ -794,6 +798,10 @@ def test_current_typed_replay_retains_web_only_losat_fastas(
             source_version=source_document.version,
         )
     )
+    # A typed replay regenerates Results and their v41 exact-identity catalogue.
+    # Web-only file bindings remain adjunct data; stale rendered artifacts do not.
+    adjunct["results"] = []
+    adjunct["editorState"] = {"featureCatalog": None}
     assert web_file_inventory is not None
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:

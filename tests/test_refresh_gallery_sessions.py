@@ -30,9 +30,14 @@ from gbdraw.session_io import (
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
+    SUPPORTED_SESSION_VERSIONS,
     load_session,
+    validate_session,
 )
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA,
+    SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
+)
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
@@ -78,6 +83,10 @@ from tools.refresh_gallery_sessions import (
     _validate_staged_gallery_session,
     _with_interactive_svg_format,
 )
+
+
+PINNED_GALLERY_SESSION_VERSION = 40
+PINNED_GALLERY_REQUEST_SCHEMA = 5
 
 
 pytestmark = pytest.mark.gallery
@@ -660,11 +669,9 @@ def test_vibrio_gallery_session_retains_complete_compact_cache(
     path = _session_path("vibrio-harveyi-group-collinear")
     session = load_cached_gallery_session(path)
 
-    _validate_staged_gallery_session(
-        path,
-        session,
-        artifact_path=path,
-    )
+    validate_session(session)
+    assert session["version"] == PINNED_GALLERY_SESSION_VERSION
+    assert session["renderRequest"]["schema"] == PINNED_GALLERY_REQUEST_SCHEMA
 
     protein_entries = [
         entry
@@ -685,7 +692,7 @@ def test_gallery_session_inventory_matches_files_and_examples() -> None:
     _validate_gallery_session_inventory()
 
 
-def test_all_bundled_sessions_use_current_request_and_artifact_schemas(
+def test_all_bundled_sessions_use_supported_pinned_request_and_artifact_schemas(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
     repo_root = Path(__file__).parents[1]
@@ -701,10 +708,12 @@ def test_all_bundled_sessions_use_current_request_and_artifact_schemas(
     )
 
     assert len(paths) == 13
+    assert PINNED_GALLERY_SESSION_VERSION in SUPPORTED_SESSION_VERSIONS
+    assert PINNED_GALLERY_REQUEST_SCHEMA in SUPPORTED_CANONICAL_REQUEST_SCHEMAS
     for path in paths:
         session = load_cached_gallery_session(path)
-        assert session["version"] == CURRENT_SESSION_VERSION, path
-        assert session["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA, path
+        assert session["version"] == PINNED_GALLERY_SESSION_VERSION, path
+        assert session["renderRequest"]["schema"] == PINNED_GALLERY_REQUEST_SCHEMA, path
         assert (
             session["proteinIdentityManifest"]["schema"]
             == PROTEIN_IDENTITY_MANIFEST_SCHEMA
@@ -1358,7 +1367,11 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
 
     _validate_staged_gallery_session(session_path, session)
 
-    stale_version = dict(session, version=33)
+    stale_version = dict(
+        session,
+        version=33,
+        renderRequest={"schema": 2, "mode": "linear"},
+    )
     with pytest.raises(ValueError, match=f"expected {CURRENT_SESSION_VERSION}"):
         _validate_staged_gallery_session(session_path, stale_version)
 

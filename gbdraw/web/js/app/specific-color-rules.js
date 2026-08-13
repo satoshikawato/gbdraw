@@ -1,19 +1,33 @@
 import { resolveColorToHex } from './color-utils.js';
-import { parseSpecificRules } from './file-imports.js';
+import {
+  INSTANCE_HASH_QUALIFIER,
+  parseSpecificRules
+} from './file-imports.js';
+import { FEATURE_SEMANTIC_SCOPE_QUALIFIER } from './feature-editor/semantic-fill-selectors.js';
 
 export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';
 
 const normalizeText = (value) => String(value ?? '').trim();
-const normalizeColor = (value) => String(resolveColorToHex(normalizeText(value)) || '').toLowerCase();
+const normalizeColor = (value) => {
+  const normalized = normalizeText(value);
+  if (normalized.toLowerCase() === 'none') return 'none';
+  return String(resolveColorToHex(normalized) || '').toLowerCase();
+};
 
-export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile) } = {}) => ({
-  feat: normalizeText(rule?.feat),
-  qual: normalizeText(rule?.qual),
-  val: normalizeText(rule?.val),
-  color: normalizeColor(rule?.color),
-  cap: normalizeText(rule?.cap),
-  ...(fromFile ? { fromFile: true } : {})
-});
+export const normalizeSpecificRule = (rule, { fromFile = Boolean(rule?.fromFile) } = {}) => {
+  const qual = normalizeText(rule?.qual);
+  return {
+    feat: normalizeText(rule?.feat),
+    qual,
+    val: normalizeText(rule?.val),
+    color: normalizeColor(rule?.color),
+    cap: normalizeText(rule?.cap),
+    ...([INSTANCE_HASH_QUALIFIER, FEATURE_SEMANTIC_SCOPE_QUALIFIER].includes(qual)
+      ? { match: rule?.match === 'regex' ? 'regex' : 'literal' }
+      : {}),
+    ...(fromFile ? { fromFile: true } : {})
+  };
+};
 
 export const specificRuleIdentity = (rule) => {
   const normalized = normalizeSpecificRule(rule);

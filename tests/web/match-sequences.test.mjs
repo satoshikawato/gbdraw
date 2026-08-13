@@ -1,15 +1,34 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+const sandboxDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
+const tempDir = join(sandboxDir, 'app');
+await mkdir(tempDir, { recursive: true });
+await mkdir(join(tempDir, 'feature-editor'), { recursive: true });
+await writeFile(join(sandboxDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+await mkdir(join(sandboxDir, 'services'), { recursive: true });
+await writeFile(
+  join(sandboxDir, 'services', 'feature-instance-identity.js'),
+  await readFile('gbdraw/web/js/services/feature-instance-identity.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(sandboxDir, 'services', 'json-clone.js'),
+  await readFile('gbdraw/web/js/services/json-clone.js', 'utf8'),
+  'utf8'
+);
 await writeFile(
   join(tempDir, 'feature-utils.js'),
   await readFile('gbdraw/web/js/app/feature-utils.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'feature-editor', 'semantic-fill-selectors.js'),
+  await readFile('gbdraw/web/js/app/feature-editor/semantic-fill-selectors.js', 'utf8'),
   'utf8'
 );
 await writeFile(

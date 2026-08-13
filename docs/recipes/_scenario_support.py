@@ -583,5 +583,16 @@ def publish_output(
     return destination
 
 
+def normalized_artifact_payload(path: Path) -> bytes:
+    """Return a comparison payload that ignores non-semantic text encoding noise."""
+
+    if path.suffix.lower() == ".svg":
+        return ElementTree.canonicalize(from_file=path).encode("utf-8")
+    payload = path.read_bytes()
+    if path.suffix.lower() in {".tsv", ".txt"}:
+        return payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return payload
+
+
 def _local_name(name: str) -> str:
     return name.rsplit("}", 1)[-1]

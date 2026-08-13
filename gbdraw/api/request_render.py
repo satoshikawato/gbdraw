@@ -6,7 +6,7 @@ import copy
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence, TypeAlias
 
@@ -41,6 +41,14 @@ from gbdraw.features.visibility import (
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
+from gbdraw.features.instance_identity import (
+    FeatureInstanceIdentityPlan,
+    build_feature_instance_identity_plan,
+)
+from gbdraw.features.semantic_selectors import (
+    build_feature_semantic_selector_context,
+)
+from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.annotations import AnnotationOptions, read_annotation_table
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors, read_color_table
@@ -64,6 +72,7 @@ from .diagram import (
     build_circular_diagram,
     build_circular_multi_diagram,
     build_linear_diagram_result,
+    _resolve_diagram_options_config,
 )
 from .io import load_gbks, load_gff_fasta
 from .options import (
@@ -361,6 +370,11 @@ class PreparedDiagramRequest:
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
 
 @dataclass(frozen=True)
@@ -387,6 +401,11 @@ class PreparedCircularBatchRequest:
     records: tuple[SeqRecord, ...]
     items: tuple[PreparedDiagramRequest, ...]
     inputs: PreparedDiagramInputs | None = None
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -494,11 +513,18 @@ class CircularRequestPlan:
 
         _preflight_render_output(self.request.output)
 
-    def build(self) -> Drawing:
+    def build(
+        self,
+        *,
+        feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    ) -> Drawing:
         shared_kwargs = (
             {"_resolved_feature_inputs": self.inputs.features}
             if self.inputs is not None
             else {}
+        )
+        shared_kwargs["_feature_instance_identity_plan"] = (
+            feature_instance_identity_plan
         )
         if self.layout is None:
             depth_kwargs: dict[str, Any] = dict(shared_kwargs)
@@ -687,6 +713,7 @@ class LinearRequestPlan:
         *,
         losatp_cache: LosatpCacheManager | None = None,
         protein_extraction: ProteinExtractionResult | None = None,
+        feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
     ) -> LinearDiagramBuildResult:
         kwargs: dict[str, Any] = {"options": self.request.options}
         if self.layout is not None:
@@ -697,6 +724,7 @@ class LinearRequestPlan:
             kwargs["protein_extraction"] = protein_extraction
         if self.inputs is not None:
             kwargs["_resolved_feature_inputs"] = self.inputs.features
+        kwargs["_feature_instance_identity_plan"] = feature_instance_identity_plan
         built = build_linear_diagram_result(self.records, **kwargs)
         if isinstance(built, LinearDiagramBuildResult):
             return built
@@ -1552,14 +1580,20 @@ def build_request_plan_diagram(
     )
     if not isinstance(current_artifacts, CurrentRequestArtifacts):
         raise ValidationError("artifacts must be CurrentRequestArtifacts.")
+    feature_instance_identity_plan = build_feature_instance_identity_plan(
+        plan.records
+    )
     if isinstance(plan, CircularBatchRequestPlan):
         items = tuple(
             PreparedDiagramRequest(
                 mode="circular",
                 request=item_plan.request,
                 records=item_plan.records,
-                drawing=item_plan.build(),
+                drawing=item_plan.build(
+                    feature_instance_identity_plan=feature_instance_identity_plan,
+                ),
                 inputs=item_plan.inputs,
+                feature_instance_identity_plan=feature_instance_identity_plan,
             )
             for item_plan in plan.item_plans()
         )
@@ -1568,6 +1602,7 @@ def build_request_plan_diagram(
             records=plan.records,
             items=items,
             inputs=plan.inputs,
+            feature_instance_identity_plan=feature_instance_identity_plan,
         )
     request = plan.request
     records = plan.records
@@ -1576,7 +1611,9 @@ def build_request_plan_diagram(
     protein_identity_manifest: Mapping[str, Any] | None = None
     linear_metadata: LinearDiagramMetadata | None = None
     if isinstance(plan, CircularRequestPlan):
-        drawing = plan.build()
+        drawing = plan.build(
+            feature_instance_identity_plan=feature_instance_identity_plan,
+        )
         losat_cache_entries = current_artifacts.losat_cache_entries
         losat_derived_cache_entries = current_artifacts.losat_derived_cache_entries
         protein_identity_manifest = current_artifacts.protein_identity_manifest
@@ -1592,6 +1629,7 @@ def build_request_plan_diagram(
         linear_build = plan.build(
             losatp_cache=linear_artifacts.cache,
             protein_extraction=linear_artifacts.extraction,
+            feature_instance_identity_plan=feature_instance_identity_plan,
         )
         drawing = linear_build.drawing
         linear_metadata = linear_build.metadata
@@ -1627,6 +1665,7 @@ def build_request_plan_diagram(
         losat_cache_entries=losat_cache_entries,
         losat_derived_cache_entries=losat_derived_cache_entries,
         protein_identity_manifest=protein_identity_manifest,
+        feature_instance_identity_plan=feature_instance_identity_plan,
     )
 
 
@@ -1684,6 +1723,16 @@ def build_prepared_interactive_context(
             LinearDiagramOptions,
         ):
             computed_orthogroups = options.orthogroups
+        cfg = _resolve_diagram_options_config(options)
+        feature_semantic_selector_context = (
+            build_feature_semantic_selector_context(
+                prepared.records,
+                label_filtering=preprocess_label_filtering(
+                    copy.deepcopy(cfg.labels.filtering.as_dict())
+                ),
+                orthogroups=computed_orthogroups,
+            )
+        )
         collinearity_search_scope = None
         if (
             isinstance(options, LinearDiagramOptions)
@@ -1706,6 +1755,12 @@ def build_prepared_interactive_context(
             mode=prepared.mode,
             comparison_sequence_records=comparison_sequence_records,
             collinearity_search_scope=collinearity_search_scope,
+            feature_instance_identity_plan=(
+                prepared.feature_instance_identity_plan
+            ),
+            feature_semantic_selector_context=(
+                feature_semantic_selector_context
+            ),
         )
 
     return require_interactive_svg_metadata(build)

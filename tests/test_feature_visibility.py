@@ -631,6 +631,43 @@ def test_prepare_legend_table_skips_gene_other_entry_without_default_usage() -> 
     assert "other genes" not in legend_table
 
 
+def test_prepare_legend_table_includes_used_wildcard_semantic_rule() -> None:
+    default_colors = pd.DataFrame(
+        [["CDS", "#54bcf8"], ["default", "#d3d3d3"]],
+        columns=["feature_type", "color"],
+    )
+    color_table = pd.DataFrame(
+        [[
+            "*",
+            "__gbdraw_semantic_scope__",
+            "fs1:source-annotation-label:wsv360-like%20protein",
+            "#ff00ff",
+            "wsv360-like protein",
+        ]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+    gc_config, skew_config, feature_config = _legend_config_stubs(
+        default_colors,
+        color_table,
+    )
+
+    legend_table = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        ["CDS"],
+        used_color_rules={("wsv360-like protein", "#ff00ff")},
+        default_used_features=set(),
+        show_gc=False,
+        show_skew=False,
+        show_depth=False,
+    )
+
+    assert legend_table["wsv360-like protein"]["fill"] == "#ff00ff"
+    assert "CDS" not in legend_table
+    assert "other proteins" not in legend_table
+
+
 def test_prepare_legend_table_plain_gene_entry_uses_default_fallback_color() -> None:
     default_colors = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
     gc_config, skew_config, feature_config = _legend_config_stubs(default_colors, None)

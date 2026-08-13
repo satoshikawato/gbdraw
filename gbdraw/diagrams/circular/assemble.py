@@ -1995,6 +1995,12 @@ def add_record_on_circular_canvas(
         feature_shapes=feature_config.feature_shapes,
         feature_visibility_rules=feature_config.feature_visibility_rules,
         compute_label_text=compute_label_text,
+        feature_instance_identity_plan=(
+            feature_config.feature_instance_identity_plan
+        ),
+        feature_semantic_selector_context=(
+            feature_config.feature_semantic_selector_context
+        ),
     )
     precomputed_feature_dict: dict = feature_layers.foreground_features
     layout_feature_dict = {
@@ -2670,6 +2676,9 @@ def _assemble_circular_diagram_result(
             feature_config.selected_features_set,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             specific_color_rules=color_map,
+            feature_instance_identity_plan=(
+                feature_config.feature_instance_identity_plan
+            ),
         )
         used_color_rules, default_used_features = precompute_used_color_rules(
             gb_record,
@@ -2677,6 +2686,9 @@ def _assemble_circular_diagram_result(
             default_color_map,
             set(feature_config.selected_features_set),
             feature_visibility_rules=feature_config.feature_visibility_rules,
+            feature_instance_identity_plan=(
+                feature_config.feature_instance_identity_plan
+            ),
         )
         legend_table = prepare_legend_table(
             gc_config,

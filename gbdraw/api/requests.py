@@ -485,7 +485,7 @@ class CircularDiagramRequest:
     diagram is a regular single-record render or a grid.  A grid may contain
     one record; separate-diagram collections use :class:`CircularBatchRequest`.
     Request planning expands cardinality and returns an exact-one materialized
-    projection suitable for canonical schema 5.
+    projection suitable for the current canonical request schema.
     """
 
     records: Sequence[RecordInput]

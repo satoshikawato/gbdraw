@@ -189,7 +189,7 @@ def _normalized_target_transforms(
 
 
 @pytest.mark.parametrize("legend", CIRCULAR_LEGEND_VALUES)
-def test_circular_legend_values_cross_schema_5_and_reach_composition(
+def test_circular_legend_values_cross_current_schema_and_reach_composition(
     legend: str,
     tmp_path: Path,
 ) -> None:
@@ -201,7 +201,7 @@ def test_circular_legend_values_cross_schema_5_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, CircularOutputOptions)
-    assert encoded.payload["schema"] == 5
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, CircularOutputOptions)
     assert replay.options.output.legend == legend
@@ -211,7 +211,7 @@ def test_circular_legend_values_cross_schema_5_and_reach_composition(
 
 
 @pytest.mark.parametrize("legend", LINEAR_LEGEND_VALUES)
-def test_linear_legend_values_cross_schema_5_and_reach_composition(
+def test_linear_legend_values_cross_current_schema_and_reach_composition(
     legend: str,
     tmp_path: Path,
 ) -> None:
@@ -223,7 +223,7 @@ def test_linear_legend_values_cross_schema_5_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, LinearOutputOptions)
-    assert encoded.payload["schema"] == 5
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, LinearOutputOptions)
     assert replay.options.output.legend == legend
@@ -285,7 +285,7 @@ def test_linear_title_values_cross_schema_5_and_reach_composition(
         ("linear", "bottom", True),
     ),
 )
-def test_output_option_defaults_remain_mode_specific_after_schema_5_replay(
+def test_output_option_defaults_remain_mode_specific_after_current_schema_replay(
     mode: Literal["circular", "linear"],
     expected_title_side: str,
     has_title: bool,
@@ -328,7 +328,7 @@ def test_output_option_defaults_remain_mode_specific_after_schema_5_replay(
         ("linear", "top", "center"),
     ),
 )
-def test_fresh_and_schema_5_replay_have_identical_automatic_composition(
+def test_fresh_and_current_schema_replay_have_identical_automatic_composition(
     mode: Literal["circular", "linear"],
     legend: str,
     title_position: str,
@@ -393,9 +393,9 @@ def test_linear_cli_rejects_circular_corner_legend_before_rendering(
     assert not svg_path.exists()
 
 
-def test_current_request_and_session_schema_versions_remain_unchanged() -> None:
-    assert CANONICAL_REQUEST_SCHEMA == 5
-    assert CURRENT_SESSION_VERSION == 40
+def test_current_request_and_session_schema_versions_are_explicit() -> None:
+    assert CANONICAL_REQUEST_SCHEMA == 6
+    assert CURRENT_SESSION_VERSION == 41
 
 
 @pytest.mark.parametrize("mode", ("circular", "linear"))

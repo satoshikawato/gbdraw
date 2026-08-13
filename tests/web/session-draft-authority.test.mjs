@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
@@ -12,6 +13,7 @@ globalThis.window = {
   DOMPurify: { sanitize: (value) => value }
 };
 globalThis.document = {};
+globalThis.crypto = webcrypto;
 installFakeSvgDom();
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
@@ -24,17 +26,41 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
 const {
+  applyEditorStateData,
+  applyFeatureStateData,
   buildConfigData,
   buildEditorStateData,
   buildFeatureStateData,
   buildOrthogroupStateData,
   buildRunStateData,
   buildUiStateData,
+  exportSession,
   importSession,
   overlayCurrentWriterDraftConfig,
   validateCurrentWriterActiveDraft
 } = await import('../../gbdraw/web/js/services/config.js');
+const { catalogResultKey } = await import(
+  '../../gbdraw/web/js/services/feature-catalog.js'
+);
+const { captureStyleSnapshot } = await import(
+  '../../gbdraw/web/js/services/style-revision.js'
+);
 const { state } = await import('../../gbdraw/web/js/state.js');
+
+state.legendOrderIntent.value = ['Beta', 'Alpha'];
+const legendOrderEditorSnapshot = buildEditorStateData();
+assert.deepEqual(legendOrderEditorSnapshot.legend.orderIntent, ['Beta', 'Alpha']);
+state.legendOrderIntent.value = [];
+applyEditorStateData(legendOrderEditorSnapshot, { trusted: true });
+assert.deepEqual(state.legendOrderIntent.value, ['Beta', 'Alpha']);
+const legacyLegendEditorSnapshot = structuredClone(legendOrderEditorSnapshot);
+delete legacyLegendEditorSnapshot.legend.orderIntent;
+applyEditorStateData(legacyLegendEditorSnapshot, { trusted: true });
+assert.deepEqual(
+  state.legendOrderIntent.value,
+  [],
+  'sessions written before document-global order intent hydrate compatibly'
+);
 const {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE
@@ -201,8 +227,6 @@ divergentSession.ui.layoutPreferences = {
   linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
 };
 divergentSession.ui.paletteInstantPreviewEnabled = false;
-divergentSession.ui.appliedPaletteName = 'orchid';
-divergentSession.ui.appliedPaletteColors = { CDS: '#123456' };
 divergentSession.ui.pendingPaletteName = 'mint';
 divergentSession.ui.pendingPaletteColors = { CDS: '#abcdef' };
 const importEvent = {
@@ -215,6 +239,69 @@ const importEvent = {
 const imported = await importSession(importEvent);
 
 assert.equal(imported.status, 'ok');
+const currentHashBearingSession = structuredClone(imported.data);
+assert.equal(imported.data.version, 41);
+assert.equal(imported.data.renderRequest.schema, 6);
+assert.deepEqual(
+  imported.data.renderRequest.diagramOptions.colors.defaultColorsFile,
+  { resourceId: 'colors-default-colors-file', representation: 'file' }
+);
+assert.equal(imported.data.renderRequest.diagramOptions.colors.defaultColors, null);
+assert.ok(
+  imported.data.editorState.featureCatalog.items.every((item) => (
+    item.biologicalFeatures.every((feature) => /^fi1_[a-z2-7]{26}$/.test(feature.instanceHash))
+  )),
+  'safe v40 canonical Feature pairs must be upgraded before current-session hydration'
+);
+assert.ok(
+  Object.keys(imported.data.features.featureColorOverrides).every((key) => key.includes('\u0000')),
+  'recovered rule-derived overrides must use canonical Feature pairs'
+);
+assert.equal(state.featureExactScopeAvailable.value, true);
+assert.equal(state.featureExactScopeDiagnostic.value, '');
+const mismatchedPairSession = structuredClone(currentHashBearingSession);
+const mismatchedPairFeature = mismatchedPairSession.editorState.featureCatalog.items
+  .flatMap((item) => item.biologicalFeatures)
+  .find((feature) => feature.instanceHash);
+assert.ok(mismatchedPairFeature);
+mismatchedPairFeature.instanceHash = mismatchedPairFeature.instanceHash ===
+  'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+  ? 'fi1_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+  : 'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa';
+const epochBeforeMismatchedPairImport = state.documentEpoch.value;
+const alertCountBeforeMismatchedPairImport = alerts.length;
+const mismatchedPairEvent = {
+  target: {
+    files: [new Blob([JSON.stringify(mismatchedPairSession)], { type: 'application/json' })],
+    value: 'selected'
+  }
+};
+const consoleErrorBeforeMismatchedPairImport = console.error;
+console.error = () => {};
+let mismatchedPairImport;
+try {
+  mismatchedPairImport = await importSession(mismatchedPairEvent);
+} finally {
+  console.error = consoleErrorBeforeMismatchedPairImport;
+}
+assert.equal(mismatchedPairImport.status, 'error');
+assert.match(
+  mismatchedPairImport.error.message,
+  /does not match its canonical record and Feature identity/
+);
+assert.equal(state.documentEpoch.value, epochBeforeMismatchedPairImport);
+assert.equal(alerts.length, alertCountBeforeMismatchedPairImport + 1);
+assert.match(
+  alerts.at(-1),
+  /Failed to load session: Feature instance hash does not match its canonical record and Feature identity/
+);
+assert.equal(mismatchedPairEvent.target.value, '');
+const exactCapabilitySnapshot = buildFeatureStateData();
+state.featureExactScopeAvailable.value = false;
+state.featureExactScopeDiagnostic.value = 'temporary diagnostic';
+applyFeatureStateData(exactCapabilitySnapshot);
+assert.equal(state.featureExactScopeAvailable.value, true);
+assert.equal(state.featureExactScopeDiagnostic.value, '');
 assert.equal(state.linearComparisonPlan.mode, 'none');
 assert.deepEqual(state.linearComparisonPlan.edges, []);
 assert.deepEqual({
@@ -243,8 +330,8 @@ assert.equal(
 );
 assert.equal(state.adv.plot_title_position, 'bottom');
 assert.equal(state.generatedLegendPosition.value, 'right');
-assert.equal(state.appliedPaletteName.value, 'orchid');
-assert.equal(state.appliedPaletteColors.value.CDS, '#123456');
+assert.equal(state.appliedPaletteName.value, 'orange');
+assert.equal(state.appliedPaletteColors.value.CDS, '#dddddd');
 assert.equal(state.pendingPaletteName.value, 'mint');
 assert.equal(state.pendingPaletteColors.value.CDS, '#abcdef');
 assert.deepEqual(state.layoutPreferences.linear, {
@@ -504,6 +591,12 @@ const rollbackState = () => ({
   legend: state.form.legend,
   plotTitlePosition: state.adv.plot_title_position,
   generatedLegendPosition: state.generatedLegendPosition.value,
+  documentEpoch: state.documentEpoch.value,
+  semanticStyleRevision: state.semanticStyleRevision.value,
+  semanticStyleFingerprint: state.semanticStyleFingerprint.value,
+  validatedStyleFingerprintByResultKey: jsonClone(
+    state.validatedStyleFingerprintByResultKey.value
+  ),
   semanticFileWatchersSuppressed: state.semanticFileWatchersSuppressed.value,
   sessionImportRollbackInProgress: state.sessionImportRollbackInProgress.value,
   skipCaptureBaseConfig: state.skipCaptureBaseConfig.value,
@@ -630,6 +723,12 @@ try {
     {
       rollbackState: sessionImportRollbackState,
       afterLoad: async () => {
+        state.documentEpoch.value += 11;
+        state.semanticStyleRevision.value += 7;
+        state.semanticStyleFingerprint.value = 'sf1_interrupted-import';
+        state.validatedStyleFingerprintByResultKey.value = Object.freeze({
+          'interrupted-result': 'sf1_interrupted-import'
+        });
         depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;
@@ -661,3 +760,54 @@ assert.deepEqual(rollbackState(), stateBeforeFailedImport);
 assert.equal(alerts.length, 1);
 assert.match(alerts[0], /^Failed to load session: .*composition metadata is not valid JSON/);
 assert.equal(failedImportEvent.target.value, '');
+
+const epochBeforeCurrentImport = state.documentEpoch.value;
+const currentImport = await importPayload(currentHashBearingSession);
+assert.equal(currentImport.status, 'ok');
+assert.equal(state.documentEpoch.value, epochBeforeCurrentImport + 1);
+assert.equal(state.semanticStyleRevision.value, 0);
+const importedStyleSnapshot = captureStyleSnapshot(state);
+assert.equal(state.semanticStyleFingerprint.value, importedStyleSnapshot.fingerprint);
+const importedResultKeys = state.featureCatalog.value.items.map(catalogResultKey);
+assert.equal(importedResultKeys.length, state.results.value.length);
+assert.deepEqual(
+  state.validatedStyleFingerprintByResultKey.value,
+  Object.fromEntries(importedResultKeys.map((resultKey) => [
+    resultKey,
+    importedStyleSnapshot.fingerprint
+  ]))
+);
+
+const exportPairFeature = state.featureCatalog.value.items
+  .flatMap((item) => item.biologicalFeatures)
+  .find((feature) => feature.instanceHash);
+assert.ok(exportPairFeature);
+const exportPairHash = exportPairFeature.instanceHash;
+exportPairFeature.instanceHash = exportPairHash === 'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+  ? 'fi1_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+  : 'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa';
+const consoleWarnBeforeMismatchedPairExport = console.warn;
+console.warn = () => {};
+try {
+  await assert.rejects(
+    exportSession('mismatched-feature-pair'),
+    /Generate again before using Save Session/
+  );
+} finally {
+  console.warn = consoleWarnBeforeMismatchedPairExport;
+  exportPairFeature.instanceHash = exportPairHash;
+}
+
+const originalCreateElement = document.createElement;
+document.createElement = () => ({
+  addEventListener: () => {},
+  click: () => {},
+  parentNode: null
+});
+try {
+  const saved = await exportSession('current-hash-bearing-roundtrip');
+  assert.equal(saved.status, 'saved');
+} finally {
+  if (originalCreateElement === undefined) delete document.createElement;
+  else document.createElement = originalCreateElement;
+}

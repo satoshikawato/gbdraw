@@ -4,40 +4,22 @@ import {
   filterFeatureFillTargets,
   getFeatureIdentity
 } from './feature-dom.js';
-import { ruleMatchesFeature } from './feature-utils.js';
 import {
   biologicalFeatureKey,
   featureStateFromCatalog
 } from '../services/feature-catalog.js';
 import {
-  featureOverrideKey,
   migrateLegacyFeatureOverrides
 } from '../services/feature-override-identity.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { ingestSvgResults } from '../services/svg-result-ingestion.js';
 import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
 import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
+import { applyLegendOrderToSvg } from './legend/manual-intent-command.js';
+import { resolveOrderedSpecificRule } from './feature-utils.js';
 
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
-
-const replaceRuleDerivedFillOverrides = (overrides, features, rules) => {
-  const candidates = Array.isArray(features) ? features : [];
-  const specificRules = Array.isArray(rules) ? rules : [];
-  candidates.forEach((feature) => {
-    for (const rule of specificRules) {
-      if (!ruleMatchesFeature(feature, rule)) continue;
-      const key = featureOverrideKey(feature);
-      if (key) {
-        overrides[key] = {
-          color: rule.color,
-          caption: rule.cap
-        };
-      }
-      break;
-    }
-  });
-};
 
 const normalizePaint = (value, label) => {
   const raw = text(value);
@@ -74,14 +56,23 @@ const featureElementsById = (svg) => {
   return index;
 };
 
-const applyItemFeatureOverrides = ({
+const biologicalFeatureIndex = (item) => new Map(
+  (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).map((feature) => [
+    biologicalFeatureKey(feature?.recordKey, feature?.biologicalFeatureId),
+    feature
+  ])
+);
+
+const observeItemFeatureFills = ({
   svg,
   item,
-  fillOverrides,
+  observedFillOverrides,
+  specificRules,
   strokeOverrides
 }) => {
   let changed = false;
   const elementsById = featureElementsById(svg);
+  const biologicalByKey = biologicalFeatureIndex(item);
   item.features.forEach((rendered) => {
     const renderedId = text(rendered.svgId);
     const stableKey = biologicalFeatureKey(
@@ -92,21 +83,38 @@ const applyItemFeatureOverrides = ({
     if (elements.length === 0) {
       throw new Error('Sanitized SVG content is missing a rendered feature binding.');
     }
-    const fillOverride = fillOverrides[stableKey];
-    const fillValue = normalizePaint(
-      fillOverride && typeof fillOverride === 'object' && hasOwn(fillOverride, 'color')
-        ? fillOverride.color
-        : fillOverride,
-      'feature fill'
-    );
-    if (fillValue) {
-      filterFeatureFillTargets(elements).forEach((element) => {
-        if (element.getAttribute('fill') !== fillValue) {
-          element.setAttribute('fill', fillValue);
-          changed = true;
-        }
-      });
+    const biological = biologicalByKey.get(stableKey);
+    if (!biological) {
+      throw new Error('Feature catalogue is missing a biological Feature binding.');
     }
+    const fillTargets = filterFeatureFillTargets(elements);
+    if (fillTargets.length === 0) {
+      throw new Error('Sanitized SVG content is missing a Feature fill target.');
+    }
+    const observedFills = new Set(fillTargets.map((element) => (
+      normalizePaint(element.getAttribute('fill'), 'rendered feature fill').toLowerCase()
+    )));
+    if (observedFills.size !== 1 || observedFills.has('')) {
+      throw new Error('Rendered Feature parts disagree on their committed fill.');
+    }
+    const [observedFill] = observedFills;
+    const catalogFill = normalizePaint(rendered.fillColor, 'catalogued feature fill').toLowerCase();
+    if (catalogFill && observedFill !== catalogFill) {
+      throw new Error('Rendered Feature fill conflicts with admitted Feature metadata.');
+    }
+    const effectiveRule = resolveOrderedSpecificRule(biological, specificRules)?.rule || null;
+    const caption = text(effectiveRule?.cap) || text(biological.type);
+    const existingFill = observedFillOverrides[stableKey];
+    if (
+      existingFill
+      && (
+        text(existingFill.color).toLowerCase() !== observedFill
+        || text(existingFill.caption) !== caption
+      )
+    ) {
+      throw new Error('Rendered Feature copies disagree on their committed fill intent.');
+    }
+    observedFillOverrides[stableKey] = { color: observedFill, caption };
 
     const strokeOverride = strokeOverrides[stableKey];
     if (!strokeOverride || typeof strokeOverride !== 'object') return;
@@ -149,6 +157,7 @@ export const prepareReflowResultCommit = ({
   features = [],
   featureStrokeOverrides = {},
   legendStrokeOverrides = {},
+  legendOrderIntent = [],
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
 }) => ({
   results: ingestSvgResults(results, {
@@ -163,7 +172,8 @@ export const prepareReflowResultCommit = ({
         featureStrokeOverrides,
         legendStrokeOverrides
       }) > 0;
-      return legendChanged || strokeChanged;
+      const orderChanged = applyLegendOrderToSvg(svg, legendOrderIntent).movedEntries > 0;
+      return legendChanged || strokeChanged || orderChanged;
     }
   })
 });
@@ -172,9 +182,10 @@ export const prepareCandidateRenderCommit = ({
   results,
   catalog,
   mode = '',
-  featureColorOverrides,
+  featureColorOverrides: derivedFillCache = {},
   featureStrokeOverrides,
   legendStrokeOverrides = {},
+  legendOrderIntent = [],
   manualSpecificRules = [],
   legacyFeatures = [],
   preparedFeatureState = null,
@@ -183,24 +194,18 @@ export const prepareCandidateRenderCommit = ({
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
 }) => {
   const featureState = preparedFeatureState || featureStateFromCatalog(catalog, { mode });
-  const fillOverrides = cloneJsonValue(featureColorOverrides, {});
+  // Feature fills in a generated or saved Result are renderer-owned. The Web
+  // cache is rebuilt from admitted SVG bytes below; it must never replay over
+  // Python output or turn inherited palette/rule values into local intent.
+  void derivedFillCache;
+  const fillOverrides = {};
   const strokeOverrides = cloneJsonValue(featureStrokeOverrides, {});
   const migrationOptions = { legacyFeatures };
 
   migrateLegacyFeatureOverrides(
-    fillOverrides,
-    featureState.extractedFeatures,
-    migrationOptions
-  );
-  migrateLegacyFeatureOverrides(
     strokeOverrides,
     featureState.extractedFeatures,
     migrationOptions
-  );
-  replaceRuleDerivedFillOverrides(
-    fillOverrides,
-    featureState.extractedFeatures,
-    manualSpecificRules
   );
 
   const itemsByIndex = new Map(
@@ -216,10 +221,11 @@ export const prepareCandidateRenderCommit = ({
       const legendChanged = suppressPairwiseIdentityLegend
         ? removePairwiseIdentityLegend(svg)
         : false;
-      const overridesChanged = applyItemFeatureOverrides({
+      const overridesChanged = observeItemFeatureFills({
         svg,
         item,
-        fillOverrides,
+        observedFillOverrides: fillOverrides,
+        specificRules: manualSpecificRules,
         strokeOverrides
       });
       const legendStrokeChanged = applyStrokeOverridesToSvg({
@@ -231,7 +237,8 @@ export const prepareCandidateRenderCommit = ({
       const callerChanged = typeof transformSvg === 'function'
         ? Boolean(transformSvg(svg, { resultIndex }))
         : false;
-      return legendChanged || overridesChanged || legendStrokeChanged || callerChanged;
+      const orderChanged = applyLegendOrderToSvg(svg, legendOrderIntent).movedEntries > 0;
+      return legendChanged || overridesChanged || legendStrokeChanged || callerChanged || orderChanged;
     }
   });
 

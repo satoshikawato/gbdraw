@@ -469,6 +469,17 @@ class Reproducer:
             return True
 
         session = json.loads(session_path.read_text(encoding="utf-8"))
+        if recipe.replay_canonical_color_resources:
+            # A geometry-only derivative must replay the persisted request, not
+            # promote a v40 editor palette overlay during compatibility loading.
+            config = session.get("config")
+            if isinstance(config, dict):
+                for key in ("colors", "palette", "rules"):
+                    config.pop(key, None)
+            ui = session.get("ui")
+            if isinstance(ui, dict):
+                for key in ("appliedPaletteColors", "appliedPaletteName"):
+                    ui.pop(key, None)
         request = session.get("renderRequest")
         resources = session.get("resources")
         if not isinstance(request, dict) or not isinstance(resources, dict):

@@ -28,10 +28,20 @@ const {
 const { createLegendEntryActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'entry-actions.js'))
 );
+const { applyLegendOrderToSvg, orderedLegendCaptions } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'legend', 'manual-intent-command.js'))
+);
+const { builtInLegendPaletteColorKey } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'svg-styles.js'))
+);
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
 assert.equal(SPECIFIC_COLOR_FILE_OWNER, 'specific-color-file');
+assert.equal(builtInLegendPaletteColorKey('GC content'), 'gc_content');
+assert.equal(builtInLegendPaletteColorKey('GC skew (+)'), 'skew_high');
+assert.equal(builtInLegendPaletteColorKey('GC skew (-)'), 'skew_low');
+assert.equal(builtInLegendPaletteColorKey('CDS'), '');
 assert.deepEqual(parseTransformXY('translate(12.5,-3.25)'), { x: 12.5, y: -3.25 });
 assert.deepEqual(parseTransformXY('translate(.5 2e1)'), { x: 0.5, y: 20 });
 assert.match(COMPARISON_LEGEND_SELECTOR, /^\[data-gbdraw-role="comparison-legend"\]/);
@@ -68,7 +78,14 @@ assert.match(
   /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+persistCurrentSvg\(svg\)/
 );
 assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
-assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);
+assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 2);
+assert.match(entryActionsSource, /requestManualLegendIntent/);
+assert.match(entryActionsSource, /history\.runUndoableCommand/);
+assert.match(entryActionsSource, /dispatchFeatureLegendIntent/);
+assert.doesNotMatch(
+  entryActionsSource.match(/const updateLegendEntryColor = [\s\S]*?\n  const addNewLegendEntry/)?.[0] || '',
+  /setAttribute\(['"]fill|manualLegendEntries\.value\s*=/
+);
 assert.match(
   appSetupSource,
   /setLegendGeometryChangedHandler\(legendLayout\.refreshLegendGeometry\)/
@@ -187,6 +204,61 @@ const mockLegendEntry = (caption, color, x) => {
   group.appendChild(new MockElement('text', { transform: `translate(${x + 22},7)` }, caption));
   return group;
 };
+
+{
+  const buildResult = (entries, outerTransform) => {
+    const svg = new MockElement('svg');
+    const outer = new MockElement('g', { id: 'legend', transform: outerTransform });
+    const featureLegend = new MockElement('g', { id: 'feature_legend' });
+    entries.forEach(([caption, color, x]) => {
+      featureLegend.appendChild(mockLegendEntry(caption, color, x));
+    });
+    outer.appendChild(featureLegend);
+    svg.appendChild(outer);
+    return { svg, outer, featureLegend };
+  };
+  const resultA = buildResult([
+    ['Alpha', '#111111', 0],
+    ['Beta', '#222222', 70],
+    ['Only A', '#333333', 140]
+  ], 'translate(500,20)');
+  const resultB = buildResult([
+    ['Gamma', '#444444', 5],
+    ['Beta', '#222222', 80]
+  ], 'translate(30,900)');
+
+  assert.deepEqual(
+    orderedLegendCaptions(['Gamma', 'Beta'], ['Beta', 'Alpha', 'Only A']),
+    ['Beta', 'Gamma'],
+    'missing captions are ignored and Result-local captions are retained'
+  );
+  applyLegendOrderToSvg(resultA.svg, ['Beta', 'Alpha', 'Only A']);
+  applyLegendOrderToSvg(resultB.svg, ['Beta', 'Alpha', 'Only A']);
+  assert.deepEqual(
+    resultA.featureLegend.children.map((entry) => entry.getAttribute('data-legend-key')),
+    ['Beta', 'Alpha', 'Only A']
+  );
+  assert.deepEqual(
+    resultB.featureLegend.children.map((entry) => entry.getAttribute('data-legend-key')),
+    ['Beta', 'Gamma']
+  );
+  assert.deepEqual(
+    resultA.featureLegend.children.map((entry) => (
+      parseTransformXY(entry.querySelector('path').getAttribute('transform')).x
+    )),
+    [0, 70, 140],
+    'Result A keeps its own slots'
+  );
+  assert.deepEqual(
+    resultB.featureLegend.children.map((entry) => (
+      parseTransformXY(entry.querySelector('path').getAttribute('transform')).x
+    )),
+    [5, 80],
+    'Result B keeps its own heterogeneous slots'
+  );
+  assert.equal(resultA.outer.getAttribute('transform'), 'translate(500,20)');
+  assert.equal(resultB.outer.getAttribute('transform'), 'translate(30,900)');
+}
 
 {
   const ref = (value) => ({ value });
@@ -359,4 +431,199 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(strokeActions.resetAllStrokes(), true);
   assert.deepEqual(state.featureStrokeOverrides, {});
   assert.equal(dirtyMarks, resetDirtyMarks);
+}
+
+{
+  const ref = (value) => ({ value });
+  const manualIntents = [];
+  const featureIntents = [];
+  const builtInIntents = [];
+  let pyodideInitializations = 0;
+  const state = {
+    pyodideReady: ref(false),
+    results: ref([{ name: 'a.svg', content: 'a' }, { name: 'b.svg', content: 'b' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => new MockElement('svg') }),
+    adv: {},
+    legendEntries: ref([{
+      caption: 'Notes', color: '#111111', owner: 'manual', featureIds: []
+    }, {
+      caption: 'Core', color: '#222222', owner: 'feature', featureIds: ['feature-a']
+    }, {
+      caption: 'GC content', color: '#777777', owner: 'feature', featureIds: []
+    }]),
+    manualLegendEntries: ref([{
+      caption: 'Notes', color: '#111111', owner: 'manual', featureIds: []
+    }]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref('Review'),
+    newLegendColor: ref('#abcdef'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false),
+    featureCatalog: ref({ items: [{
+      resultKey: 'result-a', resultIndex: 0, resultName: 'a.svg'
+    }, {
+      resultKey: 'result-b', resultIndex: 1, resultName: 'b.svg'
+    }] }),
+    appliedPaletteName: ref('default'),
+    appliedPaletteColors: ref({ CDS: '#cccccc' }),
+    documentEpoch: ref(2),
+    resultGenerationKey: ref(3),
+    semanticStyleRevision: ref(4),
+    semanticStyleFingerprint: ref('unused-by-injected-builder')
+  };
+  const actions = createLegendEntryActions({
+    state,
+    getPyodide: () => null,
+    ensurePyodide: async () => { pyodideInitializations += 1; },
+    history: {
+      runUndoableCommand: async (_label, build) => {
+        const command = await build();
+        return command.apply();
+      }
+    },
+    buildManualLegendCommand: async ({ intent }) => {
+      manualIntents.push(intent);
+      return { apply: () => true };
+    },
+    requestFeatureLegendIntent: (intent) => {
+      featureIntents.push(intent);
+      return true;
+    },
+    requestBuiltInLegendIntent: (intent) => {
+      builtInIntents.push(intent);
+      return true;
+    },
+    layoutActions: {
+      compactLegendEntries: () => {},
+      reflowDualLegendLayout: () => {},
+      updatePairwiseLegendPositions: () => {}
+    }
+  });
+
+  assert.equal(await actions.updateLegendEntryColor(0, '#333333'), true);
+  assert.equal(await actions.updateLegendEntryCaption(0, 'Editorial notes'), true);
+  assert.equal(await actions.deleteLegendEntry(0), true);
+  assert.equal(await actions.addNewLegendEntry(), true);
+  assert.deepEqual(manualIntents.map((entry) => entry.kind), ['color', 'rename', 'remove', 'add']);
+  assert.equal(manualIntents.every((entry) => (
+    entry.documentEpoch === 2
+    && entry.resultGenerationKey === 3
+    && entry.semanticStyleRevision === 4
+    && entry.mountedResultKey === 'result-a'
+  )), true);
+  assert.equal(state.newLegendCaption.value, '');
+  assert.equal(state.newLegendColor.value, '#808080');
+
+  assert.equal(actions.updateLegendEntryColor(1, '#444444'), true);
+  assert.equal(actions.updateLegendEntryCaption(1, 'Core proteins'), true);
+  assert.equal(actions.deleteLegendEntry(1), true);
+  assert.equal(await actions.addLegendEntry('Rule group', '#555555'), true);
+  assert.equal(actions.updateLegendEntryColorByCaption('Core', '#666666'), true);
+  assert.equal(actions.removeLegendEntry('Core'), true);
+  assert.deepEqual(featureIntents.map((entry) => entry.kind), [
+    'color', 'rename', 'remove', 'add', 'color', 'remove'
+  ]);
+  assert.equal(featureIntents.every((entry) => (
+    entry.semanticScope === 'legend-caption' && entry.source === 'legend-editor'
+  )), true);
+  assert.equal(actions.updateLegendEntryColor(2, '#888888'), true);
+  assert.equal(actions.updateLegendEntryCaption(2, 'GC amount'), false);
+  assert.equal(actions.deleteLegendEntry(2), false);
+  assert.deepEqual(builtInIntents.map((entry) => ({
+    kind: entry.kind,
+    paletteKey: entry.paletteKey,
+    source: entry.source
+  })), [{
+    kind: 'color',
+    paletteKey: 'gc_content',
+    source: 'legend-editor'
+  }]);
+  assert.equal(
+    state.manualLegendEntries.value.some((entry) => entry.caption === 'GC content'),
+    false,
+    'built-in swatches must not become persistent manual entries'
+  );
+  assert.equal(pyodideInitializations, 0);
+}
+
+{
+  const ref = (value) => ({ value });
+  const resultLegend = () => {
+    const svg = new MockElement('svg');
+    const legend = new MockElement('g', { id: 'legend' });
+    const featureLegend = new MockElement('g', { id: 'feature_legend' });
+    featureLegend.appendChild(mockLegendEntry('CDS', '#112233', 0));
+    legend.appendChild(featureLegend);
+    svg.appendChild(legend);
+    return svg;
+  };
+  const catalogItem = (resultKey, resultName, featureIds) => ({
+    resultKey,
+    resultName,
+    recordKeys: [`${resultKey}-record`],
+    biologicalFeatures: featureIds.map((featureId) => ({
+      recordKey: `${resultKey}-record`,
+      biologicalFeatureId: featureId,
+      type: 'CDS'
+    })),
+    features: featureIds.map((featureId) => ({
+      recordKey: `${resultKey}-record`,
+      biologicalFeatureId: featureId,
+      svgId: `${resultKey}-${featureId}`
+    })),
+    orthogroups: [],
+    annotations: [],
+    comparisonMatches: []
+  });
+  let mountedSvg = resultLegend();
+  const state = {
+    pyodideReady: ref(false),
+    results: ref([{ name: 'a.svg', content: 'a' }, { name: 'b.svg', content: 'b' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => mountedSvg }),
+    adv: {},
+    legendEntries: ref([{ caption: 'CDS', color: '#112233', featureIds: ['stale-id'] }]),
+    manualLegendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    manualSpecificRules: [],
+    appliedPaletteColors: ref({ CDS: '#112233' }),
+    featureCatalog: ref({
+      schema: 3,
+      items: [
+        catalogItem('result-a', 'a.svg', ['feature-a']),
+        catalogItem('result-b', 'b.svg', ['feature-b', 'feature-c'])
+      ]
+    }),
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state,
+    getPyodide: () => null,
+    layoutActions: {
+      compactLegendEntries: () => {},
+      reflowDualLegendLayout: () => {},
+      updatePairwiseLegendPositions: () => {}
+    }
+  });
+
+  actions.extractLegendEntries();
+  assert.deepEqual(state.legendEntries.value[0].featureIds, ['result-a-feature-a']);
+
+  state.selectedResultIndex.value = 1;
+  mountedSvg = resultLegend();
+  actions.extractLegendEntries();
+  assert.deepEqual(
+    state.legendEntries.value[0].featureIds,
+    ['result-b-feature-b', 'result-b-feature-c'],
+    'Result switching must rebuild Feature membership from the selected catalogue item'
+  );
 }

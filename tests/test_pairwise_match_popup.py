@@ -19,9 +19,38 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     if node is None:
         pytest.skip("node is not available")
 
+    json_clone_path = tmp_path / "json-clone.mjs"
+    json_clone_path.write_text(
+        (WEB_ROOT / "js" / "services" / "json-clone.js").read_text(
+            encoding="utf-8"
+        ),
+        encoding="utf-8",
+    )
+    feature_instance_identity_path = tmp_path / "feature-instance-identity.mjs"
+    feature_instance_identity_path.write_text(
+        (WEB_ROOT / "js" / "services" / "feature-instance-identity.js")
+        .read_text(encoding="utf-8")
+        .replace("./json-clone.js", json_clone_path.as_uri()),
+        encoding="utf-8",
+    )
+    semantic_fill_selectors_path = tmp_path / "semantic-fill-selectors.mjs"
+    semantic_fill_selectors_path.write_text(
+        (WEB_ROOT / "js" / "app" / "feature-editor" / "semantic-fill-selectors.js")
+        .read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     feature_utils_path = tmp_path / "feature-utils.mjs"
     feature_utils_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "app" / "feature-utils.js")
+        .read_text(encoding="utf-8")
+        .replace(
+            "../services/feature-instance-identity.js",
+            feature_instance_identity_path.as_uri(),
+        )
+        .replace(
+            "./feature-editor/semantic-fill-selectors.js",
+            semantic_fill_selectors_path.as_uri(),
+        ),
         encoding="utf-8",
     )
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"

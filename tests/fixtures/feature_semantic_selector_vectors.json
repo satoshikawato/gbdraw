@@ -1,0 +1,22 @@
+[
+  {
+    "kind": "feature-type",
+    "value": "CDS",
+    "literal": "fs1:feature-type:CDS"
+  },
+  {
+    "kind": "rendered-label",
+    "value": "ATP synthase α/β",
+    "literal": "fs1:rendered-label:ATP%20synthase%20%CE%B1%2F%CE%B2"
+  },
+  {
+    "kind": "source-annotation-label",
+    "value": "a:b % marker",
+    "literal": "fs1:source-annotation-label:a%3Ab%20%25%20marker"
+  },
+  {
+    "kind": "similarity-group",
+    "value": "OG(1)!~*'",
+    "literal": "fs1:similarity-group:OG(1)!~*'"
+  }
+]

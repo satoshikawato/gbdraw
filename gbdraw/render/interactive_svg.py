@@ -11,6 +11,7 @@ from importlib import resources
 from typing import Callable, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import GbdrawError
+from gbdraw.features.instance_identity import compute_feature_instance_hash
 
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
@@ -1296,15 +1297,31 @@ def _validate_catalog_feature_bindings(
             _FEATURE_STABLE_ID_KEYS,
         )
         source_index, source_index_valid = _feature_source_index_status(feature)
+        instance_hash, instance_hash_valid = _consistent_text_alias(
+            feature,
+            ("instanceHash", "instance_hash"),
+        )
+        has_instance_hash = any(
+            key in feature for key in ("instanceHash", "instance_hash")
+        )
         key = (record_key, biological_id)
         if (
             not record_key_valid
             or not biological_id_valid
             or not stable_id_valid
             or not source_index_valid
+            or not instance_hash_valid
             or not all(key)
             or record_key not in record_indexes
             or key in biological_identities
+            or (
+                has_instance_hash
+                and (
+                    not instance_hash
+                    or instance_hash
+                    != compute_feature_instance_hash(record_key, biological_id)
+                )
+            )
         ):
             raise GbdrawError(
                 "Interactive feature catalog contains invalid or duplicate "

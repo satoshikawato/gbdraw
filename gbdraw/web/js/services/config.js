@@ -76,6 +76,7 @@ import {
 import { buildRestoredMatchSequenceSources } from '../app/match-sequences.js';
 import {
   buildCanonicalRenderRequest,
+  overlayCanonicalColorSemantics,
   projectCanonicalSessionRequest
 } from './session-request.js';
 import {
@@ -94,9 +95,19 @@ import {
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
 import {
+  catalogResultKey,
   featureStateFromCatalog,
   validateFeatureCatalog
 } from './feature-catalog.js';
+import {
+  assessFeatureInstanceHashCapability,
+  upgradeFeatureCatalogInstanceHashes
+} from './feature-instance-identity.js';
+import {
+  advanceDocumentEpoch,
+  captureStyleSnapshot,
+  styleSnapshotIsCurrent
+} from './style-revision.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups
@@ -152,6 +163,7 @@ import {
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
+import { recoverV40ColorAuthority } from './session-color-recovery.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -165,12 +177,13 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 40;
+export const SESSION_VERSION = 41;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
+const FEATURE_CATALOG_SESSION_MIN_VERSION = 40;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 const SESSION_FEATURE_CATALOG_SAVE_ERROR =
   'Generate again before using Save Session. The current results are missing compatible feature metadata.';
@@ -986,6 +999,8 @@ export const buildConfigData = () => ({
 const defaultEditorStateData = () => ({
   legend: {
     entries: [],
+    manualEntries: [],
+    orderIntent: [],
     deletedEntries: [],
     originalOrder: [],
     originalColors: {},
@@ -1006,6 +1021,8 @@ const defaultEditorStateData = () => ({
 export const buildEditorStateData = () => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
+    manualEntries: cloneJsonArray(state.manualLegendEntries?.value),
+    orderIntent: cloneJsonArray(state.legendOrderIntent?.value),
     deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
     originalOrder: cloneJsonArray(state.originalLegendOrder.value),
     originalColors: cloneStringMap(state.originalLegendColors.value),
@@ -1035,6 +1052,8 @@ const normalizeEditorStateData = (editorState = {}) => {
   return {
     legend: {
       entries: normalizeSessionLegendEntries(legend.entries),
+      manualEntries: normalizeSessionLegendEntries(legend.manualEntries),
+      orderIntent: normalizeStringArray(legend.orderIntent),
       deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries),
       originalOrder: normalizeStringArray(legend.originalOrder),
       originalColors: normalizeLegendColorOverrides(legend.originalColors),
@@ -1072,6 +1091,12 @@ export const applyEditorStateData = (editorState = {}, { trusted = false } = {})
     : normalizeEditorStateData(editorState);
 
   state.legendEntries.value = normalized.legend.entries;
+  if (state.manualLegendEntries) {
+    state.manualLegendEntries.value = normalized.legend.manualEntries || [];
+  }
+  if (state.legendOrderIntent) {
+    state.legendOrderIntent.value = normalized.legend.orderIntent || [];
+  }
   state.deletedLegendEntries.value = normalized.legend.deletedEntries;
   state.originalLegendOrder.value = normalized.legend.originalOrder;
   state.originalLegendColors.value = normalized.legend.originalColors;
@@ -1502,7 +1527,7 @@ export const validateCurrentWriterActiveDraft = ({
   }
 };
 
-const validateCurrentWriterFeatureCatalog = (data) => {
+const validateSessionFeatureCatalog = (data) => {
   const results = normalizeLogicalResults(
     (Array.isArray(data.results) ? data.results : []).map((result, index) => ({
       name: result?.name || `Result ${index + 1}`,
@@ -1510,16 +1535,49 @@ const validateCurrentWriterFeatureCatalog = (data) => {
     }))
   );
   const catalog = data.editorState?.featureCatalog ?? null;
-  if (catalog === null) return;
+  if (catalog === null) return null;
   data.editorState.featureCatalog = validateFeatureCatalog(catalog, results);
+  return data.editorState.featureCatalog;
 };
 
-const preflightSessionImport = (rawData) => {
+const preflightSessionImport = async (rawData) => {
   const sourceSessionVersion = rawData.version;
   validateSessionAuthorityInventory(rawData, sourceSessionVersion);
-  const normalizedData = normalizeSessionData(rawData);
-  if (sourceSessionVersion === SESSION_VERSION) {
-    validateCurrentWriterFeatureCatalog(normalizedData);
+  let normalizedData = normalizeSessionData(rawData);
+  let legacyColorRecovery = null;
+  let legacyInstanceHashCapability = null;
+  if (sourceSessionVersion === 40) {
+    legacyColorRecovery = recoverV40ColorAuthority(normalizedData);
+    normalizedData = legacyColorRecovery.session;
+  }
+  if (sourceSessionVersion >= FEATURE_CATALOG_SESSION_MIN_VERSION) {
+    const validatedCatalog = validateSessionFeatureCatalog(normalizedData);
+    if (sourceSessionVersion === 40 && validatedCatalog) {
+      try {
+        const upgraded = await upgradeFeatureCatalogInstanceHashes(validatedCatalog);
+        legacyInstanceHashCapability = upgraded;
+        normalizedData.editorState.featureCatalog = upgraded.exactScopeAvailable
+          ? upgraded.catalog
+          : validatedCatalog;
+      } catch (error) {
+        console.warn('Legacy exact Feature identity could not be upgraded.', error);
+        legacyInstanceHashCapability = {
+          ...assessFeatureInstanceHashCapability(validatedCatalog),
+          exactScopeAvailable: false,
+          upgraded: false,
+          error
+        };
+        normalizedData.editorState.featureCatalog = validatedCatalog;
+      }
+    } else if (validatedCatalog) {
+      const verified = await upgradeFeatureCatalogInstanceHashes(validatedCatalog);
+      if (verified.featureCount > 0 && !verified.exactScopeAvailable) {
+        throw new Error(
+          'The Feature catalogue does not contain unambiguous instance identities.'
+        );
+      }
+      normalizedData.editorState.featureCatalog = verified.catalog;
+    }
   }
   migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   const promotedData = (
@@ -1582,7 +1640,10 @@ const preflightSessionImport = (rawData) => {
       data.files = migratedComparisonDraft.filesData;
     }
   }
-  if (canonicalProjection && sourceSessionVersion === SESSION_VERSION) {
+  if (
+    canonicalProjection
+    && sourceSessionVersion >= FEATURE_CATALOG_SESSION_MIN_VERSION
+  ) {
     validateCurrentWriterActiveDraft({
       mode: canonicalProjection.mode,
       projectedConfig: canonicalProjection.config,
@@ -1639,7 +1700,9 @@ const preflightSessionImport = (rawData) => {
     sourceSessionVersion,
     canonicalProjection,
     restoredConfig,
-    projectionResult
+    projectionResult,
+    legacyColorRecovery,
+    legacyInstanceHashCapability
   };
 };
 
@@ -2742,6 +2805,10 @@ export const adoptCanonicalRenderArtifacts = (canonical) => {
   committedCanonicalSession = nextCommittedCanonicalSession;
 };
 
+export const clearCanonicalRenderArtifacts = () => {
+  committedCanonicalSession = null;
+};
+
 const applyFiles = (filesData) => {
   state.matchSequenceRegistry?.reset?.();
   state.files.c_gb = null;
@@ -2986,6 +3053,12 @@ const restoreLiveFileState = (snapshot) => {
 };
 
 const captureSessionImportTransientState = () => ({
+  documentEpoch: Number(state.documentEpoch?.value || 0),
+  semanticStyleRevision: Number(state.semanticStyleRevision?.value || 0),
+  semanticStyleFingerprint: String(state.semanticStyleFingerprint?.value || ''),
+  validatedStyleFingerprintByResultKey: cloneJsonData(
+    state.validatedStyleFingerprintByResultKey?.value || {}
+  ),
   semanticFileWatchersSuppressed: Boolean(
     state.semanticFileWatchersSuppressed.value
   ),
@@ -3053,6 +3126,18 @@ const captureSessionImportTransientState = () => ({
 });
 
 const restoreSessionImportTransientState = (snapshot) => {
+  if (state.documentEpoch) state.documentEpoch.value = snapshot.documentEpoch;
+  if (state.semanticStyleRevision) {
+    state.semanticStyleRevision.value = snapshot.semanticStyleRevision;
+  }
+  if (state.semanticStyleFingerprint) {
+    state.semanticStyleFingerprint.value = snapshot.semanticStyleFingerprint;
+  }
+  if (state.validatedStyleFingerprintByResultKey) {
+    state.validatedStyleFingerprintByResultKey.value = Object.freeze({
+      ...(snapshot.validatedStyleFingerprintByResultKey || {})
+    });
+  }
   state.suppressCircularMultiRecordDefaults.value =
     snapshot.suppressCircularMultiRecordDefaults;
   state.linearReorderNotice.value = snapshot.linearReorderNotice;
@@ -3371,6 +3456,8 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 export const buildFeatureStateData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
   biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
+  featureExactScopeAvailable: state.featureExactScopeAvailable?.value === true,
+  featureExactScopeDiagnostic: String(state.featureExactScopeDiagnostic?.value || ''),
   featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
@@ -3393,6 +3480,23 @@ export const applyFeatureStateData = (features = {}) => {
     state.biologicalFeatures.value = Array.isArray(features.biologicalFeatures)
       ? features.biologicalFeatures
       : [];
+  }
+  if (
+    state.featureExactScopeAvailable
+    && Object.prototype.hasOwnProperty.call(features, 'featureExactScopeAvailable')
+  ) {
+    state.featureExactScopeAvailable.value = features.featureExactScopeAvailable === true;
+  }
+  if (
+    state.featureExactScopeDiagnostic
+    && Object.prototype.hasOwnProperty.call(features, 'featureExactScopeDiagnostic')
+  ) {
+    state.featureExactScopeDiagnostic.value = String(
+      features.featureExactScopeDiagnostic
+      || (features.featureExactScopeAvailable === true
+        ? ''
+        : 'Generate to enable exact feature edits')
+    );
   }
   state.featureSelectorSafetyScope.value = Array.isArray(features.featureSelectorSafetyScope)
     ? features.featureSelectorSafetyScope
@@ -3549,6 +3653,19 @@ export const exportSession = async (
   titleOverride = null,
   { linearRecordCatalog = null } = {}
 ) => {
+  const exportStyleSnapshot = captureStyleSnapshot(state);
+  const exportRules = cloneJsonData(exportStyleSnapshot.semantic.rules);
+  const exportAppliedPaletteName = String(
+    exportStyleSnapshot.semantic.appliedPaletteName || 'default'
+  );
+  const exportAppliedPaletteColors = cloneColors(
+    exportStyleSnapshot.semantic.appliedPaletteColors
+  );
+  const exportAppliedPaletteBase = state.normalizePaletteColors(
+    state.paletteDefinitions.value?.[exportAppliedPaletteName]
+      || state.paletteDefinitions.value?.default
+      || {}
+  );
   const resolvedTitle =
     typeof titleOverride === 'string'
       ? titleOverride.trim()
@@ -3572,6 +3689,19 @@ export const exportSession = async (
         editorState.featureCatalog,
         logicalResults
       );
+      const instanceHashCapability = assessFeatureInstanceHashCapability(
+        editorState.featureCatalog
+      );
+      if (
+        instanceHashCapability.missingFeatureKeys.length > 0
+        || instanceHashCapability.invalidFeatureKeys.length > 0
+      ) {
+        throw new Error('The Feature catalogue is missing unambiguous instance hashes.');
+      }
+      const verifiedCatalog = await upgradeFeatureCatalogInstanceHashes(
+        editorState.featureCatalog
+      );
+      editorState.featureCatalog = verifiedCatalog.catalog;
     } catch (error) {
       console.warn('Session feature catalog validation failed.', error);
       throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
@@ -3627,9 +3757,21 @@ export const exportSession = async (
     committed = buildCanonicalRenderRequest({
       state,
       filesData: activeFiles,
-      comparisonPlanSnapshot
+      comparisonPlanSnapshot,
+      styleSnapshot: {
+        rules: exportRules,
+        paletteName: exportAppliedPaletteName,
+        colors: exportAppliedPaletteColors,
+        paletteColors: exportAppliedPaletteBase
+      }
     });
   }
+  committed = overlayCanonicalColorSemantics(committed, {
+    rules: exportRules,
+    appliedColors: exportAppliedPaletteColors,
+    paletteColors: exportAppliedPaletteBase,
+    paletteName: exportAppliedPaletteName
+  });
   const canonical = await assembleSessionResources(state, committed);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
@@ -3716,7 +3858,30 @@ export const exportSession = async (
     throw new Error('Save Session could not validate the session data.');
   }
 
+  if (!styleSnapshotIsCurrent(state, exportStyleSnapshot)) {
+    throw new Error('Feature style changed while Save Session was preparing the download. Save again.');
+  }
+
+  if (logicalResults.length > 0) {
+    const ledger = state.validatedStyleFingerprintByResultKey?.value || {};
+    const expectedFingerprint = exportStyleSnapshot.fingerprint;
+    const resultKeys = (editorState.featureCatalog?.items || [])
+      .map(catalogResultKey)
+      .filter(Boolean);
+    if (
+      resultKeys.length !== logicalResults.length
+      || resultKeys.some((resultKey) => ledger[resultKey] !== expectedFingerprint)
+    ) {
+      throw new Error(
+        'Save Session cannot prove that every Result uses the current Feature style. Generate again.'
+      );
+    }
+  }
+
   const compressed = await compressSessionData(sessionData);
+  if (!styleSnapshotIsCurrent(state, exportStyleSnapshot)) {
+    throw new Error('Feature style changed while Save Session was preparing the download. Save again.');
+  }
   if (!confirmLargeSessionBlob(compressed)) {
     return { status: 'canceled', compressedSize: compressed.size };
   }
@@ -3751,7 +3916,7 @@ export const importSession = async (e, options = {}) => {
       return { status: 'legacy' };
     }
 
-    const preflight = preflightSessionImport(data);
+    const preflight = await preflightSessionImport(data);
     data = preflight.data;
     const {
       sourceSessionVersion,
@@ -3866,10 +4031,19 @@ export const importSession = async (e, options = {}) => {
     const storedEditorState = canonicalSession
       ? projectionResult.artifactState.editorState
       : data.editorState;
+    if (
+      sourceSessionVersion < SESSION_VERSION
+      && isPlainObject(storedEditorState?.legend)
+      && !Array.isArray(storedEditorState.legend.manualEntries)
+    ) {
+      storedEditorState.legend.manualEntries = normalizeSessionLegendEntries(
+        storedEditorState.legend.entries
+      ).filter((entry) => storedEditorState.legend.addedCaptions?.includes?.(entry.caption));
+    }
     let currentCatalogFeatureState = null;
     let validatedSessionCatalog = null;
     let restoredEditorState = storedEditorState;
-    if (sourceSessionVersion === SESSION_VERSION) {
+    if (sourceSessionVersion >= FEATURE_CATALOG_SESSION_MIN_VERSION) {
       if (storedEditorState?.featureCatalog) {
         try {
           validatedSessionCatalog = validateFeatureCatalog(
@@ -3893,7 +4067,7 @@ export const importSession = async (e, options = {}) => {
     const artifactFeatureState = canonicalSession
       ? cloneJsonData(projectionResult.artifactState.features)
       : {};
-    if (sourceSessionVersion === SESSION_VERSION) {
+    if (sourceSessionVersion >= FEATURE_CATALOG_SESSION_MIN_VERSION) {
       [
         'extractedFeatures',
         'biologicalFeatures',
@@ -3909,10 +4083,13 @@ export const importSession = async (e, options = {}) => {
         }
       : (data.features || {});
     applyFeatureStateData(features);
-    if (sourceSessionVersion === SESSION_VERSION && currentCatalogFeatureState) {
+    if (
+      sourceSessionVersion >= FEATURE_CATALOG_SESSION_MIN_VERSION
+      && currentCatalogFeatureState
+    ) {
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
     }
-    const catalogSequenceSources = sourceSessionVersion === SESSION_VERSION
+    const catalogSequenceSources = sourceSessionVersion >= FEATURE_CATALOG_SESSION_MIN_VERSION
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
     const primarySequenceOrigin = state.mode.value === 'linear'
@@ -3930,7 +4107,7 @@ export const importSession = async (e, options = {}) => {
         .map((source) => source?.sourceIndex)
         .filter(Number.isInteger)
     );
-    const missingCatalogSequenceSources = sourceSessionVersion !== SESSION_VERSION
+    const missingCatalogSequenceSources = !validatedSessionCatalog
       || catalogSequenceSources.filter(
         (source) => source?.origin === primarySequenceOrigin
       ).length < canonicalRecordCount || (
@@ -4029,6 +4206,7 @@ export const importSession = async (e, options = {}) => {
           featureColorOverrides: state.featureColorOverrides,
           featureStrokeOverrides: state.featureStrokeOverrides,
           legendStrokeOverrides: state.legendStrokeOverrides,
+          legendOrderIntent: state.legendOrderIntent?.value || [],
           manualSpecificRules: state.manualSpecificRules,
           legacyFeatures: features?.extractedFeatures || [],
           preparedFeatureState: currentCatalogFeatureState,
@@ -4062,7 +4240,10 @@ export const importSession = async (e, options = {}) => {
       state.zoom.value = ui.zoom;
     }
 
-    if (sourceSessionVersion !== SESSION_VERSION) {
+    if (
+      sourceSessionVersion < FEATURE_CATALOG_SESSION_MIN_VERSION
+      || !validatedSessionCatalog
+    ) {
       try {
         await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
       } catch (recoveryError) {
@@ -4073,6 +4254,20 @@ export const importSession = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
+    advanceDocumentEpoch(state);
+    const importedResultKeys = (state.featureCatalog?.value?.items || [])
+      .map(catalogResultKey)
+      .filter(Boolean);
+    if (
+      state.validatedStyleFingerprintByResultKey
+      && importedResultKeys.length === state.results.value.length
+      && new Set(importedResultKeys).size === importedResultKeys.length
+    ) {
+      const fingerprint = state.semanticStyleFingerprint.value;
+      state.validatedStyleFingerprintByResultKey.value = Object.freeze(
+        Object.fromEntries(importedResultKeys.map((resultKey) => [resultKey, fingerprint]))
+      );
+    }
     committedCanonicalSession = cloneCanonicalSession(data);
     alert('Session loaded successfully!');
     return { status: 'ok', data };

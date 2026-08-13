@@ -85,8 +85,10 @@ from .api.requests import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 5
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, CANONICAL_REQUEST_SCHEMA})
+CANONICAL_REQUEST_SCHEMA = 6
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
+    {1, 2, 5, CANONICAL_REQUEST_SCHEMA}
+)
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -597,7 +599,8 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("Linear comparison table")
     if unresolved_reasons:
         raise CanonicalRequestEncodingError(
-            "Canonical schema 5 requires a materialized exact-one request; "
+            f"Canonical schema {CANONICAL_REQUEST_SCHEMA} requires a materialized "
+            "exact-one request; "
             "call gbdraw.api.resolve_request() before encoding (unresolved: "
             + ", ".join(unresolved_reasons)
             + ")."
@@ -698,7 +701,7 @@ def _decode_canonical_request(
         path="renderRequest",
         required=set(
             _TOP_LEVEL_FIELDS_V5
-            if schema == CANONICAL_REQUEST_SCHEMA
+            if schema >= 5
             else _TOP_LEVEL_FIELDS
         ),
     )
@@ -740,7 +743,7 @@ def _decode_canonical_request(
     options = options_type(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
     grouping = top.get("grouping")
-    if schema == CANONICAL_REQUEST_SCHEMA:
+    if schema >= 5:
         allowed_groupings = (
             {"single", "grid", "batch"}
             if mode == "circular"
@@ -2020,7 +2023,7 @@ def _decode_option_value(
             path="renderRequest.diagramOptions.config",
         )
     if name == "colors":
-        return _decode_colors(value, resource_paths=resource_paths)
+        return _decode_colors(value, schema=schema, resource_paths=resource_paths)
     if name == "tracks":
         return _decode_tracks(value, mode=mode, schema=schema)
     if name == "annotations":
@@ -2223,6 +2226,7 @@ def _encode_colors(value: object, *, resources: _ResourceBuilder) -> dict[str, A
 def _decode_colors(
     value: object,
     *,
+    schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> ColorOptions:
     path = "renderRequest.diagramOptions.colors"
@@ -2237,27 +2241,36 @@ def _decode_colors(
             "defaultColorsFile",
         },
     )
-    result = ColorOptions(
-        color_table=(
-            _decode_table_ref(
+    color_table = (
+        _decode_table_ref(
                 payload["colorTable"],
                 name="colors-color-table",
                 resource_paths=resource_paths,
             )
-            if payload["colorTable"] is not None
-            else None
-        ),
-        color_table_file=(
-            str(
-                _decode_file_ref(
+        if payload["colorTable"] is not None
+        else None
+    )
+    color_table_file = (
+        str(
+            _decode_file_ref(
                     payload["colorTableFile"],
                     name="colors-color-table-file",
                     resource_paths=resource_paths,
                 )
-            )
-            if payload["colorTableFile"] is not None
-            else None
-        ),
+        )
+        if payload["colorTableFile"] is not None
+        else None
+    )
+    if color_table is None and color_table_file is not None and schema < 6:
+        from .io.colors import read_color_table
+
+        color_table = read_color_table(color_table_file)
+        color_table_file = None
+    if color_table is not None:
+        color_table.attrs["gbdraw_specific_rule_schema"] = schema
+    result = ColorOptions(
+        color_table=color_table,
+        color_table_file=color_table_file,
         default_colors=(
             _decode_table_ref(
                 payload["defaultColors"],

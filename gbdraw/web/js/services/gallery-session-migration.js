@@ -680,7 +680,7 @@ export const promoteGallerySessionToCurrent = (session) => {
     throw new Error('Gallery session must contain canonical resources.');
   }
   const schema = Number(session.renderRequest.schema);
-  if (schema === CANONICAL_REQUEST_SCHEMA) {
+  if (schema >= 5 && schema <= CANONICAL_REQUEST_SCHEMA) {
     if (Number(session.version) < 40) {
       const args = sessionArgs(session);
       const cliAuthored = isPlainObject(session?.config?.cliOptions)

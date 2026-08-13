@@ -4,7 +4,7 @@ import {
   toNativeColorInputValue
 } from './app/color-utils.js';
 
-const { ref, reactive, computed, nextTick } = window.Vue;
+const { ref, reactive, computed, nextTick, watch } = window.Vue;
 
 export const HelpTip = {
   template: '#help-tip-template',
@@ -113,6 +113,188 @@ export const ColorValueControl = {
         class="h-8 w-full p-0 border rounded disabled:opacity-40"
         :aria-label="ariaLabel"
       >
+    </div>
+  `
+};
+
+export const DefaultColorControl = {
+  props: {
+    modelValue: { default: null },
+    fallback: { type: String, default: '#000000' },
+    allowNone: { type: Boolean, default: true },
+    ariaLabel: { type: String, default: 'Default color' }
+  },
+  emits: ['update:modelValue', 'accept'],
+  setup(props, { emit }) {
+    const draftColor = ref(toNativeColorInputValue(props.modelValue, props.fallback));
+    const mode = computed(() => colorValueMode(props.modelValue));
+    watch(
+      () => [props.modelValue, props.fallback],
+      () => {
+        draftColor.value = toNativeColorInputValue(props.modelValue, props.fallback);
+      }
+    );
+    const acceptValue = (value) => {
+      emit('update:modelValue', value);
+      emit('accept', value);
+    };
+    const updateMode = (event) => {
+      const nextMode = String(event?.target?.value || 'auto');
+      acceptValue(colorValueForMode(nextMode, props.modelValue, props.fallback));
+    };
+    const stageColor = (event) => {
+      draftColor.value = toNativeColorInputValue(event?.target?.value, props.fallback);
+    };
+    const acceptColor = (event) => {
+      stageColor(event);
+      acceptValue(draftColor.value);
+    };
+    return { draftColor, mode, updateMode, stageColor, acceptColor };
+  },
+  template: `
+    <div class="default-color-control grid grid-cols-[minmax(0,1fr)_2.25rem] gap-1 items-center">
+      <select
+        :value="mode"
+        @change="updateMode"
+        class="form-input form-input-compact min-w-0"
+        :aria-label="\`\${ariaLabel} mode\`"
+      >
+        <option value="auto">Auto</option>
+        <option v-if="allowNone" value="none">None</option>
+        <option value="color">Color</option>
+      </select>
+      <input
+        type="color"
+        :value="draftColor"
+        @input="stageColor"
+        @change="acceptColor"
+        :disabled="mode !== 'color'"
+        class="h-8 w-full p-0 border rounded disabled:opacity-40"
+        :aria-label="ariaLabel"
+      >
+    </div>
+  `
+};
+
+export const FeatureFillColorControl = {
+  props: {
+    viewModel: { type: Object, required: true },
+    ariaLabel: { type: String, default: 'Feature fill color' }
+  },
+  emits: ['request'],
+  setup(props, { emit }) {
+    const effectiveColor = computed(() => (
+      toNativeColorInputValue(props.viewModel?.effectiveColor, '#cccccc')
+    ));
+    const mode = computed(() => (
+      String(props.viewModel?.effectiveColor || '').toLowerCase() === 'none' ? 'none' : 'color'
+    ));
+    const requestMode = (event) => {
+      const next = String(event?.target?.value || 'color');
+      if (next === 'inherit') emit('request', { kind: 'inherit' });
+      if (next === 'none') emit('request', { kind: 'none' });
+    };
+    const requestColor = (event) => {
+      emit('request', {
+        kind: 'color',
+        color: toNativeColorInputValue(event?.target?.value, effectiveColor.value)
+      });
+    };
+    return { effectiveColor, mode, requestMode, requestColor };
+  },
+  template: `
+    <div class="feature-fill-color-control space-y-1">
+      <div class="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-1 items-center">
+        <select
+          :value="mode"
+          @change="requestMode"
+          class="form-input form-input-compact min-w-0"
+          :aria-label="ariaLabel + ' action'"
+        >
+          <option value="color">Color</option>
+          <option v-if="viewModel.allowNone !== false" value="none">No fill</option>
+          <option value="inherit" :disabled="!viewModel.canReset">Use inherited</option>
+        </select>
+        <input
+          type="color"
+          :value="effectiveColor"
+          @change="requestColor"
+          class="h-8 w-full p-0 border rounded"
+          :aria-label="ariaLabel"
+        >
+      </div>
+      <p class="text-[10px] leading-tight text-slate-400" data-feature-fill-origin>
+        {{ viewModel.originLabel }}
+      </p>
+    </div>
+  `
+};
+
+export const FeatureStrokeColorControl = {
+  props: {
+    viewModel: { type: Object, required: true },
+    ariaLabel: { type: String, default: 'Feature stroke' }
+  },
+  emits: ['request'],
+  setup(props, { emit }) {
+    const effectiveColor = computed(() => (
+      toNativeColorInputValue(props.viewModel?.effectiveColor, '#000000')
+    ));
+    const effectiveWidth = computed(() => {
+      const value = Number(props.viewModel?.effectiveWidth);
+      return Number.isFinite(value) && value >= 0 ? value : 0.5;
+    });
+    const requestMode = (event) => {
+      if (String(event?.target?.value || '') === 'inherit') {
+        emit('request', { kind: 'inherit' });
+      }
+    };
+    const requestColor = (event) => {
+      emit('request', {
+        kind: 'stroke',
+        strokeColor: toNativeColorInputValue(event?.target?.value, effectiveColor.value)
+      });
+    };
+    const requestWidth = (event) => {
+      const strokeWidth = Number(event?.target?.value);
+      if (Number.isFinite(strokeWidth) && strokeWidth >= 0) {
+        emit('request', { kind: 'stroke', strokeWidth });
+      }
+    };
+    return { effectiveColor, effectiveWidth, requestMode, requestColor, requestWidth };
+  },
+  template: `
+    <div class="feature-stroke-color-control space-y-1">
+      <div class="grid grid-cols-[minmax(0,1fr)_2.25rem_4.5rem] gap-1 items-center">
+        <select
+          value="stroke"
+          @change="requestMode"
+          class="form-input form-input-compact min-w-0"
+          :aria-label="ariaLabel + ' action'"
+        >
+          <option value="stroke">Stroke</option>
+          <option value="inherit" :disabled="!viewModel.canReset">Use inherited</option>
+        </select>
+        <input
+          type="color"
+          :value="effectiveColor"
+          @change="requestColor"
+          class="h-8 w-full p-0 border rounded"
+          :aria-label="ariaLabel + ' color'"
+        >
+        <input
+          type="number"
+          :value="effectiveWidth"
+          @change="requestWidth"
+          min="0"
+          step="0.1"
+          class="form-input form-input-compact min-w-0"
+          :aria-label="ariaLabel + ' width'"
+        >
+      </div>
+      <p class="text-[10px] leading-tight text-slate-400" data-feature-stroke-origin>
+        {{ viewModel.originLabel }}
+      </p>
     </div>
   `
 };

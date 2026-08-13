@@ -7,6 +7,8 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
 from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.features.instance_identity import FeatureInstanceIdentityPlan
+from gbdraw.features.semantic_selectors import FeatureSemanticSelectorContext
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
     resolve_directional_feature_types,
@@ -40,6 +42,8 @@ class FeatureDrawingConfigurator:
         feature_visibility_rules: list[dict[str, Any]] | None = None,
         specific_color_rules: Mapping[str, Any] | None = None,
         default_color_map: Mapping[str, str] | None = None,
+        feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+        feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
     ) -> None:
         """
         Initializes the FeatureDrawingConfigurator with color settings and feature selection.
@@ -69,6 +73,8 @@ class FeatureDrawingConfigurator:
             )
         self.specific_color_rules = specific_color_rules
         self.default_color_map = default_color_map
+        self.feature_instance_identity_plan = feature_instance_identity_plan
+        self.feature_semantic_selector_context = feature_semantic_selector_context
         self.selected_features_set: List[str] = selected_features_set
         self.feature_shapes = normalize_feature_shape_overrides(feature_shapes)
         self.directional_feature_types: set[str] = resolve_directional_feature_types(

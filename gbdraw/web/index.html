@@ -3293,7 +3293,7 @@
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
                                     <label class="flex items-center gap-2 text-[10px] font-medium text-slate-600 cursor-pointer">
-                                        <input v-model="paletteInstantPreviewEnabled" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                        <input v-model="paletteInstantPreviewEnabled" @change="handlePaletteInstantPreviewChange" type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                                         <span>Palette instant preview</span>
                                         <help-tip text="When off, changing the palette only updates the swatches. The preview keeps the current palette until you click Generate Diagram."></help-tip>
                                     </label>
@@ -3307,11 +3307,12 @@
                                 <div class="grid grid-cols-2 gap-1.5 bg-white p-2 rounded border border-slate-200">
                                     <div v-for="(color, feat) in currentColors" :key="feat" class="min-w-0">
                                         <span class="text-[9px] text-slate-500 truncate block mb-0.5" :title="feat">{{ feat }}</span>
-                                        <color-value-control
-                                            v-model="currentColors[feat]"
+                                        <default-color-control
+                                            :model-value="currentColors[feat]"
+                                            @accept="acceptDefaultColor(feat, $event)"
                                             :fallback="appliedPaletteColors[feat] || '#cccccc'"
                                             :aria-label="`${feat} feature color`">
-                                        </color-value-control>
+                                        </default-color-control>
                                     </div>
                                 </div>
 
@@ -3345,7 +3346,7 @@
                                     <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple"></i> TSV</button>
-                                        <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear All</button>
+                                        <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline"><i class="ph ph-trash"></i> Clear Editable</button>
                                     </div>
                                 </div>
 
@@ -3355,21 +3356,24 @@
 
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
+                                        <div v-if="isOpaqueSpecificRule(rule)" class="text-[9px] font-semibold text-slate-500" data-managed-specific-rule>
+                                            Managed Feature scope (read-only)
+                                        </div>
                                         <div class="grid grid-cols-12 gap-1 items-center">
-                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value)" class="form-input form-input-compact col-span-4">
+                                            <select :value="rule.feat" :disabled="isOpaqueSpecificRule(rule)" @change="setSpecificRuleField(i, 'feat', $event.target.value)" class="form-input form-input-compact col-span-4">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
-                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4">
-                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value)" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1">
+                                            <input :value="rule.qual" :disabled="isOpaqueSpecificRule(rule)" @change="setSpecificRuleField(i, 'qual', $event.target.value)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4">
+                                            <input type="color" :value="rule.color" :disabled="isOpaqueSpecificRule(rule)" @change="setSpecificRuleField(i, 'color', $event.target.value)" class="h-6 w-full p-0 border rounded cursor-pointer disabled:cursor-not-allowed col-span-1">
                                             <div class="col-span-3 flex items-center justify-end gap-0.5">
-                                                <button @click="moveSpecificRuleUp(i)" :disabled="i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
-                                                <button @click="moveSpecificRuleDown(i)" :disabled="i === manualSpecificRules.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
-                                                <button @click="removeSpecificRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule"><i class="ph ph-trash"></i></button>
+                                                <button @click="moveSpecificRuleUp(i)" :disabled="!canMoveSpecificRule(i, -1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
+                                                <button @click="moveSpecificRuleDown(i)" :disabled="!canMoveSpecificRule(i, 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
+                                                <button @click="removeSpecificRule(i)" :disabled="isOpaqueSpecificRule(rule)" class="h-6 w-6 text-red-500 hover:text-red-700 disabled:opacity-30" title="Delete rule"><i class="ph ph-trash"></i></button>
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value)" placeholder="Regex" class="form-input form-input-compact col-span-7 font-mono">
-                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
+                                            <input :value="rule.val" :disabled="isOpaqueSpecificRule(rule)" @change="setSpecificRuleField(i, 'val', $event.target.value)" placeholder="Regex" class="form-input form-input-compact col-span-7 font-mono">
+                                            <input :value="rule.cap" :disabled="isOpaqueSpecificRule(rule)" @change="setSpecificRuleField(i, 'cap', $event.target.value)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
                                         </div>
                                     </div>
                                     <div v-if="manualSpecificRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No rules added</div>
@@ -4186,7 +4190,7 @@
                             <i class="ph ph-check-circle text-xl shrink-0"></i>
                             <span v-if="results.length === 1">Result Preview</span>
                             <span v-else>
-                                <select :value="selectedResultIndex" @change="selectResult($event.target.value)" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
+                                <select aria-label="Preview Result" :value="selectedResultIndex" @change="selectResult($event.target.value)" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
                                     <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
                                 </select>
                             </span>
@@ -4385,6 +4389,23 @@
                                 </button>
                             </div>
                             <div class="flex items-center gap-1 min-w-0">
+                                <input type="text"
+                                       v-model="selectedFeatureBulkLabelText"
+                                       data-history-ignore
+                                       class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
+                                       placeholder="Label text"
+                                       aria-label="Selected feature label text">
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm shrink-0"
+                                        data-history-managed
+                                        @click="applySelectedFeatureLabelText"
+                                        title="Apply label text to selected features"
+                                        aria-label="Apply label text to selected features">
+                                    <i class="ph ph-text-t"></i>
+                                    <span>Apply</span>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-1 min-w-0">
                                 <select v-model="selectedFeatureBulkVisibility"
                                         data-history-ignore
                                         class="min-w-0 flex-1 border border-slate-200 rounded px-2 py-1 text-xs"
@@ -4551,14 +4572,13 @@
                                     <div>{{ clickedFeature.orthogroupId }} - {{ clickedFeature.orthogroupMemberCount }} members</div>
                                 </div>
                             </div>
-                            <color-value-control
-                                :model-value="getFeatureColorValue(clickedFeature.feat)"
-                                :fallback="clickedFeature.color || '#cccccc'"
-                                @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
+                            <feature-fill-color-control
+                                :view-model="getFeatureFillViewModel(clickedFeature.feat)"
+                                @request="requestFeatureFillChange(clickedFeature.feat, $event, clickedFeature.legendName, { closePopupOnDialog: true, source: 'popup' })"
                                 data-history-managed
                                 aria-label="Feature fill color"
                                 class="w-32 shrink-0">
-                            </color-value-control>
+                            </feature-fill-color-control>
                             <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
@@ -4858,6 +4878,7 @@
                             <div class="mb-2">
                                 <label class="text-[10px] font-medium text-slate-500 block mb-1">Label visibility</label>
                                 <select v-model="clickedFeature.labelVisibility"
+                                        @change="updateClickedFeatureLabelVisibility"
                                         class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
                                     <option value="default">Default (follow filter)</option>
                                     <option value="on">On (force show, bypass filters)</option>
@@ -4866,7 +4887,7 @@
                             </div>
                             <input type="text"
                                    v-model="clickedFeature.labelText"
-                                   @keydown.enter.prevent="updateClickedFeatureLabelText"
+                                   @keydown.enter.prevent="requestClickedFeatureLabelTextChange"
                                    data-history-managed
                                    :disabled="!clickedFeature.hasEditableLabel"
                                    :placeholder="clickedFeature.hasEditableLabel ? 'Edit label text' : 'No editable label'"
@@ -4883,7 +4904,7 @@
                                 {{ clickedFeature.labelUnavailableReason }}
                             </p>
                             <div class="mt-2 flex justify-end">
-                                <button @click="updateClickedFeatureLabelText"
+                                <button @click="requestClickedFeatureLabelTextChange"
                                         data-history-managed
                                         :disabled="!clickedFeature.hasEditableLabel"
                                         :class="[
@@ -4899,16 +4920,15 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
                             <div class="flex items-center gap-4">
-                                <color-value-control
-                                    :model-value="getFeatureColorValue(clickedFeature.feat)"
-                                    :fallback="clickedFeature.color || '#cccccc'"
-                                    @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
+                                <feature-fill-color-control
+                                    :view-model="getFeatureFillViewModel(clickedFeature.feat)"
+                                    @request="requestFeatureFillChange(clickedFeature.feat, $event, clickedFeature.legendName, { closePopupOnDialog: true, source: 'popup' })"
                                     data-history-managed
                                     aria-label="Feature fill color"
                                     class="w-36">
-                                </color-value-control>
+                                </feature-fill-color-control>
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
-                                <button @click="resetClickedFeatureFillColor"
+                                <button @click="requestFeatureFillChange(clickedFeature.feat, { kind: 'inherit' }, clickedFeature.legendName, { closePopupOnDialog: true, source: 'popup' })"
                                         data-history-managed
                                         class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
                                         title="Reset fill color to default">
@@ -4918,39 +4938,12 @@
                         </div>
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Stroke</label>
-                            <div class="flex items-center gap-4">
-                                <color-value-control
-                                    :model-value="getFeatureStrokeColorValue(clickedFeature.feat)"
-                                    :fallback="clickedFeature.strokeColor || '#000000'"
-                                    @update:model-value="setClickedFeatureStrokeColorValue"
-                                    data-history-managed
-                                    aria-label="Feature stroke color"
-                                    class="w-36">
-                                </color-value-control>
-                                <input type="number"
-                                       :value="clickedFeature.strokeWidth"
-                                       @input="clickedFeature.strokeWidth = $event.target.value"
-                                       @change="updateClickedFeatureStroke(null, $event.target.value)"
-                                       data-history-managed
-                                       aria-label="Feature stroke width"
-                                       class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
-                                       placeholder="Width"
-                                       step="0.1"
-                                       min="0"
-                                       title="Stroke width">
-                                <button @click="resetClickedFeatureStroke"
-                                        data-history-managed
-                                        class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
-                                        title="Reset stroke to default">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
-                                </button>
-                                <button @click="applyStrokeToAllSiblings"
-                                        data-history-managed
-                                        class="text-slate-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50"
-                                        title="Apply this stroke to all features with the same legend">
-                                    <i class="ph ph-users-three text-lg"></i>
-                                </button>
-                            </div>
+                            <feature-stroke-color-control
+                                :view-model="getFeatureStrokeViewModel(clickedFeature.feat)"
+                                @request="requestFeatureStrokeChange(clickedFeature.feat, $event, { source: 'popup' })"
+                                data-history-managed
+                                aria-label="Feature stroke">
+                            </feature-stroke-color-control>
                         </div>
                         </div>
                         </div>
@@ -5393,36 +5386,24 @@
                         </div>
                     </div>
 
-                    <!-- Label Text Scope Dialog -->
-                    <div v-if="labelTextScopeDialog.show"
+                    <!-- Feature Label Scope Dialog -->
+                    <div v-if="pendingFeatureLabelPlan && featureLabelPlanStatus === 'needs-scope'"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Label Text Scope</h3>
-                            <p class="text-sm text-slate-600 mb-4">
-                                Choose how to apply the label text change for "<span class="font-mono text-slate-700">{{ labelTextScopeDialog.sourceText }}</span>".
-                            </p>
-
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Feature Label Scope</h3>
+                            <p class="text-sm text-slate-600 mb-4">Choose the Features and Results to update.</p>
                             <div class="flex flex-col gap-2">
-                                <button @click="handleLabelTextScopeChoice('single')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-user text-lg"></i>
-                                    <span>This label only</span>
-                                </button>
-                                <button @click="handleLabelTextScopeChoice('all')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users text-lg"></i>
-                                    <span>All matching source labels ({{ labelTextScopeDialog.matchingCount }})</span>
+                                <button v-for="candidate in pendingFeatureLabelPlan.candidates"
+                                        :key="candidate.id"
+                                        @click="resolveFeatureLabelScope(pendingFeatureLabelPlan.token, candidate.id)"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left">
+                                    <span class="block">{{ candidate.label }}</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">
+                                        {{ candidate.targetCount }} Feature(s) · {{ candidate.affectedResultCount }} Result(s)
+                                    </span>
                                 </button>
                             </div>
-
-                            <p v-if="!labelTextScopeDialog.featureId" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-3">
-                                This label is not linked to a feature ID. "This label only" is applied to the current SVG but may not persist after re-generate.
-                            </p>
-
-                            <button @click="handleLabelTextScopeChoice('cancel')"
-                                    data-history-managed
+                            <button @click="cancelFeatureLabelScope(pendingFeatureLabelPlan.token)"
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -5454,202 +5435,57 @@
                         </div>
                     </div>
 
-                    <!-- Color Change Scope Dialog -->
-                    <div v-if="colorScopeDialog.show"
+                    <!-- Feature Fill Scope Dialog -->
+                    <div v-if="pendingFeatureFillPlan && ['needs-scope', 'conflict'].includes(featureFillPlanStatus)"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Color Change Scope</h3>
-                            <p class="text-sm text-slate-600 mb-4">
-                                <template v-if="colorScopeDialog.matchingRule">
-                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>" ({{ colorScopeDialog.ruleMatchCount }} features).
-                                    <template v-if="colorScopeDialog.siblingCount > 0">
-                                        <br>Legend item "<span class="font-bold text-green-600">{{ colorScopeDialog.legendName }}</span>" is shared by {{ colorScopeDialog.siblingCount + 1 }} features.
-                                    </template>
-                                </template>
-                                <template v-else-if="colorScopeDialog.siblingCount > 0">
-                                    There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features sharing the legend item "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
-                                </template>
-                                <template v-else>
-                                    How do you want to apply the color change?
-                                </template>
-                            </p>
-
-                            <div class="flex flex-col gap-2">
-                                <!-- Apply to all features matching the rule (when rule exists) -->
-                                <button v-if="colorScopeDialog.matchingRule"
-                                        @click="handleColorScopeChoice('rule')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}" ({{ colorScopeDialog.ruleMatchCount }})</span>
-                                </button>
-
-                                <!-- Apply to all features with same legend item (when siblings exist) -->
-                                <button v-if="colorScopeDialog.siblingCount > 0"
-                                        @click="handleColorScopeChoice('caption')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users-three text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.legendName }}" ({{ colorScopeDialog.siblingCount + 1 }})</span>
-                                </button>
-
-                                <!-- Apply to this feature only -->
-                                <button @click="handleColorScopeChoice('single')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-user text-lg"></i>
-                                    <span>This feature only</span>
-                                </button>
-
-                                <!-- Apply to all features with same rendered label text -->
-                                <button v-if="
-                                          colorScopeDialog.displayLabelSiblingCount > 0 &&
-                                          String(colorScopeDialog.displayLabel || '').trim() !== '' &&
-                                          String(colorScopeDialog.displayLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase()
-                                        "
-                                        @click="handleColorScopeChoice('displayLabel')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all label "{{ colorScopeDialog.displayLabel }}" ({{ colorScopeDialog.displayLabelSiblingCount + 1 }})</span>
-                                </button>
-
-                                <!-- Apply to all features with same source annotation label -->
-                                <button v-if="
-                                          colorScopeDialog.annotationLabelSiblingCount > 0 &&
-                                          String(colorScopeDialog.annotationLabel || '').trim() !== '' &&
-                                          String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase() &&
-                                          String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.displayLabel || '').trim().toLowerCase()
-                                        "
-                                        @click="handleColorScopeChoice('annotationLabel')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all source label "{{ colorScopeDialog.annotationLabel }}" ({{ colorScopeDialog.annotationLabelSiblingCount + 1 }})</span>
-                                </button>
-
-                                <!-- Use existing caption color (if available) -->
-                                <button v-if="colorScopeDialog.existingCaptionColor"
-                                        @click="handleColorScopeChoice('useExisting')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
-                                          :style="{ backgroundColor: colorScopeDialog.existingCaptionColor }"></span>
-                                    <span>Use existing "{{ colorScopeDialog.legendName }}" color</span>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Feature Fill Scope</h3>
+                            <p class="text-sm text-slate-600 mb-4">Choose the Features and Results to update.</p>
+                            <div v-if="!pendingFeatureFillPlan.selectedCandidateId" class="flex flex-col gap-2">
+                                <button v-for="candidate in pendingFeatureFillPlan.candidates"
+                                        :key="candidate.id"
+                                        @click="resolveFeatureFillScope(pendingFeatureFillPlan.token, candidate.id)"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left">
+                                    <span class="block">{{ candidate.label }}</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">
+                                        {{ candidate.targetCount }} Feature(s) · {{ candidate.affectedResultCount }} Result(s)
+                                    </span>
                                 </button>
                             </div>
-
-                            <button @click="handleColorScopeChoice('cancel')"
-                                    data-history-managed
+                            <div v-else-if="pendingFeatureFillPlan.conflict" class="flex flex-col gap-2">
+                                <p class="text-xs text-amber-700 mb-1">That caption already has another color.</p>
+                                <button v-for="choice in pendingFeatureFillPlan.conflict.choices"
+                                        :key="choice.id"
+                                        @click="resolveFeatureFillScope(pendingFeatureFillPlan.token, pendingFeatureFillPlan.selectedCandidateId, choice.id)"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-left">
+                                    {{ choice.label }}
+                                </button>
+                            </div>
+                            <button @click="cancelFeatureFillScope(pendingFeatureFillPlan.token)"
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
                         </div>
                     </div>
 
-                    <!-- Legend Rename Dialog -->
-                    <div v-if="legendRenameDialog.show"
-                         class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">
-                                {{ legendRenameDialog.mode === 'scope' ? 'Legend Name Scope' : 'Legend Name Conflict' }}
-                            </h3>
-                            <p v-if="legendRenameDialog.mode === 'scope'" class="text-sm text-slate-600 mb-4">
-                                Legend item "<span class="font-bold text-blue-600">{{ legendRenameDialog.oldCaption }}</span>" is currently shared by
-                                {{ legendRenameDialog.siblingCount + 1 }} features.
-                                <br>Apply the rename to "<span class="font-bold text-emerald-600">{{ legendRenameDialog.newCaption }}</span>" for this feature only, or for all current uses?
-                            </p>
-                            <p v-else class="text-sm text-slate-600 mb-4">
-                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists with a different color.
-                                <br>Existing color:
-                                <span class="inline-flex items-center gap-2 font-mono text-slate-700">
-                                    <span class="w-4 h-4 rounded border border-slate-300 inline-block"
-                                          :style="{ backgroundColor: legendRenameDialog.targetColor }"></span>
-                                    {{ legendRenameDialog.targetColor }}
-                                </span>
-                                <br>Current color:
-                                <span class="inline-flex items-center gap-2 font-mono text-slate-700">
-                                    <span class="w-4 h-4 rounded border border-slate-300 inline-block"
-                                          :style="{ backgroundColor: legendRenameDialog.currentColor }"></span>
-                                    {{ legendRenameDialog.currentColor }}
-                                </span>
-                            </p>
-
-                            <div v-if="legendRenameDialog.mode === 'scope'" class="flex flex-col gap-2">
-                                <button @click="handleLegendRenameChoice('single')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-user text-lg"></i>
-                                    <span>This feature only</span>
-                                </button>
-                                <button @click="handleLegendRenameChoice('group')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users-three text-lg"></i>
-                                    <span>All current "{{ legendRenameDialog.oldCaption }}"</span>
-                                </button>
-                            </div>
-
-                            <div v-else class="flex flex-col gap-2">
-                                <button @click="handleLegendRenameChoice('merge')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-arrows-merge text-lg"></i>
-                                    <span>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
-                                </button>
-                                <button @click="handleLegendRenameChoice('suffix')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-text-t text-lg"></i>
-                                    <span>Keep current color and add a suffix</span>
-                                </button>
-                            </div>
-
-                            <button @click="handleLegendRenameChoice('cancel')"
-                                    data-history-managed
-                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Reset Color Dialog -->
-                    <div v-if="resetColorDialog.show"
+                    <!-- Feature Stroke Scope Dialog -->
+                    <div v-if="pendingFeatureStrokePlan && featureStrokePlanStatus === 'needs-scope'"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
-                            <p class="text-sm text-slate-600 mb-4">
-                                There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ resetColorDialog.caption }}</span>".
-                                <br>How do you want to reset the color?
-                            </p>
-
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">Feature Stroke Scope</h3>
+                            <p class="text-sm text-slate-600 mb-4">Choose the Features and Results to update.</p>
                             <div class="flex flex-col gap-2">
-                                <!-- Reset all features with same caption -->
-                                <button @click="handleResetColorChoice('all')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-users text-lg"></i>
-                                    <span>Reset all "{{ resetColorDialog.caption }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
-                                </button>
-
-                                <!-- Reset this feature only with new legend entry -->
-                                <button @click="handleResetColorChoice('this_with_legend')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-user-plus text-lg"></i>
-                                    <span>This only + add legend entry</span>
-                                </button>
-
-                                <!-- Reset this feature only -->
-                                <button @click="handleResetColorChoice('this')"
-                                        data-history-managed
-                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
-                                    <i class="ph ph-user text-lg"></i>
-                                    <span>This feature only</span>
+                                <button v-for="candidate in pendingFeatureStrokePlan.candidates"
+                                        :key="candidate.id"
+                                        @click="resolveFeatureStrokeScope(pendingFeatureStrokePlan.token, candidate.id)"
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left">
+                                    <span class="block">{{ candidate.label }}</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">
+                                        {{ candidate.targetCount }} Feature(s) · {{ candidate.affectedResultCount }} Result(s)
+                                    </span>
                                 </button>
                             </div>
-
-                            <button @click="resetColorDialog.show = false"
+                            <button @click="cancelFeatureStrokeScope(pendingFeatureStrokePlan.token)"
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
                             </button>
@@ -5803,8 +5639,13 @@
                                             <i class="ph ph-caret-down text-xs"></i>
                                         </button>
                                     </div>
-                                    <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
-                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
+                                    <input type="color"
+                                           :value="entry.color"
+                                           @change="updateLegendEntryColor(idx, $event.target.value)"
+                                           class="w-6 h-6 rounded border border-slate-300 shrink-0 p-0"
+                                           :title="entry.color"
+                                           :aria-label="`Legend fill color for ${entry.caption}`">
+                                    <input type="text" :value="entry.caption" @change="updateLegendEntryCaption(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0">
                                     <button @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'"></i>
                                     </button>
@@ -5812,30 +5653,17 @@
                                         <i class="ph ph-trash text-sm"></i>
                                     </button>
                                 </div>
-                                <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
-                                    <span class="text-slate-500 shrink-0">Stroke:</span>
-                                    <color-value-control
-                                        :model-value="getLegendEntryStrokeColor(idx)"
-                                        fallback="#000000"
-                                        @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
-                                        aria-label="Legend stroke color"
-                                        class="w-28 shrink-0">
-                                    </color-value-control>
-                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width">
-                                    <button @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default">
-                                        <i class="ph ph-arrow-counter-clockwise text-xs"></i>
-                                    </button>
+                                <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200">
+                                    <feature-stroke-color-control
+                                        :view-model="getLegendEntryStrokeViewModel(idx)"
+                                        @request="requestLegendEntryStrokeChange(idx, $event)"
+                                        :aria-label="`Legend stroke for ${entry.caption}`">
+                                    </feature-stroke-color-control>
                                 </div>
                             </div>
                             <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">No legend entries found</div>
                         </div>
 
-                        <div class="px-3 py-2 border-t border-slate-200 shrink-0">
-                            <button @click="resetAllStrokes" class="w-full text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded flex items-center justify-center gap-1" title="Reset all stroke colors and widths to default">
-                                <i class="ph ph-arrow-counter-clockwise"></i>
-                                Reset All Strokes
-                            </button>
-                        </div>
                     </div>
 
                     <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col">
@@ -5866,14 +5694,13 @@
                                         {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
                                     </span>
                                     <button @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
-                                    <color-value-control
-                                        :model-value="getFeatureColorValue(feat)"
-                                        :fallback="getFeatureColor(feat)"
+                                    <feature-fill-color-control
+                                        :view-model="getFeatureFillViewModel(feat)"
                                         @click.stop
-                                        @update:model-value="setFeatureColorValue(feat, $event)"
+                                        @request="requestFeatureFillChange(feat, $event, '', { source: 'feature-list' })"
                                         :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
                                         class="w-28 shrink-0">
-                                    </color-value-control>
+                                    </feature-fill-color-control>
                                 </div>
                                 <p class="text-[10px] text-slate-400 truncate">
                                     <template v-if="getEditableLabelByFeatureId(feat.svg_id)">Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}</template>

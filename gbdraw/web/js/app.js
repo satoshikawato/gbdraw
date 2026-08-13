@@ -1,6 +1,9 @@
 import {
   AutoValueField,
   ColorValueControl,
+  DefaultColorControl,
+  FeatureFillColorControl,
+  FeatureStrokeColorControl,
   HelpTip,
   FileUploader
 } from './components.js';
@@ -9,7 +12,15 @@ import { createAppSetup } from './app/app-setup.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { AutoValueField, ColorValueControl, FileUploader, HelpTip },
+  components: {
+    AutoValueField,
+    ColorValueControl,
+    DefaultColorControl,
+    FeatureFillColorControl,
+    FeatureStrokeColorControl,
+    FileUploader,
+    HelpTip
+  },
   setup: createAppSetup
 });
 

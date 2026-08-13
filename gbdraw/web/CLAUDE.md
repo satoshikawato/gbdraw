@@ -25,7 +25,7 @@ The canonical generation path is:
 index.html
   -> app.js and app/app-setup.js
   -> reactive state
-  -> services/session-request.js builds one canonical schema-5 render request
+  -> services/session-request.js builds one canonical schema-6 render request
   -> app/run-analysis.js validates and orchestrates optional LOSAT work
   -> services/diagram-generation.js dispatches the request and resources
   -> workers/diagram-generation-worker.js owns Pyodide rendering
@@ -110,8 +110,11 @@ mutation through the owning editor action so History records the same operation.
 If a mounted target exists, update it and the current Result synchronously before
 optional geometry reflow. If canonical output requires creating or removing
 geometry and no mounted target exists, queue the owning automatic rerender in
-the same action and replace the Result when it completes. A rerender failure must
-keep any direct edit already applied and report the failure. Metadata-only edits
+the same action and replace the Result when it completes. A rerender failure may
+keep a direct edit already applied only for unrelated, optional reflow. A
+required multi-Result feature-style transaction must finish all geometry and
+legend preparation before committing and must restore the exact before-state
+when preparation or commit fails. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
 

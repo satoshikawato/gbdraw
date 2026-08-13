@@ -338,7 +338,18 @@ const buildContextKey = (svg, mode) => {
   return `${mode}:${ids.join(',')}`;
 };
 
-export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
+const replaceObjectContents = (target, source) => {
+  Object.keys(target || {}).forEach((key) => delete target[key]);
+  Object.entries(source || {}).forEach(([key, value]) => {
+    target[key] = value;
+  });
+};
+
+export const createFeatureLabelActions = ({
+  state,
+  previewRuntime = null,
+  serializeSvg = serializeCleanSvg
+}) => {
   const {
     mode,
     form,
@@ -351,7 +362,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     editableLabels,
     extractedFeatures,
     clickedFeature,
-    labelTextScopeDialog,
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
@@ -383,7 +393,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     }
     const index = selectedResultIndex.value;
     if (index < 0 || index >= results.value.length) return;
-    const serialized = serializeCleanSvg(svg);
+    const serialized = serializeSvg(svg);
     if (results.value[index]?.content === serialized) return;
     skipCaptureBaseConfig.value = true;
     results.value[index] = { ...results.value[index], content: serialized };
@@ -446,7 +456,9 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   const handleGlobalLabelModeChoice = (choiceRaw) => {
     if (!globalLabelModeDialog.show) return;
     const resolver = globalLabelModeDialog.resolve;
-    const normalizedChoice = choiceRaw === 'whitelist_only' ? 'whitelist_only' : 'show_all';
+    const normalizedChoice = choiceRaw === 'cancel'
+      ? 'cancel'
+      : (choiceRaw === 'whitelist_only' ? 'whitelist_only' : 'show_all');
     closeGlobalLabelModeDialog();
     if (typeof resolver === 'function') {
       resolver(normalizedChoice);
@@ -631,7 +643,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const contextKey = buildContextKey(svg, mode.value);
     if (labelOverrideContextKey.value && labelOverrideContextKey.value !== contextKey) {
       clearOverrides();
-      labelTextScopeDialog.show = false;
       closeGlobalLabelModeDialog();
     }
     labelOverrideContextKey.value = contextKey;
@@ -676,42 +687,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     return resetChanged || overrideChanged || visibilityChanged;
   };
 
-  const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
-    if (!labelKey) return;
-    const entry = editableLabels.value.find((candidate) => candidate.key === labelKey);
-    if (!entry) return;
-    const nextText = String(nextTextRaw ?? '');
-    if (entry.text === nextText) return;
-
-    labelTextScopeDialog.show = true;
-    labelTextScopeDialog.labelKey = entry.key;
-    labelTextScopeDialog.newText = nextText;
-    labelTextScopeDialog.sourceText = entry.sourceText || entry.text;
-    labelTextScopeDialog.featureId = entry.featureId || '';
-    labelTextScopeDialog.matchingCount = editableLabels.value.filter(
-      (candidate) => candidate.sourceText === (entry.sourceText || entry.text)
-    ).length;
-    if (clickedFeature.value?.labelKey === entry.key) {
-      clickedFeature.value.labelText = nextText;
-    }
-  };
-
-  const closeLabelTextScopeDialog = () => {
-    labelTextScopeDialog.show = false;
-    labelTextScopeDialog.labelKey = '';
-    labelTextScopeDialog.newText = '';
-    labelTextScopeDialog.sourceText = '';
-    labelTextScopeDialog.featureId = '';
-    labelTextScopeDialog.matchingCount = 0;
-  };
-
-  const requestLabelTextChangeByFeatureId = (featureId, nextTextRaw) => {
-    const entry = getEditableLabelByFeatureId(featureId);
-    if (!entry) return false;
-    requestLabelTextChangeByKey(entry.key, nextTextRaw);
-    return true;
-  };
-
   const applyClickedFeatureVisibilityOverride = () => {
     if (!clickedFeature.value) return;
     const featureId = String(clickedFeature.value.svg_id || clickedFeature.value.id || '').trim();
@@ -729,56 +704,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     return previousMode !== nextMode;
   };
 
-  const applyDirectFeatureLabelOverride = (featureId, labelTextRaw, sourceTextRaw, baselineTextRaw) => {
-    const featureIdKey = String(featureId || '').trim();
-    if (!featureIdKey) return false;
-    const nextText = String(labelTextRaw ?? '');
-    const baselineText = String(baselineTextRaw ?? '');
-    const hasExistingOverride = Object.prototype.hasOwnProperty.call(labelTextFeatureOverrides, featureIdKey);
-    const prevText = Object.prototype.hasOwnProperty.call(labelTextFeatureOverrides, featureIdKey)
-      ? String(labelTextFeatureOverrides[featureIdKey] ?? '')
-      : undefined;
-    const sourceText = String(sourceTextRaw ?? '').trim();
-    let changed = false;
-
-    if (!hasExistingOverride && nextText === baselineText) {
-      return false;
-    }
-
-    if (hasExistingOverride && nextText === baselineText) {
-      delete labelTextFeatureOverrides[featureIdKey];
-      delete labelTextFeatureOverrideSources[featureIdKey];
-      return true;
-    }
-
-    if (prevText !== nextText || !hasExistingOverride) {
-      labelTextFeatureOverrides[featureIdKey] = nextText;
-      changed = true;
-    }
-    if (sourceText) {
-      const prevSource = String(labelTextFeatureOverrideSources[featureIdKey] ?? '');
-      if (prevSource !== sourceText) changed = true;
-      labelTextFeatureOverrideSources[featureIdKey] = sourceText;
-    }
-    return changed;
-  };
-
-  const applyDirectTextToCurrentSvg = (featureId, nextText) => {
-    if (!svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-    const entry = getEditableLabelByFeatureId(featureId);
-    if (!entry?.key) return false;
-    const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
-    if (!targetEl) return false;
-    const currentText = getLabelText(targetEl);
-    if (currentText === nextText) return false;
-    setLabelText(targetEl, nextText);
-    serializeCurrentSvg(svg);
-    syncLabelEditor();
-    return true;
-  };
-
   const applyDirectVisibilityToCurrentSvg = (featureId, visibilityMode) => {
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
@@ -791,102 +716,23 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     return true;
   };
 
-  const updateClickedFeatureLabelText = async () => {
-    if (!clickedFeature.value) return;
+  const updateClickedFeatureLabelVisibility = async () => {
+    if (!clickedFeature.value) return false;
     const featureId = String(clickedFeature.value.svg_id || clickedFeature.value.id || '').trim();
-    if (!featureId) return;
-
-    const featureType = String(clickedFeature.value.feat?.type || '').trim();
-    const nextText = String(clickedFeature.value.labelText ?? '');
-    const sourceText = String(clickedFeature.value.labelSourceText || clickedFeature.value.label || '');
-    const baselineText = sourceText;
-    const visibilityChanged = applyClickedFeatureVisibilityOverride();
-    const textChanged = applyDirectFeatureLabelOverride(featureId, nextText, sourceText, baselineText);
-
-    if (clickedFeature.value.hasEditableLabel) {
-      applyDirectTextToCurrentSvg(featureId, nextText);
-    }
-    if (visibilityChanged) {
-      applyDirectVisibilityToCurrentSvg(featureId, clickedFeature.value.labelVisibility);
-    }
-
-    const requiresGlobalSelection = isGlobalLabelsOff() && (visibilityChanged || textChanged);
-    if (requiresGlobalSelection) {
+    if (!featureId) return false;
+    const visibilityMode = normalizeVisibilityMode(clickedFeature.value.labelVisibility);
+    if (!applyClickedFeatureVisibilityOverride()) return false;
+    applyDirectVisibilityToCurrentSvg(featureId, visibilityMode);
+    if (visibilityMode === 'on' && isGlobalLabelsOff()) {
+      const featureType = String(clickedFeature.value?.feat?.type || '').trim();
       const choice = await requestGlobalLabelModeChoice(featureId, featureType);
+      if (choice === 'cancel') return false;
       applyGlobalLabelModeChoice(choice, featureType, featureId);
-      queueLabelReflow('global-off-label-apply', true);
-      return;
-    }
-
-    if (visibilityChanged || (!clickedFeature.value.hasEditableLabel && textChanged)) {
       queueLabelReflow('label-visibility-apply', true);
-      return;
-    }
-
-    if (textChanged) {
-      queueLabelReflow('apply');
-    }
-  };
-
-  const handleLabelTextScopeChoice = (choice) => {
-    if (choice === 'cancel' || !labelTextScopeDialog.show) {
-      closeLabelTextScopeDialog();
-      return;
-    }
-    if (!svgContainer.value) {
-      closeLabelTextScopeDialog();
-      return;
-    }
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) {
-      closeLabelTextScopeDialog();
-      return;
-    }
-
-    const targetKey = String(labelTextScopeDialog.labelKey || '');
-    const sourceText = String(labelTextScopeDialog.sourceText || '');
-    const newText = String(labelTextScopeDialog.newText ?? '');
-    const featureId = String(labelTextScopeDialog.featureId || '');
-
-    if (choice === 'all') {
-      let matchedCount = 0;
-      let hasUntrackableMatch = false;
-      svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
-        const candidateSource = textEl.getAttribute('data-label-source-text') || '';
-        if (candidateSource !== sourceText) return;
-        matchedCount += 1;
-        const candidateFeatureId = textEl.getAttribute('data-label-feature-id');
-        if (candidateFeatureId) {
-          labelTextFeatureOverrides[candidateFeatureId] = newText;
-          labelTextFeatureOverrideSources[candidateFeatureId] = candidateSource;
-        } else {
-          hasUntrackableMatch = true;
-        }
-        setLabelText(textEl, newText);
-      });
-      if (hasUntrackableMatch || matchedCount === 0) {
-        labelTextBulkOverrides[sourceText] = newText;
-      } else if (Object.prototype.hasOwnProperty.call(labelTextBulkOverrides, sourceText)) {
-        delete labelTextBulkOverrides[sourceText];
-      }
-    } else if (choice === 'single' && targetKey) {
-      const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
-      if (targetEl) {
-        setLabelText(targetEl, newText);
-      }
-      if (featureId) {
-        labelTextFeatureOverrides[featureId] = newText;
-        labelTextFeatureOverrideSources[featureId] = sourceText;
-      }
     } else {
-      closeLabelTextScopeDialog();
-      return;
+      queueLabelReflow('label-visibility-apply', visibilityMode === 'on');
     }
-
-    serializeCurrentSvg(svg);
-    closeLabelTextScopeDialog();
-    syncLabelEditor();
-    queueLabelReflow('apply');
+    return true;
   };
 
   const resetAllLabelTextOverrides = () => {
@@ -894,7 +740,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     if (!svgContainer.value) {
       labelOverrideContextKey.value = '';
       editableLabels.value = [];
-      closeLabelTextScopeDialog();
       closeGlobalLabelModeDialog();
       return;
     }
@@ -903,7 +748,6 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     resetLabelsToSourceText(svg);
     applyStoredVisibilityOverridesToSvg(svg);
 
-    closeLabelTextScopeDialog();
     closeGlobalLabelModeDialog();
     serializeCurrentSvg(svg);
     syncLabelEditor();
@@ -951,11 +795,203 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     return values.some((value) => row.qualifierValuePattern.test(String(value || '')));
   };
 
+  const elementHasVisibilityPreview = (element) => (
+    element.hasAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE)
+  );
+
+  const planLabelOverrideImport = (svg, rows) => {
+    const featureGeometry = collectFeatureGeometry(svg);
+    const labelElements = collectEditableLabelElements(svg, mode.value);
+    const featureAssignments = assignFeatureIdsToLabels(
+      svg,
+      labelElements,
+      featureGeometry,
+      mode.value
+    );
+    const entries = labelElements.map((element, index) => {
+      const text = getLabelText(element);
+      const sourceText = element.getAttribute('data-label-source-text') ?? text;
+      const featureId = featureAssignments.get(element)
+        || String(element.getAttribute('data-label-feature-id') || '').trim();
+      return {
+        element,
+        key: `label-${index + 1}`,
+        text,
+        sourceText,
+        featureId,
+        kind: element.querySelector('textPath') ? 'embedded' : 'regular'
+      };
+    });
+    const metadataByFeatureId = buildFeatureMetadataMap(extractedFeatures.value);
+    const nextFeatureOverrides = {};
+    const nextBulkOverrides = {};
+    const nextFeatureOverrideSources = {};
+    let appliedCount = 0;
+    let skippedNonTrackableCount = 0;
+
+    const preparedEntries = entries.map((entry) => {
+      const entryMeta = getEntryMeta(entry, metadataByFeatureId);
+      const matchedRow = rows.find((row) => rowMatchesEntry(row, entry, entryMeta));
+      let nextText = entry.sourceText;
+      if (matchedRow) {
+        nextText = String(matchedRow.labelText ?? '');
+        appliedCount += 1;
+        if (matchedRow.isGlobalLabelRule) {
+          if (entry.sourceText) nextBulkOverrides[entry.sourceText] = nextText;
+        } else if (entry.featureId) {
+          nextFeatureOverrides[entry.featureId] = nextText;
+        } else {
+          skippedNonTrackableCount += 1;
+        }
+        if (entry.featureId && entry.sourceText) {
+          nextFeatureOverrideSources[entry.featureId] = entry.sourceText;
+        }
+      }
+      return {
+        ...entry,
+        nextText,
+        clearVisibilityPreview: elementHasVisibilityPreview(entry.element)
+      };
+    });
+
+    return {
+      appliedCount,
+      contextKey: buildContextKey(svg, mode.value),
+      nextBulkOverrides,
+      nextFeatureOverrides,
+      nextFeatureOverrideSources,
+      preparedEntries,
+      skippedNonTrackableCount
+    };
+  };
+
+  const captureLabelImportState = (preparedEntries) => {
+    const touchedAttributes = [
+      'data-label-editable',
+      'data-label-key',
+      'data-label-source-text',
+      'data-label-feature-id',
+      LABEL_VISIBILITY_PREVIEW_ATTRIBUTE,
+      'display',
+      'style'
+    ];
+    const labelSnapshots = preparedEntries.map(({ element }) => ({
+      element,
+      text: getLabelText(element),
+      attributes: Object.fromEntries(
+        touchedAttributes.map((name) => [name, element.getAttribute(name)])
+      )
+    }));
+    const resultsReference = results.value;
+    const resultsSnapshot = [...resultsReference];
+    const editableLabelsSnapshot = editableLabels.value;
+    const clickedFeatureReference = clickedFeature.value;
+    const clickedFeatureSnapshot = clickedFeatureReference
+      ? { ...clickedFeatureReference }
+      : null;
+    const runtime = previewRuntime?.getActiveRuntime?.() || null;
+    const runtimeSnapshot = runtime
+      ? {
+          dirty: Boolean(runtime.dirty),
+          dirtyReasons: runtime.dirtyReasons,
+          dirtyReasonValues: [...(runtime.dirtyReasons || [])]
+        }
+      : null;
+    const globalDialogSnapshot = {
+      show: globalLabelModeDialog.show,
+      featureId: globalLabelModeDialog.featureId,
+      featureType: globalLabelModeDialog.featureType,
+      resolve: globalLabelModeDialog.resolve
+    };
+    const featureOverridesSnapshot = { ...labelTextFeatureOverrides };
+    const bulkOverridesSnapshot = { ...labelTextBulkOverrides };
+    const featureOverrideSourcesSnapshot = { ...labelTextFeatureOverrideSources };
+    const visibilityOverridesSnapshot = { ...labelVisibilityOverrides };
+    const contextKeySnapshot = labelOverrideContextKey.value;
+    const buildWarningSnapshot = labelOverrideBuildWarning.value;
+    const skipCaptureSnapshot = skipCaptureBaseConfig.value;
+
+    return () => {
+      labelSnapshots.forEach(({ element, text, attributes }) => {
+        setLabelText(element, text);
+        Object.entries(attributes).forEach(([name, value]) => {
+          if (value === null) element.removeAttribute(name);
+          else element.setAttribute(name, value);
+        });
+      });
+      replaceObjectContents(labelTextFeatureOverrides, featureOverridesSnapshot);
+      replaceObjectContents(labelTextBulkOverrides, bulkOverridesSnapshot);
+      replaceObjectContents(labelTextFeatureOverrideSources, featureOverrideSourcesSnapshot);
+      replaceObjectContents(labelVisibilityOverrides, visibilityOverridesSnapshot);
+      labelOverrideContextKey.value = contextKeySnapshot;
+      labelOverrideBuildWarning.value = buildWarningSnapshot;
+      editableLabels.value = editableLabelsSnapshot;
+      if (clickedFeatureReference && clickedFeatureSnapshot) {
+        Object.keys(clickedFeatureReference).forEach((key) => delete clickedFeatureReference[key]);
+        Object.assign(clickedFeatureReference, clickedFeatureSnapshot);
+      }
+      clickedFeature.value = clickedFeatureReference;
+      Object.assign(globalLabelModeDialog, globalDialogSnapshot);
+      if (!runtime && previewRuntime?.getActiveRuntime?.()) {
+        previewRuntime.clearActiveRuntime?.();
+      } else if (runtime && runtimeSnapshot) {
+        runtime.dirty = runtimeSnapshot.dirty;
+        runtime.dirtyReasons = runtimeSnapshot.dirtyReasons;
+        runtime.dirtyReasons?.clear?.();
+        runtimeSnapshot.dirtyReasonValues.forEach((reason) => runtime.dirtyReasons?.add?.(reason));
+      }
+      if (results.value !== resultsReference) results.value = resultsReference;
+      resultsReference.splice(0, resultsReference.length, ...resultsSnapshot);
+      skipCaptureBaseConfig.value = skipCaptureSnapshot;
+    };
+  };
+
+  const commitLabelOverrideImport = (svg, plan) => {
+    const currentElements = collectEditableLabelElements(svg, mode.value);
+    if (
+      currentElements.length !== plan.preparedEntries.length
+      || currentElements.some((element, index) => element !== plan.preparedEntries[index].element)
+    ) {
+      throw new Error('Editable labels changed before the TSV import started.');
+    }
+    const restore = captureLabelImportState(plan.preparedEntries);
+    try {
+      plan.preparedEntries.forEach((entry) => {
+        entry.element.style.cursor = 'text';
+        entry.element.setAttribute('data-label-editable', 'true');
+        entry.element.setAttribute('data-label-key', entry.key);
+        entry.element.setAttribute('data-label-source-text', entry.sourceText);
+        if (entry.featureId) entry.element.setAttribute('data-label-feature-id', entry.featureId);
+        else entry.element.removeAttribute('data-label-feature-id');
+        if (entry.clearVisibilityPreview) {
+          entry.element.removeAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE);
+          entry.element.removeAttribute('display');
+        }
+        setLabelText(entry.element, entry.nextText);
+      });
+      replaceObjectContents(labelTextFeatureOverrides, plan.nextFeatureOverrides);
+      replaceObjectContents(labelTextBulkOverrides, plan.nextBulkOverrides);
+      replaceObjectContents(labelTextFeatureOverrideSources, plan.nextFeatureOverrideSources);
+      replaceObjectContents(labelVisibilityOverrides, {});
+      labelOverrideBuildWarning.value = '';
+      labelOverrideContextKey.value = plan.contextKey;
+      closeGlobalLabelModeDialog();
+      serializeCurrentSvg(svg);
+      refreshEditableList(svg);
+      syncClickedFeatureLabelState();
+    } catch (error) {
+      restore();
+      throw error;
+    }
+  };
+
   const loadLabelOverrideTable = async (event) => {
     const input = event?.target;
     const file = input?.files?.[0];
     if (!file) return;
 
+    let message = '';
+    let failure = null;
     try {
       const text = await file.text();
       const rows = parseLabelOverrideTsv(text);
@@ -964,98 +1000,34 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
         clearOverrides();
         labelOverrideContextKey.value = '';
         editableLabels.value = [];
-        closeLabelTextScopeDialog();
         closeGlobalLabelModeDialog();
-        window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
-        return;
-      }
-
-      const svg = svgContainer.value.querySelector('svg');
-      if (!svg) {
-        clearOverrides();
-        labelOverrideContextKey.value = '';
-        editableLabels.value = [];
-        closeLabelTextScopeDialog();
-        closeGlobalLabelModeDialog();
-        window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
-        return;
-      }
-
-      syncLabelEditor();
-      const metadataByFeatureId = buildFeatureMetadataMap(extractedFeatures.value);
-      const operations = [];
-      editableLabels.value.forEach((entry) => {
-        const entryMeta = getEntryMeta(entry, metadataByFeatureId);
-        const matchedRow = rows.find((row) => rowMatchesEntry(row, entry, entryMeta));
-        if (!matchedRow) return;
-        operations.push({
-          key: String(entry.key || ''),
-          featureId: String(entry.featureId || ''),
-          sourceText: String(entry.sourceText || ''),
-          nextText: String(matchedRow.labelText ?? ''),
-          isGlobalLabelRule: Boolean(matchedRow.isGlobalLabelRule)
-        });
-      });
-
-      clearOverrides();
-      const resetChanged = resetLabelsToSourceText(svg);
-
-      let appliedCount = 0;
-      let skippedNonTrackableCount = 0;
-      const nextFeatureOverrides = {};
-      const nextBulkOverrides = {};
-
-      operations.forEach((operation) => {
-        if (!operation.key) return;
-        const target = svg.querySelector(`text[data-label-key="${CSS.escape(operation.key)}"]`);
-        if (!target) return;
-        setLabelText(target, operation.nextText);
-        appliedCount += 1;
-
-        if (operation.isGlobalLabelRule) {
-          if (operation.sourceText) {
-            nextBulkOverrides[operation.sourceText] = operation.nextText;
-          }
-          return;
-        }
-        if (operation.featureId) {
-          nextFeatureOverrides[operation.featureId] = operation.nextText;
+        message = `Loaded ${rows.length} row(s). No diagram is currently displayed.`;
+      } else {
+        const svg = svgContainer.value.querySelector('svg');
+        if (!svg) {
+          clearOverrides();
+          labelOverrideContextKey.value = '';
+          editableLabels.value = [];
+          closeGlobalLabelModeDialog();
+          message = `Loaded ${rows.length} row(s). No diagram is currently displayed.`;
         } else {
-          skippedNonTrackableCount += 1;
+          const plan = planLabelOverrideImport(svg, rows);
+          commitLabelOverrideImport(svg, plan);
+          queueLabelReflow('load');
+
+          message = `Loaded ${rows.length} row(s). Applied to ${plan.appliedCount} label(s).`;
+          if (plan.skippedNonTrackableCount > 0) {
+            message += ` ${plan.skippedNonTrackableCount} match(es) lacked a feature key and were not tracked for re-export.`;
+          }
         }
-      });
-
-      Object.entries(nextFeatureOverrides).forEach(([featureId, labelText]) => {
-        labelTextFeatureOverrides[featureId] = labelText;
-      });
-      operations.forEach((operation) => {
-        if (!operation.featureId || !operation.sourceText) return;
-        labelTextFeatureOverrideSources[operation.featureId] = operation.sourceText;
-      });
-      Object.entries(nextBulkOverrides).forEach(([sourceText, labelText]) => {
-        if (!sourceText) return;
-        labelTextBulkOverrides[sourceText] = labelText;
-      });
-
-      closeLabelTextScopeDialog();
-      closeGlobalLabelModeDialog();
-      if (resetChanged || appliedCount > 0) {
-        serializeCurrentSvg(svg);
       }
-      syncLabelEditor();
-      queueLabelReflow('load');
-
-      let message = `Loaded ${rows.length} row(s). Applied to ${appliedCount} label(s).`;
-      if (skippedNonTrackableCount > 0) {
-        message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not tracked for re-export.`;
-      }
-      window.alert(message);
     } catch (error) {
       console.error('Failed to load label TSV:', error);
-      window.alert(`Failed to load label TSV. ${error?.message || 'Please check the 5-column TSV format.'}`);
+      failure = `Failed to load label TSV. ${error?.message || 'Please check the 5-column TSV format.'}`;
     } finally {
       if (input) input.value = '';
     }
+    window.alert(failure || message);
   };
 
   const downloadLabelOverrideTable = () => {
@@ -1113,13 +1085,10 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     loadLabelOverrideTable,
     getEditableLabelByFeatureId,
     handleGlobalLabelModeChoice,
-    handleLabelTextScopeChoice,
-    requestLabelTextChangeByFeatureId,
-    requestLabelTextChangeByKey,
     reconcileLabelOverrides,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,
-    updateClickedFeatureLabelText
+    updateClickedFeatureLabelVisibility
   };
 };

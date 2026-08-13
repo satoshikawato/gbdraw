@@ -15,6 +15,11 @@ from gbdraw.core.record_metadata import (
     _source_feature_location_parts,
 )
 from gbdraw.features.selector_values import build_feature_selector_values
+from gbdraw.features.instance_identity import (
+    FeatureInstanceIdentityPlan,
+    build_feature_instance_identity_plan,
+)
+from gbdraw.features.semantic_selectors import FeatureSemanticSelectorContext
 from gbdraw.features.ids import (
     compute_feature_hash_from_location_parts,
     make_linear_rendered_feature_id,
@@ -324,6 +329,8 @@ def extract_features_from_records_payload(
     specific_color_rules: dict | None = None,
     linear_rendered_feature_ids: bool = False,
     include_biological_features: bool = False,
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> dict[str, object]:
     """Extract feature metadata from processed records.
 
@@ -334,6 +341,13 @@ def extract_features_from_records_payload(
     """
 
     records = list(records or [])
+    identity_plan = (
+        feature_instance_identity_plan
+        if feature_instance_identity_plan is not None
+        else build_feature_instance_identity_plan(records)
+    )
+    for record in records:
+        identity_plan.record_key_for_record(record)
     selected_feature_set = _normalize_selected_feature_set(selected_features)
 
     features: list[dict[str, object]] = []
@@ -351,6 +365,7 @@ def extract_features_from_records_payload(
         prepared_features = []
         rendered_id_counts: Counter[str] = Counter()
         for feature_index, feat in enumerate(_iter_features(record.features)):
+            feature_instance_identity = identity_plan.identity_for_feature(feat)
             source_feature_index = _source_feature_index(feat)
             is_rendered_feature = should_render_feature(
                 feat,
@@ -358,6 +373,10 @@ def extract_features_from_records_payload(
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=hash_record_id,
                 specific_color_rules=specific_color_rules,
+                feature_instance_identity=feature_instance_identity,
+                feature_semantic_selector_context=(
+                    feature_semantic_selector_context
+                ),
             )
             if not is_rendered_feature and not include_biological_features:
                 continue
@@ -382,6 +401,7 @@ def extract_features_from_records_payload(
                     feat,
                     is_rendered_feature,
                     selector_values,
+                    feature_instance_identity,
                 )
             )
 
@@ -391,6 +411,7 @@ def extract_features_from_records_payload(
             feat,
             is_rendered_feature,
             selector_values,
+            feature_instance_identity,
         ) in prepared_features:
             feature_start = int(feat.location.start)
             feature_end = int(feat.location.end)
@@ -457,7 +478,19 @@ def extract_features_from_records_payload(
                 "nucleotide_sequence": nucleotide_sequence,
                 "amino_acid_sequence": amino_acid_sequence,
                 "sequence_warnings": sequence_warnings,
+                "instance_hash": feature_instance_identity.instance_hash,
             }
+            if feature_semantic_selector_context is not None:
+                semantic_values = (
+                    feature_semantic_selector_context.values_for_feature(feat)
+                )
+                feature_payload["rendered_label"] = semantic_values.rendered_label
+                feature_payload["source_annotation_label"] = (
+                    semantic_values.source_annotation_label
+                )
+                feature_payload["orthogroup_ids"] = list(
+                    semantic_values.similarity_group_ids
+                )
             if include_biological_features:
                 biological_features.append(feature_payload)
                 biological_idx += 1

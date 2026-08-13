@@ -172,10 +172,10 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
 
 def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None:
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
-    assert CURRENT_SESSION_VERSION == 40
+    assert CURRENT_SESSION_VERSION == 41
     for value in (
-        "CURRENT_SESSION_VERSION = 40",
-        "CURRENT_RENDER_REQUEST_SCHEMA = 5",
+        "CURRENT_SESSION_VERSION = 41",
+        "CURRENT_RENDER_REQUEST_SCHEMA = 6",
         'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"',
         'contents[:2] != b"\\x1f\\x8b"',
         'with gzip.open(path, "rt", encoding="utf-8")',
@@ -221,13 +221,16 @@ def test_h_gui_15_validates_every_actual_export() -> None:
 
 
 def test_interactive_accessibility_labels_are_public_ui_contracts() -> None:
-    source = INDEX_PATH.read_text(encoding="utf-8")
+    source = INDEX_PATH.read_text(encoding="utf-8") + (
+        REPO_ROOT / "gbdraw" / "web" / "js" / "components.js"
+    ).read_text(encoding="utf-8")
     for label in (
         ':aria-label="`Feature details: ${clickedFeature.label}`"',
         'aria-label="Close feature popup"',
         'aria-label="Feature legend name"',
         'aria-label="Feature visibility"',
-        'aria-label="Feature stroke width"',
+        'aria-label="Feature stroke"',
+        ":aria-label=\"ariaLabel + ' width'\"",
         'aria-label="Feature search status"',
         'aria-label="Selected feature count"',
         'aria-label="PNG DPI"',

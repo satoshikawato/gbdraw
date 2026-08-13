@@ -27,7 +27,7 @@ NODE_SPEC = REPO_ROOT / "tests" / "web" / "losat-cache-migration.playwright.spec
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "sessions"
 FIXTURE_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
-CURRENT_RENDER_REQUEST_SCHEMA = 5
+CURRENT_RENDER_REQUEST_SCHEMA = 6
 CURRENT_PROTEIN_RAW_SCHEMA = 4
 CURRENT_PROTEIN_DERIVED_SCHEMA = 3
 

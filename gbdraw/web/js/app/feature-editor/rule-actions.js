@@ -1,24 +1,34 @@
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
-import { getFeatureGenerationHash, ruleMatchesFeature } from '../feature-utils.js';
+import {
+  getFeatureGenerationHash,
+  resolveOrderedSpecificRule,
+  ruleMatchesFeature
+} from '../feature-utils.js';
 import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
-  featureOverrideKey,
-  getFeatureOverride,
-  migrateLegacyFeatureOverrides
+  getFeatureOverride
 } from '../../services/feature-override-identity.js';
 import {
   defaultFeatureRendering,
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
+import { resolveFeatureFillViewModel } from './fill-view-model.js';
+import { FEATURE_INSTANCE_HASH_QUALIFIER } from '../../services/feature-instance-identity.js';
+import {
+  FEATURE_SEMANTIC_SCOPE_QUALIFIER,
+  isFeatureSemanticScopeRule
+} from './semantic-fill-selectors.js';
 
-export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
+export const createFeatureRuleActions = ({
+  state,
+  nextTick,
+  legendActions,
+  bulkStyleActions = null
+}) => {
   const {
-    currentColors,
     appliedPaletteColors,
-    newColorFeat,
-    newColorVal,
     manualSpecificRules,
     newSpecRule,
     specificRulePresets,
@@ -33,21 +43,68 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     editableLabels,
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
-    addedLegendCaptions,
     fileLegendCaptions
   } = state;
 
-  const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
+  void nextTick;
+  void legendActions;
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
   const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
+  const isExactFeatureRule = (rule) => (
+    String(rule?.qual || '').trim() === FEATURE_INSTANCE_HASH_QUALIFIER
+    && String(rule?.match || '').trim().toLowerCase() !== 'regex'
+  );
+  const isOpaqueSpecificRule = (rule) => (
+    isExactFeatureRule(rule) || isFeatureSemanticScopeRule(rule)
+  );
+  const canMoveSpecificRule = (index, offset) => {
+    const target = index + offset;
+    return Number.isInteger(index)
+      && Number.isInteger(offset)
+      && target >= 0
+      && target < manualSpecificRules.length
+      && !isOpaqueSpecificRule(manualSpecificRules[index])
+      && !isOpaqueSpecificRule(manualSpecificRules[target]);
+  };
 
-  const setSpecificRuleField = (index, field, value) => {
+  const commitSpecificRules = async (rules, {
+    writerKind,
+    label,
+    appliedPaletteColors: nextPaletteColors = undefined,
+    presentationPatch = null
+  } = {}) => {
+    if (typeof bulkStyleActions?.requestFeatureBulkStyleChange !== 'function') {
+      throw new Error('Bulk Feature style actions are unavailable.');
+    }
+    return bulkStyleActions.requestFeatureBulkStyleChange({
+      writerKind,
+      label,
+      presentationPatch,
+      replacement: {
+        rules,
+        ...(nextPaletteColors === undefined
+          ? {}
+          : { appliedPaletteColors: nextPaletteColors })
+      }
+    });
+  };
+
+  const syncFileCaptionTracking = () => {
+    fileLegendCaptions.value = new Set(
+      manualSpecificRules
+        .filter((rule) => rule?.fromFile && normalizeCaption(rule?.cap))
+        .map((rule) => normalizeCaption(rule.cap))
+    );
+  };
+
+  const setSpecificRuleField = async (index, field, value) => {
     if (!specificRuleFields.has(field)) return;
     const current = manualSpecificRules[index];
     if (!current) return;
+    if (isOpaqueSpecificRule(current)) return false;
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
 
     if (field === 'val') {
@@ -61,20 +118,38 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
     const nextRule = { ...current, [field]: nextValue };
     delete nextRule.fromFile;
-    manualSpecificRules.splice(index, 1, nextRule);
+    const nextRules = manualSpecificRules.map((rule, ruleIndex) => (
+      ruleIndex === index ? nextRule : rule
+    ));
+    const committed = await commitSpecificRules(nextRules, {
+      writerKind: 'rule-field',
+      label: 'Edit specific color rule'
+    });
+    if (committed) syncFileCaptionTracking();
+    return committed;
   };
 
-  const moveSpecificRule = (index, offset) => {
+  const moveSpecificRule = async (index, offset) => {
     const target = index + offset;
-    if (target < 0 || target >= manualSpecificRules.length) return;
-    const [rule] = manualSpecificRules.splice(index, 1);
-    manualSpecificRules.splice(target, 0, rule);
+    if (!canMoveSpecificRule(index, offset)) return false;
+    const nextRules = [...manualSpecificRules];
+    const [rule] = nextRules.splice(index, 1);
+    nextRules.splice(target, 0, rule);
+    return commitSpecificRules(nextRules, {
+      writerKind: 'rule-reorder',
+      label: 'Reorder specific color rules'
+    });
   };
 
-  const removeSpecificRule = (index) => {
-    const rule = manualSpecificRules[index];
-    if (rule?.cap) fileLegendCaptions.value.delete(rule.cap);
-    manualSpecificRules.splice(index, 1);
+  const removeSpecificRule = async (index) => {
+    if (!manualSpecificRules[index] || isOpaqueSpecificRule(manualSpecificRules[index])) return false;
+    const nextRules = manualSpecificRules.filter((_rule, ruleIndex) => ruleIndex !== index);
+    const committed = await commitSpecificRules(nextRules, {
+      writerKind: 'rule-remove',
+      label: 'Remove specific color rule'
+    });
+    if (committed) syncFileCaptionTracking();
+    return committed;
   };
 
   const downloadSpecificRulesTsv = () => {
@@ -83,7 +158,18 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       alert('No specific rules to export.');
       return;
     }
+    if (
+      manualSpecificRules.some(isOpaqueSpecificRule)
+      && typeof confirm === 'function'
+      && !confirm(
+        'Managed Feature rows require gbdraw 0.14.0b0 or later. Exact rows only '
+        + 'replay against the same canonical request/session record keys. Download this TSV?'
+      )
+    ) {
+      return false;
+    }
     downloadTextFile('gbdraw_specific_rules.tsv', text);
+    return true;
   };
 
   const getIndividualFeatureLabel = (feat) => {
@@ -125,45 +211,15 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  const getFirstMatchingRule = (feat, ruleFilter) => {
-    for (const rule of manualSpecificRules) {
-      if (rule.feat !== feat.type) continue;
-      if (!ruleFilter(rule)) continue;
-      if (ruleMatchesFeature(feat, rule)) return rule;
-    }
-    return null;
-  };
-
   // Resolve the effective legend item label used by current SVG coloring priority.
   const getEffectiveLegendCaption = (feat) => {
     if (!feat) return '';
-
-    const hashRule = getFirstMatchingRule(feat, (rule) => String(rule.qual || '').toLowerCase() === 'hash');
-    if (hashRule) {
-      const hashCaption = normalizeCaption(hashRule.cap);
-      if (hashCaption) return hashCaption;
-    }
-
-    const regexRule = getFirstMatchingRule(feat, (rule) => String(rule.qual || '').toLowerCase() !== 'hash');
-    if (regexRule) {
-      const regexCaption = normalizeCaption(regexRule.cap);
-      if (regexCaption) return regexCaption;
-    }
-
-    const overrideCaption = normalizeCaption(
-      getFeatureOverride(featureColorOverrides, feat)?.caption
+    const resolvedCaption = normalizeCaption(
+      resolveOrderedSpecificRule(feat, manualSpecificRules)?.rule?.cap
     );
-    if (overrideCaption) return overrideCaption;
+    if (resolvedCaption) return resolvedCaption;
 
     return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
-  };
-
-  const addCustomColor = () => {
-    if (!newColorFeat.value) return;
-    currentColors.value = {
-      ...currentColors.value,
-      [newColorFeat.value]: newColorVal.value
-    };
   };
 
   const addPriorityRule = () => {
@@ -178,6 +234,13 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
   const addSpecificRule = async () => {
     if (!newSpecRule.val) return;
+    if ([
+      FEATURE_INSTANCE_HASH_QUALIFIER,
+      FEATURE_SEMANTIC_SCOPE_QUALIFIER
+    ].includes(String(newSpecRule.qual || '').trim())) {
+      alert('Managed Feature selectors cannot be added in the generic rule editor.');
+      return false;
+    }
 
     if (newSpecRule.val.length > 50) {
       if (!confirm('Regular expression is quite long (>50 chars). This might impact performance. Continue?')) {
@@ -209,29 +272,23 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    manualSpecificRules.push(rule);
-
-    if (rule.cap) {
-      await nextTick();
-      const actualCaption = await addLegendEntry(rule.cap, rule.color);
-      if (actualCaption && typeof actualCaption === 'string') {
-        addedLegendCaptions.value.add(actualCaption);
-      }
-      extractLegendEntries();
-    }
-
-    newSpecRule.val = '';
+    const committed = await commitSpecificRules([...manualSpecificRules, rule], {
+      writerKind: 'rule-add',
+      label: 'Add specific color rule'
+    });
+    if (committed) newSpecRule.val = '';
+    return committed;
   };
 
   const clearAllSpecificRules = async () => {
-    const captionsToRemove = manualSpecificRules.filter((rule) => rule.cap).map((rule) => rule.cap);
-
-    for (const cap of captionsToRemove) {
-      await removeLegendEntry(cap);
-    }
-
-    manualSpecificRules.splice(0);
-    extractLegendEntries();
+    const retainedRules = manualSpecificRules.filter(isOpaqueSpecificRule);
+    if (retainedRules.length === manualSpecificRules.length) return false;
+    const committed = await commitSpecificRules(retainedRules, {
+      writerKind: 'rule-clear',
+      label: 'Clear editable specific color rules'
+    });
+    if (committed) syncFileCaptionTracking();
+    return committed;
   };
 
   const applySpecificRulePreset = async () => {
@@ -251,37 +308,23 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
         throw new Error(`Preset fetch failed: ${response.status}`);
       }
       const text = await response.text();
-      const { rules, rulesWithCaptions } = parseSpecificRules(text);
-
-      const captionsToRemove = manualSpecificRules.filter((rule) => rule.cap).map((rule) => rule.cap);
-      for (const cap of captionsToRemove) {
-        await removeLegendEntry(cap);
-        addedLegendCaptions.value.delete(cap);
-        fileLegendCaptions.value.delete(cap);
+      const { rules } = parseSpecificRules(text);
+      const retainedOpaqueRules = manualSpecificRules.filter(isOpaqueSpecificRule);
+      const presetColors = presetId === 'bakta'
+        ? { ...appliedPaletteColors.value, CDS: '#cccccc' }
+        : appliedPaletteColors.value;
+      const committed = await commitSpecificRules([...retainedOpaqueRules, ...rules], {
+        writerKind: 'preset',
+        label: 'Apply specific color preset',
+        appliedPaletteColors: presetColors,
+        presentationPatch: presetId === 'bakta'
+          ? { legendBoxSize: 12, legendFontSize: 12 }
+          : null
+      });
+      if (committed) {
+        syncFileCaptionTracking();
       }
-
-      manualSpecificRules.splice(0);
-      rules.forEach((rule) => manualSpecificRules.push(rule));
-
-      if (presetId === 'bakta') {
-        currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
-        adv.legend_box_size = 12;
-        adv.legend_font_size = 12;
-      }
-
-      if (rulesWithCaptions.length > 0) {
-        await nextTick();
-        for (const rule of rulesWithCaptions) {
-          const actualCaption = await addLegendEntry(rule.cap, rule.color);
-          if (actualCaption && typeof actualCaption === 'string') {
-            addedLegendCaptions.value.add(actualCaption);
-            fileLegendCaptions.value.add(actualCaption);
-          }
-        }
-        extractLegendEntries();
-      } else {
-        extractLegendEntries();
-      }
+      return committed;
     } catch (e) {
       console.error('Failed to load specific rule preset:', e);
       alert('Failed to load preset. Please check the preset file and format.');
@@ -326,22 +369,32 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   };
 
   const getFeatureColor = (feat) => {
-    const override = getFeatureOverride(featureColorOverrides, feat);
-    if (override) {
-      return resolveColorToHex(override.color || override);
-    }
-    return resolveColorToHex(appliedPaletteColors.value[feat.type]) || '#cccccc';
+    const svgDefaultColor = feat?.fill_color
+      || feat?.fillColor
+      || getFeatureOverride(featureColorOverrides, feat)?.color
+      || getFeatureOverride(featureColorOverrides, feat)
+      || '#cccccc';
+    return resolveFeatureFillViewModel({
+      feature: feat,
+      specificRules: manualSpecificRules,
+      paletteColors: appliedPaletteColors.value,
+      svgDefaultColor
+    }).effectiveColor;
   };
 
   const getFeatureColorValue = (feat) => {
-    const override = getFeatureOverride(featureColorOverrides, feat);
-    if (!override) return null;
-    return Object.prototype.hasOwnProperty.call(override, 'color')
-      ? override.color
-      : override;
+    const rule = resolveOrderedSpecificRule(feat, manualSpecificRules)?.rule;
+    return isExactFeatureRule(rule) ? rule.color : null;
   };
 
   const canEditFeatureColor = () => true;
+
+  const getFeatureFillViewModel = (feat) => resolveFeatureFillViewModel({
+    feature: feat,
+    specificRules: manualSpecificRules,
+    paletteColors: appliedPaletteColors.value,
+    svgDefaultColor: feat?.fill_color || feat?.fillColor || '#cccccc'
+  });
 
   const getFeatureQualifier = (feat) => {
     const generationHash = getFeatureGenerationHash(feat);
@@ -371,32 +424,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     };
   };
 
-  const refreshFeatureOverrides = (features) => {
-    if (!features || features.length === 0) return;
-    migrateLegacyFeatureOverrides(featureColorOverrides, features);
-
-    for (const feat of features) {
-      for (const rule of manualSpecificRules) {
-        if (!ruleMatchesFeature(feat, rule)) continue;
-        const key = featureOverrideKey(feat);
-        if (key) {
-          featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
-        }
-        break;
-      }
-    }
-  };
-
   const findMatchingRegexRule = (feat) => {
-    for (const rule of manualSpecificRules) {
-      if (rule.feat !== feat.type) continue;
-      if (String(rule.qual || '').toLowerCase() === 'hash') continue;
-
-      if (ruleMatchesFeature(feat, rule)) {
-        return rule;
-      }
-    }
-    return null;
+    const rule = resolveOrderedSpecificRule(feat, manualSpecificRules)?.rule || null;
+    return rule && !isOpaqueSpecificRule(rule) ? rule : null;
   };
 
   const countFeaturesMatchingRule = (rule) => {
@@ -460,7 +490,6 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   };
 
   return {
-    addCustomColor,
     addFeature,
     removeFeature,
     getFeatureShape,
@@ -468,6 +497,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     addPriorityRule,
     addSpecificRule,
     applySpecificRulePreset,
+    canMoveSpecificRule,
     canEditFeatureColor,
     clearAllSpecificRules,
     countFeaturesMatchingRule,
@@ -480,14 +510,15 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     findMatchingRegexRule,
     getFeatureColor,
     getFeatureColorValue,
+    getFeatureFillViewModel,
     getDisplayedFeatureLabel,
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLabelSpecificRule,
+    isOpaqueSpecificRule,
     moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
     moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
-    refreshFeatureOverrides,
     removeSpecificRule,
     setSpecificRuleField
   };

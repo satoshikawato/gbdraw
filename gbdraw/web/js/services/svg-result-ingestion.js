@@ -42,6 +42,37 @@ const markCommitted = (result, metadata) => {
   return result;
 };
 
+const admitSvgRoot = (result, svg) => {
+  normalizeSvgResultIds(svg);
+  const metadata = Object.freeze({
+    renderedFeatureIdentities: collectRenderedFeatureIdentitiesFromSvgRoot(svg)
+  });
+  return markCommitted({
+    ...result,
+    content: serializeCleanSvg(svg)
+  }, metadata);
+};
+
+export const parseCommittedSvgResultRoot = (
+  result,
+  parser = globalThis.DOMParser || globalThis.window?.DOMParser
+) => {
+  if (!isCommittedSvgResult(result)) {
+    throw new Error('Only an admitted SVG Result can be parsed for projection.');
+  }
+  return parseSanitizedSvg(getCommittedSvgContent(result), parser);
+};
+
+export const admitProjectedSvgResult = (result, svg) => {
+  if (!isCommittedSvgResult(result)) {
+    throw new Error('Only an admitted SVG Result can receive a projected root.');
+  }
+  if (!svg || String(svg.localName || '').toLowerCase() !== 'svg') {
+    throw new Error('A projected SVG root is required.');
+  }
+  return admitSvgRoot(result, svg);
+};
+
 export const isCommittedSvgResult = (result) => Boolean(committedState(result));
 
 export const isCommittedSvgResultMounted = (result) => Boolean(
@@ -100,16 +131,51 @@ export const ingestSvgResult = (
   if (typeof transformSvg === 'function') {
     transformSvg(svg, { result, resultIndex });
   }
-  normalizeSvgResultIds(svg);
-  const metadata = Object.freeze({
-    renderedFeatureIdentities: collectRenderedFeatureIdentitiesFromSvgRoot(svg)
-  });
-  const content = serializeCleanSvg(svg);
+  return admitSvgRoot(result, svg);
+};
 
-  return markCommitted({
-    ...result,
-    content
-  }, metadata);
+/**
+ * Reproject an already admitted Result without running untrusted-input sanitization again.
+ * The detached root and replacement admission record are published only on success.
+ */
+export const reprojectCommittedSvgResult = (
+  result,
+  {
+    parser = globalThis.DOMParser || globalThis.window?.DOMParser,
+    transformSvg = null,
+    resultIndex = 0
+  } = {}
+) => {
+  if (!isCommittedSvgResult(result)) {
+    throw new Error('Only an admitted SVG Result can be reprojected.');
+  }
+  const svg = parseCommittedSvgResultRoot(result, parser);
+  if (typeof transformSvg === 'function') {
+    transformSvg(svg, { result, resultIndex });
+  }
+  return admitProjectedSvgResult(result, svg);
+};
+
+/**
+ * Admit a candidate derived from the mounted SVG without parsing or sanitizing it.
+ * The supplied root is cloned so preparation cannot mutate the live mount.
+ */
+export const projectMountedSvgResult = (
+  result,
+  mountedSvg,
+  { transformSvg = null, resultIndex = 0 } = {}
+) => {
+  if (!isCommittedSvgResult(result)) {
+    throw new Error('Only an admitted SVG Result can be projected from a mount.');
+  }
+  if (!mountedSvg?.cloneNode) {
+    throw new Error('A mounted SVG root is required for projection.');
+  }
+  const svg = mountedSvg.cloneNode(true);
+  if (typeof transformSvg === 'function') {
+    transformSvg(svg, { result, resultIndex });
+  }
+  return admitProjectedSvgResult(result, svg);
 };
 
 export const ingestSvgResults = (results, options = {}) => {

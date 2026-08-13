@@ -1,0 +1,8 @@
+{
+  "description": "Duplicate the sole unreferenced saved default-color resource so recovery has two equally supported choices.",
+  "operation": "duplicate-resource",
+  "sourceResourceId": "colors-default-colors-file",
+  "targetResourceId": "colors-default-colors-file-copy",
+  "targetName": "saved-default-colors-copy.tsv",
+  "expectedError": "ambiguous saved resource support"
+}

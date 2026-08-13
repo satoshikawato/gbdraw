@@ -1,3 +1,13 @@
+import {
+  FEATURE_INSTANCE_HASH_QUALIFIER as INSTANCE_HASH_QUALIFIER,
+  FEATURE_INSTANCE_HASH_PATTERN as INSTANCE_HASH_PATTERN
+} from '../services/feature-instance-identity.js';
+import {
+  featureSemanticSelectorMatches,
+  isFeatureSemanticScopeRule,
+  parseFeatureSemanticSelector
+} from './feature-editor/semantic-fill-selectors.js';
+
 export const normalizeStringArray = (value) => {
   if (Array.isArray(value)) {
     return value
@@ -162,8 +172,15 @@ export const resolveInternalProteinId = (feature, member = null, fallback = '') 
 const getFeatureQualifierValue = (feat, qual) => {
   if (!qual) return null;
   const key = qual.toLowerCase();
-  if (feat.qualifiers && Object.prototype.hasOwnProperty.call(feat.qualifiers, key)) {
-    return feat.qualifiers[key];
+  const qualifiers = feat?.qualifiers && typeof feat.qualifiers === 'object'
+    && !Array.isArray(feat.qualifiers)
+    ? feat.qualifiers
+    : {};
+  const sourceKey = Object.keys(qualifiers).find(
+    (candidate) => candidate.toLowerCase() === key
+  );
+  if (sourceKey) {
+    return qualifiers[sourceKey];
   }
   if (key === 'product') return feat.product || null;
   if (key === 'gene') return feat.gene || null;
@@ -173,61 +190,259 @@ const getFeatureQualifierValue = (feat, qual) => {
 };
 
 const matchRuleValue = (value, ruleVal, strictEquals = false) => {
-  if (!value || !ruleVal) return false;
+  if (value === null || value === undefined || ruleVal === null || ruleVal === undefined) {
+    return false;
+  }
   const values = Array.isArray(value) ? value : [value];
   const needle = String(ruleVal);
+  let regex = null;
+  if (!strictEquals) {
+    try {
+      regex = new RegExp(needle, 'i');
+    } catch {
+      return false;
+    }
+  }
   for (const item of values) {
     if (item === null || item === undefined) continue;
     const text = String(item);
-    try {
-      const regex = new RegExp(needle, 'i');
-      if (regex.test(text)) return true;
-    } catch {
-      if (strictEquals) {
-        if (text === needle) return true;
-      } else if (text.toLowerCase().includes(needle.toLowerCase())) {
-        return true;
-      }
-    }
+    if (strictEquals ? text === needle : regex.test(text)) return true;
   }
   return false;
 };
 
-export const ruleMatchesFeature = (feat, rule) => {
-  if (!rule || rule.feat !== feat.type) return false;
-  const qualKey = (rule.qual || '').toLowerCase();
+const normalizeFeatureStrand = (value) => {
+  if (value === null || value === undefined) return 'undefined';
+  const normalized = String(value).trim().toLowerCase();
+  if (['positive', 'plus', '+', 'forward', '1'].includes(normalized)) return '+';
+  if (['negative', 'minus', '-', 'reverse', '-1'].includes(normalized)) return '-';
+  return 'undefined';
+};
+
+const getFeatureLocationValue = (feat) => firstFeatureText(
+  feat?.selector?.location,
+  feat?.location,
+  feat?.start !== undefined && feat?.end !== undefined ? `${feat.start}..${feat.end}` : ''
+);
+
+const getFeatureRecordLocationValue = (feat) => {
+  const explicit = firstFeatureText(
+    feat?.selector?.record_location,
+    feat?.selector?.recordLocation,
+    feat?.record_location,
+    feat?.recordLocation
+  );
+  if (explicit) return explicit;
+  const recordId = firstFeatureText(feat?.record_id, feat?.recordId, feat?.record);
+  const location = getFeatureLocationValue(feat);
+  return recordId && location
+    ? `${recordId}:${location}:${normalizeFeatureStrand(feat?.strand)}`
+    : '';
+};
+
+const getRuleHashCandidates = (feature) => [...new Set([
+  feature?.selector?.hash,
+  feature?.hash,
+  feature?.stableFeatureId,
+  feature?.stable_feature_id,
+  ...getFeatureHashCandidates(feature)
+].map((value) => firstFeatureText(value)).filter(Boolean))];
+
+const isInstanceLiteralRule = (rule) => (
+  String(rule?.qual || '').trim() === INSTANCE_HASH_QUALIFIER
+  && String(rule?.match || '').trim().toLowerCase() !== 'regex'
+);
+
+const ruleKind = (rule) => {
+  if (isInstanceLiteralRule(rule)) return 'instance-literal';
+  if (isFeatureSemanticScopeRule(rule)) return 'semantic-literal';
+  const qualifier = String(rule?.qual || '').trim().toLowerCase();
+  if (qualifier === 'hash') return 'hash';
+  if (qualifier === 'record_location') return 'record-location';
+  if (qualifier === 'location') return 'location';
+  return 'source-qualifier';
+};
+
+const ruleTypeMatchesFeature = (feat, rule) => {
+  const featureType = String(feat?.type || '').trim();
+  const ruleType = String(rule?.feat || '').trim();
+  return Boolean(featureType && (ruleType === featureType || ruleType === '*'));
+};
+
+/** Match one normalized specific-color rule without applying precedence. */
+export const specificRuleMatchesFeature = (
+  feat,
+  rule,
+  { baseLegendCaption = undefined } = {}
+) => {
+  if (!feat || !rule || !ruleTypeMatchesFeature(feat, rule)) return false;
+  const rawQual = String(rule.qual || '').trim();
+  const qualKey = rawQual.toLowerCase();
+
+  if (isInstanceLiteralRule(rule)) {
+    const instanceHash = firstFeatureText(feat.instanceHash, feat.instance_hash);
+    const literal = String(rule.val || '').trim();
+    return INSTANCE_HASH_PATTERN.test(literal) && instanceHash === literal;
+  }
+
+  if (isFeatureSemanticScopeRule(rule)) {
+    const resolvedBaseLegendCaption = baseLegendCaption === undefined
+      ? firstFeatureText(
+        feat.baseLegendCaption,
+        feat.base_legend_caption,
+        feat.type
+      )
+      : String(baseLegendCaption ?? '');
+    return featureSemanticSelectorMatches(
+      feat,
+      parseFeatureSemanticSelector(rule.val),
+      { baseLegendCaption: resolvedBaseLegendCaption }
+    );
+  }
 
   if (qualKey === 'hash') {
-    return getFeatureHashCandidates(feat).some((candidate) => matchRuleValue(candidate, rule.val, true));
+    return getRuleHashCandidates(feat).some((candidate) => matchRuleValue(candidate, rule.val));
   }
 
   if (qualKey === 'record_location') {
-    const recordId = firstFeatureText(feat.record_id, feat.recordId, feat.record);
-    const location = firstFeatureText(
-      feat.selector?.location,
-      feat.location,
-      feat.start !== undefined && feat.end !== undefined ? `${feat.start}..${feat.end}` : ''
-    );
-    const strandToken = String(feat.strand ?? '').trim().toLowerCase();
-    const strand = ['positive', 'plus', 'forward', '1'].includes(strandToken)
-      ? '+'
-      : (['negative', 'minus', 'reverse', '-1'].includes(strandToken) ? '-' : strandToken);
-    const value = firstFeatureText(
-      feat.selector?.record_location,
-      feat.record_location,
-      feat.recordLocation,
-      recordId && location && strand ? `${recordId}:${location}:${strand}` : ''
-    );
-    return matchRuleValue(value, rule.val);
+    return matchRuleValue(getFeatureRecordLocationValue(feat), rule.val);
   }
 
   if (qualKey === 'location') {
-    const location = `${feat.start}..${feat.end}`;
-    return matchRuleValue(location, rule.val);
+    return matchRuleValue(getFeatureLocationValue(feat), rule.val);
   }
 
   const value = getFeatureQualifierValue(feat, qualKey);
   if (!value) return false;
-  const strictEquals = qualKey === 'locus_tag';
-  return matchRuleValue(value, rule.val, strictEquals);
+  return matchRuleValue(value, rule.val);
 };
+
+const sourceQualifierOrder = (feature) => {
+  const qualifiers = feature?.qualifiers && typeof feature.qualifiers === 'object'
+    && !Array.isArray(feature.qualifiers)
+    ? feature.qualifiers
+    : {};
+  const ordered = [];
+  const seen = new Set();
+  Object.keys(qualifiers).forEach((key) => {
+    const normalized = String(key).trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    ordered.push(normalized);
+  });
+  for (const key of ['product', 'gene', 'locus_tag', 'note']) {
+    if (seen.has(key) || !firstFeatureText(feature?.[key])) continue;
+    seen.add(key);
+    ordered.push(key);
+  }
+  return ordered;
+};
+
+const firstMatchingRuleOfKind = (feature, rules, kind, matchOptions = undefined) => {
+  for (let index = 0; index < rules.length; index += 1) {
+    const rule = rules[index];
+    if (
+      ruleKind(rule) !== kind
+      || !specificRuleMatchesFeature(feature, rule, matchOptions)
+    ) {
+      continue;
+    }
+    return { rule, ruleIndex: index };
+  }
+  return null;
+};
+
+const firstMatchingLegacyRule = (feature, rules) => {
+  for (const kind of ['hash', 'record-location']) {
+    const matched = firstMatchingRuleOfKind(feature, rules, kind);
+    if (matched) return matched;
+  }
+
+  for (const qualifier of sourceQualifierOrder(feature)) {
+    for (let index = 0; index < rules.length; index += 1) {
+      const rule = rules[index];
+      if (
+        ruleKind(rule) !== 'source-qualifier'
+        || String(rule?.qual || '').trim().toLowerCase() !== qualifier
+        || !specificRuleMatchesFeature(feature, rule)
+      ) {
+        continue;
+      }
+      return { rule, ruleIndex: index };
+    }
+  }
+
+  return firstMatchingRuleOfKind(feature, rules, 'location');
+};
+
+/**
+ * Resolve renderer-visible rule precedence: exact Feature type, then wildcard;
+ * inside either set, instance literal, hash, record-location, source qualifier
+ * order, then location. Rule-array order is stable within one selector class.
+ */
+export const resolveOrderedSpecificRule = (feature, rules = []) => {
+  const source = Array.isArray(rules) ? rules : [];
+  const featureType = String(feature?.type || '').trim();
+  if (!featureType) return null;
+
+  const typedRuleSets = [featureType, '*'].map((candidateType) => ({
+    candidateType,
+    rules: source.filter(
+      (rule) => String(rule?.feat || '').trim() === candidateType
+    )
+  }));
+  const underlyingLegacyRule = typedRuleSets
+    .map(({ rules: typedRules }) => firstMatchingLegacyRule(feature, typedRules))
+    .find(Boolean);
+  const baseLegendCaption = firstFeatureText(
+    underlyingLegacyRule?.rule?.cap,
+    featureType
+  );
+
+  for (const { rules: typedRules } of typedRuleSets) {
+    for (const kind of [
+      'instance-literal',
+      'semantic-literal',
+      'hash',
+      'record-location'
+    ]) {
+      const matched = firstMatchingRuleOfKind(
+        feature,
+        typedRules,
+        kind,
+        kind === 'semantic-literal' ? { baseLegendCaption } : undefined
+      );
+      if (matched) {
+        return {
+          rule: matched.rule,
+          ruleIndex: source.indexOf(matched.rule)
+        };
+      }
+    }
+
+    for (const qualifier of sourceQualifierOrder(feature)) {
+      for (const rule of typedRules) {
+        if (
+          ruleKind(rule) !== 'source-qualifier'
+          || String(rule?.qual || '').trim().toLowerCase() !== qualifier
+          || !specificRuleMatchesFeature(feature, rule)
+        ) {
+          continue;
+        }
+        return { rule, ruleIndex: source.indexOf(rule) };
+      }
+    }
+
+    const locationRule = firstMatchingRuleOfKind(feature, typedRules, 'location');
+    if (locationRule) {
+      return {
+        rule: locationRule.rule,
+        ruleIndex: source.indexOf(locationRule.rule)
+      };
+    }
+  }
+  return null;
+};
+
+// Compatibility name for callers that only need one-rule matching.
+export const ruleMatchesFeature = specificRuleMatchesFeature;

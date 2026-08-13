@@ -1,38 +1,57 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
+const sourceServicesDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+await mkdir(join(tempDir, 'app'));
+await mkdir(join(tempDir, 'app', 'feature-editor'));
+await mkdir(join(tempDir, 'services'));
 await writeFile(
-  join(tempDir, 'file-imports.js'),
+  join(tempDir, 'app', 'file-imports.js'),
   await readFile(join(sourceDir, 'file-imports.js'), 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'color-utils.js'),
+  join(tempDir, 'app', 'color-utils.js'),
   await readFile(join(sourceDir, 'color-utils.js'), 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'specific-color-rules.js'),
+  join(tempDir, 'app', 'specific-color-rules.js'),
   await readFile(join(sourceDir, 'specific-color-rules.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'feature-instance-identity.js'),
+  await readFile(join(sourceServicesDir, 'feature-instance-identity.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'json-clone.js'),
+  await readFile(join(sourceServicesDir, 'json-clone.js'), 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'app', 'feature-editor', 'semantic-fill-selectors.js'),
+  await readFile(join(sourceDir, 'feature-editor', 'semantic-fill-selectors.js'), 'utf8'),
   'utf8'
 );
 
 const { parseColorTable, parsePriorityRules, parseSpecificRules, serializeSpecificRules } = await import(
-  pathToFileURL(join(tempDir, 'file-imports.js'))
+  pathToFileURL(join(tempDir, 'app', 'file-imports.js'))
 );
 const {
   applySpecificRuleProvenance,
   buildLegendIntents,
   diffLegendIntents,
   prepareSpecificColorImport
-} = await import(pathToFileURL(join(tempDir, 'specific-color-rules.js')));
+} = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
 
 const rules = [
   { feat: 'CDS', qual: 'custom_annotation', val: '^alpha$', color: '#111111', cap: 'Alpha' },
@@ -43,6 +62,64 @@ assert.equal(
   serializeSpecificRules(rules),
   'CDS\tcustom_annotation\t^alpha$\t#111111\tAlpha\n' +
     'tRNA\tcolor\t^beta$\t#222222\tBeta\n'
+);
+
+const instanceHash = 'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa';
+const literalRule = parseSpecificRules(
+  `CDS\t__gbdraw_instance_hash__\t${instanceHash}\tnone\tHidden\n`,
+  { schema: 6 }
+).rules[0];
+assert.equal(literalRule.match, 'literal');
+assert.equal(literalRule.color, 'none');
+assert.equal(
+  serializeSpecificRules([literalRule], { schema: 6 }),
+  `CDS\t__gbdraw_instance_hash__\t${instanceHash}\tnone\tHidden\n`
+);
+assert.throws(
+  () => serializeSpecificRules([literalRule], { schema: 5 }),
+  /require canonical request schema 6/
+);
+assert.throws(
+  () => parseSpecificRules(
+    'CDS\t__gbdraw_instance_hash__\tfi1_bad\t#112233\tBad\n',
+    { schema: 6 }
+  ),
+  /Invalid feature-instance hash/
+);
+assert.equal(
+  parseSpecificRules(
+    'CDS\t__gbdraw_instance_hash__\tfi1_.*\t#112233\tLegacy biological qualifier\n',
+    { schema: 5 }
+  ).rules[0].match,
+  'regex'
+);
+
+const semanticLiteralRule = parseSpecificRules(
+  '*\t__gbdraw_semantic_scope__\tfs1:source-annotation-label:Shared%20protein\t#abcdef\tShared protein\n',
+  { schema: 6 }
+).rules[0];
+assert.equal(semanticLiteralRule.match, 'literal');
+assert.equal(
+  serializeSpecificRules([semanticLiteralRule], { schema: 6 }),
+  '*\t__gbdraw_semantic_scope__\tfs1:source-annotation-label:Shared%20protein\t#abcdef\tShared protein\n'
+);
+assert.throws(
+  () => serializeSpecificRules([semanticLiteralRule], { schema: 5 }),
+  /require canonical request schema 6/
+);
+assert.throws(
+  () => parseSpecificRules(
+    '*\t__gbdraw_semantic_scope__\tfs1:source-annotation-label:%zz\t#abcdef\tBad\n',
+    { schema: 6 }
+  ),
+  /Invalid Feature semantic selector/
+);
+assert.equal(
+  parseSpecificRules(
+    '*\t__gbdraw_semantic_scope__\t^bio.*$\t#abcdef\tLegacy biological qualifier\n',
+    { schema: 5 }
+  ).rules[0].match,
+  'regex'
 );
 
 assert.deepEqual(

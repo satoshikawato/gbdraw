@@ -2,16 +2,26 @@
 
 # Session and request compatibility
 
-Current writers emit session version 40 and canonical `renderRequest` schema 5.
+Current writers emit session version 41 and canonical `renderRequest` schema 6.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 40 | 27–33 and 39–40 |
-| Canonical `renderRequest` | 5 | 1, 2, and 5 |
+| gbdraw session | 41 | 27–33 and 39–41 |
+| Canonical `renderRequest` | 6 | 1, 2, 5, and 6 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
 hand; changing metadata does not migrate its content.
+
+Version 41 binds feature-style resources and saved Results to one validated
+style fingerprint. Schema 6 reserves `__gbdraw_instance_hash__` for an opaque,
+case-sensitive exact-feature literal and `__gbdraw_semantic_scope__` for opaque,
+future-matching Feature-group literals. Version 40/schema 5 remains a supported
+input. Its ordinary biological `instance_hash` qualifier and any source
+qualifier using a later-reserved spelling keep regex behavior, but a version-40
+session cannot be promoted if it actually persists either reserved spelling as
+editor authority. The reader promotes exact scope only when the catalogue's
+canonical record and feature pairs are unambiguous.
 
 ## What a session preserves
 

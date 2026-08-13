@@ -14,9 +14,91 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   linearRecordLayoutHasSharedRow,
+  overlayCanonicalColorSemantics,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+);
+
+const unrelatedResource = Object.freeze({
+  kind: 'genbank',
+  name: 'record.gb',
+  type: 'text/plain',
+  size: 3,
+  lastModified: 0,
+  encoding: 'base64',
+  data: Buffer.from('abc').toString('base64')
+});
+const unrelatedLayout = Object.freeze({ marker: 'same-reference' });
+const colorBasis = {
+  renderRequest: {
+    schema: 5,
+    mode: 'circular',
+    grouping: 'single',
+    records: [],
+    diagramOptions: {
+      colors: {
+        colorTable: null,
+        colorTableFile: null,
+        defaultColors: null,
+        defaultColorsFile: null,
+        defaultColorsPalette: 'default'
+      }
+    },
+    layout: unrelatedLayout,
+    comparisons: [],
+    output: {}
+  },
+  resources: { sequence: unrelatedResource },
+  webFiles: { marker: true }
+};
+const overlaidColors = overlayCanonicalColorSemantics(colorBasis, {
+  rules: [{
+    feat: 'CDS',
+    qual: '__gbdraw_instance_hash__',
+    val: 'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa',
+    color: 'none',
+    cap: 'Hidden'
+  }],
+  appliedColors: { CDS: '#222222' },
+  paletteColors: { CDS: '#111111' },
+  paletteName: 'custom'
+});
+assert.equal(overlaidColors.renderRequest.schema, 6);
+assert.strictEqual(overlaidColors.renderRequest.layout, unrelatedLayout);
+assert.strictEqual(overlaidColors.resources.sequence, unrelatedResource);
+assert.equal(
+  Buffer.from(
+    overlaidColors.resources[
+      overlaidColors.renderRequest.diagramOptions.colors.colorTableFile.resourceId
+    ].data,
+    'base64'
+  ).toString('utf8'),
+  'CDS\t__gbdraw_instance_hash__\tfi1_aaaaaaaaaaaaaaaaaaaaaaaaaa\tnone\tHidden\n'
+);
+assert.equal(
+  Buffer.from(
+    overlaidColors.resources[
+      overlaidColors.renderRequest.diagramOptions.colors.defaultColorsFile.resourceId
+    ].data,
+    'base64'
+  ).toString('utf8'),
+  'CDS\t#222222\n'
+);
+assert.strictEqual(
+  overlayCanonicalColorSemantics(overlaidColors, {
+    rules: [{
+      feat: 'CDS',
+      qual: '__gbdraw_instance_hash__',
+      val: 'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa',
+      color: 'none',
+      cap: 'Hidden'
+    }],
+    appliedColors: { CDS: '#222222' },
+    paletteColors: { CDS: '#111111' },
+    paletteName: 'custom'
+  }),
+  overlaidColors
 );
 const {
   createDefaultLinearComparisonPlan,
@@ -441,7 +523,7 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 5);
+assert.equal(canonical.renderRequest.schema, 6);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');

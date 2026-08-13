@@ -1,5 +1,4 @@
 import {
-  estimateColorFactor,
   interpolateColor,
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
@@ -7,8 +6,7 @@ import {
 import {
   FEATURE_SELECTOR,
   getFeatureElementIndex,
-  getFeatureFillElements,
-  getFeatureIdentity
+  getFeatureFillElements
 } from './feature-editor/svg-actions.js';
 import {
   FEATURE_PART_CONNECTOR,
@@ -16,9 +14,12 @@ import {
   isFeatureFillTarget
 } from './feature-dom.js';
 import { ruleMatchesFeature } from './feature-utils.js';
-import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
+import {
+  getAllFeatureLegendGroups,
+  PAIRWISE_LEGEND_SELECTOR,
+  parseTransformXY
+} from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
-import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
 export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
@@ -33,27 +34,350 @@ const setColorAttributeIfChanged = (element, attribute, value) => {
   return true;
 };
 
-const paletteColorsEqual = (left, right) => {
-  const keys = new Set([...Object.keys(left || {}), ...Object.keys(right || {})]);
-  return Array.from(keys).every(
-    (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
-  );
-};
+export const NON_FEATURE_PALETTE_COLOR_KEYS = Object.freeze([
+  'gc_content',
+  'skew_high',
+  'skew_low',
+  'pairwise_match',
+  'pairwise_match_min',
+  'pairwise_match_max',
+  'collinear_block_plus_min',
+  'collinear_block_plus',
+  'collinear_block_minus_min',
+  'collinear_block_minus'
+]);
 
-const paletteColorKeysEqual = (left, right, keys) => keys.every(
-  (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
+const BUILT_IN_LEGEND_PALETTE_KEYS = Object.freeze({
+  'gc content': 'gc_content',
+  'gc skew (+)': 'skew_high',
+  'gc skew (-)': 'skew_low'
+});
+
+/** Return the applied-palette owner for an editable built-in legend swatch. */
+export const builtInLegendPaletteColorKey = (caption) => (
+  BUILT_IN_LEGEND_PALETTE_KEYS[String(caption ?? '').trim().toLowerCase()] || ''
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions, previewRuntime = null }) => {
+const NON_FEATURE_PALETTE_COLOR_KEY_SET = new Set(NON_FEATURE_PALETTE_COLOR_KEYS);
+const text = (value) => String(value ?? '').trim();
+
+export const changedNonFeaturePaletteColorKeys = (beforeColors = {}, afterColors = {}) => (
+  NON_FEATURE_PALETTE_COLOR_KEYS.filter(
+    (key) => normalizeComparableColor(beforeColors?.[key]) !== normalizeComparableColor(afterColors?.[key])
+  )
+);
+
+const normalizedDinucleotide = (value, fallback = 'GC') => {
+  const normalized = text(value || fallback).toUpperCase();
+  return /^[ACGTU]{2}$/.test(normalized) ? normalized : text(fallback).toUpperCase() || 'GC';
+};
+
+/**
+ * Freeze the track-slot ownership needed to distinguish palette-derived skew
+ * colors from explicit per-track colors during a detached Result projection.
+ */
+export const buildNonFeaturePaletteProjectionContext = ({
+  trackSlots = [],
+  defaultDinucleotide = 'GC'
+} = {}) => Object.freeze({
+  skewSlots: Object.freeze(Object.fromEntries(
+    (Array.isArray(trackSlots) ? trackSlots : [])
+      .filter((slot) => text(slot?.renderer) === 'dinucleotide_skew' && text(slot?.id))
+      .map((slot) => {
+        const params = slot?.params && typeof slot.params === 'object' ? slot.params : {};
+        const dinucleotide = normalizedDinucleotide(
+          params.nt ?? params.dinucleotide,
+          defaultDinucleotide
+        );
+        return [text(slot.id), Object.freeze({
+          highPaletteOwned: !text(params.positive_color ?? params.high_color),
+          lowPaletteOwned: !text(params.negative_color ?? params.low_color),
+          legendLabel: text(params.legend_label) || `${dinucleotide} skew`
+        })];
+      })
+  )),
+  contentSlots: Object.freeze(Object.fromEntries(
+    (Array.isArray(trackSlots) ? trackSlots : [])
+      .filter((slot) => text(slot?.renderer) === 'dinucleotide_content' && text(slot?.id))
+      .map((slot) => {
+        const params = slot?.params && typeof slot.params === 'object' ? slot.params : {};
+        const dinucleotide = normalizedDinucleotide(
+          params.nt ?? params.dinucleotide,
+          defaultDinucleotide
+        );
+        return [text(slot.id), Object.freeze({
+          legendLabel: text(params.legend_label) || `${dinucleotide} content`
+        })];
+      })
+  ))
+});
+
+const setProjectedColor = (element, attribute, value, counters, counterKey) => {
+  if (!element || !text(value)) return false;
+  if (!setColorAttributeIfChanged(element, attribute, value)) return false;
+  counters[counterKey] += 1;
+  return true;
+};
+
+const visibleFilledPaths = (group) => Array.from(group?.querySelectorAll?.('path') || []).filter((path) => {
+  const fill = normalizeComparableColor(path.getAttribute?.('fill'));
+  return fill && fill !== 'white' && fill !== '#ffffff' && fill !== 'none' && !fill.startsWith('url(');
+});
+
+const groupSlotId = (group) => text(
+  group?.getAttribute?.('data-gbdraw-slot-id')
+  || group?.getAttribute?.('id')
+);
+
+const defaultSkewSlot = (slotId) => (
+  /^(?:gc_)?skew(?:_|$)/i.test(slotId)
+  || /_gc_skew(?:_|$)/i.test(slotId)
+);
+
+const legendSwatchPath = (entryGroup) => Array.from(
+  entryGroup?.querySelectorAll?.('path') || []
+).find((path) => {
+  const fill = text(path.getAttribute?.('fill'));
+  return fill && fill.toLowerCase() !== 'none' && !fill.startsWith('url(');
+}) || null;
+
+const updateLegacyLegendSwatches = (legendGroup, colorsByCaption, counters) => {
+  const texts = legendGroup?.querySelectorAll?.('text') || [];
+  const paths = legendGroup?.querySelectorAll?.('path') || [];
+  texts.forEach((textElement) => {
+    const caption = text(textElement.textContent);
+    const color = colorsByCaption.get(caption);
+    if (!color) return;
+    const textPosition = parseTransformXY(textElement.getAttribute?.('transform'));
+    let bestPath = null;
+    let bestX = -Infinity;
+    paths.forEach((path) => {
+      const pathPosition = parseTransformXY(path.getAttribute?.('transform'));
+      const fill = text(path.getAttribute?.('fill'));
+      if (
+        Math.abs(pathPosition.y - textPosition.y) < 2
+        && pathPosition.x < textPosition.x
+        && fill
+        && fill.toLowerCase() !== 'none'
+        && !fill.startsWith('url(')
+        && pathPosition.x > bestX
+      ) {
+        bestX = pathPosition.x;
+        bestPath = path;
+      }
+    });
+    setProjectedColor(bestPath, 'fill', color, counters, 'legendSwatches');
+  });
+};
+
+const updateNonFeatureLegendSwatches = (svg, colorsByCaption, counters) => {
+  getAllFeatureLegendGroups(svg).forEach((legendGroup) => {
+    const keyedEntries = legendGroup.querySelectorAll?.('g[data-legend-key]') || [];
+    if (keyedEntries.length === 0) {
+      updateLegacyLegendSwatches(legendGroup, colorsByCaption, counters);
+      return;
+    }
+    keyedEntries.forEach((entryGroup) => {
+      const color = colorsByCaption.get(text(entryGroup.getAttribute?.('data-legend-key')));
+      if (!color) return;
+      setProjectedColor(
+        legendSwatchPath(entryGroup),
+        'fill',
+        color,
+        counters,
+        'legendSwatches'
+      );
+    });
+  });
+};
+
+const updatePairwiseLegendGradientStops = (pairwiseLegend, colors, counters = null) => {
+  let updated = false;
+  pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
+    const legendKey = gradient.closest('g[data-legend-key]')?.getAttribute('data-legend-key') || '';
+    const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
+    const minColor = colors[minKey];
+    const maxColor = colors[maxKey];
+    if (!minColor || !maxColor) return;
+    const stops = gradient.querySelectorAll('stop');
+    if (stops.length < 2) return;
+    const minChanged = setColorAttributeIfChanged(stops[0], 'stop-color', minColor);
+    const maxChanged = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor);
+    if (minChanged || maxChanged) {
+      updated = true;
+      if (counters) counters.gradientStops += Number(minChanged) + Number(maxChanged);
+    }
+  });
+  return updated;
+};
+
+const projectionError = (unsupported) => {
+  const error = new Error(
+    `Non-Feature palette projection requires regeneration metadata (${unsupported.length} unresolved target(s)).`
+  );
+  error.code = 'NON_FEATURE_PALETTE_PROJECTION_UNSUPPORTED';
+  error.details = Object.freeze(unsupported.map((entry) => Object.freeze({ ...entry })));
+  return error;
+};
+
+/**
+ * Prepare GC/skew/comparison palette consumers on a detached clone. The input
+ * SVG is never changed. Feature fills and Feature-derived legends intentionally
+ * remain owned by the Feature bulk-style projection.
+ */
+export const prepareNonFeaturePaletteProjection = ({
+  svg,
+  beforeColors = {},
+  afterColors = {},
+  context = null,
+  strict = true
+} = {}) => {
+  if (!svg?.cloneNode) throw new Error('Non-Feature palette projection requires an SVG root.');
+  const projectedSvg = svg.cloneNode(true);
+  const changedKeys = changedNonFeaturePaletteColorKeys(beforeColors, afterColors);
+  const changedKeySet = new Set(changedKeys);
+  const counters = {
+    gcPaths: 0,
+    skewPaths: 0,
+    comparisonPaths: 0,
+    legendSwatches: 0,
+    gradientStops: 0
+  };
+  const unsupported = [];
+  const colorsByCaption = new Map();
+
+  if (changedKeySet.has('gc_content') && text(afterColors.gc_content)) {
+    getGroupsByBaseIds(
+      projectedSvg,
+      ['gc_content'],
+      ['dinucleotide_content']
+    ).forEach((group) => {
+      visibleFilledPaths(group).forEach((path) => {
+        setProjectedColor(path, 'fill', afterColors.gc_content, counters, 'gcPaths');
+      });
+      const slotId = groupSlotId(group);
+      const label = text(context?.contentSlots?.[slotId]?.legendLabel);
+      if (label) colorsByCaption.set(label, afterColors.gc_content);
+    });
+    colorsByCaption.set('GC content', afterColors.gc_content);
+  }
+
+  if (changedKeySet.has('skew_high') || changedKeySet.has('skew_low')) {
+    getGroupsByBaseIds(
+      projectedSvg,
+      ['skew', 'gc_skew'],
+      ['dinucleotide_skew']
+    ).forEach((group) => {
+      const slotId = groupSlotId(group);
+      const ownership = context?.skewSlots?.[slotId] || null;
+      const isDefault = defaultSkewSlot(slotId);
+      if (!ownership && !isDefault) {
+        unsupported.push({ kind: 'skew-slot-ownership', slotId: slotId || '(missing)' });
+        return;
+      }
+      const highPaletteOwned = ownership ? ownership.highPaletteOwned : true;
+      const lowPaletteOwned = ownership ? ownership.lowPaletteOwned : true;
+      const paths = visibleFilledPaths(group);
+      if (changedKeySet.has('skew_high') && highPaletteOwned && paths[0]) {
+        setProjectedColor(paths[0], 'fill', afterColors.skew_high, counters, 'skewPaths');
+      }
+      if (changedKeySet.has('skew_low') && lowPaletteOwned && paths[1]) {
+        setProjectedColor(paths[1], 'fill', afterColors.skew_low, counters, 'skewPaths');
+      }
+      const label = text(ownership?.legendLabel) || (isDefault ? 'GC skew' : '');
+      if (label && highPaletteOwned && text(afterColors.skew_high)) {
+        colorsByCaption.set(`${label} (+)`, afterColors.skew_high);
+      }
+      if (label && lowPaletteOwned && text(afterColors.skew_low)) {
+        colorsByCaption.set(`${label} (-)`, afterColors.skew_low);
+      }
+    });
+  }
+
+  const comparisonKeysChanged = changedKeys.some((key) => (
+    key.startsWith('pairwise_match') || key.startsWith('collinear_block_')
+  ));
+  if (comparisonKeysChanged) {
+    projectedSvg.querySelectorAll(
+      'path[data-gbdraw-pairwise-match-id], path[data-gbdraw-match-id]'
+    ).forEach((path) => {
+      const colorMode = text(path.getAttribute('data-collinearity-color-mode'))
+        .toLowerCase()
+        .replace(/-/g, '_');
+      const orientation = text(path.getAttribute('data-collinearity-orientation')).toLowerCase();
+      const blockId = text(path.getAttribute('data-collinearity-block-id'));
+      const factorText = text(path.getAttribute('data-identity-factor'));
+      const factor = factorText ? Number(factorText) : NaN;
+      let relevantKeys = ['pairwise_match_min', 'pairwise_match_max'];
+      if (blockId && colorMode === 'orientation' && ['plus', 'minus'].includes(orientation)) {
+        relevantKeys = [`collinear_block_${orientation}`];
+      } else if (
+        blockId
+        && colorMode === 'orientation_identity'
+        && ['plus', 'minus'].includes(orientation)
+      ) {
+        relevantKeys = [
+          `collinear_block_${orientation}_min`,
+          `collinear_block_${orientation}`
+        ];
+      }
+      if (!relevantKeys.some((key) => changedKeySet.has(key))) return;
+      if (!Number.isFinite(factor) && relevantKeys.length > 1) {
+        unsupported.push({
+          kind: 'comparison-identity-factor',
+          matchId: text(
+            path.getAttribute('data-gbdraw-pairwise-match-id')
+            || path.getAttribute('data-gbdraw-match-id')
+          ) || '(missing)'
+        });
+        return;
+      }
+      let color = resolveCollinearMatchColor({
+        blockId,
+        colorMode,
+        orientation,
+        identityFactor: Number.isFinite(factor) ? factor : null,
+        colors: afterColors
+      });
+      if (!color) {
+        const minColor = text(afterColors.pairwise_match_min);
+        const maxColor = text(afterColors.pairwise_match_max);
+        if (!minColor || !maxColor || !Number.isFinite(factor)) {
+          unsupported.push({
+            kind: 'comparison-palette-metadata',
+            matchId: text(
+              path.getAttribute('data-gbdraw-pairwise-match-id')
+              || path.getAttribute('data-gbdraw-match-id')
+            ) || '(missing)'
+          });
+          return;
+        }
+        color = interpolateColor(minColor, maxColor, factor);
+      }
+      setProjectedColor(path, 'fill', color, counters, 'comparisonPaths');
+    });
+    projectedSvg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR).forEach((legend) => {
+      updatePairwiseLegendGradientStops(legend, afterColors, counters);
+    });
+  }
+
+  updateNonFeatureLegendSwatches(projectedSvg, colorsByCaption, counters);
+  if (strict && unsupported.length > 0) throw projectionError(unsupported);
+  return Object.freeze({
+    svg: projectedSvg,
+    changed: Object.values(counters).some((count) => count > 0),
+    changedKeys: Object.freeze(changedKeys),
+    unsupported: Object.freeze(unsupported.map((entry) => Object.freeze({ ...entry }))),
+    counters: Object.freeze({ ...counters })
+  });
+};
+
+export const createSvgStyles = ({ state, watch, legendActions, previewRuntime = null }) => {
   const {
     svgContent,
     extractedFeatures,
-    featuresBySvgId,
     appliedPaletteColors,
     manualSpecificRules,
-    featureColorOverrides,
-    legendColorOverrides,
-    pairwiseMatchFactors,
     results,
     selectedResultIndex,
     skipCaptureBaseConfig,
@@ -62,8 +386,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     mode,
     form
   } = state;
-
-  const { getAllFeatureLegendGroups } = legendActions;
+  void legendActions;
 
   const persistSvgEdit = (svg, reason) => {
     skipCaptureBaseConfig.value = true;
@@ -74,255 +397,24 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
   };
 
-  const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
-    let updated = false;
-    pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
-      const legendKey = gradient.closest('g[data-legend-key]')?.getAttribute('data-legend-key') || '';
-      const { minKey, maxKey } = resolvePairwiseLegendGradientColorKeys(legendKey);
-      const minColor = colors[minKey];
-      const maxColor = colors[maxKey];
-      if (!minColor || !maxColor) return;
-      const stops = gradient.querySelectorAll('stop');
-      if (stops.length >= 2) {
-        updated = setColorAttributeIfChanged(stops[0], 'stop-color', minColor) || updated;
-        updated = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor) || updated;
-      }
-    });
-    return updated;
-  };
-
+  // Compatibility adapter for hydration callers. It deliberately prepares a
+  // detached projection and never writes the mounted Result. Live acceptance
+  // is owned by the all-Result bulk style command.
   const applyPaletteToSvg = ({
-    recolorPairwise = false,
-    recolorCollinear = false
+    beforeColors = appliedPaletteColors.value,
+    afterColors = appliedPaletteColors.value,
+    context = null,
+    strict = false
   } = {}) => {
-    if (!svgContent.value || !extractedFeatures.value.length) return;
-    if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    const colors = appliedPaletteColors.value;
-    const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
-    const featureLookup = featuresBySvgId?.value || new Map();
-    let updatedCount = 0;
-
-    featurePaths.forEach((path) => {
-      if (!isFeatureFillTarget(path)) return;
-      const svgId = getFeatureIdentity(path);
-      const feat = featureLookup.get(svgId);
-      if (!feat) return;
-
-      const paletteColor = colors[feat.type];
-      if (!paletteColor) return;
-
-      const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
-
-      if (!hasSpecificRule && !getFeatureOverride(featureColorOverrides, feat)) {
-        const currentFill = path.getAttribute('fill');
-        if (currentFill !== paletteColor) {
-          path.setAttribute('fill', paletteColor);
-          updatedCount++;
-        }
-      }
-    });
-
-    const gcContentGroups = getGroupsByBaseIds(
+    const svg = svgContainer.value?.querySelector?.('svg');
+    if (!svg) return null;
+    return prepareNonFeaturePaletteProjection({
       svg,
-      ['gc_content'],
-      ['dinucleotide_content']
-    );
-    if (gcContentGroups.length > 0 && colors.gc_content) {
-      gcContentGroups.forEach((gcContentGroup) => {
-        const gcPaths = gcContentGroup.querySelectorAll('path');
-        gcPaths.forEach((path) => {
-          if (setColorAttributeIfChanged(path, 'fill', colors.gc_content)) updatedCount++;
-        });
-      });
-    }
-
-    const skewGroups = getGroupsByBaseIds(
-      svg,
-      ['skew', 'gc_skew'],
-      ['dinucleotide_skew']
-    );
-    if (skewGroups.length > 0) {
-      skewGroups.forEach((skewGroup) => {
-        const skewPaths = skewGroup.querySelectorAll('path');
-        let pathIndex = 0;
-        skewPaths.forEach((path) => {
-          const fill = path.getAttribute('fill');
-          if (fill && fill !== 'white' && fill !== 'none') {
-            if (pathIndex === 0 && colors.skew_high) {
-              if (setColorAttributeIfChanged(path, 'fill', colors.skew_high)) updatedCount++;
-            } else if (pathIndex === 1 && colors.skew_low) {
-              if (setColorAttributeIfChanged(path, 'fill', colors.skew_low)) updatedCount++;
-            }
-            pathIndex++;
-          }
-        });
-      });
-    }
-
-    if (
-      (recolorPairwise || recolorCollinear)
-      && colors.pairwise_match_min
-      && colors.pairwise_match_max
-    ) {
-      let compIdx = 1;
-      let compGroup = svg.getElementById(`comparison${compIdx}`);
-      while (compGroup) {
-        const matchPaths = compGroup.querySelectorAll('path');
-        matchPaths.forEach((path, pathIdx) => {
-          const pathKey = `comp${compIdx}_path${pathIdx}`;
-          const currentFill = path.getAttribute('fill');
-          if (currentFill) {
-            const collinearityBlockId = path.getAttribute('data-collinearity-block-id') || '';
-            const collinearityColorMode = path.getAttribute('data-collinearity-color-mode') || '';
-            const metadataText = path.getAttribute('data-identity-factor');
-            const metadataFactor = metadataText === null || metadataText === '' ? NaN : Number(metadataText);
-            const collinearColor = resolveCollinearMatchColor({
-              blockId: collinearityBlockId,
-              colorMode: collinearityColorMode,
-              orientation: path.getAttribute('data-collinearity-orientation') || '',
-              identityFactor: Number.isFinite(metadataFactor) ? metadataFactor : null,
-              colors
-            });
-            if (collinearColor) {
-              if (
-                recolorCollinear
-                && setColorAttributeIfChanged(path, 'fill', collinearColor)
-              ) {
-                updatedCount++;
-              }
-              return;
-            }
-            if (collinearityBlockId && !collinearityColorMode) return;
-            if (!recolorPairwise) return;
-
-            let factor;
-            if (Number.isFinite(metadataFactor)) {
-              factor = metadataFactor;
-              pairwiseMatchFactors.value[pathKey] = factor;
-            } else if (pairwiseMatchFactors.value[pathKey] !== undefined) {
-              factor = pairwiseMatchFactors.value[pathKey];
-            } else {
-              const origMin = window._origPairwiseMin || '#FFE7E7';
-              const origMax = window._origPairwiseMax || '#FF7272';
-              factor = estimateColorFactor(currentFill, origMin, origMax);
-              pairwiseMatchFactors.value[pathKey] = factor;
-            }
-            const newColor = interpolateColor(colors.pairwise_match_min, colors.pairwise_match_max, factor);
-            if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
-          }
-        });
-        compIdx++;
-        compGroup = svg.getElementById(`comparison${compIdx}`);
-      }
-    }
-
-    const featureLegendGroups = getAllFeatureLegendGroups(svg);
-    const keyToColorKey = {
-      CDS: 'CDS',
-      'D-loop': 'D-loop',
-      repeat_region: 'repeat_region',
-      tmRNA: 'tmRNA',
-      tRNA: 'tRNA',
-      rRNA: 'rRNA',
-      ncRNA: 'ncRNA',
-      misc_feature: 'misc_feature',
-      mobile_element: 'mobile_element',
-      'GC content': 'gc_content',
-      'GC skew (+)': 'skew_high',
-      'GC skew (-)': 'skew_low'
-    };
-    const resolveOtherLegendColor = (legendKey, palette) => {
-      if (!legendKey) return null;
-      const lowerKey = legendKey.toLowerCase();
-      if (lowerKey === 'other proteins') return palette.CDS || null;
-      if (!lowerKey.startsWith('other ')) return null;
-      let raw = legendKey.slice(6).trim();
-      if (!raw) return null;
-      if (raw.toLowerCase() === 'proteins') return palette.CDS || null;
-      if (raw.endsWith('s')) raw = raw.slice(0, -1);
-      return palette[raw] || null;
-    };
-    const resolveLegendColor = (legendKey, palette) => {
-      if (!legendKey) return null;
-      const colorKey = keyToColorKey[legendKey];
-      if (colorKey && palette[colorKey]) return palette[colorKey];
-      if (palette[legendKey]) return palette[legendKey];
-      return resolveOtherLegendColor(legendKey, palette);
-    };
-    featureLegendGroups.forEach((featureLegendGroup) => {
-      if (!featureLegendGroup) return;
-
-      const entryGroups = featureLegendGroup.querySelectorAll('g[data-legend-key]');
-
-      if (entryGroups.length > 0) {
-        entryGroups.forEach((entryGroup) => {
-          const legendKey = entryGroup.getAttribute('data-legend-key');
-          if (!legendKey) return;
-          if (legendColorOverrides[legendKey]) return;
-
-          const newColor = resolveLegendColor(legendKey, colors);
-          if (!newColor) return;
-
-          const paths = entryGroup.querySelectorAll('path');
-          for (const path of paths) {
-            const fill = path.getAttribute('fill');
-            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-              if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
-              break;
-            }
-          }
-        });
-      } else {
-        const texts = featureLegendGroup.querySelectorAll('text');
-        const allPaths = featureLegendGroup.querySelectorAll('path');
-        texts.forEach((textEl) => {
-          const textContent = textEl.textContent?.trim();
-          if (!textContent) return;
-          if (legendColorOverrides[textContent]) return;
-
-          const newColor = resolveLegendColor(textContent, colors);
-          if (!newColor) return;
-
-          const textPos = parseTransformXY(textEl.getAttribute('transform'));
-          let bestPath = null;
-          let bestX = -Infinity;
-          for (const path of allPaths) {
-            const pathPos = parseTransformXY(path.getAttribute('transform'));
-            const fill = path.getAttribute('fill');
-            if (
-              Math.abs(pathPos.y - textPos.y) < 2 &&
-              pathPos.x < textPos.x &&
-              fill &&
-              fill !== 'none' &&
-              !fill.startsWith('url(')
-            ) {
-              if (pathPos.x > bestX) {
-                bestX = pathPos.x;
-                bestPath = path;
-              }
-            }
-          }
-          if (bestPath) {
-            if (setColorAttributeIfChanged(bestPath, 'fill', newColor)) updatedCount++;
-          }
-        });
-      }
+      beforeColors,
+      afterColors,
+      context,
+      strict
     });
-
-    if (colors.pairwise_match_min && colors.pairwise_match_max) {
-      const allPairwiseLegends = svg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR);
-      allPairwiseLegends.forEach((pairwiseLegend) => {
-        if (updatePairwiseLegendGradientStops(pairwiseLegend, colors)) updatedCount++;
-      });
-    }
-
-    if (updatedCount > 0) {
-      persistSvgEdit(svg, 'palette-style');
-    }
   };
 
   const applySpecificRulesToSvg = () => {
@@ -582,35 +674,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       console.log('Track visibility updated');
     }
   };
-
-  watch(
-    appliedPaletteColors,
-    (colors, previousColors) => {
-      if (paletteColorsEqual(colors, previousColors)) return;
-      // Inferred comparison factors are lossy, so only re-interpolate a family
-      // when one of its palette endpoints actually changed.
-      const recolorPairwise = !paletteColorKeysEqual(
-        colors,
-        previousColors,
-        ['pairwise_match_min', 'pairwise_match_max']
-      );
-      const recolorCollinear = !paletteColorKeysEqual(
-        colors,
-        previousColors,
-        [
-          'collinear_block_plus_min',
-          'collinear_block_plus',
-          'collinear_block_minus_min',
-          'collinear_block_minus'
-        ]
-      );
-      nextTick(() => {
-        applyPaletteToSvg({ recolorPairwise, recolorCollinear });
-        applySpecificRulesToSvg();
-      });
-    },
-    { deep: true }
-  );
 
   watch(
     () => [

@@ -722,6 +722,8 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     )
     session = build_session_document(stored_request).to_dict()
     session["version"] = 33
+    session["renderRequest"]["schema"] = 2
+    session["renderRequest"].pop("grouping", None)
     session["config"] = {
         "adv": {
             "depth_tick_interval": 10,

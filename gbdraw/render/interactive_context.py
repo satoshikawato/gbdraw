@@ -9,6 +9,12 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.features.instance_identity import FeatureInstanceIdentityPlan
+from gbdraw.features.semantic_selectors import (
+    FeatureSemanticSelectorContext,
+    build_feature_semantic_selector_context,
+)
+from gbdraw.labels.filtering import preprocess_label_filtering
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.render.interactive_svg import InteractiveSvgContext
@@ -54,6 +60,8 @@ def build_interactive_svg_context(
     mode: str | None = None,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] | None = None,
     collinearity_search_scope: str | None = None,
+    feature_instance_identity_plan: FeatureInstanceIdentityPlan | None = None,
+    feature_semantic_selector_context: FeatureSemanticSelectorContext | None = None,
 ) -> InteractiveSvgContext:
     """Build rich popup metadata from rendered records.
 
@@ -82,6 +90,12 @@ def build_interactive_svg_context(
         resolved_color_rules, _ = preprocess_color_tables(color_table, default_colors)
 
     record_list = list(records)
+    if feature_semantic_selector_context is None:
+        feature_semantic_selector_context = build_feature_semantic_selector_context(
+            record_list,
+            label_filtering=preprocess_label_filtering({}),
+            orthogroups=orthogroups,
+        )
     payload = extract_features_from_records_payload(
         record_list,
         selected_features=selected_features_set,
@@ -89,6 +103,8 @@ def build_interactive_svg_context(
         specific_color_rules=resolved_color_rules,
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,
+        feature_instance_identity_plan=feature_instance_identity_plan,
+        feature_semantic_selector_context=feature_semantic_selector_context,
     )
     features = payload.get("features", [])
     biological_features = payload.get("biological_features", [])

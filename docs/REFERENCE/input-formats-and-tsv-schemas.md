@@ -108,7 +108,20 @@ also accept their documented header row.
 `priorities` is a comma-separated qualifier list. `value` and `keyword` fields
 are case-insensitive regular expressions. Selector qualifiers may also use the
 documented synthetic keys `location`, `record_location`, and `hash` where that
-surface supports exact feature identity. Visibility `action` is `show`, `off`,
+surface supports exact feature identity. Canonical request schema 6 additionally
+reserves `__gbdraw_instance_hash__`: its value is a case-sensitive literal with
+the form `fi1_` followed by 26 lower-case base32 characters. The Web editor
+generates this opaque value; do not derive or edit it by hand. It is stable only
+for the canonical `recordKey` domain that produced it, so a downloaded exact-row
+TSV must be replayed with the same record keys and a gbdraw version that supports
+schema 6. The biological qualifier `instance_hash` remains an ordinary regex
+qualifier. Schema 6 also reserves `__gbdraw_semantic_scope__` for Web-authored,
+future-matching Feature-group rules. Its opaque `fs1:<kind>:<encoded-value>`
+literal can represent a Feature type, underlying legend caption, rendered label,
+source annotation label, or Similarity group. Keep this machine-generated row
+unchanged; unlike exact instance rows, it intentionally applies to matching
+Features introduced by regeneration. Under schema 5, the same spelling remains
+an ordinary biological regex qualifier. Visibility `action` is `show`, `off`,
 or `exclude_matching`.
 
 Table precedence and the meaning of those actions are documented in [Feature

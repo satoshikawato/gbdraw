@@ -8,7 +8,9 @@ import {
   ingestSvgResults,
   isCommittedSvgResult,
   markCommittedSvgResultMounted,
-  markCommittedSvgResultUnmounted
+  markCommittedSvgResultUnmounted,
+  projectMountedSvgResult,
+  reprojectCommittedSvgResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 import { normalizeLogicalResults } from '../../gbdraw/web/js/services/result-normalization.js';
 
@@ -34,7 +36,13 @@ class FakeDomParser {
       documentElement: {
         localName: content.includes('<svg') ? 'svg' : 'html',
         content,
-        cloneNode() { return this; },
+        cloneNode() {
+          return {
+            ...this,
+            content: this.content,
+            cloneNode: this.cloneNode
+          };
+        },
         getAttribute(name) {
           return name === 'xmlns' || name === 'xmlns:xlink' ? 'present' : null;
         },
@@ -110,6 +118,38 @@ test('one ingestion transaction owns sanitization, parsing, and runtime trust', 
   assert.equal(ingestSvgResults([committed], { sanitizer, parser: FakeDomParser })[0], committed);
   assert.equal(sanitizeCalls, 1);
   assert.equal(FakeDomParser.calls, 1);
+});
+
+test('admitted Results support detached and mounted copy-on-write projection', () => {
+  const committed = ingestSvgResult(
+    { name: 'safe.svg', content: '<svg><path/></svg>' },
+    { sanitizer: { sanitize: (content) => content }, parser: FakeDomParser }
+  );
+  const detached = reprojectCommittedSvgResult(committed, {
+    parser: FakeDomParser,
+    transformSvg: (svg) => { svg.content = '<svg><path fill="#222222"/></svg>'; }
+  });
+  assert.notEqual(detached, committed);
+  assert.equal(isCommittedSvgResult(detached), true);
+  assert.equal(detached.content, '<svg><path fill="#222222"/></svg>');
+  assert.equal(committed.content, '<svg><path/></svg>');
+  assert.notEqual(
+    getCommittedSvgResultMetadata(detached),
+    getCommittedSvgResultMetadata(committed)
+  );
+
+  const mountedRoot = new FakeDomParser()
+    .parseFromString(committed.content, 'image/svg+xml')
+    .documentElement;
+  const mounted = projectMountedSvgResult(committed, mountedRoot, {
+    transformSvg: (svg) => { svg.content = '<svg><path fill="#333333"/></svg>'; }
+  });
+  assert.equal(mounted.content, '<svg><path fill="#333333"/></svg>');
+  assert.equal(mountedRoot.content, '<svg><path/></svg>');
+  assert.throws(
+    () => reprojectCommittedSvgResult({ content: '<svg/>' }, { parser: FakeDomParser }),
+    /Only an admitted SVG Result/
+  );
 });
 
 test('a malformed sanitized document never becomes committed', () => {

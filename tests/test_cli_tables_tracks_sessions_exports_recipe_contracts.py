@@ -428,6 +428,7 @@ def test_export_renderer_metadata_is_normalized_but_content_is_not(
             b"%%Creator: cairo 1.18.0 (https://cairographics.org)\n"
             b"%%CreationDate: Mon Aug 10 04:43:20 2026\n"
             b"same body\n"
+            .replace(b"\n", b"\r\n")
         )
         assert _artifact_comparison_error(
             "H-CLI-13", expected_path, actual_path

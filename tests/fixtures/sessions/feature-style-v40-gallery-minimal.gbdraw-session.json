@@ -1,0 +1,268 @@
+{
+  "format": "gbdraw-session",
+  "version": 40,
+  "createdAt": "2026-08-12T00:00:00Z",
+  "title": "BGC0000708 feature-style recovery minimum",
+  "renderRequest": {
+    "schema": 5,
+    "mode": "linear",
+    "grouping": "single",
+    "records": [
+      {
+        "recordKey": "record-1",
+        "source": {
+          "kind": "genbank",
+          "resourceId": "record-1-genbank"
+        },
+        "selector": null,
+        "region": null,
+        "presentation": {
+          "label": null,
+          "subtitle": null,
+          "reverseComplement": false,
+          "gridRow": null,
+          "gridColumn": null
+        }
+      }
+    ],
+    "diagramOptions": {
+      "configOverrides": {
+        "canvas.show_gc": false,
+        "canvas.show_skew": false,
+        "objects.axis.linear.stroke_color": "lightgray"
+      },
+      "colors": {
+        "colorTable": {
+          "resourceId": "colors-color-table",
+          "representation": "canonicalTsv"
+        },
+        "colorTableFile": null,
+        "defaultColors": {
+          "resourceId": "colors-default-colors",
+          "representation": "canonicalTsv"
+        },
+        "defaultColorsPalette": "orange",
+        "defaultColorsFile": null
+      },
+      "selectedFeaturesSet": [
+        "CDS",
+        "rRNA",
+        "tRNA",
+        "tmRNA",
+        "ncRNA",
+        "misc_RNA",
+        "repeat_region"
+      ],
+      "evalue": 0.01,
+      "bitscore": 50.0,
+      "identity": 0.0,
+      "alignmentLength": 0
+    },
+    "layout": {},
+    "comparisons": [],
+    "output": {
+      "prefix": "out",
+      "formats": [
+        "svg"
+      ],
+      "overwrite": false,
+      "interactiveMetadataPolicy": "auto"
+    }
+  },
+  "resources": {
+    "record-1-genbank": {
+      "kind": "genbank",
+      "name": "record-1.gbk",
+      "type": "application/octet-stream",
+      "size": 266,
+      "lastModified": 0,
+      "encoding": "base64",
+      "data": "TE9DVVMgICAgICAgQkdDMDAwMDcwOCAgICAgICAgICAgICAgICAgOCBicCAgICBETkEgICAgICAgICAgICAgIFVOSyAwMS1KQU4tMTk4MApERUZJTklUSU9OICAuCkFDQ0VTU0lPTiAgIEJHQzAwMDA3MDgKVkVSU0lPTiAgICAgQkdDMDAwMDcwOApLRVlXT1JEUyAgICAuClNPVVJDRSAgICAgIC4KICBPUkdBTklTTSAgLgogICAgICAgICAgICAuCkZFQVRVUkVTICAgICAgICAgICAgIExvY2F0aW9uL1F1YWxpZmllcnMKT1JJR0lOCiAgICAgICAgMSBhdGdjZ2NhdAovLwo="
+    },
+    "colors-color-table": {
+      "kind": "canonical-tsv",
+      "name": "colors-color-table.tsv",
+      "type": "text/tab-separated-values",
+      "size": 163,
+      "lastModified": 0,
+      "encoding": "base64",
+      "data": "ZmVhdHVyZV90eXBlCXF1YWxpZmllcl9rZXkJdmFsdWUJY29sb3IJY2FwdGlvbgpDRFMJZ2VuZV9raW5kCWJpb3N5bnRoZXRpYyQJI2QwMzUzNQlDb3JlIGJpb3N5bnRoZXRpYyBnZW5lcwpDRFMJZ2VuZV9raW5kCXRyYW5zcG9ydAkjNTc3ZWRiCVRyYW5zcG9ydC1yZWxhdGVkIGdlbmVzCg=="
+    },
+    "colors-default-colors": {
+      "kind": "canonical-tsv",
+      "name": "colors-default-colors.tsv",
+      "type": "text/tab-separated-values",
+      "size": 60,
+      "lastModified": 0,
+      "encoding": "base64",
+      "data": "ZmVhdHVyZV90eXBlCWNvbG9yCkNEUwkjNTRiY2Y4CnRSTkEJI2U4YjQ0MQpkZWZhdWx0CSNkM2QzZDMK"
+    },
+    "colors-color-table-file": {
+      "kind": "colors-color-table-file",
+      "name": "saved-specific-colors.tsv",
+      "type": "text/tab-separated-values",
+      "size": 116,
+      "lastModified": 0,
+      "encoding": "base64",
+      "data": "Q0RTCWdlbmVfa2luZAliaW9zeW50aGV0aWMkCSNkMDM1MzUJQ29yZSBiaW9zeW50aGV0aWMgZ2VuZXMKQ0RTCWdlbmVfa2luZAl0cmFuc3BvcnQJIzU3N2VkYglUcmFuc3BvcnQtcmVsYXRlZCBnZW5lcwo="
+    },
+    "colors-default-colors-file": {
+      "kind": "colors-default-colors-file",
+      "name": "saved-default-colors.tsv",
+      "type": "text/tab-separated-values",
+      "size": 41,
+      "lastModified": 0,
+      "encoding": "base64",
+      "data": "Q0RTCSNkZGRkZGQKdFJOQQkjOWNkOWNmCmRlZmF1bHQJI2QzZDNkMwo="
+    }
+  },
+  "config": {
+    "palette": "orange",
+    "colors": {
+      "CDS": "#dddddd",
+      "tRNA": "#9cd9cf",
+      "default": "#d3d3d3"
+    },
+    "rules": [
+      {
+        "feat": "CDS",
+        "qual": "gene_kind",
+        "val": "biosynthetic$",
+        "color": "#d03535",
+        "cap": "Core biosynthetic genes"
+      },
+      {
+        "feat": "CDS",
+        "qual": "gene_kind",
+        "val": "transport",
+        "color": "#577edb",
+        "cap": "Transport-related genes"
+      }
+    ]
+  },
+  "ui": {
+    "appliedPaletteName": "orange",
+    "appliedPaletteColors": {
+      "CDS": "#dddddd",
+      "tRNA": "#9cd9cf",
+      "default": "#d3d3d3"
+    }
+  },
+  "results": [
+    {
+      "name": "BGC0000708-minimal",
+      "content": "<svg><path fill=\"#54bcf8\" id=\"fd4ab5f0c_record_1\"/><path fill=\"#577edb\" id=\"f4ff32855_record_1\"/><path fill=\"#d03535\" id=\"fed46a3a6_record_1\"/></svg>"
+    }
+  ],
+  "features": {
+    "featureColorOverrides": {
+      "file0_f8": {
+        "color": "#577edb",
+        "caption": "Transport-related genes"
+      },
+      "file0_f14": {
+        "color": "#d03535",
+        "caption": "Core biosynthetic genes"
+      }
+    }
+  },
+  "editorState": {
+    "legend": {
+      "entries": [
+        {
+          "caption": "Core biosynthetic genes",
+          "color": "#d03535"
+        },
+        {
+          "caption": "Transport-related genes",
+          "color": "#577edb"
+        },
+        {
+          "caption": "other proteins",
+          "color": "#dddddd"
+        }
+      ]
+    },
+    "featureCatalog": {
+      "schema": 3,
+      "items": [
+        {
+          "resultIndex": 0,
+          "resultName": "BGC0000708-minimal",
+          "recordKeys": [
+            "record-1"
+          ],
+          "biologicalFeatures": [
+            {
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fd4ab5f0c",
+              "stableFeatureId": "fd4ab5f0c_record_1",
+              "sourceFeatureIndex": 6,
+              "sequenceSourceIndex": 0,
+              "record_id": "BGC0000708",
+              "type": "CDS",
+              "start": 15,
+              "end": 2079,
+              "strand": "+",
+              "qualifiers": {}
+            },
+            {
+              "recordKey": "record-1",
+              "biologicalFeatureId": "f4ff32855",
+              "stableFeatureId": "f4ff32855_record_1",
+              "sourceFeatureIndex": 8,
+              "sequenceSourceIndex": 0,
+              "record_id": "BGC0000708",
+              "type": "CDS",
+              "start": 2774,
+              "end": 3764,
+              "strand": "+",
+              "qualifiers": {
+                "gene_kind": [
+                  "transport"
+                ]
+              }
+            },
+            {
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fed46a3a6",
+              "stableFeatureId": "fed46a3a6_record_1",
+              "sourceFeatureIndex": 14,
+              "sequenceSourceIndex": 0,
+              "record_id": "BGC0000708",
+              "type": "CDS",
+              "start": 7438,
+              "end": 8458,
+              "strand": "+",
+              "qualifiers": {
+                "gene_kind": [
+                  "biosynthetic"
+                ]
+              }
+            }
+          ],
+          "features": [
+            {
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fd4ab5f0c",
+              "svgId": "fd4ab5f0c_record_1",
+              "fillColor": "#54bcf8"
+            },
+            {
+              "recordKey": "record-1",
+              "biologicalFeatureId": "f4ff32855",
+              "svgId": "f4ff32855_record_1",
+              "fillColor": "#577edb"
+            },
+            {
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fed46a3a6",
+              "svgId": "fed46a3a6_record_1",
+              "fillColor": "#d03535"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -2,6 +2,10 @@ import {
   SOURCE_FEATURE_INDEX_KEYS,
   nonnegativeIntegerAliasStatus
 } from './feature-identity.js';
+import {
+  assessFeatureInstanceHashCapability,
+  isFeatureInstanceHash
+} from './feature-instance-identity.js';
 
 const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
@@ -39,6 +43,17 @@ export const stableFeatureOverrideKey = (feature) => biologicalFeatureKey(
   feature?.biological_feature_id ?? feature?.biologicalFeatureId
 );
 
+export const catalogResultKey = (item) => {
+  const explicitKey = text(item?.resultKey ?? item?.result_key);
+  if (explicitKey) return explicitKey;
+  const recordKeys = Array.isArray(item?.recordKeys)
+    ? item.recordKeys.map(text).filter(Boolean)
+    : [];
+  if (recordKeys.length > 0) return `catalog-result:${JSON.stringify(recordKeys)}`;
+  const resultName = text(item?.resultName);
+  return resultName ? `catalog-result-name:${JSON.stringify(resultName)}` : '';
+};
+
 const validateReferences = (entries, knownFeatures, fields) => {
   entries.forEach((entry) => {
     if (!isObject(entry)) throw catalogError();
@@ -75,6 +90,10 @@ const validateCatalogItem = (item, result, resultIndex) => {
   ) {
     throw catalogError();
   }
+  const explicitResultKeys = [item.resultKey, item.result_key]
+    .map(text)
+    .filter(Boolean);
+  if (new Set(explicitResultKeys).size > 1) throw catalogError();
 
   const recordKeys = requireArray(item.recordKeys).map(text);
   if (recordKeys.some((recordKey) => !recordKey) || new Set(recordKeys).size !== recordKeys.length) {
@@ -106,11 +125,13 @@ const validateCatalogItem = (item, result, resultIndex) => {
     ) throw catalogError();
     const recordKey = text(feature.recordKey);
     const featureId = text(feature.biologicalFeatureId);
+    const instanceHash = text(feature.instanceHash);
     const key = biologicalFeatureKey(recordKey, featureId);
     if (
       !key
       || !knownRecordKeys.has(recordKey)
       || knownFeatures.has(key)
+      || (instanceHash && !isFeatureInstanceHash(instanceHash))
     ) {
       throw catalogError();
     }
@@ -342,8 +363,12 @@ export const validateFeatureCatalog = (catalog, results) => {
   const validated = cloneJson(catalog);
   const items = requireArray(validated.items);
   if (items.length !== logicalResults.length) throw catalogError();
+  const resultKeys = new Set();
   items.forEach((item, resultIndex) => {
     validateCatalogItem(item, logicalResults[resultIndex], resultIndex);
+    const resultKey = catalogResultKey(item);
+    if (!resultKey || resultKeys.has(resultKey)) throw catalogError();
+    resultKeys.add(resultKey);
   });
   return validated;
 };
@@ -507,7 +532,8 @@ const expandBiologicalFeature = (
   displayRecordId,
   sequenceSources,
   sourceSequences,
-  sequenceRecordIndex
+  sequenceRecordIndex,
+  resultIdentity
 ) => {
   const recordKey = text(feature.recordKey);
   const biologicalFeatureId = text(feature.biologicalFeatureId);
@@ -532,6 +558,12 @@ const expandBiologicalFeature = (
     fileIdx: recordIndex,
     record_idx: recordIndex,
     displayRecordId,
+    result_key: resultIdentity.resultKey,
+    resultKey: resultIdentity.resultKey,
+    result_index: resultIdentity.resultIndex,
+    resultIndex: resultIdentity.resultIndex,
+    result_name: resultIdentity.resultName,
+    resultName: resultIdentity.resultName,
     selector: selectorForFeature(feature, stableId)
   });
   if (sourceFeatureIndex.supplied) {
@@ -664,7 +696,12 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
   const comparisonMatches = [];
   const sequenceSources = [];
 
-  catalog.items.forEach((item) => {
+  catalog.items.forEach((item, resultIndex) => {
+    const resultIdentity = {
+      resultKey: catalogResultKey(item),
+      resultIndex,
+      resultName: text(item.resultName)
+    };
     const itemSequenceSources = cloneJson(item.sequenceSources || []);
     const itemSourceSequences = canonicalSequenceSourceStrings(
       itemSequenceSources
@@ -682,7 +719,8 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
         displayRecordIdByKey.get(text(feature.recordKey)) || text(feature.recordKey),
         itemSequenceSources,
         itemSourceSequences,
-        itemRecordIndexByKey.get(text(feature.recordKey)) ?? -1
+        itemRecordIndexByKey.get(text(feature.recordKey)) ?? -1,
+        resultIdentity
       )
     ));
     const biologicalByKey = new Map(
@@ -724,6 +762,7 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
     sequenceSources.push(...itemSequenceSources);
   });
 
+  const instanceHashCapability = assessFeatureInstanceHashCapability(catalog);
   return {
     extractedFeatures,
     biologicalFeatures,
@@ -734,7 +773,16 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
     collinearGroups,
     annotations,
     comparisonMatches,
-    sequenceSources
+    sequenceSources,
+    featureResultIdentities: catalog.items.map((item, resultIndex) => ({
+      resultKey: catalogResultKey(item),
+      resultIndex,
+      resultName: text(item.resultName)
+    })),
+    featureExactScopeAvailable: instanceHashCapability.exactScopeAvailable,
+    featureExactScopeDiagnostic: instanceHashCapability.exactScopeAvailable
+      ? ''
+      : 'Generate to enable exact feature edits'
   };
 };
 

@@ -84,7 +84,12 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
     if (!feature) throw new Error('No editable rendered feature was found.');
 
     const featureColor = '#1234ab';
-    await app.setFeatureColorValue(feature, featureColor);
+    await app.requestFeatureFillChange(
+      feature,
+      { kind: 'color', color: featureColor },
+      'Drawer feature',
+      { source: 'feature-list', semanticScope: 'single' }
+    );
     const featureResultContent = app.results[app.selectedResultIndex]?.content || '';
 
     const labeledFeature = app.extractedFeatures.find((candidate) => (
@@ -93,8 +98,11 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
     if (!labeledFeature) throw new Error('No editable feature label was found.');
     const labelEntry = app.getEditableLabelByFeatureId(labeledFeature.svg_id);
     const labelText = 'Drawer live label';
-    await app.requestLabelTextChangeByFeatureId(labeledFeature.svg_id, labelText);
-    await app.handleLabelTextScopeChoice('single');
+    await app.requestFeatureLabelTextChange(
+      labeledFeature,
+      labelText,
+      { source: 'feature-list', semanticScope: 'single' }
+    );
     let currentSvg = document.querySelector('.origin-top svg');
     let labelElement = currentSvg.querySelector(
       `text[data-label-key="${CSS.escape(labelEntry.key)}"]`
@@ -102,7 +110,7 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
     const textResultContent = app.results[app.selectedResultIndex]?.content || '';
     app.openFeatureEditorFromList(labeledFeature, null);
     app.clickedFeature.labelVisibility = 'off';
-    await app.updateClickedFeatureLabelText();
+    await app.updateClickedFeatureLabelVisibility();
     currentSvg = document.querySelector('.origin-top svg');
     labelElement = currentSvg.querySelector(
       `text[data-label-key="${CSS.escape(labelEntry.key)}"]`
@@ -110,7 +118,9 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
     const visibilityResultContent = app.results[app.selectedResultIndex]?.content || '';
 
     const legendIndex = app.legendEntries.findIndex((entry) => {
-      if (!entry?.caption) return false;
+      if (!entry?.caption || !Array.isArray(entry.featureIds) || entry.featureIds.length === 0) {
+        return false;
+      }
       const group = currentSvg.querySelector(
         `g[data-legend-key="${CSS.escape(entry.caption)}"]`
       );
@@ -118,12 +128,27 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
     });
     if (legendIndex < 0) throw new Error('No editable legend entry was found.');
     const legendCaption = app.legendEntries[legendIndex].caption;
+    const legendFeatureIds = [...app.legendEntries[legendIndex].featureIds];
     const legendColor = '#ab3412';
-    app.updateLegendEntryColor(legendIndex, legendColor);
+    const legendUpdateCommitted = await app.updateLegendEntryColor(legendIndex, legendColor);
     currentSvg = document.querySelector('.origin-top svg');
     const legendFill = currentSvg.querySelector(
       `g[data-legend-key="${CSS.escape(legendCaption)}"] path[fill]:not([fill="none"])`
     )?.getAttribute('fill');
+
+    const builtInLegendIndex = app.legendEntries.findIndex(
+      (entry) => entry?.caption === 'GC content'
+    );
+    if (builtInLegendIndex < 0) throw new Error('GC content legend entry was not found.');
+    const builtInLegendColor = '#23ab45';
+    await app.updateLegendEntryColor(builtInLegendIndex, builtInLegendColor);
+    currentSvg = document.querySelector('.origin-top svg');
+    const builtInLegendFill = currentSvg.querySelector(
+      'g[data-legend-key="GC content"] path[fill]:not([fill="none"])'
+    )?.getAttribute('fill');
+    const gcContentFills = [...currentSvg.querySelectorAll(
+      '[data-gbdraw-slot-renderer="dinucleotide_content"] path[fill]'
+    )].map((path) => path.getAttribute('fill'));
 
     return {
       featureFills: getFeatureFillElements(currentSvg, feature.svg_id)
@@ -135,7 +160,19 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
       labelVisibilityOverride: app.labelVisibilityOverrides[labeledFeature.svg_id],
       labelOverride: app.labelTextFeatureOverrides[labeledFeature.svg_id],
       legendFill,
+      legendCaption,
+      legendFeatureIds,
+      legendUpdateCommitted,
+      featureFillPlanStatus: app.featureFillPlanStatus,
+      featureFillPlanProgress: app.featureFillPlanProgress,
+      errorLog: app.errorLog,
       legendEntryColor: app.legendEntries[legendIndex]?.color,
+      builtInLegendFill,
+      builtInLegendEntryColor: app.legendEntries.find(
+        (entry) => entry?.caption === 'GC content'
+      )?.color,
+      builtInPaletteColor: app.appliedPaletteColors.gc_content,
+      gcContentFills,
       featureResultContent,
       textResultContent,
       visibilityResultContent,
@@ -151,12 +188,25 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', async
   expect(result.labelDisplay).toBe('none');
   expect(result.labelVisibilityOverride).toBe('off');
   expect(result.labelOverride).toBe('Drawer live label');
+  expect(result.legendUpdateCommitted, JSON.stringify({
+    caption: result.legendCaption,
+    featureIds: result.legendFeatureIds,
+    status: result.featureFillPlanStatus,
+    progress: result.featureFillPlanProgress,
+    errorLog: result.errorLog
+  })).toBe(true);
   expect(result.legendFill).toBe('#ab3412');
   expect(result.legendEntryColor).toBe('#ab3412');
+  expect(result.builtInLegendFill).toBe('#23ab45');
+  expect(result.builtInLegendEntryColor).toBe('#23ab45');
+  expect(result.builtInPaletteColor).toBe('#23ab45');
+  expect(result.gcContentFills.length).toBeGreaterThan(0);
+  expect(result.gcContentFills.every((fill) => fill === '#23ab45')).toBe(true);
   expect(result.textResultContent).toContain('Drawer live label');
   expect(result.visibilityResultContent).toContain(
     'data-gbdraw-label-visibility-preview="off"'
   );
   expect(result.visibilityResultContent).toContain('display="none"');
   expect(result.legendResultContent).toContain('#ab3412');
+  expect(result.legendResultContent).toContain('#23ab45');
 });

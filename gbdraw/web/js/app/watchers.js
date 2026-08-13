@@ -4,10 +4,7 @@ import {
   parsePriorityRules,
   parseWhitelistRules
 } from './file-imports.js';
-import {
-  buildLegendIntents,
-  prepareSpecificColorImport
-} from './specific-color-rules.js';
+import { prepareSpecificColorImport } from './specific-color-rules.js';
 import {
   buildFeatureVisibilitySelectorCache,
   preserveFeatureVisibilitySelectorCacheForOverrides
@@ -41,7 +38,6 @@ export const setupWatchers = ({
   nextTick,
   onMounted,
   legendActions,
-  svgActions,
   featureActions,
   legendLayout,
   resultsManager,
@@ -51,6 +47,7 @@ export const setupWatchers = ({
   resetPreviewViewport,
   resetRightDrawer,
   previewRuntime = null,
+  bulkStyleActions = null,
   preparePaletteDefinitions = null,
   prepareDiagramGenerationWorker
 }) => {
@@ -75,7 +72,6 @@ export const setupWatchers = ({
     canvasPadding,
     skipCaptureBaseConfig,
     skipPositionReapply,
-    skipExtractOnSvgChange,
     svgContainer,
     layoutPreferences,
     suppressCircularMultiRecordDefaults,
@@ -105,7 +101,6 @@ export const setupWatchers = ({
     clickedFeature,
     clickedPairwiseMatch,
     clickedLabel,
-    labelTextScopeDialog,
     globalLabelModeDialog,
     files,
     currentColors,
@@ -129,16 +124,12 @@ export const setupWatchers = ({
   } = state;
 
   const {
-    removeLegendEntry,
-    addLegendEntry,
     extractLegendEntries,
     setupLegendDrag,
-    refreshLegendDragAffordances,
-    syncFileLegendEntries
+    refreshLegendDragAffordances
   } = legendActions;
 
-  const { applyPaletteToSvg, applySpecificRulesToSvg } = svgActions;
-  const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
+  const { attachSvgFeatureHandlers, syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
     captureBaseConfig,
@@ -148,10 +139,9 @@ export const setupWatchers = ({
     setupDiagramDrag
   } = legendLayout;
   const {
-    applyPaletteDraftToPreview,
+    clearPendingPaletteDraft,
     scheduleDefinitionUpdate,
-    cancelDefinitionUpdate,
-    syncPaletteDraftState
+    cancelDefinitionUpdate
   } = resultsManager;
 
   const normalizeLegendPosition = (value, fallback = 'left') => {
@@ -181,7 +171,6 @@ export const setupWatchers = ({
   const shouldSyncLabelEditor = () =>
     isFeatureDrawerMounted.value ||
     Boolean(clickedFeature.value) ||
-    labelTextScopeDialog.show ||
     globalLabelModeDialog.show ||
     hasLabelOverrides();
 
@@ -230,49 +219,6 @@ export const setupWatchers = ({
     }
     scheduleDefinitionUpdate();
   };
-
-  watch(
-    () => [...manualSpecificRules],
-    async (newRules, oldRules) => {
-      if (semanticFileWatchersSuppressed.value) return;
-      applyPaletteToSvg();
-      applySpecificRulesToSvg();
-      if (extractedFeatures.value.length > 0) {
-        refreshFeatureOverrides(extractedFeatures.value);
-      }
-
-      const currentCaptions = new Set(newRules.filter((r) => r.cap).map((r) => r.cap));
-      const oldCaptions = new Set((oldRules || []).filter((r) => r.cap).map((r) => r.cap));
-
-      const removedFromRules = [...oldCaptions].filter((cap) => !currentCaptions.has(cap));
-      const removedFromTracked = [...addedLegendCaptions.value].filter((cap) => !currentCaptions.has(cap));
-
-      const allRemovedCaptions = new Set([...removedFromRules, ...removedFromTracked]);
-
-      for (const cap of allRemovedCaptions) {
-        removeLegendEntry(cap);
-        addedLegendCaptions.value.delete(cap);
-      }
-    },
-    { deep: true }
-  );
-
-  watch(
-    currentColors,
-    () => {
-      syncPaletteDraftState();
-    },
-    { deep: true }
-  );
-
-  watch(
-    () => paletteInstantPreviewEnabled.value,
-    (enabled) => {
-      if (!enabled) return;
-      if (String(pendingPaletteName.value || '').trim() === '') return;
-      applyPaletteDraftToPreview();
-    }
-  );
 
   watch(
     canvasPadding,
@@ -352,9 +298,7 @@ export const setupWatchers = ({
         previewRuntime?.clearActiveRuntime?.();
       }
 
-      if (!skipExtractOnSvgChange.value) {
-        measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
-      }
+      measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
       const shouldBindComposition = Boolean(
         svg && (
           !isIncrementalEdit ||
@@ -413,8 +357,6 @@ export const setupWatchers = ({
     nextTick(() => {
       if (semanticFileWatchersSuppressed.value) return;
       const timingEntries = [];
-      measureTiming(timingEntries, 'watch(extractedFeatures) apply palette colors', applyPaletteToSvg);
-      measureTiming(timingEntries, 'watch(extractedFeatures) apply specific rules', applySpecificRulesToSvg);
       measureTiming(timingEntries, 'watch(extractedFeatures) refresh delegated feature handlers', attachSvgFeatureHandlers);
       logPostGbdrawTimings(timingEntries);
     });
@@ -490,12 +432,6 @@ export const setupWatchers = ({
       featurePanelTab.value = 'colors';
       clickedPairwiseMatch.value = null;
       clickedLabel.value = null;
-      labelTextScopeDialog.show = false;
-      labelTextScopeDialog.labelKey = '';
-      labelTextScopeDialog.newText = '';
-      labelTextScopeDialog.sourceText = '';
-      labelTextScopeDialog.featureId = '';
-      labelTextScopeDialog.matchingCount = 0;
       globalLabelModeDialog.show = false;
       globalLabelModeDialog.featureId = '';
       globalLabelModeDialog.featureType = '';
@@ -511,9 +447,16 @@ export const setupWatchers = ({
     try {
       const text = await readFileText(newFile);
       const { colors, count } = parseColorTable(text);
-      Object.entries(colors).forEach(([key, color]) => {
-        currentColors.value[key] = color;
+      if (typeof bulkStyleActions?.requestFeatureBulkStyleChange !== 'function') {
+        throw new Error('Bulk Feature style actions are unavailable.');
+      }
+      const nextColors = { ...currentColors.value, ...colors };
+      const committed = await bulkStyleActions.requestFeatureBulkStyleChange({
+        writerKind: 'default-color-tsv-import',
+        label: 'Import default feature colors',
+        replacement: { appliedPaletteColors: nextColors }
       });
+      if (!committed) return;
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
       console.error('Failed to load color file:', e);
@@ -528,20 +471,18 @@ export const setupWatchers = ({
       const text = await readFileText(newFile);
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
       const previousCaptions = Array.from(fileLegendCaptions.value);
-      const previousFileIntents = buildLegendIntents(
-        manualSpecificRules.filter((rule) => rule.fromFile),
-        { conflictPolicy: 'last-wins' }
-      ).intents;
-      if (svgContent.value) {
-        await nextTick();
-        await syncFileLegendEntries(prepared.intents, { previousFileIntents });
+      if (typeof bulkStyleActions?.requestFeatureBulkStyleChange !== 'function') {
+        throw new Error('Bulk Feature style actions are unavailable.');
       }
-
-      manualSpecificRules.splice(0, manualSpecificRules.length, ...prepared.nextRules);
+      const committed = await bulkStyleActions.requestFeatureBulkStyleChange({
+        writerKind: 'specific-color-tsv-import',
+        label: 'Import specific color rules',
+        replacement: { rules: prepared.nextRules }
+      });
+      if (!committed) return;
       previousCaptions.forEach((caption) => addedLegendCaptions.value.delete(caption));
       fileLegendCaptions.value = new Set(prepared.fileLegendCaptions);
       prepared.fileLegendCaptions.forEach((caption) => addedLegendCaptions.value.add(caption));
-      extractLegendEntries();
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
       console.error('Failed to load rules file:', e);

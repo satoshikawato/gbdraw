@@ -2,7 +2,6 @@ import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
 import { createLegendSortActions } from './legend/sort-actions.js';
-import { createLegendStrokeActions } from './legend/stroke-actions.js';
 import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
@@ -14,7 +13,11 @@ export const createLegendManager = ({
   getPyodide,
   ensurePyodide = null,
   history = null,
-  previewRuntime = null
+  previewRuntime = null,
+  requestFeatureLegendIntent = null,
+  requestBuiltInLegendIntent = null,
+  buildManualLegendCommand = undefined,
+  manualCommandAdapters = undefined
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({
@@ -22,10 +25,17 @@ export const createLegendManager = ({
     getPyodide,
     ensurePyodide,
     layoutActions,
-    previewRuntime
+    previewRuntime,
+    history,
+    requestFeatureLegendIntent,
+    requestBuiltInLegendIntent,
+    ...(buildManualLegendCommand ? { buildManualLegendCommand } : {}),
+    ...(manualCommandAdapters ? { manualCommandAdapters } : {})
   });
-  const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
-  const strokeActions = createLegendStrokeActions({ state, previewRuntime });
+  const sortActions = createLegendSortActions({
+    state,
+    requestLegendOrderIntent: entryActions.requestManualLegendIntent
+  });
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
@@ -36,7 +46,6 @@ export const createLegendManager = ({
     ...entryActions,
     ...layoutActions,
     ...sortActions,
-    ...strokeActions,
     ...dragActions,
     getAllFeatureLegendGroups,
     getVisibleFeatureLegendGroup,

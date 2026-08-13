@@ -50,6 +50,7 @@ from gbdraw.api.requests import (
     RecordPresentation,
 )
 from gbdraw.session_io import (
+    CANONICAL_REQUEST_SCHEMAS_BY_SESSION_VERSION,
     CURRENT_SESSION_VERSION,
     DEPTH_FILE_ENCODING,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -520,9 +521,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 40
+    assert CURRENT_SESSION_VERSION == 41
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -582,6 +583,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
                     {
                         "recordKey": "record-key",
                         "biologicalFeatureId": "feature-1",
+                        "instanceHash": "fi1_h4qs7ulfo5trynni5dgdwsgnem",
                         "stableFeatureId": "stable-feature",
                         "record_id": "public-record",
                         "type": "CDS",
@@ -621,6 +623,16 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     assert on_disk["orthogroupState"] == {}
     assert load_session(path) == on_disk
     assert load_session_document(path).to_dict() == on_disk
+
+    missing_instance_hash = copy.deepcopy(on_disk)
+    missing_instance_hash["editorState"]["featureCatalog"]["items"][0][
+        "biologicalFeatures"
+    ][0].pop("instanceHash")
+    with pytest.raises(ValidationError, match=r"instanceHash"):
+        write_session_json(
+            tmp_path / "missing-instance-hash.json",
+            missing_instance_hash,
+        )
 
     unknown_field = copy.deepcopy(on_disk)
     unknown_field["branchOnlyState"] = {}
@@ -1444,6 +1456,8 @@ def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
         canonical_request=_canonical_request("linear"),
     )
     source["version"] = 33
+    source["renderRequest"]["schema"] = 2
+    source["renderRequest"].pop("grouping", None)
     source["config"]["blastSource"] = "upload"
     source["config"]["linearRecordLayout"] = {
         "enabled": True,
@@ -1695,6 +1709,8 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
         canonical_request=_canonical_request("linear"),
     )
     source["version"] = 33
+    source["renderRequest"]["schema"] = 2
+    source["renderRequest"].pop("grouping", None)
     source["losatCache"] = {"entries": [legacy_raw]}
     source["losatDerivedCache"] = {"entries": [legacy_derived]}
     source.pop("proteinIdentityManifest")
@@ -1763,6 +1779,7 @@ def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> N
         validate_session(session)
 
     session["version"] = 39
+    session["renderRequest"]["schema"] = 5
     validate_session(session)
 
 
@@ -1961,9 +1978,11 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
     ("version", "request_schema"),
     (
         (31, 1),
+        (32, 1),
         (32, 2),
         (33, 2),
-        (39, CANONICAL_REQUEST_SCHEMA),
+        (39, 5),
+        (40, 5),
         (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA),
     ),
 )
@@ -1983,6 +2002,55 @@ def test_main_backed_and_current_canonical_session_schemas_remain_supported(
 
     validate_session(session)
     assert version in SUPPORTED_SESSION_VERSIONS
+
+
+@pytest.mark.parametrize(
+    ("version", "request_schema"),
+    (
+        (31, 2),
+        (32, 5),
+        (33, 1),
+        (33, 5),
+        (39, 2),
+        (39, 6),
+        (40, 2),
+        (40, 6),
+        (CURRENT_SESSION_VERSION, 5),
+    ),
+)
+def test_session_and_request_schema_eras_reject_invalid_pairings(
+    version: int,
+    request_schema: int,
+) -> None:
+    session = {
+        "format": SESSION_FORMAT,
+        "version": version,
+        "renderRequest": {"schema": request_schema},
+        "resources": {},
+    }
+    if version == CURRENT_SESSION_VERSION:
+        session["results"] = []
+        session["editorState"] = {"featureCatalog": None}
+
+    with pytest.raises(
+        ValidationError,
+        match=(
+            rf"Session version {version} is incompatible with canonical "
+            rf"renderRequest schema {request_schema}"
+        ),
+    ):
+        validate_session(session)
+
+
+def test_session_request_schema_era_matrix_matches_first_parent_writers() -> None:
+    assert CANONICAL_REQUEST_SCHEMAS_BY_SESSION_VERSION == {
+        31: frozenset({1}),
+        32: frozenset({1, 2}),
+        33: frozenset({2}),
+        39: frozenset({5}),
+        40: frozenset({5}),
+        41: frozenset({6}),
+    }
 
 
 def test_session_json_gzip_round_trip(tmp_path: Path) -> None:

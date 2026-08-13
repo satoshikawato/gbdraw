@@ -299,21 +299,25 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
             "Sessions version 27 through 30 support internal CLI replay only and do not "
             "have a public typed-request conversion."
         )
-    payload = document._data.get("renderRequest")
-    assert isinstance(payload, Mapping)
+    from gbdraw.api.session_compat import canonical_projection_for_session_decode
     from gbdraw.session_request_codec import (
         CanonicalRequestCodecError,
         decode_canonical_request,
     )
-    from gbdraw.api.session_compat import canonical_payload_for_session_decode
 
     try:
-        return decode_canonical_request(
-            canonical_payload_for_session_decode(document.version, payload),
+        payload, resource_paths = canonical_projection_for_session_decode(
+            document.version,
+            document._data,
             resource_paths=materialized.resource_paths,
+            temp_directory=materialized.temp_directory,
+        )
+        return decode_canonical_request(
+            payload,
+            resource_paths=resource_paths,
             output_directory=materialized.output_directory,
         )
-    except CanonicalRequestCodecError as exc:
+    except (CanonicalRequestCodecError, ValidationError) as exc:
         raise SessionConversionError(str(exc)) from exc
 
 

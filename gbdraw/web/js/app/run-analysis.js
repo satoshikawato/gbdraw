@@ -105,6 +105,11 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
+import {
+  advanceDocumentEpoch,
+  styleFingerprint
+} from '../services/style-revision.js';
+import { catalogResultKey } from '../services/feature-catalog.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('circular')
@@ -814,6 +819,9 @@ export const createRunAnalysis = ({
     results,
     selectedResultIndex,
     resultGenerationKey,
+    documentEpoch,
+    semanticStyleRevision,
+    validatedStyleFingerprintByResultKey,
     resultPanelTab,
     lastRunInfo,
     trackSlotResolvedGeometry,
@@ -829,6 +837,7 @@ export const createRunAnalysis = ({
     featureVisibilityRules,
     featureStrokeOverrides,
     legendStrokeOverrides,
+    legendOrderIntent,
     selectedPalette,
     currentColors,
     paletteDefinitions,
@@ -886,7 +895,6 @@ export const createRunAnalysis = ({
     featureRecordIds,
     selectedFeatureRecordIdx,
     editableLabels,
-    labelTextScopeDialog,
     labelTextFeatureOverrides,
     canonicalLabelOverrideRows,
     labelTextBulkOverrides,
@@ -1281,15 +1289,6 @@ export const createRunAnalysis = ({
     );
   };
 
-  const resetLabelScopeDialogState = () => {
-    labelTextScopeDialog.show = false;
-    labelTextScopeDialog.labelKey = '';
-    labelTextScopeDialog.newText = '';
-    labelTextScopeDialog.sourceText = '';
-    labelTextScopeDialog.featureId = '';
-    labelTextScopeDialog.matchingCount = 0;
-  };
-
   const circularDiscoveryTargetsCurrentInput = () => {
     const inputType = cInputType.value;
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
@@ -1513,6 +1512,54 @@ export const createRunAnalysis = ({
     comparisonPlanSnapshot = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
+    const capturedPaletteName = String(
+      isReflow
+        ? appliedPaletteName.value
+        : (selectedPalette?.value || appliedPaletteName.value || 'default')
+    ).trim() || 'default';
+    const capturedPaletteColors = normalizePaletteColors(
+      paletteDefinitions.value?.[capturedPaletteName]
+      || paletteDefinitions.value?.default
+      || {}
+    );
+    const generationStyleSnapshot = Object.freeze({
+      documentEpoch: Number(documentEpoch?.value || 0),
+      revision: Number(semanticStyleRevision?.value || 0),
+      fingerprint: styleFingerprint({
+        rules: manualSpecificRules,
+        appliedPaletteName: capturedPaletteName,
+        appliedPaletteColors: isReflow ? appliedPaletteColors.value : currentColors.value
+      }),
+      rules: Object.freeze(cloneJsonValue(manualSpecificRules, [])),
+      paletteName: capturedPaletteName,
+      colors: Object.freeze(cloneJsonValue(
+        isReflow ? appliedPaletteColors.value : currentColors.value,
+        {}
+      )),
+      paletteColors: Object.freeze(cloneJsonValue(capturedPaletteColors, {})),
+      legendOrder: Object.freeze(cloneJsonValue(legendOrderIntent?.value || [], []))
+    });
+    const generationFeatureOverrides = cloneJsonValue(featureColorOverrides, {});
+    const currentGenerationStyleFingerprint = () => styleFingerprint({
+      rules: manualSpecificRules,
+      appliedPaletteName: String(
+        isReflow
+          ? appliedPaletteName.value
+          : (selectedPalette?.value || appliedPaletteName.value || 'default')
+      ).trim() || 'default',
+      appliedPaletteColors: isReflow ? appliedPaletteColors.value : currentColors.value
+    });
+    const generationStyleIsCurrent = () => (
+      Number(documentEpoch?.value || 0) === generationStyleSnapshot.documentEpoch
+      && Number(semanticStyleRevision?.value || 0) === generationStyleSnapshot.revision
+      && currentGenerationStyleFingerprint() === generationStyleSnapshot.fingerprint
+    );
+    const rejectStaleGenerationStyle = () => {
+      const message = 'Feature style changed while Generate was running. Generate again to use the latest style.';
+      if (isReflow) labelReflowLastError.value = message;
+      else errorLog.value = formatJsError(new Error(message));
+      return { status: 'stale-style' };
+    };
     let pyodide = getPyodide();
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
@@ -1657,7 +1704,6 @@ export const createRunAnalysis = ({
           latestCliHelperArchiveName,
           matchSequenceSources: matchSequenceRegistry?.values?.() || [],
           editableLabels: cloneJsonValue(editableLabels.value || [], []),
-          labelTextScopeDialog: cloneJsonValue(labelTextScopeDialog, {}),
           featureEditorStatus: cloneJsonValue(featureEditorStatus || {}, {}),
           featureExtractionPending: featureExtractionPending.value,
           featureExtractionError: featureExtractionError.value,
@@ -1695,10 +1741,6 @@ export const createRunAnalysis = ({
       latestCliHelperArchiveName = manualCancelSnapshot.latestCliHelperArchiveName;
       matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
       editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
-      Object.assign(
-        labelTextScopeDialog,
-        cloneJsonValue(manualCancelSnapshot.labelTextScopeDialog, {})
-      );
       setFeatureEditorStatus(cloneJsonValue(manualCancelSnapshot.featureEditorStatus, {}));
       featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
       featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
@@ -1737,7 +1779,7 @@ export const createRunAnalysis = ({
         String(modeValue || '')
       ])
     );
-    const activeRunColors = isReflow ? appliedPaletteColors.value : currentColors.value;
+    const activeRunColors = generationStyleSnapshot.colors;
     const manualRunStartedAt = isReflow ? null : getNow();
     const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
     let structuredLosatTelemetry = null;
@@ -1769,7 +1811,6 @@ export const createRunAnalysis = ({
       errorLog.value = null;
       skipCaptureBaseConfig.value = false;
       skipPositionReapply.value = false;
-      resetLabelScopeDialogState();
       window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
       window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
     }
@@ -1895,14 +1936,8 @@ export const createRunAnalysis = ({
 
       const normalizedOutputPrefix = String(form.prefix || '').trim();
 
-      const activePaletteName = String(
-        isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
-      ).trim() || 'default';
-      const paletteBaseColors = normalizePaletteColors(
-        paletteDefinitions.value?.[activePaletteName] ||
-        paletteDefinitions.value?.default ||
-        {}
-      );
+      const activePaletteName = generationStyleSnapshot.paletteName;
+      const paletteBaseColors = generationStyleSnapshot.paletteColors;
       const dContent = buildDefaultColorOverrideTsv({
         colors: activeRunColors,
         paletteColors: paletteBaseColors
@@ -1911,7 +1946,7 @@ export const createRunAnalysis = ({
         stageTextFile('/combined_d.tsv', `${dContent}\n`);
       }
 
-      const tContent = serializeSpecificRules(manualSpecificRules);
+      const tContent = serializeSpecificRules(generationStyleSnapshot.rules);
       if (tContent.trim() !== '') {
         stageTextFile('/combined_t.tsv', tContent);
       }
@@ -3942,7 +3977,8 @@ export const createRunAnalysis = ({
         filesData: serializedFiles,
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
-        resolvedCircularConservation: canonicalCircularConservation
+        resolvedCircularConservation: canonicalCircularConservation,
+        styleSnapshot: generationStyleSnapshot
       });
       if (!Number.isInteger(canonicalSessionVersion)) {
         throw new Error('Canonical session version is unavailable.');
@@ -3999,6 +4035,8 @@ export const createRunAnalysis = ({
         throw new Error('The diagram engine returned an invalid Result list.');
       }
 
+      if (!generationStyleIsCurrent()) return rejectStaleGenerationStyle();
+
       if (generationToken !== latestGenerationToken) {
         if (!isReflow && generationCancelRequested.value) {
           return finishCanceledManualRun();
@@ -4031,7 +4069,8 @@ export const createRunAnalysis = ({
               suppressPairwiseIdentityLegend,
               features: extractedFeatures.value,
               featureStrokeOverrides,
-              legendStrokeOverrides
+              legendStrokeOverrides,
+              legendOrderIntent: generationStyleSnapshot.legendOrder
             })
           )
         : measureTiming(
@@ -4041,10 +4080,11 @@ export const createRunAnalysis = ({
               results: res,
               catalog: candidateCatalog,
               mode: mode.value,
-              featureColorOverrides,
+              featureColorOverrides: generationFeatureOverrides,
               featureStrokeOverrides,
               legendStrokeOverrides,
-              manualSpecificRules,
+              legendOrderIntent: generationStyleSnapshot.legendOrder,
+              manualSpecificRules: generationStyleSnapshot.rules,
               legacyFeatures: manualCancelSnapshot?.artifact?.features?.extractedFeatures || [],
               suppressPairwiseIdentityLegend
             })
@@ -4064,6 +4104,8 @@ export const createRunAnalysis = ({
       if (isReflow && requestId !== pendingReflowRequestId) {
         return { status: 'stale' };
       }
+
+      if (!generationStyleIsCurrent()) return rejectStaleGenerationStyle();
 
       measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
         if (isReflow) results.value = candidateCommit.results;
@@ -4108,6 +4150,15 @@ export const createRunAnalysis = ({
         extractedFeatures.value = candidateCommit.featureState.extractedFeatures;
         if (biologicalFeatures) {
           biologicalFeatures.value = candidateCommit.featureState.biologicalFeatures;
+        }
+        if (state.featureExactScopeAvailable) {
+          state.featureExactScopeAvailable.value =
+            candidateCommit.featureState.featureExactScopeAvailable === true;
+        }
+        if (state.featureExactScopeDiagnostic) {
+          state.featureExactScopeDiagnostic.value = String(
+            candidateCommit.featureState.featureExactScopeDiagnostic || ''
+          );
         }
         featureSelectorSafetyScope.value =
           candidateCommit.featureState.featureSelectorSafetyScope;
@@ -4158,14 +4209,24 @@ export const createRunAnalysis = ({
         }
       }
       if (!isReflow) {
-        appliedPaletteName.value = String(selectedPalette?.value || appliedPaletteName.value || 'default');
-        appliedPaletteColors.value = { ...currentColors.value };
+        appliedPaletteName.value = generationStyleSnapshot.paletteName;
+        appliedPaletteColors.value = { ...generationStyleSnapshot.colors };
         pendingPaletteName.value = '';
         pendingPaletteColors.value = {};
       }
       commitProteinMigration?.();
       if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
         adoptCanonicalRenderArtifacts(canonical);
+      }
+      if (!isReflow && documentEpoch && semanticStyleRevision) {
+        advanceDocumentEpoch(state);
+        if (validatedStyleFingerprintByResultKey) {
+          const fingerprint = state.semanticStyleFingerprint?.value || generationStyleSnapshot.fingerprint;
+          validatedStyleFingerprintByResultKey.value = Object.freeze(Object.fromEntries(
+            (candidateCatalog?.items || []).map((item) => [catalogResultKey(item), fingerprint])
+              .filter(([resultKey]) => Boolean(resultKey))
+          ));
+        }
       }
       return { status: 'ok' };
     } catch (e) {

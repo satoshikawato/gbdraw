@@ -14,13 +14,13 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 40 | 27–33 and 39–40 |
-| Canonical `renderRequest` | 5 | 1, 2, and 5 |
+| gbdraw session | 41 | 27–33 and 39–41 |
+| Canonical `renderRequest` | 6 | 1, 2, 5, and 6 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert session versions 31–33 and 39–40 to
+The public typed-session bridge can convert session versions 31–33 and 39–41 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -38,7 +38,7 @@ form by default; the CLI writes uncompressed JSON unless the output name ends in
 
 ## Current request ownership
 
-Canonical request schema 5 records Circular grouping explicitly as `single`,
+Canonical request schemas 5 and 6 record Circular grouping explicitly as `single`,
 `grid`, or `batch`. A single diagram or grid has one output object. A Circular
 batch has one resolved output object per record. `renderRequest.output.prefix`
 is the output-prefix owner.
@@ -76,7 +76,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–40.
+remain 27–33 and 39–41.
 
 ## Retired inputs
 
@@ -100,7 +100,7 @@ active aliases. `--annotation-table` remains an alias for
 `--gc_content_large_tick_interval`.
 
 The private `__gbdraw_legacy_spacing` key is read only from canonical request
-schemas 1–2 and is never written by schema 5. Pixel spacing migrates to
+schemas 1–2 and is never written by schema 6. Pixel spacing migrates to
 `inner_gap_px` and `outer_gap_px`. Factor-based spacing can be replayed but
 cannot be saved losslessly in the current format; replace it with explicit pixel
 gaps before saving a migrated session.

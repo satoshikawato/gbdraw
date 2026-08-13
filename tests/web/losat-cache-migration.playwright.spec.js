@@ -20,8 +20,8 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 40;
-const CURRENT_RENDER_REQUEST_SCHEMA = 5;
+const CURRENT_SESSION_VERSION = 41;
+const CURRENT_RENDER_REQUEST_SCHEMA = 6;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
 const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
 

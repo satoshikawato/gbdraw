@@ -356,6 +356,33 @@ const addPostDragLegendEntry = async (page) => {
 
 const addAndRenameLegendEntry = async (page) => {
   const addedCaption = 'WP5 legend entry';
+  const manualIntentDebug = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { styleFingerprint } = await import('/gbdraw/web/js/services/style-revision.js');
+    const computed = styleFingerprint({
+      rules: app.manualSpecificRules,
+      appliedPaletteName: app.appliedPaletteName,
+      appliedPaletteColors: app.appliedPaletteColors
+    });
+    const resultKeys = (app.featureCatalog?.items || []).map(
+      (item) => String(item?.resultKey || item?.result_key || '')
+    );
+    return {
+      epoch: app.documentEpoch,
+      generation: app.resultGenerationKey,
+      revision: app.semanticStyleRevision,
+      storedFingerprint: app.semanticStyleFingerprint,
+      computed,
+      ledger: app.validatedStyleFingerprintByResultKey,
+      resultKeys,
+      resultCount: app.results.length,
+      catalogCount: app.featureCatalog?.items?.length,
+      selectedResultIndex: app.selectedResultIndex,
+      mountedResultKey: resultKeys[app.selectedResultIndex],
+      hasSvg: Boolean(app.svgContainer?.querySelector?.('svg'))
+    };
+  });
+  console.log('manual intent debug', JSON.stringify(manualIntentDebug));
   await page.evaluate(async ({ caption, color }) => {
     const app = window.__GBDRAW_APP__;
     app.newLegendCaption = caption;

@@ -435,6 +435,413 @@ const createLayoutPreferences = () => ({
 }
 
 {
+  let value = 0;
+  let oversizedApplyCalls = 0;
+  const history = createHistoryManager({
+    maxBytes: 64,
+    buildIntent: () => ({ value }),
+    applyIntent: (intent) => {
+      value = intent.value;
+    },
+    buildCheckpoint: () => ({ value }),
+    applyCheckpoint: (checkpoint) => {
+      value = checkpoint.value;
+    }
+  });
+
+  await history.captureBaseline('oversized command baseline');
+  await history.runUndoableCommand('Fitting command', () => ({
+    apply: () => {
+      value = 1;
+    },
+    revert: () => {
+      value = 0;
+    },
+    estimateBytes: () => 16
+  }));
+  await history.undo();
+  const before = {
+    value,
+    undoCount: history.getUndoCount(),
+    redoCount: history.getRedoCount(),
+    redoLabel: history.redoLabel(),
+    intent: structuredClone(history.getCurrentIntent()),
+    intentSignature: history.getCurrentIntentSignature(),
+    retainedEntryBytes: history.getDiagnostics().retainedEntryBytes,
+    revision: history.revision.value
+  };
+
+  assert.equal(
+    await history.runUndoableCommand('Oversized command', () => ({
+      apply: () => {
+        oversizedApplyCalls += 1;
+        value = 2;
+      },
+      revert: () => {
+        value = 0;
+      },
+      estimateBytes: () => 65
+    })),
+    false
+  );
+  assert.equal(oversizedApplyCalls, 0);
+  assert.equal(value, before.value);
+  assert.equal(history.getUndoCount(), before.undoCount);
+  assert.equal(history.getRedoCount(), before.redoCount);
+  assert.equal(history.redoLabel(), before.redoLabel);
+  assert.deepEqual(history.getCurrentIntent(), before.intent);
+  assert.equal(history.getCurrentIntentSignature(), before.intentSignature);
+  assert.equal(history.getDiagnostics().retainedEntryBytes, before.retainedEntryBytes);
+  assert.equal(history.revision.value, before.revision);
+  assert.match(history.historyLimitMessage.value, /too large to undo/);
+}
+
+{
+  let value = 0;
+  let semanticRevision = 7;
+  let captureFailure = '';
+  const snapshots = [];
+  const compensations = [];
+  const history = createHistoryManager({
+    buildIntent: () => {
+      if (captureFailure) {
+        const message = captureFailure;
+        captureFailure = '';
+        throw new Error(message);
+      }
+      return { value, semanticRevision };
+    },
+    applyIntent: (intent) => {
+      value = intent.value;
+      semanticRevision = intent.semanticRevision;
+    },
+    buildCheckpoint: () => ({ value, semanticRevision }),
+    applyCheckpoint: (checkpoint) => {
+      value = checkpoint.value;
+      semanticRevision = checkpoint.semanticRevision;
+    }
+  });
+
+  await history.captureBaseline('compensation hook baseline');
+  const before = {
+    intent: structuredClone(history.getCurrentIntent()),
+    intentSignature: history.getCurrentIntentSignature(),
+    retainedEntryBytes: history.getDiagnostics().retainedEntryBytes,
+    revision: history.revision.value
+  };
+  captureFailure = 'forced post-apply intent capture failure';
+  await assert.rejects(
+    history.runUndoableCommand('Snapshot-compensated command', () => ({
+      snapshot: ({ direction }) => {
+        const snapshot = { value, semanticRevision };
+        snapshots.push({ direction, snapshot: { ...snapshot } });
+        return snapshot;
+      },
+      apply: () => {
+        value = 1;
+        semanticRevision = 8;
+      },
+      revert: () => {
+        value = 0;
+        semanticRevision += 1;
+      },
+      compensate: ({ direction, snapshot, error }) => {
+        compensations.push({ direction, error: error.message });
+        value = snapshot.value;
+        semanticRevision = snapshot.semanticRevision;
+      },
+      estimateBytes: () => 24
+    })),
+    /forced post-apply intent capture failure/
+  );
+  assert.deepEqual({ value, semanticRevision }, { value: 0, semanticRevision: 7 });
+  assert.deepEqual(snapshots, [{
+    direction: 'apply',
+    snapshot: { value: 0, semanticRevision: 7 }
+  }]);
+  assert.deepEqual(compensations, [{
+    direction: 'apply',
+    error: 'forced post-apply intent capture failure'
+  }]);
+  assert.equal(history.getUndoCount(), 0);
+  assert.equal(history.getRedoCount(), 0);
+  assert.deepEqual(history.getCurrentIntent(), before.intent);
+  assert.equal(history.getCurrentIntentSignature(), before.intentSignature);
+  assert.equal(history.getDiagnostics().retainedEntryBytes, before.retainedEntryBytes);
+  assert.equal(history.revision.value, before.revision);
+  assert.equal(history.integrityError.value, '');
+}
+
+{
+  let value = 0;
+  let semanticRevision = 20;
+  let captureFailure = '';
+  const history = createHistoryManager({
+    buildIntent: () => {
+      if (captureFailure) {
+        const message = captureFailure;
+        captureFailure = '';
+        throw new Error(message);
+      }
+      return { value, semanticRevision };
+    },
+    applyIntent: (intent) => {
+      value = intent.value;
+      semanticRevision = intent.semanticRevision;
+    },
+    buildCheckpoint: () => ({ value, semanticRevision }),
+    applyCheckpoint: (checkpoint) => {
+      value = checkpoint.value;
+      semanticRevision = checkpoint.semanticRevision;
+    }
+  });
+
+  await history.captureBaseline('undo redo compensation baseline');
+  await history.runUndoableCommand('Compensated transition', () => ({
+    snapshot: () => ({ value, semanticRevision }),
+    apply: () => {
+      value = 1;
+      semanticRevision += 1;
+    },
+    revert: () => {
+      value = 0;
+      semanticRevision += 1;
+    },
+    compensate: ({ snapshot }) => {
+      value = snapshot.value;
+      semanticRevision = snapshot.semanticRevision;
+    },
+    estimateBytes: () => 32
+  }));
+
+  const afterApply = {
+    value,
+    semanticRevision,
+    intent: structuredClone(history.getCurrentIntent()),
+    intentSignature: history.getCurrentIntentSignature(),
+    undoCount: history.getUndoCount(),
+    redoCount: history.getRedoCount(),
+    retainedEntryBytes: history.getDiagnostics().retainedEntryBytes,
+    revision: history.revision.value
+  };
+  captureFailure = 'forced post-undo intent capture failure';
+  await assert.rejects(history.undo(), /forced post-undo intent capture failure/);
+  assert.deepEqual({ value, semanticRevision }, {
+    value: afterApply.value,
+    semanticRevision: afterApply.semanticRevision
+  });
+  assert.deepEqual(history.getCurrentIntent(), afterApply.intent);
+  assert.equal(history.getCurrentIntentSignature(), afterApply.intentSignature);
+  assert.equal(history.getUndoCount(), afterApply.undoCount);
+  assert.equal(history.getRedoCount(), afterApply.redoCount);
+  assert.equal(history.getDiagnostics().retainedEntryBytes, afterApply.retainedEntryBytes);
+  assert.equal(history.revision.value, afterApply.revision);
+
+  await history.undo();
+  const afterUndo = {
+    value,
+    semanticRevision,
+    intent: structuredClone(history.getCurrentIntent()),
+    intentSignature: history.getCurrentIntentSignature(),
+    undoCount: history.getUndoCount(),
+    redoCount: history.getRedoCount(),
+    retainedEntryBytes: history.getDiagnostics().retainedEntryBytes,
+    revision: history.revision.value
+  };
+  captureFailure = 'forced post-redo intent capture failure';
+  await assert.rejects(history.redo(), /forced post-redo intent capture failure/);
+  assert.deepEqual({ value, semanticRevision }, {
+    value: afterUndo.value,
+    semanticRevision: afterUndo.semanticRevision
+  });
+  assert.deepEqual(history.getCurrentIntent(), afterUndo.intent);
+  assert.equal(history.getCurrentIntentSignature(), afterUndo.intentSignature);
+  assert.equal(history.getUndoCount(), afterUndo.undoCount);
+  assert.equal(history.getRedoCount(), afterUndo.redoCount);
+  assert.equal(history.getDiagnostics().retainedEntryBytes, afterUndo.retainedEntryBytes);
+  assert.equal(history.revision.value, afterUndo.revision);
+}
+
+{
+  let value = 0;
+  let activeFileId = 'file-old';
+  const retainedFiles = new Map([['file-old', 11]]);
+  let estimatesBeforeFailure = null;
+  const fileStore = {
+    estimateBytes(fileIds) {
+      if (estimatesBeforeFailure !== null) {
+        if (estimatesBeforeFailure === 0) {
+          estimatesBeforeFailure = null;
+          throw new Error('forced retained-file bookkeeping failure');
+        }
+        estimatesBeforeFailure -= 1;
+      }
+      return [...fileIds].reduce(
+        (total, fileId) => total + (retainedFiles.get(fileId) || 0),
+        0
+      );
+    },
+    retainOnly(fileIds) {
+      const retained = new Set(fileIds);
+      [...retainedFiles.keys()].forEach((fileId) => {
+        if (!retained.has(fileId)) retainedFiles.delete(fileId);
+      });
+    }
+  };
+  const history = createHistoryManager({
+    fileStore,
+    buildIntent: () => ({ value, file: { fileId: activeFileId } }),
+    applyIntent: (intent) => {
+      value = intent.value;
+      activeFileId = intent.file.fileId;
+    },
+    buildCheckpoint: () => ({ value, file: { fileId: activeFileId } }),
+    applyCheckpoint: (checkpoint) => {
+      value = checkpoint.value;
+      activeFileId = checkpoint.file.fileId;
+    }
+  });
+
+  await history.captureBaseline('file-retention compensation baseline');
+  const before = {
+    intent: structuredClone(history.getCurrentIntent()),
+    intentSignature: history.getCurrentIntentSignature(),
+    retainedEntryBytes: history.getDiagnostics().retainedEntryBytes,
+    revision: history.revision.value
+  };
+  estimatesBeforeFailure = 1;
+  await assert.rejects(
+    history.runUndoableCommand('File-retaining command', () => ({
+      apply: () => {
+        value = 1;
+        activeFileId = 'file-new';
+        retainedFiles.set('file-new', 13);
+      },
+      revert: () => {
+        value = 0;
+        activeFileId = 'file-old';
+      },
+      metadata: {
+        before: { fileId: 'file-old' },
+        after: { fileId: 'file-new' }
+      },
+      estimateBytes: () => 12
+    })),
+    /forced retained-file bookkeeping failure/
+  );
+  assert.deepEqual({ value, activeFileId }, { value: 0, activeFileId: 'file-old' });
+  assert.deepEqual([...retainedFiles.keys()], ['file-old']);
+  assert.equal(history.getUndoCount(), 0);
+  assert.equal(history.getRedoCount(), 0);
+  assert.deepEqual(history.getCurrentIntent(), before.intent);
+  assert.equal(history.getCurrentIntentSignature(), before.intentSignature);
+  assert.equal(history.getDiagnostics().retainedEntryBytes, before.retainedEntryBytes);
+  assert.equal(history.revision.value, before.revision);
+}
+
+{
+  let value = 0;
+  let failCapture = false;
+  let blockedApplyCalls = 0;
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.map(String).join(' '));
+  const history = createHistoryManager({
+    buildIntent: () => {
+      if (failCapture) {
+        failCapture = false;
+        throw new Error('forced integrity capture failure');
+      }
+      return { value };
+    },
+    applyIntent: (intent) => {
+      value = intent.value;
+    },
+    buildCheckpoint: () => ({ value }),
+    applyCheckpoint: (checkpoint) => {
+      value = checkpoint.value;
+    }
+  });
+
+  try {
+    await history.captureBaseline('integrity block baseline');
+    failCapture = true;
+    await assert.rejects(
+      history.runUndoableCommand('Uncompensatable command', () => ({
+        snapshot: () => ({ value }),
+        apply: () => {
+          value = 1;
+        },
+        revert: () => {
+          value = 0;
+        },
+        compensate: () => {
+          throw new Error('forced compensation failure');
+        },
+        estimateBytes: () => 8
+      })),
+      (error) => error?.name === 'HistoryIntegrityError'
+    );
+    assert.match(history.integrityError.value, /Further History actions are disabled/);
+    assert.equal(history.canUndo(), false);
+    assert.equal(history.canRedo(), false);
+    assert.equal(await history.undo(), false);
+    assert.equal(await history.redo(), false);
+    assert.equal(
+      await history.runUndoableCommand('Blocked command', () => ({
+        apply: () => {
+          blockedApplyCalls += 1;
+          value = 2;
+        },
+        revert: () => {
+          value = 1;
+        }
+      })),
+      false
+    );
+    assert.equal(blockedApplyCalls, 0);
+    assert.equal(value, 1);
+    assert.equal(errors.length, 1);
+  } finally {
+    console.error = originalError;
+  }
+}
+
+{
+  let value = 0;
+  const history = createHistoryManager({
+    maxBytes: 24,
+    buildIntent: () => ({ value }),
+    applyIntent: (intent) => {
+      value = intent.value;
+    },
+    buildCheckpoint: () => ({ value }),
+    applyCheckpoint: (checkpoint) => {
+      value = checkpoint.value;
+    }
+  });
+  const command = (before, after) => ({
+    apply: () => {
+      value = after;
+    },
+    revert: () => {
+      value = before;
+    },
+    estimateBytes: () => 16
+  });
+
+  await history.captureBaseline('command eviction baseline');
+  await history.runUndoableCommand('First command', () => command(0, 1));
+  await history.runUndoableCommand('Second command', () => command(1, 2));
+  assert.equal(value, 2);
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Second command');
+  assert.match(history.historyLimitMessage.value, /Older undo history was discarded/);
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 1);
+}
+
+{
   const fileStore = createHistoryFileStore();
   const file = makeFile('restore.gb', 25);
   const proteinTable = makeFile('resolved-protein.tsv', 40);

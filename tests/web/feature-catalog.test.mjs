@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
 import test from 'node:test';
 
 import {
   biologicalFeatureKey,
+  catalogResultKey,
   featureStateFromCatalog,
   stableFeatureOverrideKey,
   validateFeatureCatalog
 } from '../../gbdraw/web/js/services/feature-catalog.js';
+import {
+  assessFeatureInstanceHashCapability,
+  deriveFeatureInstanceHash,
+  upgradeFeatureCatalogInstanceHashes
+} from '../../gbdraw/web/js/services/feature-instance-identity.js';
 
 const results = [{ name: 'diagram.svg', content: '<svg />' }];
 const fullNote = `${'x'.repeat(49)}😀tail`;
@@ -658,5 +665,143 @@ test('circular batch catalog state rebases item-local record indexes globally', 
   assert.deepEqual(
     state.extractedFeatures.map((feature) => feature.displayRecordId),
     ['duplicated-accession', 'second-accession']
+  );
+  assert.deepEqual(
+    state.extractedFeatures.map((feature) => feature.resultIndex),
+    [0, 1]
+  );
+  assert.deepEqual(
+    state.extractedFeatures.map((feature) => feature.resultKey),
+    batchCatalog.items.map(catalogResultKey)
+  );
+  assert.deepEqual(
+    state.featureResultIdentities,
+    batchCatalog.items.map((item, resultIndex) => ({
+      resultKey: catalogResultKey(item),
+      resultIndex,
+      resultName: item.resultName
+    }))
+  );
+});
+
+test('feature instance hash encoding matches frozen cross-runtime vectors', async () => {
+  assert.equal(
+    await deriveFeatureInstanceHash('record-1', 'f12345678', { crypto: webcrypto }),
+    'fi1_f6lpj7ii45v7lrrthhg4pci24i'
+  );
+  assert.equal(
+    await deriveFeatureInstanceHash('rec-α', 'fdeadbeef~7', { crypto: webcrypto }),
+    'fi1_3rqvxium7ztier2dwg2nzdkp4q'
+  );
+});
+
+test('schema-3 instance hashes are additive and exact capability fails closed', async () => {
+  const oldCatalog = structuredClone(catalog);
+  const oldValidated = validateFeatureCatalog(oldCatalog, results);
+  const oldState = featureStateFromCatalog(oldValidated);
+
+  assert.equal(oldState.featureExactScopeAvailable, false);
+  assert.equal(oldState.featureExactScopeDiagnostic, 'Generate to enable exact feature edits');
+  assert.equal(oldState.extractedFeatures[0].instanceHash, undefined);
+  assert.equal(oldState.extractedFeatures[0].resultIndex, 0);
+  assert.equal(oldState.extractedFeatures[0].resultName, 'diagram.svg');
+  assert.equal(
+    oldState.extractedFeatures[0].resultKey,
+    catalogResultKey(oldCatalog.items[0])
+  );
+
+  const beforeUpgrade = structuredClone(oldCatalog);
+  const upgraded = await upgradeFeatureCatalogInstanceHashes(oldCatalog, { crypto: webcrypto });
+  assert.deepEqual(oldCatalog, beforeUpgrade, 'compatibility upgrade must not mutate input');
+  assert.equal(upgraded.upgraded, true);
+  assert.equal(upgraded.exactScopeAvailable, true);
+  assert.match(
+    upgraded.catalog.items[0].biologicalFeatures[0].instanceHash,
+    /^fi1_[a-z2-7]{26}$/
+  );
+
+  upgraded.catalog.items[0].resultKey = 'result-key-a';
+  const nextState = featureStateFromCatalog(
+    validateFeatureCatalog(upgraded.catalog, results)
+  );
+  assert.equal(nextState.featureExactScopeAvailable, true);
+  assert.equal(nextState.biologicalFeatures[0].resultKey, 'result-key-a');
+  assert.equal(nextState.extractedFeatures[0].resultKey, 'result-key-a');
+  assert.equal(
+    nextState.extractedFeatures[0].instanceHash,
+    upgraded.catalog.items[0].biologicalFeatures[0].instanceHash
+  );
+});
+
+test('instance-hash upgrade verifies supplied hashes against their canonical pairs', async () => {
+  const hashCatalog = structuredClone(catalog);
+  const feature = hashCatalog.items[0].biologicalFeatures[0];
+  feature.instanceHash = await deriveFeatureInstanceHash(
+    feature.recordKey,
+    feature.biologicalFeatureId,
+    { crypto: webcrypto }
+  );
+  const beforeVerification = structuredClone(hashCatalog);
+
+  const verified = await upgradeFeatureCatalogInstanceHashes(
+    hashCatalog,
+    { crypto: webcrypto }
+  );
+  assert.equal(verified.exactScopeAvailable, true);
+  assert.equal(verified.upgraded, false);
+  assert.deepEqual(verified.catalog, beforeVerification);
+  assert.deepEqual(hashCatalog, beforeVerification, 'verification must not mutate input');
+
+  hashCatalog.items[0].biologicalFeatures[0].instanceHash =
+    'fi1_aaaaaaaaaaaaaaaaaaaaaaaaaa';
+  await assert.rejects(
+    () => upgradeFeatureCatalogInstanceHashes(hashCatalog, { crypto: webcrypto }),
+    /does not match its canonical record and Feature identity/
+  );
+});
+
+test('catalog rejects malformed instance hashes and duplicate durable Result keys', () => {
+  const malformed = structuredClone(catalog);
+  malformed.items[0].biologicalFeatures[0].instanceHash = 'fi1_NOT-VALID';
+  assert.throws(
+    () => validateFeatureCatalog(malformed, results),
+    /Reload the page and Generate again/
+  );
+
+  const duplicatedResult = structuredClone(catalog);
+  const secondItem = structuredClone(catalog.items[0]);
+  duplicatedResult.items.push(secondItem);
+  duplicatedResult.items[0].resultKey = 'duplicate-result';
+  duplicatedResult.items[1].resultKey = 'duplicate-result';
+  duplicatedResult.items[0].resultName = 'first.svg';
+  duplicatedResult.items[1].resultIndex = 1;
+  duplicatedResult.items[1].resultName = 'second.svg';
+  assert.throws(
+    () => validateFeatureCatalog(duplicatedResult, [
+      { name: 'first.svg', content: '<svg />' },
+      { name: 'second.svg', content: '<svg />' }
+    ]),
+    /Reload the page and Generate again/
+  );
+});
+
+test('legacy instance-hash upgrade rejects ambiguous canonical pairs', async () => {
+  const ambiguous = {
+    schema: 3,
+    items: [{ biologicalFeatures: [{
+      recordKey: 'record', biologicalFeatureId: 'feature'
+    }] }, { biologicalFeatures: [{
+      recordKey: 'record', biologicalFeatureId: 'feature'
+    }] }]
+  };
+  const capability = assessFeatureInstanceHashCapability(ambiguous);
+  assert.equal(capability.canUpgradeFromCanonicalPairs, false);
+  assert.equal(capability.exactScopeAvailable, false);
+
+  const upgraded = await upgradeFeatureCatalogInstanceHashes(ambiguous);
+  assert.equal(upgraded.upgraded, false);
+  assert.equal(
+    upgraded.catalog.items.some((item) => item.biologicalFeatures[0].instanceHash),
+    false
   );
 });

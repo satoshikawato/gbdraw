@@ -18,11 +18,16 @@ from gbdraw.api import (
     session_to_request,
 )
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.session_io import SUPPORTED_SESSION_VERSIONS
+from gbdraw.session_request_codec import SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
 
 
 pytestmark = pytest.mark.gallery
+
+
+PINNED_GALLERY_SESSION_VERSION = 40
+PINNED_GALLERY_REQUEST_SCHEMA = 5
 
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -55,16 +60,23 @@ def _example(example_id: str) -> GallerySessionExample:
 def gallery_sessions(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> dict[str, tuple[GallerySessionExample, dict[str, object]]]:
-    return {
+    sessions = {
         example.id: (example, load_cached_gallery_session(example.session_path))
         for example in EXAMPLES
     }
+    assert PINNED_GALLERY_SESSION_VERSION in SUPPORTED_SESSION_VERSIONS
+    assert PINNED_GALLERY_REQUEST_SCHEMA in SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+    assert all(
+        session.get("version") == PINNED_GALLERY_SESSION_VERSION
+        for _, session in sessions.values()
+    )
+    return sessions
 
 
 def _request(session: dict[str, object]) -> dict[str, object]:
     request = session["renderRequest"]
     assert isinstance(request, dict)
-    assert request["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert request["schema"] == PINNED_GALLERY_REQUEST_SCHEMA
     return request
 
 
