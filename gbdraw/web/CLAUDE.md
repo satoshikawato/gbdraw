@@ -38,13 +38,18 @@ saved sessions, and replay must converge on the typed render-request boundary.
 JavaScript owns browser state and resource bytes; Python owns request validation,
 planning, loading, diagram assembly, and rendering.
 
-The application may have two Pyodide runtimes:
+The application has one Pyodide runtime, owned by the lazy diagram Worker.
+Typed helper operations, generation-time feature extraction, and diagram
+rendering share that runtime; Python must not return to the main thread.
 
-- The module worker owns diagram rendering and generation-time feature
-  extraction. Heavy rendering must not return to the main thread.
-- The main-thread runtime may serve small UI helpers that have not yet moved,
-  such as palette data or isolated compatibility helpers. It is not an
-  alternative render path.
+App-shell readiness means Vue is mounted and required local UI assets and
+palette definitions are available. It is independent of diagram-Worker
+readiness. Loading a saved preview that needs no Python must leave the Worker
+unconstructed. The first Python-backed helper or render operation constructs
+and initializes the Worker, and later operations reuse it. Callers await their
+own explicit success, error, or canceled result. Tests and capture tools start
+the operation they need and await its settlement; they never wait for a global
+Worker-ready flag.
 
 LOSAT workers are separate from the diagram-generation worker. Threaded LOSAT
 is available only when the page is cross-origin isolated; keep a single-thread

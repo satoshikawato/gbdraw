@@ -30,7 +30,7 @@ from flows.web_capture import (
     open_linear_comparison_disclosure,
     select_linear_losat_mode,
     set_feature_search_visible,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -629,7 +629,7 @@ def capture_bgc_losatp(
 
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _set_bgc_inputs(page)
         if separate_strands is not None:
             separate_strands_control = page.get_by_label(

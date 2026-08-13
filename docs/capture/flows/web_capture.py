@@ -26,7 +26,6 @@ from config import (
     TIMEZONE_ID,
     VIEWPORT_HEIGHT,
     VIEWPORT_WIDTH,
-    WORKER_READY_TIMEOUT_MS,
     validate_capture_base_url,
 )
 
@@ -171,37 +170,101 @@ def open_browser_capture(browser_type: BrowserType, base_url: str) -> BrowserCap
     )
 
 
-def wait_for_worker(page: Page) -> None:
-    """Wait for the packaged diagram worker and verify isolation."""
+def wait_for_app_shell(page: Page, *, timeout_ms: int = GENERATION_TIMEOUT_MS) -> None:
+    """Wait for the mounted, palette-backed shell without starting Python."""
 
     page.wait_for_function(
         """
         () => {
           const app = window.__GBDRAW_APP__;
           return Boolean(
-            app && (app.diagramGenerationWorkerReady || app.diagramGenerationWorkerError)
+            app && Object.keys(app.paletteDefinitions || {}).length > 0
           );
         }
         """,
-        timeout=WORKER_READY_TIMEOUT_MS,
+        timeout=timeout_ms,
     )
-    worker_state = page.evaluate(
+    shell_state = page.evaluate(
         """
-        () => ({
-          ready: Boolean(window.__GBDRAW_APP__?.diagramGenerationWorkerReady),
-          error: String(window.__GBDRAW_APP__?.diagramGenerationWorkerError || ''),
-          status: String(window.__GBDRAW_APP__?.diagramGenerationWorkerStatus || ''),
-          isolated: Boolean(window.crossOriginIsolated)
-        })
+        () => {
+          const app = window.__GBDRAW_APP__;
+          const runtimeFields = [
+            'pyodide', 'pyodideReady', 'pyodideLoading', 'pyodideError', 'pyodideStatus'
+          ];
+          return {
+            mounted: Boolean(app),
+            paletteDefinitionCount: Object.keys(app?.paletteDefinitions || {}).length,
+            mainLoaderPresent: typeof window.loadPyodide === 'function',
+            mainRuntimeFields: app
+              ? runtimeFields.filter((field) => Object.prototype.hasOwnProperty.call(app, field))
+              : [],
+            isolated: Boolean(window.crossOriginIsolated)
+          };
+        }
         """
     )
-    if not worker_state["ready"]:
+    if not shell_state["mounted"] or shell_state["paletteDefinitionCount"] == 0:
+        raise AssertionError(f"Capture app shell did not become ready: {shell_state!r}")
+    if shell_state["mainLoaderPresent"] or shell_state["mainRuntimeFields"]:
         raise AssertionError(
-            "Diagram worker did not become ready: "
-            f"{worker_state['error'] or worker_state['status']}"
+            "Capture app shell exposed a forbidden main-thread Python runtime: "
+            f"{shell_state!r}"
         )
-    if not worker_state["isolated"]:
+    if not shell_state["isolated"]:
         raise AssertionError("Capture page is not cross-origin isolated")
+
+
+def generate_and_wait_for_result(
+    page: Page,
+    *,
+    timeout_ms: int = GENERATION_TIMEOUT_MS,
+    expected_status: str = "ok",
+) -> dict[str, Any]:
+    """Start Generate and await a committed Result or an explicit app error."""
+
+    generate = page.get_by_role("button", name="Generate Diagram", exact=True)
+    expect(generate).to_be_enabled()
+    previous_run_marker = page.evaluate(
+        "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"
+    )
+    generate.click()
+    page.wait_for_function(
+        """
+        previous => {
+          const app = window.__GBDRAW_APP__;
+          if (!app || app.processing) return false;
+          const marker = String(app.lastRunInfo?.startedAtIso || '');
+          const committed = Boolean(
+            marker && marker !== previous && Array.isArray(app.results) && app.results.length > 0
+          );
+          return committed || Boolean(app.errorLog);
+        }
+        """,
+        arg=previous_run_marker,
+        timeout=timeout_ms,
+    )
+    outcome = page.evaluate(
+        """
+        () => {
+          const app = window.__GBDRAW_APP__;
+          return {
+            status: app?.errorLog ? 'error' : 'ok',
+            errorLog: app?.errorLog || null,
+            resultCount: Array.isArray(app?.results) ? app.results.length : 0,
+            runMarker: String(app?.lastRunInfo?.startedAtIso || '')
+          };
+        }
+        """
+    )
+    if outcome["status"] != expected_status:
+        raise AssertionError(
+            "Generate Diagram settled with an unexpected status: "
+            f"expected {expected_status!r}, found {outcome!r}"
+        )
+    if expected_status == "ok" and outcome["resultCount"] < 1:
+        raise AssertionError(f"Generate Diagram did not commit a Result: {outcome!r}")
+    expect(generate).to_be_enabled(timeout=timeout_ms)
+    return outcome
 
 
 def linear_pair(page: Page, query_index: int, subject_index: int) -> Locator:
@@ -267,24 +330,7 @@ def generate_and_inspect(
 ) -> dict[str, Any]:
     """Click the public Generate action and inspect the resulting SVG."""
 
-    generate = page.get_by_role("button", name="Generate Diagram", exact=True)
-    expect(generate).to_be_enabled()
-    previous_run_marker = page.evaluate(
-        "() => String(window.__GBDRAW_APP__?.lastRunInfo?.startedAtIso || '')"
-    )
-    generate.click()
-    page.wait_for_function(
-        """
-        previous => {
-          const app = window.__GBDRAW_APP__;
-          const marker = String(app?.lastRunInfo?.startedAtIso || '');
-          return Boolean(app && !app.processing && marker && marker !== previous);
-        }
-        """,
-        arg=previous_run_marker,
-        timeout=timeout_ms,
-    )
-    expect(generate).to_be_enabled(timeout=timeout_ms)
+    generate_and_wait_for_result(page, timeout_ms=timeout_ms)
 
     result_region = page.get_by_role("region", name="Result Preview", exact=True)
     expect(result_region).to_be_visible(timeout=timeout_ms)

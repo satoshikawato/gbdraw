@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -125,8 +126,7 @@ const installDiagramRequestObserver = async (page) => {
 };
 
 test('Similarity-group popup selects every OG match without a focus outline', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -181,8 +181,7 @@ test('Similarity-group popup selects every OG match without a focus outline', as
 });
 
 test('Linear record rows and N-to-M comparison batches remain keyed by sequence uid', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const setup = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -296,8 +295,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
 
 test('Linear records precede comparison pairs in DOM and keyboard order at narrow width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const uids = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -379,8 +377,7 @@ test('Linear records precede comparison pairs in DOM and keyboard order at narro
 });
 
 test('Linear region controls do not overlap at supported sidebar widths', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
 
   const recordOptions = page.locator('details[data-linear-record-options]').first();
@@ -464,8 +461,7 @@ test('Linear region controls do not overlap at supported sidebar widths', async 
 });
 
 test('Selected pairs focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const uids = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -527,8 +523,7 @@ test('Selected pairs focuses Add and repairs an unplaced draft in its boundary',
 });
 
 test('Comparison card actions target the active owner of duplicate directional drafts', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const [uidA, uidB] = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -597,8 +592,7 @@ test('Comparison card actions target the active owner of duplicate directional d
 test('Normalize Record Lengths rejects a shared Linear row and remains recoverable', async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   const sharedRowUids = await page.evaluate((records) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
@@ -683,8 +677,7 @@ test('No comparison completes a real render without touching dormant comparison 
       throw new Error('No comparison must not execute LOSAT.');
     };
   });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   const dormantEdgeKey = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
@@ -826,13 +819,7 @@ test('No comparison completes a real render without touching dormant comparison 
 test('Automatic Linear renders every record from one GenBank source and survives session reload', async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
-    null,
-    { timeout: 180000 }
-  );
+  await openApp(page);
 
   const sourceName = 'automatic-multi-record.gbk';
   await page.evaluate(({ content, name }) => {
@@ -944,12 +931,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
     };
   }, sourceName);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
-    null,
-    { timeout: 180000 }
-  );
+  await waitForAppShell(page);
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
   const dialog = await dialogPromise;
@@ -1020,8 +1002,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       }));
     };
   });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   const [uidA, uidB, uidC] = await page.evaluate((records) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
@@ -1301,7 +1282,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status).toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await waitForAppShell(page, { waitForPalette: false });
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').setInputFiles(sessionPath);
   const dialog = await dialogPromise;
@@ -1382,8 +1363,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
 test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ page }) => {
   test.setTimeout(180000);
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const imported = await page.evaluate(async () => {
     const response = await fetch(
@@ -1435,8 +1415,7 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
 });
 
 test('Candidate render post-processing sanitizes and reapplies stable styles before commit', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const outcome = await page.evaluate(async () => {
     const { prepareCandidateRenderCommit } = await import('./js/app/candidate-render.js');
@@ -1567,8 +1546,7 @@ ${origin}
 `;
   };
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   await page.evaluate(({ firstRecord, secondRecord }) => {
     const app = window.__GBDRAW_APP__;
@@ -1904,8 +1882,7 @@ ${origin}
 });
 
 test('Region annotations expose and persist an explicit target-record selection', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const genbank = `LOCUS       RecA                      10 bp    DNA     linear   UNA 01-JAN-2000
 DEFINITION  first.
@@ -1968,8 +1945,7 @@ ORIGIN
 });
 
 test('Region annotation IDs accept continuous typing without losing focus', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -1991,8 +1967,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
 });
 
 test('GFF annotation targets follow FASTA record order', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const gff = `##gff-version 3
 ##sequence-region RecB 1 12

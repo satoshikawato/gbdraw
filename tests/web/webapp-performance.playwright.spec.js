@@ -1,5 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { join, resolve } = require('node:path');
+const {
+  assertSessionLoadLeftWorkerIdle,
+  openApp
+} = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const wssvSessionPath = join(
@@ -26,24 +30,6 @@ const percentile = (values, fraction) => {
 };
 
 const median = (values) => percentile(values, 0.5);
-
-const openApp = async (page) => {
-  await page.addInitScript(() => {
-    window.__GBDRAW_TEST_HOOKS__ = {
-      historyDiagnostics: [],
-      onHistoryDiagnostic(detail) {
-        window.__GBDRAW_TEST_HOOKS__.historyDiagnostics.push({ ...(detail || {}) });
-      }
-    };
-  });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
-    null,
-    { timeout: 180_000 }
-  );
-};
 
 const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
   const largeSvgThreshold = 1_000_000;
@@ -260,11 +246,20 @@ test.describe.configure({ mode: 'serial' });
 
 test('WSSV restore and ordinary edits keep History and SVG work bounded', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
+  await page.addInitScript(() => {
+    window.__GBDRAW_TEST_HOOKS__ = {
+      historyDiagnostics: [],
+      onHistoryDiagnostic(detail) {
+        window.__GBDRAW_TEST_HOOKS__.historyDiagnostics.push({ ...(detail || {}) });
+      }
+    };
+  });
   await openApp(page);
   await installBrowserProbe(page);
   await resetProbe(page);
 
   const restoreMs = await loadWssvSession(page);
+  await assertSessionLoadLeftWorkerIdle(page);
   const restoreProbe = await getProbeSnapshot(page);
   expect(restoreProbe.sanitizeCalls, 'WSSV must cross one sanitizer boundary').toHaveLength(1);
   expect(restoreProbe.parseCalls, 'WSSV must cross one full SVG parse boundary').toHaveLength(1);
@@ -424,7 +419,7 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
 });
 
 test('the browser SVG sanitizer retains its malicious-input security profile', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await openApp(page, { waitForPalette: false });
   await page.waitForFunction(() => window.DOMPurify?.sanitize);
   const sanitized = await page.evaluate(async () => {
     const { sanitizeSvgContent } = await import('/gbdraw/web/js/services/svg-sanitization.js');

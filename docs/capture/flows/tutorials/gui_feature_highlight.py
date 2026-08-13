@@ -37,8 +37,9 @@ from flows.web_capture import (
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    generate_and_wait_for_result,
     open_browser_capture,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -368,7 +369,7 @@ def capture_gui_feature_highlight(
     screenshot_bytes: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _resize_sidebar(page)
         _open_human_circular(page, OUTPUT_PREFIX)
 
@@ -461,7 +462,7 @@ def capture_gui_feature_highlight(
             page, output_paths[SCREENSHOT_NAMES[0]], "Circular"
         )
 
-        page.get_by_role("button", name="Generate Diagram", exact=True).click()
+        generate_and_wait_for_result(page)
         result_region = page.get_by_role("region", name="Result Preview", exact=True)
         expect(result_region.locator("svg")).to_have_count(1, timeout=180_000)
         _load_label_overrides(page, tables["overrides"])

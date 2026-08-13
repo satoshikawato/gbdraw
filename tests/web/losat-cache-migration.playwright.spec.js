@@ -358,6 +358,9 @@ const migrationUiSnapshot = async (page) => page.evaluate(async () => {
 const cancelDuringRender = async (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
   const { state } = await import('/gbdraw/web/js/state.js');
+  const {
+    CANONICAL_REQUEST_SCHEMA
+  } = await import('/gbdraw/web/js/services/session-request.js');
   const before = {
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
@@ -366,26 +369,38 @@ const cancelDuringRender = async (page) => page.evaluate(async () => {
     losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
     losatCacheInfo: state.losatCacheInfo.value
   };
-  let sawRendering = false;
+  const originalWorkerPostMessage = Worker.prototype.postMessage;
+  let releaseRunRequest;
+  const runRequestIssued = new Promise((resolve) => {
+    releaseRunRequest = resolve;
+  });
+  let heldCanonicalRun = null;
   let cancelInvoked = false;
-  const cancelPoll = setInterval(() => {
+  Worker.prototype.postMessage = function holdFirstCanonicalRun(message, ...args) {
     if (
-      sawRendering ||
-      String(app.processingStatus || '') !== 'Rendering SVG...'
-    ) return;
-    sawRendering = true;
+      !heldCanonicalRun &&
+      message?.type === 'run' &&
+      message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA
+    ) {
+      heldCanonicalRun = { worker: this, message, args };
+      releaseRunRequest();
+      return;
+    }
+    return originalWorkerPostMessage.call(this, message, ...args);
+  };
+  try {
+    const runPromise = app.runAnalysis();
+    await runRequestIssued;
     app.cancelGeneration();
     cancelInvoked = true;
-  }, 0);
-  try {
-    const result = await app.runAnalysis();
+    const result = await runPromise;
     const sameMapEntries = (entries, current) => (
       entries.length === current.size &&
       entries.every(([key, value]) => current.get(key) === value)
     );
     return {
       result,
-      sawRendering,
+      runRequestIssued: Boolean(heldCanonicalRun),
       cancelInvoked,
       errorSummary: String(app.errorLog?.summary || ''),
       executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
@@ -400,7 +415,7 @@ const cancelDuringRender = async (page) => page.evaluate(async () => {
       )
     };
   } finally {
-    clearInterval(cancelPoll);
+    Worker.prototype.postMessage = originalWorkerPostMessage;
   }
 });
 
@@ -814,7 +829,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await settleAppRender(page);
   expect(canceledLegacyRun).toMatchObject({
     result: { status: 'canceled' },
-    sawRendering: true,
+    runRequestIssued: true,
     cancelInvoked: true,
     errorSummary: '',
     executorCalls: 0,

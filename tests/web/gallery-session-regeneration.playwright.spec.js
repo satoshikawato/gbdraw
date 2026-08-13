@@ -1,67 +1,15 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-
-const installDiagramWorkerActivityTracker = async (page) => {
-  await page.addInitScript(() => {
-    window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ = {
-      constructions: 0,
-      instances: []
-    };
-    const NativeWorker = window.Worker;
-    window.Worker = new Proxy(NativeWorker, {
-      construct(target, args) {
-        const worker = Reflect.construct(target, args, target);
-        if (!String(args[0] || '').includes('diagram-generation-worker.js')) {
-          return worker;
-        }
-        const activity = window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__;
-        activity.constructions += 1;
-        const instance = {
-          initializations: 0,
-          helpers: [],
-          runs: 0,
-          events: [],
-          terminated: false
-        };
-        activity.instances.push(instance);
-        const nativePostMessage = worker.postMessage.bind(worker);
-        worker.postMessage = (message, transfer) => {
-          if (message?.type === 'init') {
-            instance.initializations += 1;
-            instance.events.push('init');
-          } else if (message?.type === 'helper') {
-            const transferList = Array.isArray(transfer) ? transfer : [];
-            instance.helpers.push({
-              operation: String(message.operation || ''),
-              transferCount: transferList.length,
-              transferredBytes: transferList.reduce(
-                (total, item) => total + Number(item?.byteLength || 0),
-                0
-              )
-            });
-            instance.events.push('helper');
-          } else if (message?.type === 'run') {
-            instance.runs += 1;
-            instance.events.push('run');
-          }
-          if (transfer === undefined) return nativePostMessage(message);
-          return nativePostMessage(message, transfer);
-        };
-        const nativeTerminate = worker.terminate.bind(worker);
-        worker.terminate = () => {
-          instance.terminated = true;
-          return nativeTerminate();
-        };
-        return worker;
-      }
-    });
-  });
-};
+const {
+  assertDiagramWorkerIdle,
+  assertSessionLoadLeftWorkerIdle,
+  assertWorkerReuseAcrossHelperAndRender,
+  openApp
+} = require('./helpers/app-lifecycle.cjs');
 
 test('uncached protein LOSAT helpers and render share one lazy Worker runtime', async ({ page }) => {
   test.setTimeout(240000);
   page.on('dialog', (dialog) => dialog.accept());
-  await installDiagramWorkerActivityTracker(page);
   await page.addInitScript(() => {
     window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ = 0;
     window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
@@ -77,15 +25,11 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
       }));
     };
   });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page);
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => {
     requestAnimationFrame(resolve);
   })));
-  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__)).toEqual({
-    constructions: 0,
-    instances: []
-  });
+  await assertDiagramWorkerIdle(page);
   expect(await page.evaluate(() => ({
     mainLoaderPresent: typeof window.loadPyodide === 'function',
     mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
@@ -107,10 +51,7 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
   });
 
   expect(imported?.status).toBe('ok');
-  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__)).toEqual({
-    constructions: 0,
-    instances: []
-  });
+  await assertSessionLoadLeftWorkerIdle(page);
 
   const proteinMode = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -168,11 +109,9 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
     executorCalls: 1
   });
 
-  const activity = await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__);
-  expect(activity.constructions).toBe(1);
-  expect(activity.instances).toHaveLength(1);
+  const activity = await assertWorkerReuseAcrossHelperAndRender(page);
   expect(activity.instances[0].initializations).toBe(1);
-  expect(activity.instances[0].runs).toBe(2);
+  expect(activity.instances[0].runs).toHaveLength(2);
   expect(activity.instances[0].helpers.length).toBeGreaterThan(0);
   expect(activity.instances[0].helpers.some(({ operation }) => (
     operation === 'hydrateProteinLosatTsv'
@@ -180,9 +119,6 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
   expect(activity.instances[0].helpers.some((helper) => (
     helper.transferCount > 0 && helper.transferredBytes > 0
   ))).toBe(true);
-  expect(activity.instances[0].events[0]).toBe('init');
-  expect(activity.instances[0].events.indexOf('helper'))
-    .toBeLessThan(activity.instances[0].events.indexOf('run'));
   expect(activity.instances[0].terminated).toBe(false);
   expect(await page.evaluate(() => ({
     mainLoaderPresent: typeof window.loadPyodide === 'function',
@@ -196,8 +132,7 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
 test('Gallery session colors, record labels, and feature labels survive regeneration', async ({ page }) => {
   test.setTimeout(240000);
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const imported = await page.evaluate(async () => {
     const inspectSettings = (app) => ({

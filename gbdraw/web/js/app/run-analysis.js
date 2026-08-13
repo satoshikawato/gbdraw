@@ -809,7 +809,6 @@ export const createRunAnalysis = ({
   prepareReflowCommit = prepareReflowResultCommit
 }) => {
   const {
-    diagramGenerationWorkerReady,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -3843,7 +3842,7 @@ export const createRunAnalysis = ({
       }
 
       throwIfGenerationCanceled();
-      setProcessingStatus(diagramGenerationWorkerReady.value ? 'Rendering SVG...' : 'Starting diagram engine...');
+      setProcessingStatus('Rendering SVG...');
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }

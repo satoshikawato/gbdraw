@@ -176,7 +176,6 @@ export const createSessionImportRollbackState = ({
 
 export const createAppSetup = () => {
   const {
-    diagramGenerationWorkerReady,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -2205,9 +2204,6 @@ export const createAppSetup = () => {
     if (result?.status === 'ok') {
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
-    if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
-      diagramGenerationWorkerReady.value = true;
-    }
     return result;
   });
 
@@ -2978,7 +2974,6 @@ export const createAppSetup = () => {
   };
 
   return {
-    diagramGenerationWorkerReady,
     processing,
     processingStatus,
     generationCancelRequested,

@@ -39,7 +39,7 @@ from config import (
     GUI_LOSATN_DE3_FIXTURE_SIZE,
     GUI_UPLOADED_COMPARISON_SCREENSHOT_NAMES,
     WEB_ROOT,
-    WORKER_READY_TIMEOUT_MS,
+    PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
     assert_fixture_identity,
@@ -51,7 +51,7 @@ from flows.web_capture import (
     open_browser_capture,
     open_linear_comparison_disclosure,
     select_linear_losat_mode,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -253,9 +253,9 @@ def _load_complete_linear_inputs(page: Page) -> None:
         selector = page.get_by_label(
             f"Record selector for sequence {index}", exact=True
         )
-        expect(selector).to_be_enabled(timeout=WORKER_READY_TIMEOUT_MS)
+        expect(selector).to_be_enabled(timeout=PYTHON_OPERATION_TIMEOUT_MS)
         expect(selector).to_contain_text(
-            record_id, timeout=WORKER_READY_TIMEOUT_MS
+            record_id, timeout=PYTHON_OPERATION_TIMEOUT_MS
         )
 
 
@@ -328,7 +328,7 @@ def capture_gui_uploaded_comparison(
     screenshot_bytes: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _load_complete_linear_inputs(page)
 
         commands = page.get_by_role(
@@ -436,7 +436,7 @@ def capture_gui_tlosatx(
     screenshot_bytes: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _load_complete_linear_inputs(page)
 
         commands = page.get_by_role(
@@ -882,7 +882,7 @@ def capture_gui_circular_rings(
     screenshot_bytes: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         circular = page.get_by_role("button", name="Circular", exact=True)
         circular.click()
         expect(circular).to_have_attribute("aria-pressed", "true")
@@ -1012,7 +1012,7 @@ def capture_gui_circular_rings(
         download_report = _assert_circular_download(svg_path, expected_ring_count=3)
 
         first_match = page.get_by_role("button", name="Pairwise match 1", exact=True)
-        expect(first_match).to_be_visible(timeout=WORKER_READY_TIMEOUT_MS)
+        expect(first_match).to_be_visible(timeout=PYTHON_OPERATION_TIMEOUT_MS)
         first_match.focus()
         first_match.press("Enter")
         popup = page.get_by_role("dialog", name="Pairwise match details", exact=True)

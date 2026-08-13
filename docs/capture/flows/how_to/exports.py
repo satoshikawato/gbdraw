@@ -33,7 +33,7 @@ from flows.web_capture import (
     capture_screenshot,
     open_browser_capture,
     set_feature_search_visible,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -339,7 +339,7 @@ def capture_gui_exports(
     page = capture.page
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         load_raw_human_circular(page, output_prefix=OUTPUT_PREFIX)
         final_report = generate_finished_human_diagram(page)
         page.wait_for_timeout(350)

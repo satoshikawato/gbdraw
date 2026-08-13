@@ -28,7 +28,7 @@ from flows.web_capture import (
     generate_and_inspect,
     open_browser_capture,
     set_feature_search_visible,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -296,7 +296,7 @@ def capture_gui_quantitative_map(
     screenshot_bytes: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _resize_sidebar(page)
         page.get_by_role("button", name="Circular", exact=True).click()
         page.get_by_role("radio", name="GenBank", exact=True).check()

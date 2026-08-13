@@ -22,7 +22,7 @@ from config import (
     GUI_HEPATOPLASMATACEAE_FIXTURES,
     VIEWPORT_HEIGHT,
     VIEWPORT_WIDTH,
-    WORKER_READY_TIMEOUT_MS,
+    PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
     assert_fixture_identity,
@@ -33,7 +33,7 @@ from flows.web_capture import (
     open_linear_comparison_disclosure,
     select_linear_losat_mode,
     set_feature_search_visible,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -131,9 +131,9 @@ def _set_source_inputs(page: Page) -> None:
         selector = page.get_by_label(
             f"Record selector for sequence {index}", exact=True
         )
-        expect(selector).to_be_enabled(timeout=WORKER_READY_TIMEOUT_MS)
+        expect(selector).to_be_enabled(timeout=PYTHON_OPERATION_TIMEOUT_MS)
         expect(selector).to_contain_text(
-            fixture[3], timeout=WORKER_READY_TIMEOUT_MS
+            fixture[3], timeout=PYTHON_OPERATION_TIMEOUT_MS
         )
         expect(selector).to_have_value("")
         expect(
@@ -946,7 +946,7 @@ def capture_hepatoplasmataceae_collinear(
     screenshots: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _set_source_inputs(page)
         _assert_empty_cache(page)
         page.mouse.move(1_400, 880)

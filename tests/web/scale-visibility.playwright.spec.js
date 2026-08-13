@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
+const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -39,13 +40,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   test.setTimeout(300000);
   const genbank = readFileSync(genbankPath, 'utf8');
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
-    null,
-    { timeout: 180000 }
-  );
+  await openApp(page);
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
@@ -166,13 +161,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   test.setTimeout(300000);
   const genbank = readFileSync(genbankPath, 'utf8');
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
-    null,
-    { timeout: 180000 }
-  );
+  await openApp(page);
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;

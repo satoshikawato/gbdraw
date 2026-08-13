@@ -536,7 +536,7 @@ def import_playwright():
     return sync_playwright
 
 
-def wait_for_web_app_ready(page) -> None:
+def wait_for_app_shell(page) -> None:
     page.wait_for_function(
         """
         () => {
@@ -1175,7 +1175,7 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
         page.locator(panel_selector).wait_for(state="visible")
     elif source in {"webapp", "web-app", "app"}:
         page.goto(f"{base_url}/", wait_until="domcontentloaded")
-        wait_for_web_app_ready(page)
+        wait_for_app_shell(page)
         session_ref = as_text(capture.get("session")) or as_text(sample.get("session"))
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():

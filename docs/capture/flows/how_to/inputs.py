@@ -37,8 +37,9 @@ from flows.web_capture import (
     capture_screenshot,
     fit_complete_linear_preview,
     generate_and_inspect,
+    generate_and_wait_for_result,
     open_browser_capture,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -101,7 +102,7 @@ def capture_gui_inputs(
 
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
 
         linear = page.get_by_role("button", name="Linear", exact=True)
         linear.click()
@@ -178,7 +179,7 @@ def capture_gui_inputs(
             "mismatched_sequence_id.fna"
         )
         generate = page.get_by_role("button", name="Generate Diagram", exact=True)
-        generate.click()
+        generate_and_wait_for_result(page, expected_status="error")
         error_alert = page.get_by_role("alert", name="Generation Error", exact=True)
         expect(error_alert).to_be_visible(timeout=GENERATION_TIMEOUT_MS)
         expect(generate).to_be_enabled(timeout=GENERATION_TIMEOUT_MS)

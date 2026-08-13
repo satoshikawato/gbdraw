@@ -10,6 +10,7 @@ const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
 class FakeWorker {
   static instances = [];
   static deferHelpers = false;
+  static failRuns = false;
 
   constructor() {
     this.listeners = new Map();
@@ -58,6 +59,19 @@ class FakeWorker {
       return;
     }
     if (message.type === 'run') {
+      if (FakeWorker.failRuns) {
+        queueMicrotask(() => this.emit({
+          requestId: message.requestId,
+          type: 'run',
+          ok: false,
+          error: {
+            name: 'RenderStageError',
+            message: 'diagram render stage failed',
+            details: [{ label: 'Stage', text: 'typed render request' }]
+          }
+        }));
+        return;
+      }
       queueMicrotask(() => this.emit({
         requestId: message.requestId,
         type: 'run',
@@ -98,6 +112,11 @@ const helper = await runDiagramHelperOperation(
   }
 );
 assert.equal(helper.result.records[0].record_id, 'shared-worker');
+const helperWorker = FakeWorker.instances[0];
+assert.equal(FakeWorker.instances.length, 1);
+assert.equal(helperWorker.messages.filter(({ type }) => type === 'init').length, 1);
+assert.equal(helperWorker.messages.filter(({ type }) => type === 'helper').length, 1);
+assert.equal(helperWorker.messages.filter(({ type }) => type === 'run').length, 0);
 const rendered = await runDiagramGeneration({ request: {}, resources: {} });
 assert.equal(rendered.results[0].name, 'shared.svg');
 
@@ -131,6 +150,28 @@ await Promise.resolve();
 disposeDiagramGenerationWorker();
 await Promise.all([rejectedA, rejectedB]);
 assert.equal(worker.terminated, true);
+
+FakeWorker.deferHelpers = false;
+const directRendered = await runDiagramGeneration({ request: {}, resources: {} });
+assert.equal(directRendered.results[0].name, 'shared.svg');
+const directWorker = FakeWorker.instances[1];
+assert.equal(directWorker.messages.filter(({ type }) => type === 'init').length, 1);
+assert.equal(directWorker.messages.filter(({ type }) => type === 'helper').length, 0);
+assert.equal(directWorker.messages.filter(({ type }) => type === 'run').length, 1);
+disposeDiagramGenerationWorker();
+
+FakeWorker.failRuns = true;
+await assert.rejects(
+  runDiagramGeneration({ request: {}, resources: {} }),
+  (error) => {
+    assert.equal(error.name, 'RenderStageError');
+    assert.match(error.message, /render stage failed/);
+    assert.deepEqual(error.details, [{ label: 'Stage', text: 'typed render request' }]);
+    return true;
+  }
+);
+disposeDiagramGenerationWorker();
+FakeWorker.failRuns = false;
 
 const { cloneFileBytesForTransfer } = await import(
   '../../gbdraw/web/js/services/file-content-cache.js'

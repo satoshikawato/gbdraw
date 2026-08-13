@@ -35,7 +35,6 @@ import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
 const { ref, reactive, computed } = window.Vue;
 
 // System State
-const diagramGenerationWorkerReady = ref(false);
 const processing = ref(false);
 const processingStatus = ref('');
 const generationCancelRequested = ref(false);
@@ -922,7 +921,6 @@ const filteredEditableLabels = computed(() => {
 });
 
 export const state = {
-  diagramGenerationWorkerReady,
   processing,
   processingStatus,
   generationCancelRequested,
