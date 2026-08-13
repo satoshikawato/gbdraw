@@ -124,7 +124,7 @@ const installDiagramRequestObserver = async (page) => {
   });
 };
 
-test('Pairwise match popup selects the active SVG match until closed', async ({ page }) => {
+test('Similarity-group popup selects every OG match without a focus outline', async ({ page }) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 
@@ -135,25 +135,49 @@ test('Pairwise match popup selects the active SVG match until closed', async ({ 
     app.results.splice(0, app.results.length, ingestSvgResult({
       name: 'pairwise-selection.svg',
       content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
-        <path data-gbdraw-pairwise-match-id="match-1" data-match-kind="pairwise"
+        <path data-gbdraw-pairwise-match-id="match-1" data-match-kind="orthogroup"
+          data-orthogroup-id="og-1"
           data-query-record-id="query" data-subject-record-id="subject"
           data-qstart="1" data-qend="20" data-sstart="5" data-send="24"
-          fill="#94a3b8" d="M 10 20 L 40 20 L 45 60 L 15 60 Z" />
+          fill="#94a3b8" d="M 5 20 L 25 20 L 25 60 L 5 60 Z" />
+        <path data-gbdraw-pairwise-match-id="match-2" data-match-kind="orthogroup"
+          data-orthogroup-id="og-1" fill="#94a3b8"
+          d="M 35 20 L 50 20 L 50 60 L 35 60 Z" />
+        <path data-gbdraw-pairwise-match-id="match-3" data-match-kind="orthogroup"
+          data-orthogroup-id="og-2" fill="#94a3b8"
+          d="M 60 20 L 75 20 L 75 60 L 60 60 Z" />
+        <path data-gbdraw-pairwise-match-id="match-4" data-match-kind="pairwise"
+          data-orthogroup-id="og-1"
+          fill="#94a3b8" d="M 82 20 L 95 20 L 95 60 L 82 60 Z" />
       </svg>`
     }));
     app.selectedResultIndex = 0;
   });
 
-  const match = page.getByRole('button', { name: 'Pairwise match 1', exact: true });
-  await expect(match).toBeVisible();
-  await match.press('Enter');
+  const firstOgMatch = page.getByRole('button', { name: 'Pairwise match 1', exact: true });
+  const secondOgMatch = page.getByRole('button', { name: 'Pairwise match 2', exact: true });
+  const otherOgMatch = page.getByRole('button', { name: 'Pairwise match 3', exact: true });
+  const pairwiseMatch = page.getByRole('button', { name: 'Pairwise match 4', exact: true });
+  await expect(firstOgMatch).toBeVisible();
+  await firstOgMatch.press('Enter');
 
   await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
-  await expect(match).toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(firstOgMatch).toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(secondOgMatch).toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(otherOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(pairwiseMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect.poll(() => firstOgMatch.evaluate((element) => getComputedStyle(element).outlineStyle))
+    .toBe('none');
 
   await page.getByRole('button', { name: 'Close match popup' }).click();
   await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toHaveCount(0);
-  await expect(match).not.toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(secondOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
+
+  await pairwiseMatch.press('Enter');
+  await expect(pairwiseMatch).toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(secondOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
 });
 
 test('Linear record rows and N-to-M comparison batches remain keyed by sequence uid', async ({ page }) => {

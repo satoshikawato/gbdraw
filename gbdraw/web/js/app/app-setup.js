@@ -2502,13 +2502,29 @@ export const createAppSetup = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
     const matchId = String(match?.id || '').trim();
+    const orthogroupId = String(
+      match?.matchKind === 'orthogroup' ? match?.orthogroupId : ''
+    ).trim();
     svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
       const elementMatchId = String(
         element.getAttribute('data-gbdraw-match-id') ||
         element.getAttribute('data-gbdraw-pairwise-match-id') ||
         ''
       ).trim();
-      element.classList.toggle('gbdraw-match-selected', Boolean(matchId) && elementMatchId === matchId);
+      const elementOrthogroupIds = String(element.getAttribute('data-orthogroup-id') || '')
+        .split(';')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const elementMatchKind = String(element.getAttribute('data-match-kind') || '').trim().toLowerCase();
+      const isOrthogroupMatch = elementMatchKind === 'orthogroup' || (
+        !elementMatchKind &&
+        !element.hasAttribute('data-collinearity-block-id') &&
+        elementOrthogroupIds.length > 0
+      );
+      const selected = orthogroupId
+        ? isOrthogroupMatch && elementOrthogroupIds.includes(orthogroupId)
+        : Boolean(matchId) && elementMatchId === matchId;
+      element.classList.toggle('gbdraw-match-selected', selected);
     });
   });
 
