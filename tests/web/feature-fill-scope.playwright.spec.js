@@ -205,7 +205,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   expect(redone.legendEntryColor).toBe(changedColor);
 });
 
-test('Feature stroke changes use the shared scope dialog with atomic Undo and Redo', async ({
+test('Feature stroke width steppers defer scope selection and stroke changes keep atomic Undo and Redo', async ({
   page
 }) => {
   const imported = await loadGallerySession(
@@ -263,8 +263,33 @@ test('Feature stroke changes use the shared scope dialog with atomic Undo and Re
   expect(before.undoCount).toBe(0);
   expect(before.redoCount).toBe(0);
 
-  await changeColor(strokePicker, '#8a5a44');
   const scopeDialog = page.getByRole('heading', { name: 'Stroke Change Scope' }).locator('..');
+  const strokeWidthInput = popup.getByLabel('Feature stroke width', { exact: true });
+  const initialStrokeWidth = Number(await strokeWidthInput.inputValue());
+  await strokeWidthInput.press('ArrowUp');
+  await expect.poll(async () => Number(await strokeWidthInput.inputValue())).toBeCloseTo(
+    initialStrokeWidth + 0.1,
+    5
+  );
+  await expect(scopeDialog).toBeHidden();
+  expect(await inspectStrokeState(page, target)).toEqual(before);
+
+  await strokeWidthInput.press('Enter');
+  await expect(scopeDialog).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.featureStyleScopeDialog.strokeWidth))
+    .toBeCloseTo(initialStrokeWidth + 0.1, 5);
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
+  ).toBe(0);
+  await scopeDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(scopeDialog).toBeHidden();
+  expect(await inspectStrokeState(page, target)).toEqual(before);
+
+  await featureRow.getByRole('button', { name: 'Edit' }).click();
+  await expect(popup).toBeVisible();
+  strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
+
+  await changeColor(strokePicker, '#8a5a44');
   await expect(scopeDialog).toBeVisible();
   await expect.poll(
     () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())

@@ -4929,7 +4929,8 @@
                                 </color-value-control>
                                 <input type="number"
                                        :value="clickedFeature.strokeWidth"
-                                       @change="setClickedFeatureStrokeWidthValue($event.target.value)"
+                                       @blur="setClickedFeatureStrokeWidthValue($event.target.value)"
+                                       @keydown.enter.prevent="$event.target.blur()"
                                        data-history-managed
                                        aria-label="Feature stroke width"
                                        class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"

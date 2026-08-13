@@ -622,6 +622,11 @@ legendEntries.value = [{
   featureIds: [strokeFeature.svg_id, featureB.svg_id, hashOnlyFeature.svg_id]
 }];
 
+featureStyleScopeDialog.show = false;
+assert.equal(await actions.setClickedFeatureStrokeWidthValue(1), false);
+assert.equal(featureStyleScopeDialog.show, false);
+assert.equal(await actions.setClickedFeatureStrokeWidthValue(''), false);
+assert.equal(featureStyleScopeDialog.show, false);
 assert.equal(await actions.setClickedFeatureStrokeWidthValue(2.5), false);
 assert.equal(featureStyleScopeDialog.show, true);
 assert.equal(featureStyleScopeDialog.kind, 'stroke');

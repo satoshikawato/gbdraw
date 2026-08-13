@@ -1670,7 +1670,10 @@ export const createFeatureColorActions = ({
 
   const setClickedFeatureStrokeWidthValue = (value) => {
     if (!clickedFeature.value) return false;
-    return requestClickedFeatureStrokeChange(clickedFeature.value.strokeColor, value);
+    const normalizedStrokeWidth = normalizeStrokeWidthValue(value);
+    const currentStrokeWidth = normalizeStrokeWidthValue(clickedFeature.value.strokeWidth);
+    if (normalizedStrokeWidth === null || normalizedStrokeWidth === currentStrokeWidth) return false;
+    return requestClickedFeatureStrokeChange(clickedFeature.value.strokeColor, normalizedStrokeWidth);
   };
 
   const resetClickedFeatureFillColor = () => {
