@@ -75,7 +75,8 @@ import {
 } from '../app/session-feature-metadata.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
-  buildRestoredMatchSequenceSources
+  buildRestoredMatchSequenceSources,
+  resolveCircularComparisonSequenceAvailability
 } from '../app/match-sequences.js';
 import {
   buildCanonicalRenderRequest,
@@ -3918,6 +3919,12 @@ export const importSession = async (e, options = {}) => {
     const catalogSequenceSources = sourceSessionVersion === SESSION_VERSION
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
+    const comparisonSourceAvailability = state.mode.value === 'circular'
+      ? resolveCircularComparisonSequenceAvailability({
+          files: state.files,
+          circularConservation: state.circularConservation
+        })
+      : undefined;
     const catalogSequenceSourceCoverage = (
       sourceSessionVersion === SESSION_VERSION
       && validatedSessionCatalog
@@ -3925,7 +3932,8 @@ export const importSession = async (e, options = {}) => {
       ? analyzeCatalogSequenceSourceCoverage({
           mode: state.mode.value,
           catalogFeatureState: validatedSessionCatalog,
-          renderRequest: data.renderRequest
+          renderRequest: data.renderRequest,
+          comparisonSourceAvailability
         })
       : null;
     const missingCatalogSequenceSources = sourceSessionVersion !== SESSION_VERSION
