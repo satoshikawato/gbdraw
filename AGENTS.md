@@ -53,7 +53,16 @@ python -m build
   - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
 - The JavaScript specs under `tests/web/*.playwright.spec.js` require Node's `@playwright/test`. Verify it with `node -e "console.log(require.resolve('@playwright/test'))"` before trying to run those specs.
 - If Node's `@playwright/test` is unavailable, use Python Playwright for targeted browser checks instead of skipping browser verification.
-- In Codex/agent sandboxes, Chromium may fail with `sandbox_host_linux.cc ... Operation not permitted`. When that happens, rerun the same local browser check with the required sandbox escalation rather than reporting that Playwright is unavailable.
+- In Codex/agent sandboxes, Chromium is known to fail with
+  `sandbox_host_linux.cc ... Operation not permitted`. Run browser-backed
+  Playwright checks with the required sandbox escalation from the first
+  attempt. Reuse a narrowly scoped approved prefix such as
+  `npx playwright test`; do not add a conversational approval round before the
+  tool's required permission handling.
+- Put temporary Playwright specs and configs in one dedicated isolated
+  directory (for example, a `mktemp -d` directory under `/tmp`) and set
+  `testDir` to that exact directory. Never set `testDir` to `/tmp` itself:
+  Playwright may scan unrelated protected directories and fail with `EACCES`.
 
 ## Expectations When Editing
 

@@ -93,6 +93,11 @@ import {
   textToBase64,
   textToBytes
 } from './file-content-cache.js';
+import {
+  createCombinedSessionResourceFileView,
+  createSessionResourceFileView,
+  getAdoptedSessionResourceDescriptor
+} from './session-resources.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -2015,14 +2020,21 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   return file;
 };
 
-const webBindingAsLegacyFile = (resources, binding) => {
+const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null) => {
   if (binding === null || binding === undefined) return null;
   if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
     throw new Error('Web file bindings must be objects or null.');
   }
   const resourceId = String(binding.resourceId || '').trim();
   if (!resourceId) throw new Error('A Web file binding requires a resourceId.');
-  const file = resourceAsLegacyFile(resources, resourceId);
+  const file = typeof resolveResourceFile === 'function'
+    ? resolveResourceFile(resourceId, {
+        name: normalizeOriginalResourceName(binding.name),
+        type: String(binding.type || ''),
+        lastModified: Number(binding.lastModified) || 0
+      })
+    : resourceAsLegacyFile(resources, resourceId);
+  if (typeof resolveResourceFile === 'function') return file;
   return {
     ...file,
     name: normalizeOriginalResourceName(binding.name) || file.name,
@@ -2031,13 +2043,19 @@ const webBindingAsLegacyFile = (resources, binding) => {
   };
 };
 
-const webBindingValueAsLegacyFile = (resources, value) => (
+const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null) => (
   Array.isArray(value)
-    ? value.map((item) => webBindingValueAsLegacyFile(resources, item))
-    : webBindingAsLegacyFile(resources, value)
+    ? value.map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile))
+    : webBindingAsLegacyFile(resources, value, resolveResourceFile)
 );
 
-const applyWebFileBindings = (files, webMetadata, resources) => {
+const applyWebFileBindings = (
+  files,
+  webMetadata,
+  resources,
+  resolveResourceFile = null,
+  { adoptCanonicalPayloads = false } = {}
+) => {
   const bindings = webMetadata?.bindings;
   if (bindings === undefined || bindings === null) return files;
   if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) {
@@ -2063,7 +2081,11 @@ const applyWebFileBindings = (files, webMetadata, resources) => {
     'qualifier_priority'
   ].forEach((field) => {
     if (!Object.prototype.hasOwnProperty.call(bindings, field)) return;
-    restored[field] = webBindingValueAsLegacyFile(resources, bindings[field]);
+    restored[field] = webBindingValueAsLegacyFile(
+      resources,
+      bindings[field],
+      resolveResourceFile
+    );
   });
   restored.c_conservation_blasts_source =
     bindings.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null;
@@ -2071,11 +2093,11 @@ const applyWebFileBindings = (files, webMetadata, resources) => {
   if (Array.isArray(bindings.linearSeqs)) {
     restored.linearSeqs = bindings.linearSeqs.map((sequence, index) => ({
       uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
-      gb: webBindingValueAsLegacyFile(resources, sequence?.gb),
-      gff: webBindingValueAsLegacyFile(resources, sequence?.gff),
-      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta),
-      depth: webBindingValueAsLegacyFile(resources, sequence?.depth),
-      blast: webBindingValueAsLegacyFile(resources, sequence?.blast),
+      gb: webBindingValueAsLegacyFile(resources, sequence?.gb, resolveResourceFile),
+      gff: webBindingValueAsLegacyFile(resources, sequence?.gff, resolveResourceFile),
+      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveResourceFile),
+      depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveResourceFile),
+      blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveResourceFile),
       losat_gencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
       losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
@@ -2088,18 +2110,18 @@ const applyWebFileBindings = (files, webMetadata, resources) => {
   }
   if (Array.isArray(bindings.linearComparisons)) {
     restored.linearComparisons = bindings.linearComparisons.map((comparison, index) => ({
-      ...cloneCanonicalJsonValue(comparison),
+      ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
       id: String(comparison?.id || `linear-comparison-restored-${index + 1}`),
       queryUid: String(comparison?.queryUid || ''),
       subjectUid: String(comparison?.subjectUid || ''),
       source: String(comparison?.source || 'upload'),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file)
+      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveResourceFile)
     }));
   }
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
     restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
-      ...cloneCanonicalJsonValue(comparison),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file)
+      ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
+      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveResourceFile)
     }));
   }
   return restored;
@@ -2109,7 +2131,10 @@ const cloneCanonicalJsonValue = (value) => (
   value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 );
 
-const projectGeneratedProteinPipeline = (comparison) => {
+const projectGeneratedProteinPipeline = (
+  comparison,
+  { adoptCanonicalPayloads = false } = {}
+) => {
   if (
     !comparison ||
     comparison.kind !== 'generatedProteinComparison' ||
@@ -2121,7 +2146,9 @@ const projectGeneratedProteinPipeline = (comparison) => {
   const parameters = settings.collinearityParams?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
   return {
-    generatedProteinComparison: cloneCanonicalJsonValue(comparison),
+    generatedProteinComparison: adoptCanonicalPayloads
+      ? comparison
+      : cloneCanonicalJsonValue(comparison),
     selectedOrthogroupAlignmentFeature:
       String(settings.alignOrthogroupFeature || '').trim(),
     config: {
@@ -2186,7 +2213,12 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
   }
 };
 
-const canonicalDepthResourceFile = (ref, resources, fieldName) => {
+const canonicalDepthResourceFile = (
+  ref,
+  resources,
+  fieldName,
+  resolveResourceFile = null
+) => {
   if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
     throw new Error(`${fieldName} must be a canonical resource reference.`);
   }
@@ -2198,7 +2230,9 @@ const canonicalDepthResourceFile = (ref, resources, fieldName) => {
     throw new Error(`${fieldName}.resourceId must be a non-empty string.`);
   }
   const resourceId = ref.resourceId.trim();
-  return resourceAsLegacyFile(resources, resourceId);
+  return typeof resolveResourceFile === 'function'
+    ? resolveResourceFile(resourceId)
+    : resourceAsLegacyFile(resources, resourceId);
 };
 
 const canonicalDepthNumber = (value, fieldName) => {
@@ -2221,7 +2255,8 @@ const projectCanonicalDepthTracks = ({
   options,
   records,
   resources,
-  mode
+  mode,
+  resolveResourceFile = null
 }) => {
   const canonicalPresent = hasOptionValue(options.depthTracks);
   const legacyFields = LEGACY_DEPTH_OPTION_FIELDS.filter(
@@ -2280,7 +2315,8 @@ const projectCanonicalDepthTracks = ({
         : canonicalDepthResourceFile(
           ref,
           resources,
-          `${fieldName}.source${Array.isArray(track.source) ? `[${recordIndex}]` : ''}`
+          `${fieldName}.source${Array.isArray(track.source) ? `[${recordIndex}]` : ''}`,
+          resolveResourceFile
         );
     });
     if (mode === 'circular' && track.height !== null) {
@@ -2556,7 +2592,12 @@ const projectLegacyCanonicalCircularSlot = (slot) => {
   return migrateLegacyCircularTrackSlot(projected);
 };
 
-const combineCircularGenbankResources = (resources, records, originalName = '') => {
+const combineCircularGenbankResources = (
+  resources,
+  records,
+  originalName = '',
+  { resolveResourceFile = null, sessionResourceTable = null } = {}
+) => {
   const resourceIds = [];
   const seen = new Set();
   records.forEach((record) => {
@@ -2568,7 +2609,22 @@ const combineCircularGenbankResources = (resources, records, originalName = '') 
   });
   if (resourceIds.length === 0) return null;
 
-  const files = resourceIds.map((resourceId) => resourceAsLegacyFile(resources, resourceId));
+  if (sessionResourceTable) {
+    return createCombinedSessionResourceFileView(
+      sessionResourceTable,
+      resourceIds,
+      {
+        name: normalizeOriginalResourceName(originalName)
+          || 'canonical-circular-records.gb',
+        type: 'text/plain'
+      }
+    );
+  }
+  const files = resourceIds.map((resourceId) => (
+    typeof resolveResourceFile === 'function'
+      ? resolveResourceFile(resourceId)
+      : resourceAsLegacyFile(resources, resourceId)
+  ));
   if (files.length === 1) return files[0];
   const chunks = files.map((file) => {
     if (file.encoding && file.encoding !== 'base64') {
@@ -2720,7 +2776,10 @@ export const projectCanonicalSessionRequest = ({
   storedConfig = null,
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-  repairInvalidComparisonHeight = false
+  repairInvalidComparisonHeight = false,
+  sessionResourceTable = null,
+  deferResourceContent = false,
+  adoptCanonicalPayloads = false
 }) => {
   if (!renderRequest || !SUPPORTED_CANONICAL_REQUEST_SCHEMAS.has(renderRequest.schema)) {
     throw new Error('Unsupported canonical renderRequest schema.');
@@ -2736,11 +2795,39 @@ export const projectCanonicalSessionRequest = ({
     ? webFiles
     : {};
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
-  const resources = resourcesWithOriginalNames(canonicalResources, {
+  const originalNameHints = {
     ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
     ...(storedResourceOriginalNames && typeof storedResourceOriginalNames === 'object' &&
       !Array.isArray(storedResourceOriginalNames) ? storedResourceOriginalNames : {})
-  });
+  };
+  const resources = sessionResourceTable
+    ? canonicalResources
+    : resourcesWithOriginalNames(canonicalResources, originalNameHints);
+  const resolveResourceFile = sessionResourceTable
+    ? (resourceId, metadata = {}) => {
+        const descriptor = getAdoptedSessionResourceDescriptor(
+          sessionResourceTable,
+          resourceId
+        );
+        const storedName = normalizeOriginalResourceName(descriptor.name);
+        const prefix = `${resourceId}-`;
+        let inferredName = storedName;
+        while (inferredName.startsWith(prefix) && inferredName.length > prefix.length) {
+          inferredName = inferredName.slice(prefix.length);
+        }
+        const displayName = normalizeOriginalResourceName(metadata.name)
+          || normalizeOriginalResourceName(originalNameHints[resourceId])
+          || inferredName;
+        return createSessionResourceFileView(
+          sessionResourceTable,
+          resourceId,
+          {
+            ...metadata,
+            ...(displayName ? { name: displayName } : {})
+          }
+        );
+      }
+    : null;
   const legacyCircularInputBinding = (Array.isArray(fileBindings) ? fileBindings : [])
     .find((binding) => /^(?:files\.)?c_gb$/.test(String(binding?.slot || '')));
   const circularInputOriginalName = normalizeOriginalResourceName(
@@ -2763,7 +2850,8 @@ export const projectCanonicalSessionRequest = ({
   const projectedProteinPipeline = projectGeneratedProteinPipeline(
     (renderRequest.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
-    )
+    ),
+    { adoptCanonicalPayloads }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
@@ -2772,11 +2860,20 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'circular') {
     const source = records[0]?.source || {};
     if (source.kind === 'genbank') {
-      files.c_gb = combineCircularGenbankResources(resources, records, circularInputOriginalName);
+      files.c_gb = combineCircularGenbankResources(
+        resources,
+        records,
+        circularInputOriginalName,
+        { resolveResourceFile, sessionResourceTable }
+      );
     }
     if (source.kind === 'gffFasta') {
-      files.c_gff = resourceAsLegacyFile(resources, source.gffResourceId);
-      files.c_fasta = resourceAsLegacyFile(resources, source.fastaResourceId);
+      files.c_gff = resolveResourceFile
+        ? resolveResourceFile(source.gffResourceId)
+        : resourceAsLegacyFile(resources, source.gffResourceId);
+      files.c_fasta = resolveResourceFile
+        ? resolveResourceFile(source.fastaResourceId)
+        : resourceAsLegacyFile(resources, source.fastaResourceId);
     }
   } else {
     files.linearSeqs = records.map((record, index) => {
@@ -2787,9 +2884,21 @@ export const projectCanonicalSessionRequest = ({
         savedLinearRecordMetadata[index] || legacyLinearSequences[index] || {};
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
-        gb: source.kind === 'genbank' ? resourceAsLegacyFile(resources, source.resourceId) : null,
-        gff: source.kind === 'gffFasta' ? resourceAsLegacyFile(resources, source.gffResourceId) : null,
-        fasta: source.kind === 'gffFasta' ? resourceAsLegacyFile(resources, source.fastaResourceId) : null,
+        gb: source.kind === 'genbank'
+          ? (resolveResourceFile
+              ? resolveResourceFile(source.resourceId)
+              : resourceAsLegacyFile(resources, source.resourceId))
+          : null,
+        gff: source.kind === 'gffFasta'
+          ? (resolveResourceFile
+              ? resolveResourceFile(source.gffResourceId)
+              : resourceAsLegacyFile(resources, source.gffResourceId))
+          : null,
+        fasta: source.kind === 'gffFasta'
+          ? (resolveResourceFile
+              ? resolveResourceFile(source.fastaResourceId)
+              : resourceAsLegacyFile(resources, source.fastaResourceId))
+          : null,
         depth: null,
         blast: null,
         losat_gencode: optionalPositiveInteger(
@@ -2817,7 +2926,9 @@ export const projectCanonicalSessionRequest = ({
         const subjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
           ? Number(comparison.subjectRecordIndex)
           : index + 1;
-        const file = resourceAsLegacyFile(resources, comparison.resourceId);
+        const file = resolveResourceFile
+          ? resolveResourceFile(comparison.resourceId)
+          : resourceAsLegacyFile(resources, comparison.resourceId);
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
           files.linearSeqs[queryIndex].blast = file;
         }
@@ -2847,7 +2958,9 @@ export const projectCanonicalSessionRequest = ({
           {
             ...mapResourceBackedCanonicalComparison(
               comparison,
-              () => resourceAsLegacyFile(resources, comparison.resourceId)
+              () => resolveResourceFile
+                ? resolveResourceFile(comparison.resourceId)
+                : resourceAsLegacyFile(resources, comparison.resourceId)
             ),
             // This is in-memory projection provenance, not a canonical-schema
             // field. Direct CLI/Python comparison options have no Web pipeline
@@ -2863,7 +2976,7 @@ export const projectCanonicalSessionRequest = ({
       }
       if (comparison?.kind === 'generatedProteinComparison') {
         files.linearCanonicalComparisons.push(
-          cloneCanonicalJsonValue(comparison)
+          adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)
         );
         (Array.isArray(comparison.pairs) ? comparison.pairs : [])
           .forEach((pair, index) => {
@@ -2888,7 +3001,8 @@ export const projectCanonicalSessionRequest = ({
     options,
     records,
     resources,
-    mode: renderRequest.mode
+    mode: renderRequest.mode,
+    resolveResourceFile
   });
   const projectedCircularSizeMode = renderRequest.mode === 'circular'
     ? (
@@ -2914,7 +3028,11 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'circular' && depthRows.length > 0) {
     files.c_depth = normalizeRecordMajorDepthFileRows(
       canonicalDepth?.fileRows || depthRows.map((row) => row.map((ref) => (
-        ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null
+        ref?.resourceId
+          ? (resolveResourceFile
+              ? resolveResourceFile(ref.resourceId)
+              : resourceAsLegacyFile(resources, ref.resourceId))
+          : null
       ))),
       records.length
     );
@@ -2923,47 +3041,81 @@ export const projectCanonicalSessionRequest = ({
     depthRows.forEach((row, index) => {
       if (!files.linearSeqs[index] || !Array.isArray(row)) return;
       const depth = canonicalDepth?.fileRows[index] || row
-        .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null);
+        .map((ref) => ref?.resourceId
+          ? (resolveResourceFile
+              ? resolveResourceFile(ref.resourceId)
+              : resourceAsLegacyFile(resources, ref.resourceId))
+          : null);
       files.linearSeqs[index].depth = depth.length > 1 ? depth : (depth[0] || null);
     });
   }
   const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;
-  let projectedDefaultColors = {};
+  let projectedDefaultColors = deferResourceContent
+    && storedConfig?.colors
+    && typeof storedConfig.colors === 'object'
+    && !Array.isArray(storedConfig.colors)
+    ? storedConfig.colors
+    : {};
   if (defaultColorsRef?.resourceId) {
-    files.d_color = resourceAsLegacyFile(resources, defaultColorsRef.resourceId);
-    projectedDefaultColors = parseColorTable(
-      resourceTextFromRef(resources, defaultColorsRef)
-    ).colors;
+    files.d_color = resolveResourceFile
+      ? resolveResourceFile(defaultColorsRef.resourceId)
+      : resourceAsLegacyFile(resources, defaultColorsRef.resourceId);
+    if (!deferResourceContent) {
+      projectedDefaultColors = parseColorTable(
+        resourceTextFromRef(resources, defaultColorsRef)
+      ).colors;
+    }
   }
   const colorTableRef = options.colors?.colorTableFile || options.colors?.colorTable;
-  let projectedSpecificRules = [];
+  let projectedSpecificRules = deferResourceContent && Array.isArray(storedConfig?.rules)
+    ? storedConfig.rules
+    : [];
   if (colorTableRef?.resourceId) {
-    files.t_color = resourceAsLegacyFile(resources, colorTableRef.resourceId);
-    projectedSpecificRules = parseSpecificRules(
-      resourceTextFromRef(resources, colorTableRef)
-    ).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
+    files.t_color = resolveResourceFile
+      ? resolveResourceFile(colorTableRef.resourceId)
+      : resourceAsLegacyFile(resources, colorTableRef.resourceId);
+    if (!deferResourceContent) {
+      projectedSpecificRules = parseSpecificRules(
+        resourceTextFromRef(resources, colorTableRef)
+      ).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
+    }
   }
-  let projectedWhitelist = [];
+  let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)
+    ? storedConfig.whitelist
+    : [];
   if (options.labelWhitelistFile?.resourceId) {
-    files.whitelist = resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
-    projectedWhitelist = parseWhitelistRules(
-      resourceTextFromRef(resources, options.labelWhitelistFile)
-    ).rules;
+    files.whitelist = resolveResourceFile
+      ? resolveResourceFile(options.labelWhitelistFile.resourceId)
+      : resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
+    if (!deferResourceContent) {
+      projectedWhitelist = parseWhitelistRules(
+        resourceTextFromRef(resources, options.labelWhitelistFile)
+      ).rules;
+    }
   }
   const qualifierPriorityRef = options.qualifierPriorityFile || options.qualifierPriorityTable;
-  let projectedPriorityRules = [];
+  let projectedPriorityRules = deferResourceContent
+    && Array.isArray(storedConfig?.qualifierPriorityRules)
+    ? storedConfig.qualifierPriorityRules
+    : [];
   if (qualifierPriorityRef?.resourceId) {
-    files.qualifier_priority = resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
-    projectedPriorityRules = parsePriorityRules(
-      resourceTextFromRef(resources, qualifierPriorityRef)
-    ).rules;
+    files.qualifier_priority = resolveResourceFile
+      ? resolveResourceFile(qualifierPriorityRef.resourceId)
+      : resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
+    if (!deferResourceContent) {
+      projectedPriorityRules = parsePriorityRules(
+        resourceTextFromRef(resources, qualifierPriorityRef)
+      ).rules;
+    }
   }
-  const projectedFeatureVisibilityRules = options.featureVisibilityTableFile?.resourceId
+  const projectedFeatureVisibilityRules = !deferResourceContent
+    && options.featureVisibilityTableFile?.resourceId
     ? parseFeatureVisibilityRules(
         resourceTextFromRef(resources, options.featureVisibilityTableFile)
       ).rules
     : [];
-  const projectedLabelOverrideRows = options.labelOverrideFile?.resourceId
+  const projectedLabelOverrideRows = !deferResourceContent
+    && options.labelOverrideFile?.resourceId
     ? parseLabelOverrideTsv(resourceTextFromRef(resources, options.labelOverrideFile)).map((row) => ({
         recordId: row.recordId,
         featureType: row.featureType,
@@ -2974,7 +3126,11 @@ export const projectCanonicalSessionRequest = ({
     : [];
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationBlastFiles)) {
     files.c_conservation_blasts = options.conservationBlastFiles
-      .map((ref) => ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null)
+      .map((ref) => ref?.resourceId
+        ? (resolveResourceFile
+            ? resolveResourceFile(ref.resourceId)
+            : resourceAsLegacyFile(resources, ref.resourceId))
+        : null)
       .filter(Boolean);
     const storedConservationSource = String(
       storedConfig?.circularConservation?.source || ''
@@ -2988,14 +3144,22 @@ export const projectCanonicalSessionRequest = ({
   }
   if (renderRequest.mode === 'circular' && Array.isArray(options.conservationFastaFiles)) {
     files.c_conservation_sequence_sources = options.conservationFastaFiles.map((ref) => (
-      ref?.resourceId ? resourceAsLegacyFile(resources, ref.resourceId) : null
+      ref?.resourceId
+        ? (resolveResourceFile
+            ? resolveResourceFile(ref.resourceId)
+            : resourceAsLegacyFile(resources, ref.resourceId))
+        : null
     ));
   } else if (
     renderRequest.mode === 'circular'
     && Array.isArray(webMetadata.conservationSequenceSources)
   ) {
     files.c_conservation_sequence_sources = webMetadata.conservationSequenceSources.map(
-      (resourceId) => (resourceId ? resourceAsLegacyFile(resources, resourceId) : null)
+      (resourceId) => (resourceId
+        ? (resolveResourceFile
+            ? resolveResourceFile(resourceId)
+            : resourceAsLegacyFile(resources, resourceId))
+        : null)
     );
   }
   if (
@@ -3004,10 +3168,20 @@ export const projectCanonicalSessionRequest = ({
   ) {
     files.c_conservation_fastas = webMetadata.conservationLosatFastaSources
       .map((resourceId) => (
-        resourceId ? resourceAsLegacyFile(resources, resourceId) : null
+        resourceId
+          ? (resolveResourceFile
+              ? resolveResourceFile(resourceId)
+              : resourceAsLegacyFile(resources, resourceId))
+          : null
       ));
   }
-  Object.assign(files, applyWebFileBindings(files, webMetadata, resources));
+  Object.assign(files, applyWebFileBindings(
+    files,
+    webMetadata,
+    resources,
+    resolveResourceFile,
+    { adoptCanonicalPayloads }
+  ));
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(
       ([, value]) => value !== null && value !== undefined

@@ -136,6 +136,9 @@ const hashText = async (text) => {
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
+const workerCloneableValue = (value) => (
+  typeof window.Vue?.toRaw === 'function' ? window.Vue.toRaw(value) : value
+);
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
 const proteinExtractionCache = new WeakMap();
@@ -634,7 +637,7 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
-  if (typeof text !== 'string' && !file?.text) {
+  if (typeof text !== 'string' && !file) {
     throw new Error('Input file is not available for browser FASTA extraction.');
   }
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
@@ -648,7 +651,7 @@ const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelect
   };
 };
 const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
-  if (typeof text !== 'string' && !file?.text) {
+  if (typeof text !== 'string' && !file) {
     throw new Error('Input file is not available for browser FASTA extraction.');
   }
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
@@ -1210,8 +1213,11 @@ export const createRunAnalysis = ({
     const response = await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV,
       {
-        entry: cloneJsonData({ ...cached, key: String(cacheKey || '') }),
-        identityManifest: cloneJsonData(proteinIdentityManifest.value)
+        entry: {
+          ...workerCloneableValue(cached),
+          key: String(cacheKey || '')
+        },
+        identityManifest: workerCloneableValue(proteinIdentityManifest.value)
       }
     );
     const result = response.result;
@@ -3015,7 +3021,7 @@ export const createRunAnalysis = ({
             const response = await runDiagramHelperOperation(
               DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY,
               {
-                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                identityManifest: workerCloneableValue(proteinIdentityManifest.value),
                 queryRecordInstanceKey: metadata.queryRecordInstanceKey,
                 subjectRecordInstanceKey: metadata.subjectRecordInstanceKey,
                 expectedOptions: {
@@ -3062,7 +3068,7 @@ export const createRunAnalysis = ({
               subjectFasta: String(subjectEntry?.fasta || ''),
               queryProteinMap: cloneJsonData(queryEntry?.proteinMap || {}),
               subjectProteinMap: cloneJsonData(subjectEntry?.proteinMap || {}),
-              identityManifest: cloneJsonData(proteinIdentityManifest.value),
+              identityManifest: workerCloneableValue(proteinIdentityManifest.value),
               expectedOptions: {
                 program: metadata.program,
                 outfmt: metadata.outfmt,
@@ -3250,7 +3256,7 @@ export const createRunAnalysis = ({
                   proteinMap: entry.proteinMap || {},
                   fasta: entry.fasta || ''
                 }))),
-                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                identityManifest: workerCloneableValue(proteinIdentityManifest.value),
                 referenceIds: cloneJsonData(legacyReferenceIds)
               }
             );

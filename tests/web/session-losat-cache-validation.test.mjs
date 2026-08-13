@@ -17,9 +17,17 @@ globalThis.document = {};
 installFakeSvgDom();
 let restoredPrimaryTextReads = 0;
 let restoredPrimaryArrayBufferReads = 0;
+let restoredFileConstructions = 0;
+let embeddedResourceDecodes = 0;
+const nativeAtob = globalThis.atob;
+globalThis.atob = (value) => {
+  embeddedResourceDecodes += 1;
+  return nativeAtob(value);
+};
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
     super(parts, options);
+    restoredFileConstructions += 1;
     this.name = String(name || 'file');
     this.lastModified = options.lastModified ?? Date.now();
   }
@@ -34,16 +42,29 @@ globalThis.File = class File extends Blob {
     return super.arrayBuffer();
   }
 };
+globalThis.document.createElement = () => ({
+  addEventListener: () => {},
+  click: () => {},
+  parentNode: null
+});
+globalThis.document.body = { appendChild: () => {} };
+globalThis.confirm = () => true;
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
 const {
   adoptCanonicalRenderArtifacts,
+  exportSession,
   importSession,
   serializeActiveRenderFiles,
   validateSessionLosatArtifacts
 } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const {
+  cloneFileBytesForTransfer,
+  readFileBytes,
+  readFileText
+} = await import('../../gbdraw/web/js/services/file-content-cache.js');
 
 const rawEntry = (key) => ({
   schema: 2,
@@ -425,6 +446,12 @@ ORIGIN
     webFiles: {
       bindings: {
         schema: 1,
+        d_color: {
+          resourceId: 'catalog-record',
+          name: 'catalog-colors.tsv',
+          type: 'text/tab-separated-values',
+          lastModified: 9
+        },
         linearSeqs: [{
           uid: 'catalog-record',
           gb: {
@@ -482,8 +509,16 @@ ORIGIN
       }
     },
     orthogroupState: {},
-    losatCache: { entries: [] },
-    losatDerivedCache: { entries: [] },
+    losatCache: {
+      entries: [{
+        ...rawEntry('adopted-raw'),
+        filename: 'adopted.tsv',
+        display: true
+      }]
+    },
+    losatDerivedCache: {
+      entries: [{ ...derivedEntry('adopted-derived'), mode: 'orthogroup' }]
+    },
     proteinIdentityManifest: {
       schema: 2,
       proteinSets: {},
@@ -491,20 +526,115 @@ ORIGIN
       recordInstances: {}
     }
   };
-  const file = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const sessionText = JSON.stringify(payload);
+  const file = new Blob([sessionText], { type: 'application/json' });
   const event = { target: { files: [file], value: 'selected' } };
 
-  const result = await importSession(event);
+  embeddedResourceDecodes = 0;
+  restoredFileConstructions = 0;
+  let documentParseCalls = 0;
+  const nativeJsonParse = JSON.parse;
+  JSON.parse = (value, ...args) => {
+    if (value === sessionText) documentParseCalls += 1;
+    return nativeJsonParse(value, ...args);
+  };
+  let result;
+  try {
+    result = await importSession(event);
+  } finally {
+    JSON.parse = nativeJsonParse;
+  }
 
   assert.equal(result.status, 'ok');
+  assert.equal(documentParseCalls, 1);
   assert.equal(state.linearSeqs[0].gb.name, 'catalog-primary.gbk');
+  assert.equal(typeof state.linearSeqs[0].gb.text, 'undefined');
+  assert.equal(typeof state.linearSeqs[0].gb.arrayBuffer, 'undefined');
+  assert.equal(embeddedResourceDecodes, 0);
+  assert.equal(restoredFileConstructions, 0);
   assert.equal(restoredPrimaryTextReads, 0);
   assert.equal(restoredPrimaryArrayBufferReads, 0);
+  assert.equal(
+    state.losatCache.value.get('adopted-raw'),
+    result.data.losatCache.entries[0]
+  );
+  assert.equal(
+    state.losatDerivedCache.value.get('adopted-derived'),
+    result.data.losatDerivedCache.entries[0]
+  );
+  assert.equal(
+    state.proteinIdentityManifest.value,
+    result.data.proteinIdentityManifest
+  );
   assert.deepEqual(state.matchSequenceRegistry.values(), [{
     ...sequenceSource,
     aliases: ['CATALOG.1', 'CATALOG'],
     sourceIndex: null
   }]);
+
+  const sourceBytes = await readFileBytes(state.linearSeqs[0].gb);
+  assert.equal(embeddedResourceDecodes, 1);
+  assert.equal(await readFileText(state.files.d_color), genbank);
+  assert.equal(embeddedResourceDecodes, 1);
+  assert.equal(await readFileText(state.linearSeqs[0].gb), genbank);
+  assert.equal(embeddedResourceDecodes, 1);
+  const transferred = await cloneFileBytesForTransfer(state.files.d_color);
+  structuredClone(transferred, { transfer: [transferred] });
+  assert.equal(transferred.byteLength, 0);
+  assert.deepEqual(
+    Array.from(await readFileBytes(state.linearSeqs[0].gb)),
+    Array.from(sourceBytes)
+  );
+  assert.equal(embeddedResourceDecodes, 1);
+
+  const saved = await exportSession('lazy-current-round-trip');
+  assert.equal(saved.status, 'saved');
+  assert.equal(embeddedResourceDecodes, 1);
+  const savedPayload = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+  assert.equal(
+    savedPayload.resources['catalog-record'].data,
+    payload.resources['catalog-record'].data
+  );
+  assert.deepEqual(savedPayload.renderRequest, payload.renderRequest);
+  assert.deepEqual(savedPayload.editorState.featureCatalog, payload.editorState.featureCatalog);
+  assert.deepEqual(savedPayload.losatCache.entries, payload.losatCache.entries);
+
+  const reloaded = await importSession({
+    target: { files: [saved.blob], value: 'selected' }
+  });
+  assert.equal(reloaded.status, 'ok');
+  assert.equal(embeddedResourceDecodes, 1);
+
+  await readFileBytes(state.linearSeqs[0].gb);
+  assert.equal(embeddedResourceDecodes, 2);
+  adoptCanonicalRenderArtifacts({
+    renderRequest: structuredClone(payload.renderRequest),
+    resources: {
+      'catalog-record': { ...payload.resources['catalog-record'] }
+    }
+  });
+  let resourceEncodesAfterGenerate = 0;
+  const nativeBtoa = globalThis.btoa;
+  globalThis.btoa = (value) => {
+    resourceEncodesAfterGenerate += 1;
+    return nativeBtoa(value);
+  };
+  let savedAfterGenerate;
+  try {
+    savedAfterGenerate = await exportSession('lazy-current-after-generate');
+  } finally {
+    globalThis.btoa = nativeBtoa;
+  }
+  assert.equal(savedAfterGenerate.status, 'saved');
+  assert.equal(embeddedResourceDecodes, 2);
+  assert.equal(resourceEncodesAfterGenerate, 0);
+  const payloadAfterGenerate = JSON.parse(gunzipSync(Buffer.from(
+    await savedAfterGenerate.blob.arrayBuffer()
+  )));
+  assert.deepEqual(
+    payloadAfterGenerate.resources['catalog-record'],
+    payload.resources['catalog-record']
+  );
 
   const secondGenbank = genbank
     .replaceAll('CATALOG', 'SECOND')
@@ -534,6 +664,7 @@ ORIGIN
     'second-record'
   );
   restoredPrimaryTextReads = 0;
+  embeddedResourceDecodes = 0;
   const incompleteResult = await importSession({
     target: {
       files: [new Blob([JSON.stringify(incompletePayload)], { type: 'application/json' })],
@@ -541,8 +672,13 @@ ORIGIN
     }
   });
 
-  assert.equal(incompleteResult.status, 'ok');
-  assert.equal(restoredPrimaryTextReads, 2);
+  assert.equal(incompleteResult.status, 'degraded');
+  assert.deepEqual(incompleteResult.degraded, {
+    reason: 'incomplete-current-feature-catalog',
+    recovered: true
+  });
+  assert.equal(restoredPrimaryTextReads, 0);
+  assert.equal(embeddedResourceDecodes, 2);
   assert.deepEqual(
     state.matchSequenceRegistry.values().map((source) => source.recordId),
     ['CATALOG.1', 'SECOND.1']
