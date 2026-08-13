@@ -344,15 +344,6 @@ export const analyzeCatalogSequenceSourceCoverage = ({
     }
   });
 
-  const comparisonSourceIndexes = new Set(
-    sourceEntries
-      .map(({ source }) => sourceIdentity(source))
-      .filter((identity) => (
-        identity.origin === 'homology-comparison'
-        && identity.sourceIndex !== null
-      ))
-      .map((identity) => identity.sourceIndex)
-  );
   const requirements = new Map();
   const failedRequirementKeys = new Set();
   const failureReasons = new Map();
@@ -472,14 +463,6 @@ export const analyzeCatalogSequenceSourceCoverage = ({
           const expectedOrigin = homology
             ? (role === normalizedReferenceSide ? 'circular-reference' : 'homology-comparison')
             : 'linear-record';
-          if (
-            expectedOrigin === 'homology-comparison'
-            && sourceIndex.valid
-            && sourceIndex.supplied
-            && !comparisonSourceIndexes.has(sourceIndex.value)
-          ) {
-            return;
-          }
           const displayedRecord = recordIndex.value === null
             ? null
             : displayedRecords[recordIndex.value] || null;
