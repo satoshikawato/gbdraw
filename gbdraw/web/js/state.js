@@ -37,8 +37,6 @@ const { ref, reactive, computed } = window.Vue;
 // System State
 const pyodideReady = ref(false);
 const diagramGenerationWorkerReady = ref(false);
-const diagramGenerationWorkerStatus = ref('Preparing diagram engine...');
-const diagramGenerationWorkerError = ref(null);
 const processing = ref(false);
 const processingStatus = ref('');
 const generationCancelRequested = ref(false);
@@ -928,8 +926,6 @@ const filteredEditableLabels = computed(() => {
 export const state = {
   pyodideReady,
   diagramGenerationWorkerReady,
-  diagramGenerationWorkerStatus,
-  diagramGenerationWorkerError,
   processing,
   processingStatus,
   generationCancelRequested,

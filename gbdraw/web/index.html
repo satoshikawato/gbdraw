@@ -1908,7 +1908,6 @@
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
-            <p v-if="!processing && (!diagramGenerationWorkerReady || diagramGenerationWorkerError)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError ? 'text-red-600' : 'text-slate-500']" v-text="diagramGenerationWorkerStatus"></p>
             </div>
 
                 <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card bg-slate-50/50">

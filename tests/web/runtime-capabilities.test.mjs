@@ -88,17 +88,34 @@ class FakeWorker {
 
   postMessage(message) {
     this.messages.push(message);
-    if (message.type !== 'init') return;
-    queueMicrotask(() => {
-      this.emit('message', {
-        data: {
-          id: message.id,
-          type: 'init',
-          ok: true,
-          capabilities: structuredClone(FakeWorker.capabilities)
-        }
+    if (message.type === 'init') {
+      queueMicrotask(() => {
+        this.emit('message', {
+          data: {
+            id: message.id,
+            type: 'init',
+            ok: true,
+            capabilities: structuredClone(FakeWorker.capabilities)
+          }
+        });
       });
-    });
+      return;
+    }
+    if (message.type === 'run') {
+      queueMicrotask(() => {
+        this.emit('message', {
+          data: {
+            requestId: message.requestId,
+            type: 'run',
+            ok: true,
+            results: {
+              results: [{ name: 'diagram.svg', content: '<svg></svg>' }],
+              metadata: {}
+            }
+          }
+        });
+      });
+    }
   }
 
   emit(type, event) {
@@ -117,22 +134,31 @@ const generationModule = await import(
 const {
   disposeDiagramGenerationWorker,
   getDiagramGenerationWorkerCapabilities,
-  preinitializeDiagramGenerationWorker
+  runDiagramGeneration
 } = generationModule;
 
 {
-  const [first, second] = await Promise.all([
-    preinitializeDiagramGenerationWorker(),
-    preinitializeDiagramGenerationWorker()
-  ]);
+  assert.equal(FakeWorker.instances.length, 0);
+  const first = await runDiagramGeneration({ request: {}, resources: {} });
   assert.equal(FakeWorker.instances.length, 1);
   assert.equal(
     FakeWorker.instances[0].messages.filter((message) => message.type === 'init').length,
     1
   );
-  assert.equal(first, second);
-  assert.equal(first, getDiagramGenerationWorkerCapabilities());
-  assert.equal(Object.isFrozen(first), true);
+  assert.deepEqual(first.results, [{ name: 'diagram.svg', content: '<svg></svg>' }]);
+  assert.equal(Object.isFrozen(getDiagramGenerationWorkerCapabilities()), true);
+
+  const second = await runDiagramGeneration({ request: {}, resources: {} });
+  assert.deepEqual(second.results, first.results);
+  assert.equal(FakeWorker.instances.length, 1);
+  assert.equal(
+    FakeWorker.instances[0].messages.filter((message) => message.type === 'init').length,
+    1
+  );
+  assert.equal(
+    FakeWorker.instances[0].messages.filter((message) => message.type === 'run').length,
+    2
+  );
   disposeDiagramGenerationWorker();
 }
 
@@ -141,7 +167,7 @@ const {
   incompatible.renderProtocol += 1;
   FakeWorker.capabilities = incompatible;
   await assert.rejects(
-    preinitializeDiagramGenerationWorker(),
+    runDiagramGeneration({ request: {}, resources: {} }),
     (error) => {
       assert.equal(error instanceof DiagramRuntimeCompatibilityError, true);
       assert.equal(error.message, DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE);
@@ -160,7 +186,7 @@ const {
   oldWheel.rendering.featureRenderings = ['arrow', 'arrowhead', 'rectangle', 'underlay'];
   FakeWorker.capabilities = oldWheel;
   await assert.rejects(
-    preinitializeDiagramGenerationWorker(),
+    runDiagramGeneration({ request: {}, resources: {} }),
     (error) => {
       assert.equal(error instanceof DiagramRuntimeCompatibilityError, true);
       assert.equal(error.message, DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE);

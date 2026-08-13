@@ -51,8 +51,7 @@ export const setupWatchers = ({
   resetPreviewViewport,
   resetRightDrawer,
   previewRuntime = null,
-  preparePaletteDefinitions = null,
-  prepareDiagramGenerationWorker
+  preparePaletteDefinitions = null
 }) => {
   const {
     manualSpecificRules,
@@ -666,14 +665,11 @@ export const setupWatchers = ({
 
   onMounted(async () => {
     await nextTick();
-    const palettePromise = typeof preparePaletteDefinitions === 'function'
-      ? preparePaletteDefinitions().catch((error) => {
-          console.warn('Could not load browser palette definitions.', error);
-        })
-      : Promise.resolve();
-    const workerPromise = typeof prepareDiagramGenerationWorker === 'function'
-      ? prepareDiagramGenerationWorker()
-      : Promise.resolve();
-    await Promise.all([palettePromise, workerPromise]);
+    if (typeof preparePaletteDefinitions !== 'function') return;
+    try {
+      await preparePaletteDefinitions();
+    } catch (error) {
+      console.warn('Could not load browser palette definitions.', error);
+    }
   });
 };

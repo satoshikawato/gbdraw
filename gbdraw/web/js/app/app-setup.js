@@ -30,14 +30,7 @@ import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import {
-  disposeDiagramGenerationWorker,
-  preinitializeDiagramGenerationWorker
-} from '../services/diagram-generation.js';
-import {
-  DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE,
-  DIAGRAM_ENGINE_STARTUP_MESSAGE
-} from '../services/runtime-capabilities.js';
+import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
@@ -185,8 +178,6 @@ export const createAppSetup = () => {
   const {
     pyodideReady,
     diagramGenerationWorkerReady,
-    diagramGenerationWorkerStatus,
-    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -1899,24 +1890,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     previewRuntime,
-    preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
-    prepareDiagramGenerationWorker: async () => {
-      diagramGenerationWorkerReady.value = false;
-      diagramGenerationWorkerError.value = null;
-      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
-      try {
-        await preinitializeDiagramGenerationWorker();
-        diagramGenerationWorkerReady.value = true;
-        diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
-      } catch (error) {
-        const userMessage = error?.name === 'DiagramRuntimeCompatibilityError'
-          ? DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE
-          : DIAGRAM_ENGINE_STARTUP_MESSAGE;
-        diagramGenerationWorkerError.value = userMessage;
-        diagramGenerationWorkerStatus.value = userMessage;
-        console.error('Diagram engine startup failed.', error);
-      }
-    }
+    preparePaletteDefinitions: pyodideManager.loadPaletteAsset
   });
 
   const refreshLoadedSessionSvgLayout = async () => {
@@ -2243,12 +2217,6 @@ export const createAppSetup = () => {
       ? linearComparisonResolution.value
       : null;
 
-    if (diagramGenerationWorkerError.value) {
-      diagramGenerationWorkerReady.value = false;
-      diagramGenerationWorkerError.value = null;
-      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
-    }
-
     const result = await runGeneratedDiagramAnalysis(comparisonPlanSnapshot);
     if (result?.status === 'error' && mode.value === 'linear') {
       await focusLinearComparisonIssue();
@@ -2258,8 +2226,6 @@ export const createAppSetup = () => {
     }
     if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
       diagramGenerationWorkerReady.value = true;
-      diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
-      diagramGenerationWorkerError.value = null;
     }
     return result;
   });
@@ -3033,8 +2999,6 @@ export const createAppSetup = () => {
   return {
     pyodideReady,
     diagramGenerationWorkerReady,
-    diagramGenerationWorkerStatus,
-    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
