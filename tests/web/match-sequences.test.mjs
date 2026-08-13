@@ -4,7 +4,6 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { gunzipSync } from 'node:zlib';
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
@@ -163,35 +162,6 @@ test('registry validates every supplied source identity field and duplicate key'
   );
 });
 
-test('real Vibrio catalog covers every consumer without a source for its unused record', async () => {
-  const fixture = JSON.parse(gunzipSync(await readFile(
-    'gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz'
-  )));
-  const coverage = analyzeCatalogSequenceSourceCoverage({
-    mode: fixture.renderRequest.mode,
-    catalogFeatureState: fixture.editorState.featureCatalog,
-    renderRequest: fixture.renderRequest
-  });
-
-  assert.equal(coverage.complete, true);
-  assert.deepEqual(coverage.consumerCounts, {
-    biologicalFeatures: 49612,
-    matchEndpoints: 1266
-  });
-  assert.equal(coverage.requiredConsumers.length, 10);
-  assert.equal(coverage.resolvedConsumers.length, 10);
-  assert.deepEqual(coverage.missingConsumers, []);
-  assert.deepEqual(coverage.invalidCatalogSources, []);
-  assert.deepEqual(
-    coverage.resolvedConsumers.map(({ expectedSource }) => expectedSource.recordIndex),
-    [0, 1, 3, 4, 5, 6, 7, 8, 9, 10]
-  );
-  assert.deepEqual(coverage.displayedRecordsWithoutConsumers, [{
-    recordIndex: 2,
-    recordKey: 'record-3'
-  }]);
-});
-
 test('coverage reports a match endpoint whose displayed record source is missing', () => {
   const source = {
     key: 'linear:record:0',
@@ -243,6 +213,55 @@ test('coverage reports a match endpoint whose displayed record source is missing
     [{ kind: 'match-endpoint', id: 'match-a-b/subject' }]
   );
   assert.match(coverage.missingConsumers[0].reasons[0], /unavailable/);
+});
+
+test('coverage reports a homology match endpoint whose comparison source is missing', () => {
+  const referenceSource = {
+    key: 'circular:record:0',
+    recordId: 'reference',
+    aliases: ['reference'],
+    sequence: 'AACCGGTT',
+    origin: 'circular-reference',
+    recordIndex: 0
+  };
+  const coverage = analyzeCatalogSequenceSourceCoverage({
+    mode: 'circular',
+    renderRequest: {
+      records: [{ recordKey: 'record-reference' }]
+    },
+    catalogFeatureState: {
+      items: [{
+        recordKeys: ['record-reference'],
+        sequenceSources: [referenceSource],
+        biologicalFeatures: [],
+        comparisonMatches: [{
+          id: 'homology-a',
+          match_kind: 'homology',
+          query_record_id: 'comparison',
+          subject_record_id: 'reference',
+          source_index: '0',
+          reference_side: 'subject'
+        }]
+      }]
+    }
+  });
+
+  assert.equal(coverage.complete, false);
+  assert.deepEqual(coverage.consumerCounts, {
+    biologicalFeatures: 0,
+    matchEndpoints: 2
+  });
+  assert.equal(coverage.resolvedConsumers.length, 1);
+  assert.equal(coverage.missingConsumers.length, 1);
+  assert.equal(
+    coverage.missingConsumers[0].expectedSource.origin,
+    'homology-comparison'
+  );
+  assert.equal(coverage.missingConsumers[0].expectedSource.sourceIndex, 0);
+  assert.deepEqual(
+    coverage.missingConsumers[0].exampleConsumers,
+    [{ kind: 'match-endpoint', id: 'homology-a/query' }]
+  );
 });
 
 test('builds deterministic single and combined FASTA in query-subject order', () => {

@@ -10,6 +10,10 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core:
     name: Core (Python ${{ matrix.python-version }})
@@ -125,9 +129,9 @@ jobs:
       - name: Run Web JavaScript tests
         run: |
           node --test tests/web/*.test.mjs
+          node --test --test-concurrency=1 tests/web/contracts/vibrio-sequence-source-coverage.test.mjs
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
-          node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz
 
       - name: Run Python browser tests
         run: >-

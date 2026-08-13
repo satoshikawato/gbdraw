@@ -685,16 +685,6 @@ assert.equal(
   'underlay'
 );
 
-const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
-const promotedVibrio = promoteGallerySessionToCurrent(vibrio);
-const promotedVibrioComparison = promotedVibrio.renderRequest.comparisons.find(
-  (comparison) => comparison.kind === 'generatedProteinComparison'
-);
-assert.equal(
-  promotedVibrioComparison.settings.collinearityParams.parameters.maxUnitGap,
-  2
-);
-
 for (const session of [promotedBgc, promotedMajani]) {
   for (const comparison of session.renderRequest.comparisons) {
     if (!comparison.resourceId) continue;
