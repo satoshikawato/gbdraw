@@ -77,10 +77,13 @@ const featureColorOverrides = {};
 const extractedFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const biologicalFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const legendEntries = ref([{ caption: 'Core', color: '#111111', featureIds: ['hash-a', 'hash-b', 'hash-c'] }]);
-const colorScopeDialog = {
+const featureStyleScopeDialog = {
   show: true,
+  kind: 'fill',
   feat: featureA,
   color: '#abcdef',
+  strokeColor: null,
+  strokeWidth: null,
   matchingRule: specificRule,
   ruleMatchCount: 2,
   legendName: 'Core',
@@ -109,6 +112,7 @@ const svgContainer = ref(null);
 const clickedFeature = ref(null);
 const originalSvgStroke = ref({ color: null, width: null });
 const featureStrokeOverrides = {};
+const legendStrokeOverrides = {};
 const previewRuntime = {
   applyFeatureFillChanges: (changes) => {
     let updated = false;
@@ -146,11 +150,11 @@ const actions = createFeatureColorActions({
     featureColorOverrides,
     svgContainer,
     clickedFeature,
-    colorScopeDialog,
+    featureStyleScopeDialog,
     resetColorDialog: {},
     legendRenameDialog: {},
     legendEntries,
-    legendStrokeOverrides: {},
+    legendStrokeOverrides,
     legendColorOverrides: {},
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
@@ -287,7 +291,7 @@ legendEntries.value = [];
 Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
 extractedFeatures.value = [labelFeatureA, labelFeatureB];
 biologicalFeatures.value = [labelFeatureA, labelFeatureB];
-Object.assign(colorScopeDialog, {
+Object.assign(featureStyleScopeDialog, {
   show: true,
   feat: labelFeatureA,
   color: '#8cf04f',
@@ -370,7 +374,7 @@ manualSpecificRules.splice(0);
 Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
 extractedFeatures.value = [labelFeatureA, labelFeatureB];
 biologicalFeatures.value = [labelFeatureA, labelFeatureB, outsideLabelGroup];
-Object.assign(colorScopeDialog, {
+Object.assign(featureStyleScopeDialog, {
   show: true,
   feat: labelFeatureA,
   color: '#654321',
@@ -416,7 +420,7 @@ manualSpecificRules.splice(0, manualSpecificRules.length, {
 });
 extractedFeatures.value = [conflictingFeatureA, conflictingFeatureB];
 biologicalFeatures.value = [conflictingFeatureA, conflictingFeatureB];
-Object.assign(colorScopeDialog, {
+Object.assign(featureStyleScopeDialog, {
   show: true,
   feat: conflictingFeatureA,
   color: '#abcdef',
@@ -434,7 +438,7 @@ manualSpecificRules.splice(0, manualSpecificRules.length, {
   color: '#202020',
   cap: 'existing record rule'
 });
-Object.assign(colorScopeDialog, { show: true, feat: conflictingFeatureA, color: '#aabbcc' });
+Object.assign(featureStyleScopeDialog, { show: true, feat: conflictingFeatureA, color: '#aabbcc' });
 await actions.handleColorScopeChoice('displayLabel');
 assert.equal(manualSpecificRules.some((rule) => rule.qual === 'product'), false);
 assert.equal(manualSpecificRules.filter((rule) => rule.qual === 'hash').length, 2);
@@ -450,7 +454,7 @@ const geneLabelFeature = {
 manualSpecificRules.splice(0);
 extractedFeatures.value = [labelFeatureA, geneLabelFeature];
 biologicalFeatures.value = [labelFeatureA, geneLabelFeature];
-Object.assign(colorScopeDialog, {
+Object.assign(featureStyleScopeDialog, {
   show: true,
   feat: labelFeatureA,
   color: '#fedcba',
@@ -600,13 +604,61 @@ assert.equal(await actions.resetClickedFeatureStroke(), false);
 assert.equal(strokeMutationCount, resetStrokeMutationCount);
 assert.equal(previewFlushCount, resetStrokeFlushCount);
 assert.equal(await actions.applyStrokeToSelectedFeatures([strokeFeature], '#111111', 1), false);
+const siblingStrokeAttributes = [featureB, hashOnlyFeature].map((feature) => {
+  const attributes = new Map([
+    ['stroke', '#111111'],
+    ['stroke-width', '1']
+  ]);
+  featureElementsById.set(feature.svg_id, [{
+    getAttribute: (name) => attributes.has(name) ? attributes.get(name) : null,
+    setAttribute: (name, value) => attributes.set(name, String(value)),
+    removeAttribute: (name) => attributes.delete(name)
+  }]);
+  return attributes;
+});
 legendEntries.value = [{
-  caption: 'Stroke feature',
+  caption: 'Core',
   color: '#cccccc',
-  featureIds: [strokeFeature.svg_id]
+  featureIds: [strokeFeature.svg_id, featureB.svg_id, hashOnlyFeature.svg_id]
 }];
-assert.equal(await actions.applyStrokeToAllSiblings(), false);
+
+assert.equal(await actions.setClickedFeatureStrokeWidthValue(2.5), false);
+assert.equal(featureStyleScopeDialog.show, true);
+assert.equal(featureStyleScopeDialog.kind, 'stroke');
+assert.equal(featureStyleScopeDialog.strokeColor, '#111111');
+assert.equal(featureStyleScopeDialog.strokeWidth, 2.5);
+assert.equal(clickedFeature.value, null);
+assert.equal(strokeAttributes.get('stroke'), '#111111');
+assert.equal(strokeAttributes.get('stroke-width'), '1');
 assert.equal(previewFlushCount, resetStrokeFlushCount);
+assert.equal(await actions.handleFeatureStyleScopeChoice('cancel'), false);
+assert.equal(featureStyleScopeDialog.show, false);
+
+clickedFeature.value = {
+  svg_id: strokeFeature.svg_id,
+  feat: strokeFeature,
+  color: '#cccccc',
+  legendName: 'Core',
+  strokeColor: '#111111',
+  strokeWidth: 1,
+  originalStrokeColor: '#111111',
+  originalStrokeWidth: 1
+};
+assert.equal(await actions.setClickedFeatureStrokeColorValue('#445566'), false);
+assert.equal(await actions.handleFeatureStyleScopeChoice('caption'), true);
+assert.equal(strokeAttributes.get('stroke'), '#445566');
+assert.equal(strokeAttributes.get('stroke-width'), '1');
+siblingStrokeAttributes.forEach((attributes) => {
+  assert.equal(attributes.get('stroke'), '#445566');
+  assert.equal(attributes.get('stroke-width'), '1');
+});
+assert.deepEqual(legendStrokeOverrides.Core, {
+  originalStrokeColor: null,
+  originalStrokeWidth: null,
+  strokeColor: '#445566',
+  strokeWidth: 1
+});
+assert.equal(previewFlushCount, resetStrokeFlushCount + 1);
 
 clickedFeature.value = null;
 featureElementsById.clear();

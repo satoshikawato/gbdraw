@@ -329,7 +329,7 @@ export const createAppSetup = () => {
     featurePopupResize,
     clickedLabel,
     clickedLabelPos,
-    colorScopeDialog,
+    featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     legendRenameDialog,
     resetColorDialog,
@@ -2038,6 +2038,7 @@ export const createAppSetup = () => {
     setFeatureColorValue,
     updateClickedFeatureColor,
     handleColorScopeChoice,
+    handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
     handleLegendRenameChoice,
     selectLegendNameOption,
@@ -2046,9 +2047,9 @@ export const createAppSetup = () => {
     resetClickedFeatureFillColor,
     getFeatureStrokeColorValue,
     setClickedFeatureStrokeColorValue,
+    setClickedFeatureStrokeWidthValue,
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
-    applyStrokeToAllSiblings,
     applyColorToSelectedFeatures,
     applyStrokeToSelectedFeatures,
     buildSelectedFeaturesVisibilityCommand,
@@ -2068,7 +2069,7 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     if (changedDomains.has('ui')) {
@@ -2084,7 +2085,7 @@ export const createAppSetup = () => {
     }
     if (changedDomains.has('editorState')) {
       reconcileLegendEntries({ restoreColorState: true });
-      reconcileStrokeOverrides();
+      reconcileStrokeOverrides({ changes });
       reconcileLabelOverrides();
     }
     await nextTick();
@@ -2117,6 +2118,10 @@ export const createAppSetup = () => {
     setLegendEntryStrokeColorValue
   );
   const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
+  const handleFeatureStyleScopeChoiceWithHistory = (...args) => history.runUndoable(
+    featureStyleScopeDialog.kind === 'stroke' ? 'Change feature stroke' : 'Change feature color',
+    () => handleFeatureStyleScopeChoice(...args)
+  );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
   const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
@@ -2126,8 +2131,11 @@ export const createAppSetup = () => {
     'Change feature stroke',
     setClickedFeatureStrokeColorValue
   );
+  const setClickedFeatureStrokeWidthValueWithHistory = undoableAction(
+    'Change feature stroke',
+    setClickedFeatureStrokeWidthValue
+  );
   const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
-  const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
   const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
   const selectedFeatureBulkColor = ref('#2563eb');
   const selectedFeatureBulkCaption = ref('Selected features');
@@ -3515,11 +3523,12 @@ export const createAppSetup = () => {
     updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
     getFeatureStrokeColorValue,
     setClickedFeatureStrokeColorValue: setClickedFeatureStrokeColorValueWithHistory,
+    setClickedFeatureStrokeWidthValue: setClickedFeatureStrokeWidthValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
-    applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
-    colorScopeDialog,
+    featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     handleColorScopeChoice: handleColorScopeChoiceWithHistory,
+    handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
     legendRenameDialog,
     handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
     resetColorDialog,

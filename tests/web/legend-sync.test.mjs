@@ -359,4 +359,26 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(strokeActions.resetAllStrokes(), true);
   assert.deepEqual(state.featureStrokeOverrides, {});
   assert.equal(dirtyMarks, resetDirtyMarks);
+
+  betaSwatch.setAttribute('stroke', 'gray');
+  betaSwatch.setAttribute('stroke-width', '3');
+  const appliedOverride = {
+    originalStrokeColor: 'gray',
+    originalStrokeWidth: 2,
+    strokeWidth: 3
+  };
+  const historyReconcileDirtyMarks = dirtyMarks;
+  assert.equal(strokeActions.reconcileStrokeOverrides({
+    changes: [{
+      path: ['editorState', 'legend', 'strokeOverrides', 'Beta'],
+      before: undefined,
+      after: appliedOverride
+    }]
+  }), true);
+  assert.equal(betaSwatch.getAttribute('stroke'), 'gray');
+  assert.equal(betaSwatch.getAttribute('stroke-width'), '2');
+  assert.equal(dirtyMarks, historyReconcileDirtyMarks + 1);
+  assert.equal(strokeActions.reconcileStrokeOverrides({
+    changes: [{ path: ['editorState', 'legend', 'entries', '0', 'caption'] }]
+  }), false);
 }

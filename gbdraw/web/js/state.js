@@ -641,11 +641,14 @@ const featurePopupResize = reactive({
 const clickedLabel = ref(null); // { key, text, sourceText, featureId }
 const clickedLabelPos = reactive({ x: 0, y: 0 });
 
-// Color Change Scope Dialog state
-const colorScopeDialog = reactive({
+// Feature style scope dialog state
+const featureStyleScopeDialog = reactive({
   show: false,
+  kind: 'fill', // 'fill' | 'stroke'
   feat: null,
   color: null,
+  strokeColor: null,
+  strokeWidth: null,
   matchingRule: null, // Existing regex rule from -t table
   ruleMatchCount: 0, // Number of features matching the rule
   legendName: null,
@@ -1091,7 +1094,7 @@ export const state = {
   featurePopupResize,
   clickedLabel,
   clickedLabelPos,
-  colorScopeDialog,
+  featureStyleScopeDialog,
   resetColorDialog,
   legendRenameDialog,
   labelTextScopeDialog,

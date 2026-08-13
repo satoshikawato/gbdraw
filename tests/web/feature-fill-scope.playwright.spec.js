@@ -38,6 +38,39 @@ const inspectFillState = async (page, target) => page.evaluate(async ({ caption,
   };
 }, target);
 
+const inspectStrokeState = async (page, target) => page.evaluate(async ({ caption, featureIds }) => {
+  const app = window.__GBDRAW_APP__;
+  const svg = document.querySelector('.origin-top svg');
+  const { getFeatureElements } = await import(
+    '/gbdraw/web/js/app/feature-editor/svg-actions.js'
+  );
+  const legendGroup = Array.from(svg.querySelectorAll('g[data-legend-key]'))
+    .find((group) => group.getAttribute('data-legend-key') === caption);
+  const legendSwatch = legendGroup?.querySelector('path[fill]:not([fill="none"])') || null;
+  return {
+    featureStrokes: Object.fromEntries(featureIds.map((featureId) => [
+      featureId,
+      getFeatureElements(svg, featureId).map((element) => {
+        const width = element.getAttribute('stroke-width');
+        return {
+          color: element.getAttribute('stroke'),
+          width: width === null ? null : Number(width)
+        };
+      })
+    ])),
+    legendStroke: legendSwatch ? {
+      color: legendSwatch.getAttribute('stroke'),
+      width: legendSwatch.getAttribute('stroke-width') === null
+        ? null
+        : Number(legendSwatch.getAttribute('stroke-width'))
+    } : null,
+    featureStrokeOverrides: JSON.stringify(app.featureStrokeOverrides),
+    resultContent: app.results[app.selectedResultIndex]?.content || '',
+    undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
+    redoCount: window.__GBDRAW_HISTORY__.getRedoCount()
+  };
+}, target);
+
 const changeColor = async (picker, color) => {
   await picker.evaluate((element, value) => {
     element.value = value;
@@ -170,4 +203,118 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   expect(redone.featureFills).toEqual(changed.featureFills);
   expect(redone.legendFill).toBe(changedColor);
   expect(redone.legendEntryColor).toBe(changedColor);
+});
+
+test('Feature stroke changes use the shared scope dialog with atomic Undo and Redo', async ({
+  page
+}) => {
+  const imported = await loadGallerySession(
+    page,
+    'HmmtDNA_basic_circular.gbdraw-session.json'
+  );
+  expect(imported.status).toBe('ok');
+
+  const drawer = page.locator('.right-drawer');
+  await page.locator('.drawer-toggle').click();
+  await expect(drawer.getByText(/^Features \(\d+\)$/)).toBeVisible();
+
+  const target = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const svg = document.querySelector('.origin-top svg');
+    const { getFeatureElements } = await import(
+      '/gbdraw/web/js/app/feature-editor/svg-actions.js'
+    );
+    for (const feature of app.visibleFeatureRows) {
+      const featureId = String(feature?.svg_id || '').trim();
+      if (!featureId || getFeatureElements(svg, featureId).length === 0) continue;
+      const entry = app.legendEntries.find((candidate) => candidate.caption === feature.type);
+      if (!entry) continue;
+      const featureIds = app.extractedFeatures
+        .filter((candidate) => (
+          candidate.type === feature.type &&
+          getFeatureElements(svg, String(candidate.svg_id || '')).length > 0
+        ))
+        .map((candidate) => candidate.svg_id);
+      if (featureIds.length < 2) continue;
+      return {
+        id: featureId,
+        start: feature.start,
+        end: feature.end,
+        caption: entry.caption,
+        featureIds
+      };
+    }
+    throw new Error('No visible Feature with a shared legend item was found.');
+  });
+
+  const featureRow = drawer.locator(`span[title="${target.start}..${target.end}"]`).locator('..');
+  await featureRow.getByRole('button', { name: 'Edit' }).click();
+
+  const popup = page.locator('.feature-popup');
+  await expect(popup).toBeVisible();
+  const strokeMode = popup.getByLabel('Feature stroke color mode', { exact: true });
+  if (await strokeMode.inputValue() === 'auto') {
+    await strokeMode.selectOption('color');
+  }
+  let strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
+  await expect(strokePicker).toBeEnabled();
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.captureBaseline('Stroke color mode'));
+  const before = await inspectStrokeState(page, target);
+  expect(before.undoCount).toBe(0);
+  expect(before.redoCount).toBe(0);
+
+  await changeColor(strokePicker, '#8a5a44');
+  const scopeDialog = page.getByRole('heading', { name: 'Stroke Change Scope' }).locator('..');
+  await expect(scopeDialog).toBeVisible();
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
+  ).toBe(0);
+  await scopeDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(scopeDialog).toBeHidden();
+  expect(await inspectStrokeState(page, target)).toEqual(before);
+
+  await featureRow.getByRole('button', { name: 'Edit' }).click();
+  await expect(popup).toBeVisible();
+  strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
+  const changedColor = '#365f8d';
+  await changeColor(strokePicker, changedColor);
+  await expect(scopeDialog).toBeVisible();
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
+  ).toBe(0);
+
+  const captionScopeButton = scopeDialog.locator('button.bg-green-600');
+  await expect(captionScopeButton).toBeVisible();
+  await captionScopeButton.click();
+  await expect(scopeDialog).toBeHidden();
+
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
+  ).toBe(1);
+  const changed = await inspectStrokeState(page, target);
+  expect(changed.redoCount).toBe(0);
+  Object.values(changed.featureStrokes).forEach((strokes) => {
+    expect(strokes.length).toBeGreaterThan(0);
+    expect(strokes.every((stroke) => stroke.color === changedColor)).toBe(true);
+  });
+  expect(changed.legendStroke?.color).toBe(changedColor);
+  expect(changed.resultContent).toContain(`stroke="${changedColor}"`);
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__.getRedoCount())
+  ).toBe(1);
+  const undone = await inspectStrokeState(page, target);
+  expect(undone.featureStrokes).toEqual(before.featureStrokes);
+  expect(undone.legendStroke).toEqual(before.legendStroke);
+  expect(undone.featureStrokeOverrides).toBe(before.featureStrokeOverrides);
+
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())
+  ).toBe(1);
+  const redone = await inspectStrokeState(page, target);
+  expect(redone.featureStrokes).toEqual(changed.featureStrokes);
+  expect(redone.legendStroke).toEqual(changed.legendStroke);
+  expect(redone.featureStrokeOverrides).toBe(changed.featureStrokeOverrides);
 });

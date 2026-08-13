@@ -1581,8 +1581,8 @@ ${origin}
     if (!target) throw new Error('Expected product feature was not extracted.');
     await app.requestFeatureColorChange(target, '#ff00ff');
     const dialog = {
-      displayLabel: app.colorScopeDialog.displayLabel,
-      displayLabelSiblingCount: app.colorScopeDialog.displayLabelSiblingCount
+      displayLabel: app.featureStyleScopeDialog.displayLabel,
+      displayLabelSiblingCount: app.featureStyleScopeDialog.displayLabelSiblingCount
     };
     await app.handleColorScopeChoice('displayLabel');
     app.extractedFeatures
