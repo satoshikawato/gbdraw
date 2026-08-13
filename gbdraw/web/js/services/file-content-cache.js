@@ -1,5 +1,4 @@
 const fileByteCache = new WeakMap();
-const lazyFileContent = new WeakMap();
 
 const asBytes = (value) => (
   value instanceof Uint8Array ? value : new Uint8Array(value || [])
@@ -9,65 +8,27 @@ const asCacheKey = (file) => (
   file && (typeof file === 'object' || typeof file === 'function') ? file : null
 );
 
-export const registerLazyFileContent = (
-  file,
-  {
-    cacheKey = file,
-    readBytes,
-    readText = null,
-    sessionResource = null
-  } = {}
-) => {
-  const key = asCacheKey(file);
-  const sharedKey = asCacheKey(cacheKey);
-  if (!key || !sharedKey || typeof readBytes !== 'function') {
-    throw new TypeError('Lazy file content requires object keys and a byte reader.');
-  }
-  lazyFileContent.set(key, {
-    cacheKey: sharedKey,
-    readBytes,
-    readText: typeof readText === 'function' ? readText : null,
-    sessionResource
-  });
-  return file;
-};
-
-export const isLazyFileContent = (file) => Boolean(
-  asCacheKey(file) && lazyFileContent.has(file)
-);
-
-export const getSessionResourceSource = (file) => (
-  asCacheKey(file) ? lazyFileContent.get(file)?.sessionResource || null : null
-);
-
 export const readFileBytes = async (file) => {
-  const fileKey = asCacheKey(file);
-  const lazy = fileKey ? lazyFileContent.get(fileKey) : null;
-  const key = lazy?.cacheKey || fileKey;
-  if (!key || (!lazy && typeof file.arrayBuffer !== 'function')) {
+  const key = asCacheKey(file);
+  if (!key || typeof file.arrayBuffer !== 'function') {
     throw new TypeError('A File-like object with arrayBuffer() is required.');
   }
   let pending = fileByteCache.get(key);
   if (!pending) {
     pending = Promise.resolve()
-      .then(() => lazy ? lazy.readBytes() : file.arrayBuffer())
-      .then((buffer) => asBytes(buffer));
+      .then(() => file.arrayBuffer())
+      .then((buffer) => new Uint8Array(buffer));
     fileByteCache.set(key, pending);
-    if (!lazy) {
-      pending.catch(() => {
-        if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
-      });
-    }
+    pending.catch(() => {
+      if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
+    });
   }
   return pending;
 };
 
-export const readFileText = async (file) => {
-  const lazy = asCacheKey(file) ? lazyFileContent.get(file) : null;
-  return lazy?.readText
-    ? lazy.readText()
-    : bytesToText(await readFileBytes(file));
-};
+export const readFileText = async (file) => (
+  bytesToText(await readFileBytes(file))
+);
 
 export const cloneFileBytesForTransfer = async (file) => {
   const bytes = await readFileBytes(file);

@@ -3,30 +3,6 @@ const { readFileSync } = require('node:fs');
 
 const installDiagramWorkerActivityTracker = async (page) => {
   await page.addInitScript(() => {
-    window.__GBDRAW_SESSION_RESOURCE_ACTIVITY__ = {
-      base64Decodes: 0,
-      fileConstructions: 0,
-      blobConstructions: 0
-    };
-    const nativeAtob = window.atob.bind(window);
-    window.atob = (value) => {
-      window.__GBDRAW_SESSION_RESOURCE_ACTIVITY__.base64Decodes += 1;
-      return nativeAtob(value);
-    };
-    const NativeFile = window.File;
-    window.File = new Proxy(NativeFile, {
-      construct(target, args, newTarget) {
-        window.__GBDRAW_SESSION_RESOURCE_ACTIVITY__.fileConstructions += 1;
-        return Reflect.construct(target, args, newTarget);
-      }
-    });
-    const NativeBlob = window.Blob;
-    window.Blob = new Proxy(NativeBlob, {
-      construct(target, args, newTarget) {
-        window.__GBDRAW_SESSION_RESOURCE_ACTIVITY__.blobConstructions += 1;
-        return Reflect.construct(target, args, newTarget);
-      }
-    });
     window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ = {
       constructions: 0,
       instances: []
@@ -125,29 +101,12 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
       'BGC0000708-BGC0000713.gbdraw-session.json',
       { type: 'application/json' }
     );
-    const before = { ...window.__GBDRAW_SESSION_RESOURCE_ACTIVITY__ };
-    const result = await window.__GBDRAW_APP__.importSession({
+    return window.__GBDRAW_APP__.importSession({
       target: { files: [file], value: '' }
     });
-    const after = window.__GBDRAW_SESSION_RESOURCE_ACTIVITY__;
-    return {
-      status: result?.status,
-      resourceDecodes: after.base64Decodes - before.base64Decodes,
-      fileConstructions: after.fileConstructions - before.fileConstructions,
-      blobConstructions: after.blobConstructions - before.blobConstructions,
-      previewMounted: Boolean(
-        window.__GBDRAW_APP__.svgContainer?.querySelector('svg')
-      )
-    };
   });
 
-  expect(imported).toEqual({
-    status: 'ok',
-    resourceDecodes: 0,
-    fileConstructions: 0,
-    blobConstructions: 0,
-    previewMounted: true
-  });
+  expect(imported?.status).toBe('ok');
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__)).toEqual({
     constructions: 0,
     instances: []

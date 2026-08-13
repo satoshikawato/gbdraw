@@ -3,7 +3,6 @@ import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
-import { readFileText } from '../services/file-content-cache.js';
 
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
@@ -376,8 +375,8 @@ const materializeLinearSequenceRecord = (record, sequenceState) => {
 };
 
 const readInputSequenceRecords = async (file, inputType) => {
-  if (!file) return [];
-  return parseInputSequenceRecords(await readFileText(file), inputType);
+  if (!file || typeof file.text !== 'function') return [];
+  return parseInputSequenceRecords(await file.text(), inputType);
 };
 
 /**

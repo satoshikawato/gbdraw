@@ -625,6 +625,7 @@ export const setupWatchers = ({
   watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
     () => [
+      semanticFileWatchersSuppressed.value,
       mode.value,
       cInputType.value,
       files.c_gb,
@@ -642,6 +643,7 @@ export const setupWatchers = ({
   );
   watch(
     () => [
+      semanticFileWatchersSuppressed.value,
       mode.value,
       lInputType.value,
       ...linearSeqs.flatMap((seq) => [
