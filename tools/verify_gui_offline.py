@@ -584,12 +584,13 @@ def _run_browser_contract(contract: str) -> None:
               if (!app) return { appMounted: false };
               return {
                 appMounted: true,
-                pyodideReady: app.pyodideReady,
+                mainLoaderPresent: typeof window.loadPyodide === 'function',
+                mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+                  app,
+                  'pyodideReady'
+                ),
                 paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length,
-                loadingStatus: app.loadingStatus,
-                diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
-                diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
-                diagramGenerationWorkerError: app.diagramGenerationWorkerError
+                diagramGenerationWorkerReady: app.diagramGenerationWorkerReady
               };
             }
         """
@@ -599,15 +600,7 @@ def _run_browser_contract(contract: str) -> None:
             () => {
               const app = window.__GBDRAW_APP__;
               if (!app) return false;
-              const loadingStatus = String(app.loadingStatus || '');
-              return (
-                (
-                  app.diagramGenerationWorkerReady === true &&
-                  Object.keys(app.paletteDefinitions || {}).length > 0
-                ) ||
-                loadingStatus.startsWith('Startup Error:') ||
-                Boolean(app.diagramGenerationWorkerError)
-              );
+              return Object.keys(app.paletteDefinitions || {}).length > 0;
             }
             """,
             timeout=120000,
@@ -615,16 +608,19 @@ def _run_browser_contract(contract: str) -> None:
             snapshot=startup_snapshot,
         )
         startup_state = page.evaluate(startup_snapshot)
-        if not startup_state["diagramGenerationWorkerReady"]:
+        if startup_state["mainLoaderPresent"] or startup_state["mainRuntimeStatePresent"]:
             raise RuntimeError(
-                "GUI diagram engine failed offline: "
-                f"{startup_state['diagramGenerationWorkerStatus']} "
-                f"(error: {startup_state['diagramGenerationWorkerError']})"
+                "GUI exposed a forbidden main-thread Python runtime boundary: "
+                f"{startup_state}"
+            )
+        if startup_state["diagramGenerationWorkerReady"]:
+            raise RuntimeError(
+                "GUI diagram Worker started eagerly during offline initialization: "
+                f"{startup_state}"
             )
         if startup_state["paletteDefinitionCount"] == 0:
             raise RuntimeError(
-                "GUI palettes failed to load offline: "
-                f"{startup_state['loadingStatus']}"
+                f"GUI palettes failed to load offline: {startup_state}"
             )
 
         if contract == "offline-initialization":
@@ -691,8 +687,7 @@ def _run_browser_contract(contract: str) -> None:
               return {
                 run: window.__GBDRAW_OFFLINE_CONTRACT_RUN__ || null,
                 errorLog: app?.errorLog || '',
-                resultCount: Array.isArray(app?.results) ? app.results.length : 0,
-                loadingStatus: app?.loadingStatus || ''
+                resultCount: Array.isArray(app?.results) ? app.results.length : 0
               };
             }
             """,

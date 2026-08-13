@@ -1,9 +1,11 @@
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
 import {
   cancelDiagramGeneration,
+  DIAGRAM_HELPER_OPERATIONS,
   DiagramGenerationCanceledError,
   isDiagramGenerationCanceled,
-  runDiagramGeneration
+  runDiagramGeneration,
+  runDiagramHelperOperation
 } from '../services/diagram-generation.js';
 import { buildCanonicalRenderRequest } from '../services/session-request.js';
 import {
@@ -93,7 +95,11 @@ import {
 } from './losat-cache.js';
 import { comparisonFiltersForMode } from '../mode-profiles.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
-import { readFileBytes, readFileText } from '../services/file-content-cache.js';
+import {
+  cloneFileBytesForTransfer,
+  readFileBytes,
+  readFileText
+} from '../services/file-content-cache.js';
 import {
   validateFeatureCatalog
 } from '../services/feature-catalog.js';
@@ -790,9 +796,6 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 };
 export const createRunAnalysis = ({
   state,
-  getPyodide,
-  ensurePyodide = null,
-  writeFileToFs,
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
@@ -806,7 +809,6 @@ export const createRunAnalysis = ({
   prepareReflowCommit = prepareReflowResultCommit
 }) => {
   const {
-    pyodideReady,
     diagramGenerationWorkerReady,
     processing,
     processingStatus,
@@ -1198,48 +1200,31 @@ export const createRunAnalysis = ({
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
 
-  const ensureHelperRuntime = async () => {
-    let runtime = getPyodide();
-    if (runtime && pyodideReady.value) return runtime;
-    if (typeof ensurePyodide === 'function') await ensurePyodide();
-    runtime = getPyodide();
-    if (!runtime || !pyodideReady.value) {
-      throw new Error('The Python helper runtime could not be started.');
-    }
-    return runtime;
-  };
-
-  const hydrateLosatDownloadText = (cacheKey, cached) => {
+  const hydrateLosatDownloadText = async (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
       return {
         text: String(cached?.text || ''),
         utf8Bytes: new TextEncoder().encode(String(cached?.text || '')).byteLength
       };
     }
-    const pyodide = getPyodide();
-    if (!pyodide) {
-      throw new Error('Python runtime is not ready to resolve protein export IDs.');
-    }
-    const hydrate = pyodide.globals.get('hydrate_protein_losat_tsv_json');
-    try {
-      const rawResult = hydrate(
-        JSON.stringify({ ...cached, key: String(cacheKey || '') }),
-        JSON.stringify(proteinIdentityManifest.value)
-      );
-      const result = JSON.parse(String(rawResult || '{}'));
-      if (result.status !== 'ok' || typeof result.text !== 'string') {
-        throw new Error(
-          result.error ||
-          'Protein raw TSV export contains an unresolved internal reference.'
-        );
+    const response = await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV,
+      {
+        entry: cloneJsonData({ ...cached, key: String(cacheKey || '') }),
+        identityManifest: cloneJsonData(proteinIdentityManifest.value)
       }
-      return {
-        text: result.text,
-        utf8Bytes: Number(result.utf8Bytes) || new TextEncoder().encode(result.text).byteLength
-      };
-    } finally {
-      hydrate.destroy?.();
+    );
+    const result = response.result;
+    if (result.status !== 'ok' || typeof result.text !== 'string') {
+      throw new Error(
+        result.error ||
+        'Protein raw TSV export contains an unresolved internal reference.'
+      );
     }
+    return {
+      text: result.text,
+      utf8Bytes: Number(result.utf8Bytes) || new TextEncoder().encode(result.text).byteLength
+    };
   };
 
   const downloadLosatPair = async (edgeKey, customName) => {
@@ -1248,9 +1233,6 @@ export const createRunAnalysis = ({
     if (!entry || !cacheMap) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
-    if (classifyRawLosatCacheEntry(cached) === 'protein-current') {
-      await ensureHelperRuntime();
-    }
     const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
@@ -1260,7 +1242,7 @@ export const createRunAnalysis = ({
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
     entry.filename = filename;
-    const hydrated = hydrateLosatDownloadText(entry.key, cached);
+    const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
       filename || 'losat.tsv',
       hydrated.text,
@@ -1380,15 +1362,11 @@ export const createRunAnalysis = ({
     if (!Array.isArray(adv.multi_record_positions)) {
       adv.multi_record_positions = [];
     }
-    let pyodide = getPyodide();
     const inputType = cInputType.value;
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
     const hasActiveInput = mode.value === 'circular' && hasCompleteInput;
-    const canReadWithoutRuntime = typeof (
-      inputType === 'gff' ? pairedFile : primaryFile
-    )?.text === 'function';
     Object.assign(circularRecordDiscovery, {
       status: hasActiveInput ? 'loading' : 'idle',
       error: '',
@@ -1402,22 +1380,6 @@ export const createRunAnalysis = ({
       circularRecordList.value = [];
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
-    }
-    if ((!pyodideReady.value || !pyodide) && !canReadWithoutRuntime) {
-      try {
-        pyodide = await ensureHelperRuntime();
-      } catch (error) {
-        if (
-          refreshGeneration !== circularRecordRefreshGeneration ||
-          recordDiscoverySuppressed()
-        ) return;
-        console.warn('Failed to start record discovery runtime:', error);
-        circularRecordList.value = [];
-        circularRecordDiscovery.status = 'error';
-        circularRecordDiscovery.error = 'Could not start the record discovery helper.';
-        adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
-        return;
-      }
     }
     if (
       refreshGeneration !== circularRecordRefreshGeneration ||
@@ -1433,19 +1395,12 @@ export const createRunAnalysis = ({
         ? await discoverGffFastaRecords({
             gffFile: primaryFile,
             fastaFile: pairedFile,
-            readText: readFileText,
-            pyodide,
-            writeFileToFs,
-            gffTemporaryPath: `/record-discovery-circular-${refreshGeneration}.gff`,
-            fastaTemporaryPath: `/record-discovery-circular-${refreshGeneration}.fasta`
+            readText: readFileText
           })
         : await discoverSequenceRecords({
             file: primaryFile,
             format: 'genbank',
-            readText: readFileText,
-            pyodide,
-            writeFileToFs,
-            temporaryPath: `/record-discovery-circular-${refreshGeneration}.gb`
+            readText: readFileText
           });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
@@ -1513,7 +1468,6 @@ export const createRunAnalysis = ({
     comparisonPlanSnapshot = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
-    let pyodide = getPyodide();
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
           comparisonPlanSnapshot || resolveLinearComparisonPlan({
@@ -1847,16 +1801,9 @@ export const createRunAnalysis = ({
       const stageTextFile = (
         path,
         text,
-        { name = '', slot = '', writeToRuntime = false } = {}
+        { name = '', slot = '' } = {}
       ) => {
         throwIfGenerationCanceled();
-        if (writeToRuntime) {
-          if (!pyodide) {
-            throw new Error('The Python helper runtime is not ready.');
-          }
-          const bytes = textEncoder.encode(String(text ?? ''));
-          pyodide.FS.writeFile(path, bytes);
-        }
         const displayName = name || getPayloadName(path);
         const resolvedSlot = slot || generatedSlotForPath(path);
         registerRunInfoFile(path, {
@@ -1875,13 +1822,9 @@ export const createRunAnalysis = ({
         slot = ''
       } = {}) => {
         if (!fileObj) return false;
-        if (!pyodide) {
-          throw new Error('The Python helper runtime is not ready.');
-        }
         throwIfGenerationCanceled();
         const bytes = await readFileBytes(fileObj);
         throwIfGenerationCanceled();
-        pyodide.FS.writeFile(path, bytes);
         if (cacheText && textCache) {
           textCache.set(fileObj, textDecoder.decode(bytes));
         }
@@ -2782,13 +2725,6 @@ export const createRunAnalysis = ({
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
         const linearFileTextCache = new WeakMap();
-        let extractFirstFasta = null;
-        let extractProteinFasta = null;
-        let buildProteinLosatCacheKey = null;
-        let promoteLegacyProteinCache = null;
-        let resolveLegacyProteinReferences = null;
-        let convertProteinBlast = null;
-        let convertNucleotideBlast = null;
         collinearGroups.value = [];
         if (useOrthogroupBlastp) {
           clearOrthogroupMetadata();
@@ -2811,7 +2747,7 @@ export const createRunAnalysis = ({
               fastaCacheHits: 0,
               proteinExtractionCacheHits: 0,
               fastaJsExtractions: 0,
-              fastaPyodideFallbacks: 0,
+              fastaWorkerFallbacks: 0,
               proteinDerivedPayloadCacheHits: 0,
               proteinDerivedPayloadCacheMisses: 0,
               proteinConversionCacheHits: 0,
@@ -2840,28 +2776,7 @@ export const createRunAnalysis = ({
             })
           : null;
 
-        if (useLosat) {
-          if (!pyodideReady.value || !pyodide) {
-            setProcessingStatus('Starting Python helper runtime...');
-            pyodide = await ensureHelperRuntime();
-            throwIfGenerationCanceled();
-          }
-          if (useProteinBlastp && featureVisibilityTablePath && featureVisibilityCacheKey) {
-            stageTextFile(featureVisibilityTablePath, featureVisibilityCacheKey, {
-              writeToRuntime: true
-            });
-          }
-          if (useProteinBlastp) {
-            extractProteinFasta = pyodide.globals.get('extract_cds_protein_fasta');
-            buildProteinLosatCacheKey = pyodide.globals.get('build_protein_losat_cache_key_json');
-            promoteLegacyProteinCache = pyodide.globals.get('promote_legacy_losatp_cache_candidates');
-            resolveLegacyProteinReferences = pyodide.globals.get('resolve_legacy_protein_reference_map_json');
-            convertProteinBlast = pyodide.globals.get('convert_losatp_blastp_pairs_to_genomic_payload');
-          } else {
-            extractFirstFasta = pyodide.globals.get('extract_first_fasta');
-            convertNucleotideBlast = pyodide.globals.get('convert_losat_nucleotide_to_display_tsv');
-          }
-        } else {
+        if (!useLosat) {
           losatCacheInfo.value = [];
         }
 
@@ -2885,15 +2800,9 @@ export const createRunAnalysis = ({
         const getSeqEntry = async (idx) => {
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const startedAt = getNow();
-          const path = lInputType.value === 'gb'
-            ? `/seq_${idx}.gb`
-            : (useProteinBlastp ? `/seq_${idx}.gff` : `/seq_${idx}.fasta`);
           const fmt = lInputType.value === 'gb'
             ? 'genbank'
             : (useProteinBlastp ? 'gff' : 'fasta');
-          const pairedFastaPath = lInputType.value === 'gff' && useProteinBlastp
-            ? `/seq_${idx}.fasta`
-            : null;
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
           const reverseFlag = '0';
@@ -2936,9 +2845,35 @@ export const createRunAnalysis = ({
             }
           } else {
             if (useProteinBlastp) {
-              const res = JSON.parse(
-                extractProteinFasta(path, fmt, pairedFastaPath, regionSpec, recordSelector, reverseFlag, idx, recordInstanceKey, featureVisibilityTablePath)
+              const helperFiles = [{
+                role: 'source',
+                bytes: await cloneFileBytesForTransfer(sourceFile)
+              }];
+              if (pairedFastaFile) {
+                helperFiles.push({
+                  role: 'fasta',
+                  bytes: await cloneFileBytesForTransfer(pairedFastaFile)
+                });
+              }
+              if (featureVisibilityTablePath && featureVisibilityCacheKey) {
+                helperFiles.push({
+                  role: 'visibility',
+                  bytes: textEncoder.encode(featureVisibilityCacheKey).buffer
+                });
+              }
+              const response = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA,
+                {
+                  files: helperFiles,
+                  format: fmt,
+                  regionSpec,
+                  recordSelector,
+                  reverseFlag: reverseFlag === '1',
+                  recordIndex: idx,
+                  recordInstanceKey
+                }
               );
+              const res = response.result;
               if (res.error) throw new Error(res.error);
               const fastaHash = await hashText(res.fasta || '');
               const proteinCacheKey = String(res.display_binding_hash || '');
@@ -2958,7 +2893,7 @@ export const createRunAnalysis = ({
                 sequenceKey: `protein:${fastaHash}`,
                 hash: fastaHash
               };
-              if (losatTiming) losatTiming.fastaPyodideFallbacks += 1;
+              if (losatTiming) losatTiming.fastaWorkerFallbacks += 1;
             } else {
               try {
                 entry = await extractLosatFastaFast({
@@ -2971,7 +2906,20 @@ export const createRunAnalysis = ({
                 });
                 if (losatTiming) losatTiming.fastaJsExtractions += 1;
               } catch (fastError) {
-                const res = JSON.parse(extractFirstFasta(path, fmt, regionSpec, recordSelector, reverseFlag));
+                const response = await runDiagramHelperOperation(
+                  DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA,
+                  {
+                    files: [{
+                      role: 'source',
+                      bytes: await cloneFileBytesForTransfer(sourceFile)
+                    }],
+                    format: fmt,
+                    regionSpec,
+                    recordSelector,
+                    reverseFlag: reverseFlag === '1'
+                  }
+                );
+                const res = response.result;
                 if (res.error) throw new Error(res.error);
                 entry = {
                   fasta: res.fasta,
@@ -2979,8 +2927,8 @@ export const createRunAnalysis = ({
                   canonicalLength: Number(res.record_length || 0) || getFastaSequenceLength(res.fasta)
                 };
                 if (losatTiming) {
-                  losatTiming.fastaPyodideFallbacks += 1;
-                  console.warn('LOSAT browser FASTA extraction fell back to Pyodide:', fastError);
+                  losatTiming.fastaWorkerFallbacks += 1;
+                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker:', fastError);
                 }
               }
             }
@@ -2998,7 +2946,7 @@ export const createRunAnalysis = ({
           return entry;
         };
 
-        const writeLinearFileToFs = async (fileObj, path, { cacheText = false, slot = '' } = {}) => {
+        const prepareLinearFile = async (fileObj, path, { cacheText = false, slot = '' } = {}) => {
           return stageUploadedFile(fileObj, path, {
             cacheText,
             textCache: linearFileTextCache,
@@ -3064,22 +3012,20 @@ export const createRunAnalysis = ({
 
         const buildCacheKey = async (metadata) => {
           if (metadata?.identityKind === 'protein') {
-            if (!buildProteinLosatCacheKey) {
-              throw new Error(
-                'Protein comparison cache validation is unavailable. Reload the page and try again.'
-              );
-            }
-            const rawResult = buildProteinLosatCacheKey(
-              JSON.stringify(proteinIdentityManifest.value),
-              metadata.queryRecordInstanceKey,
-              metadata.subjectRecordInstanceKey,
-              JSON.stringify({
-                program: metadata.program,
-                outfmt: metadata.outfmt,
-                args: normalizeLosatArgs(metadata.args)
-              })
+            const response = await runDiagramHelperOperation(
+              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY,
+              {
+                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                queryRecordInstanceKey: metadata.queryRecordInstanceKey,
+                subjectRecordInstanceKey: metadata.subjectRecordInstanceKey,
+                expectedOptions: {
+                  program: metadata.program,
+                  outfmt: metadata.outfmt,
+                  args: normalizeLosatArgs(metadata.args)
+                }
+              }
             );
-            const result = JSON.parse(String(rawResult || '{}'));
+            const result = response.result;
             if (result.error || !result.key) {
               throw new Error(result.error || 'Protein cache key generation failed.');
             }
@@ -3096,7 +3042,6 @@ export const createRunAnalysis = ({
         }) => {
           if (
             metadata?.identityKind !== 'protein' ||
-            !promoteLegacyProteinCache ||
             !legacyProteinRawCandidates?.value
           ) return null;
           const envelope = legacyProteinRawCandidates.value;
@@ -3109,20 +3054,23 @@ export const createRunAnalysis = ({
             }));
           if (pending.length === 0) return null;
 
-          const rawResult = promoteLegacyProteinCache(
-            JSON.stringify(pending),
-            String(queryEntry?.fasta || ''),
-            String(subjectEntry?.fasta || ''),
-            JSON.stringify(queryEntry?.proteinMap || {}),
-            JSON.stringify(subjectEntry?.proteinMap || {}),
-            JSON.stringify(proteinIdentityManifest.value),
-            JSON.stringify({
-              program: metadata.program,
-              outfmt: metadata.outfmt,
-              args: normalizeLosatArgs(metadata.args)
-            })
+          const response = await runDiagramHelperOperation(
+            DIAGRAM_HELPER_OPERATIONS.PROMOTE_LEGACY_LOSATP_CACHE,
+            {
+              candidates: cloneJsonData(pending),
+              queryFasta: String(queryEntry?.fasta || ''),
+              subjectFasta: String(subjectEntry?.fasta || ''),
+              queryProteinMap: cloneJsonData(queryEntry?.proteinMap || {}),
+              subjectProteinMap: cloneJsonData(subjectEntry?.proteinMap || {}),
+              identityManifest: cloneJsonData(proteinIdentityManifest.value),
+              expectedOptions: {
+                program: metadata.program,
+                outfmt: metadata.outfmt,
+                args: normalizeLosatArgs(metadata.args)
+              }
+            }
           );
-          const result = JSON.parse(String(rawResult || '{}'));
+          const result = response.result;
           if (result.status === 'error') {
             throw new Error(result.error || 'Legacy protein cache migration failed.');
           }
@@ -3247,7 +3195,7 @@ export const createRunAnalysis = ({
             if (lInputType.value === 'gb') {
               if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
               if (useLosat && losatRecordIndexes.has(i)) {
-                await writeLinearFileToFs(seq.gb, `/seq_${i}.gb`, {
+                await prepareLinearFile(seq.gb, `/seq_${i}.gb`, {
                   cacheText: true,
                   slot: `files.linearSeqs[${i}].gb`
                 });
@@ -3255,10 +3203,10 @@ export const createRunAnalysis = ({
             } else {
               if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
               if (useLosat && losatRecordIndexes.has(i)) {
-                await writeLinearFileToFs(seq.gff, `/seq_${i}.gff`, {
+                await prepareLinearFile(seq.gff, `/seq_${i}.gff`, {
                   slot: `files.linearSeqs[${i}].gff`
                 });
-                await writeLinearFileToFs(seq.fasta, `/seq_${i}.fasta`, {
+                await prepareLinearFile(seq.fasta, `/seq_${i}.fasta`, {
                   cacheText: true,
                   slot: `files.linearSeqs[${i}].fasta`
                 });
@@ -3295,20 +3243,18 @@ export const createRunAnalysis = ({
             biologicalFeatures?.value
           );
           if (legacyReferenceIds.length > 0) {
-            if (!resolveLegacyProteinReferences) {
-              throw new Error(
-                'Saved protein comparison references could not be updated. Clear the comparison cache and run the analysis again.'
-              );
-            }
-            const rawResult = resolveLegacyProteinReferences(
-              JSON.stringify(proteinEntries.map((entry) => ({
-                proteinMap: entry.proteinMap || {},
-                fasta: entry.fasta || ''
-              }))),
-              JSON.stringify(proteinIdentityManifest.value),
-              JSON.stringify(legacyReferenceIds)
+            const response = await runDiagramHelperOperation(
+              DIAGRAM_HELPER_OPERATIONS.RESOLVE_LEGACY_PROTEIN_REFERENCES,
+              {
+                proteinRecords: cloneJsonData(proteinEntries.map((entry) => ({
+                  proteinMap: entry.proteinMap || {},
+                  fasta: entry.fasta || ''
+                }))),
+                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                referenceIds: cloneJsonData(legacyReferenceIds)
+              }
             );
-            const result = JSON.parse(String(rawResult || '{}'));
+            const result = response.result;
             if (result.status !== 'resolved' || !result.proteinIdMap) {
               throw new Error(
                 result.error || 'Legacy protein UI reference migration failed.'
@@ -3571,11 +3517,6 @@ export const createRunAnalysis = ({
           const blastWriteStartedAt = getNow();
           throwIfGenerationCanceled();
           if (useProteinBlastp) {
-            if (!convertProteinBlast) {
-              throw new Error(
-                'Protein comparison results could not be prepared. Reload the page and try again.'
-              );
-            }
             const recordPayloads = [];
             const recordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
               ? linearSeqs.map((_, index) => index)
@@ -3658,28 +3599,30 @@ export const createRunAnalysis = ({
               }
             }
             if (!convertedPayload) {
-              convertedPayload = JSON.parse(
-                convertProteinBlast(
-                  JSON.stringify({ records: recordPayloads, pairs: pairPayloads }),
-                  blastpMode,
-                  blastpMaxHits,
-                  adv.min_bitscore,
-                  adv.evalue,
-                  adv.identity,
-                  adv.alignment_length,
+              const response = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD,
+                {
+                  pairs: cloneJsonData({ records: recordPayloads, pairs: pairPayloads }),
+                  mode: blastpMode,
+                  maxHits: blastpMaxHits,
+                  bitscore: adv.min_bitscore,
+                  evalue: adv.evalue,
+                  identity: adv.identity,
+                  alignmentLength: adv.alignment_length,
                   collinearMinAnchors,
                   collinearMaxUnitGap,
-                  'cds',
+                  collinearUnitMode: 'cds',
                   collinearColorMode,
-                  'rbh',
+                  collinearAnchorMode: 'rbh',
                   collinearMaxDiagonalDrift,
                   collinearMaxConflictsInMergeGap,
                   collinearMaxParalogLinksPerOrthogroup,
                   collinearSearchScope,
                   orthogroupMembershipMode,
                   orthogroupMemberMaxHits
-                )
+                }
               );
+              convertedPayload = response.result;
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
                   mode: blastpMode,
@@ -3741,22 +3684,19 @@ export const createRunAnalysis = ({
               }
             }
           } else {
-            if (!convertNucleotideBlast) {
-              throw new Error(
-                'Nucleotide comparison results could not be prepared. Reload the page and try again.'
-              );
-            }
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
               const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
-              const converted = JSON.parse(
-                convertNucleotideBlast(
+              const response = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV,
+                {
                   blastText,
-                  JSON.stringify(await getViewTransform(pair.queryIndex)),
-                  JSON.stringify(await getViewTransform(pair.subjectIndex))
-                )
+                  queryViewTransform: await getViewTransform(pair.queryIndex),
+                  subjectViewTransform: await getViewTransform(pair.subjectIndex)
+                }
               );
+              const converted = response.result;
               if (converted.error) throw new Error(converted.error);
               const blastPath = `/blast_${pair.pairIndex}.txt`;
               const blastName = pair.filename || getPayloadName(blastPath);
@@ -3851,7 +3791,7 @@ export const createRunAnalysis = ({
               `FASTA cache hits=${losatTiming.fastaCacheHits}`,
               `protein extraction cache hits=${losatTiming.proteinExtractionCacheHits}`,
               `JS FASTA=${losatTiming.fastaJsExtractions}`,
-              `Pyodide FASTA=${losatTiming.fastaPyodideFallbacks}`,
+              `Worker FASTA=${losatTiming.fastaWorkerFallbacks}`,
               `derived payload cache hits=${losatTiming.proteinDerivedPayloadCacheHits}`,
               `derived payload cache misses=${losatTiming.proteinDerivedPayloadCacheMisses}`,
               `protein conversion cache hits=${losatTiming.proteinConversionCacheHits}`,
@@ -3867,27 +3807,6 @@ export const createRunAnalysis = ({
               `FASTA chars=${losatTiming.totalFastaChars.toLocaleString()}`
             ].join(', ')
           );
-        }
-        if (extractFirstFasta) {
-          extractFirstFasta.destroy();
-        }
-        if (extractProteinFasta) {
-          extractProteinFasta.destroy();
-        }
-        if (buildProteinLosatCacheKey) {
-          buildProteinLosatCacheKey.destroy();
-        }
-        if (promoteLegacyProteinCache) {
-          promoteLegacyProteinCache.destroy();
-        }
-        if (resolveLegacyProteinReferences) {
-          resolveLegacyProteinReferences.destroy();
-        }
-        if (convertProteinBlast) {
-          convertProteinBlast.destroy();
-        }
-        if (convertNucleotideBlast) {
-          convertNucleotideBlast.destroy();
         }
         if (useLosat) {
           losatCacheInfo.value = cacheInfo.sort(
@@ -4241,21 +4160,16 @@ export const createRunAnalysis = ({
     if (!losatCacheInfo.value || losatCacheInfo.value.length === 0) return;
     const cacheMap = losatCache.value;
     if (!cacheMap || cacheMap.size === 0) return;
-    const requiresProteinHydration = losatCacheInfo.value.some((entry) => (
-      classifyRawLosatCacheEntry(cacheMap.get(entry.key)) === 'protein-current'
-    ));
-    if (requiresProteinHydration) await ensureHelperRuntime();
-
-    const hydratedEntries = losatCacheInfo.value.map((entry, idx) => {
+    const hydratedEntries = (await Promise.all(losatCacheInfo.value.map(async (entry, idx) => {
       const cached = cacheMap.get(entry.key);
       if (!isCurrentRawLosatCacheEntry(cached)) return null;
       return {
         entry,
         cached,
         idx,
-        hydrated: hydrateLosatDownloadText(entry.key, cached)
+        hydrated: await hydrateLosatDownloadText(entry.key, cached)
       };
-    }).filter(Boolean);
+    }))).filter(Boolean);
     const totalBytes = totalHydratedLosatExportBytes(
       hydratedEntries.map((item) => item.hydrated)
     );

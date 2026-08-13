@@ -35,12 +35,10 @@ import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
 const { ref, reactive, computed } = window.Vue;
 
 // System State
-const pyodideReady = ref(false);
 const diagramGenerationWorkerReady = ref(false);
 const processing = ref(false);
 const processingStatus = ref('');
 const generationCancelRequested = ref(false);
-const loadingStatus = ref('Initializing...');
 const errorLog = ref(null);
 const sessionTitle = ref('');
 const semanticFileWatchersSuppressed = ref(false);
@@ -924,12 +922,10 @@ const filteredEditableLabels = computed(() => {
 });
 
 export const state = {
-  pyodideReady,
   diagramGenerationWorkerReady,
   processing,
   processingStatus,
   generationCancelRequested,
-  loadingStatus,
   errorLog,
   sessionTitle,
   semanticFileWatchersSuppressed,

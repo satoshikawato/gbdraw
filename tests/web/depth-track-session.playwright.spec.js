@@ -10,37 +10,32 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
-test('diagram worker startup leaves the main helper runtime lazy', async ({ page }) => {
+test('diagram Worker startup leaves no main-thread Python runtime', async ({ page }) => {
   test.setTimeout(180000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
     () => (
-      window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true &&
       Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0
     ),
     null,
     { timeout: 180000 }
   );
   expect(await page.evaluate(() => ({
-    pyodideReady: window.__GBDRAW_APP__.pyodideReady,
+    mainLoaderPresent: typeof window.loadPyodide === 'function',
+    mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+      window.__GBDRAW_APP__,
+      'pyodideReady'
+    ),
     repeatRegion: window.__GBDRAW_APP__.currentColors.repeat_region
   }))).toEqual({
-    pyodideReady: false,
+    mainLoaderPresent: false,
+    mainRuntimeStatePresent: false,
     repeatRegion: '#d3d3d3'
   });
 
   await page.evaluate((genbankText) => {
-    const originalLoadPyodide = window.loadPyodide;
-    if (typeof originalLoadPyodide !== 'function') {
-      throw new Error('Main-thread Pyodide loader is unavailable.');
-    }
-    window.__GBDRAW_MAIN_PYODIDE_LOADS__ = 0;
-    window.loadPyodide = (...args) => {
-      window.__GBDRAW_MAIN_PYODIDE_LOADS__ += 1;
-      return originalLoadPyodide(...args);
-    };
     const app = window.__GBDRAW_APP__;
     app.mode = 'circular';
     app.cInputType = 'gb';
@@ -51,11 +46,14 @@ test('diagram worker startup leaves the main helper runtime lazy', async ({ page
   }, genbank);
   await page.waitForTimeout(250);
   expect(await page.evaluate(() => ({
-    loadCalls: window.__GBDRAW_MAIN_PYODIDE_LOADS__,
-    pyodideReady: window.__GBDRAW_APP__.pyodideReady
+    mainLoaderPresent: typeof window.loadPyodide === 'function',
+    mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+      window.__GBDRAW_APP__,
+      'pyodideReady'
+    )
   }))).toEqual({
-    loadCalls: 0,
-    pyodideReady: false
+    mainLoaderPresent: false,
+    mainRuntimeStatePresent: false
   });
 
   expect(await runDiagramWithDiagnostics(page)).toEqual({
@@ -64,11 +62,14 @@ test('diagram worker startup leaves the main helper runtime lazy', async ({ page
     errorDetails: []
   });
   expect(await page.evaluate(() => ({
-    loadCalls: window.__GBDRAW_MAIN_PYODIDE_LOADS__,
-    pyodideReady: window.__GBDRAW_APP__.pyodideReady
+    mainLoaderPresent: typeof window.loadPyodide === 'function',
+    mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+      window.__GBDRAW_APP__,
+      'pyodideReady'
+    )
   }))).toEqual({
-    loadCalls: 0,
-    pyodideReady: false
+    mainLoaderPresent: false,
+    mainRuntimeStatePresent: false
   });
 });
 
@@ -243,7 +244,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(() => (
-    window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true
+    Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0
   ), null, { timeout: 180000 });
 
   const outcome = await page.evaluate(async (genbankText) => {
@@ -939,10 +940,6 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.pyodideReady = true;
-  });
-
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
 
@@ -2542,10 +2539,6 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.pyodideReady = true;
-  });
-
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
   await page.waitForTimeout(250);
@@ -2618,10 +2611,6 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.pyodideReady = true;
-  });
-
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
   await page.waitForTimeout(250);

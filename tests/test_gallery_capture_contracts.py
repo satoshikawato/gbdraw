@@ -554,7 +554,7 @@ def test_cross_example_media_is_explicitly_generic() -> None:
                 assert operation.get("genericMedia") is True
 
 
-def test_web_app_readiness_accepts_worker_or_main_thread_runtime() -> None:
+def test_web_app_readiness_waits_for_palette_without_starting_worker() -> None:
     calls: list[tuple[str, int]] = []
 
     class FakePage:
@@ -565,7 +565,7 @@ def test_web_app_readiness_accepts_worker_or_main_thread_runtime() -> None:
 
     assert len(calls) == 1
     script, timeout = calls[0]
-    assert "app.diagramGenerationWorkerReady === true" in script
-    assert "app.pyodideReady === true" in script
-    assert "status.startsWith('Startup Error:')" in script
+    assert "Object.keys(app.paletteDefinitions || {}).length > 0" in script
+    assert "diagramGenerationWorkerReady" not in script
+    assert "pyodideReady" not in script
     assert timeout == 120000

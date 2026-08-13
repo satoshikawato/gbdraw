@@ -9,7 +9,6 @@ const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-record-selector-'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 await cp(join(sourceRoot, 'linear-record-selector.js'), join(tempRoot, 'linear-record-selector.js'));
-await cp(join(sourceRoot, 'record-discovery.js'), join(tempRoot, 'record-discovery.js'));
 await cp(join(sourceRoot, 'record-options.js'), join(tempRoot, 'record-options.js'));
 
 const {
@@ -23,7 +22,7 @@ const {
   discoverSequenceRecords,
   normalizeSequenceRecords,
   parseSequenceRecordText
-} = await import(pathToFileURL(join(tempRoot, 'record-discovery.js')));
+} = await import(pathToFileURL(join(sourceRoot, 'record-discovery.js')));
 
 assert.equal(formatRecordLength(4641652), '4,641,652 bp');
 assert.equal(formatRecordLength(null), 'length unavailable');
@@ -92,87 +91,64 @@ let fastPathStagingCalls = 0;
 const fastDiscovered = await discoverSequenceRecords({
   file: { text: async () => 'LOCUS       FAST 9 bp DNA\nVERSION     FAST.1\n//\n' },
   format: 'genbank',
-  pyodide: null,
-  writeFileToFs: async () => { fastPathStagingCalls += 1; },
-  temporaryPath: '/unused.gb'
+  runHelperOperation: async () => { fastPathStagingCalls += 1; }
 });
 assert.equal(fastDiscovered[0].recordId, 'FAST.1');
 assert.equal(fastPathStagingCalls, 0);
 
-const stagedPaths = new Set();
-const unlinkedPaths = [];
-let destroyed = false;
-const listRecords = (_path, format) => JSON.stringify({
-  records: [{ selector: '#1', record_id: format === 'fasta' ? 'FastaRec' : 'GbRec', record_length: 10 }]
-});
-listRecords.destroy = () => { destroyed = true; };
-const pyodide = {
-  globals: { get: () => listRecords },
-  FS: {
-    unlink: (path) => {
-      if (!stagedPaths.delete(path)) throw new Error('missing');
-      unlinkedPaths.push(path);
-    }
-  }
-};
+let sequenceHelperPayload = null;
 const discovered = await discoverSequenceRecords({
-  file: { name: 'records.fa' },
-  format: 'fasta',
-  pyodide,
-  writeFileToFs: async (_file, path) => {
-    stagedPaths.add(path);
-    return true;
+  file: {
+    name: 'records.fa',
+    arrayBuffer: async () => new TextEncoder().encode('>FastaRec\nACGT\n').buffer
   },
-  temporaryPath: '/records.fa'
+  format: 'fasta',
+  runHelperOperation: async (_operation, payload) => {
+    sequenceHelperPayload = payload;
+    return {
+      result: {
+        records: [{ selector: '#1', record_id: 'FastaRec', record_length: 10 }]
+      }
+    };
+  }
 });
 assert.equal(discovered[0].recordId, 'FastaRec');
-assert.deepEqual(unlinkedPaths, ['/records.fa']);
-assert.equal(destroyed, true);
-assert.equal(stagedPaths.size, 0);
+assert.equal(sequenceHelperPayload.files[0].role, 'source');
+assert.equal(sequenceHelperPayload.files[0].bytes instanceof ArrayBuffer, true);
 
-const pairedPaths = new Set();
+let pairedHelperPayload = null;
 const paired = await discoverGffFastaRecords({
-  gffFile: { name: 'records.gff' },
-  fastaFile: { name: 'records.fa' },
-  pyodide: {
-    globals: {
-      get: (name) => {
-        assert.equal(name, 'list_gff_fasta_records');
-        return () => JSON.stringify({
-          records: [{ selector: '#1', record_id: 'GffOwned', record_length: 25 }]
-        });
+  gffFile: {
+    name: 'records.gff',
+    arrayBuffer: async () => new TextEncoder().encode('##gff-version 3\n').buffer
+  },
+  fastaFile: {
+    name: 'records.fa',
+    arrayBuffer: async () => new TextEncoder().encode('>GffOwned\nACGT\n').buffer
+  },
+  runHelperOperation: async (_operation, payload) => {
+    pairedHelperPayload = payload;
+    return {
+      result: {
+        records: [{ selector: '#1', record_id: 'GffOwned', record_length: 25 }]
       }
-    },
-    FS: { unlink: (path) => pairedPaths.delete(path) }
-  },
-  writeFileToFs: async (_file, path) => {
-    pairedPaths.add(path);
-    return true;
-  },
-  gffTemporaryPath: '/records.gff',
-  fastaTemporaryPath: '/records.fasta'
+    };
+  }
 });
 assert.equal(paired[0].recordId, 'GffOwned');
-assert.equal(pairedPaths.size, 0);
+assert.deepEqual(pairedHelperPayload.files.map(({ role }) => role), ['gff', 'fasta']);
 
-const failedPaths = new Set();
 await assert.rejects(
   discoverSequenceRecords({
-    file: { name: 'bad.gb' },
+    file: {
+      name: 'bad.gb',
+      arrayBuffer: async () => new TextEncoder().encode('bad').buffer
+    },
     format: 'genbank',
-    pyodide: {
-      globals: { get: () => () => JSON.stringify({ error: 'parse failed' }) },
-      FS: { unlink: (path) => failedPaths.delete(path) }
-    },
-    writeFileToFs: async (_file, path) => {
-      failedPaths.add(path);
-      return true;
-    },
-    temporaryPath: '/bad.gb'
+    runHelperOperation: async () => ({ result: { error: 'parse failed' } })
   }),
   /parse failed/
 );
-assert.equal(failedPaths.size, 0);
 
 const ref = (value) => ({ value });
 const fileA = { name: 'a.gb' };
@@ -180,7 +156,6 @@ const fileB = { name: 'b.gb' };
 const state = {
   mode: ref('linear'),
   lInputType: ref('gb'),
-  pyodideReady: ref(true),
   linearSeqs: [{ uid: 'row-a', gb: fileA, fasta: null, region_record_id: '' }]
 };
 const pending = new Map();
@@ -192,8 +167,7 @@ const controller = createLinearRecordSelector({
   logger: { warn: () => {} }
 });
 
-state.pyodideReady.value = false;
-await controller.refresh();
+const loadingRefresh = controller.refresh();
 assert.deepEqual(controller.optionsFor(state.linearSeqs[0]), [
   { value: '', label: 'Loading records...', synthetic: false }
 ]);
@@ -202,7 +176,8 @@ assert.deepEqual(controller.optionsFor(state.linearSeqs[0]), [
   { value: 'LegacyRec', label: 'Loading records...', synthetic: true }
 ]);
 state.linearSeqs[0].region_record_id = '';
-state.pyodideReady.value = true;
+pending.get(fileA)([{ selector: '#1', recordId: 'Initial', recordLength: 9 }]);
+await loadingRefresh;
 
 const firstRefresh = controller.refresh();
 state.linearSeqs[0].gb = fileB;
@@ -233,7 +208,6 @@ assert.equal(Object.hasOwn(controller.selectorStateByUid, 'row-a'), true);
 const errorState = {
   mode: ref('linear'),
   lInputType: ref('gb'),
-  pyodideReady: ref(true),
   linearSeqs: [{ uid: 'error-row', gb: null, fasta: null, region_record_id: 'LegacyRec' }]
 };
 const loggedErrors = [];
@@ -258,18 +232,12 @@ assert.equal(loggedErrors.length, 1);
 const lazyState = {
   mode: ref('linear'),
   lInputType: ref('gb'),
-  pyodideReady: ref(false),
   linearSeqs: [{ uid: 'lazy-row', gb: fileA, fasta: null, region_record_id: '' }]
 };
-let ensureRuntimeCalls = 0;
 let lazyReaderCalls = 0;
 const lazyController = createLinearRecordSelector({
   state: lazyState,
   reactive: (value) => value,
-  ensureRuntime: async () => {
-    ensureRuntimeCalls += 1;
-    lazyState.pyodideReady.value = true;
-  },
   recordReader: async () => {
     lazyReaderCalls += 1;
     return [{ selector: '#1', recordId: 'Lazy', recordLength: 42 }];
@@ -278,14 +246,12 @@ const lazyController = createLinearRecordSelector({
 const lazyRefresh = lazyController.refresh();
 const duplicateLazyRefresh = lazyController.refresh();
 await Promise.all([lazyRefresh, duplicateLazyRefresh]);
-assert.equal(ensureRuntimeCalls, 1);
 assert.equal(lazyReaderCalls, 1);
 assert.equal(lazyController.optionsFor(lazyState.linearSeqs[0])[1].value, 'Lazy');
 
 const rollbackState = {
   mode: ref('linear'),
   lInputType: ref('gb'),
-  pyodideReady: ref(true),
   semanticFileWatchersSuppressed: ref(false),
   sessionImportRollbackInProgress: ref(false),
   linearSeqs: [{

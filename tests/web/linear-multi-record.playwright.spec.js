@@ -829,7 +829,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
     null,
     { timeout: 180000 }
   );
@@ -946,7 +946,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
     null,
     { timeout: 180000 }
   );

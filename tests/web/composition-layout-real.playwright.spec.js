@@ -15,12 +15,12 @@ const postDragLegendCaption = [
 ].join(' ');
 const legendColor = '#336699';
 
-const openApp = async (page, { waitForRenderer = true } = {}) => {
+const openApp = async (page, { waitForPalette = true } = {}) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  if (waitForRenderer) {
+  if (waitForPalette) {
     await page.waitForFunction(
-      () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+      () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
       null,
       { timeout: 180000 }
     );

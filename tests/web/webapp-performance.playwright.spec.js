@@ -39,7 +39,7 @@ const openApp = async (page) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
     null,
     { timeout: 180_000 }
   );
@@ -57,7 +57,7 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
     previewMounts: [],
     featureIndexBuilds: [],
     featureHandlerSetups: [],
-    mainThreadPyodideInitializations: 0,
+    mainThreadPyodideLoaderPresent: typeof window.loadPyodide === 'function',
     longTasks: [],
     reset() {
       this.sanitizeCalls.length = 0;
@@ -67,7 +67,6 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
       this.previewMounts.length = 0;
       this.featureIndexBuilds.length = 0;
       this.featureHandlerSetups.length = 0;
-      this.mainThreadPyodideInitializations = 0;
       this.longTasks.length = 0;
       if (window.__GBDRAW_TEST_HOOKS__) {
         window.__GBDRAW_TEST_HOOKS__.historyDiagnostics.length = 0;
@@ -137,12 +136,6 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
       probe.featureHandlerSetups.push({ rootId: rootId(this) });
     }
     return originalAddEventListener.call(this, type, listener, options);
-  };
-
-  const originalLoadPyodide = window.loadPyodide;
-  window.loadPyodide = async function instrumentedLoadPyodide(...args) {
-    probe.mainThreadPyodideInitializations += 1;
-    return originalLoadPyodide.apply(this, args);
   };
 
   const recordPreviewRoot = (root) => {
@@ -253,7 +246,7 @@ const getProbeSnapshot = (page) => page.evaluate(() => {
     previewMounts: [...probe.previewMounts],
     featureIndexBuilds: [...probe.featureIndexBuilds],
     featureHandlerSetups: [...probe.featureHandlerSetups],
-    mainThreadPyodideInitializations: probe.mainThreadPyodideInitializations,
+    mainThreadPyodideLoaderPresent: probe.mainThreadPyodideLoaderPresent,
     longTasks: [...probe.longTasks],
     historyDiagnostics: [
       ...(window.__GBDRAW_TEST_HOOKS__?.historyDiagnostics || [])
@@ -280,8 +273,11 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
   expect(restoreProbe.previewMounts, 'the committed WSSV Result must mount once').toHaveLength(1);
   expect(restoreProbe.featureIndexBuilds, 'the feature DOM index must be built once per root').toHaveLength(1);
   expect(restoreProbe.featureHandlerSetups, 'delegated handlers must be installed once per root').toHaveLength(1);
-  expect(restoreProbe.mainThreadPyodideInitializations).toBe(0);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.pyodideReady)).toBe(false);
+  expect(restoreProbe.mainThreadPyodideLoaderPresent).toBe(false);
+  expect(await page.evaluate(() => Object.prototype.hasOwnProperty.call(
+    window.__GBDRAW_APP__,
+    'pyodideReady'
+  ))).toBe(false);
 
   await resetProbe(page);
   const timing = await page.evaluate(async () => {
@@ -409,7 +405,7 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
       mounts: restoreProbe.previewMounts.length,
       featureIndexBuilds: restoreProbe.featureIndexBuilds.length,
       featureHandlerSetups: restoreProbe.featureHandlerSetups.length,
-      mainThreadPyodideInitializations: restoreProbe.mainThreadPyodideInitializations
+      mainThreadPyodideLoaderPresent: restoreProbe.mainThreadPyodideLoaderPresent
     },
     edits: {
       beginMs: timing.beginMs,

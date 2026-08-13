@@ -42,7 +42,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
     null,
     { timeout: 180000 }
   );
@@ -169,7 +169,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
+    () => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0,
     null,
     { timeout: 180000 }
   );

@@ -165,29 +165,45 @@ test('Worker construction and the diagram-generation client have explicit owners
   assert.deepEqual(importersOf('services/diagram-generation.js'), [
     'app/app-setup.js',
     'app/feature-metadata-extraction.js',
+    'app/legend/entry-actions.js',
+    'app/record-discovery.js',
+    'app/results.js',
     'app/run-analysis.js'
   ]);
 });
 
-test('Pyodide initialization remains on its explicit main and Worker owners', () => {
+test('Pyodide initialization and helper execution are Worker-only', () => {
   assert.deepEqual(
     occurrenceOwners(/\bloadPyodide\b/g),
-    new Map([
-      ['app/pyodide.js', 1],
-      ['workers/diagram-generation-worker.js', 2]
-    ])
+    new Map([['workers/diagram-generation-worker.js', 2]])
   );
   assert.deepEqual(
     occurrenceOwners(/\bloadPyodide\s*\(/g),
-    new Map([
-      ['app/pyodide.js', 1],
-      ['workers/diagram-generation-worker.js', 1]
-    ])
+    new Map([['workers/diagram-generation-worker.js', 1]])
   );
   const reachable = reachableModules(APP_ENTRY);
   assert.deepEqual(
     [...occurrenceOwners(/\bloadPyodide\s*\(/g).keys()].filter((path) => reachable.has(path)),
-    ['app/pyodide.js']
+    []
+  );
+  assert.equal(productionSources.has('app/pyodide.js'), false);
+  assert.doesNotMatch(INDEX_HTML, /<script\b[^>]*\bsrc\s*=\s*['"][^'"]*pyodide\.js/i);
+  const mainThreadSource = [...productionSources]
+    .filter(([path]) => reachable.has(path))
+    .map(([, source]) => source)
+    .join('\n');
+  assert.doesNotMatch(mainThreadSource, /\bcreatePyodideManager\b|\bgetPyodide\b|\bensurePyodide\b/);
+  assert.doesNotMatch(
+    mainThreadSource,
+    /\bloadPyodide\s*\(|\bPYTHON_HELPERS\b|\brunPython(?:Async)?\s*\(|\.globals\.get\s*\(/
+  );
+  assert.match(
+    productionSources.get('services/diagram-worker-protocol.js'),
+    /DIAGRAM_HELPER_OPERATIONS\s*=\s*Object\.freeze/
+  );
+  assert.match(
+    productionSources.get('workers/diagram-generation-worker.js'),
+    /HELPER_OPERATION_SPECS[\s\S]+assertAllowedPayloadKeys/
   );
 });
 

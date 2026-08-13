@@ -39,7 +39,7 @@ import { createFeatureSelection } from './feature-selection.js';
 import { createPreviewFeatureSearch } from './feature-search/preview-actions.js';
 import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
-import { createPyodideManager } from './pyodide.js';
+import { createPaletteLoader } from './palettes.js';
 import { createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
@@ -176,12 +176,10 @@ export const createSessionImportRollbackState = ({
 
 export const createAppSetup = () => {
   const {
-    pyodideReady,
     diagramGenerationWorkerReady,
     processing,
     processingStatus,
     generationCancelRequested,
-    loadingStatus,
     errorLog,
     sessionTitle,
     results,
@@ -866,30 +864,21 @@ export const createAppSetup = () => {
       .map((entry) => [String(entry.edgeKey), entry])
   ));
 
-  const pyodideManager = createPyodideManager({ state });
-  const getPyodide = pyodideManager.getPyodide;
+  const paletteLoader = createPaletteLoader({ state });
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
-    ensureRuntime: pyodideManager.initPyodide,
-    recordReader: ({ inputType, primaryFile, pairedFile, temporaryPathPrefix }) => (
+    recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
             gffFile: primaryFile,
             fastaFile: pairedFile,
-            readText: readFileText,
-            pyodide: getPyodide(),
-            writeFileToFs: pyodideManager.writeFileToFs,
-            gffTemporaryPath: `${temporaryPathPrefix}.gff`,
-            fastaTemporaryPath: `${temporaryPathPrefix}.fasta`
+            readText: readFileText
           })
         : discoverSequenceRecords({
             file: primaryFile,
             format: 'genbank',
-            readText: readFileText,
-            pyodide: getPyodide(),
-            writeFileToFs: pyodideManager.writeFileToFs,
-            temporaryPath: `${temporaryPathPrefix}.gb`
+            readText: readFileText
           })
     )
   });
@@ -1016,8 +1005,6 @@ export const createAppSetup = () => {
 
   const legendActions = createLegendManager({
     state,
-    getPyodide,
-    ensurePyodide: pyodideManager.initPyodide,
     history,
     previewRuntime
   });
@@ -1844,9 +1831,6 @@ export const createAppSetup = () => {
     getLosatPairDefaultName
   } = createRunAnalysis({
     state,
-    getPyodide,
-    ensurePyodide: pyodideManager.initPyodide,
-    writeFileToFs: pyodideManager.writeFileToFs,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
       serializeActiveRenderFiles(state.mode.value, state, {
         comparisonPlan: comparisonPlanSnapshot,
@@ -1867,9 +1851,6 @@ export const createAppSetup = () => {
   });
   const resultsManager = createResultsManager({
     state,
-    getPyodide,
-    ensurePyodide: pyodideManager.initPyodide,
-    writeFileToFs: pyodideManager.writeFileToFs,
     legendLayout,
     rerenderLinearDefinitions: runLabelReflow
   });
@@ -1890,7 +1871,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     previewRuntime,
-    preparePaletteDefinitions: pyodideManager.loadPaletteAsset
+    preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
   const refreshLoadedSessionSvgLayout = async () => {
@@ -2997,12 +2978,10 @@ export const createAppSetup = () => {
   };
 
   return {
-    pyodideReady,
     diagramGenerationWorkerReady,
     processing,
     processingStatus,
     generationCancelRequested,
-    loadingStatus,
     errorLog,
     errorDisplay,
     sessionTitle,

@@ -1255,7 +1255,8 @@ def _run_python_adapter() -> int:
                 page.wait_for_function("() => window.__GBDRAW_APP__")
                 _import_session(page, before_generate_path, checks)
                 page.wait_for_function(
-                    "() => window.__GBDRAW_APP__?.pyodideReady === true", timeout=240_000
+                    "() => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0",
+                    timeout=240_000,
                 )
                 legacy_ui_before_cancel = _migration_ui_snapshot(page)
                 canceled_legacy_run = _cancel_during_render(page)
@@ -1310,7 +1311,8 @@ def _run_python_adapter() -> int:
                 page.wait_for_function("() => window.__GBDRAW_APP__")
                 _import_session(page, migrated_path, checks)
                 page.wait_for_function(
-                    "() => window.__GBDRAW_APP__?.pyodideReady === true", timeout=240_000
+                    "() => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0",
+                    timeout=240_000,
                 )
                 _assert_telemetry(_generate(page), expected, checks)
                 second_layout = _inspect_layout(page)

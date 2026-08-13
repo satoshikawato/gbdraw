@@ -542,10 +542,7 @@ def wait_for_web_app_ready(page) -> None:
         () => {
           const app = window.__GBDRAW_APP__;
           if (!app) return false;
-          const status = String(app.loadingStatus || '');
-          return app.diagramGenerationWorkerReady === true ||
-            app.pyodideReady === true ||
-            status.startsWith('Startup Error:');
+          return Object.keys(app.paletteDefinitions || {}).length > 0;
         }
         """,
         timeout=120000,

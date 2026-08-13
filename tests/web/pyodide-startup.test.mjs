@@ -1,25 +1,159 @@
 import assert from 'node:assert/strict';
 
-import { createPyodideManager } from '../../gbdraw/web/js/app/pyodide.js';
-import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
-import {
-  DIAGRAM_ENGINE_STARTUP_MESSAGE
-} from '../../gbdraw/web/js/services/runtime-capabilities.js';
-
 globalThis.location = { href: 'https://example.test/gbdraw/web/' };
+delete globalThis.loadPyodide;
 
-const startupError = new Error(
-  'Missing packaged asset: gbdraw browser wheel. Rebuild and redeploy.'
+const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
+  '../../gbdraw/web/js/services/runtime-capabilities.js'
 );
-globalThis.loadPyodide = async () => {
-  throw startupError;
-};
 
+class FakeWorker {
+  static instances = [];
+  static deferHelpers = false;
+
+  constructor() {
+    this.listeners = new Map();
+    this.messages = [];
+    this.transferLists = [];
+    this.terminated = false;
+    FakeWorker.instances.push(this);
+  }
+
+  addEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || new Set();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  emit(data) {
+    this.listeners.get('message')?.forEach((listener) => listener({ data }));
+  }
+
+  postMessage(message, transfer = []) {
+    this.messages.push(message);
+    this.transferLists.push(transfer);
+    if (message.type === 'init') {
+      queueMicrotask(() => this.emit({
+        id: message.id,
+        type: 'init',
+        ok: true,
+        capabilities: structuredClone(EXPECTED_WEB_RUNTIME_CAPABILITIES)
+      }));
+      return;
+    }
+    if (message.type === 'helper') {
+      if (FakeWorker.deferHelpers) return;
+      queueMicrotask(() => this.emit({
+        requestId: message.requestId,
+        type: 'helper',
+        ok: true,
+        result: {
+          records: [{ selector: '#1', record_id: 'shared-worker', record_length: 4 }]
+        }
+      }));
+      return;
+    }
+    if (message.type === 'run') {
+      queueMicrotask(() => this.emit({
+        requestId: message.requestId,
+        type: 'run',
+        ok: true,
+        results: {
+          results: [{ name: 'shared.svg', content: '<svg></svg>' }],
+          metadata: {}
+        }
+      }));
+    }
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+}
+
+globalThis.Worker = FakeWorker;
+
+const {
+  DIAGRAM_HELPER_OPERATIONS,
+  disposeDiagramGenerationWorker,
+  runDiagramGeneration,
+  runDiagramHelperOperation
+} = await import('../../gbdraw/web/js/services/diagram-generation.js');
+
+await assert.rejects(
+  runDiagramHelperOperation('runArbitraryPython', {}),
+  /Unsupported diagram helper operation/
+);
+assert.equal(FakeWorker.instances.length, 0);
+const sourceBuffer = new TextEncoder().encode('>shared-worker\nACGT\n').buffer;
+const helper = await runDiagramHelperOperation(
+  DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
+  {
+    format: 'fasta',
+    files: [{ role: 'source', bytes: sourceBuffer }]
+  }
+);
+assert.equal(helper.result.records[0].record_id, 'shared-worker');
+const rendered = await runDiagramGeneration({ request: {}, resources: {} });
+assert.equal(rendered.results[0].name, 'shared.svg');
+
+const worker = FakeWorker.instances[0];
+assert.equal(FakeWorker.instances.length, 1);
+assert.equal(worker.messages.filter(({ type }) => type === 'init').length, 1);
+assert.equal(worker.messages.filter(({ type }) => type === 'helper').length, 1);
+assert.equal(worker.messages.filter(({ type }) => type === 'run').length, 1);
+assert.equal(worker.transferLists[1][0], sourceBuffer);
+
+await runDiagramHelperOperation(
+  DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV,
+  { entry: {}, identityManifest: {} }
+);
+await runDiagramGeneration({ request: {}, resources: {} });
+assert.equal(FakeWorker.instances.length, 1);
+assert.equal(worker.messages.filter(({ type }) => type === 'init').length, 1);
+FakeWorker.deferHelpers = true;
+const pendingHelperA = runDiagramHelperOperation(
+  DIAGRAM_HELPER_OPERATIONS.HYDRATE_PROTEIN_LOSAT_TSV,
+  { entry: {}, identityManifest: {} }
+);
+const pendingHelperB = runDiagramHelperOperation(
+  DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
+  { caption: 'pending', fontFamily: 'Arial', fontSize: 14 }
+);
+const rejectedA = assert.rejects(pendingHelperA, /disposed/);
+const rejectedB = assert.rejects(pendingHelperB, /disposed/);
+await Promise.resolve();
+await Promise.resolve();
+disposeDiagramGenerationWorker();
+await Promise.all([rejectedA, rejectedB]);
+assert.equal(worker.terminated, true);
+
+const { cloneFileBytesForTransfer } = await import(
+  '../../gbdraw/web/js/services/file-content-cache.js'
+);
+let fileReads = 0;
+const cachedFile = {
+  arrayBuffer: async () => {
+    fileReads += 1;
+    return new Uint8Array([1, 2, 3, 4]).buffer;
+  }
+};
+const transferredClone = await cloneFileBytesForTransfer(cachedFile);
+structuredClone(transferredClone, { transfer: [transferredClone] });
+assert.equal(transferredClone.byteLength, 0);
+assert.deepEqual(
+  Array.from(new Uint8Array(await cloneFileBytesForTransfer(cachedFile))),
+  [1, 2, 3, 4]
+);
+assert.equal(fileReads, 1);
+
+const { createPaletteLoader } = await import('../../gbdraw/web/js/app/palettes.js');
 const ref = (value) => ({ value });
-const loadingStatus = ref('');
-const state = {
-  pyodideReady: ref(false),
-  loadingStatus,
+const paletteState = {
   paletteDefinitions: ref({}),
   paletteNames: ref([]),
   selectedPalette: ref('default'),
@@ -30,74 +164,6 @@ const state = {
   pendingPaletteColors: ref({}),
   normalizePaletteColors: (value) => value,
   normalizePaletteDefinitions: (value) => value
-};
-const diagnostics = [];
-const originalConsoleError = console.error;
-console.error = (...args) => diagnostics.push(args);
-try {
-  const manager = createPyodideManager({ state });
-  assert.equal(await manager.initPyodide(), null);
-} finally {
-  console.error = originalConsoleError;
-}
-
-assert.equal(
-  loadingStatus.value,
-  `Startup Error: ${DIAGRAM_ENGINE_STARTUP_MESSAGE}`
-);
-assert.doesNotMatch(loadingStatus.value, /wheel|rebuild|redeploy/i);
-assert.equal(diagnostics.length, 1);
-assert.equal(diagnostics[0][0], 'Main-thread Pyodide startup failed.');
-assert.equal(diagnostics[0][1], startupError);
-
-const writes = [];
-const runtime = {
-  loadPackage: async () => {},
-  pyimport: () => ({ install: async () => {} }),
-  runPythonAsync: async () => {},
-  runPython: () => JSON.stringify({ default: { CDS: '#cccccc' } }),
-  FS: {
-    writeFile: (path, bytes) => writes.push({ path, bytes })
-  }
-};
-globalThis.fetch = async () => ({ ok: true, status: 200 });
-globalThis.loadPyodide = async () => runtime;
-const readyState = {
-  ...state,
-  pyodideReady: ref(false),
-  loadingStatus: ref(''),
-  paletteDefinitions: ref({}),
-  paletteNames: ref([]),
-  currentColors: ref({}),
-  appliedPaletteColors: ref({})
-};
-const readyManager = createPyodideManager({ state: readyState });
-assert.equal(await readyManager.initPyodide(), runtime);
-
-let reads = 0;
-const sourceBytes = new TextEncoder().encode('cached staging bytes');
-const file = {
-  async arrayBuffer() {
-    reads += 1;
-    return sourceBytes.slice().buffer;
-  }
-};
-await Promise.all([
-  readyManager.writeFileToFs(file, '/first.gb'),
-  readyManager.writeFileToFs(file, '/second.gb')
-]);
-const cachedBytes = await readFileBytes(file);
-assert.equal(reads, 1);
-assert.deepEqual(writes.map((entry) => entry.path), ['/first.gb', '/second.gb']);
-writes.forEach(({ bytes }) => {
-  assert.deepEqual(bytes, cachedBytes);
-  assert.notEqual(bytes, cachedBytes);
-});
-
-let paletteRuntimeStarts = 0;
-globalThis.loadPyodide = async () => {
-  paletteRuntimeStarts += 1;
-  return runtime;
 };
 globalThis.fetch = async () => ({
   ok: true,
@@ -111,17 +177,8 @@ globalThis.fetch = async () => ({
     }
   })
 });
-const paletteState = {
-  ...state,
-  pyodideReady: ref(false),
-  loadingStatus: ref(''),
-  paletteDefinitions: ref({}),
-  paletteNames: ref([]),
-  currentColors: ref({}),
-  appliedPaletteColors: ref({})
-};
-const paletteManager = createPyodideManager({ state: paletteState });
-await paletteManager.loadPaletteAsset();
-assert.equal(paletteRuntimeStarts, 0);
-assert.equal(paletteState.pyodideReady.value, false);
+await createPaletteLoader({ state: paletteState }).loadPaletteAsset();
+assert.equal(globalThis.loadPyodide, undefined);
 assert.equal(paletteState.currentColors.value.repeat_region, '#d3d3d3');
+
+console.log('single Worker Pyodide startup tests passed');
