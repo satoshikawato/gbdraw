@@ -9,12 +9,21 @@ const roots = [
   resolve(repoRoot, 'tests/web'),
   resolve(repoRoot, 'tools'),
   resolve(repoRoot, 'docs/capture'),
-  resolve(repoRoot, 'gbdraw/web/gallery/tutorials')
+  resolve(repoRoot, 'gbdraw/web/gallery/tutorials'),
+  resolve(repoRoot, 'gbdraw/web/js')
 ];
+const standaloneSources = [resolve(repoRoot, 'gbdraw/web/index.html')];
 const sourceExtensions = new Set(['.cjs', '.js', '.json', '.mjs', '.py']);
 const workerFieldPrefix = 'diagramGeneration' + 'Worker';
 const retiredWorkerFields = [`${workerFieldPrefix}Status`, `${workerFieldPrefix}Error`];
 const workerReadyField = `${workerFieldPrefix}Ready`;
+const workerReadyAuthority = new RegExp([
+  `(?:\\.|\\?\\.)\\s*${workerReadyField}\\b`,
+  `\\b${workerReadyField}\\b\\s*(?:=|:|\\?|&&|\\|\\||===?|!==?)`,
+  `\\b(?:if|while)\\s*\\([^)]*\\b${workerReadyField}\\b`,
+  `\\breturn\\s+${workerReadyField}\\b`,
+  `\\b(?:v-if|v-show)\\s*=\\s*["'][^"']*\\b${workerReadyField}\\b`
+].join('|'), 'g');
 
 const sourceFiles = (directory) => readdirSync(directory, { withFileTypes: true })
   .flatMap((entry) => {
@@ -97,7 +106,7 @@ const extractCall = (source, openParenthesis) => {
 };
 
 const violations = [];
-for (const path of roots.flatMap(sourceFiles)) {
+for (const path of [...roots.flatMap(sourceFiles), ...standaloneSources]) {
   const source = readFileSync(path, 'utf8');
   const label = relative(repoRoot, path);
   for (const retiredField of retiredWorkerFields) {
@@ -108,10 +117,19 @@ for (const path of roots.flatMap(sourceFiles)) {
     }
   }
 
-  const retiredDefinition = new RegExp(`\\bdef\\s+wait_for_${'worker'}\\s*\\(`, 'g');
+  const retiredDefinition = new RegExp([
+    `\\b(?:def|function)\\s+wait_for_${'worker'}\\s*\\(`,
+    `\\b(?:const|let|var)\\s+wait_for_${'worker'}\\s*=`
+  ].join('|'), 'g');
   for (const match of source.matchAll(retiredDefinition)) {
     violations.push(
       `${label}:${lineNumberAt(source, match.index)} defines retired wait_for_${'worker'}()`
+    );
+  }
+
+  for (const match of source.matchAll(workerReadyAuthority)) {
+    violations.push(
+      `${label}:${lineNumberAt(source, match.index)} uses ${workerReadyField} as readiness authority`
     );
   }
 
