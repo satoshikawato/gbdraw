@@ -66,6 +66,7 @@ const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
 );
 
 const workerResponses = [];
+const workerHelperResponses = [];
 const workerMessages = [];
 
 class AuditSimplePathWorker {
@@ -107,6 +108,16 @@ class AuditSimplePathWorker {
         requestId: message.requestId,
         ok: true,
         results: structuredClone(response)
+      }));
+      return;
+    }
+    if (message.type === 'helper') {
+      const response = workerHelperResponses.shift();
+      if (!response) throw new Error('missing helper worker response');
+      Promise.resolve(response).then((payload) => this.emit('message', {
+        type: 'helper',
+        requestId: message.requestId,
+        ...structuredClone(payload)
       }));
       return;
     }
@@ -242,6 +253,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     type: 'text/plain',
     lastModified: 7
   });
+  const fallbackPrimary = new AuditFile(['record parser fallback'], 'fallback.gb', {
+    type: 'application/octet-stream',
+    lastModified: 8
+  });
   const inactive = new AuditInactiveFile(['unused'], 'inactive.dat');
 
   state.mode.value = 'circular';
@@ -290,10 +305,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     region_reverse: false
   });
 
-  let ensurePyodideCalls = 0;
-  let ensurePyodideImpl = async () => {
-    throw new Error('simple render must not initialize Pyodide');
-  };
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
   let cancelDuringCandidate = false;
@@ -301,14 +312,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   runner = createRunAnalysis({
     ...generatedArtifactSnapshotOptions,
     state,
-    getPyodide: () => null,
-    ensurePyodide: async () => {
-      ensurePyodideCalls += 1;
-      return ensurePyodideImpl();
-    },
-    writeFileToFs: async () => {
-      throw new Error('simple render must not write through Pyodide');
-    },
     serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {
@@ -411,7 +414,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.processingStatus.value, 'Canceled.');
 
-  assert.equal(ensurePyodideCalls, 0);
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 1);
@@ -430,7 +432,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const readyResult = result('ready.svg', 'ready');
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
-  assert.equal(ensurePyodideCalls, 0);
   assert.equal(activePrimaryReads, 1);
 
   Object.assign(state.circularRecordDiscovery, {
@@ -440,20 +441,29 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
-  const primaryText = primary.text.bind(primary);
-  Object.defineProperty(primary, 'text', { value: undefined, configurable: true });
+  state.files.c_gb = fallbackPrimary;
   const workerRunCountBeforeDiscoveryFailure = workerMessages
     .filter(({ type }) => type === 'run')
     .length;
+  const workerHelperCountBeforeDiscoveryFailure = workerMessages
+    .filter(({ type }) => type === 'helper')
+    .length;
+  workerHelperResponses.push({
+    ok: false,
+    error: { name: 'Error', message: 'injected record discovery helper failure' }
+  });
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
-  assert.equal(ensurePyodideCalls, 1);
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'helper').length,
+    workerHelperCountBeforeDiscoveryFailure + 1
+  );
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
   );
   assert.match(
     state.errorLog.value?.summary || '',
-    /Could not start the record discovery helper/
+    /Could not read records from the circular input file/
   );
   assert.doesNotMatch(
     JSON.stringify(state.errorLog.value),
@@ -478,24 +488,32 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     primaryFile: null,
     pairedFile: null
   });
+  workerHelperResponses.push({
+    ok: false,
+    error: { name: 'Error', message: 'injected depth record discovery failure' }
+  });
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
-  assert.equal(ensurePyodideCalls, 2);
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
   );
 
   let releaseCoalescedDiscovery;
-  ensurePyodideImpl = () => new Promise((resolve) => {
-    releaseCoalescedDiscovery = resolve;
-  });
+  workerHelperResponses.push(new Promise((resolve) => {
+    releaseCoalescedDiscovery = () => resolve({
+      ok: true,
+      result: {
+        records: [{ selector: '#1', record_id: 'audit', record_length: 10 }]
+      }
+    });
+  }));
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
   });
   const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
   const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
   assert.equal(firstCoalescedDiscovery, secondCoalescedDiscovery);
-  assert.equal(ensurePyodideCalls, 3);
+  await Promise.resolve();
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
 
@@ -512,11 +530,16 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     pairedFile: null
   });
   let releaseDiscovery;
-  ensurePyodideImpl = () => new Promise((resolve) => {
-    releaseDiscovery = resolve;
-  });
+  workerHelperResponses.push(new Promise((resolve) => {
+    releaseDiscovery = () => resolve({
+      ok: true,
+      result: {
+        records: [{ selector: '#1', record_id: 'audit', record_length: 10 }]
+      }
+    });
+  }));
   const canceledRun = runner.runAnalysis();
-  assert.equal(ensurePyodideCalls, 4);
+  await Promise.resolve();
   await runner.cancelRunAnalysis();
   releaseDiscovery();
   assert.deepEqual(await canceledRun, { status: 'canceled' });
@@ -528,7 +551,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
 
   state.form.multi_record_canvas = true;
-  state.files.c_gb = primary;
+  state.files.c_gb = fallbackPrimary;
   state.adv.multi_record_positions.splice(
     0,
     state.adv.multi_record_positions.length,
@@ -541,10 +564,13 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   }];
   state.semanticFileWatchersSuppressed.value = false;
   state.sessionImportRollbackInProgress.value = false;
-  let rejectStaleDiscovery;
-  ensurePyodideImpl = () => new Promise((_resolve, reject) => {
-    rejectStaleDiscovery = reject;
-  });
+  let releaseStaleDiscovery;
+  workerHelperResponses.push(new Promise((resolve) => {
+    releaseStaleDiscovery = () => resolve({
+      ok: false,
+      error: { name: 'Error', message: 'injected restored-file reparse failure' }
+    });
+  }));
   const staleDiscovery = runner.refreshCircularRecordOrder();
   await Promise.resolve();
   const discoveryStateBeforeRollback = {
@@ -554,12 +580,11 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   };
   state.semanticFileWatchersSuppressed.value = true;
   await runner.refreshCircularRecordOrder({ suppress: true });
-  rejectStaleDiscovery(new Error('injected restored-file reparse failure'));
+  releaseStaleDiscovery();
   await staleDiscovery;
   assert.deepEqual(state.circularRecordList.value, discoveryStateBeforeRollback.records);
   assert.deepEqual(state.adv.multi_record_positions, discoveryStateBeforeRollback.positions);
   assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
-  Object.defineProperty(primary, 'text', { value: primaryText, configurable: true });
   state.semanticFileWatchersSuppressed.value = false;
 });
 
@@ -725,8 +750,6 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(comparisonPlanSnapshot.mode, 'none');
   assert.deepEqual(comparisonPlanSnapshot.edges, []);
 
-  let ensurePyodideCalls = 0;
-  let pyodideWrites = 0;
   let losatCalls = 0;
   let annotationValidationCalls = 0;
   let annotationValidationError = '';
@@ -747,15 +770,6 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = createRunAnalysis({
     ...generatedArtifactSnapshotOptions,
     state,
-    getPyodide: () => null,
-    ensurePyodide: async () => {
-      ensurePyodideCalls += 1;
-      throw new Error('mode none must not initialize Pyodide');
-    },
-    writeFileToFs: async () => {
-      pyodideWrites += 1;
-      throw new Error('mode none must not stage LOSAT input through Pyodide');
-    },
     serializeCanonicalFiles: (snapshot, recordCatalog) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
@@ -809,8 +823,6 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);
   assert.equal(serializedRecordCatalog, preparedRecordCatalog);
-  assert.equal(ensurePyodideCalls, 0);
-  assert.equal(pyodideWrites, 0);
   assert.equal(losatCalls, 0);
   assert.equal(dormantRawCache.probes, 0);
   assert.equal(dormantDerivedCache.probes, 0);

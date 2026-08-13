@@ -1,9 +1,6 @@
 export const DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE =
   'The diagram engine is incompatible with this Web app. Reload the page; if the problem persists, contact the site administrator.';
 
-export const DIAGRAM_ENGINE_STARTUP_MESSAGE =
-  'The diagram engine could not start. Reload the page; if the problem persists, contact the site administrator.';
-
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
   renderProtocol: 2,

@@ -21,7 +21,7 @@ from config import (
     FIRST_LINEAR_LABEL_RULE_SIZE,
     GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES,
     WEB_ROOT,
-    WORKER_READY_TIMEOUT_MS,
+    PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.how_to.nucleotide_comparisons import (
     CIRCULAR_RING_LABELS,
@@ -39,7 +39,7 @@ from flows.web_capture import (
     capture_screenshot,
     generate_and_inspect,
     open_browser_capture,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -202,7 +202,7 @@ def capture_gui_precomputed_circular_rings(
     screenshot_bytes: dict[str, int] = {}
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         circular = page.get_by_role("button", name="Circular", exact=True)
         circular.click()
         expect(circular).to_have_attribute("aria-pressed", "true")
@@ -334,7 +334,7 @@ def capture_gui_precomputed_circular_rings(
         download_report = _assert_circular_download(svg_path, expected_ring_count=3)
 
         first_match = page.get_by_role("button", name="Pairwise match 1", exact=True)
-        expect(first_match).to_be_visible(timeout=WORKER_READY_TIMEOUT_MS)
+        expect(first_match).to_be_visible(timeout=PYTHON_OPERATION_TIMEOUT_MS)
         first_match.focus()
         first_match.press("Enter")
         popup = page.get_by_role("dialog", name="Pairwise match details", exact=True)

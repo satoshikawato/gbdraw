@@ -5,7 +5,6 @@ try:
     import tomllib
 except ImportError:
     import tomli as tomllib
-from importlib import resources
 import json
 import traceback
 from gbdraw.web_support.feature_metadata import (
@@ -75,13 +74,6 @@ def _is_blank_or_js_nullish(value):
         return str(value).strip().lower() in {"", "null", "undefined", "none"}
     except Exception:
         return False
-
-def get_palettes_json():
-    try:
-        with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as fh:
-            return json.dumps(tomllib.load(fh))
-    except:
-        return "{}"
 
 def run_canonical_request_wrapper(request_json, resources_json, workspace):
     try:
@@ -1344,6 +1336,20 @@ def list_gff_fasta_records(gff_path, fasta_path):
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 
+def measure_legend_text_json(caption, font_family="Arial", font_size=14):
+    """Measure one legend caption with the packaged gbdraw font metrics."""
+    try:
+        from gbdraw.core.text import calculate_bbox_dimensions
+        width, _ = calculate_bbox_dimensions(
+            str(caption),
+            str(font_family or "Arial"),
+            float(font_size or 14),
+            72,
+        )
+        return json.dumps({"width": width})
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
 def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
     """Generate SVG elements for a single legend entry"""
     from xml.sax.saxutils import escape as xml_escape
@@ -1485,46 +1491,6 @@ def regenerate_definition_svgs(
         return json.dumps({"definitions": definitions})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
-
-def regenerate_definition_svg(
-    gb_path,
-    species=None,
-    strain=None,
-    plot_title=None,
-    font_size=None,
-    plot_title_font_size=None,
-    plot_title_position="none",
-    multi_record_canvas=False,
-    keep_full_definition_with_plot_title=False,
-):
-    """Backward-compatible single-record definition regeneration helper"""
-    result_json = regenerate_definition_svgs(
-        gb_path,
-        species=species,
-        strain=strain,
-        plot_title=plot_title,
-        font_size=font_size,
-        plot_title_font_size=plot_title_font_size,
-        plot_title_position=plot_title_position,
-        multi_record_canvas=multi_record_canvas,
-        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-    )
-    try:
-        payload = json.loads(result_json)
-    except Exception:
-        return result_json
-    if payload.get("error"):
-        return result_json
-    definitions = payload.get("definitions") or []
-    if not definitions:
-        return json.dumps({"error": "No definitions generated"})
-    first = definitions[0]
-    return json.dumps(
-        {
-            "svg": first.get("svg", ""),
-            "definition_group_id": first.get("definition_group_id", ""),
-        }
-    )
 
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""

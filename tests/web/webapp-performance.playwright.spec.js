@@ -1,5 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { join, resolve } = require('node:path');
+const {
+  assertSessionLoadLeftWorkerIdle,
+  openApp
+} = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const wssvSessionPath = join(
@@ -27,24 +31,6 @@ const percentile = (values, fraction) => {
 
 const median = (values) => percentile(values, 0.5);
 
-const openApp = async (page) => {
-  await page.addInitScript(() => {
-    window.__GBDRAW_TEST_HOOKS__ = {
-      historyDiagnostics: [],
-      onHistoryDiagnostic(detail) {
-        window.__GBDRAW_TEST_HOOKS__.historyDiagnostics.push({ ...(detail || {}) });
-      }
-    };
-  });
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
-    null,
-    { timeout: 180_000 }
-  );
-};
-
 const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
   const largeSvgThreshold = 1_000_000;
   const rootIds = new WeakMap();
@@ -57,7 +43,7 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
     previewMounts: [],
     featureIndexBuilds: [],
     featureHandlerSetups: [],
-    mainThreadPyodideInitializations: 0,
+    mainThreadPyodideLoaderPresent: typeof window.loadPyodide === 'function',
     longTasks: [],
     reset() {
       this.sanitizeCalls.length = 0;
@@ -67,7 +53,6 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
       this.previewMounts.length = 0;
       this.featureIndexBuilds.length = 0;
       this.featureHandlerSetups.length = 0;
-      this.mainThreadPyodideInitializations = 0;
       this.longTasks.length = 0;
       if (window.__GBDRAW_TEST_HOOKS__) {
         window.__GBDRAW_TEST_HOOKS__.historyDiagnostics.length = 0;
@@ -137,12 +122,6 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
       probe.featureHandlerSetups.push({ rootId: rootId(this) });
     }
     return originalAddEventListener.call(this, type, listener, options);
-  };
-
-  const originalLoadPyodide = window.loadPyodide;
-  window.loadPyodide = async function instrumentedLoadPyodide(...args) {
-    probe.mainThreadPyodideInitializations += 1;
-    return originalLoadPyodide.apply(this, args);
   };
 
   const recordPreviewRoot = (root) => {
@@ -253,7 +232,7 @@ const getProbeSnapshot = (page) => page.evaluate(() => {
     previewMounts: [...probe.previewMounts],
     featureIndexBuilds: [...probe.featureIndexBuilds],
     featureHandlerSetups: [...probe.featureHandlerSetups],
-    mainThreadPyodideInitializations: probe.mainThreadPyodideInitializations,
+    mainThreadPyodideLoaderPresent: probe.mainThreadPyodideLoaderPresent,
     longTasks: [...probe.longTasks],
     historyDiagnostics: [
       ...(window.__GBDRAW_TEST_HOOKS__?.historyDiagnostics || [])
@@ -267,11 +246,20 @@ test.describe.configure({ mode: 'serial' });
 
 test('WSSV restore and ordinary edits keep History and SVG work bounded', async ({ page }, testInfo) => {
   test.setTimeout(300_000);
+  await page.addInitScript(() => {
+    window.__GBDRAW_TEST_HOOKS__ = {
+      historyDiagnostics: [],
+      onHistoryDiagnostic(detail) {
+        window.__GBDRAW_TEST_HOOKS__.historyDiagnostics.push({ ...(detail || {}) });
+      }
+    };
+  });
   await openApp(page);
   await installBrowserProbe(page);
   await resetProbe(page);
 
   const restoreMs = await loadWssvSession(page);
+  await assertSessionLoadLeftWorkerIdle(page);
   const restoreProbe = await getProbeSnapshot(page);
   expect(restoreProbe.sanitizeCalls, 'WSSV must cross one sanitizer boundary').toHaveLength(1);
   expect(restoreProbe.parseCalls, 'WSSV must cross one full SVG parse boundary').toHaveLength(1);
@@ -280,8 +268,11 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
   expect(restoreProbe.previewMounts, 'the committed WSSV Result must mount once').toHaveLength(1);
   expect(restoreProbe.featureIndexBuilds, 'the feature DOM index must be built once per root').toHaveLength(1);
   expect(restoreProbe.featureHandlerSetups, 'delegated handlers must be installed once per root').toHaveLength(1);
-  expect(restoreProbe.mainThreadPyodideInitializations).toBe(0);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.pyodideReady)).toBe(false);
+  expect(restoreProbe.mainThreadPyodideLoaderPresent).toBe(false);
+  expect(await page.evaluate(() => Object.prototype.hasOwnProperty.call(
+    window.__GBDRAW_APP__,
+    'pyodideReady'
+  ))).toBe(false);
 
   await resetProbe(page);
   const timing = await page.evaluate(async () => {
@@ -409,7 +400,7 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
       mounts: restoreProbe.previewMounts.length,
       featureIndexBuilds: restoreProbe.featureIndexBuilds.length,
       featureHandlerSetups: restoreProbe.featureHandlerSetups.length,
-      mainThreadPyodideInitializations: restoreProbe.mainThreadPyodideInitializations
+      mainThreadPyodideLoaderPresent: restoreProbe.mainThreadPyodideLoaderPresent
     },
     edits: {
       beginMs: timing.beginMs,
@@ -428,7 +419,7 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
 });
 
 test('the browser SVG sanitizer retains its malicious-input security profile', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await openApp(page, { waitForPalette: false });
   await page.waitForFunction(() => window.DOMPurify?.sanitize);
   const sanitized = await page.evaluate(async () => {
     const { sanitizeSvgContent } = await import('/gbdraw/web/js/services/svg-sanitization.js');

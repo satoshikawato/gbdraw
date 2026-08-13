@@ -9,6 +9,10 @@ import {
   diffLegendIntents,
   SPECIFIC_COLOR_FILE_OWNER
 } from '../specific-color-rules.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  runDiagramHelperOperation
+} from '../../services/diagram-generation.js';
 
 const normalizedColor = (value) => String(value || '').trim().toLowerCase();
 
@@ -70,13 +74,10 @@ const setLegendEntryColor = (entryGroup, color) => {
 
 export const createLegendEntryActions = ({
   state,
-  getPyodide,
-  ensurePyodide = null,
   layoutActions,
   previewRuntime = null
 }) => {
   const {
-    pyodideReady,
     results,
     selectedResultIndex,
     svgContainer,
@@ -143,15 +144,7 @@ export const createLegendEntryActions = ({
     const shouldCommit = options.commit !== false;
     const shouldReflow = options.reflow !== false;
     console.log(`addLegendEntry called with caption="${caption}", color="${color}"`);
-    if (svgContainer.value && !pyodideReady.value && typeof ensurePyodide === 'function') {
-      await ensurePyodide();
-    }
-    if (!svgContainer.value || !pyodideReady.value) {
-      console.log(
-        `addLegendEntry early return: svgContainer=${!!svgContainer.value}, pyodideReady=${pyodideReady.value}`
-      );
-      return false;
-    }
+    if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
@@ -280,19 +273,14 @@ export const createLegendEntryActions = ({
     const newY = maxY + lineMargin;
 
     try {
-      const escapedCaption = caption.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      const escapedFontFamily = fontFamily.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const parser = new DOMParser();
 
-      const pyodide = getPyodide();
-      if (!pyodide) throw new Error('Pyodide not ready');
-      const widthResult = pyodide.runPython(`
-import json
-from gbdraw.core.text import calculate_bbox_dimensions
-width, _ = calculate_bbox_dimensions("${escapedCaption}", "${escapedFontFamily}", ${fontSize}, 72)
-json.dumps({"width": width})
-`);
-      const measuredWidth = Number(JSON.parse(widthResult).width);
+      const widthResponse = await runDiagramHelperOperation(
+        DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
+        { caption, fontFamily, fontSize }
+      );
+      if (widthResponse.result?.error) throw new Error(widthResponse.result.error);
+      const measuredWidth = Number(widthResponse.result?.width);
       if (!Number.isFinite(measuredWidth) || measuredWidth < 0) {
         throw new Error('Python returned an invalid legend text width.');
       }
@@ -382,12 +370,22 @@ json.dumps({"width": width})
           newY = groupMaxY + lineMargin;
         }
 
-        const pyodide = getPyodide();
-        if (!pyodide) throw new Error('Pyodide not ready');
-        const resultJson = pyodide.runPython(
-          `generate_legend_entry_svg("${escapedCaption}", "${color}", ${newY}, ${rectSize}, ${fontSize}, "${escapedFontFamily}", ${newX}, "${strokeColor}", ${strokeWidth})`
+        const entryResponse = await runDiagramHelperOperation(
+          DIAGRAM_HELPER_OPERATIONS.GENERATE_LEGEND_ENTRY_SVG,
+          {
+            caption,
+            color,
+            yOffset: newY,
+            rectSize,
+            fontSize,
+            fontFamily,
+            xOffset: newX,
+            strokeColor,
+            strokeWidth
+          }
         );
-        const result = JSON.parse(resultJson);
+        const result = entryResponse.result;
+        if (result?.error) throw new Error(result.error);
 
         const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         entryGroup.setAttribute('data-legend-key', caption);
@@ -649,10 +647,7 @@ json.dumps({"width": width})
   };
 
   const syncFileLegendEntries = async (intents, { previousFileIntents = [] } = {}) => {
-    if (svgContainer.value && !pyodideReady.value && typeof ensurePyodide === 'function') {
-      await ensurePyodide();
-    }
-    if (!svgContainer.value || !pyodideReady.value) {
+    if (!svgContainer.value) {
       return { add: [], update: [], remove: [], unchanged: [] };
     }
     const svg = svgContainer.value.querySelector('svg');

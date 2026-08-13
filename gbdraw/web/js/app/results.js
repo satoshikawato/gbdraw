@@ -3,6 +3,11 @@ import { COMPOSITION_ROLE_ATTRIBUTE } from './legend-layout/composition-actions.
 import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
 import { isMultiRecordCanvasSvg } from './record-groups.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  runDiagramHelperOperation
+} from '../services/diagram-generation.js';
+import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 
 const RECORD_DEFINITION_SELECTOR = 'g[data-gbdraw-role="record-definition"]';
 
@@ -46,32 +51,12 @@ const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
   return importedGroup;
 };
 
-const stageCircularDefinitionSource = async ({
-  inputType,
-  inputFile,
-  writeFileToFs,
-  path = '/definition-input.gb'
-}) => {
-  if (String(inputType || '').trim().toLowerCase() !== 'gb' || !inputFile) return null;
-  if (typeof writeFileToFs !== 'function') {
-    throw new Error('Circular definition input staging is unavailable.');
-  }
-  if (!await writeFileToFs(inputFile, path)) {
-    throw new Error('Circular definition input could not be staged.');
-  }
-  return path;
-};
-
 export const createResultsManager = ({
   state,
-  getPyodide,
-  ensurePyodide = null,
-  writeFileToFs = null,
   legendLayout,
   rerenderLinearDefinitions = null
 }) => {
   const {
-    pyodideReady,
     svgContent,
     mode,
     shouldDeferCircularPreviewUpdates,
@@ -92,8 +77,7 @@ export const createResultsManager = ({
     appliedPaletteColors,
     pendingPaletteName,
     pendingPaletteColors,
-    normalizePaletteColors,
-    normalizePaletteDefinitions
+    normalizePaletteColors
   } = state;
   const { refreshCompositionGeometry } = legendLayout;
 
@@ -103,15 +87,7 @@ export const createResultsManager = ({
     if (paletteDefinitions.value && Object.keys(paletteDefinitions.value).length > 0) {
       return paletteDefinitions.value;
     }
-
-    const pyodide = getPyodide();
-    if (!pyodide) return {};
-
-    const paletteJson = pyodide.runPython('get_palettes_json()');
-    const all = JSON.parse(paletteJson);
-    const normalized = normalizePaletteDefinitions(all || {});
-    paletteDefinitions.value = normalized;
-    return normalized;
+    return {};
   };
   const getPaletteBaseColors = (paletteName) => {
     const allPalettes = getPaletteMap();
@@ -252,22 +228,10 @@ export const createResultsManager = ({
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
 
     if (mode.value === 'circular') {
-      if (!pyodideReady.value && typeof ensurePyodide === 'function') {
-        await ensurePyodide();
-      }
-      if (!pyodideReady.value) return;
-      const pyodide = getPyodide();
-      if (!pyodide) return;
-
       const isMultiRecordCanvasOnSvg = isMultiRecordCanvasSvg(svg);
 
       try {
-        const gbPath = await stageCircularDefinitionSource({
-          inputType: cInputType.value,
-          inputFile: files?.c_gb,
-          writeFileToFs
-        });
-        if (!gbPath) return;
+        if (String(cInputType.value || '').trim().toLowerCase() !== 'gb' || !files?.c_gb) return;
         const species = form.species || '';
         const strain = form.strain || '';
         const hasDefinitionFontSize =
@@ -296,25 +260,24 @@ export const createResultsManager = ({
             : null;
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
 
-        let resultJson = '';
-        let regenerateDefinitionSvgs = null;
-        try {
-          regenerateDefinitionSvgs = pyodide.globals.get('regenerate_definition_svgs');
-          resultJson = regenerateDefinitionSvgs(
-            gbPath,
-            normalizedSpecies,
-            normalizedStrain,
-            normalizedPlotTitle === '' ? null : normalizedPlotTitle,
-            normalizedDefinitionFontSize,
-            normalizedPlotTitleFontSize,
-            normalizedPlotTitlePosition,
-            isMultiRecordCanvasOnSvg,
+        const response = await runDiagramHelperOperation(
+          DIAGRAM_HELPER_OPERATIONS.REGENERATE_DEFINITION_SVGS,
+          {
+            files: [{
+              role: 'source',
+              bytes: await cloneFileBytesForTransfer(files.c_gb)
+            }],
+            species: normalizedSpecies,
+            strain: normalizedStrain,
+            plotTitle: normalizedPlotTitle === '' ? null : normalizedPlotTitle,
+            definitionFontSize: normalizedDefinitionFontSize,
+            plotTitleFontSize: normalizedPlotTitleFontSize,
+            plotTitlePosition: normalizedPlotTitlePosition,
+            multiRecordCanvas: isMultiRecordCanvasOnSvg,
             keepFullDefinitionWithPlotTitle
-          );
-        } finally {
-          regenerateDefinitionSvgs?.destroy?.();
-        }
-        const result = JSON.parse(resultJson);
+          }
+        );
+        const result = response.result;
 
         if (result.error) {
           console.error('Definition update error:', result.error);

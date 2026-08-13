@@ -1481,6 +1481,18 @@ def test_offline_gui_initializes_without_external_network_requests() -> None:
 
 @pytest.mark.slow
 @pytest.mark.browser
+def test_offline_gui_generate_uses_one_lazy_diagram_worker() -> None:
+    _run_offline_gui_browser_contract("generate")
+
+
+@pytest.mark.slow
+@pytest.mark.browser
+def test_offline_gui_helper_then_render_reuses_one_diagram_worker() -> None:
+    _run_offline_gui_browser_contract("helper-before-render")
+
+
+@pytest.mark.slow
+@pytest.mark.browser
 def test_offline_gui_palette_preview_behavior() -> None:
     _run_offline_gui_browser_contract("palette-preview")
 

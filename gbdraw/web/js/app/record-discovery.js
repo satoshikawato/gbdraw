@@ -1,3 +1,9 @@
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  runDiagramHelperOperation
+} from '../services/diagram-generation.js';
+import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
+
 const normalizeRecordLength = (value) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
@@ -68,95 +74,58 @@ export const parseSequenceRecordText = (text, format) => {
   throw new Error(`Unsupported format: ${String(format)}.`);
 };
 
-const readRecordPayload = (pyodide, helperName, args) => {
-  const helper = pyodide.globals.get(helperName);
-  try {
-    if (typeof helper !== 'function') throw new Error('Record discovery helper is unavailable.');
-    const rawPayload = helper(...args);
-    return normalizeSequenceRecords(JSON.parse(String(rawPayload || '{}')));
-  } finally {
-    helper?.destroy?.();
-  }
-};
-
-const unlinkIfPresent = (pyodide, path) => {
-  try {
-    pyodide.FS.unlink(path);
-  } catch (_error) {
-    // The file may not have been staged when discovery fails early.
-  }
-};
-
 export const discoverSequenceRecords = async ({
   file,
   format,
   readText = null,
-  pyodide,
-  writeFileToFs,
-  temporaryPath
+  runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!file) throw new Error('A sequence file is required.');
-  let textError = null;
   const readSourceText = typeof readText === 'function'
     ? () => readText(file)
     : (typeof file.text === 'function' ? () => file.text() : null);
   if (readSourceText) {
     try {
       return parseSequenceRecordText(await readSourceText(), format);
-    } catch (error) {
-      textError = error;
+    } catch {
+      // The packaged Worker parser handles variants beyond the lightweight text fast path.
     }
   }
-  if (!pyodide) throw textError || new Error('Python environment is not ready.');
-  if (typeof writeFileToFs !== 'function') throw new Error('File staging is unavailable.');
-  if (!temporaryPath) throw new Error('A temporary path is required.');
-
-  try {
-    const staged = await writeFileToFs(file, temporaryPath);
-    if (!staged) throw new Error('Could not stage the sequence file.');
-    return readRecordPayload(pyodide, 'list_sequence_records', [temporaryPath, format]);
-  } finally {
-    unlinkIfPresent(pyodide, temporaryPath);
-  }
+  const response = await runHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS,
+    {
+      format,
+      files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(file) }]
+    }
+  );
+  return normalizeSequenceRecords(response.result);
 };
 
 export const discoverGffFastaRecords = async ({
   gffFile,
   fastaFile,
   readText = null,
-  pyodide,
-  writeFileToFs,
-  gffTemporaryPath,
-  fastaTemporaryPath
+  runHelperOperation = runDiagramHelperOperation
 }) => {
   if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
-  let textError = null;
   const readSourceText = typeof readText === 'function'
     ? () => readText(fastaFile)
     : (typeof fastaFile.text === 'function' ? () => fastaFile.text() : null);
   if (readSourceText) {
     try {
       return parseSequenceRecordText(await readSourceText(), 'fasta');
-    } catch (error) {
-      textError = error;
+    } catch {
+      // Let the Worker validate the paired GFF3/FASTA record set together.
     }
   }
-  if (!pyodide) throw textError || new Error('Python environment is not ready.');
-  if (typeof writeFileToFs !== 'function') throw new Error('File staging is unavailable.');
-  if (!gffTemporaryPath || !fastaTemporaryPath) throw new Error('Temporary paths are required.');
-
-  try {
-    const gffStaged = await writeFileToFs(gffFile, gffTemporaryPath);
-    if (!gffStaged) throw new Error('Could not stage the GFF3 file.');
-    const fastaStaged = await writeFileToFs(fastaFile, fastaTemporaryPath);
-    if (!fastaStaged) throw new Error('Could not stage the FASTA file.');
-    return readRecordPayload(
-      pyodide,
-      'list_gff_fasta_records',
-      [gffTemporaryPath, fastaTemporaryPath]
-    );
-  } finally {
-    unlinkIfPresent(pyodide, gffTemporaryPath);
-    unlinkIfPresent(pyodide, fastaTemporaryPath);
-  }
+  const response = await runHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.LIST_GFF_FASTA_RECORDS,
+    {
+      files: [
+        { role: 'gff', bytes: await cloneFileBytesForTransfer(gffFile) },
+        { role: 'fasta', bytes: await cloneFileBytesForTransfer(fastaFile) }
+      ]
+    }
+  );
+  return normalizeSequenceRecords(response.result);
 };

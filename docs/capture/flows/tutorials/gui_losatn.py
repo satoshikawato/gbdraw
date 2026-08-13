@@ -41,7 +41,7 @@ from flows.web_capture import (
     open_browser_capture,
     open_linear_comparison_disclosure,
     select_linear_losat_mode,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -109,7 +109,7 @@ def capture_gui_losatn(
 
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
 
         linear = page.get_by_role("button", name="Linear", exact=True)
         linear.click()

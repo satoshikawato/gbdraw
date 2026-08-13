@@ -2,6 +2,15 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const {
+  assertDiagramWorkerIdle,
+  assertSingleWorkerRun,
+  assertWorkerReuseAcrossHelperAndRender,
+  generateAndWaitForResult,
+  getDiagramWorkerActivity,
+  openApp,
+  waitForAppShell
+} = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const bgcSessionPath = join(repoRoot, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
@@ -10,37 +19,56 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
-test('diagram worker startup leaves the main helper runtime lazy', async ({ page }) => {
+test('diagram Worker startup leaves no main-thread Python runtime', async ({ page }) => {
   test.setTimeout(180000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(
-    () => (
-      window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true &&
-      Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0
-    ),
-    null,
-    { timeout: 180000 }
-  );
+  await openApp(page);
+  await assertDiagramWorkerIdle(page);
   expect(await page.evaluate(() => ({
-    pyodideReady: window.__GBDRAW_APP__.pyodideReady,
+    mainLoaderPresent: typeof window.loadPyodide === 'function',
+    mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+      window.__GBDRAW_APP__,
+      'pyodideReady'
+    ),
     repeatRegion: window.__GBDRAW_APP__.currentColors.repeat_region
   }))).toEqual({
-    pyodideReady: false,
+    mainLoaderPresent: false,
+    mainRuntimeStatePresent: false,
     repeatRegion: '#d3d3d3'
   });
 
-  await page.evaluate((genbankText) => {
-    const originalLoadPyodide = window.loadPyodide;
-    if (typeof originalLoadPyodide !== 'function') {
-      throw new Error('Main-thread Pyodide loader is unavailable.');
-    }
-    window.__GBDRAW_MAIN_PYODIDE_LOADS__ = 0;
-    window.loadPyodide = (...args) => {
-      window.__GBDRAW_MAIN_PYODIDE_LOADS__ += 1;
-      return originalLoadPyodide(...args);
-    };
+  const helperResult = await page.evaluate(async () => {
+    const {
+      DIAGRAM_HELPER_OPERATIONS,
+      runDiagramHelperOperation
+    } = await import('/gbdraw/web/js/services/diagram-generation.js');
+    const response = await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
+      { caption: 'Worker helper probe', fontFamily: 'Arial', fontSize: 14 }
+    );
+    return response.result;
+  });
+  expect(helperResult.width).toBeGreaterThan(0);
+  const helperOnlyActivity = await getDiagramWorkerActivity(page);
+  expect({
+    constructions: helperOnlyActivity.constructions,
+    initializations: helperOnlyActivity.initializations,
+    helpers: helperOnlyActivity.helpers,
+    runs: helperOnlyActivity.runs,
+    settledInitializations: helperOnlyActivity.settledInitializations,
+    settledHelpers: helperOnlyActivity.settledHelpers,
+    settledRuns: helperOnlyActivity.settledRuns
+  }).toEqual({
+    constructions: 1,
+    initializations: 1,
+    helpers: 1,
+    runs: 0,
+    settledInitializations: 1,
+    settledHelpers: 1,
+    settledRuns: 0
+  });
+
+  await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'circular';
     app.cInputType = 'gb';
@@ -48,27 +76,39 @@ test('diagram worker startup leaves the main helper runtime lazy', async ({ page
       type: 'text/plain',
       lastModified: 17
     });
+    await window.Vue.nextTick();
+    await app.refreshCircularRecordOrder();
   }, genbank);
-  await page.waitForTimeout(250);
   expect(await page.evaluate(() => ({
-    loadCalls: window.__GBDRAW_MAIN_PYODIDE_LOADS__,
-    pyodideReady: window.__GBDRAW_APP__.pyodideReady
+    mainLoaderPresent: typeof window.loadPyodide === 'function',
+    mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+      window.__GBDRAW_APP__,
+      'pyodideReady'
+    )
   }))).toEqual({
-    loadCalls: 0,
-    pyodideReady: false
+    mainLoaderPresent: false,
+    mainRuntimeStatePresent: false
   });
 
-  expect(await runDiagramWithDiagnostics(page)).toEqual({
+  const generated = await generateAndWaitForResult(page);
+  expect(generated).toMatchObject({
     result: { status: 'ok' },
     errorSummary: '',
-    errorDetails: []
+    errorDetails: [],
+    resultCount: 1,
+    committedResult: true
   });
+  await assertWorkerReuseAcrossHelperAndRender(page);
+  await assertSingleWorkerRun(page);
   expect(await page.evaluate(() => ({
-    loadCalls: window.__GBDRAW_MAIN_PYODIDE_LOADS__,
-    pyodideReady: window.__GBDRAW_APP__.pyodideReady
+    mainLoaderPresent: typeof window.loadPyodide === 'function',
+    mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(
+      window.__GBDRAW_APP__,
+      'pyodideReady'
+    )
   }))).toEqual({
-    loadCalls: 0,
-    pyodideReady: false
+    mainLoaderPresent: false,
+    mainRuntimeStatePresent: false
   });
 });
 
@@ -196,8 +236,7 @@ const runDiagramWithDiagnostics = async (page) => page.evaluate(async () => {
 });
 
 test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   await expect(page.getByLabel('GenBank/DDBJ File', { exact: true })).toHaveCount(1);
   await page.getByLabel('GFF3 + FASTA', { exact: true }).check();
@@ -208,8 +247,7 @@ test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async (
 });
 
 test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const showDepthCheckbox = page.locator('label:has-text("Show Depth") input[type="checkbox"]').first();
   await expect(showDepthCheckbox).toBeDisabled();
@@ -240,11 +278,7 @@ test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page })
 test('Linear Depth above Features generates with repeat_region underlays', async ({ page }) => {
   test.setTimeout(300000);
   const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.waitForFunction(() => (
-    window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true
-  ), null, { timeout: 180000 });
+  await openApp(page);
 
   const outcome = await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
@@ -359,8 +393,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
 });
 
 test('Linear depth add, clear, and remove keep global sparse columns aligned', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -509,8 +542,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
 });
 
 test('Linear custom slot panel and enable state preserve the explicit stack', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const result = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -579,8 +611,7 @@ test('Linear custom slot panel and enable state preserve the explicit stack', as
 });
 
 test('Custom Track disclosure and editable IDs preserve transient row identity in both modes', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -776,8 +807,7 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
 });
 
 test('Color value controls preserve Auto, None, and named colors', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -861,8 +891,7 @@ test('Color value controls preserve Auto, None, and named colors', async ({ page
 });
 
 test('Definition line colors preserve raw values and present named, Auto, and None states', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -937,12 +966,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     };
   });
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.pyodideReady = true;
-  });
-
+  await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
 
@@ -1065,8 +1089,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
 });
 
 test('Session preflight rejects invalid canonical data without resetting live state', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1336,8 +1359,7 @@ ORIGIN
     return JSON.parse(JSON.stringify(state.layoutPreferences));
   });
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ genbankText }) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'circular';
@@ -1488,7 +1510,7 @@ ORIGIN
   expect(exportedSession.config.adv).not.toHaveProperty('plot_title_position');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await waitForAppShell(page, { waitForPalette: false });
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
   const dialog = await dialogPromise;
@@ -1581,8 +1603,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     }));
   });
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   await page.evaluate(({ genbankText, nestedStyle }) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'circular';
@@ -1905,7 +1926,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   ).toEqual(styleOverride);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await waitForAppShell(page, { waitForPalette: false });
   await loadSession(initialPath);
   expect(await browserDraft()).toEqual(expectedDraft);
 
@@ -1971,7 +1992,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   expect(p3Draft(secondSession)).toEqual(expectedDraft);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await waitForAppShell(page, { waitForPalette: false });
   await loadSession(secondPath);
   expect(await browserDraft()).toEqual(expectedDraft);
   await page.evaluate(() => {
@@ -2014,8 +2035,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
 });
 
 test('Session commit failure restores the pre-import state', async ({ page }) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   const recordText = `LOCUS       ROLLBACK                    4 bp    DNA     linear   UNK 01-JAN-1980
 DEFINITION  Session rollback fixture.
@@ -2105,8 +2125,7 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
   test.setTimeout(240000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   await page.evaluate((genbankText) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
@@ -2239,8 +2258,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   const depthA = makeDepthTsv('BGC0000711', 30837, 10);
   const depthB = makeDepthTsv('BGC0000713', 31892, 50);
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
 
   await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
     const app = window.__GBDRAW_APP__;
@@ -2319,7 +2337,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   expect(savedSessionPath).toBeTruthy();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await waitForAppShell(page, { waitForPalette: false });
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
   const dialog = await dialogPromise;
@@ -2382,8 +2400,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   const depthA = makeDepthTsv('BGC0000708', 40579, 10);
   const depthB = makeDepthTsv('BGC0000709', 50466, 50);
 
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await openApp(page, { waitForPalette: false });
   await page.evaluate(({ genbankAText, genbankBText, depthAText, depthBText }) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'circular';
@@ -2463,7 +2480,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   expect(savedSessionPath).toBeTruthy();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await waitForAppShell(page, { waitForPalette: false });
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
   const dialog = await dialogPromise;
@@ -2540,12 +2557,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
 
 test('BGC session keeps restored feature metadata selectable in the preview', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.pyodideReady = true;
-  });
-
+  await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
   await page.waitForTimeout(250);
@@ -2616,12 +2628,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
 
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.pyodideReady = true;
-  });
-
+  await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
   await page.waitForTimeout(250);

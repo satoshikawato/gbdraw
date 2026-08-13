@@ -19,7 +19,7 @@ from flows.web_capture import (
     capture_screenshot,
     generate_and_inspect,
     open_browser_capture,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -759,7 +759,7 @@ def capture_gui_styling(
 
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _open_human_circular(page, STYLE_OUTPUT_PREFIX)
         species = page.get_by_label("Species", exact=True)
         species.fill("<i>Homo sapiens</i>")
@@ -895,7 +895,7 @@ def capture_gui_feature_presentation(
 
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _open_human_circular(page, PRESENTATION_OUTPUT_PREFIX)
         separate_strands = page.get_by_label("Separate Strands", exact=True)
         separate_strands.uncheck()

@@ -293,10 +293,118 @@ def _ensure_playwright_available() -> None:
 
 OFFLINE_GUI_BROWSER_CONTRACTS = (
     "offline-initialization",
+    "generate",
+    "helper-before-render",
     "palette-preview",
     "exports",
     "linear-losat",
 )
+
+
+DIAGRAM_WORKER_PROBE_INIT_SCRIPT = """
+(() => {
+  const activity = { constructions: 0, instances: [] };
+  window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ = activity;
+  const NativeWorker = window.Worker;
+  window.Worker = new Proxy(NativeWorker, {
+    construct(target, args) {
+      const worker = Reflect.construct(target, args, target);
+      const url = String(args[0] || '');
+      if (!url.includes('diagram-generation-worker.js')) return worker;
+
+      activity.constructions += 1;
+      const instance = {
+        id: activity.constructions,
+        url,
+        initializations: 0,
+        helpers: [],
+        runs: [],
+        settlements: [],
+        terminated: false
+      };
+      activity.instances.push(instance);
+      worker.addEventListener('message', (event) => {
+        const message = event.data || {};
+        if (!['init', 'helper', 'run'].includes(message.type)) return;
+        instance.settlements.push({
+          type: message.type,
+          ok: message.ok === true,
+          operation: String(message.operation || '')
+        });
+      });
+      const nativePostMessage = worker.postMessage.bind(worker);
+      worker.postMessage = (message, transfer) => {
+        if (message?.type === 'init') {
+          instance.initializations += 1;
+        } else if (message?.type === 'helper') {
+          instance.helpers.push({
+            operation: String(message.operation || ''),
+            requestId: String(message.requestId ?? '')
+          });
+        } else if (message?.type === 'run') {
+          instance.runs.push({ requestId: String(message.requestId ?? '') });
+        }
+        if (transfer === undefined) return nativePostMessage(message);
+        return nativePostMessage(message, transfer);
+      };
+      const nativeTerminate = worker.terminate.bind(worker);
+      worker.terminate = () => {
+        instance.terminated = true;
+        return nativeTerminate();
+      };
+      return worker;
+    }
+  });
+})();
+"""
+
+
+def _diagram_worker_activity(page) -> dict[str, object]:
+    return page.evaluate(
+        """
+        () => {
+          const activity = window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ || {};
+          const instances = Array.isArray(activity.instances) ? activity.instances : [];
+          const settlements = instances.flatMap((instance) => instance.settlements || []);
+          return {
+            constructions: Number(activity.constructions || 0),
+            initializations: instances.reduce(
+              (total, instance) => total + Number(instance.initializations || 0), 0
+            ),
+            helpers: instances.reduce(
+              (total, instance) => total + (instance.helpers?.length || 0), 0
+            ),
+            runs: instances.reduce(
+              (total, instance) => total + (instance.runs?.length || 0), 0
+            ),
+            settledInitializations: settlements.filter(({ type }) => type === 'init').length,
+            settledHelpers: settlements.filter(({ type }) => type === 'helper').length,
+            settledRuns: settlements.filter(({ type }) => type === 'run').length,
+            instances
+          };
+        }
+        """
+    )
+
+
+def _assert_diagram_worker_activity(
+    page,
+    expected: dict[str, int],
+    *,
+    label: str,
+) -> dict[str, object]:
+    activity = _diagram_worker_activity(page)
+    mismatches = {
+        key: {"expected": value, "actual": activity.get(key)}
+        for key, value in expected.items()
+        if activity.get(key) != value
+    }
+    if mismatches:
+        raise RuntimeError(
+            f"{label} diagram Worker lifecycle mismatch:\n"
+            f"{json.dumps({'mismatches': mismatches, 'activity': activity}, indent=2, sort_keys=True)}"
+        )
+    return activity
 
 
 def _wait_for_semantic_state(
@@ -557,6 +665,7 @@ def _run_browser_contract(contract: str) -> None:
                 f"Underlying error: {exc}"
             ) from exc
         context = browser.new_context(accept_downloads=True)
+        context.add_init_script(script=DIAGRAM_WORKER_PROBE_INIT_SCRIPT)
         external_requests: list[str] = []
 
         def route_handler(route):
@@ -582,14 +691,16 @@ def _run_browser_contract(contract: str) -> None:
             () => {
               const app = window.__GBDRAW_APP__;
               if (!app) return { appMounted: false };
+              const runtimeFields = [
+                'pyodide', 'pyodideReady', 'pyodideLoading', 'pyodideError', 'pyodideStatus'
+              ];
               return {
                 appMounted: true,
-                pyodideReady: app.pyodideReady,
-                paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length,
-                loadingStatus: app.loadingStatus,
-                diagramGenerationWorkerReady: app.diagramGenerationWorkerReady,
-                diagramGenerationWorkerStatus: app.diagramGenerationWorkerStatus,
-                diagramGenerationWorkerError: app.diagramGenerationWorkerError
+                mainLoaderPresent: typeof window.loadPyodide === 'function',
+                mainRuntimeFields: runtimeFields.filter(
+                  (field) => Object.prototype.hasOwnProperty.call(app, field)
+                ),
+                paletteDefinitionCount: Object.keys(app.paletteDefinitions || {}).length
               };
             }
         """
@@ -599,15 +710,7 @@ def _run_browser_contract(contract: str) -> None:
             () => {
               const app = window.__GBDRAW_APP__;
               if (!app) return false;
-              const loadingStatus = String(app.loadingStatus || '');
-              return (
-                (
-                  app.diagramGenerationWorkerReady === true &&
-                  Object.keys(app.paletteDefinitions || {}).length > 0
-                ) ||
-                loadingStatus.startsWith('Startup Error:') ||
-                Boolean(app.diagramGenerationWorkerError)
-              );
+              return Object.keys(app.paletteDefinitions || {}).length > 0;
             }
             """,
             timeout=120000,
@@ -615,17 +718,25 @@ def _run_browser_contract(contract: str) -> None:
             snapshot=startup_snapshot,
         )
         startup_state = page.evaluate(startup_snapshot)
-        if not startup_state["diagramGenerationWorkerReady"]:
+        if startup_state["mainLoaderPresent"] or startup_state["mainRuntimeFields"]:
             raise RuntimeError(
-                "GUI diagram engine failed offline: "
-                f"{startup_state['diagramGenerationWorkerStatus']} "
-                f"(error: {startup_state['diagramGenerationWorkerError']})"
+                "GUI exposed a forbidden main-thread Python runtime boundary: "
+                f"{startup_state}"
             )
         if startup_state["paletteDefinitionCount"] == 0:
             raise RuntimeError(
-                "GUI palettes failed to load offline: "
-                f"{startup_state['loadingStatus']}"
+                f"GUI palettes failed to load offline: {startup_state}"
             )
+        _assert_diagram_worker_activity(
+            page,
+            {
+                "constructions": 0,
+                "initializations": 0,
+                "helpers": 0,
+                "runs": 0,
+            },
+            label="Offline app shell",
+        )
 
         if contract == "offline-initialization":
             _finish_browser_contract(context, browser, external_requests, contract)
@@ -639,8 +750,50 @@ def _run_browser_contract(contract: str) -> None:
                 REPO_ROOT / "tests" / "test_inputs" / "SARS-CoV-1.gbk"
             ).read_text(encoding="utf-8")
             _verify_linear_losat(page, linear_left_gbk, linear_right_gbk)
+            _assert_diagram_worker_activity(
+                page,
+                {"constructions": 1, "initializations": 1, "runs": 1},
+                label="Offline Linear LOSAT generation",
+            )
             _finish_browser_contract(context, browser, external_requests, contract)
             return
+
+        if contract == "helper-before-render":
+            helper_result = page.evaluate(
+                """
+                async () => {
+                  const {
+                    DIAGRAM_HELPER_OPERATIONS,
+                    runDiagramHelperOperation
+                  } = await import('./js/services/diagram-generation.js');
+                  const response = await runDiagramHelperOperation(
+                    DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
+                    { caption: 'offline helper probe', fontFamily: 'Arial', fontSize: 14 }
+                  );
+                  return response?.result || null;
+                }
+                """
+            )
+            if not isinstance(helper_result, dict) or not isinstance(
+                helper_result.get("width"), (int, float)
+            ):
+                raise RuntimeError(
+                    "Offline helper operation did not settle with a measured width: "
+                    f"{helper_result!r}"
+                )
+            _assert_diagram_worker_activity(
+                page,
+                {
+                    "constructions": 1,
+                    "initializations": 1,
+                    "helpers": 1,
+                    "runs": 0,
+                    "settledInitializations": 1,
+                    "settledHelpers": 1,
+                    "settledRuns": 0,
+                },
+                label="Offline helper-only operation",
+            )
 
         circular_gbk = (
             REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"
@@ -691,8 +844,7 @@ def _run_browser_contract(contract: str) -> None:
               return {
                 run: window.__GBDRAW_OFFLINE_CONTRACT_RUN__ || null,
                 errorLog: app?.errorLog || '',
-                resultCount: Array.isArray(app?.results) ? app.results.length : 0,
-                loadingStatus: app?.loadingStatus || ''
+                resultCount: Array.isArray(app?.results) ? app.results.length : 0
               };
             }
             """,
@@ -716,6 +868,19 @@ def _run_browser_contract(contract: str) -> None:
             )
         if circular_state["resultCount"] < 1:
             raise RuntimeError("Circular offline generation produced no SVG results.")
+        activity = _assert_diagram_worker_activity(
+            page,
+            {"constructions": 1, "initializations": 1, "runs": 1, "settledRuns": 1},
+            label="Offline Circular generation",
+        )
+        if contract == "helper-before-render" and activity["helpers"] < 1:
+            raise RuntimeError(
+                "The helper-before-render scenario lost its settled helper operation: "
+                f"{activity}"
+            )
+        if contract in {"generate", "helper-before-render"}:
+            _finish_browser_contract(context, browser, external_requests, contract)
+            return
 
         if contract == "exports":
             _verify_exports(page)

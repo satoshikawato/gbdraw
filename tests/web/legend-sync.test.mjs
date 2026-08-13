@@ -9,6 +9,7 @@ globalThis.CSS = { escape: (value) => String(value) };
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-legend-sync-'));
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'app'), join(tempRoot, 'app'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services'), join(tempRoot, 'services'), { recursive: true });
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'config.js'), join(tempRoot, 'config.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 
 const {
@@ -198,11 +199,9 @@ const mockLegendEntry = (caption, color, x) => {
   legend.appendChild(featureLegend);
   svg.appendChild(legend);
 
-  let pyodideInitializations = 0;
   let dirtyMarks = 0;
   let layoutRefreshes = 0;
   const state = {
-    pyodideReady: ref(false),
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
     svgContainer: ref({ querySelector: () => svg }),
@@ -223,8 +222,6 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state,
-    getPyodide: () => null,
-    ensurePyodide: async () => { pyodideInitializations += 1; },
     layoutActions: {
       compactLegendEntries: () => {},
       reflowDualLegendLayout: () => { layoutRefreshes += 1; },
@@ -239,7 +236,6 @@ const mockLegendEntry = (caption, color, x) => {
   });
 
   assert.equal(actions.reconcileLegendEntries(), false);
-  assert.equal(pyodideInitializations, 0);
   assert.equal(dirtyMarks, 0);
 
   state.legendEntries.value = [
@@ -254,7 +250,6 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef');
   assert.equal(dirtyMarks, 1);
   assert.equal(layoutRefreshes, 1);
-  assert.equal(pyodideInitializations, 0);
   assert.equal(state.results.value[0].content, 'unchanged');
 
   state.legendEntries.value = [{ caption: 'Beta', color: '#abcdef' }];
@@ -266,7 +261,6 @@ const mockLegendEntry = (caption, color, x) => {
     ['Beta', 'Gamma']
   );
   assert.equal(dirtyMarks, 3);
-  assert.equal(pyodideInitializations, 0);
 
   state.legendEntries.value = [
     {
@@ -306,7 +300,6 @@ const mockLegendEntry = (caption, color, x) => {
     ],
     'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
   );
-  assert.equal(pyodideInitializations, 0);
 
   const noOpDirtyMarks = dirtyMarks;
   assert.equal(actions.updateLegendEntryColor(0, '#abcdef'), false);

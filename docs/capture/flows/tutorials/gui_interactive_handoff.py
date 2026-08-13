@@ -42,7 +42,7 @@ from flows.web_capture import (
     capture_screenshot,
     open_browser_capture,
     set_feature_search_visible,
-    wait_for_worker,
+    wait_for_app_shell,
 )
 
 
@@ -134,7 +134,7 @@ def capture_gui_interactive_handoff(
     page = first_capture.page
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _stabilize_static_capture_surface(page)
         load_raw_human_circular(page, output_prefix=INTERACTIVE_PREFIX)
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[0]] = (
@@ -236,7 +236,7 @@ def capture_gui_interactive_handoff(
     page = second_capture.page
     try:
         page.goto(base_url, wait_until="domcontentloaded")
-        wait_for_worker(page)
+        wait_for_app_shell(page)
         _stabilize_static_capture_surface(page)
         _load_current_session(page, session_path)
         restored_region = page.get_by_role(

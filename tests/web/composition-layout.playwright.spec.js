@@ -287,7 +287,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
     const liveSvg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
     const liveRecordBounds = liveSvg.querySelector('g[data-gbdraw-record-index="0"]').getBBox();
     return {
-      pyodideReady: app.pyodideReady,
+      mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(app, 'pyodideReady'),
       viewBox: resultSvg.getAttribute('viewBox'),
       metadata,
       liveRecordBounds: {
@@ -297,7 +297,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
     };
   });
 
-  expect(admitted.pyodideReady).toBe(false);
+  expect(admitted.mainRuntimeStatePresent).toBe(false);
   expect(admitted.viewBox).toBe('0 0 2480.0 718.8395510426063');
   expect(admitted.metadata.legacyNormalized).toBe(true);
   expect(admitted.metadata.primary.finalBounds).toEqual({

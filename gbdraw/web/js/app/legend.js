@@ -11,16 +11,12 @@ import {
 
 export const createLegendManager = ({
   state,
-  getPyodide,
-  ensurePyodide = null,
   history = null,
   previewRuntime = null
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({
     state,
-    getPyodide,
-    ensurePyodide,
     layoutActions,
     previewRuntime
   });

@@ -140,7 +140,6 @@ const previewRuntime = {
 
 const actions = createFeatureColorActions({
   state: {
-    pyodideReady: ref(true),
     results: ref([]),
     selectedResultIndex: ref(0),
     appliedPaletteColors: ref({ CDS: '#cccccc' }),

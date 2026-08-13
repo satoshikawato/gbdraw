@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -14,18 +15,6 @@ const postDragLegendCaption = [
   'without discarding the manual composition deltas'
 ].join(' ');
 const legendColor = '#336699';
-
-const openApp = async (page, { waitForRenderer = true } = {}) => {
-  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__GBDRAW_APP__);
-  if (waitForRenderer) {
-    await page.waitForFunction(
-      () => window.__GBDRAW_APP__?.diagramGenerationWorkerReady === true,
-      null,
-      { timeout: 180000 }
-    );
-  }
-};
 
 const blockExternalHttpRequests = async (page, baseURL) => {
   const appOrigin = new URL(baseURL).origin;

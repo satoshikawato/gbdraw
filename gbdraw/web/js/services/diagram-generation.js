@@ -1,6 +1,12 @@
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
 import { normalizeUserFacingError } from './error-normalization.js';
 import { validateWebRuntimeCapabilities } from './runtime-capabilities.js';
+import {
+  DIAGRAM_HELPER_OPERATION_NAMES,
+  DIAGRAM_HELPER_OPERATIONS
+} from './diagram-worker-protocol.js';
+
+export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
 
 export class DiagramGenerationCanceledError extends Error {
   constructor(message = 'Diagram generation was canceled.') {
@@ -42,7 +48,10 @@ let workerCapabilities = null;
 let initState = null;
 let activeRequest = null;
 const activeFeatureRequests = new Set();
+const activeHelperRequests = new Set();
 let nextRequestId = 1;
+
+const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
 
 const buildInitPayload = (id) => {
   return {
@@ -100,6 +109,11 @@ const terminateWorker = (error = null) => {
     request.reject(error || new Error('Diagram generation worker was terminated.'));
   });
   activeFeatureRequests.clear();
+  activeHelperRequests.forEach((request) => {
+    request.cleanup?.();
+    request.reject(error || new Error('Diagram generation worker was terminated.'));
+  });
+  activeHelperRequests.clear();
   if (worker) {
     worker.terminate();
     worker = null;
@@ -270,6 +284,21 @@ export const runDiagramGeneration = (payload = {}) => {
 };
 
 export const runFeatureExtraction = (payload = {}) => {
+  return runAuxiliaryWorkerRequest({
+    type: 'feature-extraction',
+    payload,
+    activeRequests: activeFeatureRequests,
+    fallbackMessage: 'Feature extraction failed'
+  });
+};
+
+const runAuxiliaryWorkerRequest = ({
+  type,
+  payload,
+  operation = null,
+  activeRequests,
+  fallbackMessage
+}) => {
   const requestId = nextRequestId;
   nextRequestId += 1;
 
@@ -294,10 +323,10 @@ export const runFeatureExtraction = (payload = {}) => {
         currentWorker.removeEventListener('message', handleMessage);
         currentWorker.removeEventListener('error', handleError);
         currentWorker.removeEventListener('messageerror', handleMessageError);
-        activeFeatureRequests.delete(request);
+        activeRequests.delete(request);
       };
       request.cleanup = cleanup;
-      activeFeatureRequests.add(request);
+      activeRequests.add(request);
 
       const fail = (error) => {
         cleanup();
@@ -306,13 +335,13 @@ export const runFeatureExtraction = (payload = {}) => {
 
       function handleMessage(event) {
         const data = event.data || {};
-        if (data.type !== 'feature-extraction' || data.requestId !== requestId) return;
+        if (data.type !== type || data.requestId !== requestId) return;
         cleanup();
         if (data.ok) {
           resolveRequest({ requestId, result: data.result });
           return;
         }
-        rejectRequest(deserializeWorkerError(data.error, 'Feature extraction failed'));
+        rejectRequest(deserializeWorkerError(data.error, fallbackMessage));
       }
 
       function handleError(event) {
@@ -328,8 +357,9 @@ export const runFeatureExtraction = (payload = {}) => {
       currentWorker.addEventListener('messageerror', handleMessageError);
       currentWorker.postMessage(
         {
-          type: 'feature-extraction',
+          type,
           requestId,
+          ...(operation ? { operation } : {}),
           payload
         },
         collectTransferList(payload)
@@ -343,10 +373,31 @@ export const runFeatureExtraction = (payload = {}) => {
   return promise;
 };
 
+export const runDiagramHelperOperation = (operation, payload = {}) => {
+  const normalizedOperation = String(operation || '').trim();
+  if (!diagramHelperOperationNames.has(normalizedOperation)) {
+    return Promise.reject(
+      new TypeError(`Unsupported diagram helper operation '${normalizedOperation || '(blank)'}'.`)
+    );
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return Promise.reject(new TypeError('Diagram helper payload must be an object.'));
+  }
+  return runAuxiliaryWorkerRequest({
+    type: 'helper',
+    operation: normalizedOperation,
+    payload,
+    activeRequests: activeHelperRequests,
+    fallbackMessage: `Diagram helper operation '${normalizedOperation}' failed`
+  });
+};
+
 export const cancelDiagramGeneration = () => {
   const error = new DiagramGenerationCanceledError();
   const request = activeRequest;
-  const hadActiveRequest = Boolean(request);
+  const hadActiveRequest = Boolean(
+    request || initState || activeFeatureRequests.size || activeHelperRequests.size
+  );
   if (request) {
     settleActiveRequest(request, () => request.reject(error));
   }
