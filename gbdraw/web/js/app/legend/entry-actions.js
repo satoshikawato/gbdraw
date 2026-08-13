@@ -518,19 +518,31 @@ json.dumps({"width": width})
     return removed;
   };
 
-  const reconcileLegendEntries = () => {
+  const reconcileLegendEntries = ({ restoreColorState = false } = {}) => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const targetGroups = getAllFeatureLegendGroups(svg);
     if (targetGroups.length === 0) return false;
 
     const desiredEntries = [];
+    let entryColorStateChanged = false;
     const seenCaptions = new Set();
     (Array.isArray(legendEntries.value) ? legendEntries.value : []).forEach((entry) => {
       const caption = String(entry?.caption || '').trim();
       if (!caption || seenCaptions.has(caption)) return;
       seenCaptions.add(caption);
-      desiredEntries.push({ ...entry, caption, color: String(entry?.color || '#cccccc') });
+      const entryColor = String(entry?.color || '#cccccc');
+      const color = restoreColorState
+        ? String(
+            legendColorOverrides[caption]
+            || originalLegendColors.value?.[caption]
+            || entryColor
+          )
+        : entryColor;
+      if (normalizedColor(entry?.color) !== normalizedColor(color)) {
+        entryColorStateChanged = true;
+      }
+      desiredEntries.push({ ...entry, caption, color });
     });
 
     let changed = false;
@@ -621,7 +633,10 @@ json.dumps({"width": width})
       }
     });
 
-    if (!changed) return false;
+    if (restoreColorState && entryColorStateChanged) {
+      legendEntries.value = desiredEntries;
+    }
+    if (!changed) return restoreColorState && entryColorStateChanged;
     restoredCaptions.forEach((caption) => retiredEntryTemplates.delete(caption));
     const legendGroup = svg.getElementById('legend');
     const hasDualLegends = Boolean(

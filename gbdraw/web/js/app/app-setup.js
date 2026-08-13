@@ -2083,7 +2083,7 @@ export const createAppSetup = () => {
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
-      reconcileLegendEntries();
+      reconcileLegendEntries({ restoreColorState: true });
       reconcileStrokeOverrides();
       reconcileLabelOverrides();
     }

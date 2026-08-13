@@ -4551,14 +4551,14 @@
                                     <div>{{ clickedFeature.orthogroupId }} - {{ clickedFeature.orthogroupMemberCount }} members</div>
                                 </div>
                             </div>
-                            <color-value-control
-                                :model-value="getFeatureColorValue(clickedFeature.feat)"
-                                :fallback="clickedFeature.color || '#cccccc'"
-                                @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
-                                data-history-managed
-                                aria-label="Feature fill color"
-                                class="w-32 shrink-0">
-                            </color-value-control>
+                            <input type="color"
+                                   :value="clickedFeature.color || '#cccccc'"
+                                   @change="updateClickedFeatureColor($event.target.value)"
+                                   data-history-managed
+                                   :disabled="!canEditFeatureColor(clickedFeature.feat)"
+                                   :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
+                                   aria-label="Feature fill color"
+                                   :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                             <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
@@ -4899,14 +4899,14 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
                             <div class="flex items-center gap-4">
-                                <color-value-control
-                                    :model-value="getFeatureColorValue(clickedFeature.feat)"
-                                    :fallback="clickedFeature.color || '#cccccc'"
-                                    @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
-                                    data-history-managed
-                                    aria-label="Feature fill color"
-                                    class="w-36">
-                                </color-value-control>
+                                <input type="color"
+                                       :value="clickedFeature.color || '#cccccc'"
+                                       @change="updateClickedFeatureColor($event.target.value)"
+                                       data-history-managed
+                                       :disabled="!canEditFeatureColor(clickedFeature.feat)"
+                                       :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
+                                       aria-label="Feature fill color"
+                                       :class="['w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button @click="resetClickedFeatureFillColor"
                                         data-history-managed
@@ -5866,14 +5866,14 @@
                                         {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
                                     </span>
                                     <button @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
-                                    <color-value-control
-                                        :model-value="getFeatureColorValue(feat)"
-                                        :fallback="getFeatureColor(feat)"
-                                        @click.stop
-                                        @update:model-value="setFeatureColorValue(feat, $event)"
-                                        :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
-                                        class="w-28 shrink-0">
-                                    </color-value-control>
+                                    <input type="color"
+                                           :value="getFeatureColor(feat)"
+                                           @click.stop
+                                           @change="requestFeatureColorChange(feat, $event.target.value)"
+                                           :disabled="!canEditFeatureColor(feat)"
+                                           :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No stable identifier available'"
+                                           :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                           :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
                                 </div>
                                 <p class="text-[10px] text-slate-400 truncate">
                                     <template v-if="getEditableLabelByFeatureId(feat.svg_id)">Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}</template>

@@ -288,9 +288,17 @@ export const createFeatureColorActions = ({
   };
 
   const updateLegendEntryColorByCaption = (caption, color) => {
-    const updated = updateLegendEntryColorByCaptionRaw(caption, color, { commit: false }) === true;
+    const existingEntry = findLegendEntryByCaption(caption);
+    const resolvedCaption = existingEntry?.caption || caption;
+    const overrideChanged = Boolean(
+      existingEntry && !colorsMatch(legendColorOverrides[resolvedCaption], color)
+    );
+    if (overrideChanged) {
+      legendColorOverrides[resolvedCaption] = color;
+    }
+    const updated = updateLegendEntryColorByCaptionRaw(resolvedCaption, color, { commit: false }) === true;
     if (updated) markColorPreviewDirty('feature-color-legend');
-    return updated;
+    return updated || overrideChanged;
   };
 
   const removeLegendEntry = (caption) => {
