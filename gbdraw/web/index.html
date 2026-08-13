@@ -684,6 +684,7 @@
             stroke-opacity: 1 !important;
             stroke-width: 2.5px !important;
             paint-order: stroke fill markers;
+            outline: none;
         }
         .gbdraw-feature-selected {
             opacity: 1 !important;
@@ -1907,7 +1908,6 @@
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
                 <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
-            <p v-if="!processing && (!diagramGenerationWorkerReady || diagramGenerationWorkerError)" :class="['mt-2 text-center text-xs font-mono', diagramGenerationWorkerError ? 'text-red-600' : 'text-slate-500']" v-text="diagramGenerationWorkerStatus"></p>
             </div>
 
                 <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card bg-slate-50/50">
@@ -4551,14 +4551,14 @@
                                     <div>{{ clickedFeature.orthogroupId }} - {{ clickedFeature.orthogroupMemberCount }} members</div>
                                 </div>
                             </div>
-                            <color-value-control
-                                :model-value="getFeatureColorValue(clickedFeature.feat)"
-                                :fallback="clickedFeature.color || '#cccccc'"
-                                @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
-                                data-history-managed
-                                aria-label="Feature fill color"
-                                class="w-32 shrink-0">
-                            </color-value-control>
+                            <input type="color"
+                                   :value="clickedFeature.color || '#cccccc'"
+                                   @change="updateClickedFeatureColor($event.target.value)"
+                                   data-history-managed
+                                   :disabled="!canEditFeatureColor(clickedFeature.feat)"
+                                   :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
+                                   aria-label="Feature fill color"
+                                   :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                             <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
@@ -4899,14 +4899,14 @@
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Fill Color</label>
                             <div class="flex items-center gap-4">
-                                <color-value-control
-                                    :model-value="getFeatureColorValue(clickedFeature.feat)"
-                                    :fallback="clickedFeature.color || '#cccccc'"
-                                    @update:model-value="setFeatureColorValue(clickedFeature.feat, $event, clickedFeature.legendName)"
-                                    data-history-managed
-                                    aria-label="Feature fill color"
-                                    class="w-36">
-                                </color-value-control>
+                                <input type="color"
+                                       :value="clickedFeature.color || '#cccccc'"
+                                       @change="updateClickedFeatureColor($event.target.value)"
+                                       data-history-managed
+                                       :disabled="!canEditFeatureColor(clickedFeature.feat)"
+                                       :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
+                                       aria-label="Feature fill color"
+                                       :class="['w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
                                 <button @click="resetClickedFeatureFillColor"
                                         data-history-managed
@@ -4929,8 +4929,8 @@
                                 </color-value-control>
                                 <input type="number"
                                        :value="clickedFeature.strokeWidth"
-                                       @input="clickedFeature.strokeWidth = $event.target.value"
-                                       @change="updateClickedFeatureStroke(null, $event.target.value)"
+                                       @blur="setClickedFeatureStrokeWidthValue($event.target.value)"
+                                       @keydown.enter.prevent="$event.target.blur()"
                                        data-history-managed
                                        aria-label="Feature stroke width"
                                        class="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
@@ -4943,12 +4943,6 @@
                                         class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
                                         title="Reset stroke to default">
                                     <i class="ph ph-arrow-counter-clockwise text-lg"></i>
-                                </button>
-                                <button @click="applyStrokeToAllSiblings"
-                                        data-history-managed
-                                        class="text-slate-400 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50"
-                                        title="Apply this stroke to all features with the same legend">
-                                    <i class="ph ph-users-three text-lg"></i>
                                 </button>
                             </div>
                         </div>
@@ -5454,47 +5448,49 @@
                         </div>
                     </div>
 
-                    <!-- Color Change Scope Dialog -->
-                    <div v-if="colorScopeDialog.show"
+                    <!-- Feature Style Scope Dialog -->
+                    <div v-if="featureStyleScopeDialog.show"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
                         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Color Change Scope</h3>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">
+                                {{ featureStyleScopeDialog.kind === 'stroke' ? 'Stroke Change Scope' : 'Color Change Scope' }}
+                            </h3>
                             <p class="text-sm text-slate-600 mb-4">
-                                <template v-if="colorScopeDialog.matchingRule">
-                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}</span>" ({{ colorScopeDialog.ruleMatchCount }} features).
-                                    <template v-if="colorScopeDialog.siblingCount > 0">
-                                        <br>Legend item "<span class="font-bold text-green-600">{{ colorScopeDialog.legendName }}</span>" is shared by {{ colorScopeDialog.siblingCount + 1 }} features.
+                                <template v-if="featureStyleScopeDialog.matchingRule">
+                                    This feature matches the rule "<span class="font-bold text-blue-600">{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}</span>" ({{ featureStyleScopeDialog.ruleMatchCount }} features).
+                                    <template v-if="featureStyleScopeDialog.siblingCount > 0">
+                                        <br>Legend item "<span class="font-bold text-green-600">{{ featureStyleScopeDialog.legendName }}</span>" is shared by {{ featureStyleScopeDialog.siblingCount + 1 }} features.
                                     </template>
                                 </template>
-                                <template v-else-if="colorScopeDialog.siblingCount > 0">
-                                    There are <span class="font-bold text-blue-600">{{ colorScopeDialog.siblingCount }}</span> other features sharing the legend item "<span class="font-bold text-blue-600">{{ colorScopeDialog.legendName }}</span>".
+                                <template v-else-if="featureStyleScopeDialog.siblingCount > 0">
+                                    There are <span class="font-bold text-blue-600">{{ featureStyleScopeDialog.siblingCount }}</span> other features sharing the legend item "<span class="font-bold text-blue-600">{{ featureStyleScopeDialog.legendName }}</span>".
                                 </template>
                                 <template v-else>
-                                    How do you want to apply the color change?
+                                    How do you want to apply the {{ featureStyleScopeDialog.kind === 'stroke' ? 'stroke' : 'color' }} change?
                                 </template>
                             </p>
 
                             <div class="flex flex-col gap-2">
                                 <!-- Apply to all features matching the rule (when rule exists) -->
-                                <button v-if="colorScopeDialog.matchingRule"
-                                        @click="handleColorScopeChoice('rule')"
+                                <button v-if="featureStyleScopeDialog.matchingRule"
+                                        @click="handleFeatureStyleScopeChoice('rule')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.matchingRule?.cap || colorScopeDialog.matchingRule?.val }}" ({{ colorScopeDialog.ruleMatchCount }})</span>
+                                    <span>Apply to all "{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}" ({{ featureStyleScopeDialog.ruleMatchCount }})</span>
                                 </button>
 
                                 <!-- Apply to all features with same legend item (when siblings exist) -->
-                                <button v-if="colorScopeDialog.siblingCount > 0"
-                                        @click="handleColorScopeChoice('caption')"
+                                <button v-if="featureStyleScopeDialog.siblingCount > 0"
+                                        @click="handleFeatureStyleScopeChoice('caption')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users-three text-lg"></i>
-                                    <span>Apply to all "{{ colorScopeDialog.legendName }}" ({{ colorScopeDialog.siblingCount + 1 }})</span>
+                                    <span>Apply to all "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
                                 </button>
 
                                 <!-- Apply to this feature only -->
-                                <button @click="handleColorScopeChoice('single')"
+                                <button @click="handleFeatureStyleScopeChoice('single')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-user text-lg"></i>
@@ -5503,43 +5499,43 @@
 
                                 <!-- Apply to all features with same rendered label text -->
                                 <button v-if="
-                                          colorScopeDialog.displayLabelSiblingCount > 0 &&
-                                          String(colorScopeDialog.displayLabel || '').trim() !== '' &&
-                                          String(colorScopeDialog.displayLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase()
+                                          featureStyleScopeDialog.displayLabelSiblingCount > 0 &&
+                                          String(featureStyleScopeDialog.displayLabel || '').trim() !== '' &&
+                                          String(featureStyleScopeDialog.displayLabel || '').trim().toLowerCase() !== String(featureStyleScopeDialog.legendName || '').trim().toLowerCase()
                                         "
-                                        @click="handleColorScopeChoice('displayLabel')"
+                                        @click="handleFeatureStyleScopeChoice('displayLabel')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all label "{{ colorScopeDialog.displayLabel }}" ({{ colorScopeDialog.displayLabelSiblingCount + 1 }})</span>
+                                    <span>Apply to all label "{{ featureStyleScopeDialog.displayLabel }}" ({{ featureStyleScopeDialog.displayLabelSiblingCount + 1 }})</span>
                                 </button>
 
                                 <!-- Apply to all features with same source annotation label -->
                                 <button v-if="
-                                          colorScopeDialog.annotationLabelSiblingCount > 0 &&
-                                          String(colorScopeDialog.annotationLabel || '').trim() !== '' &&
-                                          String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.legendName || '').trim().toLowerCase() &&
-                                          String(colorScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(colorScopeDialog.displayLabel || '').trim().toLowerCase()
+                                          featureStyleScopeDialog.annotationLabelSiblingCount > 0 &&
+                                          String(featureStyleScopeDialog.annotationLabel || '').trim() !== '' &&
+                                          String(featureStyleScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(featureStyleScopeDialog.legendName || '').trim().toLowerCase() &&
+                                          String(featureStyleScopeDialog.annotationLabel || '').trim().toLowerCase() !== String(featureStyleScopeDialog.displayLabel || '').trim().toLowerCase()
                                         "
-                                        @click="handleColorScopeChoice('annotationLabel')"
+                                        @click="handleFeatureStyleScopeChoice('annotationLabel')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <i class="ph ph-users text-lg"></i>
-                                    <span>Apply to all source label "{{ colorScopeDialog.annotationLabel }}" ({{ colorScopeDialog.annotationLabelSiblingCount + 1 }})</span>
+                                    <span>Apply to all source label "{{ featureStyleScopeDialog.annotationLabel }}" ({{ featureStyleScopeDialog.annotationLabelSiblingCount + 1 }})</span>
                                 </button>
 
                                 <!-- Use existing caption color (if available) -->
-                                <button v-if="colorScopeDialog.existingCaptionColor"
-                                        @click="handleColorScopeChoice('useExisting')"
+                                <button v-if="featureStyleScopeDialog.kind === 'fill' && featureStyleScopeDialog.existingCaptionColor"
+                                        @click="handleFeatureStyleScopeChoice('useExisting')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2">
                                     <span class="w-5 h-5 rounded border border-purple-300 shrink-0"
-                                          :style="{ backgroundColor: colorScopeDialog.existingCaptionColor }"></span>
-                                    <span>Use existing "{{ colorScopeDialog.legendName }}" color</span>
+                                          :style="{ backgroundColor: featureStyleScopeDialog.existingCaptionColor }"></span>
+                                    <span>Use existing "{{ featureStyleScopeDialog.legendName }}" color</span>
                                 </button>
                             </div>
 
-                            <button @click="handleColorScopeChoice('cancel')"
+                            <button @click="handleFeatureStyleScopeChoice('cancel')"
                                     data-history-managed
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium">
                                 Cancel
@@ -5866,14 +5862,14 @@
                                         {{ feat.product || feat.gene || feat.locus_tag || feat.note || '(unnamed)' }}
                                     </span>
                                     <button @click.stop="openFeatureEditorFromList(feat, $event)" class="text-[10px] px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 shrink-0" title="Open feature editor">Edit</button>
-                                    <color-value-control
-                                        :model-value="getFeatureColorValue(feat)"
-                                        :fallback="getFeatureColor(feat)"
-                                        @click.stop
-                                        @update:model-value="setFeatureColorValue(feat, $event)"
-                                        :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
-                                        class="w-28 shrink-0">
-                                    </color-value-control>
+                                    <input type="color"
+                                           :value="getFeatureColor(feat)"
+                                           @click.stop
+                                           @change="requestFeatureColorChange(feat, $event.target.value)"
+                                           :disabled="!canEditFeatureColor(feat)"
+                                           :title="canEditFeatureColor(feat) ? 'Click to change color' : 'No stable identifier available'"
+                                           :aria-label="`Fill color for ${feat.product || feat.gene || feat.locus_tag || feat.type}`"
+                                           :class="['w-7 h-5 border rounded shrink-0', canEditFeatureColor(feat) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50']">
                                 </div>
                                 <p class="text-[10px] text-slate-400 truncate">
                                     <template v-if="getEditableLabelByFeatureId(feat.svg_id)">Label: {{ getEditableLabelByFeatureId(feat.svg_id).text }}</template>

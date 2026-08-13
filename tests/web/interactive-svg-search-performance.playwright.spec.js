@@ -184,6 +184,14 @@ source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
  data-query-record-id="rec1" data-subject-record-id="rec2" data-qstart="1" data-qend="9"
  data-sstart="10" data-send="18" data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
  data-identity="95.0" data-alignment-length="9" fill="#64748b" d="M 40 20 L 50 20 L 50 50 L 40 50 Z" />
+<path data-gbdraw-pairwise-match-id="m3" data-match-kind="orthogroup" data-orthogroup-id="og1"
+ data-query-record-id="rec1" data-subject-record-id="rec2"
+ data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
+ fill="#94a3b8" d="M 60 20 L 66 20 L 66 50 L 60 50 Z" />
+<path data-gbdraw-pairwise-match-id="m4" data-match-kind="orthogroup" data-orthogroup-id="og1"
+ data-query-record-id="rec1" data-subject-record-id="rec2"
+ data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
+ fill="#94a3b8" d="M 74 20 L 80 20 L 80 50 L 74 50 Z" />
 </svg>'''
 features = [
  {"svg_id": "fq", "record_idx": 0, "record_id": "rec1", "type": "CDS", "start": 0, "end": 9, "orthogroup_id": "og1",
@@ -277,6 +285,17 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     'Subject',
   ]);
   await expect(page.locator('.gfi-content')).toContainText('Number of local collinear groups');
+  await page.locator('[data-close]').click();
+  await page.locator('[data-gbdraw-pairwise-match-id="m3"]').click();
+  await expect(page.locator('[data-gbdraw-pairwise-match-id="m3"]'))
+    .toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
+  await expect(page.locator('[data-gbdraw-pairwise-match-id="m4"]'))
+    .toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
+  await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
+    .not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
+  await expect.poll(() => page.locator('[data-gbdraw-pairwise-match-id="m3"]')
+    .evaluate((element) => getComputedStyle(element).outlineStyle))
+    .toBe('none');
 });
 
 test('standalone homology popup exports exact spans and keeps missing comparison optional', async ({ page }, testInfo) => {

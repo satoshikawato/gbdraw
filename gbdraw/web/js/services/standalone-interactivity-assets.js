@@ -61,6 +61,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-opacity: 1;
   stroke-width: 2.5;
   paint-order: stroke fill markers;
+  outline: none;
 }
 .gbdraw-interactive-annotation {
   cursor: pointer;
@@ -1958,7 +1959,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   var matchElementsById = new Map();
   var ambiguousMatchElementIds = new Set();
-  var selectedMatchId = '';
+  var selectedMatchElements = [];
   var comparisonElementsByCollinearityBlockId = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
     var matchId = getElementMatchId(element);
@@ -2086,17 +2087,32 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function setSelectedMatch(matchId) {
     var nextId = String(matchId || '').trim();
-    if (selectedMatchId) {
-      (matchElementsById.get(selectedMatchId) || []).forEach(function (element) {
-        setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', false);
-      });
+    selectedMatchElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', false);
+    });
+    selectedMatchElements = matchElementsById.get(nextId) || [];
+    var selectedElement = selectedMatchElements[0];
+    if (selectedElement) {
+      var selectedMatchKind = matchAttr(selectedElement, 'data-match-kind').toLowerCase();
+      var selectedOrthogroupIds = getOrthogroupIds(matchAttr(selectedElement, 'data-orthogroup-id'));
+      var selectedIsOrthogroup = selectedMatchKind === 'orthogroup' || (
+        !selectedMatchKind
+        && !matchAttr(selectedElement, 'data-collinearity-block-id')
+        && selectedOrthogroupIds.length === 1
+      );
+      if (selectedIsOrthogroup && selectedOrthogroupIds.length === 1) {
+        selectedMatchElements = (comparisonElementsByOrthogroupId.get(selectedOrthogroupIds[0]) || [])
+          .filter(function (element) {
+            var elementMatchKind = matchAttr(element, 'data-match-kind').toLowerCase();
+            return element.matches && element.matches(MATCH_SELECTOR)
+              && !matchAttr(element, 'data-collinearity-block-id')
+              && (elementMatchKind === 'orthogroup' || !elementMatchKind);
+          });
+      }
     }
-    selectedMatchId = nextId;
-    if (selectedMatchId) {
-      (matchElementsById.get(selectedMatchId) || []).forEach(function (element) {
-        setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
-      });
-    }
+    selectedMatchElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
+    });
   }
 
   function clearActiveFeatureHover() {

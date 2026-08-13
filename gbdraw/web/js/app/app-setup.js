@@ -30,14 +30,7 @@ import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import {
-  disposeDiagramGenerationWorker,
-  preinitializeDiagramGenerationWorker
-} from '../services/diagram-generation.js';
-import {
-  DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE,
-  DIAGRAM_ENGINE_STARTUP_MESSAGE
-} from '../services/runtime-capabilities.js';
+import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
@@ -185,8 +178,6 @@ export const createAppSetup = () => {
   const {
     pyodideReady,
     diagramGenerationWorkerReady,
-    diagramGenerationWorkerStatus,
-    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -329,7 +320,7 @@ export const createAppSetup = () => {
     featurePopupResize,
     clickedLabel,
     clickedLabelPos,
-    colorScopeDialog,
+    featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     legendRenameDialog,
     resetColorDialog,
@@ -1899,24 +1890,7 @@ export const createAppSetup = () => {
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     previewRuntime,
-    preparePaletteDefinitions: pyodideManager.loadPaletteAsset,
-    prepareDiagramGenerationWorker: async () => {
-      diagramGenerationWorkerReady.value = false;
-      diagramGenerationWorkerError.value = null;
-      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
-      try {
-        await preinitializeDiagramGenerationWorker();
-        diagramGenerationWorkerReady.value = true;
-        diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
-      } catch (error) {
-        const userMessage = error?.name === 'DiagramRuntimeCompatibilityError'
-          ? DIAGRAM_ENGINE_COMPATIBILITY_MESSAGE
-          : DIAGRAM_ENGINE_STARTUP_MESSAGE;
-        diagramGenerationWorkerError.value = userMessage;
-        diagramGenerationWorkerStatus.value = userMessage;
-        console.error('Diagram engine startup failed.', error);
-      }
-    }
+    preparePaletteDefinitions: pyodideManager.loadPaletteAsset
   });
 
   const refreshLoadedSessionSvgLayout = async () => {
@@ -2038,6 +2012,7 @@ export const createAppSetup = () => {
     setFeatureColorValue,
     updateClickedFeatureColor,
     handleColorScopeChoice,
+    handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
     handleLegendRenameChoice,
     selectLegendNameOption,
@@ -2046,9 +2021,9 @@ export const createAppSetup = () => {
     resetClickedFeatureFillColor,
     getFeatureStrokeColorValue,
     setClickedFeatureStrokeColorValue,
+    setClickedFeatureStrokeWidthValue,
     updateClickedFeatureStroke,
     resetClickedFeatureStroke,
-    applyStrokeToAllSiblings,
     applyColorToSelectedFeatures,
     applyStrokeToSelectedFeatures,
     buildSelectedFeaturesVisibilityCommand,
@@ -2068,7 +2043,7 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     if (changedDomains.has('ui')) {
@@ -2083,8 +2058,8 @@ export const createAppSetup = () => {
       reconcileLabelOverrides();
     }
     if (changedDomains.has('editorState')) {
-      reconcileLegendEntries();
-      reconcileStrokeOverrides();
+      reconcileLegendEntries({ restoreColorState: true });
+      reconcileStrokeOverrides({ changes });
       reconcileLabelOverrides();
     }
     await nextTick();
@@ -2117,6 +2092,10 @@ export const createAppSetup = () => {
     setLegendEntryStrokeColorValue
   );
   const handleColorScopeChoiceWithHistory = undoableAction('Change feature color', handleColorScopeChoice);
+  const handleFeatureStyleScopeChoiceWithHistory = (...args) => history.runUndoable(
+    featureStyleScopeDialog.kind === 'stroke' ? 'Change feature stroke' : 'Change feature color',
+    () => handleFeatureStyleScopeChoice(...args)
+  );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
   const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
   const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
@@ -2126,8 +2105,11 @@ export const createAppSetup = () => {
     'Change feature stroke',
     setClickedFeatureStrokeColorValue
   );
+  const setClickedFeatureStrokeWidthValueWithHistory = undoableAction(
+    'Change feature stroke',
+    setClickedFeatureStrokeWidthValue
+  );
   const resetClickedFeatureStrokeWithHistory = undoableAction('Reset feature stroke', resetClickedFeatureStroke);
-  const applyStrokeToAllSiblingsWithHistory = undoableAction('Change feature stroke', applyStrokeToAllSiblings);
   const setFeatureColorWithHistory = undoableAction('Change feature color', setFeatureColor);
   const selectedFeatureBulkColor = ref('#2563eb');
   const selectedFeatureBulkCaption = ref('Selected features');
@@ -2235,12 +2217,6 @@ export const createAppSetup = () => {
       ? linearComparisonResolution.value
       : null;
 
-    if (diagramGenerationWorkerError.value) {
-      diagramGenerationWorkerReady.value = false;
-      diagramGenerationWorkerError.value = null;
-      diagramGenerationWorkerStatus.value = 'Preparing diagram engine...';
-    }
-
     const result = await runGeneratedDiagramAnalysis(comparisonPlanSnapshot);
     if (result?.status === 'error' && mode.value === 'linear') {
       await focusLinearComparisonIssue();
@@ -2250,8 +2226,6 @@ export const createAppSetup = () => {
     }
     if (result?.status === 'ok' && !diagramGenerationWorkerReady.value) {
       diagramGenerationWorkerReady.value = true;
-      diagramGenerationWorkerStatus.value = 'Diagram engine ready.';
-      diagramGenerationWorkerError.value = null;
     }
     return result;
   });
@@ -2494,13 +2468,29 @@ export const createAppSetup = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return;
     const matchId = String(match?.id || '').trim();
+    const orthogroupId = String(
+      match?.matchKind === 'orthogroup' ? match?.orthogroupId : ''
+    ).trim();
     svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
       const elementMatchId = String(
         element.getAttribute('data-gbdraw-match-id') ||
         element.getAttribute('data-gbdraw-pairwise-match-id') ||
         ''
       ).trim();
-      element.classList.toggle('gbdraw-match-selected', Boolean(matchId) && elementMatchId === matchId);
+      const elementOrthogroupIds = String(element.getAttribute('data-orthogroup-id') || '')
+        .split(';')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const elementMatchKind = String(element.getAttribute('data-match-kind') || '').trim().toLowerCase();
+      const isOrthogroupMatch = elementMatchKind === 'orthogroup' || (
+        !elementMatchKind &&
+        !element.hasAttribute('data-collinearity-block-id') &&
+        elementOrthogroupIds.length > 0
+      );
+      const selected = orthogroupId
+        ? isOrthogroupMatch && elementOrthogroupIds.includes(orthogroupId)
+        : Boolean(matchId) && elementMatchId === matchId;
+      element.classList.toggle('gbdraw-match-selected', selected);
     });
   });
 
@@ -3009,8 +2999,6 @@ export const createAppSetup = () => {
   return {
     pyodideReady,
     diagramGenerationWorkerReady,
-    diagramGenerationWorkerStatus,
-    diagramGenerationWorkerError,
     processing,
     processingStatus,
     generationCancelRequested,
@@ -3515,11 +3503,12 @@ export const createAppSetup = () => {
     updateClickedFeatureStroke: updateClickedFeatureStrokeWithHistory,
     getFeatureStrokeColorValue,
     setClickedFeatureStrokeColorValue: setClickedFeatureStrokeColorValueWithHistory,
+    setClickedFeatureStrokeWidthValue: setClickedFeatureStrokeWidthValueWithHistory,
     resetClickedFeatureStroke: resetClickedFeatureStrokeWithHistory,
-    applyStrokeToAllSiblings: applyStrokeToAllSiblingsWithHistory,
-    colorScopeDialog,
+    featureStyleScopeDialog,
     featureVisibilityScopeDialog,
     handleColorScopeChoice: handleColorScopeChoiceWithHistory,
+    handleFeatureStyleScopeChoice: handleFeatureStyleScopeChoiceWithHistory,
     legendRenameDialog,
     handleLegendRenameChoice: handleLegendRenameChoiceWithHistory,
     resetColorDialog,

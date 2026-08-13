@@ -170,11 +170,6 @@ const ensureWorkerInitialized = () => {
   return promise;
 };
 
-export const preinitializeDiagramGenerationWorker = async () => {
-  await ensureWorkerInitialized();
-  return workerCapabilities;
-};
-
 export const getDiagramGenerationWorkerCapabilities = () => workerCapabilities;
 
 const collectTransferList = (payload) => {
