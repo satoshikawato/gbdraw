@@ -73,10 +73,12 @@ def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> Non
         path.write_bytes(base64.b64decode(entry["data"], validate=True))
         resource_paths[resource_id] = path
 
+    diagnostics = {"timingsMs": {}, "metrics": {}}
     result = render_staged_canonical_web_request(
         document["renderRequest"],
         resource_paths=resource_paths,
         workspace=workspace,
+        _diagnostics=diagnostics,
     )
 
     assert [item["name"] for item in result["results"]] == [
@@ -84,6 +86,30 @@ def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> Non
     ]
     assert result["results"][0]["content"].lstrip().startswith("<?xml")
     assert not workspace.exists()
+    metrics = diagnostics["metrics"]
+    assert {
+        name: metrics[name]
+        for name in (
+            "featureCatalogSvgParseCount",
+            "featureCatalogFullDomTraversalCount",
+            "featureCatalogRenderedFeatureCollectionCount",
+            "featureCatalogCatalogOnlyDomMutationCount",
+            "featureCatalogFeatureCandidateCount",
+            "featureCatalogUniqueRenderedFeatureCount",
+            "featureCatalogMatchCandidateCount",
+            "featureCatalogAnnotationCandidateCount",
+        )
+    } == {
+        "featureCatalogSvgParseCount": 1,
+        "featureCatalogFullDomTraversalCount": 1,
+        "featureCatalogRenderedFeatureCollectionCount": 1,
+        "featureCatalogCatalogOnlyDomMutationCount": 0,
+        "featureCatalogFeatureCandidateCount": 0,
+        "featureCatalogUniqueRenderedFeatureCount": 0,
+        "featureCatalogMatchCandidateCount": 0,
+        "featureCatalogAnnotationCandidateCount": 0,
+    }
+    assert metrics["featureCatalogDomElementCount"] > 0
 
     repeated = render_embedded_canonical_web_request(
         document["renderRequest"],

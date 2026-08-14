@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -13,6 +14,337 @@ from gbdraw.web_support.feature_catalog import (
     materialize_catalog_nucleotide_sequence,
     select_feature_catalog_item,
 )
+
+
+def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
+    context = InteractiveSvgContext(
+        record_keys=("record-a", "record-b"),
+        features=(
+            {
+                "stable_feature_id": "multi",
+                "rendered_feature_svg_id": "multi_record_1",
+                "record_idx": 0,
+                "feature_index": 0,
+                "type": "CDS",
+            },
+            {
+                "stable_feature_id": "suffix",
+                "rendered_feature_svg_id": "suffix_record_2",
+                "record_idx": 1,
+                "feature_index": 1,
+                "type": "gene",
+            },
+        ),
+        biological_features=(
+            {
+                "stable_feature_id": "multi",
+                "record_idx": 0,
+                "feature_index": 0,
+                "type": "CDS",
+            },
+            {
+                "stable_feature_id": "suffix",
+                "record_idx": 1,
+                "feature_index": 1,
+                "type": "gene",
+            },
+            {
+                "stable_feature_id": "fallback",
+                "record_idx": 1,
+                "feature_index": 2,
+                "type": "misc_feature",
+            },
+        ),
+        orthogroups=(
+            {
+                "id": "og-1",
+                "scope": "cross_record",
+                "members": [
+                    {
+                        "recordIndex": 0,
+                        "featureIndex": 0,
+                        "stableFeatureSvgId": "multi",
+                    },
+                    {
+                        "recordIndex": 1,
+                        "featureIndex": 2,
+                        "stableFeatureSvgId": "fallback",
+                    },
+                ],
+            },
+        ),
+        annotations=(
+            {
+                "record_index": 1,
+                "track_id": "track-1",
+                "set_id": "set-1",
+                "id": "ann-1",
+                "mark": "band",
+                "label": "Context label",
+                "start": 4,
+                "end": 8,
+            },
+        ),
+        sequence_sources=(
+            {
+                "key": "record:0",
+                "origin": "linear-record",
+                "recordIndex": 0,
+                "recordId": "record-a",
+                "sequence": "ATGAAATAACCC",
+            },
+            {
+                "key": "record:1",
+                "origin": "linear-record",
+                "recordIndex": 1,
+                "recordId": "record-b",
+                "sequence": "TTTGGGCCCAAA",
+            },
+        ),
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <g id="features">
+    <path id="multi_record_1__line1" data-gbdraw-feature-id="multi_record_1" data-gbdraw-stable-feature-id="multi" data-gbdraw-record-index="0" data-gbdraw-feature-index="0" data-gbdraw-feature-part="line" fill="#111111" />
+    <path id="multi_record_1__part1" data-gbdraw-feature-id="multi_record_1" data-gbdraw-stable-feature-id="multi" data-gbdraw-record-index="0" data-gbdraw-feature-index="0" data-gbdraw-feature-part="block" fill="#22aa44" />
+    <path id="suffix_record_2" data-gbdraw-feature-id="suffix_record_2" data-gbdraw-record-index="1" data-gbdraw-feature-index="1" fill="#3355cc" />
+    <rect id="fallback_record_2" data-gbdraw-feature-id="fallback_record_2" data-gbdraw-record-index="1" data-label="Fallback DOM" fill="#cc7733" />
+  </g>
+  <path id="pairwise-dom" data-gbdraw-match-id="pair-1" data-match-kind="pairwise" data-query-record-index="0" data-subject-record-index="1" data-query-feature-svg-id="multi_record_1" data-subject-feature-svg-id="suffix_record_2" data-identity="97.5" fill="#8899aa" />
+  <path id="orthogroup-dom" data-gbdraw-pairwise-match-id="group-1" data-match-kind="orthogroup" data-orthogroup-id="og-1" data-group-scope="cross_record" data-group-kind="orthogroup" data-query-record-index="0" data-subject-record-index="1" data-query-feature-svg-id="multi_record_1" data-subject-feature-svg-id="fallback_record_2" fill="#778899" />
+  <g id="annotation-dom" data-gbdraw-annotation-id="ann-1" data-gbdraw-annotation-set-id="set-1" data-gbdraw-annotation-track-id="track-1" data-gbdraw-record-index="1" data-gbdraw-record-id="record-b" data-gbdraw-annotation-mark="highlight" data-gbdraw-annotation-label="DOM label" />
+</svg>
+"""
+    return svg, context
+
+
+def test_feature_catalog_uses_one_read_only_svg_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    svg, context = _combined_catalog_fixture()
+    parsed_root = ET.fromstring(svg)
+    original_tree = ET.tostring(parsed_root, encoding="unicode")
+    parse_count = 0
+    traversal_count = 0
+
+    class CountingRoot:
+        tag = parsed_root.tag
+
+        def iter(self):
+            nonlocal traversal_count
+            traversal_count += 1
+            return parsed_root.iter()
+
+    def parse_once(source: str) -> CountingRoot:
+        nonlocal parse_count
+        parse_count += 1
+        assert source == svg
+        return CountingRoot()
+
+    monkeypatch.setattr(feature_catalog_module.ET, "fromstring", parse_once)
+    diagnostics: dict[str, object] = {"metrics": {}}
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=4,
+        result_name="combined.svg",
+        _diagnostics=diagnostics,
+    )
+
+    assert parse_count == 1
+    assert traversal_count == 1
+    assert ET.tostring(parsed_root, encoding="unicode") == original_tree
+    assert diagnostics["metrics"] == {
+        "featureCatalogSvgParseCount": 1,
+        "featureCatalogFullDomTraversalCount": 1,
+        "featureCatalogRenderedFeatureCollectionCount": 1,
+        "featureCatalogCatalogOnlyDomMutationCount": 0,
+        "featureCatalogDomElementCount": 9,
+        "featureCatalogFeatureCandidateCount": 4,
+        "featureCatalogUniqueRenderedFeatureCount": 3,
+        "featureCatalogMatchCandidateCount": 2,
+        "featureCatalogAnnotationCandidateCount": 1,
+    }
+    assert item == {
+        "resultIndex": 4,
+        "resultName": "combined.svg",
+        "recordKeys": ["record-a", "record-b"],
+        "features": [
+            {
+                "svgId": "multi_record_1",
+                "recordKey": "record-a",
+                "biologicalFeatureId": "multi",
+                "fillColor": "#22aa44",
+            },
+            {
+                "svgId": "suffix_record_2",
+                "recordKey": "record-b",
+                "biologicalFeatureId": "suffix",
+                "fillColor": "#3355cc",
+            },
+            {
+                "svgId": "fallback_record_2",
+                "recordKey": "record-b",
+                "biologicalFeatureId": "fallback",
+                "fillColor": "#cc7733",
+            },
+        ],
+        "biologicalFeatures": [
+            {
+                "type": "CDS",
+                "biologicalFeatureId": "multi",
+                "recordKey": "record-a",
+                "sourceFeatureIndex": 0,
+            },
+            {
+                "type": "gene",
+                "biologicalFeatureId": "suffix",
+                "recordKey": "record-b",
+                "sourceFeatureIndex": 1,
+            },
+            {
+                "type": "misc_feature",
+                "biologicalFeatureId": "fallback",
+                "recordKey": "record-b",
+                "sourceFeatureIndex": 2,
+            },
+        ],
+        "orthogroups": [
+            {
+                "scope": "cross_record",
+                "id": "og-1",
+                "members": [
+                    {
+                        "recordKey": "record-a",
+                        "biologicalFeatureId": "multi",
+                    },
+                    {
+                        "recordKey": "record-b",
+                        "biologicalFeatureId": "fallback",
+                    },
+                ],
+            }
+        ],
+        "annotations": [
+            {
+                "record_index": 1,
+                "track_id": "track-1",
+                "set_id": "set-1",
+                "id": "ann-1",
+                "mark": "highlight",
+                "label": "DOM label",
+                "start": 4,
+                "end": 8,
+                "dom_id": "annotation-dom",
+                "record_id": "record-b",
+            }
+        ],
+        "comparisonMatches": [
+            {
+                "id": "pair-1",
+                "match_kind": "pairwise",
+                "fill": "#8899aa",
+                "query_record_index": "0",
+                "subject_record_index": "1",
+                "identity": "97.5",
+                "queryFeatureReferences": [
+                    {
+                        "recordKey": "record-a",
+                        "biologicalFeatureId": "multi",
+                    }
+                ],
+                "queryRecordKey": "record-a",
+                "queryBiologicalFeatureId": "multi",
+                "subjectFeatureReferences": [
+                    {
+                        "recordKey": "record-b",
+                        "biologicalFeatureId": "suffix",
+                    }
+                ],
+                "subjectRecordKey": "record-b",
+                "subjectBiologicalFeatureId": "suffix",
+            },
+            {
+                "id": "group-1",
+                "match_kind": "orthogroup",
+                "orthogroup_ids": ["og-1"],
+                "fill": "#778899",
+                "query_record_index": "0",
+                "subject_record_index": "1",
+                "queryFeatureReferences": [
+                    {
+                        "recordKey": "record-a",
+                        "biologicalFeatureId": "multi",
+                    }
+                ],
+                "queryRecordKey": "record-a",
+                "queryBiologicalFeatureId": "multi",
+                "subjectFeatureReferences": [
+                    {
+                        "recordKey": "record-b",
+                        "biologicalFeatureId": "fallback",
+                    }
+                ],
+                "subjectRecordKey": "record-b",
+                "subjectBiologicalFeatureId": "fallback",
+            },
+        ],
+        "sequenceSources": [
+            {
+                "key": "record:0",
+                "origin": "linear-record",
+                "recordIndex": 0,
+                "recordId": "record-a",
+                "sequence": "ATGAAATAACCC",
+            },
+            {
+                "key": "record:1",
+                "origin": "linear-record",
+                "recordIndex": 1,
+                "recordId": "record-b",
+                "sequence": "TTTGGGCCCAAA",
+            },
+        ],
+    }
+
+
+def test_feature_catalog_preserves_fallback_feature_dom_order() -> None:
+    context = InteractiveSvgContext(
+        record_keys=("record-a",),
+        biological_features=(
+            {
+                "stable_feature_id": "second",
+                "record_idx": 0,
+                "feature_index": 1,
+                "type": "gene",
+            },
+            {
+                "stable_feature_id": "first",
+                "record_idx": 0,
+                "feature_index": 0,
+                "type": "CDS",
+            },
+        ),
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path id="first" data-gbdraw-feature-id="first" data-gbdraw-record-index="0" />
+  <path id="second" data-gbdraw-feature-id="second" data-gbdraw-record-index="0" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=0,
+        result_name="fallback-order.svg",
+    )
+
+    assert [feature["svgId"] for feature in item["features"]] == [
+        "first",
+        "second",
+    ]
 
 
 def test_sequence_source_deduplication_is_order_independent_and_fail_closed() -> None:
@@ -601,6 +933,41 @@ def test_feature_catalog_references_only_exactly_reconstructible_sequences() -> 
     assert mismatch["nucleotide_sequence"] == "TTTT"
     assert "translationFromAminoAcidSequence" not in mismatch
     assert mismatch["qualifiers"]["translation"] == ["DIFFERENT"]
+
+
+def test_feature_catalog_compacts_translation_after_alias_resolution() -> None:
+    source_feature = {
+        "stable_feature_id": "translation-order",
+        "record_idx": 0,
+        "feature_index": 0,
+        "type": "CDS",
+        "amino_acid_sequence": "MPEP",
+        "qualifiers": {"translation": ["", "MPEP"]},
+    }
+    context = InteractiveSvgContext(
+        record_keys=("record-key",),
+        features=(source_feature,),
+        biological_features=(source_feature,),
+    )
+    svg = """\
+<svg xmlns="http://www.w3.org/2000/svg">
+  <path id="translation-order"
+        data-gbdraw-feature-id="translation-order"
+        data-gbdraw-stable-feature-id="translation-order"
+        data-gbdraw-record-index="0" />
+</svg>
+"""
+
+    item = build_feature_catalog_item(
+        svg,
+        context,
+        result_index=0,
+        result_name="diagram.svg",
+    )
+
+    biological = item["biologicalFeatures"][0]
+    assert biological["qualifiers"]["translation"] == ["MPEP"]
+    assert "translationFromAminoAcidSequence" not in biological
 
 
 def test_feature_catalog_disambiguates_identical_biological_feature_ids() -> None:

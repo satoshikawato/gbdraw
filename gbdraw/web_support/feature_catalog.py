@@ -3,28 +3,31 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
 import math
 import re
+from types import MappingProxyType
 import xml.etree.ElementTree as ET
 from typing import Any
 
 from gbdraw.exceptions import GbdrawError
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
-    _add_class_token,
-    _collect_rendered_features,
+    _RenderedFeatureEntry,
     _compact_wire_value,
-    _element_match_id_status,
-    _feature_payloads,
     _feature_record_index_status,
-    _feature_rendered_id_status,
     _feature_source_index_status,
     _feature_stable_id,
     _feature_stable_id_status,
     _first_text,
+    _is_feature_candidate,
     _is_match_candidate,
+    _match_id_status,
+    _merge_rendered_feature_entry,
     _normalize_string_array,
+    _rendered_feature_entry,
+    _resolve_rendered_features,
 )
 
 FEATURE_CATALOG_SCHEMA = 3
@@ -58,6 +61,41 @@ _ORTHOGROUP_FEATURE_KEYS = {
     "orthogroupRepresentative",
     "orthogroupMember",
 }
+_BIOLOGICAL_REMOVED_KEYS = frozenset(
+    _BIOLOGICAL_ALIAS_KEYS
+    | _ORTHOGROUP_FEATURE_KEYS
+    | {
+        "selector",
+        "nucleotide_fasta",
+        "nucleotideFasta",
+        "amino_acid_fasta",
+        "aminoAcidFasta",
+        "record_idx",
+        "recordIndex",
+        "record_index",
+        "feature_index",
+        "featureIndex",
+        "source_feature_index",
+        "sourceFeatureIndex",
+    }
+)
+_SOURCE_IDENTITY_CONFLICT_KEYS = frozenset(
+    {
+        "record_index",
+        "recordIndex",
+        "fileIdx",
+        "file_idx",
+        "featureIndex",
+        "source_feature_index",
+        "sourceFeatureIndex",
+        "stableFeatureSvgId",
+        "stable_feature_svg_id",
+        "stableFeatureId",
+        "stableSvgId",
+        "feature_svg_id",
+        "featureSvgId",
+    }
+)
 _MATCH_REDUNDANT_SUFFIXES = (
     "feature_svg_id",
     "stable_feature_svg_id",
@@ -83,12 +121,20 @@ _PRESENTATION_BY_SEARCH_SCOPE = {
 
 
 def _sequence(value: object | None) -> list[object]:
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+    if type(value) is list or type(value) is tuple:
+        return list(value)
+    if value is not None and isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes)
+    ):
         return list(value)
     return []
 
 
 def _text(value: object | None) -> str:
+    if type(value) is str:
+        return value.strip()
+    if value is None:
+        return ""
     return _first_text(value)
 
 
@@ -133,14 +179,171 @@ _MATCH_ATTRIBUTES = {
     "subject_display_name": "data-subject-display-name",
 }
 
+_MATCH_SNAPSHOT_ATTRIBUTES = tuple(
+    dict.fromkeys(
+        (
+            "data-gbdraw-match-id",
+            "data-gbdraw-pairwise-match-id",
+            "data-match-kind",
+            "data-collinearity-block-id",
+            "data-orthogroup-id",
+            "fill",
+            "data-query-record-id",
+            "data-query",
+            "data-subject-record-id",
+            "data-subject",
+            "data-collinearity-orientation",
+            "data-orientation",
+            *_MATCH_ATTRIBUTES.values(),
+        )
+    )
+)
+_ANNOTATION_SNAPSHOT_ATTRIBUTES = (
+    "id",
+    "data-gbdraw-annotation-id",
+    "data-gbdraw-record-index",
+    "data-gbdraw-annotation-track-id",
+    "data-gbdraw-annotation-set-id",
+    "data-gbdraw-record-id",
+    "data-gbdraw-annotation-mark",
+    "data-gbdraw-annotation-label",
+)
 
-def _match_kind(element: ET.Element) -> str:
-    value = _text(element.get("data-match-kind")).lower()
+
+@dataclass(frozen=True)
+class _SvgCatalogCandidate:
+    attributes: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class _RenderedSvgCatalogIndex:
+    """Read-only catalog state collected in one complete SVG traversal."""
+
+    rendered_features: Mapping[str, _RenderedFeatureEntry]
+    match_candidates: tuple[_SvgCatalogCandidate, ...]
+    annotation_candidates: tuple[_SvgCatalogCandidate, ...]
+    dom_element_count: int
+    feature_candidate_count: int
+
+
+@dataclass(frozen=True)
+class _SourceFeatureCandidate:
+    feature: Mapping[str, object]
+    record_index: int
+    stable_id: str
+    feature_index: int | None
+    record_key: str
+    identity_base: str
+
+
+@dataclass(frozen=True)
+class _IndexedBiologicalFeature:
+    normalized: Mapping[str, object]
+    record_index: int
+    stable_id: str
+    feature_index: int | None
+
+
+def _snapshot_attributes(
+    element: ET.Element,
+    names: Sequence[str],
+) -> Mapping[str, str]:
+    return MappingProxyType(
+        {
+            name: value
+            for name in names
+            if (value := element.get(name)) is not None
+        }
+    )
+
+
+def _record_catalog_index_metrics(
+    diagnostics: MutableMapping[str, Any] | None,
+    index: _RenderedSvgCatalogIndex,
+) -> None:
+    if diagnostics is None:
+        return
+    metrics = diagnostics.setdefault("metrics", {})
+    if not isinstance(metrics, MutableMapping):
+        raise GbdrawError("Feature catalog diagnostics metrics must be a mapping.")
+    values = {
+        "featureCatalogSvgParseCount": 1,
+        "featureCatalogFullDomTraversalCount": 1,
+        "featureCatalogRenderedFeatureCollectionCount": 1,
+        "featureCatalogCatalogOnlyDomMutationCount": 0,
+        "featureCatalogDomElementCount": index.dom_element_count,
+        "featureCatalogFeatureCandidateCount": index.feature_candidate_count,
+        "featureCatalogUniqueRenderedFeatureCount": len(
+            index.rendered_features
+        ),
+        "featureCatalogMatchCandidateCount": len(index.match_candidates),
+        "featureCatalogAnnotationCandidateCount": len(
+            index.annotation_candidates
+        ),
+    }
+    for name, value in values.items():
+        metrics[name] = int(metrics.get(name, 0)) + value
+
+
+def _build_rendered_svg_catalog_index(
+    svg_source: str,
+    diagnostics: MutableMapping[str, Any] | None,
+) -> _RenderedSvgCatalogIndex:
+    try:
+        root = ET.fromstring(svg_source)
+    except ET.ParseError as exc:
+        raise GbdrawError(
+            f"Malformed SVG source for feature catalog: {exc}"
+        ) from exc
+    if root.tag.rsplit("}", 1)[-1] != "svg":
+        raise GbdrawError("Feature catalog generation expected an SVG root.")
+
+    rendered_features: dict[str, _RenderedFeatureEntry] = {}
+    match_candidates: list[_SvgCatalogCandidate] = []
+    annotation_candidates: list[_SvgCatalogCandidate] = []
+    dom_element_count = 0
+    feature_candidate_count = 0
+    for element in root.iter():
+        dom_element_count += 1
+        if _is_feature_candidate(element):
+            feature_candidate_count += 1
+            entry = _rendered_feature_entry(element)
+            if entry is not None:
+                _merge_rendered_feature_entry(rendered_features, entry)
+        if _is_match_candidate(element):
+            match_candidates.append(
+                _SvgCatalogCandidate(
+                    _snapshot_attributes(element, _MATCH_SNAPSHOT_ATTRIBUTES)
+                )
+            )
+        if element.get("data-gbdraw-annotation-id"):
+            annotation_candidates.append(
+                _SvgCatalogCandidate(
+                    _snapshot_attributes(
+                        element,
+                        _ANNOTATION_SNAPSHOT_ATTRIBUTES,
+                    )
+                )
+            )
+
+    index = _RenderedSvgCatalogIndex(
+        rendered_features=MappingProxyType(rendered_features),
+        match_candidates=tuple(match_candidates),
+        annotation_candidates=tuple(annotation_candidates),
+        dom_element_count=dom_element_count,
+        feature_candidate_count=feature_candidate_count,
+    )
+    _record_catalog_index_metrics(diagnostics, index)
+    return index
+
+
+def _match_kind(attributes: Mapping[str, object]) -> str:
+    value = _text(attributes.get("data-match-kind")).lower()
     if value in {"pairwise", "orthogroup", "collinear", "homology"}:
         return value
-    if element.get("data-collinearity-block-id"):
+    if attributes.get("data-collinearity-block-id"):
         return "collinear"
-    if element.get("data-orthogroup-id"):
+    if attributes.get("data-orthogroup-id"):
         return "orthogroup"
     return "pairwise"
 
@@ -153,33 +356,40 @@ def _metadata_values(value: object | None) -> list[str]:
     )
 
 
-def _match_payload(element: ET.Element, index: int) -> dict[str, object]:
-    match_id, valid = _element_match_id_status(element)
+def _match_payload(
+    attributes: Mapping[str, object],
+    index: int,
+) -> dict[str, object]:
+    match_id, valid = _match_id_status(attributes)
     if not valid:
         raise GbdrawError("Rendered match contains conflicting match ID aliases.")
     match_id = match_id or f"match_{index + 1}"
-    element.set("data-gbdraw-match-id", match_id)
-    element.set("data-gbdraw-pairwise-match-id", match_id)
     payload: dict[str, object] = {
         "id": match_id,
-        "match_kind": _match_kind(element),
-        "orthogroup_ids": _metadata_values(element.get("data-orthogroup-id")),
-        "collinearity_block_id": _text(element.get("data-collinearity-block-id")),
-        "fill": _first_text(element.get("fill"), "#94a3b8"),
+        "match_kind": _match_kind(attributes),
+        "orthogroup_ids": _metadata_values(
+            attributes.get("data-orthogroup-id")
+        ),
+        "collinearity_block_id": _text(
+            attributes.get("data-collinearity-block-id")
+        ),
+        "fill": _first_text(attributes.get("fill"), "#94a3b8"),
         "query_record_id": _first_text(
-            element.get("data-query-record-id"), element.get("data-query")
+            attributes.get("data-query-record-id"),
+            attributes.get("data-query"),
         ),
         "subject_record_id": _first_text(
-            element.get("data-subject-record-id"), element.get("data-subject")
+            attributes.get("data-subject-record-id"),
+            attributes.get("data-subject"),
         ),
         "orientation": _first_text(
-            element.get("data-collinearity-orientation"),
-            element.get("data-orientation"),
+            attributes.get("data-collinearity-orientation"),
+            attributes.get("data-orientation"),
         ),
     }
     payload.update(
         {
-            field: _text(element.get(attribute))
+            field: _text(attributes.get(attribute))
             for field, attribute in _MATCH_ATTRIBUTES.items()
         }
     )
@@ -187,20 +397,13 @@ def _match_payload(element: ET.Element, index: int) -> dict[str, object]:
 
 
 def _match_payloads(
-    root: ET.Element,
-    features: Sequence[Mapping[str, object]],
+    candidates: Sequence[_SvgCatalogCandidate],
+    rendered_features: Mapping[str, Mapping[str, object]],
 ) -> list[dict[str, object]]:
-    rendered_features = {
-        _text(feature.get("svg_id")): feature
-        for feature in features
-        if _text(feature.get("svg_id"))
-    }
     payloads: list[dict[str, object]] = []
     seen: set[str] = set()
-    for element in root.iter():
-        if not _is_match_candidate(element):
-            continue
-        payload = _match_payload(element, len(payloads))
+    for candidate in candidates:
+        payload = _match_payload(candidate.attributes, len(payloads))
         match_id = _text(payload.get("id"))
         if not match_id or match_id in seen:
             raise GbdrawError("Rendered SVG contains invalid or duplicate match IDs.")
@@ -217,8 +420,6 @@ def _match_payloads(
             )
             payload.setdefault(f"{role}_feature_index", rendered.get("feature_index"))
         payloads.append(dict(_compact_wire_value(payload) or {}))
-        element.set("data-gbdraw-interactive-match", "true")
-        _add_class_token(element, "gbdraw-interactive-pairwise-match")
     return payloads
 
 
@@ -277,12 +478,17 @@ def _text_alias_status(
     payload: Mapping[str, object],
     keys: Sequence[str],
 ) -> tuple[str, bool]:
-    values = {
-        _text(payload.get(key))
-        for key in keys
-        if key in payload and _text(payload.get(key))
-    }
-    return (next(iter(values), ""), len(values) <= 1)
+    resolved = ""
+    for key in keys:
+        if key not in payload:
+            continue
+        value = _text(payload.get(key))
+        if not value:
+            continue
+        if resolved and value != resolved:
+            return "", False
+        resolved = value
+    return resolved, True
 
 
 def _group_presentation(
@@ -346,17 +552,20 @@ def _presentation_from_search_scope(
 
 
 def _first_qualifier_value(value: object | None) -> str:
-    values = _sequence(value)
-    if not values:
-        values = [value] if value is not None else []
-    return next(
-        (
-            raw
-            for entry in values
-            if (raw := str(entry)) and raw.strip()
-        ),
-        "",
-    )
+    if value is None:
+        return ""
+    value_type = type(value)
+    if value_type is list or value_type is tuple:
+        values = value
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        values = value
+    else:
+        values = (value,)
+    for entry in values:
+        raw = str(entry)
+        if raw and raw.strip():
+            return raw
+    return ""
 
 
 def _record_index(feature: Mapping[str, object]) -> int | None:
@@ -387,40 +596,16 @@ def _feature_index(feature: Mapping[str, object]) -> int | None:
 
 
 def _record_key_alias(feature: Mapping[str, object]) -> tuple[str, bool]:
-    values = {
-        _text(feature.get(key))
-        for key in ("record_key", "recordKey")
-        if key in feature and _text(feature.get(key))
-    }
-    return (next(iter(values), ""), len(values) <= 1)
+    return _text_alias_status(feature, ("record_key", "recordKey"))
 
 
 def _biological_feature_id_alias(
     feature: Mapping[str, object],
 ) -> tuple[str, bool]:
-    values = {
-        _text(feature.get(key))
-        for key in ("biological_feature_id", "biologicalFeatureId")
-        if key in feature and _text(feature.get(key))
-    }
-    return (next(iter(values), ""), len(values) <= 1)
-
-
-def _rendered_svg_id(feature: Mapping[str, object]) -> str:
-    rendered_id, rendered_valid = _feature_rendered_id_status(feature)
-    svg_aliases = {
-        _text(feature.get(key))
-        for key in ("svg_id", "svgId")
-        if key in feature and _text(feature.get(key))
-    }
-    values = set(svg_aliases)
-    if rendered_id:
-        values.add(rendered_id)
-    if not rendered_valid or len(values) != 1:
-        raise GbdrawError(
-            "Rendered feature metadata contains missing or conflicting SVG ID aliases."
-        )
-    return next(iter(values))
+    return _text_alias_status(
+        feature,
+        ("biological_feature_id", "biologicalFeatureId"),
+    )
 
 
 def _validated_source_identity(
@@ -429,6 +614,33 @@ def _validated_source_identity(
     *,
     description: str,
 ) -> tuple[int, str, int | None]:
+    if type(feature) is dict:
+        record_index = feature.get("record_idx")
+        feature_index = feature.get("feature_index")
+        stable_feature_id = feature.get("stable_feature_id")
+        record_key = feature.get("recordKey")
+        if (
+            type(record_index) is int
+            and 0 <= record_index < len(record_keys)
+            and (
+                feature_index is None
+                or type(feature_index) is int
+                and feature_index >= 0
+            )
+            and type(stable_feature_id) is str
+            and stable_feature_id
+            and feature.get("stable_svg_id") == stable_feature_id
+            and feature.get("record_key") is None
+            and (
+                record_key is None
+                or type(record_key) is str
+                and record_key == record_keys[record_index]
+            )
+            and feature.keys().isdisjoint(_SOURCE_IDENTITY_CONFLICT_KEYS)
+        ):
+            stable_id = _stable_feature_id(feature)
+            if stable_id:
+                return record_index, stable_id, feature_index
     record_index = _record_index(feature)
     stable_id = _stable_feature_id(feature)
     feature_index = _feature_index(feature)
@@ -489,25 +701,12 @@ def _record_key(record_keys: Sequence[str], record_index: int | None) -> str:
     return str(record_keys[record_index])
 
 
-def _identity_base(feature: Mapping[str, object]) -> str:
-    stable_id = _stable_feature_id(feature)
-    if stable_id:
-        return stable_id
-    feature_index = _feature_index(feature)
-    if feature_index is not None:
-        return f"feature-{feature_index}"
-    raise GbdrawError(
-        "Feature catalog source identity requires a stable feature ID or "
-        "source feature index."
-    )
-
-
 def _normalized_biological_features(
     context: InteractiveSvgContext,
     record_keys: Sequence[str],
 ) -> tuple[
     list[dict[str, object]],
-    list[tuple[Mapping[str, object], dict[str, object]]],
+    list[_IndexedBiologicalFeature],
 ]:
     rendered_source_identities = {
         (_record_index(feature), _stable_feature_id(feature))
@@ -520,44 +719,37 @@ def _normalized_biological_features(
         if context.biological_features
         else context.features
     )
-    candidates = [
-        feature
-        for feature in source_features
-        if isinstance(feature, Mapping)
-        and (
-            _text(feature.get("type")).lower() != "source"
-            or (
-                (
-                    _record_index(feature),
-                    _stable_feature_id(feature),
-                )
-                in rendered_source_identities
-            )
-        )
-    ]
-    source_identities = [
-        _validated_source_identity(
+    candidates: list[_SourceFeatureCandidate] = []
+    collisions: Counter[tuple[str, str]] = Counter()
+    collision_indexes: dict[tuple[str, str], list[int | None]] = defaultdict(
+        list
+    )
+    for feature in source_features:
+        if not isinstance(feature, Mapping):
+            continue
+        if _text(feature.get("type")).lower() == "source" and (
+            _record_index(feature),
+            _stable_feature_id(feature),
+        ) not in rendered_source_identities:
+            continue
+        record_index, stable_id, feature_index = _validated_source_identity(
             feature,
             record_keys,
             description="Feature catalog source feature",
         )
-        for feature in candidates
-    ]
-    identity_bases = [
-        (_record_key(record_keys, record_index), _identity_base(feature))
-        for feature, (record_index, _stable_id, _source_index) in zip(
-            candidates,
-            source_identities,
-            strict=True,
+        record_key = _record_key(record_keys, record_index)
+        identity_base = stable_id or f"feature-{feature_index}"
+        candidate = _SourceFeatureCandidate(
+            feature=feature,
+            record_index=record_index,
+            stable_id=stable_id,
+            feature_index=feature_index,
+            record_key=record_key,
+            identity_base=identity_base,
         )
-    ]
-    collisions = Counter(identity_bases)
-    collision_indexes: dict[tuple[str, str], list[int | None]] = defaultdict(list)
-    for identity, (_record_index_value, _stable_id, feature_index) in zip(
-        identity_bases,
-        source_identities,
-        strict=True,
-    ):
+        candidates.append(candidate)
+        identity = (record_key, identity_base)
+        collisions[identity] += 1
         collision_indexes[identity].append(feature_index)
     for identity, indexes in collision_indexes.items():
         if len(indexes) > 1 and (
@@ -570,15 +762,14 @@ def _normalized_biological_features(
             )
     used: set[tuple[str, str]] = set()
     normalized: list[dict[str, object]] = []
-    indexed: list[tuple[Mapping[str, object], dict[str, object]]] = []
+    indexed: list[_IndexedBiologicalFeature] = []
 
-    for feature, (record_key, identity_base), source_identity in zip(
-        candidates,
-        identity_bases,
-        source_identities,
-        strict=True,
-    ):
-        _record_index_value, stable_id, feature_index = source_identity
+    for candidate in candidates:
+        feature = candidate.feature
+        record_key = candidate.record_key
+        identity_base = candidate.identity_base
+        stable_id = candidate.stable_id
+        feature_index = candidate.feature_index
         biological_feature_id = identity_base
         if collisions[(record_key, identity_base)] > 1:
             biological_feature_id = f"{identity_base}~{feature_index}"
@@ -589,28 +780,13 @@ def _normalized_biological_features(
             )
         used.add((record_key, biological_feature_id))
 
-        payload = dict(feature)
-        for key in _BIOLOGICAL_ALIAS_KEYS | _ORTHOGROUP_FEATURE_KEYS:
-            payload.pop(key, None)
-        payload.pop("selector", None)
-        for fasta_key in (
-            "nucleotide_fasta",
-            "nucleotideFasta",
-            "amino_acid_fasta",
-            "aminoAcidFasta",
-        ):
-            payload.pop(fasta_key, None)
+        payload = {
+            key: value
+            for key, value in feature.items()
+            if key not in _BIOLOGICAL_REMOVED_KEYS
+        }
         payload["biologicalFeatureId"] = biological_feature_id
         payload["recordKey"] = record_key
-        for record_index_key in ("record_idx", "recordIndex", "record_index"):
-            payload.pop(record_index_key, None)
-        for feature_index_key in (
-            "feature_index",
-            "featureIndex",
-            "source_feature_index",
-            "sourceFeatureIndex",
-        ):
-            payload.pop(feature_index_key, None)
         if feature_index is not None:
             payload["sourceFeatureIndex"] = feature_index
         if stable_id and stable_id != biological_feature_id:
@@ -618,12 +794,19 @@ def _normalized_biological_features(
 
         qualifiers = payload.get("qualifiers")
         if isinstance(qualifiers, Mapping):
-            normalized_qualifiers = {
-                str(key): list(value)
-                if isinstance(value, Sequence) and not isinstance(value, (str, bytes))
-                else value
-                for key, value in qualifiers.items()
-            }
+            normalized_qualifiers = {}
+            for key, value in qualifiers.items():
+                value_type = type(value)
+                normalized_qualifiers[str(key)] = (
+                    list(value)
+                    if value_type is list
+                    or value_type is tuple
+                    or (
+                        isinstance(value, Sequence)
+                        and not isinstance(value, (str, bytes))
+                    )
+                    else value
+                )
             amino_acid_sequence = _text(
                 payload.get("amino_acid_sequence")
                 or payload.get("aminoAcidSequence")
@@ -646,35 +829,58 @@ def _normalized_biological_features(
                 "gene",
                 "product",
             ):
-                if payload.get(field) == _first_qualifier_value(
-                    normalized_qualifiers.get(field)
+                field_value = payload.get(field)
+                if (
+                    field_value is None
+                    or field_value == ""
+                    or field_value is False
+                    or field_value
+                    == _first_qualifier_value(
+                        normalized_qualifiers.get(field)
+                    )
                 ):
                     payload.pop(field, None)
-            if payload.get("note") == _first_qualifier_value(
-                normalized_qualifiers.get("note")
-            )[:50]:
+            note = payload.get("note")
+            if (
+                note is None
+                or note == ""
+                or note is False
+                or note
+                == _first_qualifier_value(
+                    normalized_qualifiers.get("note")
+                )[:50]
+            ):
                 payload.pop("note", None)
 
-        protein_id = _text(
-            payload.get("protein_id")
-            or payload.get("proteinId")
-            or (
-                payload.get("qualifiers", {}).get("protein_id")
-                if isinstance(payload.get("qualifiers"), Mapping)
-                else None
-            )
-        )
         source_protein_id = _text(
             payload.get("source_protein_id")
             or payload.get("sourceProteinId")
         )
-        if protein_id and source_protein_id == protein_id:
-            payload.pop("source_protein_id", None)
-            payload.pop("sourceProteinId", None)
+        if source_protein_id:
+            protein_id = _text(
+                payload.get("protein_id")
+                or payload.get("proteinId")
+                or (
+                    payload.get("qualifiers", {}).get("protein_id")
+                    if isinstance(payload.get("qualifiers"), Mapping)
+                    else None
+                )
+            )
+            if protein_id and source_protein_id == protein_id:
+                payload.pop("source_protein_id", None)
+                payload.pop("sourceProteinId", None)
 
-        parts = _sequence(
-            payload.get("location_parts") or payload.get("locationParts")
+        if type(payload.get("qualifiers")) is dict:
+            compact_qualifiers = _compact_wire_value(payload["qualifiers"])
+            if compact_qualifiers is None:
+                payload.pop("qualifiers")
+            else:
+                payload["qualifiers"] = compact_qualifiers
+
+        raw_parts = payload.get("location_parts") or payload.get(
+            "locationParts"
         )
+        parts = _sequence(raw_parts) if raw_parts else []
         if len(parts) == 1 and isinstance(parts[0], Mapping):
             part = parts[0]
             start = _integer_or_none(payload.get("start"))
@@ -690,55 +896,94 @@ def _normalized_biological_features(
                 payload.pop("location_parts", None)
                 payload.pop("locationParts", None)
 
-        compact = dict(_compact_wire_value(payload) or {})
+        compact: dict[str, object] = {}
+        for key, value in payload.items():
+            value_type = type(value)
+            if key == "qualifiers" and value_type is dict:
+                normalized_value = value or None
+            elif value_type is str or value_type is bool:
+                normalized_value = value or None
+            elif value is None:
+                normalized_value = None
+            elif value_type is int or value_type is float or value_type is bytes:
+                normalized_value = value
+            else:
+                normalized_value = _compact_wire_value(value)
+            if normalized_value is not None:
+                compact[str(key)] = normalized_value
         normalized.append(compact)
-        indexed.append((feature, compact))
+        indexed.append(
+            _IndexedBiologicalFeature(
+                normalized=compact,
+                record_index=candidate.record_index,
+                stable_id=stable_id,
+                feature_index=feature_index,
+            )
+        )
     return normalized, indexed
 
 
 class _BiologicalFeatureIndex:
     def __init__(
         self,
-        indexed_features: Sequence[
-            tuple[Mapping[str, object], Mapping[str, object]]
-        ],
+        indexed_features: Sequence[_IndexedBiologicalFeature],
     ) -> None:
         self._by_record_feature_index: dict[
-            tuple[int, int],
-            list[Mapping[str, object]],
-        ] = defaultdict(list)
+            tuple[int, int], Mapping[str, object] | None
+        ] = {}
         self._by_record_stable: dict[
             tuple[int, str],
-            list[Mapping[str, object]],
-        ] = defaultdict(list)
+            Mapping[str, object] | list[Mapping[str, object]],
+        ] = {}
         self._by_canonical: dict[
-            tuple[str, str],
-            list[Mapping[str, object]],
-        ] = defaultdict(list)
-        for raw, normalized in indexed_features:
-            record_index = _record_index(raw)
-            stable_id = _stable_feature_id(raw)
-            feature_index = _feature_index(raw)
+            tuple[str, str], Mapping[str, object] | None
+        ] = {}
+        for indexed in indexed_features:
+            normalized = indexed.normalized
+            record_index = indexed.record_index
+            stable_id = indexed.stable_id
+            feature_index = indexed.feature_index
             if record_index is not None and feature_index is not None:
-                self._by_record_feature_index[
-                    (record_index, feature_index)
-                ].append(
-                    normalized
+                self._add_unique(
+                    self._by_record_feature_index,
+                    (record_index, feature_index),
+                    normalized,
                 )
             if stable_id:
                 if record_index is not None:
-                    self._by_record_stable[(record_index, stable_id)].append(
-                        normalized
+                    self._add_stable(
+                        self._by_record_stable,
+                        (record_index, stable_id),
+                        normalized,
                     )
             canonical = _feature_reference(normalized)
             if all(canonical):
-                self._by_canonical[canonical].append(normalized)
+                self._add_unique(self._by_canonical, canonical, normalized)
 
     @staticmethod
-    def _unique(
-        candidates: Sequence[Mapping[str, object]],
-    ) -> Mapping[str, object] | None:
-        return candidates[0] if len(candidates) == 1 else None
+    def _add_unique(
+        index: dict[object, Mapping[str, object] | None],
+        key: object,
+        feature: Mapping[str, object],
+    ) -> None:
+        index[key] = None if key in index else feature
+
+    @staticmethod
+    def _add_stable(
+        index: dict[
+            tuple[int, str],
+            Mapping[str, object] | list[Mapping[str, object]],
+        ],
+        key: tuple[int, str],
+        feature: Mapping[str, object],
+    ) -> None:
+        existing = index.get(key)
+        if existing is None:
+            index[key] = feature
+        elif isinstance(existing, list):
+            existing.append(feature)
+        else:
+            index[key] = [existing, feature]
 
     def resolve(
         self,
@@ -750,31 +995,33 @@ class _BiologicalFeatureIndex:
         if stable_id:
             if record_index is None:
                 return None
-            stable_candidates = self._by_record_stable.get(
-                (record_index, stable_id),
-                [],
+            stable_candidate = self._by_record_stable.get(
+                (record_index, stable_id)
             )
             if feature_index is None:
-                return self._unique(stable_candidates)
-            indexed = self._unique(
-                self._by_record_feature_index.get(
-                    (record_index, feature_index),
-                    [],
+                return (
+                    stable_candidate
+                    if isinstance(stable_candidate, Mapping)
+                    else None
                 )
+            indexed = self._by_record_feature_index.get(
+                (record_index, feature_index)
             )
             if indexed is None:
                 return None
-            return (
-                indexed
-                if any(candidate is indexed for candidate in stable_candidates)
-                else None
-            )
-        if record_index is not None and feature_index is not None:
-            return self._unique(
-                self._by_record_feature_index.get(
-                    (record_index, feature_index),
-                    [],
+            if isinstance(stable_candidate, list):
+                return (
+                    indexed
+                    if any(
+                        candidate is indexed
+                        for candidate in stable_candidate
+                    )
+                    else None
                 )
+            return indexed if indexed is stable_candidate else None
+        if record_index is not None and feature_index is not None:
+            return self._by_record_feature_index.get(
+                (record_index, feature_index)
             )
         return None
 
@@ -786,11 +1033,8 @@ class _BiologicalFeatureIndex:
     ) -> Mapping[str, object] | None:
         if not record_key or not biological_feature_id:
             return None
-        return self._unique(
-            self._by_canonical.get(
-                (record_key, biological_feature_id),
-                [],
-            )
+        return self._by_canonical.get(
+            (record_key, biological_feature_id)
         )
 
 
@@ -870,41 +1114,83 @@ def _resolve_reference(
 
 
 def _normalized_rendered_features(
-    rendered_features: Sequence[Mapping[str, object]],
+    index: _RenderedSvgCatalogIndex,
+    context: InteractiveSvgContext,
     record_keys: Sequence[str],
     biological_index: _BiologicalFeatureIndex,
-) -> tuple[list[dict[str, object]], dict[str, Mapping[str, object]]]:
+) -> tuple[
+    list[dict[str, object]],
+    dict[str, Mapping[str, object]],
+    dict[str, dict[str, object]],
+]:
     normalized: list[dict[str, object]] = []
     references_by_svg_id: dict[str, Mapping[str, object]] = {}
-    for feature in rendered_features:
-        svg_id = _rendered_svg_id(feature)
-        reference = _resolve_reference(
-            feature,
-            record_keys,
-            biological_index,
-            description=f"Rendered feature {svg_id!r}",
+    match_identities_by_svg_id: dict[str, dict[str, object]] = {}
+    for resolved in _resolve_rendered_features(
+        index.rendered_features,
+        context.features,
+    ):
+        svg_id = resolved.svg_id
+        stable_id = _first_text(
+            (
+                resolved.stable_feature_id
+                if resolved.feature is not None
+                else ""
+            ),
+            resolved.entry.payload_stable_id,
         )
+        record_index = resolved.record_index
+        feature_index = resolved.feature_index
+        description = f"Rendered feature {svg_id!r}"
+        if (
+            record_index is None
+            or not 0 <= record_index < len(record_keys)
+            or (not stable_id and feature_index is None)
+        ):
+            raise GbdrawError(
+                f"{description} must identify one biological feature by a "
+                "record-scoped stable feature ID or source feature index and a "
+                "valid record index/key."
+            )
+        reference = biological_index.resolve(
+            record_index=record_index,
+            stable_id=stable_id,
+            feature_index=feature_index,
+        )
+        if reference is None:
+            raise GbdrawError(
+                f"{description} identity fields do not resolve to the same "
+                "biological feature by a record-scoped stable feature ID or "
+                "source feature index."
+            )
         record_key, biological_feature_id = _feature_reference(reference)
-        if not svg_id or not record_key or not biological_feature_id:
+        if not record_key or not biological_feature_id:
             raise GbdrawError(
                 "Rendered feature metadata does not resolve to one biological "
-                f"feature: {svg_id or '<missing SVG ID>'}."
+                f"feature: {svg_id}."
             )
         if svg_id in references_by_svg_id:
             raise GbdrawError(
                 f"Rendered feature SVG ID {svg_id!r} is duplicated."
             )
-        payload = {
-            "svgId": svg_id,
-            "recordKey": record_key,
-            "biologicalFeatureId": biological_feature_id,
-            "fillColor": _text(
-                feature.get("fill_color") or feature.get("fillColor")
-            ),
-        }
-        normalized.append(dict(_compact_wire_value(payload) or {}))
+        normalized.append(
+            {
+                "svgId": svg_id,
+                "recordKey": record_key,
+                "biologicalFeatureId": biological_feature_id,
+                "fillColor": resolved.entry.fill,
+            }
+        )
         references_by_svg_id[svg_id] = reference
-    return normalized, references_by_svg_id
+        match_identity: dict[str, object] = {
+            "svg_id": svg_id,
+            "record_idx": record_index,
+            "stable_svg_id": stable_id,
+        }
+        if feature_index is not None:
+            match_identity["feature_index"] = feature_index
+        match_identities_by_svg_id[svg_id] = match_identity
+    return normalized, references_by_svg_id, match_identities_by_svg_id
 
 
 def _normalized_orthogroups(
@@ -1319,7 +1605,7 @@ def _normalized_matches(
 
 
 def _normalized_annotations(
-    root: ET.Element,
+    candidates: Sequence[_SvgCatalogCandidate],
     context: InteractiveSvgContext,
 ) -> list[dict[str, object]]:
     context_by_key = {
@@ -1333,14 +1619,13 @@ def _normalized_annotations(
         if isinstance(item, Mapping)
     }
     annotations: list[dict[str, object]] = []
-    for element in root.iter():
-        annotation_id = _text(element.get("data-gbdraw-annotation-id"))
-        if not annotation_id:
-            continue
+    for candidate in candidates:
+        attributes = candidate.attributes
+        annotation_id = _text(attributes.get("data-gbdraw-annotation-id"))
         key = (
-            _text(element.get("data-gbdraw-record-index")),
-            _text(element.get("data-gbdraw-annotation-track-id")),
-            _text(element.get("data-gbdraw-annotation-set-id")),
+            _text(attributes.get("data-gbdraw-record-index")),
+            _text(attributes.get("data-gbdraw-annotation-track-id")),
+            _text(attributes.get("data-gbdraw-annotation-set-id")),
             annotation_id,
         )
         payload = context_by_key.get(
@@ -1349,20 +1634,22 @@ def _normalized_annotations(
         ).copy()
         payload.update(
             {
-                "dom_id": _text(element.get("id")),
+                "dom_id": _text(attributes.get("id")),
                 "id": annotation_id,
                 "set_id": key[2],
                 "track_id": key[1],
-                "record_id": _text(element.get("data-gbdraw-record-id")),
+                "record_id": _text(
+                    attributes.get("data-gbdraw-record-id")
+                ),
                 "record_index": (
                     int(key[0]) if key[0].isdigit() else key[0]
                 ),
                 "mark": _text(
-                    element.get("data-gbdraw-annotation-mark")
+                    attributes.get("data-gbdraw-annotation-mark")
                     or payload.get("mark")
                 ),
                 "label": _text(
-                    element.get("data-gbdraw-annotation-label")
+                    attributes.get("data-gbdraw-annotation-label")
                     or payload.get("label")
                 ),
             }
@@ -1599,19 +1886,16 @@ def build_feature_catalog_item(
     *,
     result_index: int,
     result_name: str,
+    _diagnostics: MutableMapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Normalize one prepared render context without reading source files."""
 
     if not isinstance(context, InteractiveSvgContext):
         raise GbdrawError("Feature catalog generation requires prepared context.")
-    try:
-        root = ET.fromstring(svg_source)
-    except ET.ParseError as exc:
-        raise GbdrawError(
-            f"Malformed SVG source for feature catalog: {exc}"
-        ) from exc
-    if root.tag.rsplit("}", 1)[-1] != "svg":
-        raise GbdrawError("Feature catalog generation expected an SVG root.")
+    svg_index = _build_rendered_svg_catalog_index(
+        svg_source,
+        _diagnostics,
+    )
 
     record_keys = _record_keys(context)
     biological_features, indexed_features = _normalized_biological_features(
@@ -1619,18 +1903,20 @@ def build_feature_catalog_item(
         record_keys,
     )
     biological_index = _BiologicalFeatureIndex(indexed_features)
-    rendered_payloads = _feature_payloads(root, context)
-    rendered_entries = _collect_rendered_features(root)
-    for rendered_payload in rendered_payloads:
-        svg_id = _text(rendered_payload.get("svg_id"))
-        if svg_id in rendered_entries:
-            rendered_payload["fill_color"] = rendered_entries[svg_id].fill
-    rendered_features, rendered_references = _normalized_rendered_features(
-        rendered_payloads,
+    (
+        rendered_features,
+        rendered_references,
+        rendered_match_identities,
+    ) = _normalized_rendered_features(
+        svg_index,
+        context,
         record_keys,
         biological_index,
     )
-    raw_matches = _match_payloads(root, rendered_payloads)
+    raw_matches = _match_payloads(
+        svg_index.match_candidates,
+        rendered_match_identities,
+    )
     orthogroups = list(context.orthogroups)
     known_group_ids: set[str] = set()
     for group in orthogroups:
@@ -1695,7 +1981,10 @@ def build_feature_catalog_item(
         "features": rendered_features,
         "biologicalFeatures": biological_features,
         "orthogroups": normalized_orthogroups,
-        "annotations": _normalized_annotations(root, context),
+        "annotations": _normalized_annotations(
+            svg_index.annotation_candidates,
+            context,
+        ),
         "comparisonMatches": normalized_matches,
     }
     if sequence_sources:
