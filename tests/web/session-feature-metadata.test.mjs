@@ -24,6 +24,7 @@ await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normaliz
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
 await copyModule('gbdraw/web/js/services/diagram-worker-protocol.js', 'services/diagram-worker-protocol.js');
 await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
+await copyModule('gbdraw/web/js/services/byte-utils.js', 'services/byte-utils.js');
 await copyModule('gbdraw/web/js/services/file-content-cache.js', 'services/file-content-cache.js');
 await copyModule('gbdraw/web/js/services/depth-file-codec.js', 'services/depth-file-codec.js');
 await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');

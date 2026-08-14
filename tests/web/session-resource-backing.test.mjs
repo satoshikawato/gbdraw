@@ -14,6 +14,7 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
 
 const {
   adoptCurrentSessionResources,
+  createCombinedSessionResourceFileView,
   createSessionResourceFileView,
   readSessionResourceBytes,
   readSessionResourceText
@@ -87,15 +88,33 @@ test('current-session file views materialize one requested resource once', async
     directBytes,
     'concurrent backing reads share one Promise'
   );
-  const [bytesA, bytesB, textA, textB, directText] = await Promise.all([
+  const genericBytes = readFileBytes(alpha);
+  assert.strictEqual(
+    genericBytes,
+    directBytes,
+    'the generic cache retains the backing Promise rather than a copied byte array'
+  );
+  assert.strictEqual(
     readFileBytes(alpha),
+    genericBytes,
+    'concurrent generic reads share the cached Promise'
+  );
+  const [directValue, bytesA, bytesB, textA, textB, directText] = await Promise.all([
+    directBytes,
+    genericBytes,
     readFileBytes(alpha),
     readFileText(alpha),
     readFileText(alpha),
     readSessionResourceText(alpha)
   ]);
 
+  assert.strictEqual(bytesA, directValue);
   assert.strictEqual(bytesA, bytesB);
+  assert.strictEqual(
+    await readFileBytes(alpha),
+    directValue,
+    'the generic cache does not retain a second Uint8Array'
+  );
   assert.equal(new TextDecoder().decode(bytesA), alphaText);
   assert.equal(textA, alphaText);
   assert.equal(textB, alphaText);
@@ -108,6 +127,72 @@ test('current-session file views materialize one requested resource once', async
   assert.equal(metricTotal('resourceByteReadCount', 'beta'), 0);
   assert.equal(await readFileText(beta), 'beta resource\n');
   assert.equal(metricTotal('base64DecodeCount', 'beta'), 1);
+});
+
+test('combined file views report exact canonical byte sizes without preview decoding', async () => {
+  const cases = [
+    {
+      name: 'both resources end with LF',
+      parts: ['a\n', 'ab\n'],
+      expected: 'a\nab\n'
+    },
+    {
+      name: 'neither resource ends with LF',
+      parts: ['a', 'abc'],
+      expected: 'a\nabc\n'
+    },
+    {
+      name: 'one resource ends with LF',
+      parts: ['alpha\n', 'be'],
+      expected: 'alpha\nbe\n'
+    }
+  ];
+
+  for (const { name, parts, expected } of cases) {
+    resetMetrics();
+    const resources = Object.fromEntries(parts.map((text, index) => [
+      `part-${index + 1}`,
+      encodedDescriptor(`part-${index + 1}.gbk`, text)
+    ]));
+    const table = adoptCurrentSessionResources(resources);
+    const view = createCombinedSessionResourceFileView(table, Object.keys(resources));
+    const expectedBytes = new TextEncoder().encode(expected);
+
+    assert.equal(metrics.length, 0, `${name}: metadata projection stays lazy`);
+    assert.equal(view.size, expectedBytes.byteLength, `${name}: declared size is exact`);
+
+    const backingRead = readSessionResourceBytes(view);
+    assert.strictEqual(
+      readSessionResourceBytes(view),
+      backingRead,
+      `${name}: concurrent combined backing reads share one Promise`
+    );
+    const genericRead = readFileBytes(view);
+    assert.strictEqual(
+      genericRead,
+      backingRead,
+      `${name}: generic and combined boundaries share one Promise`
+    );
+    assert.strictEqual(readFileBytes(view), genericRead);
+
+    const [backingBytes, genericBytes] = await Promise.all([backingRead, genericRead]);
+    assert.strictEqual(
+      genericBytes,
+      backingBytes,
+      `${name}: generic and combined boundaries share one Uint8Array`
+    );
+    assert.equal(view.size, genericBytes.byteLength, `${name}: materialized size is exact`);
+    assert.equal(new TextDecoder().decode(genericBytes), expected);
+
+    Object.keys(resources).forEach((resourceId) => {
+      assert.equal(metricTotal('base64DecodeCount', resourceId), 1);
+      assert.equal(metricTotal('resourceByteReadCount', resourceId), 1);
+      assert.equal(
+        metricTotal('decodedByteCount', resourceId),
+        resources[resourceId].size
+      );
+    });
+  }
 });
 
 test('lazy resource failures identify the resource and remain cached', async () => {

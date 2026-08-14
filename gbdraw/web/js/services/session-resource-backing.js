@@ -1,9 +1,10 @@
 import {
+  base64DecodedLastByte,
   base64ToBytes,
   bytesToText,
   sha256Hex,
   textToBytes
-} from './file-content-cache.js';
+} from './byte-utils.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
@@ -12,6 +13,7 @@ import { recordStructuralMetric } from './runtime-test-hooks.js';
 
 const tableBackings = new WeakMap();
 const fileViewBackings = new WeakMap();
+const LF_BYTE = 0x0A;
 
 const normalizedChecksum = (value) => {
   if (value === null || value === undefined || value === '') return null;
@@ -179,12 +181,18 @@ export const createCombinedSessionResourceFileView = (
   if (backings.length === 1) {
     return createSessionResourceFileView(table, backings[0].resourceId, metadata);
   }
+  const appendedLineFeeds = backings.reduce((count, backing) => (
+    count + Number(
+      backing.size > 0
+      && base64DecodedLastByte(backing.descriptor.data, backing.size) !== LF_BYTE
+    )
+  ), 0);
   const composite = {
     resourceId: backings.map(({ resourceId }) => resourceId).join('+'),
     name: String(metadata.name || 'canonical-circular-records.gb'),
     type: String(metadata.type || 'text/plain'),
     size: backings.reduce((total, backing) => total + backing.size, 0)
-      + Math.max(0, backings.length - 1),
+      + appendedLineFeeds,
     lastModified: metadata.lastModified === undefined
       ? Math.max(0, ...backings.map((backing) => backing.lastModified))
       : Number(metadata.lastModified) || 0,
@@ -202,7 +210,7 @@ export const createCombinedSessionResourceFileView = (
   const readParts = () => Promise.all(backings.map((backing) => materializeBytes(backing)))
     .then((parts) => {
       const lengths = parts.map((part) => (
-        part.byteLength > 0 && part[part.byteLength - 1] !== 0x0A
+        part.byteLength > 0 && part[part.byteLength - 1] !== LF_BYTE
           ? part.byteLength + 1
           : part.byteLength
       ));
@@ -211,7 +219,7 @@ export const createCombinedSessionResourceFileView = (
       parts.forEach((part, index) => {
         combined.set(part, offset);
         offset += part.byteLength;
-        if (lengths[index] > part.byteLength) combined[offset++] = 0x0A;
+        if (lengths[index] > part.byteLength) combined[offset++] = LF_BYTE;
       });
       return combined;
     });
