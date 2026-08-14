@@ -142,14 +142,14 @@ import {
 } from '../app/legend-layout/composition-actions.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
+  buildValidatedProteinIdentityIndex,
   classifyRawLosatCacheEntry,
   createLegacyProteinCandidateEnvelope,
   emptyProteinIdentityManifest,
   isCurrentRawLosatCacheEntry,
   isLosatDerivedCacheEntry,
   normalizeLegacyProteinCandidateEnvelope,
-  proteinRuntimeIdSets,
-  rawProteinTextMatchesBindings,
+  releaseValidatedProteinIdentityIndex,
   serializableLegacyProteinCandidateEnvelope,
   validateDerivedProteinReferences,
   validateProteinRawEntryReferences,
@@ -1218,39 +1218,43 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   rejectInvalidLosatCacheKeys(rawEntries, 'LOSAT', { requireKey: true });
   rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
 
-  if (!validateProteinIdentityManifest(manifest)) {
+  if (sourceSessionVersion === SESSION_VERSION) {
+    recordStructuralMetric('currentSessionPreflightProteinManifestValidationCount');
+  }
+  const identityIndex = buildValidatedProteinIdentityIndex(manifest);
+  if (!identityIndex) {
     throw new Error(
       `Session version ${sourceSessionVersion} requires a valid schema-2 protein manifest.`
     );
   }
-  for (const entry of rawEntries) {
-    const classification = classifyRawLosatCacheEntry(entry);
-    if (!['protein-current', 'nucleotide-current'].includes(classification)) {
-      throw new Error(
-        `Session version ${sourceSessionVersion} contains a non-current raw LOSAT entry.`
-      );
+  let invalidDerivedEntry = false;
+  try {
+    for (const entry of rawEntries) {
+      const classification = classifyRawLosatCacheEntry(entry);
+      if (!['protein-current', 'nucleotide-current'].includes(classification)) {
+        throw new Error(
+          `Session version ${sourceSessionVersion} contains a non-current raw LOSAT entry.`
+        );
+      }
+      if (classification !== 'protein-current') continue;
+      if (sourceSessionVersion === SESSION_VERSION) {
+        recordStructuralMetric('currentSessionPreflightProteinRawTextValidationCount');
+      }
+      if (
+        !validateProteinRawEntryReferences(entry, manifest, { identityIndex })
+      ) {
+        throw new Error(
+          `Session version ${sourceSessionVersion} contains an unresolved protein raw entry.`
+        );
+      }
     }
-    if (classification !== 'protein-current') continue;
-    const ids = proteinRuntimeIdSets(
-      manifest,
-      entry.queryRecordInstanceKey,
-      entry.subjectRecordInstanceKey
+    invalidDerivedEntry = derivedEntries.some(
+      (entry) => !validateDerivedProteinReferences(entry, manifest, { identityIndex })
     );
-    if (
-      !validateProteinRawEntryReferences(entry, manifest) ||
-      !ids ||
-      !rawProteinTextMatchesBindings(entry.text, ids.query, ids.subject)
-    ) {
-      throw new Error(
-        `Session version ${sourceSessionVersion} contains an unresolved protein raw entry.`
-      );
-    }
+  } finally {
+    releaseValidatedProteinIdentityIndex(identityIndex);
   }
-  if (
-    derivedEntries.some(
-      (entry) => !validateDerivedProteinReferences(entry, manifest)
-    )
-  ) {
+  if (invalidDerivedEntry) {
     throw new Error(
       `Session version ${sourceSessionVersion} contains an invalid derived LOSATP entry.`
     );
@@ -1565,14 +1569,22 @@ const preflightSessionImport = (rawData) => {
     if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') {
       throw new Error('Invalid session file.');
     }
+    recordSessionLifecycleEvent('session-authority-validation-start');
     adoptedSession = adoptCurrentSessionDocument(rawData, SESSION_VERSION);
+    recordSessionLifecycleEvent('session-authority-validation-end');
+    recordSessionLifecycleEvent('feature-catalog-validation-start');
     validatedFeatureCatalog = validateCurrentWriterFeatureCatalog(rawData, {
       adopt: true
     });
+    recordSessionLifecycleEvent('feature-catalog-validation-end');
+    recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
       featureCatalog: validatedFeatureCatalog
     });
+    recordSessionLifecycleEvent('editor-state-normalization-end');
+    recordSessionLifecycleEvent('resource-table-adoption-start');
     currentResourceTable = adoptCurrentSessionResources(rawData.resources);
+    recordSessionLifecycleEvent('resource-table-adoption-end');
     normalizedData = rawData;
   } else {
     validateSessionAuthorityInventory(rawData, sourceSessionVersion);
@@ -1586,7 +1598,9 @@ const preflightSessionImport = (rawData) => {
   )
     ? promoteGallerySessionToCurrent(normalizedData)
     : normalizedData;
+  if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   validateSessionLosatArtifacts(promotedData, sourceSessionVersion);
+  if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   const data = currentSession
     ? promotedData
     : migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
@@ -1596,6 +1610,7 @@ const preflightSessionImport = (rawData) => {
         sourceSessionVersion
       )
     : data.config;
+  if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   const canonicalProjection = sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
         renderRequest: data.renderRequest,
@@ -1613,6 +1628,7 @@ const preflightSessionImport = (rawData) => {
         adoptCanonicalPayloads: currentSession
       })
     : null;
+  if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
   let restoredConfig = canonicalProjection
     ? {
         ...restoreStoredNonCanonicalConfig(
@@ -1652,11 +1668,13 @@ const preflightSessionImport = (rawData) => {
     }
   }
   if (canonicalProjection && sourceSessionVersion === SESSION_VERSION) {
+    recordSessionLifecycleEvent('current-draft-validation-start');
     validateCurrentWriterActiveDraft({
       mode: canonicalProjection.mode,
       projectedConfig: canonicalProjection.config,
       storedConfig: runtimeStoredConfig
     });
+    recordSessionLifecycleEvent('current-draft-validation-end');
     restoredConfig = overlayCurrentWriterDraftConfig(
       restoredConfig,
       runtimeStoredConfig
@@ -1682,6 +1700,7 @@ const preflightSessionImport = (rawData) => {
         : null
     });
   }
+  if (currentSession) recordSessionLifecycleEvent('artifact-projection-start');
   const projectionResult = canonicalProjection
     ? (() => {
         const artifactState = projectArtifactState(data);
@@ -1708,6 +1727,7 @@ const preflightSessionImport = (rawData) => {
         };
       })()
     : null;
+  if (currentSession) recordSessionLifecycleEvent('artifact-projection-end');
   return {
     data,
     sourceSessionVersion,

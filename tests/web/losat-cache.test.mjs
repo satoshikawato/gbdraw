@@ -104,6 +104,8 @@ assert.equal(
   'branch-internal protein raw schema 3 must not be accepted'
 );
 assert.equal(cache.validateProteinIdentityManifest(manifest), true);
+const identityIndex = cache.buildValidatedProteinIdentityIndex(manifest);
+assert.ok(identityIndex, 'a valid manifest must produce a reusable identity index');
 const canonicalJson = (value) => {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -148,6 +150,12 @@ assert.equal(
   'branch-internal top-level manifest schema 1 must not be accepted'
 );
 assert.equal(cache.validateProteinRawEntryReferences(proteinEntry, manifest), true);
+assert.equal(
+  cache.validateProteinRawEntryReferences(proteinEntry, manifest, { identityIndex }),
+  true,
+  'raw cache validation must accept the reusable identity index'
+);
+assert.equal(cache.releaseValidatedProteinIdentityIndex(identityIndex), true);
 const queryRuntimeIds = new Set([runtimeA]);
 const subjectRuntimeIds = new Set([runtimeB]);
 assert.equal(

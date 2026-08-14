@@ -301,12 +301,22 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   const previewMetrics = Object.fromEntries(
     PREVIEW_ZERO_METRICS.map((name) => [name, Number(loadProbe.metrics[name] || 0)])
   );
+  const preflightStructural = {
+    proteinManifestFullValidationCount: Number(
+      loadProbe.metrics.currentSessionPreflightProteinManifestValidationCount || 0
+    ),
+    proteinRawTextValidationCount: Number(
+      loadProbe.metrics.currentSessionPreflightProteinRawTextValidationCount || 0
+    )
+  };
   expect(loaded.previewVisible).toBe(true);
   expect(loaded.resultCount).toBe(1);
   expect(ready).toMatchObject({ status: 'success', degradedRecovery: false });
   expect(previewMetrics).toEqual(Object.fromEntries(
     PREVIEW_ZERO_METRICS.map((name) => [name, 0])
   ));
+  expect(preflightStructural.proteinManifestFullValidationCount).toBe(1);
+  expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
 
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
   const first = await invokeGeneration(page, terminal, runnerEvidence, terminalSignal);
@@ -424,6 +434,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   const report = {
     load: {
       previewMetrics,
+      preflightStructural,
       timings: loadTimings(loadProbe.lifecycle)
     },
     generations: {

@@ -160,6 +160,23 @@ const probeSnapshot = (page) => page.evaluate(() => ({
   resultCount: window.__GBDRAW_APP__?.results?.length || 0
 }));
 
+const phaseDuration = (events, startName, endName) => {
+  const start = events.find(({ name }) => name === startName);
+  const end = events.find(({ name }) => name === endName);
+  return start && end ? end.timestamp - start.timestamp : null;
+};
+
+const PREFLIGHT_SUBPHASES = Object.freeze({
+  sessionAuthorityValidationMs: 'session-authority-validation',
+  featureCatalogValidationMs: 'feature-catalog-validation',
+  editorStateNormalizationMs: 'editor-state-normalization',
+  resourceTableAdoptionMs: 'resource-table-adoption',
+  losatArtifactValidationMs: 'losat-artifact-validation',
+  canonicalRequestProjectionMs: 'canonical-request-projection',
+  currentDraftValidationMs: 'current-draft-validation',
+  artifactProjectionMs: 'artifact-projection'
+});
+
 const loadSyntheticSession = (page, variant = 'normal') => page.evaluate(
   async ({ filename, requestedVariant }) => {
     const response = await fetch(`/gbdraw/web/gallery/sessions/${filename}`);
@@ -212,6 +229,17 @@ const lifecycleTiming = (snapshot) => {
   const preview = snapshot.lifecycle.find(({ name }) => name === 'firstCommittedPreview');
   const ready = snapshot.lifecycle.find(({ name }) => name === 'interactiveReady');
   return {
+    currentSessionPreflightMs: phaseDuration(
+      snapshot.lifecycle,
+      'current-session-preflight-start',
+      'current-session-preflight-end'
+    ),
+    preflightSubphases: Object.fromEntries(
+      Object.entries(PREFLIGHT_SUBPHASES).map(([metric, event]) => [
+        metric,
+        phaseDuration(snapshot.lifecycle, `${event}-start`, `${event}-end`)
+      ])
+    ),
     firstPreviewMs: preview && selected ? preview.timestamp - selected.timestamp : null,
     interactiveReadyMs: ready && selected ? ready.timestamp - selected.timestamp : null,
     ready
@@ -283,6 +311,14 @@ test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, 
 
   const snapshot = await probeSnapshot(page);
   const timing = lifecycleTiming(snapshot);
+  const preflightStructural = {
+    proteinManifestFullValidationCount: Number(
+      snapshot.hookMetrics.currentSessionPreflightProteinManifestValidationCount || 0
+    ),
+    proteinRawTextValidationCount: Number(
+      snapshot.hookMetrics.currentSessionPreflightProteinRawTextValidationCount || 0
+    )
+  };
   expect(snapshot.savedPreviewVisible).toBe(true);
   expect(snapshot.resultCount).toBe(1);
   expect(snapshot.structural).toEqual(ZERO_PREVIEW_METRICS);
@@ -292,11 +328,23 @@ test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, 
   });
   expect(timing.firstPreviewMs).toBeGreaterThan(0);
   expect(timing.interactiveReadyMs).toBeGreaterThanOrEqual(timing.firstPreviewMs);
+  expect(timing.currentSessionPreflightMs).toBeLessThan(30_000);
+  expect(preflightStructural.proteinManifestFullValidationCount).toBe(1);
+  expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
 
   await testInfo.attach('vibrio-lazy-session-metrics.json', {
-    body: Buffer.from(JSON.stringify({ structural: snapshot.structural, timing }, null, 2)),
+    body: Buffer.from(JSON.stringify({
+      structural: snapshot.structural,
+      preflightStructural,
+      timing
+    }, null, 2)),
     contentType: 'application/json'
   });
+  console.log(`Vibrio lazy-session evidence: ${JSON.stringify({
+    structural: snapshot.structural,
+    preflightStructural,
+    timing
+  })}`);
 });
 
 test('Generate materializes only required resources and reuses one Worker', async ({ page }) => {
