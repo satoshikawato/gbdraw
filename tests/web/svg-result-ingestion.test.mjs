@@ -149,7 +149,15 @@ test('a validated catalog commits sanitized saved SVG without a detached parse o
     sanitizer: {
       sanitize(content) {
         sanitizeCalls += 1;
-        return content.replace(/^<\?xml[^>]*>/, '').replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '');
+        let sanitized = content;
+        let previous;
+        do {
+          previous = sanitized;
+          sanitized = sanitized
+            .replace(/^<\?xml[^>]*>/, '')
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '');
+        } while (sanitized !== previous);
+        return sanitized;
       }
     }
   })[0];
