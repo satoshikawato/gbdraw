@@ -86,6 +86,87 @@ test('a unique version-39 alias migrates to the compound key', () => {
   });
 });
 
+test('current compound keys skip the legacy feature scan', () => {
+  const current = feature('record-a', 'feature-1', {
+    stable_svg_id: 'stable-a',
+    record_id: 'accession-a'
+  });
+  const overrides = {
+    [featureOverrideKey(current)]: { color: '#ff00ff' }
+  };
+  let diagnostic = null;
+
+  const result = migrateLegacyFeatureOverrides(overrides, [current], {
+    legacyFeatures: [{
+      id: 'f0',
+      stable_svg_id: 'stable-a',
+      record_id: 'accession-a'
+    }],
+    onDiagnostic: (value) => {
+      diagnostic = value;
+    },
+    warn: () => assert.fail('current keys must not warn')
+  });
+
+  assert.deepEqual(result, {
+    migrated: 0,
+    unresolved: 0,
+    ambiguous: 0,
+    collisions: 0
+  });
+  assert.deepEqual(overrides, {
+    'record-a\u0000feature-1': { color: '#ff00ff' }
+  });
+  assert.deepEqual(diagnostic, {
+    currentDescriptorCount: 1,
+    legacyFeatureCount: 1,
+    legacyFeaturesVisited: 0,
+    legacyKeysNeedingMigration: 0,
+    fullDescriptorComparisons: 0,
+    indexedDescriptorComparisons: 0,
+    skippedLegacyFeatureScan: true
+  });
+});
+
+test('version-39 migration indexes current descriptors by stable feature id', () => {
+  const overrides = {
+    file0_f2: { color: '#abcdef' }
+  };
+  const current = [
+    feature('persistent-record-a', 'biological-a', {
+      stableFeatureId: 'stable-a',
+      record_id: 'accession-a'
+    }),
+    feature('persistent-record-b', 'biological-b', {
+      stableFeatureId: 'stable-b',
+      record_id: 'accession-b'
+    })
+  ];
+  let diagnostic = null;
+
+  const result = migrateLegacyFeatureOverrides(overrides, current, {
+    legacyFeatures: [{
+      id: 'file0_f2',
+      stable_svg_id: 'stable-a',
+      record_id: 'accession-a'
+    }],
+    onDiagnostic: (value) => {
+      diagnostic = value;
+    },
+    warn: () => assert.fail('a unique indexed migration must not warn')
+  });
+
+  assert.equal(result.migrated, 1);
+  assert.equal(overrides.file0_f2, undefined);
+  assert.deepEqual(overrides[featureOverrideKey(current[0])], {
+    color: '#abcdef'
+  });
+  assert.equal(diagnostic.fullDescriptorComparisons, 0);
+  assert.equal(diagnostic.indexedDescriptorComparisons, 1);
+  assert.equal(diagnostic.legacyFeaturesVisited, 1);
+  assert.equal(diagnostic.skippedLegacyFeatureScan, false);
+});
+
 test('a positional alias without a matching legacy catalog stays unresolved', () => {
   const overrides = {
     f0: { color: '#ff00ff' }

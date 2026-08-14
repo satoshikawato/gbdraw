@@ -147,7 +147,8 @@ export const createHistoryManager = ({
     intentSignatureComputations: 0,
     artifactCheckpointSignatureComputations: 0,
     byteEstimateComputations: 0,
-    historySvgBytes: 0
+    historySvgBytes: 0,
+    checkpointEstimatedBytes: 0
   };
   let currentIntent = null;
   let currentIntentSignature = '';
@@ -180,6 +181,16 @@ export const createHistoryManager = ({
     return bytes;
   };
 
+  const notifyCheckpointCapture = (options, phase) => {
+    const callback = options?.onCheckpointCapture;
+    if (typeof callback !== 'function') return;
+    try {
+      callback({ phase, diagnostics: { ...diagnostics } });
+    } catch (_error) {
+      // Diagnostic observers cannot own History behavior.
+    }
+  };
+
   const collectIntentFileIds = (intent) => {
     const fileIds = collectHistoryFileIds(intent, new Set());
     if (typeof collectCurrentFileIds !== 'function') return fileIds;
@@ -210,12 +221,14 @@ export const createHistoryManager = ({
   const finishCheckpointCapture = (checkpoint) => {
     const signature = computeSignature(checkpoint, 'artifact-checkpoint');
     const svgBytes = checkpointSvgBytes(checkpoint);
+    const byteSize = estimateSignedBytes(signature, 'artifact-checkpoint');
     diagnostics.historySvgBytes += svgBytes;
+    diagnostics.checkpointEstimatedBytes += byteSize;
     emitHistoryDiagnostic({ type: 'capture', scope: 'artifact-checkpoint', svgBytes });
     return {
       checkpoint,
       signature,
-      byteSize: estimateSignedBytes(signature, 'artifact-checkpoint'),
+      byteSize,
       fileIds: collectHistoryFileIds(checkpoint, new Set())
     };
   };
@@ -430,6 +443,7 @@ export const createHistoryManager = ({
   const beginCheckpoint = (label = 'Artifact change', options = {}) => {
     if (restoring.value || capturing.value) return null;
     const createTransaction = (before) => {
+      if (currentCheckpoint !== null) setCurrentCheckpoint(before);
       emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-checkpoint', label });
       return {
         label,
@@ -439,10 +453,19 @@ export const createHistoryManager = ({
       };
     };
     const captureBefore = () => {
+      notifyCheckpointCapture(options, 'before-start');
       const before = captureCheckpoint();
       return isPromiseLike(before)
-        ? Promise.resolve(before).then(createTransaction)
-        : createTransaction(before);
+        ? Promise.resolve(before).then((record) => {
+            const transaction = createTransaction(record);
+            notifyCheckpointCapture(options, 'before-end');
+            return transaction;
+          })
+        : (() => {
+            const transaction = createTransaction(before);
+            notifyCheckpointCapture(options, 'before-end');
+            return transaction;
+          })();
     };
 
     if (!activeTransaction || activeTransaction.closed) return captureBefore();
@@ -460,6 +483,7 @@ export const createHistoryManager = ({
 
   const commitCheckpoint = async (transaction, options = {}) => {
     if (!transaction || transaction.closed) return false;
+    notifyCheckpointCapture(options, 'after-start');
     const after = await captureCheckpoint();
     const intent = await captureIntent();
     transaction.closed = true;
@@ -475,6 +499,7 @@ export const createHistoryManager = ({
       });
       releaseUnreferencedFiles();
       touch();
+      notifyCheckpointCapture(options, 'after-end');
       return false;
     }
 
@@ -499,6 +524,7 @@ export const createHistoryManager = ({
     clearRedo();
     enforceLimits();
     touch();
+    notifyCheckpointCapture(options, 'after-end');
     return true;
   };
 

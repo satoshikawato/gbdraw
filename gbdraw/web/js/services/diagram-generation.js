@@ -299,7 +299,15 @@ export const runDiagramGeneration = (payload = {}) => {
 
   (async () => {
     try {
+      const initializationWasWarm = workerInitialized;
+      const initializationStartedAt = globalThis.performance?.now?.() ?? Date.now();
       const currentWorker = await ensureWorkerInitialized();
+      recordSessionLifecycleEvent('worker-initialization-resolved', {
+        reused: initializationWasWarm,
+        durationMs: initializationWasWarm
+          ? 0
+          : (globalThis.performance?.now?.() ?? Date.now()) - initializationStartedAt
+      });
       if (request.settled || activeRequest !== request) return;
       const preparedResources = await resourceTransport.prepare(payload);
       if (request.settled || activeRequest !== request) return;

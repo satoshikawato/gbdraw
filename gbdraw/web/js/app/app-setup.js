@@ -2195,6 +2195,13 @@ export const createAppSetup = () => {
         };
   }
 
+  const recordGenerateHistoryCapture = ({ phase, diagnostics } = {}) => {
+    recordSessionLifecycleEvent(`generate-history-${String(phase || '')}`, {
+      diagnostics: diagnostics && typeof diagnostics === 'object'
+        ? diagnostics
+        : {}
+    });
+  };
   const runAnalysis = async () => history.runUndoableCheckpoint('Generate diagram', async () => {
     cancelDefinitionUpdate();
     const comparisonPlanSnapshot = mode.value === 'linear'
@@ -2210,7 +2217,8 @@ export const createAppSetup = () => {
     }
     return result;
   }, {
-    shouldCommit: (result) => result?.status === 'ok'
+    shouldCommit: (result) => result?.status === 'ok',
+    onCheckpointCapture: recordGenerateHistoryCapture
   });
 
   const cancelGeneration = () => {

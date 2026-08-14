@@ -263,6 +263,36 @@ const createLayoutPreferences = () => ({
 }
 
 {
+  const captured = [];
+  const phases = [];
+  const history = createHistoryManager({
+    buildIntent: () => ({ setting: 'unchanged' }),
+    applyIntent: async () => {},
+    buildCheckpoint: () => {
+      const checkpoint = { setting: 'unchanged' };
+      captured.push(checkpoint);
+      return checkpoint;
+    },
+    applyCheckpoint: async () => {}
+  });
+
+  await history.captureBaseline('initial');
+  await history.runUndoableCheckpoint('No-op Generate', () => {}, {
+    onCheckpointCapture: ({ phase }) => {
+      if (phase !== 'before-end' && phase !== 'after-start') return;
+      phases.push({ phase, current: history.getCurrentCheckpoint() });
+    }
+  });
+
+  assert.equal(captured.length, 3);
+  assert.deepEqual(phases.map(({ phase }) => phase), ['before-end', 'after-start']);
+  assert.equal(phases[0].current, captured[1]);
+  assert.equal(phases[1].current, captured[1]);
+  assert.equal(history.getCurrentCheckpoint(), captured[2]);
+  assert.equal(history.getUndoCount(), 0);
+}
+
+{
   let checkpointBuilds = 0;
   const history = createHistoryManager({
     buildIntent: async () => ({ setting: 'loaded' }),

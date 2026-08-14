@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const { spawnSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const {
   getDiagramWorkerActivity,
@@ -72,6 +74,181 @@ const phaseDuration = (events, startName, endName) => {
   const start = events.find(({ name }) => name === startName);
   const end = events.find(({ name }) => name === endName);
   return start && end ? end.timestamp - start.timestamp : null;
+};
+
+const durationOrZero = (events, startName, endName) => (
+  phaseDuration(events, startName, endName) ?? 0
+);
+
+const HISTORY_DIAGNOSTIC_FIELDS = [
+  'artifactCheckpointBuilds',
+  'artifactCheckpointSignatureComputations',
+  'intentBuilds',
+  'intentSignatureComputations',
+  'historySvgBytes',
+  'checkpointEstimatedBytes'
+];
+
+const historyStructuralDelta = (events, startName, endName) => {
+  const start = events.find(({ name }) => name === startName)?.diagnostics || {};
+  const end = events.find(({ name }) => name === endName)?.diagnostics || {};
+  return Object.fromEntries(HISTORY_DIAGNOSTIC_FIELDS.map((name) => [
+    name,
+    Number(end[name] || 0) - Number(start[name] || 0)
+  ]));
+};
+
+const generationPhaseAttribution = (outcome, probe) => {
+  const events = probe.lifecycle || [];
+  const python = events.find(({ name }) => name === 'python-diagnostics') || {};
+  const pythonTimings = python.timingsMs || {};
+  const pythonMetrics = python.metrics || {};
+  const initialization = events.find(
+    ({ name }) => name === 'worker-initialization-resolved'
+  ) || {};
+  const resourceLinking = events.find(
+    ({ name }) => name === 'worker-resource-linking-end'
+  ) || {};
+  const resultTransportDecodeMs = (
+    durationOrZero(events, 'result-binary-decode-start', 'result-binary-decode-end')
+    + durationOrZero(
+      events,
+      'result-metadata-binary-decode-start',
+      'result-metadata-binary-decode-end'
+    )
+  );
+  const inputResolutionMs = durationOrZero(
+    events,
+    'generation-input-resolution-start',
+    'generation-input-resolution-end'
+  );
+  const canonicalFileSerializationMs = durationOrZero(
+    events,
+    'serialize-canonical-files-start',
+    'serialize-canonical-files-end'
+  );
+  return {
+    warmGenerateMs: Number(outcome?.elapsedMs || 0),
+    historyBeforeMs: durationOrZero(
+      events,
+      'generate-history-before-start',
+      'generate-history-before-end'
+    ),
+    jsPreparationMs: inputResolutionMs + canonicalFileSerializationMs,
+    inputResolutionMs,
+    losatCachePreparationMs: durationOrZero(
+      events,
+      'losat-cache-preparation-start',
+      'losat-cache-preparation-end'
+    ),
+    canonicalFileSerializationMs,
+    canonicalRequestMs: durationOrZero(
+      events,
+      'canonical-request-construction-start',
+      'canonical-request-construction-end'
+    ),
+    resourcePrepareMs: durationOrZero(
+      events,
+      'resource-stage-start',
+      'resource-stage-end'
+    ),
+    workerInitializationMs: Number(initialization.durationMs || 0),
+    workerInitializationReused: initialization.reused === true,
+    workerWorkspaceMs: durationOrZero(
+      events,
+      'worker-workspace-preparation-start',
+      'worker-workspace-preparation-end'
+    ),
+    workerResourceLinkingMs: durationOrZero(
+      events,
+      'worker-resource-linking-start',
+      'worker-resource-linking-end'
+    ),
+    newlyStagedResourceBytes: Number(resourceLinking.newlyStagedResourceBytes || 0),
+    pythonInvocationMs: durationOrZero(
+      events,
+      'python-wrapper-start',
+      'python-wrapper-end'
+    ),
+    pythonDecodeMs: Number(pythonTimings.decode || 0),
+    pythonArtifactCopyMs: Number(pythonTimings.artifactCopy || 0),
+    pythonArtifactValidationMs: Number(pythonTimings.artifactValidation || 0),
+    pythonRecordLoadMs: Number(pythonTimings.recordLoad || 0),
+    pythonPreparationMs: Number(pythonTimings.preparation || 0),
+    pythonComparisonPreparationMs: Number(
+      pythonTimings.comparisonPreparation || 0
+    ),
+    pythonDrawingMs: Number(pythonTimings.drawing || 0),
+    pythonInteractivePreparationMs: Number(
+      pythonTimings.interactivePreparation || 0
+    ),
+    pythonSvgWriteMs: Number(pythonTimings.svgWrite || 0),
+    pythonSvgReadbackMs: Number(pythonTimings.svgReadback || 0),
+    pythonFeatureCatalogMs: Number(pythonTimings.featureCatalog || 0),
+    pythonGeometryMetadataMs: Number(pythonTimings.geometryMetadata || 0),
+    pythonArtifactMetrics: { ...pythonMetrics },
+    workerResultPreparationMs: durationOrZero(
+      events,
+      'result-object-conversion-start',
+      'result-transport-ready'
+    ),
+    workerCleanupMs: durationOrZero(
+      events,
+      'worker-cleanup-start',
+      'worker-cleanup-end'
+    ),
+    resultTransportDecodeMs,
+    candidateResultValidationMs: durationOrZero(
+      events,
+      'candidate-result-validation-start',
+      'candidate-result-validation-end'
+    ),
+    featureCatalogAdoptionMs: durationOrZero(
+      events,
+      'feature-catalog-adoption-start',
+      'feature-catalog-adoption-end'
+    ),
+    legacyFeatureOverrideMigrationMs: durationOrZero(
+      events,
+      'legacy-feature-override-migration-start',
+      'legacy-feature-override-migration-end'
+    ),
+    ruleDerivedFillOverrideMs: durationOrZero(
+      events,
+      'rule-derived-fill-override-start',
+      'rule-derived-fill-override-end'
+    ),
+    svgAdmissionMs: durationOrZero(
+      events,
+      'svg-admission-start',
+      'svg-admission-end'
+    ),
+    resultAdmissionMs: durationOrZero(
+      events,
+      'result-admission-start',
+      'result-admission-end'
+    ),
+    previewResultCommitMs: durationOrZero(
+      events,
+      'preview-result-commit-start',
+      'preview-result-commit-end'
+    ),
+    historyAfterMs: durationOrZero(
+      events,
+      'generate-history-after-start',
+      'generate-history-after-end'
+    ),
+    historyBeforeStructural: historyStructuralDelta(
+      events,
+      'generate-history-before-start',
+      'generate-history-before-end'
+    ),
+    historyAfterStructural: historyStructuralDelta(
+      events,
+      'generate-history-after-start',
+      'generate-history-after-end'
+    )
+  };
 };
 
 const loadTimings = (events) => {
@@ -330,9 +507,14 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     resultCommitted: true,
     previewVisible: true
   });
+  const firstGeneratedSvg = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return String(app.results?.[app.selectedResultIndex]?.content || '');
+  });
 
+  await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
   const second = await invokeGeneration(page, terminal, runnerEvidence, terminalSignal);
-  const cumulativeProbe = !page.isClosed() && !terminal.pageCrashed
+  const secondProbe = !page.isClosed() && !terminal.pageCrashed
     ? await probeSnapshot(page)
     : { metrics: {}, details: [], lifecycle: [] };
   const secondRecovery = await assertRecoverableErrorState(page, second, loaded.originalPreview);
@@ -342,39 +524,112 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     resultCommitted: true,
     previewVisible: true
   });
+  const secondGeneratedSvg = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return String(app.results?.[app.selectedResultIndex]?.content || '');
+  });
 
   const activity = second.worker;
   const runs = activity?.instances?.[0]?.runs || [];
-  const lifecycleNames = cumulativeProbe.lifecycle.map(({ name }) => name);
-  const resultSvgCharacters = cumulativeProbe.lifecycle
-    .filter(({ name }) => name === 'result-svg-characters')
-    .map(({ value }) => Number(value || 0));
-  const structural = {
+  const lifecycleNames = secondProbe.lifecycle.map(({ name }) => name);
+  const resultSvgCharacters = [firstProbe, secondProbe].map((probe) => Number(
+    probe.lifecycle.find(({ name }) => name === 'result-svg-characters')?.value || 0
+  ));
+  const firstStructural = {
     canonicalReplayFullSerializationCount: Number(
-      cumulativeProbe.metrics.canonicalReplayFullSerializationCount || 0
+      firstProbe.metrics.canonicalReplayFullSerializationCount || 0
     ),
+    resourceMaterializationCount: Number(
+      firstProbe.metrics.resourceMaterializationCount || 0
+    ),
+    resourceReencodeCount: Number(firstProbe.metrics.resourceReencodeCount || 0),
+    resultBinaryDecodeCount: Number(firstProbe.metrics.resultBinaryDecodeCount || 0),
+    resultBinaryDecodedBytes: Number(firstProbe.metrics.resultBinaryDecodedBytes || 0),
+    resultMetadataBinaryDecodeCount: Number(
+      firstProbe.metrics.resultMetadataBinaryDecodeCount || 0
+    ),
+    resultMetadataBinaryDecodedBytes: Number(
+      firstProbe.metrics.resultMetadataBinaryDecodedBytes || 0
+    ),
+    legacyFeatureOverrideFullDescriptorComparisonCount: Number(
+      firstProbe.metrics.legacyFeatureOverrideFullDescriptorComparisonCount || 0
+    ),
+    legacyFeatureOverrideIndexedDescriptorComparisonCount: Number(
+      firstProbe.metrics.legacyFeatureOverrideIndexedDescriptorComparisonCount || 0
+    ),
+    legacyFeatureOverrideLegacyFeaturesVisited: Number(
+      firstProbe.metrics.legacyFeatureOverrideLegacyFeaturesVisited || 0
+    ),
+    legacyFeatureOverrideMigrationCallCount: Number(
+      firstProbe.metrics.legacyFeatureOverrideMigrationCallCount || 0
+    ),
+    legacyFeatureOverrideScanSkipCount: Number(
+      firstProbe.metrics.legacyFeatureOverrideScanSkipCount || 0
+    )
+  };
+  const secondStructural = {
+    canonicalReplayFullSerializationCount: Number(
+      secondProbe.metrics.canonicalReplayFullSerializationCount || 0
+    ),
+    resourceMaterializationCount: Number(
+      secondProbe.metrics.resourceMaterializationCount || 0
+    ),
+    resourceReencodeCount: Number(secondProbe.metrics.resourceReencodeCount || 0),
+    resultBinaryDecodeCount: Number(secondProbe.metrics.resultBinaryDecodeCount || 0),
+    resultBinaryDecodedBytes: Number(secondProbe.metrics.resultBinaryDecodedBytes || 0),
+    resultMetadataBinaryDecodeCount: Number(
+      secondProbe.metrics.resultMetadataBinaryDecodeCount || 0
+    ),
+    resultMetadataBinaryDecodedBytes: Number(
+      secondProbe.metrics.resultMetadataBinaryDecodedBytes || 0
+    ),
+    legacyFeatureOverrideFullDescriptorComparisonCount: Number(
+      secondProbe.metrics.legacyFeatureOverrideFullDescriptorComparisonCount || 0
+    ),
+    legacyFeatureOverrideIndexedDescriptorComparisonCount: Number(
+      secondProbe.metrics.legacyFeatureOverrideIndexedDescriptorComparisonCount || 0
+    ),
+    legacyFeatureOverrideLegacyFeaturesVisited: Number(
+      secondProbe.metrics.legacyFeatureOverrideLegacyFeaturesVisited || 0
+    ),
+    legacyFeatureOverrideMigrationCallCount: Number(
+      secondProbe.metrics.legacyFeatureOverrideMigrationCallCount || 0
+    ),
+    legacyFeatureOverrideScanSkipCount: Number(
+      secondProbe.metrics.legacyFeatureOverrideScanSkipCount || 0
+    )
+  };
+  const resultTransportEvents = [firstProbe, secondProbe].flatMap((probe) => (
+    probe.lifecycle.filter(({ name }) => name === 'result-transport-ready')
+  ));
+  const structural = {
+    canonicalReplayFullSerializationCount:
+      firstStructural.canonicalReplayFullSerializationCount
+      + secondStructural.canonicalReplayFullSerializationCount,
     workerBase64ResourceCloneCount: runs.filter(
       ({ hasBase64ResourceTable }) => hasBase64ResourceTable
     ).length,
     workerBase64ResourceJsonStringifyCount: lifecycleNames.filter(
       (name) => name.startsWith('worker-resources-json-')
     ).length,
-    resourceMaterializationCount: Number(
-      cumulativeProbe.metrics.resourceMaterializationCount || 0
-    ),
-    resourceReencodeCount: Number(cumulativeProbe.metrics.resourceReencodeCount || 0),
-    resultBinaryDecodeCount: Number(cumulativeProbe.metrics.resultBinaryDecodeCount || 0),
-    resultBinaryDecodedBytes: Number(cumulativeProbe.metrics.resultBinaryDecodedBytes || 0),
-    resultMetadataBinaryDecodeCount: Number(
-      cumulativeProbe.metrics.resultMetadataBinaryDecodeCount || 0
-    ),
-    resultMetadataBinaryDecodedBytes: Number(
-      cumulativeProbe.metrics.resultMetadataBinaryDecodedBytes || 0
-    )
+    resourceMaterializationCount:
+      firstStructural.resourceMaterializationCount
+      + secondStructural.resourceMaterializationCount,
+    resourceReencodeCount:
+      firstStructural.resourceReencodeCount + secondStructural.resourceReencodeCount,
+    resultBinaryDecodeCount:
+      firstStructural.resultBinaryDecodeCount + secondStructural.resultBinaryDecodeCount,
+    resultBinaryDecodedBytes:
+      firstStructural.resultBinaryDecodedBytes + secondStructural.resultBinaryDecodedBytes,
+    resultMetadataBinaryDecodeCount:
+      firstStructural.resultMetadataBinaryDecodeCount
+      + secondStructural.resultMetadataBinaryDecodeCount,
+    resultMetadataBinaryDecodedBytes:
+      firstStructural.resultMetadataBinaryDecodedBytes
+      + secondStructural.resultMetadataBinaryDecodedBytes
   };
-  const resultTransportEvents = cumulativeProbe.lifecycle.filter(
-    ({ name }) => name === 'result-transport-ready'
-  );
+  const firstPhaseAttribution = generationPhaseAttribution(first.outcome, firstProbe);
+  const secondPhaseAttribution = generationPhaseAttribution(second.outcome, secondProbe);
 
   expect(activity.constructions).toBe(1);
   expect(activity.initializations).toBe(1);
@@ -396,6 +651,21 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     transferredBytes: 0,
     hasBase64ResourceTable: false
   });
+  expect(secondPhaseAttribution).toMatchObject({
+    workerInitializationMs: 0,
+    workerInitializationReused: true,
+    newlyStagedResourceBytes: 0
+  });
+  expect(secondStructural.resourceMaterializationCount).toBe(0);
+  expect(secondStructural).toMatchObject({
+    legacyFeatureOverrideFullDescriptorComparisonCount: 0,
+    legacyFeatureOverrideIndexedDescriptorComparisonCount: 0,
+    legacyFeatureOverrideLegacyFeaturesVisited: 0,
+    legacyFeatureOverrideMigrationCallCount: 2,
+    legacyFeatureOverrideScanSkipCount: 2
+  });
+  expect(secondPhaseAttribution.pythonInvocationMs).toBeGreaterThan(0);
+  expect(secondProbe.lifecycle.filter(({ name }) => name === 'python-diagnostics')).toHaveLength(1);
   expect(structural).toMatchObject({
     canonicalReplayFullSerializationCount: 0,
     workerBase64ResourceCloneCount: 0,
@@ -431,6 +701,90 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   expect(afterPing.initializations).toBe(1);
   expect(afterPing.instances[0].terminated).toBe(false);
 
+  const firstSvgPath = testInfo.outputPath('vibrio-generate-1.svg');
+  const secondSvgPath = testInfo.outputPath('vibrio-generate-2.svg');
+  writeFileSync(firstSvgPath, firstGeneratedSvg, 'utf8');
+  writeFileSync(secondSvgPath, secondGeneratedSvg, 'utf8');
+  const semanticComparison = spawnSync(
+    process.env.GBDRAW_PYTHON || 'python',
+    [
+      '-c',
+      [
+        'import sys',
+        'from tests.utils.svg_compare import compare_svgs',
+        'result = compare_svgs(sys.argv[1], sys.argv[2])',
+        'print(result.message)',
+        'print("\\n".join(result.differences))',
+        'raise SystemExit(0 if result.equal else 1)'
+      ].join(';'),
+      firstSvgPath,
+      secondSvgPath
+    ],
+    { cwd: repoRoot, encoding: 'utf8' }
+  );
+  expect(
+    semanticComparison.status,
+    `${semanticComparison.stdout}\n${semanticComparison.stderr}`
+  ).toBe(0);
+
+  const outputsExactlyEqual = firstGeneratedSvg === secondGeneratedSvg;
+  let historyRoundTrip;
+  if (outputsExactlyEqual) {
+    historyRoundTrip = await page.evaluate((expectedCharacters) => {
+      const history = window.__GBDRAW_HISTORY__;
+      const app = window.__GBDRAW_APP__;
+      const currentSvg = String(app.results?.[app.selectedResultIndex]?.content || '');
+      return {
+        undoCountBefore: history.getUndoCount(),
+        historyEntryCreated: false,
+        undoRedoAttempted: false,
+        noOpGeneratePreserved: currentSvg.length === expectedCharacters,
+        undoCountAfter: history.getUndoCount(),
+        redoCountAfter: history.getRedoCount()
+      };
+    }, secondGeneratedSvg.length);
+    expect(historyRoundTrip).toMatchObject({
+      historyEntryCreated: false,
+      undoRedoAttempted: false,
+      noOpGeneratePreserved: true,
+      undoCountAfter: 0,
+      redoCountAfter: 0
+    });
+  } else {
+    historyRoundTrip = await page.evaluate(async ({ firstSvg, secondSvg }) => {
+      const history = window.__GBDRAW_HISTORY__;
+      const app = window.__GBDRAW_APP__;
+      const undoCountBefore = history.getUndoCount();
+      const undoOk = await history.undo();
+      const afterUndo = String(app.results?.[app.selectedResultIndex]?.content || '');
+      const redoOk = await history.redo();
+      const afterRedo = String(app.results?.[app.selectedResultIndex]?.content || '');
+      return {
+        undoCountBefore,
+        historyEntryCreated: true,
+        undoRedoAttempted: true,
+        undoOk,
+        redoOk,
+        undoRestoredFirstGenerate: afterUndo === firstSvg,
+        redoRestoredSecondGenerate: afterRedo === secondSvg,
+        undoCountAfter: history.getUndoCount(),
+        redoCountAfter: history.getRedoCount()
+      };
+    }, {
+      firstSvg: firstGeneratedSvg,
+      secondSvg: secondGeneratedSvg
+    });
+    expect(historyRoundTrip).toMatchObject({
+      historyEntryCreated: true,
+      undoRedoAttempted: true,
+      undoOk: true,
+      redoOk: true,
+      undoRestoredFirstGenerate: true,
+      redoRestoredSecondGenerate: true,
+      redoCountAfter: 0
+    });
+  }
+
   const report = {
     load: {
       previewMetrics,
@@ -451,8 +805,21 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       generatedSvgCharacters: resultSvgCharacters,
       firstElapsedMs: first.outcome.elapsedMs,
       secondElapsedMs: second.outcome.elapsedMs,
-      firstProbe
+      firstPhaseAttribution,
+      secondPhaseAttribution
     },
+    perGenerationStructural: {
+      first: firstStructural,
+      second: secondStructural
+    },
+    deterministicOutput: {
+      comparison: 'tests.utils.svg_compare.compare_svgs',
+      semanticallyEquivalent: semanticComparison.status === 0,
+      exactBytesEqual: firstGeneratedSvg === secondGeneratedSvg,
+      firstCharacters: firstGeneratedSvg.length,
+      secondCharacters: secondGeneratedSvg.length
+    },
+    historyRoundTrip,
     structural,
     worker: afterPing
   };
@@ -468,6 +835,9 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     referencedDeclaredBytes: report.generations.referencedDeclaredBytes,
     firstTransferredBytes: report.generations.firstTransferredBytes,
     secondTransferredBytes: report.generations.secondTransferredBytes,
-    structural: report.structural
+    secondPhaseAttribution: report.generations.secondPhaseAttribution,
+    structural: report.structural,
+    deterministicOutput: report.deterministicOutput,
+    historyRoundTrip: report.historyRoundTrip
   })}`);
 });

@@ -714,6 +714,22 @@ const runGeneration = async ({
   let primaryError = null;
   let pythonWrapperStarted = false;
   try {
+    const newlyStagedResourceBytes = (
+      Array.isArray(stagedResources) ? stagedResources : []
+    ).reduce(
+      (total, entry) => total + Number(entry?.bytes?.byteLength || 0),
+      0
+    );
+    emitTestLifecycle(
+      testLifecycleEnabled,
+      requestId,
+      'worker-workspace-preparation-start'
+    );
+    emitTestLifecycle(
+      testLifecycleEnabled,
+      requestId,
+      'worker-resource-linking-start'
+    );
     const resourcePaths = await stageRenderResources(
       pyodide,
       workspace,
@@ -721,6 +737,15 @@ const runGeneration = async ({
       stagedResources,
       testLifecycleEnabled,
       requestId
+    );
+    emitTestLifecycle(
+      testLifecycleEnabled,
+      requestId,
+      'worker-resource-linking-end',
+      {
+        referencedResourceCount: Object.keys(resourcePaths).length,
+        newlyStagedResourceBytes
+      }
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-request-json-start');
     const requestJson = JSON.stringify(request);
@@ -732,12 +757,18 @@ const runGeneration = async ({
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
       characters: resourcePathsJson.length
     });
+    emitTestLifecycle(
+      testLifecycleEnabled,
+      requestId,
+      'worker-workspace-preparation-end'
+    );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-start');
     pythonWrapperStarted = true;
     resultHandle = runWrapper(
       requestJson,
       resourcePathsJson,
-      workspace
+      workspace,
+      testLifecycleEnabled
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-start');
@@ -745,6 +776,20 @@ const runGeneration = async ({
       ? resultHandle.toJs({ dict_converter: Object.fromEntries })
       : resultHandle;
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-end');
+    const pythonDiagnostics = (
+      result?._diagnostics
+      && typeof result._diagnostics === 'object'
+      && !Array.isArray(result._diagnostics)
+    )
+      ? result._diagnostics
+      : null;
+    if (result && typeof result === 'object') delete result._diagnostics;
+    if (pythonDiagnostics) {
+      emitTestLifecycle(testLifecycleEnabled, requestId, 'python-diagnostics', {
+        timingsMs: pythonDiagnostics.timingsMs || {},
+        metrics: pythonDiagnostics.metrics || {}
+      });
+    }
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-transport-ready', {
       transport: 'transferable-binary',
       bytes: collectGenerationResultTransferList(result).reduce(
@@ -755,6 +800,7 @@ const runGeneration = async ({
   } catch (error) {
     primaryError = error;
   }
+  emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-cleanup-start');
   let destroyError = null;
   try {
     resultHandle?.destroy?.();
@@ -805,6 +851,7 @@ const runGeneration = async ({
   } catch (error) {
     workspaceError = error;
   }
+  emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-cleanup-end');
   return resolveGenerationCleanupOutcome({
     result,
     primaryError,

@@ -14,6 +14,10 @@ import {
   migrateLegacyFeatureOverrides
 } from '../services/feature-override-identity.js';
 import { cloneJsonValue } from '../services/json-clone.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric
+} from '../services/runtime-test-hooks.js';
 import { ingestSvgResults } from '../services/svg-result-ingestion.js';
 import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
 import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
@@ -182,30 +186,78 @@ export const prepareCandidateRenderCommit = ({
   transformSvg = null,
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
 }) => {
+  recordSessionLifecycleEvent('feature-catalog-adoption-start');
   const featureState = preparedFeatureState || featureStateFromCatalog(catalog, { mode });
+  recordSessionLifecycleEvent('feature-catalog-adoption-end');
   const fillOverrides = cloneJsonValue(featureColorOverrides, {});
   const strokeOverrides = cloneJsonValue(featureStrokeOverrides, {});
-  const migrationOptions = { legacyFeatures };
+  const migrationOptions = (overrideKind) => ({
+    legacyFeatures,
+    onDiagnostic: (diagnostic) => {
+      const detail = { overrideKind };
+      recordStructuralMetric('legacyFeatureOverrideMigrationCallCount', 1, detail);
+      recordStructuralMetric(
+        'legacyFeatureOverrideCurrentDescriptorCount',
+        diagnostic.currentDescriptorCount,
+        detail
+      );
+      recordStructuralMetric(
+        'legacyFeatureOverrideLegacyFeatureCount',
+        diagnostic.legacyFeatureCount,
+        detail
+      );
+      recordStructuralMetric(
+        'legacyFeatureOverrideLegacyFeaturesVisited',
+        diagnostic.legacyFeaturesVisited,
+        detail
+      );
+      recordStructuralMetric(
+        'legacyFeatureOverrideKeysNeedingMigration',
+        diagnostic.legacyKeysNeedingMigration,
+        detail
+      );
+      recordStructuralMetric(
+        'legacyFeatureOverrideFullDescriptorComparisonCount',
+        diagnostic.fullDescriptorComparisons,
+        detail
+      );
+      recordStructuralMetric(
+        'legacyFeatureOverrideIndexedDescriptorComparisonCount',
+        diagnostic.indexedDescriptorComparisons,
+        detail
+      );
+      recordStructuralMetric(
+        'legacyFeatureOverrideScanSkipCount',
+        diagnostic.skippedLegacyFeatureScan ? 1 : 0,
+        detail
+      );
+    }
+  });
 
+  recordSessionLifecycleEvent('legacy-feature-override-migration-start');
   migrateLegacyFeatureOverrides(
     fillOverrides,
     featureState.extractedFeatures,
-    migrationOptions
+    migrationOptions('fill')
   );
   migrateLegacyFeatureOverrides(
     strokeOverrides,
     featureState.extractedFeatures,
-    migrationOptions
+    migrationOptions('stroke')
   );
+  recordSessionLifecycleEvent('legacy-feature-override-migration-end');
+  recordSessionLifecycleEvent('rule-derived-fill-override-start');
   replaceRuleDerivedFillOverrides(
     fillOverrides,
     featureState.extractedFeatures,
     manualSpecificRules
   );
+  recordSessionLifecycleEvent('rule-derived-fill-override-end');
 
   const itemsByIndex = new Map(
     catalog.items.map((item) => [item.resultIndex, item])
   );
+  recordSessionLifecycleEvent('svg-admission-start');
   const processedResults = ingestSvgResults(results, {
     sanitizer,
     transformSvg: (svg, { resultIndex }) => {
@@ -234,6 +286,7 @@ export const prepareCandidateRenderCommit = ({
       return legendChanged || overridesChanged || legendStrokeChanged || callerChanged;
     }
   });
+  recordSessionLifecycleEvent('svg-admission-end');
 
   return {
     results: processedResults,

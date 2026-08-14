@@ -78,6 +78,10 @@ fallback.
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
 | Gallery data, media, and tutorials | `gallery/` |
 
+During an artifact History transaction, the captured `before` checkpoint is the
+current checkpoint until the `after` capture replaces it. Do not retain an older
+equivalent current checkpoint alongside the transaction copy.
+
 Keep top-level `create*` entry points in `js/app/*.js`. Put larger,
 single-purpose helpers in the matching subfolder instead of growing another
 general utility module.

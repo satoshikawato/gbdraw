@@ -75,15 +75,39 @@ def _is_blank_or_js_nullish(value):
     except Exception:
         return False
 
-def run_canonical_request_wrapper(request_json, resource_paths_json, workspace):
+def run_canonical_request_wrapper(
+    request_json,
+    resource_paths_json,
+    workspace,
+    diagnostics_enabled=False,
+):
     try:
         payload = json.loads(str(request_json))
         resource_paths = json.loads(str(resource_paths_json))
+        diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
         result = render_staged_canonical_web_request(
             payload,
             resource_paths=resource_paths,
             workspace=str(workspace),
+            _diagnostics=diagnostics,
         )
+        if diagnostics is not None:
+            for name in (
+                "decode",
+                "artifactCopy",
+                "artifactValidation",
+                "recordLoad",
+                "preparation",
+                "comparisonPreparation",
+                "drawing",
+                "interactivePreparation",
+                "svgWrite",
+                "svgReadback",
+                "featureCatalog",
+                "geometryMetadata",
+            ):
+                diagnostics["timingsMs"].setdefault(name, 0.0)
+            result["_diagnostics"] = diagnostics
         for item in result.get("results", []):
             content = item.get("content")
             if isinstance(content, str):
