@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import copy
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import json
 import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence, TypeAlias
+from time import perf_counter
+from typing import Any, Iterator, Literal, Mapping, MutableMapping, Sequence, TypeAlias
 
 from Bio import SeqIO  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -99,6 +102,61 @@ from .requests import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+_REQUEST_RENDER_DIAGNOSTICS: ContextVar[MutableMapping[str, Any] | None] = (
+    ContextVar("gbdraw_request_render_diagnostics", default=None)
+)
+
+
+@contextmanager
+def _capture_request_render_diagnostics(
+    diagnostics: MutableMapping[str, Any] | None,
+) -> Iterator[None]:
+    """Collect coarse Web-only render timings without changing public results."""
+
+    token = _REQUEST_RENDER_DIAGNOSTICS.set(diagnostics)
+    try:
+        yield
+    finally:
+        _REQUEST_RENDER_DIAGNOSTICS.reset(token)
+
+
+@contextmanager
+def _request_render_diagnostic_phase(name: str) -> Iterator[None]:
+    diagnostics = _REQUEST_RENDER_DIAGNOSTICS.get()
+    if diagnostics is None:
+        yield
+        return
+    started_at = perf_counter()
+    try:
+        yield
+    finally:
+        timings = diagnostics.setdefault("timingsMs", {})
+        timings[name] = float(timings.get(name, 0.0)) + (
+            perf_counter() - started_at
+        ) * 1000.0
+
+
+def _record_request_render_diagnostic_metric(name: str, value: int = 1) -> None:
+    diagnostics = _REQUEST_RENDER_DIAGNOSTICS.get()
+    if diagnostics is None:
+        return
+    metrics = diagnostics.setdefault("metrics", {})
+    metrics[name] = int(metrics.get(name, 0)) + int(value)
+
+
+def _artifact_text_characters(value: object) -> int:
+    if isinstance(value, str):
+        return len(value)
+    if isinstance(value, Mapping):
+        return sum(
+            len(str(key)) + _artifact_text_characters(entry)
+            for key, entry in value.items()
+        )
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        return sum(_artifact_text_characters(entry) for entry in value)
+    return 0
 
 
 def _resolve_request_option_tables(
@@ -269,79 +327,106 @@ class CurrentRequestArtifacts:
     ] | None = None
 
     def __post_init__(self) -> None:
-        raw_entries = _detached_artifact_entries(
-            self.losat_cache_entries,
-            label="losat_cache_entries",
-        )
-        derived_entries = _detached_artifact_entries(
-            self.losat_derived_cache_entries,
-            label="losat_derived_cache_entries",
-        )
-        protein_entries: list[Mapping[str, Any]] = []
-        raw_keys: set[str] = set()
-        for index, entry in enumerate(raw_entries):
-            if is_protein_losat_cache_entry(entry):
-                protein_entries.append(entry)
-            elif not _is_current_nucleotide_losat_entry(entry):
-                raise ValidationError(
-                    "Unsupported current LOSAT artifact at "
-                    f"losat_cache_entries[{index}]."
-                )
-            key = str(entry["key"])
-            if key in raw_keys:
-                raise ValidationError(f"Duplicate current LOSAT artifact key: {key!r}.")
-            raw_keys.add(key)
-
-        derived_keys: set[str] = set()
-        for index, entry in enumerate(derived_entries):
-            if not is_current_derived_protein_artifact(entry):
-                raise ValidationError(
-                    "Unsupported current derived LOSATP artifact at "
-                    f"losat_derived_cache_entries[{index}]."
-                )
-            key = str(entry["key"])
-            if key in derived_keys:
-                raise ValidationError(
-                    f"Duplicate current derived LOSATP artifact key: {key!r}."
-                )
-            derived_keys.add(key)
-
-        manifest = self.protein_identity_manifest
-        detached_manifest: Mapping[str, Any] | None = None
-        if manifest is not None:
-            if not isinstance(manifest, Mapping):
-                raise ValidationError("protein_identity_manifest must be an object.")
-            detached_manifest = copy.deepcopy(dict(manifest))
-            validate_protein_identity_manifest(detached_manifest)
-        if protein_entries and detached_manifest is None:
-            raise ValidationError(
-                "Current protein LOSATP artifacts require protein_identity_manifest."
+        with _request_render_diagnostic_phase("artifactCopy"):
+            raw_entries = _detached_artifact_entries(
+                self.losat_cache_entries,
+                label="losat_cache_entries",
             )
-        if detached_manifest is not None:
-            for index, entry in enumerate(protein_entries):
-                if not validate_protein_raw_entry_references(
-                    entry,
-                    detached_manifest,
-                ):
+            derived_entries = _detached_artifact_entries(
+                self.losat_derived_cache_entries,
+                label="losat_derived_cache_entries",
+            )
+            manifest = self.protein_identity_manifest
+            detached_manifest: Mapping[str, Any] | None = None
+            if manifest is not None:
+                if not isinstance(manifest, Mapping):
+                    raise ValidationError("protein_identity_manifest must be an object.")
+                detached_manifest = copy.deepcopy(dict(manifest))
+            if raw_entries or derived_entries or detached_manifest is not None:
+                _record_request_render_diagnostic_metric("artifactBundleCopyCount")
+                _record_request_render_diagnostic_metric(
+                    "artifactEntryCount",
+                    len(raw_entries) + len(derived_entries),
+                )
+                _record_request_render_diagnostic_metric(
+                    "artifactTextCharacters",
+                    _artifact_text_characters(raw_entries)
+                    + _artifact_text_characters(derived_entries)
+                    + _artifact_text_characters(detached_manifest),
+                )
+
+        with _request_render_diagnostic_phase("artifactValidation"):
+            protein_entries: list[Mapping[str, Any]] = []
+            raw_keys: set[str] = set()
+            for index, entry in enumerate(raw_entries):
+                if is_protein_losat_cache_entry(entry):
+                    protein_entries.append(entry)
+                elif not _is_current_nucleotide_losat_entry(entry):
                     raise ValidationError(
-                        "Current protein LOSATP artifact does not resolve through "
-                        f"protein_identity_manifest: losat_cache_entries[{index}]."
+                        "Unsupported current LOSAT artifact at "
+                        f"losat_cache_entries[{index}]."
                     )
-        if derived_entries:
-            validate_current_derived_protein_artifacts(
-                derived_entries,
-                detached_manifest,
-            )
-        if self.protein_source_mode not in {
-            None,
-            "none",
-            "pairwise",
-            "orthogroup",
-            "collinear",
-        }:
-            raise ValidationError(
-                f"Unsupported protein_source_mode: {self.protein_source_mode!r}."
-            )
+                key = str(entry["key"])
+                if key in raw_keys:
+                    raise ValidationError(
+                        f"Duplicate current LOSAT artifact key: {key!r}."
+                    )
+                raw_keys.add(key)
+
+            derived_keys: set[str] = set()
+            for index, entry in enumerate(derived_entries):
+                if not is_current_derived_protein_artifact(entry):
+                    raise ValidationError(
+                        "Unsupported current derived LOSATP artifact at "
+                        f"losat_derived_cache_entries[{index}]."
+                    )
+                key = str(entry["key"])
+                if key in derived_keys:
+                    raise ValidationError(
+                        f"Duplicate current derived LOSATP artifact key: {key!r}."
+                    )
+                derived_keys.add(key)
+
+            if detached_manifest is not None:
+                _record_request_render_diagnostic_metric(
+                    "proteinManifestFullValidationCount"
+                )
+                validate_protein_identity_manifest(detached_manifest)
+            if protein_entries and detached_manifest is None:
+                raise ValidationError(
+                    "Current protein LOSATP artifacts require protein_identity_manifest."
+                )
+            if detached_manifest is not None:
+                for index, entry in enumerate(protein_entries):
+                    _record_request_render_diagnostic_metric(
+                        "proteinRawReferenceValidationCount"
+                    )
+                    if not validate_protein_raw_entry_references(
+                        entry,
+                        detached_manifest,
+                    ):
+                        raise ValidationError(
+                            "Current protein LOSATP artifact does not resolve through "
+                            f"protein_identity_manifest: losat_cache_entries[{index}]."
+                        )
+            if derived_entries:
+                _record_request_render_diagnostic_metric(
+                    "derivedArtifactFullValidationCount"
+                )
+                validate_current_derived_protein_artifacts(
+                    derived_entries,
+                    detached_manifest,
+                )
+            if self.protein_source_mode not in {
+                None,
+                "none",
+                "pairwise",
+                "orthogroup",
+                "collinear",
+            }:
+                raise ValidationError(
+                    f"Unsupported protein_source_mode: {self.protein_source_mode!r}."
+                )
 
         object.__setattr__(self, "losat_cache_entries", raw_entries)
         object.__setattr__(self, "losat_derived_cache_entries", derived_entries)
@@ -1021,40 +1106,43 @@ def plan_circular_request(
 
     if not isinstance(request, CircularDiagramRequest):
         raise ValidationError("request must be CircularDiagramRequest.")
-    resolved_options = _resolve_request_option_tables(
-        resolve_circular_options(request.options),
-        mode="circular",
-        load_comparison_colors=False,
-    )
-    unresolved_request = (
-        request
-        if resolved_options is request.options
-        else replace(request, options=resolved_options)
-    )
-    inputs = _prepare_diagram_inputs(unresolved_request)
-    collection = _coerce_resolved_collection(
-        unresolved_request,
-        _normalize_request_records(unresolved_request, inputs),
-    )
-    records = collection.records
-    projected_request = replace(
-        unresolved_request,
-        records=_materialized_record_inputs(collection),
-        output=_resolve_first_record_output(
-            unresolved_request.output,
-            records,
-        ),
-        record_options=RecordCollectionOptions(),
-    )
-    resolved_layout = _layout_with_record_placements(projected_request)
-    materialized_request = (
-        unresolved_request
-        if _is_materialized_exact_one_request(unresolved_request)
-        and not unresolved_request.output.resolve_prefix_from_first_record
-        and resolved_layout == unresolved_request.layout
-        else projected_request
-    )
-    _warn_circular_topologies(records)
+    with _request_render_diagnostic_phase("preparation"):
+        resolved_options = _resolve_request_option_tables(
+            resolve_circular_options(request.options),
+            mode="circular",
+            load_comparison_colors=False,
+        )
+        unresolved_request = (
+            request
+            if resolved_options is request.options
+            else replace(request, options=resolved_options)
+        )
+        inputs = _prepare_diagram_inputs(unresolved_request)
+    with _request_render_diagnostic_phase("recordLoad"):
+        collection = _coerce_resolved_collection(
+            unresolved_request,
+            _normalize_request_records(unresolved_request, inputs),
+        )
+    with _request_render_diagnostic_phase("preparation"):
+        records = collection.records
+        projected_request = replace(
+            unresolved_request,
+            records=_materialized_record_inputs(collection),
+            output=_resolve_first_record_output(
+                unresolved_request.output,
+                records,
+            ),
+            record_options=RecordCollectionOptions(),
+        )
+        resolved_layout = _layout_with_record_placements(projected_request)
+        materialized_request = (
+            unresolved_request
+            if _is_materialized_exact_one_request(unresolved_request)
+            and not unresolved_request.output.resolve_prefix_from_first_record
+            and resolved_layout == unresolved_request.layout
+            else projected_request
+        )
+        _warn_circular_topologies(records)
     return CircularRequestPlan(
         request=materialized_request,
         records=records,
@@ -1071,43 +1159,46 @@ def plan_circular_batch_request(
 
     if not isinstance(request, CircularBatchRequest):
         raise ValidationError("request must be CircularBatchRequest.")
-    resolved_options = _resolve_request_option_tables(
-        resolve_circular_options(request.options),
-        mode="circular",
-        load_comparison_colors=False,
-    )
-    unresolved_request = (
-        request
-        if resolved_options is request.options
-        else replace(request, options=resolved_options)
-    )
-    inputs = _prepare_diagram_inputs(unresolved_request)
-    collection = _coerce_resolved_collection(
-        unresolved_request,
-        _normalize_request_records(unresolved_request, inputs),
-    )
-    records = collection.records
-    outputs = (
-        unresolved_request.outputs
-        if unresolved_request.outputs
-        else resolve_circular_batch_outputs(
-            unresolved_request.output_policy,
-            records,
+    with _request_render_diagnostic_phase("preparation"):
+        resolved_options = _resolve_request_option_tables(
+            resolve_circular_options(request.options),
+            mode="circular",
+            load_comparison_colors=False,
         )
-    )
-    materialized_request = (
-        unresolved_request
-        if _is_materialized_exact_one_request(unresolved_request)
-        and unresolved_request.output_policy is None
-        else replace(
+        unresolved_request = (
+            request
+            if resolved_options is request.options
+            else replace(request, options=resolved_options)
+        )
+        inputs = _prepare_diagram_inputs(unresolved_request)
+    with _request_render_diagnostic_phase("recordLoad"):
+        collection = _coerce_resolved_collection(
             unresolved_request,
-            records=_materialized_record_inputs(collection),
-            outputs=outputs,
-            output_policy=None,
-            record_options=RecordCollectionOptions(),
+            _normalize_request_records(unresolved_request, inputs),
         )
-    )
-    _warn_circular_topologies(records)
+    with _request_render_diagnostic_phase("preparation"):
+        records = collection.records
+        outputs = (
+            unresolved_request.outputs
+            if unresolved_request.outputs
+            else resolve_circular_batch_outputs(
+                unresolved_request.output_policy,
+                records,
+            )
+        )
+        materialized_request = (
+            unresolved_request
+            if _is_materialized_exact_one_request(unresolved_request)
+            and unresolved_request.output_policy is None
+            else replace(
+                unresolved_request,
+                records=_materialized_record_inputs(collection),
+                outputs=outputs,
+                output_policy=None,
+                record_options=RecordCollectionOptions(),
+            )
+        )
+        _warn_circular_topologies(records)
     return CircularBatchRequestPlan(
         request=materialized_request,
         records=records,
@@ -1123,40 +1214,43 @@ def plan_linear_request(
 
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("request must be LinearDiagramRequest.")
-    unresolved_request = replace(
-        request,
-        options=_resolve_request_option_tables(
-            request.options,
-            mode="linear",
-            load_comparison_colors=_linear_request_uses_comparisons(request),
-        ),
-    )
-    inputs = _prepare_diagram_inputs(unresolved_request)
-    collection = _coerce_resolved_collection(
-        unresolved_request,
-        _normalize_request_records(unresolved_request, inputs),
-    )
-    projected_request = replace(
-        unresolved_request,
-        records=_materialized_record_inputs(collection),
-        record_options=RecordCollectionOptions(),
-    )
-    resolved_layout = _linear_layout_with_record_placements(projected_request)
-    resolved_options = resolve_linear_options(
+    with _request_render_diagnostic_phase("preparation"):
+        unresolved_request = replace(
+            request,
+            options=_resolve_request_option_tables(
+                request.options,
+                mode="linear",
+                load_comparison_colors=_linear_request_uses_comparisons(request),
+            ),
+        )
+        inputs = _prepare_diagram_inputs(unresolved_request)
+    with _request_render_diagnostic_phase("recordLoad"):
+        collection = _coerce_resolved_collection(
+            unresolved_request,
+            _normalize_request_records(unresolved_request, inputs),
+        )
+    with _request_render_diagnostic_phase("preparation"):
+        projected_request = replace(
+            unresolved_request,
+            records=_materialized_record_inputs(collection),
+            record_options=RecordCollectionOptions(),
+        )
+        resolved_layout = _linear_layout_with_record_placements(projected_request)
+        resolved_options = resolve_linear_options(
             projected_request.options,
             records=collection.records,
             layout=resolved_layout,
         )
-    materialized_request = (
-        unresolved_request
-        if _is_materialized_exact_one_request(unresolved_request)
-        and resolved_layout == unresolved_request.layout
-        and resolved_options is unresolved_request.options
-        else replace(
-            projected_request,
-            options=resolved_options,
+        materialized_request = (
+            unresolved_request
+            if _is_materialized_exact_one_request(unresolved_request)
+            and resolved_layout == unresolved_request.layout
+            and resolved_options is unresolved_request.options
+            else replace(
+                projected_request,
+                options=resolved_options,
+            )
         )
-    )
     return LinearRequestPlan(
         request=materialized_request,
         records=collection.records,
@@ -1553,16 +1647,17 @@ def build_request_plan_diagram(
     if not isinstance(current_artifacts, CurrentRequestArtifacts):
         raise ValidationError("artifacts must be CurrentRequestArtifacts.")
     if isinstance(plan, CircularBatchRequestPlan):
-        items = tuple(
-            PreparedDiagramRequest(
-                mode="circular",
-                request=item_plan.request,
-                records=item_plan.records,
-                drawing=item_plan.build(),
-                inputs=item_plan.inputs,
+        with _request_render_diagnostic_phase("drawing"):
+            items = tuple(
+                PreparedDiagramRequest(
+                    mode="circular",
+                    request=item_plan.request,
+                    records=item_plan.records,
+                    drawing=item_plan.build(),
+                    inputs=item_plan.inputs,
+                )
+                for item_plan in plan.item_plans()
             )
-            for item_plan in plan.item_plans()
-        )
         return PreparedCircularBatchRequest(
             request=plan.request,
             records=plan.records,
@@ -1576,47 +1671,51 @@ def build_request_plan_diagram(
     protein_identity_manifest: Mapping[str, Any] | None = None
     linear_metadata: LinearDiagramMetadata | None = None
     if isinstance(plan, CircularRequestPlan):
-        drawing = plan.build()
+        with _request_render_diagnostic_phase("drawing"):
+            drawing = plan.build()
         losat_cache_entries = current_artifacts.losat_cache_entries
         losat_derived_cache_entries = current_artifacts.losat_derived_cache_entries
         protein_identity_manifest = current_artifacts.protein_identity_manifest
     else:
         if plan.inputs is None:  # pragma: no cover - planners always prepare inputs.
             raise ValidationError("Linear request plan has no prepared diagram inputs.")
-        linear_artifacts = _prepare_linear_artifacts(
-            request,
-            records,
-            current_artifacts,
-            plan.inputs,
-        )
-        linear_build = plan.build(
-            losatp_cache=linear_artifacts.cache,
-            protein_extraction=linear_artifacts.extraction,
-        )
+        with _request_render_diagnostic_phase("comparisonPreparation"):
+            linear_artifacts = _prepare_linear_artifacts(
+                request,
+                records,
+                current_artifacts,
+                plan.inputs,
+            )
+        with _request_render_diagnostic_phase("drawing"):
+            linear_build = plan.build(
+                losatp_cache=linear_artifacts.cache,
+                protein_extraction=linear_artifacts.extraction,
+            )
         drawing = linear_build.drawing
         linear_metadata = linear_build.metadata
-        protein_entries = (
-            tuple(linear_artifacts.cache.session_entries())
-            if linear_artifacts.cache is not None
-            else ()
-        )
-        losat_cache_entries = (
-            *protein_entries,
-            *linear_artifacts.nucleotide_entries,
-        )
-        losat_derived_cache_entries = _build_current_derived_entries(
-            linear_metadata,
-            request,
-            records,
-            linear_artifacts,
-            losat_cache_entries,
-        )
-        protein_identity_manifest = (
-            linear_artifacts.extraction.identity_manifest.to_dict()
-            if linear_artifacts.extraction is not None
-            and linear_artifacts.extraction.identity_manifest is not None
-            else current_artifacts.protein_identity_manifest
-        )
+        with _request_render_diagnostic_phase("comparisonPreparation"):
+            protein_entries = (
+                tuple(linear_artifacts.cache.session_entries())
+                if linear_artifacts.cache is not None
+                else ()
+            )
+            losat_cache_entries = (
+                *protein_entries,
+                *linear_artifacts.nucleotide_entries,
+            )
+            losat_derived_cache_entries = _build_current_derived_entries(
+                linear_metadata,
+                request,
+                records,
+                linear_artifacts,
+                losat_cache_entries,
+            )
+            protein_identity_manifest = (
+                linear_artifacts.extraction.identity_manifest.to_dict()
+                if linear_artifacts.extraction is not None
+                and linear_artifacts.extraction.identity_manifest is not None
+                else current_artifacts.protein_identity_manifest
+            )
     return PreparedDiagramRequest(
         mode=plan.mode,
         request=request,
@@ -1776,10 +1875,11 @@ def _render_request_diagram(
     *,
     include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    comparison_sequence_records = _comparison_sequence_records(
-        prepared,
-        include_feature_catalog=include_feature_catalog,
-    )
+    with _request_render_diagnostic_phase("interactivePreparation"):
+        comparison_sequence_records = _comparison_sequence_records(
+            prepared,
+            include_feature_catalog=include_feature_catalog,
+        )
     if isinstance(prepared, PreparedCircularBatchRequest):
         return CircularBatchRenderResult(
             request=prepared.request,
@@ -1890,11 +1990,12 @@ def _render_prepared_request(
     """Write one already-planned diagram using its canonical output request."""
 
     output = prepared.request.output
-    interactive_context = _interactive_context(
-        prepared,
-        comparison_sequence_records=comparison_sequence_records,
-        include_feature_catalog=include_feature_catalog,
-    )
+    with _request_render_diagnostic_phase("interactivePreparation"):
+        interactive_context = _interactive_context(
+            prepared,
+            comparison_sequence_records=comparison_sequence_records,
+            include_feature_catalog=include_feature_catalog,
+        )
     export_interactive_context = (
         interactive_context
         if (
@@ -1903,18 +2004,19 @@ def _render_prepared_request(
         )
         else None
     )
-    paths = save_figure_to(
-        prepared.drawing,
-        output.formats,
-        output_dir=(
-            str(output.output_directory)
-            if output.output_directory is not None
-            else None
-        ),
-        output_prefix=output.output_prefix,
-        overwrite=output.overwrite,
-        interactive_context=export_interactive_context,
-    )
+    with _request_render_diagnostic_phase("svgWrite"):
+        paths = save_figure_to(
+            prepared.drawing,
+            output.formats,
+            output_dir=(
+                str(output.output_directory)
+                if output.output_directory is not None
+                else None
+            ),
+            output_prefix=output.output_prefix,
+            overwrite=output.overwrite,
+            interactive_context=export_interactive_context,
+        )
     return RequestRenderResult(
         mode=prepared.mode,
         request=prepared.request,

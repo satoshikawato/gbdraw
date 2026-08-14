@@ -72,7 +72,8 @@ export const migrateLegacyFeatureOverrides = (
   {
     warn = console.warn,
     legacyFeatures = [],
-    legacyRecordKeys = []
+    legacyRecordKeys = [],
+    onDiagnostic = null
   } = {}
 ) => {
   const result = {
@@ -86,7 +87,19 @@ export const migrateLegacyFeatureOverrides = (
   const targets = new Set();
   const targetsByAlias = new Map();
   const currentFeatures = Array.isArray(features) ? features : [];
-  const currentDescriptors = [];
+  const currentDescriptorsByStableId = new Map();
+  const diagnostics = {
+    currentDescriptorCount: 0,
+    legacyFeatureCount: Array.isArray(legacyFeatures) ? legacyFeatures.length : 0,
+    legacyFeaturesVisited: 0,
+    legacyKeysNeedingMigration: 0,
+    fullDescriptorComparisons: 0,
+    indexedDescriptorComparisons: 0,
+    skippedLegacyFeatureScan: false
+  };
+  const reportDiagnostic = () => {
+    if (typeof onDiagnostic === 'function') onDiagnostic({ ...diagnostics });
+  };
   const addAliasTarget = (alias, target) => {
     if (!alias || !target || alias === target) return;
     if (!targetsByAlias.has(alias)) targetsByAlias.set(alias, new Set());
@@ -99,16 +112,42 @@ export const migrateLegacyFeatureOverrides = (
     legacyFeatureAliases(feature, index).forEach((alias) => {
       addAliasTarget(alias, target);
     });
-    currentDescriptors.push({
+    const descriptor = {
       target,
       stableId: stableFeatureId(feature),
       recordKey: recordKeyForFeature(feature),
       recordId: recordIdForFeature(feature)
-    });
+    };
+    diagnostics.currentDescriptorCount += 1;
+    if (descriptor.stableId) {
+      if (!currentDescriptorsByStableId.has(descriptor.stableId)) {
+        currentDescriptorsByStableId.set(descriptor.stableId, []);
+      }
+      currentDescriptorsByStableId.get(descriptor.stableId).push(descriptor);
+    }
   });
-  if (targets.size === 0) return result;
+  if (targets.size === 0) {
+    reportDiagnostic();
+    return result;
+  }
+
+  const legacyKeys = Object.keys(overrides).filter((key) => !targets.has(key));
+  const legacyKeySet = new Set(legacyKeys);
+  diagnostics.legacyKeysNeedingMigration = legacyKeys.length;
+  if (legacyKeys.length === 0) {
+    diagnostics.skippedLegacyFeatureScan = true;
+    reportDiagnostic();
+    return result;
+  }
 
   (Array.isArray(legacyFeatures) ? legacyFeatures : []).forEach((feature, index) => {
+    const relevantAliases = legacyFeatureAliases(
+      feature,
+      index,
+      { includePositional: true }
+    ).filter((alias) => legacyKeySet.has(alias));
+    if (relevantAliases.length === 0) return;
+    diagnostics.legacyFeaturesVisited += 1;
     const sourceStableId = stableFeatureId(feature);
     if (!sourceStableId) return;
     let sourceRecordKey = recordKeyForFeature(feature);
@@ -124,15 +163,14 @@ export const migrateLegacyFeatureOverrides = (
     }
     const sourceRecordId = recordIdForFeature(feature);
     if (!sourceRecordKey && !sourceRecordId) return;
-    let matches = currentDescriptors.filter(
-      (candidate) => candidate.stableId && candidate.stableId === sourceStableId
-    );
+    let matches = currentDescriptorsByStableId.get(sourceStableId) || [];
+    diagnostics.indexedDescriptorComparisons += matches.length;
     if (sourceRecordKey) {
       matches = matches.filter((candidate) => candidate.recordKey === sourceRecordKey);
     } else if (sourceRecordId) {
       matches = matches.filter((candidate) => candidate.recordId === sourceRecordId);
     }
-    legacyFeatureAliases(feature, index, { includePositional: true }).forEach((alias) => {
+    relevantAliases.forEach((alias) => {
       matches.forEach((candidate) => addAliasTarget(alias, candidate.target));
     });
   });
@@ -166,5 +204,6 @@ export const migrateLegacyFeatureOverrides = (
       + `${result.collisions} key collisions).`
     );
   }
+  reportDiagnostic();
   return result;
 };

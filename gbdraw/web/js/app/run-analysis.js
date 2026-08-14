@@ -1483,7 +1483,10 @@ export const createRunAnalysis = ({
     comparisonPlanSnapshot = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
-    if (!isReflow) recordSessionLifecycleEvent('generate-start');
+    if (!isReflow) {
+      recordSessionLifecycleEvent('generate-start');
+      recordSessionLifecycleEvent('generation-input-resolution-start');
+    }
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
           comparisonPlanSnapshot || resolveLinearComparisonPlan({
@@ -2562,6 +2565,7 @@ export const createRunAnalysis = ({
         const comparisonResolution = activeComparisonPlanSnapshot;
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const useLosat = comparisonResolution.hasLosatIntent === true;
+        if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
         const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
           ? normalizeBlastpMode(losat.blastp?.mode)
@@ -3848,6 +3852,16 @@ export const createRunAnalysis = ({
             (left, right) => Number(left?.ordinal) - Number(right?.ordinal)
           );
           losatCache.value = cacheMap;
+          recordSessionLifecycleEvent('losat-cache-preparation-end', {
+            cacheHits: Number(losatTiming?.cacheHits || 0),
+            cacheMisses: Number(losatTiming?.cacheMisses || 0),
+            derivedPayloadCacheHits: Number(
+              losatTiming?.proteinDerivedPayloadCacheHits || 0
+            ),
+            derivedPayloadCacheMisses: Number(
+              losatTiming?.proteinDerivedPayloadCacheMisses || 0
+            )
+          });
         }
         if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -3882,6 +3896,7 @@ export const createRunAnalysis = ({
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
+      if (!isReflow) recordSessionLifecycleEvent('generation-input-resolution-end');
       recordSessionLifecycleEvent('serialize-canonical-files-start');
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
@@ -3893,6 +3908,7 @@ export const createRunAnalysis = ({
         ...entry,
         fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
+      recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
         state,
         filesData: serializedFiles,
@@ -3900,6 +3916,7 @@ export const createRunAnalysis = ({
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation
       });
+      recordSessionLifecycleEvent('canonical-request-construction-end');
       const canonicalResourceEntries = Object.values(canonical.resources || {});
       const canonicalResourceCount = canonicalResourceEntries.length;
       const canonicalResourceDeclaredBytes = canonicalResourceEntries.reduce(
@@ -4014,9 +4031,12 @@ export const createRunAnalysis = ({
       const suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend(
         activeComparisonPlanSnapshot
       );
+      if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-start');
       const candidateCatalog = isReflow
         ? null
         : validateFeatureCatalog(generationMetadata.featureCatalog, res);
+      if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-end');
+      recordSessionLifecycleEvent('result-admission-start');
       const candidateCommit = isReflow
         ? measureTiming(
             postGbdrawTimingEntries,
@@ -4044,6 +4064,7 @@ export const createRunAnalysis = ({
               suppressPairwiseIdentityLegend
             })
           );
+      recordSessionLifecycleEvent('result-admission-end');
 
       if (generationToken !== latestGenerationToken) {
         if (
@@ -4092,6 +4113,7 @@ export const createRunAnalysis = ({
       }
 
       if (!isReflow) {
+        recordSessionLifecycleEvent('preview-result-commit-start');
         results.value = candidateCommit.results;
         trackSlotResolvedGeometry.value = generationMetadata.trackSlotGeometry || null;
         if (resultGenerationKey) resultGenerationKey.value += 1;
@@ -4151,6 +4173,7 @@ export const createRunAnalysis = ({
         } else {
           zoom.value = 1.0;
         }
+        recordSessionLifecycleEvent('preview-result-commit-end');
       }
       if (!isReflow) {
         appliedPaletteName.value = String(selectedPalette?.value || appliedPaletteName.value || 'default');

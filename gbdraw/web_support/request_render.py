@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 import re
 import shutil
-from typing import Any, Mapping
+from time import perf_counter
+from typing import Any, Iterator, Mapping, MutableMapping
 
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
     RequestRenderResult,
+    _capture_request_render_diagnostics,
     render_request,
 )
 from gbdraw.exceptions import ValidationError
@@ -29,6 +32,24 @@ from gbdraw.web_support.feature_catalog import (
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
 _STAGED_WORKSPACE_MARKER = ".gbdraw-worker-render-workspace"
+
+
+@contextmanager
+def _web_render_diagnostic_phase(
+    diagnostics: MutableMapping[str, Any] | None,
+    name: str,
+) -> Iterator[None]:
+    if diagnostics is None:
+        yield
+        return
+    started_at = perf_counter()
+    try:
+        yield
+    finally:
+        timings = diagnostics.setdefault("timingsMs", {})
+        timings[name] = float(timings.get(name, 0.0)) + (
+            perf_counter() - started_at
+        ) * 1000.0
 
 
 def _attach_exception_note(error: BaseException, note: str) -> None:
@@ -65,8 +86,26 @@ def render_canonical_web_request(
     *,
     resource_paths: Mapping[str, str | Path],
     output_directory: str | Path,
+    _diagnostics: MutableMapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Decode and render one browser request without a CLI translation layer."""
+
+    with _capture_request_render_diagnostics(_diagnostics):
+        return _render_canonical_web_request(
+            payload,
+            resource_paths=resource_paths,
+            output_directory=output_directory,
+            diagnostics=_diagnostics,
+        )
+
+
+def _render_canonical_web_request(
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    output_directory: str | Path,
+    diagnostics: MutableMapping[str, Any] | None,
+) -> dict[str, Any]:
 
     if not isinstance(payload, Mapping):
         raise ValidationError("The Web render request must be an object.")
@@ -74,12 +113,14 @@ def render_canonical_web_request(
         raise ValidationError("The Web render resource map must be an object.")
     output_root = Path(output_directory)
     output_root.mkdir(parents=True, exist_ok=True)
-    request = decode_canonical_request(
-        payload,
-        resource_paths=resource_paths,
-        output_directory=output_root,
-    )
-    rendered = render_request(request, include_feature_catalog=True)
+    with _web_render_diagnostic_phase(diagnostics, "decode"):
+        request = decode_canonical_request(
+            payload,
+            resource_paths=resource_paths,
+            output_directory=output_root,
+        )
+    with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
+        rendered = render_request(request, include_feature_catalog=True)
     items: tuple[RequestRenderResult, ...]
     if isinstance(rendered, CircularBatchRenderResult):
         items = rendered.items
@@ -92,35 +133,40 @@ def render_canonical_web_request(
     for result_index, item in enumerate(items):
         path = _base_svg_path(item)
         result_name = path.name
-        svg_content = path.read_text(encoding="utf-8")
+        with _web_render_diagnostic_phase(diagnostics, "svgReadback"):
+            svg_content = path.read_text(encoding="utf-8")
         results.append(
             {
                 "name": result_name,
                 "content": svg_content,
             }
         )
-        feature_catalog_items.append(
-            build_feature_catalog_item(
-                svg_content,
-                item.interactive_context,
-                result_index=result_index,
-                result_name=result_name,
+        with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
+            feature_catalog_items.append(
+                build_feature_catalog_item(
+                    svg_content,
+                    item.interactive_context,
+                    result_index=result_index,
+                    result_name=result_name,
+                )
             )
-        )
-        geometry_records.extend(
-            collect_track_slot_geometry_records(
-                item.drawing,
-                result_index=result_index,
-                result_name=result_name,
+        with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):
+            geometry_records.extend(
+                collect_track_slot_geometry_records(
+                    item.drawing,
+                    result_index=result_index,
+                    result_name=result_name,
+                )
             )
-        )
     if not results:
         raise ValidationError("The canonical Web request did not produce an SVG.")
-    metadata = build_track_slot_geometry_run_metadata(
-        mode=rendered.mode,
-        records=geometry_records,
-    )
-    metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
+    with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):
+        metadata = build_track_slot_geometry_run_metadata(
+            mode=rendered.mode,
+            records=geometry_records,
+        )
+    with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
+        metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
     return {
         "results": results,
         "metadata": metadata,
@@ -215,6 +261,7 @@ def render_staged_canonical_web_request(
     *,
     resource_paths: Mapping[str, str | Path],
     workspace: str | Path,
+    _diagnostics: MutableMapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Render a browser request from paths staged by the diagram Worker."""
 
@@ -271,6 +318,7 @@ def render_staged_canonical_web_request(
             payload,
             resource_paths=validated_paths,
             output_directory=output_directory,
+            _diagnostics=_diagnostics,
         )
     except BaseException as exc:
         render_error = exc
