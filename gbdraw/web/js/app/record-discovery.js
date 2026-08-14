@@ -2,7 +2,11 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
+import {
+  cloneFileBytesForTransfer,
+  getSessionResourceSource,
+  readFileText
+} from '../services/file-content-cache.js';
 
 const normalizeRecordLength = (value) => {
   const numeric = Number(value);
@@ -74,6 +78,12 @@ export const parseSequenceRecordText = (text, format) => {
   throw new Error(`Unsupported format: ${String(format)}.`);
 };
 
+const defaultTextReader = (file) => (
+  typeof file?.text === 'function' || getSessionResourceSource(file)
+    ? () => readFileText(file)
+    : null
+);
+
 export const discoverSequenceRecords = async ({
   file,
   format,
@@ -83,7 +93,7 @@ export const discoverSequenceRecords = async ({
   if (!file) throw new Error('A sequence file is required.');
   const readSourceText = typeof readText === 'function'
     ? () => readText(file)
-    : (typeof file.text === 'function' ? () => file.text() : null);
+    : defaultTextReader(file);
   if (readSourceText) {
     try {
       return parseSequenceRecordText(await readSourceText(), format);
@@ -110,7 +120,7 @@ export const discoverGffFastaRecords = async ({
   if (!gffFile || !fastaFile) throw new Error('GFF3 and FASTA files are required.');
   const readSourceText = typeof readText === 'function'
     ? () => readText(fastaFile)
-    : (typeof fastaFile.text === 'function' ? () => fastaFile.text() : null);
+    : defaultTextReader(fastaFile);
   if (readSourceText) {
     try {
       return parseSequenceRecordText(await readSourceText(), 'fasta');

@@ -74,6 +74,9 @@ const isPlainObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
 );
 
+const adoptedCurrentDocuments = new WeakSet();
+const adoptedCanonicalOwners = new WeakSet();
+
 const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze([
   'extractedFeatures',
   'biologicalFeatures',
@@ -369,6 +372,44 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
   }
 };
+
+export const adoptRuntimeCanonicalSession = (canonical) => {
+  if (
+    !isPlainObject(canonical)
+    || !isPlainObject(canonical.renderRequest)
+    || !isPlainObject(canonical.resources)
+    || (
+      canonical.webFiles !== undefined
+      && !isPlainObject(canonical.webFiles)
+    )
+  ) {
+    throw new Error('A canonical render request is required for adoptive ownership.');
+  }
+  adoptedCanonicalOwners.add(canonical);
+  return canonical;
+};
+
+export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
+  validateSessionAuthorityInventory(sessionData, currentVersion);
+  if (sessionData.version !== currentVersion) {
+    throw new Error('Only the current session schema can use adoptive ownership.');
+  }
+  const canonical = adoptRuntimeCanonicalSession({
+    renderRequest: sessionData.renderRequest,
+    resources: sessionData.resources,
+    webFiles: isPlainObject(sessionData.webFiles) ? sessionData.webFiles : {}
+  });
+  adoptedCurrentDocuments.add(sessionData);
+  return { document: sessionData, canonical };
+};
+
+export const isAdoptedCurrentSessionDocument = (value) => (
+  Boolean(value) && adoptedCurrentDocuments.has(value)
+);
+
+export const isAdoptedCanonicalSession = (value) => (
+  Boolean(value) && adoptedCanonicalOwners.has(value)
+);
 
 export const projectWebOnlyEditorMetadata = (sessionData) => ({
   ui: copyFields(sessionData?.ui, WEB_EDITOR_UI_FIELDS)

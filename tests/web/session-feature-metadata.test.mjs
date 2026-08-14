@@ -22,9 +22,23 @@ await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-f
 await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
 await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule(
+  'gbdraw/web/js/services/diagram-resource-staging.js',
+  'services/diagram-resource-staging.js'
+);
+await copyModule(
+  'gbdraw/web/js/services/canonical-resource-references.js',
+  'services/canonical-resource-references.js'
+);
+await copyModule(
+  'gbdraw/web/js/services/resource-payload-owner.js',
+  'services/resource-payload-owner.js'
+);
 await copyModule('gbdraw/web/js/services/diagram-worker-protocol.js', 'services/diagram-worker-protocol.js');
 await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
+await copyModule('gbdraw/web/js/services/byte-utils.js', 'services/byte-utils.js');
 await copyModule('gbdraw/web/js/services/file-content-cache.js', 'services/file-content-cache.js');
+await copyModule('gbdraw/web/js/services/depth-file-codec.js', 'services/depth-file-codec.js');
 await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule(
@@ -33,6 +47,11 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/pyodide-assets.js', 'services/pyodide-assets.js');
 await copyModule('gbdraw/web/js/services/runtime-capabilities.js', 'services/runtime-capabilities.js');
+await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
+await copyModule(
+  'gbdraw/web/js/services/session-resource-backing.js',
+  'services/session-resource-backing.js'
+);
 await copyModule('gbdraw/web/js/services/session-feature-metadata.js', 'services/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/services/svg-result-ingestion.js', 'services/svg-result-ingestion.js');
 await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');
@@ -133,6 +152,17 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
   );
   const errorPayload = { error: { type: 'OutputError', message: 'No output files generated.' } };
   assert.deepEqual(normalizeGenerationResponse(errorPayload), { results: errorPayload, metadata: {} });
+  const binarySvg = new TextEncoder().encode('<svg>µ</svg>');
+  assert.deepEqual(
+    normalizeGenerationResponse({
+      results: [{ name: 'binary.svg', content: binarySvg }],
+      metadata: new TextEncoder().encode(JSON.stringify(metadata))
+    }),
+    {
+      results: [{ name: 'binary.svg', content: '<svg>µ</svg>' }],
+      metadata
+    }
+  );
 }
 
 const parseAttributes = (source) => {

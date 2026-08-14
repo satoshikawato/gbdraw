@@ -213,9 +213,10 @@ const installUserUploadedTsv = async (page) => page.evaluate(
 
 const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
   const file = window.__GBDRAW_APP__.linearComparisonPlan.edges[0]?.file;
+  const { readFileBytes } = await import('/gbdraw/web/js/services/file-content-cache.js');
   return {
     name: file?.name || '',
-    bytes: file ? Array.from(new Uint8Array(await file.arrayBuffer())) : []
+    bytes: file ? Array.from(await readFileBytes(file)) : []
   };
 });
 
@@ -441,9 +442,9 @@ const failRendererAfterMigration = async (page) => page.evaluate(async () => {
       !rendererFailureInjected &&
       message?.type === 'run' &&
       message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA &&
-      message?.payload?.resources &&
-      typeof message.payload.resources === 'object' &&
-      !Array.isArray(message.payload.resources)
+      Array.isArray(message?.payload?.resourceManifest) &&
+      Array.isArray(message?.payload?.stagedResources) &&
+      !Object.hasOwn(message.payload, 'resources')
     ) {
       rendererFailureInjected = true;
       message.payload.request = null;

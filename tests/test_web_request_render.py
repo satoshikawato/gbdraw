@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -20,6 +22,7 @@ from gbdraw.session import build_session_document
 import gbdraw.web_support.request_render as web_request_render
 from gbdraw.web_support.request_render import (
     render_embedded_canonical_web_request,
+    render_staged_canonical_web_request,
 )
 
 
@@ -47,6 +50,41 @@ def test_embedded_web_request_renders_through_typed_api(tmp_path) -> None:
     assert result["results"][0]["content"].lstrip().startswith("<?xml")
     assert not workspace.exists()
 
+
+def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> None:
+    record = SeqRecord(Seq("ATGC" * 25), id="staged-web-record")
+    record.annotations["molecule_type"] = "DNA"
+    document = build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            output=RenderOutputRequest(
+                output_prefix="staged-web-result",
+                formats=("svg",),
+            ),
+        )
+    ).to_dict()
+    workspace = tmp_path / "gbdraw-web-render-1"
+    resources_directory = workspace / "resources"
+    resources_directory.mkdir(parents=True)
+    (workspace / ".gbdraw-worker-render-workspace").touch()
+    resource_paths = {}
+    for index, (resource_id, entry) in enumerate(document["resources"].items(), start=1):
+        path = resources_directory / f"{index:04d}.bin"
+        path.write_bytes(base64.b64decode(entry["data"], validate=True))
+        resource_paths[resource_id] = path
+
+    result = render_staged_canonical_web_request(
+        document["renderRequest"],
+        resource_paths=resource_paths,
+        workspace=workspace,
+    )
+
+    assert [item["name"] for item in result["results"]] == [
+        "staged-web-result.svg"
+    ]
+    assert result["results"][0]["content"].lstrip().startswith("<?xml")
+    assert not workspace.exists()
+
     repeated = render_embedded_canonical_web_request(
         document["renderRequest"],
         resources=document["resources"],
@@ -55,6 +93,52 @@ def test_embedded_web_request_renders_through_typed_api(tmp_path) -> None:
 
     assert repeated["results"] == result["results"]
     assert not workspace.exists()
+
+    linked_workspace = tmp_path / "gbdraw-web-render-2"
+    linked_resources = linked_workspace / "resources"
+    linked_resources.mkdir(parents=True)
+    (linked_workspace / ".gbdraw-worker-render-workspace").touch()
+    cache_directory = tmp_path / "gbdraw-web-render-resource-cache"
+    cache_directory.mkdir()
+    linked_paths = {}
+    cache_paths = []
+    for index, (resource_id, entry) in enumerate(document["resources"].items(), start=1):
+        cache_path = cache_directory / f"render-resource-{index}.bin"
+        cache_path.write_bytes(base64.b64decode(entry["data"], validate=True))
+        linked_path = linked_resources / f"{index:04d}.bin"
+        linked_path.symlink_to(cache_path)
+        linked_paths[resource_id] = linked_path
+        cache_paths.append(cache_path)
+
+    linked = render_staged_canonical_web_request(
+        document["renderRequest"],
+        resource_paths=linked_paths,
+        workspace=linked_workspace,
+    )
+
+    assert linked["results"] == result["results"]
+    assert not linked_workspace.exists()
+    assert all(path.is_file() for path in cache_paths)
+
+
+def test_staged_web_request_preserves_workspace_without_worker_marker(tmp_path) -> None:
+    workspace = tmp_path / "gbdraw-web-render-1"
+    resources_directory = workspace / "resources"
+    resources_directory.mkdir(parents=True)
+    sentinel = workspace / "owner-data.txt"
+    sentinel.write_text("preserve", encoding="utf-8")
+
+    with pytest.raises(
+        ValidationError,
+        match="staged Web render workspace is incomplete",
+    ):
+        render_staged_canonical_web_request(
+            {},
+            resource_paths={},
+            workspace=workspace,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "preserve"
 
 
 def test_embedded_web_request_rejects_duplicate_materialized_names(tmp_path) -> None:

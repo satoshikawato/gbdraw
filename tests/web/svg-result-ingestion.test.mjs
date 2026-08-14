@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   getCommittedSvgContent,
   getCommittedSvgResultMetadata,
+  ingestCatalogBackedSvgResults,
   ingestSvgResult,
   ingestSvgResults,
   isCommittedSvgResult,
@@ -11,7 +12,6 @@ import {
   markCommittedSvgResultUnmounted
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 import { normalizeLogicalResults } from '../../gbdraw/web/js/services/result-normalization.js';
-
 class FakeDomParser {
   static calls = 0;
 
@@ -119,6 +119,71 @@ test('a malformed sanitized document never becomes committed', () => {
       {
         sanitizer: { sanitize: (content) => content },
         parser: FakeDomParser
+      }
+    ),
+    /malformed SVG/
+  );
+});
+
+test('a validated catalog commits sanitized saved SVG without a detached parse or scan', () => {
+  const catalogItem = {
+    recordKeys: ['record-a'],
+    biologicalFeatures: [{
+      recordKey: 'record-a',
+      biologicalFeatureId: 'stable-a',
+      record_id: 'public-record-a'
+    }],
+    features: [{
+      recordKey: 'record-a',
+      biologicalFeatureId: 'stable-a',
+      svgId: 'rendered-a'
+    }]
+  };
+  let sanitizeCalls = 0;
+  const beforeParserCalls = FakeDomParser.calls;
+  const committed = ingestCatalogBackedSvgResults([{
+    name: 'saved.svg',
+    content: '<?xml version="1.0"?><svg><script>bad()</script><path id="rendered-a"/></svg>'
+  }], {
+    catalogItems: [catalogItem],
+    sanitizer: {
+      sanitize(content) {
+        sanitizeCalls += 1;
+        let sanitized = content;
+        let previous;
+        do {
+          previous = sanitized;
+          sanitized = sanitized
+            .replace(/^<\?xml[^>]*>/, '')
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '');
+        } while (sanitized !== previous);
+        return sanitized;
+      }
+    }
+  })[0];
+
+  assert.equal(sanitizeCalls, 1);
+  assert.equal(FakeDomParser.calls, beforeParserCalls);
+  assert.equal(isCommittedSvgResult(committed), true);
+  assert.equal(committed.content, '<svg><path id="rendered-a"/></svg>');
+  assert.deepEqual(
+    getCommittedSvgResultMetadata(committed).renderedFeatureIdentities.byRenderedId
+      .get('rendered-a'),
+    {
+      renderedId: 'rendered-a',
+      stableId: 'stable-a',
+      recordIndex: 0,
+      recordId: 'public-record-a',
+      elementId: 'rendered-a'
+    }
+  );
+
+  assert.throws(
+    () => ingestCatalogBackedSvgResults(
+      [{ name: 'bad.svg', content: 'not svg' }],
+      {
+        catalogItems: [catalogItem],
+        sanitizer: { sanitize: (content) => content }
       }
     ),
     /malformed SVG/

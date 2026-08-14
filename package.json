@@ -6,7 +6,8 @@
   "scripts": {
     "test:playwright": "playwright test",
     "test:web:functional-smoke": "playwright test --config=playwright.functional.config.js",
-    "test:web:perf-smoke": "playwright test --config=playwright.perf.config.js"
+    "test:web:perf-smoke": "playwright test --config=playwright.perf.config.js",
+    "test:web:vibrio-generate": "playwright test --config=playwright.vibrio.config.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

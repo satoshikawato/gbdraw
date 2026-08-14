@@ -48,7 +48,12 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "app" / "match-sequences.js")
         .read_text(encoding="utf-8")
         .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./conservation-series.js", "./conservation-series.mjs"),
+        .replace("./conservation-series.js", "./conservation-series.mjs")
+        .replace("../services/file-content-cache.js", "./file-content-cache.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "file-content-cache.mjs").write_text(
+        "export const readFileText = (file) => file.text();\n",
         encoding="utf-8",
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"

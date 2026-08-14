@@ -3,9 +3,20 @@ import assert from 'node:assert/strict';
 globalThis.self = {};
 
 const {
+  collectGenerationResultTransferList,
   resolveGenerationCleanupOutcome,
   serializeError
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
+
+const svgBytes = new TextEncoder().encode('<svg />');
+const metadataBytes = new TextEncoder().encode('{"featureCatalog":{}}');
+assert.deepEqual(
+  collectGenerationResultTransferList({
+    results: [{ content: svgBytes }, { content: '<svg />' }],
+    metadata: metadataBytes
+  }),
+  [svgBytes.buffer, metadataBytes.buffer]
+);
 
 const pythonPayload = {
   error: {

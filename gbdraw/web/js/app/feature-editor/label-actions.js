@@ -8,6 +8,7 @@ import {
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { readFileText } from '../../services/file-content-cache.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 
 export const EXCLUDED_GROUP_SELECTOR = [
@@ -957,7 +958,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     if (!file) return;
 
     try {
-      const text = await file.text();
+      const text = await readFileText(file);
       const rows = parseLabelOverrideTsv(text);
 
       if (!svgContainer.value) {

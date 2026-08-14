@@ -1,35 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+await mkdir(join(tempDir, 'app'));
+await mkdir(join(tempDir, 'services'));
 await writeFile(
-  join(tempDir, 'feature-utils.js'),
+  join(tempDir, 'app', 'feature-utils.js'),
   await readFile('gbdraw/web/js/app/feature-utils.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'feature-sequence-fasta.js'),
+  join(tempDir, 'app', 'feature-sequence-fasta.js'),
   await readFile('gbdraw/web/js/app/feature-sequence-fasta.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'color-utils.js'),
+  join(tempDir, 'app', 'color-utils.js'),
   await readFile('gbdraw/web/js/app/color-utils.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'conservation-series.js'),
+  join(tempDir, 'app', 'conservation-series.js'),
   await readFile('gbdraw/web/js/app/conservation-series.js', 'utf8'),
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'match-sequences.js'),
+  join(tempDir, 'app', 'match-sequences.js'),
   await readFile('gbdraw/web/js/app/match-sequences.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'services', 'file-content-cache.js'),
+  'export const readFileText = (file) => file.text();\n',
   'utf8'
 );
 
@@ -41,7 +48,7 @@ const {
   extractMatchedSpan,
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
-} = await import(pathToFileURL(join(tempDir, 'match-sequences.js')));
+} = await import(pathToFileURL(join(tempDir, 'app', 'match-sequences.js')));
 
 const textFile = (value) => ({ text: async () => value });
 const namedTextFile = (name, value) => ({ name, text: async () => value });

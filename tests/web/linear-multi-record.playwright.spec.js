@@ -913,23 +913,16 @@ test('Automatic Linear renders every record from one GenBank source and survives
     session.renderRequest.records.map((record) => record.source.resourceId)
   ).size).toBe(1);
 
-  await page.addInitScript((recordSourceName) => {
-    const nativeArrayBuffer = File.prototype.arrayBuffer;
-    let releaseRecordRead;
-    const recordReadGate = new Promise((resolve) => { releaseRecordRead = resolve; });
-    window.__GBDRAW_RECORD_TEXT_READS__ = 0;
-    window.__GBDRAW_RELEASE_RECORD_TEXT__ = releaseRecordRead;
-    File.prototype.arrayBuffer = async function (...args) {
-      if (this.name !== recordSourceName) return nativeArrayBuffer.apply(this, args);
-      const { state } = await import('./js/state.js');
-      if (state.semanticFileWatchersSuppressed.value) {
-        return nativeArrayBuffer.apply(this, args);
+  await page.addInitScript(() => {
+    window.__GBDRAW_RECORD_RESOURCE_READS__ = 0;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      onStructuralMetric(metric) {
+        if (metric.name === 'resourceByteReadCount') {
+          window.__GBDRAW_RECORD_RESOURCE_READS__ += metric.value;
+        }
       }
-      window.__GBDRAW_RECORD_TEXT_READS__ += 1;
-      await recordReadGate;
-      return nativeArrayBuffer.apply(this, args);
     };
-  }, sourceName);
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
@@ -937,21 +930,23 @@ test('Automatic Linear renders every record from one GenBank source and survives
   const dialog = await dialogPromise;
   expect(dialog.message()).toBe('Session loaded successfully!');
   await dialog.accept();
-  await page.waitForFunction(() => window.__GBDRAW_RECORD_TEXT_READS__ === 1);
+  expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(0);
 
-  await page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    state.labelReflowForceRequestReason.value = 'multi-record-session-reflow';
-    state.labelReflowForceRequestSeq.value += 1;
-    await window.Vue.nextTick();
+  await page.evaluate(() => {
+    window.__GBDRAW_AUTOMATIC_RELOAD_RUN__ = { done: false, error: '' };
+    window.__GBDRAW_APP__.runAnalysis().then(() => {
+      window.__GBDRAW_AUTOMATIC_RELOAD_RUN__.done = true;
+    }).catch((error) => {
+      Object.assign(window.__GBDRAW_AUTOMATIC_RELOAD_RUN__, {
+        done: true,
+        error: error?.message || String(error)
+      });
+    });
   });
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_RECORD_TEXT_READS__)).toBe(1);
-  expect(await page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    return [window.__GBDRAW_DIAGRAM_RUNS__.length, state.labelReflowLastError.value];
-  })).toEqual([0, null]);
-  await page.evaluate(() => window.__GBDRAW_RELEASE_RECORD_TEXT__());
-  await page.waitForFunction(() => window.__GBDRAW_DIAGRAM_RUNS__.length === 1);
+  await page.waitForFunction(() => window.__GBDRAW_AUTOMATIC_RELOAD_RUN__?.done === true);
+  expect(await page.evaluate(() => window.__GBDRAW_AUTOMATIC_RELOAD_RUN__.error)).toBe('');
+  expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(1);
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(1);
 
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;

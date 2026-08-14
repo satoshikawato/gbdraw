@@ -100,12 +100,35 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
     original_loader = assemble.load_comparisons
     wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
 
-    payload = json.loads(wrapper("{}", "{}", str(tmp_path / "render")))  # type: ignore[operator]
+    payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
 
     assert payload["error"]["type"]
     assert payload["error"]["message"]
     assert assemble.load_comparisons is original_loader
     assert marker.exists()
+
+
+def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    wrapper = python_helpers_namespace["run_canonical_request_wrapper"]
+    original_renderer = python_helpers_namespace["render_staged_canonical_web_request"]
+    python_helpers_namespace["render_staged_canonical_web_request"] = (
+        lambda *_args, **_kwargs: {
+            "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>"}],
+            "metadata": {"featureCatalog": {"schema": 1}},
+        }
+    )
+    try:
+        payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
+    finally:
+        python_helpers_namespace["render_staged_canonical_web_request"] = original_renderer
+
+    assert payload == {
+        "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>".encode()}],
+        "metadata": b'{"featureCatalog":{"schema":1}}',
+    }
 
 
 def test_regenerate_definition_svgs_accepts_nullish_font_sizes(

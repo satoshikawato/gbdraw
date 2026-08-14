@@ -111,6 +111,10 @@ import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
 } from './candidate-render.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric
+} from '../services/runtime-test-hooks.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('circular')
@@ -917,6 +921,9 @@ export const createRunAnalysis = ({
   let activeLosatAbortController = null;
   let latestCliHelperFiles = [];
   let latestCliHelperArchiveName = 'out-cli-files.zip';
+  const cloneCliHelperFiles = (files) => (
+    (Array.isArray(files) ? files : []).map((file) => ({ ...file }))
+  );
   const recordDiscoverySuppressed = () => Boolean(
     semanticFileWatchersSuppressed?.value ||
     sessionImportRollbackInProgress?.value
@@ -945,7 +952,9 @@ export const createRunAnalysis = ({
         if (!entry) return null;
         return {
           name: String(helper?.name || entry.name || 'helper.tsv'),
-          data: entry.data
+          ...(typeof entry.buildData === 'function'
+            ? { buildData: entry.buildData }
+            : { data: entry.data })
         };
       })
       .filter(Boolean);
@@ -961,14 +970,21 @@ export const createRunAnalysis = ({
       alert('No CLI helper files are available for the latest run.');
       return;
     }
-    const totalChars = latestCliHelperFiles.reduce((sum, file) => sum + String(file.data ?? '').length, 0);
+    const materializedFiles = latestCliHelperFiles.map((file) => ({
+      name: file.name,
+      data: typeof file.buildData === 'function' ? file.buildData() : file.data
+    }));
+    const totalChars = materializedFiles.reduce(
+      (sum, file) => sum + String(file.data ?? '').length,
+      0
+    );
     if (totalChars > 50 * 1024 * 1024) {
       const proceed = confirm(
         `CLI helper file export will download about ${(totalChars / (1024 * 1024)).toFixed(1)} MB. Continue?`
       );
       if (!proceed) return;
     }
-    downloadBlob(createZipBlob(latestCliHelperFiles), latestCliHelperArchiveName);
+    downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
   const extractCircularTrackSlotError = (err) => {
@@ -1467,6 +1483,7 @@ export const createRunAnalysis = ({
     comparisonPlanSnapshot = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
+    if (!isReflow) recordSessionLifecycleEvent('generate-start');
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
           comparisonPlanSnapshot || resolveLinearComparisonPlan({
@@ -1606,7 +1623,7 @@ export const createRunAnalysis = ({
           resultGenerationKey: resultGenerationKey?.value ?? 0,
           resultPanelTab: resultPanelTab.value,
           errorLog: cloneJsonValue(errorLog.value, null),
-          latestCliHelperFiles: cloneJsonValue(latestCliHelperFiles, []),
+          latestCliHelperFiles: cloneCliHelperFiles(latestCliHelperFiles),
           latestCliHelperArchiveName,
           matchSequenceSources: matchSequenceRegistry?.values?.() || [],
           editableLabels: cloneJsonValue(editableLabels.value || [], []),
@@ -1644,7 +1661,7 @@ export const createRunAnalysis = ({
       }
       resultPanelTab.value = manualCancelSnapshot.resultPanelTab;
       errorLog.value = cloneJsonValue(manualCancelSnapshot.errorLog, null);
-      latestCliHelperFiles = cloneJsonValue(manualCancelSnapshot.latestCliHelperFiles, []);
+      latestCliHelperFiles = cloneCliHelperFiles(manualCancelSnapshot.latestCliHelperFiles);
       latestCliHelperArchiveName = manualCancelSnapshot.latestCliHelperArchiveName;
       matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
       editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
@@ -1795,6 +1812,25 @@ export const createRunAnalysis = ({
           name: displayName,
           slot: String(slot || '').trim(),
           data: String(data ?? '')
+        });
+      };
+      const recordDeferredGeneratedCliFile = (
+        path,
+        buildData,
+        { name = '', slot = '' } = {}
+      ) => {
+        const normalizedPath = String(path || '').trim();
+        if (!normalizedPath) return;
+        if (typeof buildData !== 'function') {
+          throw new TypeError('A deferred CLI helper file requires a builder.');
+        }
+        const displayName = String(name || getPayloadName(normalizedPath)).trim()
+          || getPayloadName(normalizedPath);
+        generatedCliFileMap.set(normalizedPath, {
+          path: normalizedPath,
+          name: displayName,
+          slot: String(slot || '').trim(),
+          buildData
         });
       };
       const stageTextFile = (
@@ -3846,10 +3882,12 @@ export const createRunAnalysis = ({
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
+      recordSessionLifecycleEvent('serialize-canonical-files-start');
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
         linearRecordCatalog
       );
+      recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
@@ -3862,6 +3900,36 @@ export const createRunAnalysis = ({
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation
       });
+      const canonicalResourceEntries = Object.values(canonical.resources || {});
+      const canonicalResourceCount = canonicalResourceEntries.length;
+      const canonicalResourceDeclaredBytes = canonicalResourceEntries.reduce(
+        (total, resource) => total + (Number(resource?.size) || 0),
+        0
+      );
+      const canonicalResourceBase64Characters = canonicalResourceEntries.reduce(
+        (total, resource) => total + (
+          resource?.encoding === 'base64' && typeof resource?.data === 'string'
+            ? resource.data.length
+            : 0
+        ),
+        0
+      );
+      recordSessionLifecycleEvent('canonical-request-built');
+      recordSessionLifecycleEvent('canonical-resource-count', {
+        value: canonicalResourceCount
+      });
+      recordSessionLifecycleEvent('canonical-resource-declared-bytes', {
+        value: canonicalResourceDeclaredBytes
+      });
+      recordSessionLifecycleEvent('canonical-resource-base64-characters', {
+        value: canonicalResourceBase64Characters
+      });
+      recordStructuralMetric('canonicalResourceCount', canonicalResourceCount);
+      recordStructuralMetric('canonicalResourceDeclaredBytes', canonicalResourceDeclaredBytes);
+      recordStructuralMetric(
+        'canonicalResourceBase64Characters',
+        canonicalResourceBase64Characters
+      );
       if (!Number.isInteger(canonicalSessionVersion)) {
         throw new Error('Canonical session version is unavailable.');
       }
@@ -3869,7 +3937,9 @@ export const createRunAnalysis = ({
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
-      const canonicalReplayText = JSON.stringify({
+      const buildCanonicalReplayText = () => {
+        recordSessionLifecycleEvent('canonical-replay-json-start');
+        const replayText = JSON.stringify({
           format: 'gbdraw-session',
           version: canonicalSessionVersion,
           createdAt: manualRunStartedAtIso || new Date().toISOString(),
@@ -3879,12 +3949,19 @@ export const createRunAnalysis = ({
           losatDerivedCache: { entries: [] },
           proteinIdentityManifest: emptyProteinIdentityManifest()
         });
+        recordStructuralMetric('canonicalReplayFullSerializationCount');
+        recordSessionLifecycleEvent('canonical-replay-json-end');
+        recordSessionLifecycleEvent('canonical-replay-json-characters', {
+          value: replayText.length
+        });
+        return replayText;
+      };
       registerRunInfoFile(canonicalReplayPath, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
         kind: 'generated'
       });
-      recordGeneratedCliFile(canonicalReplayPath, canonicalReplayText, {
+      recordDeferredGeneratedCliFile(canonicalReplayPath, buildCanonicalReplayText, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session'
       });
@@ -4065,7 +4142,7 @@ export const createRunAnalysis = ({
             normalizeCircularPlotTitlePosition(adv.plot_title_position);
         }
         lastRunInfo.value = candidateRunInfo;
-        latestCliHelperFiles = cloneJsonValue(candidateCliHelpers?.files, []);
+        latestCliHelperFiles = cloneCliHelperFiles(candidateCliHelpers?.files);
         latestCliHelperArchiveName =
           candidateCliHelpers?.archiveName || 'out-cli-files.zip';
         resultPanelTab.value = 'preview';

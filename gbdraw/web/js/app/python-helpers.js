@@ -11,7 +11,7 @@ from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
     extract_features_from_gff_fasta_json,
 )
-from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+from gbdraw.web_support.request_render import render_staged_canonical_web_request
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
@@ -75,24 +75,35 @@ def _is_blank_or_js_nullish(value):
     except Exception:
         return False
 
-def run_canonical_request_wrapper(request_json, resources_json, workspace):
+def run_canonical_request_wrapper(request_json, resource_paths_json, workspace):
     try:
         payload = json.loads(str(request_json))
-        resources = json.loads(str(resources_json))
-        result = render_embedded_canonical_web_request(
+        resource_paths = json.loads(str(resource_paths_json))
+        result = render_staged_canonical_web_request(
             payload,
-            resources=resources,
+            resource_paths=resource_paths,
             workspace=str(workspace),
         )
-        return json.dumps(result)
+        for item in result.get("results", []):
+            content = item.get("content")
+            if isinstance(content, str):
+                item["content"] = content.encode("utf-8")
+        metadata = result.get("metadata")
+        if isinstance(metadata, dict):
+            result["metadata"] = json.dumps(
+                metadata,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        return result
     except Exception as e:
-        return json.dumps({
+        return {
             "error": {
                 "type": e.__class__.__name__,
                 "message": str(e) if str(e) else "Unhandled exception",
                 "traceback": traceback.format_exc(),
             }
-        })
+        }
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""

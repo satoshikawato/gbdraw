@@ -91,14 +91,25 @@ import {
   resolveLinearComparisonPlan
 } from '../app/linear-comparisons.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
-import { base64ToBytes, bytesToBase64, readFileBytes } from './file-content-cache.js';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  getSessionResourceSource,
+  readFileBytes
+} from './file-content-cache.js';
+import {
+  adoptCurrentSessionResources,
+  isSessionResourceFileView
+} from './session-resource-backing.js';
 import { normalizeLogicalResults } from './result-normalization.js';
 import {
+  ingestCatalogBackedSvgResults,
   ingestSvgResults,
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
 import {
   featureStateFromCatalog,
+  isAdoptedFeatureCatalog,
   validateFeatureCatalog
 } from './feature-catalog.js';
 import {
@@ -151,11 +162,19 @@ import {
   normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
+  adoptCurrentSessionDocument,
+  adoptRuntimeCanonicalSession,
+  isAdoptedCanonicalSession,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric
+} from './runtime-test-hooks.js';
+import { setResourcePayloadOwner } from './resource-payload-owner.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -874,6 +893,9 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
 let lastSessionFilename = null;
 let preservedCliOptions = null;
 let committedCanonicalSession = null;
+let activeSessionResourceTable = null;
+let adoptedProteinIdentityManifest = null;
+const adoptedLosatCacheValues = new WeakSet();
 
 const cloneCanonicalSession = (canonical) => {
   if (
@@ -1007,7 +1029,7 @@ const defaultEditorStateData = () => ({
   featureCatalog: null
 });
 
-export const buildEditorStateData = () => ({
+export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
     deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
@@ -1026,10 +1048,13 @@ export const buildEditorStateData = () => ({
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
-  featureCatalog: cloneJsonValue(state.featureCatalog?.value, null)
+  featureCatalog: preserveAdoptedCatalog
+    && isAdoptedFeatureCatalog(state.featureCatalog?.value)
+    ? state.featureCatalog.value
+    : cloneJsonValue(state.featureCatalog?.value, null)
 });
 
-const normalizeEditorStateData = (editorState = {}) => {
+const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
   const defaults = defaultEditorStateData();
   const source = isPlainObject(editorState) ? editorState : {};
   const legend = isPlainObject(source.legend) ? source.legend : {};
@@ -1057,9 +1082,11 @@ const normalizeEditorStateData = (editorState = {}) => {
         ? normalizeStrokeWidth(originalSvgStroke.width)
         : defaults.originalSvgStroke.width
     },
-    featureCatalog: isPlainObject(source.featureCatalog)
-      ? cloneJsonData(source.featureCatalog)
-      : null
+    featureCatalog: featureCatalog !== undefined
+      ? featureCatalog
+      : isPlainObject(source.featureCatalog)
+        ? cloneJsonData(source.featureCatalog)
+        : null
   };
 };
 
@@ -1070,10 +1097,15 @@ const replacePlainObject = (target, source) => {
   });
 };
 
-export const applyEditorStateData = (editorState = {}, { trusted = false } = {}) => {
-  const normalized = trusted
-    ? cloneJsonData(editorState)
-    : normalizeEditorStateData(editorState);
+export const applyEditorStateData = (
+  editorState = {},
+  { trusted = false, normalized: alreadyNormalized = false, adoptCatalog = false } = {}
+) => {
+  const normalized = alreadyNormalized
+    ? editorState
+    : trusted
+      ? cloneJsonData(editorState)
+      : normalizeEditorStateData(editorState);
 
   state.legendEntries.value = normalized.legend.entries;
   state.deletedLegendEntries.value = normalized.legend.deletedEntries;
@@ -1085,7 +1117,9 @@ export const applyEditorStateData = (editorState = {}, { trusted = false } = {})
   replacePlainObject(state.featureStrokeOverrides, normalized.featureStrokes.overrides);
   state.originalSvgStroke.value = normalized.originalSvgStroke;
   if (state.featureCatalog) {
-    state.featureCatalog.value = cloneJsonValue(normalized.featureCatalog, null);
+    state.featureCatalog.value = adoptCatalog
+      ? normalized.featureCatalog
+      : cloneJsonValue(normalized.featureCatalog, null);
   }
 };
 
@@ -1506,7 +1540,7 @@ export const validateCurrentWriterActiveDraft = ({
   }
 };
 
-const validateCurrentWriterFeatureCatalog = (data) => {
+const validateCurrentWriterFeatureCatalog = (data, { adopt = false } = {}) => {
   const results = normalizeLogicalResults(
     (Array.isArray(data.results) ? data.results : []).map((result, index) => ({
       name: result?.name || `Result ${index + 1}`,
@@ -1514,50 +1548,81 @@ const validateCurrentWriterFeatureCatalog = (data) => {
     }))
   );
   const catalog = data.editorState?.featureCatalog ?? null;
-  if (catalog === null) return;
-  data.editorState.featureCatalog = validateFeatureCatalog(catalog, results);
+  if (catalog === null) return null;
+  return validateFeatureCatalog(catalog, results, { adopt });
 };
 
 const preflightSessionImport = (rawData) => {
-  const sourceSessionVersion = rawData.version;
-  validateSessionAuthorityInventory(rawData, sourceSessionVersion);
-  const normalizedData = normalizeSessionData(rawData);
-  if (sourceSessionVersion === SESSION_VERSION) {
-    validateCurrentWriterFeatureCatalog(normalizedData);
+  const sourceSessionVersion = rawData?.version;
+  const currentSession = sourceSessionVersion === SESSION_VERSION;
+  let adoptedSession = null;
+  let currentResourceTable = null;
+  let validatedFeatureCatalog = null;
+  let normalizedEditorState = null;
+  let normalizedData;
+
+  if (currentSession) {
+    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') {
+      throw new Error('Invalid session file.');
+    }
+    adoptedSession = adoptCurrentSessionDocument(rawData, SESSION_VERSION);
+    validatedFeatureCatalog = validateCurrentWriterFeatureCatalog(rawData, {
+      adopt: true
+    });
+    normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
+      featureCatalog: validatedFeatureCatalog
+    });
+    currentResourceTable = adoptCurrentSessionResources(rawData.resources);
+    normalizedData = rawData;
+  } else {
+    validateSessionAuthorityInventory(rawData, sourceSessionVersion);
+    normalizedData = normalizeSessionData(rawData);
+    migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
   }
-  migrateImportedLinearTrackSlots(normalizedData.config, sourceSessionVersion);
-  const promotedData = (
+
+  const promotedData = !currentSession && (
     sourceSessionVersion >= 31 &&
     Number(normalizedData.renderRequest?.schema) === 2
-    )
+  )
     ? promoteGallerySessionToCurrent(normalizedData)
     : normalizedData;
   validateSessionLosatArtifacts(promotedData, sourceSessionVersion);
-  const data = migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
+  const data = currentSession
+    ? promotedData
+    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
+  const runtimeStoredConfig = currentSession
+    ? migrateImportedLinearTrackSlots(
+        migrateImportedCircularTrackSlots(data.config),
+        sourceSessionVersion
+      )
+    : data.config;
   const canonicalProjection = sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
         renderRequest: data.renderRequest,
         resources: data.resources,
         webFiles: data.webFiles,
         legacyFiles: data.files,
-        storedConfig: data.config,
+        storedConfig: runtimeStoredConfig,
         fileBindings: data.cliInvocation?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-        repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33
+        repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33,
+        sessionResourceTable: currentResourceTable,
+        deferResourceContent: currentSession,
+        adoptCanonicalPayloads: currentSession
       })
     : null;
   let restoredConfig = canonicalProjection
     ? {
         ...restoreStoredNonCanonicalConfig(
           canonicalProjection.config,
-          data.config,
+          runtimeStoredConfig,
           { hasCanonicalProteinPipeline: Boolean(canonicalProjection.pipelineState) }
         ),
         rules: applySpecificRuleProvenance(
           canonicalProjection.config.rules,
-          data.config?.rules
+          runtimeStoredConfig?.rules
         )
       }
     : data.config;
@@ -1590,9 +1655,12 @@ const preflightSessionImport = (rawData) => {
     validateCurrentWriterActiveDraft({
       mode: canonicalProjection.mode,
       projectedConfig: canonicalProjection.config,
-      storedConfig: data.config
+      storedConfig: runtimeStoredConfig
     });
-    restoredConfig = overlayCurrentWriterDraftConfig(restoredConfig, data.config);
+    restoredConfig = overlayCurrentWriterDraftConfig(
+      restoredConfig,
+      runtimeStoredConfig
+    );
   }
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
@@ -1617,6 +1685,7 @@ const preflightSessionImport = (rawData) => {
   const projectionResult = canonicalProjection
     ? (() => {
         const artifactState = projectArtifactState(data);
+        if (currentSession) artifactState.editorState = normalizedEditorState;
         if (canonicalProjection.pipelineState) {
           artifactState.orthogroupState = {
             ...(artifactState.orthogroupState || {}),
@@ -1634,7 +1703,8 @@ const preflightSessionImport = (rawData) => {
           },
           editorMetadata: projectWebOnlyEditorMetadata(data),
           artifactState,
-          restoredFiles: canonicalProjection.files
+          restoredFiles: canonicalProjection.files,
+          validatedFeatureCatalog
         };
       })()
     : null;
@@ -1643,7 +1713,9 @@ const preflightSessionImport = (rawData) => {
     sourceSessionVersion,
     canonicalProjection,
     restoredConfig,
-    projectionResult
+    projectionResult,
+    adoptedCanonicalSession: adoptedSession?.canonical || null,
+    currentResourceTable
   };
 };
 
@@ -2169,10 +2241,28 @@ const restorePaletteStateFromSession = (ui = {}) => {
   }
 };
 
+const serializedFileDescriptors = new WeakMap();
+
 const serializeFile = async (file) => {
   if (!file) return null;
+  const source = getSessionResourceSource(file);
+  if (source?.descriptor) {
+    setResourcePayloadOwner(source.descriptor, file);
+    return source.descriptor;
+  }
+  const cached = serializedFileDescriptors.get(file);
+  if (cached) return cached;
   const bytes = await readFileBytes(file);
-  return {
+  recordStructuralMetric('resourceReencodeCount', 1, {
+    resourceName: String(file.name || 'file')
+  });
+  recordStructuralMetric('base64EncodeCount', 1, {
+    resourceName: String(file.name || 'file')
+  });
+  recordStructuralMetric('encodedByteCount', bytes.byteLength, {
+    resourceName: String(file.name || 'file')
+  });
+  const descriptor = {
     name: file.name || 'file',
     type: file.type || '',
     size: bytes.byteLength,
@@ -2180,6 +2270,9 @@ const serializeFile = async (file) => {
     encoding: 'base64',
     data: bytesToBase64(bytes)
   };
+  setResourcePayloadOwner(descriptor, file);
+  serializedFileDescriptors.set(file, descriptor);
+  return descriptor;
 };
 
 const serializeFileValue = async (value) => (
@@ -2192,6 +2285,7 @@ const deserializeFile = (entry) => {
   if (Array.isArray(entry)) {
     return entry.map((item) => deserializeFile(item));
   }
+  if (isSessionResourceFileView(entry)) return entry;
   if (
     !entry ||
     !Object.prototype.hasOwnProperty.call(entry, 'data') ||
@@ -2200,6 +2294,7 @@ const deserializeFile = (entry) => {
   ) return null;
   if (isEncodedDepthFileEntry(entry)) {
     const text = decodeDepthText(entry.data);
+    recordStructuralMetric('fileConstructionCount');
     return new File([text], entry.name || 'depth.tsv', {
       type: entry.type || 'text/tab-separated-values',
       lastModified: entry.lastModified ?? Date.now()
@@ -2207,6 +2302,9 @@ const deserializeFile = (entry) => {
   }
   if (typeof entry.data !== 'string') return null;
   const bytes = base64ToBytes(entry.data);
+  recordStructuralMetric('base64DecodeCount');
+  recordStructuralMetric('decodedByteCount', bytes.byteLength);
+  recordStructuralMetric('fileConstructionCount');
   return new File([bytes], entry.name || 'file', {
     type: entry.type || 'application/octet-stream',
     lastModified: entry.lastModified ?? Date.now()
@@ -2303,7 +2401,7 @@ const serializeLosatCache = () => {
   const seen = new Set();
 
   const buildEntry = (key, cached, infoEntry = {}) => ({
-    ...cloneJsonData(cached),
+    ...(adoptedLosatCacheValues.has(cached) ? cached : cloneJsonData(cached)),
     key: String(key),
     filename: String(infoEntry.filename || ''),
     display: Boolean(infoEntry.display),
@@ -2331,7 +2429,11 @@ const serializeLosatCache = () => {
   return entries;
 };
 
-const applyLosatCache = (entries, legacyEnvelope = null) => {
+const applyLosatCache = (
+  entries,
+  legacyEnvelope = null,
+  { adoptCurrent = false } = {}
+) => {
   const map = new Map();
   const info = [];
   const legacyEntries = [];
@@ -2350,12 +2452,23 @@ const applyLosatCache = (entries, legacyEnvelope = null) => {
       ) {
         return;
       }
-      const restored = cloneJsonData(entry);
-      delete restored.key;
-      delete restored.filename;
-      delete restored.display;
-      [...LOSAT_CACHE_INFO_STRING_FIELDS, ...LOSAT_CACHE_INFO_INTEGER_FIELDS]
-        .forEach((field) => delete restored[field]);
+      const excludedFields = new Set([
+        'key',
+        'filename',
+        'display',
+        ...LOSAT_CACHE_INFO_STRING_FIELDS,
+        ...LOSAT_CACHE_INFO_INTEGER_FIELDS
+      ]);
+      const restored = adoptCurrent
+        ? Object.fromEntries(
+            Object.entries(entry).filter(([field]) => !excludedFields.has(field))
+          )
+        : cloneJsonData(entry);
+      if (!adoptCurrent) {
+        excludedFields.forEach((field) => delete restored[field]);
+      } else {
+        adoptedLosatCacheValues.add(restored);
+      }
       map.set(entry.key, restored);
       if (entry.display === false) return;
       info.push({
@@ -2400,7 +2513,11 @@ const normalizeLegacyDerivedEvidence = (value, fallbackEntries = []) => ({
     .map((entry) => cloneJsonData(entry))
 });
 
-const applyLosatDerivedCache = (entries, legacyEvidence = null) => {
+const applyLosatDerivedCache = (
+  entries,
+  legacyEvidence = null,
+  { adoptCurrent = false } = {}
+) => {
   const map = new Map();
   const legacyEntries = [];
 
@@ -2417,7 +2534,7 @@ const applyLosatDerivedCache = (entries, legacyEvidence = null) => {
         idEncoding: 'runtime-handle-v1',
         key: entry.key,
         mode: String(entry.mode || ''),
-        payload: cloneJsonData(entry.payload)
+        payload: adoptCurrent ? entry.payload : cloneJsonData(entry.payload)
       });
     });
   }
@@ -2430,10 +2547,16 @@ const applyLosatDerivedCache = (entries, legacyEvidence = null) => {
   );
 };
 
-const applyProteinIdentityManifest = (manifest) => {
-  state.proteinIdentityManifest.value = validateProteinIdentityManifest(manifest)
-    ? cloneJsonData(manifest)
-    : emptyProteinIdentityManifest();
+const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) => {
+  if (!validateProteinIdentityManifest(manifest)) {
+    state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
+    adoptedProteinIdentityManifest = null;
+    return;
+  }
+  state.proteinIdentityManifest.value = adoptCurrent
+    ? manifest
+    : cloneJsonData(manifest);
+  adoptedProteinIdentityManifest = adoptCurrent ? manifest : null;
 };
 
 export const applyOrthogroupStateData = (orthogroupState = {}) => {
@@ -2678,22 +2801,38 @@ export const buildSessionResources = (sourceState, committedRequest) => (
   assembleSessionResources(sourceState, committedRequest)
 );
 
-const deserializeCanonicalComparisons = (comparisons) => (
+const deserializeCanonicalComparisons = (
+  comparisons,
+  { adoptCanonicalPayloads = false } = {}
+) => (
   Array.isArray(comparisons)
     ? comparisons.map((comparison) => (
         isResourceBackedCanonicalComparison(comparison)
           ? mapResourceBackedCanonicalComparison(comparison, deserializeFile)
-          : cloneJsonData(comparison)
+          : adoptCanonicalPayloads ? comparison : cloneJsonData(comparison)
       ))
     : []
 );
 
 export const adoptCanonicalRenderArtifacts = (canonical) => {
-  const projection = projectCanonicalSessionRequest(canonical);
-  const nextCommittedCanonicalSession = cloneCanonicalSession(canonical);
+  const preserveAdoptedResources = isAdoptedCanonicalSession(canonical);
+  const sessionResourceTable = preserveAdoptedResources
+    ? adoptCurrentSessionResources(canonical?.resources)
+    : null;
+  const projection = projectCanonicalSessionRequest({
+    ...canonical,
+    sessionResourceTable,
+    deferResourceContent: preserveAdoptedResources,
+    adoptCanonicalPayloads: preserveAdoptedResources
+  });
+  const nextCommittedCanonicalSession = preserveAdoptedResources
+    ? adoptRuntimeCanonicalSession(canonical)
+    : cloneCanonicalSession(canonical);
+  activeSessionResourceTable = sessionResourceTable;
   if (projection.mode === 'linear') {
     const nextComparisons = deserializeCanonicalComparisons(
-      projection.files.linearCanonicalComparisons
+      projection.files.linearCanonicalComparisons,
+      { adoptCanonicalPayloads: preserveAdoptedResources }
     );
     state.files.linearCanonicalComparisons = nextComparisons;
     committedCanonicalSession = nextCommittedCanonicalSession;
@@ -2746,7 +2885,7 @@ export const adoptCanonicalRenderArtifacts = (canonical) => {
   committedCanonicalSession = nextCommittedCanonicalSession;
 };
 
-const applyFiles = (filesData) => {
+const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.matchSequenceRegistry?.reset?.();
   state.files.c_gb = null;
   state.files.c_gff = null;
@@ -2791,7 +2930,8 @@ const applyFiles = (filesData) => {
     ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
     : [];
   state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
-    filesData.linearCanonicalComparisons
+    filesData.linearCanonicalComparisons,
+    { adoptCanonicalPayloads }
   );
   state.files.d_color = deserializeFile(filesData.d_color);
   state.files.t_color = deserializeFile(filesData.t_color);
@@ -3136,11 +3276,17 @@ const captureSessionImportSnapshot = () => ({
   runState: buildRunStateData(),
   losatCache: new Map(state.losatCache.value),
   losatDerivedCache: new Map(state.losatDerivedCache.value),
-  proteinIdentityManifest: cloneJsonData(state.proteinIdentityManifest.value),
+  proteinIdentityManifest: state.proteinIdentityManifest.value === adoptedProteinIdentityManifest
+    ? state.proteinIdentityManifest.value
+    : cloneJsonData(state.proteinIdentityManifest.value),
+  adoptedProteinIdentityManifest,
   legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
   legacyProteinDerivedEvidence: cloneJsonData(state.legacyProteinDerivedEvidence.value),
   losatCacheInfo: cloneJsonData(state.losatCacheInfo.value),
-  committedCanonicalSession: cloneCanonicalSession(committedCanonicalSession),
+  committedCanonicalSession: isAdoptedCanonicalSession(committedCanonicalSession)
+    ? committedCanonicalSession
+    : cloneCanonicalSession(committedCanonicalSession),
+  activeSessionResourceTable,
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
   transients: captureSessionImportTransientState()
@@ -3158,11 +3304,17 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     restoreLiveFileState(snapshot.files);
     state.losatCache.value = new Map(snapshot.losatCache);
     state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
-    state.proteinIdentityManifest.value = cloneJsonData(snapshot.proteinIdentityManifest);
+    adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
+    state.proteinIdentityManifest.value = snapshot.proteinIdentityManifest === adoptedProteinIdentityManifest
+      ? snapshot.proteinIdentityManifest
+      : cloneJsonData(snapshot.proteinIdentityManifest);
     state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
     state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
     state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
-    committedCanonicalSession = cloneCanonicalSession(snapshot.committedCanonicalSession);
+    committedCanonicalSession = isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
+      ? snapshot.committedCanonicalSession
+      : cloneCanonicalSession(snapshot.committedCanonicalSession);
+    activeSessionResourceTable = snapshot.activeSessionResourceTable;
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
     applyResultsData(snapshot.results, snapshot.ui);
@@ -3190,6 +3342,9 @@ const resetSessionBaseline = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
   committedCanonicalSession = null;
+  activeSessionResourceTable = null;
+  adoptedProteinIdentityManifest = null;
+  state.sessionResourceDiscoveryDeferred.value = false;
   resetSettingsState(state);
   resetLayoutState(state);
   resetRightDrawerState(state);
@@ -3566,15 +3721,17 @@ export const exportSession = async (
   }
 
   const logicalResults = serializeResults();
-  const editorState = buildEditorStateData();
+  const editorState = buildEditorStateData({ preserveAdoptedCatalog: true });
   if (logicalResults.length > 0) {
     if (!editorState.featureCatalog) {
       throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
     }
     try {
+      const adoptedCatalog = isAdoptedFeatureCatalog(editorState.featureCatalog);
       editorState.featureCatalog = validateFeatureCatalog(
         editorState.featureCatalog,
-        logicalResults
+        logicalResults,
+        { adopt: adoptedCatalog }
       );
     } catch (error) {
       console.warn('Session feature catalog validation failed.', error);
@@ -3594,10 +3751,18 @@ export const exportSession = async (
     storedConfig.adv,
     normalizedArrowGeometryState(storedConfig.adv)
   );
-  let committed = cloneCanonicalSession(committedCanonicalSession);
+  let committed = isAdoptedCanonicalSession(committedCanonicalSession)
+    ? committedCanonicalSession
+    : cloneCanonicalSession(committedCanonicalSession);
   if (committed) {
     try {
-      const projected = projectCanonicalSessionRequest(committed);
+      const adoptedCommitted = isAdoptedCanonicalSession(committed);
+      const projected = projectCanonicalSessionRequest({
+        ...committed,
+        sessionResourceTable: adoptedCommitted ? activeSessionResourceTable : null,
+        deferResourceContent: adoptedCommitted,
+        adoptCanonicalPayloads: adoptedCommitted
+      });
       validateCurrentWriterActiveDraft({
         mode: projected.mode,
         projectedConfig: projected.config,
@@ -3700,7 +3865,11 @@ export const exportSession = async (
       entries: []
     },
     proteinIdentityManifest: validateProteinIdentityManifest(state.proteinIdentityManifest.value)
-      ? cloneJsonData(state.proteinIdentityManifest.value)
+      ? (
+          state.proteinIdentityManifest.value === adoptedProteinIdentityManifest
+            ? state.proteinIdentityManifest.value
+            : cloneJsonData(state.proteinIdentityManifest.value)
+        )
       : emptyProteinIdentityManifest(),
     cliInvocation: exportableCliInvocation
   };
@@ -3732,6 +3901,7 @@ export const exportSession = async (
 export const importSession = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
+  recordSessionLifecycleEvent('sessionSelection');
 
   const semanticFileWatchersSuppressedBeforeImport = Boolean(
     state.semanticFileWatchersSuppressed.value
@@ -3742,28 +3912,37 @@ export const importSession = async (e, options = {}) => {
   let commitStarted = false;
 
   try {
+    recordSessionLifecycleEvent('gzip-to-text-start');
     const text = await readSessionText(file);
+    recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
+    recordSessionLifecycleEvent('json-parse-start');
     let data = JSON.parse(text, (key, value) => {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         return undefined;
       }
       return value;
     });
+    recordSessionLifecycleEvent('json-parse-end');
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
       return { status: 'legacy' };
     }
 
+    recordSessionLifecycleEvent('current-session-preflight-start');
     const preflight = preflightSessionImport(data);
+    recordSessionLifecycleEvent('current-session-preflight-end');
     data = preflight.data;
     const {
       sourceSessionVersion,
       canonicalProjection,
       restoredConfig,
-      projectionResult
+      projectionResult,
+      adoptedCanonicalSession,
+      currentResourceTable
     } = preflight;
     const canonicalSession = Boolean(projectionResult);
+    const currentSchemaSession = sourceSessionVersion === SESSION_VERSION;
     rollbackSnapshot = captureSessionImportSnapshot();
     if (typeof rollbackStateExtension?.capture === 'function') {
       rollbackExtensionSnapshot = rollbackStateExtension.capture();
@@ -3771,6 +3950,11 @@ export const importSession = async (e, options = {}) => {
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
+    state.sessionResourceDiscoveryDeferred.value = currentSchemaSession;
+    if (currentSchemaSession) {
+      committedCanonicalSession = adoptedCanonicalSession;
+      activeSessionResourceTable = currentResourceTable;
+    }
     const ui = canonicalSession
       ? {
           ...projectionResult.editorMetadata.ui,
@@ -3827,19 +4011,25 @@ export const importSession = async (e, options = {}) => {
     restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
 
     const { collapsedLinearSeqs } = applyFiles(
-      canonicalSession ? projectionResult.restoredFiles : data.files
+      canonicalSession ? projectionResult.restoredFiles : data.files,
+      { adoptCanonicalPayloads: currentSchemaSession }
     );
     reconcileDepthTrackStateAfterSessionFiles();
     if (canonicalSession) {
       applyLosatCache(
         projectionResult.artifactState.losatCache?.entries,
-        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates
+        projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
+        { adoptCurrent: currentSchemaSession }
       );
       applyLosatDerivedCache(
         projectionResult.artifactState.losatDerivedCache?.entries,
-        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence
+        projectionResult.artifactState.legacyArtifacts?.proteinDerivedEvidence,
+        { adoptCurrent: currentSchemaSession }
       );
-      applyProteinIdentityManifest(projectionResult.artifactState.proteinIdentityManifest);
+      applyProteinIdentityManifest(
+        projectionResult.artifactState.proteinIdentityManifest,
+        { adoptCurrent: currentSchemaSession }
+      );
     } else {
       applyLosatCache(
         data.losatCache?.entries,
@@ -3871,33 +4061,23 @@ export const importSession = async (e, options = {}) => {
       ? projectionResult.artifactState.editorState
       : data.editorState;
     let currentCatalogFeatureState = null;
-    let validatedSessionCatalog = null;
+    let validatedSessionCatalog = currentSchemaSession
+      ? projectionResult?.validatedFeatureCatalog || null
+      : null;
     let restoredEditorState = storedEditorState;
-    if (sourceSessionVersion === SESSION_VERSION) {
-      if (storedEditorState?.featureCatalog) {
-        try {
-          validatedSessionCatalog = validateFeatureCatalog(
-            storedEditorState.featureCatalog,
-            logicalImportedResults
-          );
-          currentCatalogFeatureState = featureStateFromCatalog(
-            validatedSessionCatalog,
-            { mode: state.mode.value }
-          );
-        } catch (catalogError) {
-          console.warn('Session feature catalog is unavailable or incompatible.', catalogError);
-        }
-      }
-      restoredEditorState = {
-        ...(isPlainObject(storedEditorState) ? storedEditorState : {}),
-        featureCatalog: validatedSessionCatalog
-      };
+    if (currentSchemaSession && validatedSessionCatalog) {
+      currentCatalogFeatureState = featureStateFromCatalog(
+        validatedSessionCatalog,
+        { mode: state.mode.value }
+      );
     }
 
     const artifactFeatureState = canonicalSession
-      ? cloneJsonData(projectionResult.artifactState.features)
+      ? currentSchemaSession
+        ? { ...projectionResult.artifactState.features }
+        : cloneJsonData(projectionResult.artifactState.features)
       : {};
-    if (sourceSessionVersion === SESSION_VERSION) {
+    if (currentSchemaSession) {
       [
         'extractedFeatures',
         'biologicalFeatures',
@@ -3913,10 +4093,10 @@ export const importSession = async (e, options = {}) => {
         }
       : (data.features || {});
     applyFeatureStateData(features);
-    if (sourceSessionVersion === SESSION_VERSION && currentCatalogFeatureState) {
+    if (currentSchemaSession && currentCatalogFeatureState) {
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
     }
-    const catalogSequenceSources = sourceSessionVersion === SESSION_VERSION
+    const catalogSequenceSources = currentSchemaSession
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
     const comparisonSourceAvailability = state.mode.value === 'circular'
@@ -3926,7 +4106,7 @@ export const importSession = async (e, options = {}) => {
         })
       : undefined;
     const catalogSequenceSourceCoverage = (
-      sourceSessionVersion === SESSION_VERSION
+      currentSchemaSession
       && validatedSessionCatalog
     )
       ? analyzeCatalogSequenceSourceCoverage({
@@ -3939,7 +4119,8 @@ export const importSession = async (e, options = {}) => {
     const missingCatalogSequenceSources = sourceSessionVersion !== SESSION_VERSION
       || !catalogSequenceSourceCoverage?.complete;
     let restoredFileSequenceSources = [];
-    if (missingCatalogSequenceSources) {
+    if (missingCatalogSequenceSources && !currentSchemaSession) {
+      recordStructuralMetric('sourceRecoveryCount');
       try {
         restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
           mode: state.mode.value,
@@ -3982,7 +4163,10 @@ export const importSession = async (e, options = {}) => {
               {}
         }
     );
-    applyEditorStateData(restoredEditorState);
+    applyEditorStateData(restoredEditorState, {
+      normalized: currentSchemaSession,
+      adoptCatalog: currentSchemaSession
+    });
 
     const restoredFeatureState = currentCatalogFeatureState || features || {};
     const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
@@ -4021,7 +4205,12 @@ export const importSession = async (e, options = {}) => {
       return legendGroupsChanged || compositionChanged || strokeCount > 0;
     };
 
-    const committedImportedResults = validatedSessionCatalog
+    recordSessionLifecycleEvent('svg-admission-start');
+    const committedImportedResults = currentSchemaSession && validatedSessionCatalog
+      ? ingestCatalogBackedSvgResults(logicalImportedResults, {
+          catalogItems: validatedSessionCatalog.items
+        })
+      : validatedSessionCatalog
       ? prepareCandidateRenderCommit({
           results: logicalImportedResults,
           catalog: validatedSessionCatalog,
@@ -4037,12 +4226,40 @@ export const importSession = async (e, options = {}) => {
       : ingestSvgResults(logicalImportedResults, {
           transformSvg: transformRestoredSessionSvg
         });
+    recordSessionLifecycleEvent('svg-admission-end');
 
     await nextTick();
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
+    recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    recordSessionLifecycleEvent('firstCommittedPreview', {
+      resultCount: state.results.value.length
+    });
     await nextTick();
+    recordSessionLifecycleEvent('preview-mount-end');
+
+    let currentRecoveryError = null;
+    if (currentSchemaSession && missingCatalogSequenceSources) {
+      recordStructuralMetric('sourceRecoveryCount');
+      try {
+        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
+          mode: state.mode.value,
+          cInputType: state.cInputType.value,
+          lInputType: state.lInputType.value,
+          files: state.files,
+          linearSeqs: state.linearSeqs,
+          circularConservation: state.circularConservation
+        });
+        state.matchSequenceRegistry?.reset?.([
+          ...catalogSequenceSources,
+          ...restoredFileSequenceSources
+        ]);
+      } catch (sequenceError) {
+        currentRecoveryError = sequenceError;
+        console.warn('Session preview loaded, but match sequence recovery failed.', sequenceError);
+      }
+    }
 
     if (typeof options?.afterLoad === 'function') {
       await options.afterLoad({ data, ui });
@@ -4073,9 +4290,21 @@ export const importSession = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
-    committedCanonicalSession = cloneCanonicalSession(data);
+    state.sessionResourceDiscoveryDeferred.value = false;
+    if (!currentSchemaSession) {
+      committedCanonicalSession = cloneCanonicalSession(data);
+      activeSessionResourceTable = null;
+    }
+    recordSessionLifecycleEvent('interactiveReady', {
+      status: 'success',
+      degradedRecovery: Boolean(currentRecoveryError)
+    });
     alert('Session loaded successfully!');
-    return { status: 'ok', data };
+    return {
+      status: 'ok',
+      data,
+      degradedRecovery: Boolean(currentRecoveryError)
+    };
   } catch (err) {
     console.error(err);
     if (commitStarted && rollbackSnapshot) {
@@ -4089,9 +4318,14 @@ export const importSession = async (e, options = {}) => {
       }
     }
     const message = err?.message || 'Invalid JSON structure.';
+    recordSessionLifecycleEvent('interactiveReady', {
+      status: 'error',
+      error: message
+    });
     alert(`Failed to load session: ${message}`);
     return { status: 'error', error: err };
   } finally {
+    state.sessionResourceDiscoveryDeferred.value = false;
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';

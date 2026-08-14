@@ -2489,10 +2489,10 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     return app.mode === 'circular' &&
-      app.circularRecordList?.length === 2 &&
       Array.isArray(app.files?.c_depth) &&
       app.files.c_depth.length === 2;
   }, null, { timeout: 120000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList?.length)).toBe(0);
 
   const restoredState = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -2514,6 +2514,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
     errorSummary: '',
     errorDetails: []
   });
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.circularRecordList?.length === 2);
   const secondResult = await inspectCircularSparseDepthResult(page);
   expect(secondResult.groups).toEqual(firstResult.groups);
   expect(secondResult.depthAFills).toContain('#112233');

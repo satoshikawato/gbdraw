@@ -8,6 +8,7 @@ const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
 const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
 const serviceNames = [
+  'runtime-test-hooks.js',
   'session-feature-metadata.js',
   'svg-result-normalization.js',
   'svg-result-ingestion.js',

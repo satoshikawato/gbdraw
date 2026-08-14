@@ -7,6 +7,7 @@ const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
 export const FEATURE_CATALOG_SCHEMA = 3;
+const adoptedFeatureCatalogs = new WeakSet();
 
 const isObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -334,19 +335,24 @@ const validateCatalogItem = (item, result, resultIndex) => {
   requireArray(item.annotations);
 };
 
-export const validateFeatureCatalog = (catalog, results) => {
+export const validateFeatureCatalog = (catalog, results, { adopt = false } = {}) => {
   const logicalResults = requireArray(results);
   if (!isObject(catalog) || catalog.schema !== FEATURE_CATALOG_SCHEMA) {
     throw catalogError();
   }
-  const validated = cloneJson(catalog);
+  const validated = adopt ? catalog : cloneJson(catalog);
   const items = requireArray(validated.items);
   if (items.length !== logicalResults.length) throw catalogError();
   items.forEach((item, resultIndex) => {
     validateCatalogItem(item, logicalResults[resultIndex], resultIndex);
   });
+  if (adopt) adoptedFeatureCatalogs.add(validated);
   return validated;
 };
+
+export const isAdoptedFeatureCatalog = (catalog) => (
+  Boolean(catalog) && adoptedFeatureCatalogs.has(catalog)
+);
 
 const selectorForFeature = (feature, stableId) => {
   if (isObject(feature.selector)) return cloneJson(feature.selector);
