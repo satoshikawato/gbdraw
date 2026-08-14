@@ -449,6 +449,44 @@ def test_export_renderer_metadata_is_normalized_but_content_is_not(
         ) == "normalized payload differs"
 
 
+def test_export_pdf_normalization_respects_declared_stream_length(
+    tmp_path: Path,
+) -> None:
+    expected_pdf = tmp_path / "expected.pdf"
+    actual_pdf = tmp_path / "actual.pdf"
+
+    def pdf_payload(version: str, date: str) -> tuple[bytes, bytes]:
+        decoded = (
+            "16 0\n"
+            f"<< /Producer (cairo {version} (https://cairographics.org))\n"
+            f"   /CreationDate (D:{date}Z)\n"
+            ">>\n"
+            "!!!!!!!!!!!!!!!!!!!"
+        ).encode()
+        compressed = zlib.compress(decoded)
+        payload = (
+            b"1 0 obj\n<< /Type /ObjStm /Length 2 0 R >>\nstream\n"
+            + compressed
+            + b"\nendstream\nendobj\n"
+            + f"2 0 obj\n{len(compressed)}\nendobj\n".encode()
+        )
+        return payload, compressed
+
+    expected_payload, expected_stream = pdf_payload("1.18.0", "20260814005730")
+    actual_payload, actual_stream = pdf_payload("1.18.4", "20260814005729")
+    assert not expected_stream.endswith(b"\r")
+    assert actual_stream.endswith(b"\r")
+    expected_pdf.write_bytes(expected_payload)
+    actual_pdf.write_bytes(actual_payload)
+
+    assert _normalized_artifact_payload(
+        "H-CLI-13", expected_pdf
+    ) == _normalized_artifact_payload("H-CLI-13", actual_pdf)
+    assert _artifact_comparison_error(
+        "H-CLI-13", expected_pdf, actual_pdf
+    ) is None
+
+
 @pytest.mark.parametrize("scenario_id", SCENARIOS)
 def test_recipe_regenerates_from_a_clean_external_directory(
     scenario_id: str,
