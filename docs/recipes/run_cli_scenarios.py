@@ -393,6 +393,11 @@ def _normalized_artifact_payload(scenario_id: str, path: Path) -> bytes:
             rb"(?ms)^(\d+) 0 obj\r?\n(.*?)\r?\nendobj$",
         )
         objects = object_pattern.findall(payload)
+        object_values = {
+            object_number: int(body)
+            for object_number, body in objects
+            if re.fullmatch(rb"\s*\d+\s*", body)
+        }
         length_objects = {
             match.group(1)
             for _, body in objects
@@ -402,17 +407,35 @@ def _normalized_artifact_payload(scenario_id: str, path: Path) -> bytes:
         for object_number, body in objects:
             if object_number in length_objects or b"/Type /XRef" in body:
                 continue
-            stream = re.fullmatch(
-                rb"(.*?)\r?\nstream\r?\n(.*?)\r?\nendstream",
-                body,
-                flags=re.DOTALL,
-            )
-            if stream is not None:
+            stream_marker = re.search(rb"\r?\nstream\r?\n", body)
+            if stream_marker is not None:
+                header = body[: stream_marker.start()]
+                length_reference = re.search(rb"/Length (\d+) 0 R", header)
+                direct_length = re.search(rb"/Length (\d+)(?!\s+0 R)", header)
+                if length_reference is not None:
+                    stream_length = object_values.get(length_reference.group(1))
+                elif direct_length is not None:
+                    stream_length = int(direct_length.group(1))
+                else:
+                    stream_length = None
+                if stream_length is None:
+                    raise RecipeContractError(
+                        f"H-CLI-13 PDF stream length is invalid in object "
+                        f"{object_number.decode('ascii')}."
+                    )
+                stream_start = stream_marker.end()
+                stream_end = stream_start + stream_length
+                if not re.fullmatch(rb"\r?\nendstream", body[stream_end:]):
+                    raise RecipeContractError(
+                        f"H-CLI-13 PDF stream boundary is invalid in object "
+                        f"{object_number.decode('ascii')}."
+                    )
+                encoded = body[stream_start:stream_end]
                 try:
-                    decoded = zlib.decompress(stream.group(2))
+                    decoded = zlib.decompress(encoded)
                 except zlib.error:
-                    decoded = stream.group(2)
-                body = stream.group(1) + b"\nstream\n" + decoded + b"\nendstream"
+                    decoded = encoded
+                body = header + b"\nstream\n" + decoded + b"\nendstream"
             body = re.sub(
                 rb"/CreationDate \(D:\d{14}Z\)",
                 b"/CreationDate (normalized)",
