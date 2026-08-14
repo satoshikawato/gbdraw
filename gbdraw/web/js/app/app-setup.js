@@ -975,6 +975,7 @@ export const createAppSetup = () => {
     applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
+    collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
     makeRef: ref
   });
   window.__GBDRAW_HISTORY__ = history;
@@ -1935,7 +1936,7 @@ export const createAppSetup = () => {
         await synchronizeLoadedSessionLegendEntries();
       }
       recordSessionLifecycleEvent('history-baseline-start');
-      await history.captureBaseline('Loaded session');
+      await history.initializeIntentBaseline('Loaded session');
       recordSessionLifecycleEvent('history-baseline-end');
     }
     return result;
@@ -2208,6 +2209,8 @@ export const createAppSetup = () => {
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
     return result;
+  }, {
+    shouldCommit: (result) => result?.status === 'ok'
   });
 
   const cancelGeneration = () => {

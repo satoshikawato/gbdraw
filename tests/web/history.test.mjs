@@ -157,6 +157,147 @@ const createLayoutPreferences = () => ({
 }
 
 {
+  let setting = 0;
+  let checkpointBuilds = 0;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: () => {
+      checkpointBuilds += 1;
+      return { setting, artifact: '<svg id="baseline" />' };
+    },
+    applyCheckpoint: async (checkpoint) => {
+      setting = checkpoint.setting;
+    }
+  });
+
+  await history.captureBaseline('full baseline');
+  await history.runUndoable('Set one', () => {
+    setting = 1;
+  });
+  await history.undo();
+  assert.equal(history.getRedoCount(), 1);
+  const pending = await history.begin('Pending edit');
+  setting = 2;
+  const before = history.getDiagnostics();
+
+  await history.initializeIntentBaseline('Loaded session');
+  const after = history.getDiagnostics();
+  assert.equal(pending.closed, true);
+  assert.equal(history.getUndoCount(), 0);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.canUndo(), false);
+  assert.equal(history.canRedo(), false);
+  assert.equal(history.getCurrentCheckpoint(), null);
+  assert.equal(history.getCurrentCheckpointSignature(), '');
+  assert.equal(after.intentBuilds - before.intentBuilds, 1);
+  assert.equal(after.intentSignatureComputations - before.intentSignatureComputations, 1);
+  assert.equal(after.artifactCheckpointBuilds - before.artifactCheckpointBuilds, 0);
+  assert.equal(
+    after.artifactCheckpointSignatureComputations
+      - before.artifactCheckpointSignatureComputations,
+    0
+  );
+  assert.equal(after.signatureComputations - before.signatureComputations, 1);
+  assert.equal(after.historySvgBytes - before.historySvgBytes, 0);
+  assert.equal(checkpointBuilds, 1);
+
+  await history.runUndoable('Set three', () => {
+    setting = 3;
+  });
+  assert.equal(setting, 3);
+  await history.undo();
+  assert.equal(setting, 2);
+  await history.redo();
+  assert.equal(setting, 3);
+}
+
+{
+  let documentState = {
+    setting: 'loaded',
+    results: [{ name: 'loaded.svg', content: '<svg id="loaded" />' }],
+    selectedResultIndex: 0
+  };
+  let checkpointBuilds = 0;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting: documentState.setting }),
+    applyIntent: async (intent) => {
+      documentState.setting = intent.setting;
+    },
+    buildCheckpoint: () => {
+      checkpointBuilds += 1;
+      return structuredClone(documentState);
+    },
+    applyCheckpoint: async (checkpoint) => {
+      documentState = structuredClone(checkpoint);
+    }
+  });
+
+  await history.initializeIntentBaseline('Loaded session');
+  assert.equal(checkpointBuilds, 0);
+  await history.runUndoableCheckpoint('Generate', () => {
+    documentState = {
+      setting: 'generated',
+      results: [
+        { name: 'generated-1.svg', content: '<svg id="generated-1" />' },
+        { name: 'generated-2.svg', content: '<svg id="generated-2" />' }
+      ],
+      selectedResultIndex: 1
+    };
+  });
+  assert.equal(checkpointBuilds, 2);
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(history.undoLabel(), 'Generate');
+  await history.undo();
+  assert.deepEqual(documentState, {
+    setting: 'loaded',
+    results: [{ name: 'loaded.svg', content: '<svg id="loaded" />' }],
+    selectedResultIndex: 0
+  });
+  await history.redo();
+  assert.equal(documentState.results.length, 2);
+  assert.equal(documentState.results[1].name, 'generated-2.svg');
+  assert.equal(documentState.selectedResultIndex, 1);
+}
+
+{
+  let checkpointBuilds = 0;
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting: 'loaded' }),
+    applyIntent: async () => {},
+    buildCheckpoint: () => {
+      checkpointBuilds += 1;
+      return { results: [{ content: '<svg id="loaded" />' }] };
+    },
+    applyCheckpoint: async () => {}
+  });
+
+  await history.initializeIntentBaseline('Loaded session');
+  await assert.rejects(
+    history.runUndoableCheckpoint('Failed Generate', async () => {
+      throw new Error('generation failed');
+    }),
+    /generation failed/
+  );
+  assert.equal(history.getUndoCount(), 0);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.getCurrentCheckpoint(), null);
+
+  const canceled = await history.runUndoableCheckpoint(
+    'Canceled Generate',
+    async () => ({ status: 'canceled' }),
+    { shouldCommit: (result) => result?.status === 'ok' }
+  );
+  assert.deepEqual(canceled, { status: 'canceled' });
+  assert.equal(checkpointBuilds, 2);
+  assert.equal(history.getUndoCount(), 0);
+  assert.equal(history.getRedoCount(), 0);
+  assert.equal(history.getCurrentCheckpoint(), null);
+}
+
+{
   let value = 0;
   const buildState = async () => ({ value });
   const applyState = async (snapshot) => {
@@ -1083,6 +1224,102 @@ const createLayoutPreferences = () => ({
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_sequence_sources'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_blasts'), false);
+}
+
+{
+  const fileStore = createHistoryFileStore();
+  const circularPrimary = makeFile('circular-primary.gb', 101);
+  const circularDepth = makeFile('circular-depth.tsv', 102);
+  const conservationBlast = makeFile('derived-conservation.tsv', 103);
+  const conservationFasta = makeFile('conservation-subject.fa', 104);
+  const conservationSequenceSource = makeFile('derived-conservation-source.fa', 105);
+  const linearPrimary = makeFile('linear-primary.gb', 106);
+  const linearDepth = makeFile('linear-depth.tsv', 107);
+  const linearComparison = makeFile('linear-comparison.tsv', 108);
+  const canonicalProtein = makeFile('canonical-protein.tsv', 109);
+  const canonicalOrthogroups = makeFile('canonical-orthogroups.json', 110);
+  const canonicalCollinearity = makeFile('canonical-collinearity.json', 111);
+  const unreferenced = makeFile('unreferenced.tmp', 112);
+  const retainedFiles = [
+    circularPrimary,
+    circularDepth,
+    conservationBlast,
+    conservationFasta,
+    conservationSequenceSource,
+    linearPrimary,
+    linearDepth,
+    linearComparison,
+    canonicalProtein,
+    canonicalOrthogroups,
+    canonicalCollinearity
+  ];
+  const retainedIds = retainedFiles.map((file) => fileStore.describeFile(file).fileId);
+  const unreferencedId = fileStore.describeFile(unreferenced).fileId;
+  const state = {
+    files: {
+      c_gb: circularPrimary,
+      c_gff: null,
+      c_fasta: null,
+      c_depth: [circularDepth],
+      c_conservation_blasts: [conservationBlast],
+      c_conservation_blasts_source: 'losat-cache',
+      c_conservation_fastas: [conservationFasta],
+      c_conservation_sequence_sources: [conservationSequenceSource],
+      linearCanonicalComparisons: [
+        { kind: 'precomputedProteinComparison', file: canonicalProtein },
+        { kind: 'orthogroupResult', file: canonicalOrthogroups },
+        { kind: 'collinearityResult', file: canonicalCollinearity }
+      ],
+      d_color: null,
+      t_color: null,
+      blacklist: null,
+      whitelist: null,
+      qualifier_priority: null
+    },
+    linearSeqs: [{
+      uid: 'linear-a',
+      gb: linearPrimary,
+      gff: null,
+      fasta: null,
+      depth: [linearDepth]
+    }],
+    linearComparisonPlan: {
+      mode: 'selected',
+      defaultSource: 'upload',
+      edges: [{ id: 'edge-a-b', file: linearComparison }]
+    }
+  };
+  let setting = 'loaded';
+  let artifactBuilds = 0;
+  const snapshots = createHistorySnapshotService({ state, fileStore });
+  const history = createHistoryManager({
+    fileStore,
+    collectCurrentFileIds: snapshots.collectCurrentFileIds,
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: () => {
+      artifactBuilds += 1;
+      throw new Error('lightweight baseline must not build an artifact checkpoint');
+    },
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
+  });
+
+  await history.initializeIntentBaseline('Loaded session');
+  assert.equal(artifactBuilds, 0);
+  retainedIds.forEach((fileId) => assert.equal(fileStore.has(fileId), true));
+  assert.equal(fileStore.has(unreferencedId), false);
+
+  await history.runUndoable('Change ordinary setting', () => {
+    setting = 'edited';
+  });
+  await history.undo();
+  assert.equal(setting, 'loaded');
+  retainedIds.forEach((fileId) => assert.equal(fileStore.has(fileId), true));
+  await history.redo();
+  assert.equal(setting, 'edited');
+  retainedIds.forEach((fileId) => assert.equal(fileStore.has(fileId), true));
 }
 
 {

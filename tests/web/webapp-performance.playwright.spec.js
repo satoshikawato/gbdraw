@@ -168,21 +168,21 @@ const installBrowserProbe = async (page) => page.evaluate((featureSelector) => {
 const loadWssvSession = async (page) => {
   await page.evaluate(() => {
     const history = window.__GBDRAW_HISTORY__;
-    if (!history?.captureBaseline) {
+    if (!history?.initializeIntentBaseline) {
       throw new Error('The session-import History boundary is unavailable.');
     }
-    const originalCaptureBaseline = history.captureBaseline;
+    const originalInitializeIntentBaseline = history.initializeIntentBaseline;
     window.__GBDRAW_WSSV_IMPORT_COMPLETE__ = null;
-    history.captureBaseline = async (label, ...args) => {
+    history.initializeIntentBaseline = async (label, ...args) => {
       try {
-        const result = await originalCaptureBaseline(label, ...args);
+        const result = await originalInitializeIntentBaseline(label, ...args);
         if (label === 'Loaded session') {
-          history.captureBaseline = originalCaptureBaseline;
+          history.initializeIntentBaseline = originalInitializeIntentBaseline;
           window.__GBDRAW_WSSV_IMPORT_COMPLETE__ = { status: 'ok', label };
         }
         return result;
       } catch (error) {
-        history.captureBaseline = originalCaptureBaseline;
+        history.initializeIntentBaseline = originalInitializeIntentBaseline;
         window.__GBDRAW_WSSV_IMPORT_COMPLETE__ = {
           status: 'error',
           message: String(error?.message || error)

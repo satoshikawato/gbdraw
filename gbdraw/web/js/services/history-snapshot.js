@@ -502,6 +502,47 @@ const buildIntentFilesData = (state, fileStore) => {
   return files;
 };
 
+const collectCurrentFileIds = (state, fileStore) => {
+  const fileIds = new Set();
+  const register = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(register);
+      return;
+    }
+    const fileId = fileStore.registerFile(value);
+    if (fileId) fileIds.add(fileId);
+  };
+  const files = state.files || {};
+  [
+    files.c_gb,
+    files.c_gff,
+    files.c_fasta,
+    files.c_depth,
+    files.c_conservation_blasts,
+    files.c_conservation_fastas,
+    files.c_conservation_sequence_sources,
+    files.d_color,
+    files.t_color,
+    files.blacklist,
+    files.whitelist,
+    files.qualifier_priority
+  ].forEach(register);
+  (Array.isArray(files.linearCanonicalComparisons)
+    ? files.linearCanonicalComparisons
+    : []
+  ).forEach((comparison) => register(comparison?.file));
+  Array.from(state.linearSeqs || []).forEach((sequence) => {
+    register(sequence?.gb);
+    register(sequence?.gff);
+    register(sequence?.fasta);
+    register(sequence?.depth);
+  });
+  Array.from(state.linearComparisonPlan?.edges || []).forEach((comparison) => {
+    register(comparison?.file);
+  });
+  return fileIds;
+};
+
 const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = null) => {
   if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
@@ -897,6 +938,7 @@ export const createHistorySnapshotService = ({
     applyGeneratedArtifactSnapshot,
     applyHistoryIntent,
     buildArtifactCheckpoint,
+    collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
     buildGeneratedArtifactSnapshot,
     buildHistoryIntent,
     setAfterApplyHistoryIntent,
