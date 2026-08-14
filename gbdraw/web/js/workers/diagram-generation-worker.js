@@ -5,6 +5,37 @@ import { normalizeUserFacingError } from '../services/error-normalization.js';
 let runtimePromise = null;
 let runtime = null;
 let operationQueue = Promise.resolve();
+const RENDER_RESOURCE_CACHE = '/gbdraw-web-render-resource-cache';
+const RENDER_WORKSPACE_MARKER = '.gbdraw-worker-render-workspace';
+const RENDER_RESOURCE_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const RENDER_RESOURCE_TOKEN_RE = /^render-resource-[1-9][0-9]*$/;
+const cachedRenderResources = new Map();
+
+const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
+  if (!enabled) return;
+  self.postMessage({
+    type: 'test-lifecycle',
+    requestId,
+    event: {
+      name,
+      timestamp: globalThis.performance?.now?.() ?? Date.now(),
+      ...detail
+    }
+  });
+};
+
+export const collectGenerationResultTransferList = (payload) => {
+  const buffers = new Set();
+  const addBuffer = (value) => {
+    if (value instanceof ArrayBuffer) buffers.add(value);
+    else if (ArrayBuffer.isView(value)) buffers.add(value.buffer);
+  };
+  (Array.isArray(payload?.results) ? payload.results : []).forEach((result) => {
+    addBuffer(result?.content);
+  });
+  addBuffer(payload?.metadata);
+  return Array.from(buffers);
+};
 
 export const serializeError = (error) => {
   const normalized = normalizeUserFacingError(error);
@@ -222,6 +253,124 @@ const stageHelperFiles = (pyodide, workspace, files, allowedRoles) => {
     paths.set(role, path);
   });
   return paths;
+};
+
+const ensureRenderResourceCache = (pyodide) => {
+  if (!pyodide.FS.analyzePath(RENDER_RESOURCE_CACHE).exists) {
+    pyodide.FS.mkdir(RENDER_RESOURCE_CACHE);
+  }
+};
+
+const stageRenderResources = async (
+  pyodide,
+  workspace,
+  resourceManifest,
+  stagedResources,
+  testLifecycleEnabled,
+  requestId
+) => {
+  if (!Array.isArray(resourceManifest) || !Array.isArray(stagedResources)) {
+    throw new TypeError('Diagram generation requires a staged resource manifest.');
+  }
+  ensureRenderResourceCache(pyodide);
+  const stagedById = new Map();
+  stagedResources.forEach((entry) => {
+    const resourceId = String(entry?.resourceId || '').trim();
+    if (!RENDER_RESOURCE_ID_RE.test(resourceId) || stagedById.has(resourceId)) {
+      throw new TypeError(`Invalid or duplicate staged render resource '${resourceId}'.`);
+    }
+    if (!RENDER_RESOURCE_TOKEN_RE.test(String(entry?.cacheToken || ''))) {
+      throw new TypeError(`Invalid cache token for staged render resource '${resourceId}'.`);
+    }
+    if (!(entry?.bytes instanceof ArrayBuffer)) {
+      throw new TypeError(`Staged render resource '${resourceId}' requires an ArrayBuffer.`);
+    }
+    stagedById.set(resourceId, entry);
+  });
+
+  const manifestIds = new Set();
+  const resourcePaths = {};
+  const resourcesDirectory = `${workspace}/resources`;
+  pyodide.FS.mkdir(workspace);
+  pyodide.FS.writeFile(`${workspace}/${RENDER_WORKSPACE_MARKER}`, new Uint8Array(0));
+  pyodide.FS.mkdir(resourcesDirectory);
+  for (let index = 0; index < resourceManifest.length; index += 1) {
+    const metadata = resourceManifest[index];
+    const resourceId = String(metadata?.resourceId || '').trim();
+    const cacheToken = String(metadata?.cacheToken || '');
+    const size = Number(metadata?.size);
+    if (!RENDER_RESOURCE_ID_RE.test(resourceId) || manifestIds.has(resourceId)) {
+      throw new TypeError(`Invalid or duplicate render resource '${resourceId}'.`);
+    }
+    if (!RENDER_RESOURCE_TOKEN_RE.test(cacheToken)) {
+      throw new TypeError(`Invalid cache token for render resource '${resourceId}'.`);
+    }
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new TypeError(`Invalid byte size for render resource '${resourceId}'.`);
+    }
+    manifestIds.add(resourceId);
+    let cached = cachedRenderResources.get(resourceId);
+    const staged = stagedById.get(resourceId);
+    if (staged) {
+      if (staged.cacheToken !== cacheToken || staged.bytes.byteLength !== size) {
+        throw new TypeError(`Staged render resource '${resourceId}' does not match its manifest.`);
+      }
+      emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-start', {
+        resourceId,
+        bytes: size
+      });
+      if (cached && pyodide.FS.analyzePath(cached.path).exists) {
+        pyodide.FS.unlink(cached.path);
+      }
+      const cachePath = `${RENDER_RESOURCE_CACHE}/${cacheToken}.bin`;
+      if (pyodide.FS.analyzePath(cachePath).exists) pyodide.FS.unlink(cachePath);
+      if (typeof pyodide.FS.createDataFile !== 'function') {
+        throw new Error('Pyodide render resource ownership transfer is unavailable.');
+      }
+      pyodide.FS.createDataFile(
+        RENDER_RESOURCE_CACHE,
+        `${cacheToken}.bin`,
+        new Uint8Array(staged.bytes),
+        true,
+        true,
+        true
+      );
+      cached = { cacheToken, path: cachePath, size };
+      cachedRenderResources.set(resourceId, cached);
+      staged.bytes = null;
+      stagedById.delete(resourceId);
+      emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-stage-end', {
+        resourceId,
+        bytes: size
+      });
+    }
+    if (
+      !cached
+      || cached.cacheToken !== cacheToken
+      || cached.size !== size
+      || !pyodide.FS.analyzePath(cached.path).exists
+    ) {
+      throw new Error(`Render resource cache miss for '${resourceId}'.`);
+    }
+    const requestPath = `${resourcesDirectory}/${String(index + 1).padStart(4, '0')}.bin`;
+    if (typeof pyodide.FS.symlink !== 'function') {
+      throw new Error('Pyodide render resource symbolic links are unavailable.');
+    }
+    pyodide.FS.symlink(cached.path, requestPath);
+    resourcePaths[resourceId] = requestPath;
+  }
+  stagedById.forEach((_entry, resourceId) => {
+    if (!manifestIds.has(resourceId)) {
+      throw new TypeError(`Unexpected staged render resource '${resourceId}'.`);
+    }
+  });
+  cachedRenderResources.forEach((cached, resourceId) => {
+    if (manifestIds.has(resourceId)) return;
+    if (pyodide.FS.analyzePath(cached.path).exists) pyodide.FS.unlink(cached.path);
+    cachedRenderResources.delete(resourceId);
+  });
+  stagedResources.splice(0);
+  return resourcePaths;
 };
 
 const requireHelperFile = (paths, role, operation) => {
@@ -546,8 +695,10 @@ const runHelperOperation = async ({ operation, payload, requestId } = {}) => {
 
 const runGeneration = async ({
   request,
-  resources,
-  requestId
+  resourceManifest,
+  stagedResources,
+  requestId,
+  testLifecycleEnabled = false
 } = {}) => {
   if (!runtime?.pyodide) {
     throw new Error('Diagram generation worker has not been initialized.');
@@ -555,29 +706,73 @@ const runGeneration = async ({
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw new Error('Diagram generation requires a canonical typed request.');
   }
-  if (!resources || typeof resources !== 'object' || Array.isArray(resources)) {
-    throw new Error('Diagram generation requires canonical request resources.');
-  }
   const { pyodide } = runtime;
   const runWrapper = pyodide.globals.get('run_canonical_request_wrapper');
   const workspace = `/gbdraw-web-render-${Number(requestId) || 0}`;
   let result = null;
+  let resultHandle = null;
   let primaryError = null;
+  let pythonWrapperStarted = false;
   try {
-    const resultJson = runWrapper(
-      JSON.stringify(request),
-      JSON.stringify(resources),
+    const resourcePaths = await stageRenderResources(
+      pyodide,
+      workspace,
+      resourceManifest,
+      stagedResources,
+      testLifecycleEnabled,
+      requestId
+    );
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-request-json-start');
+    const requestJson = JSON.stringify(request);
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-request-json-end', {
+      characters: requestJson.length
+    });
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-start');
+    const resourcePathsJson = JSON.stringify(resourcePaths);
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
+      characters: resourcePathsJson.length
+    });
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-start');
+    pythonWrapperStarted = true;
+    resultHandle = runWrapper(
+      requestJson,
+      resourcePathsJson,
       workspace
     );
-    result = JSON.parse(String(resultJson || 'null'));
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-start');
+    result = typeof resultHandle?.toJs === 'function'
+      ? resultHandle.toJs({ dict_converter: Object.fromEntries })
+      : resultHandle;
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-end');
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'result-transport-ready', {
+      transport: 'transferable-binary',
+      bytes: collectGenerationResultTransferList(result).reduce(
+        (total, buffer) => total + buffer.byteLength,
+        0
+      )
+    });
   } catch (error) {
     primaryError = error;
   }
   let destroyError = null;
   try {
-    runWrapper.destroy?.();
+    resultHandle?.destroy?.();
   } catch (error) {
     destroyError = error;
+  }
+  try {
+    runWrapper.destroy?.();
+  } catch (error) {
+    if (destroyError) {
+      attachCleanupDiagnostic(
+        destroyError,
+        error,
+        'Additional temporary render handle cleanup also failed'
+      );
+    } else {
+      destroyError = error;
+    }
   }
   let workspaceError = null;
   try {
@@ -586,7 +781,9 @@ const runGeneration = async ({
       remainingEntries = pyodide.FS.readdir(workspace).filter(
         (entry) => entry !== '.' && entry !== '..'
       );
-      if (remainingEntries.length === 0) {
+      if (!pythonWrapperStarted) {
+        removeWorkspace(pyodide, workspace);
+      } else if (remainingEntries.length === 0) {
         // Pyodide's MEMFS can retain the now-empty top-level directory after
         // Python shutil.rmtree has removed its contents.
         pyodide.FS.rmdir(workspace);
@@ -599,6 +796,11 @@ const runGeneration = async ({
           ? ` (${remainingEntries.join(', ')})`
           : '')
       );
+      try {
+        removeWorkspace(pyodide, workspace);
+      } catch (_cleanupError) {
+        // Preserve the invariant error assembled above.
+      }
     }
   } catch (error) {
     workspaceError = error;
@@ -735,11 +937,20 @@ const handleWorkerMessage = async (data) => {
       throw new Error(`Unsupported diagram generation worker message type '${type || '(blank)'}'.`);
     }
 
+    emitTestLifecycle(
+      data.testLifecycleEnabled,
+      requestId,
+      'run-message-received'
+    );
     const results = await runGeneration({
       ...(data.payload || {}),
-      requestId
+      requestId,
+      testLifecycleEnabled: data.testLifecycleEnabled
     });
-    self.postMessage({ requestId, type: 'run', ok: true, results });
+    self.postMessage(
+      { requestId, type: 'run', ok: true, results },
+      collectGenerationResultTransferList(results)
+    );
   } catch (error) {
     self.postMessage({
       id,

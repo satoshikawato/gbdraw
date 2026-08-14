@@ -202,6 +202,7 @@ export const createCombinedSessionResourceFileView = (
       resourceId: backing.resourceId,
       descriptor: backing.descriptor
     })),
+    sourceBackings: backings,
     bytesPromise: null,
     textPromise: null,
     filePromise: null,
@@ -276,4 +277,17 @@ export const readSessionResourceText = (file) => {
   if (!backing) return null;
   if (typeof backing.readText === 'function') return backing.readText();
   return materializeText(backing);
+};
+
+export const releaseSessionResourceContent = (file) => {
+  const backing = fileViewBackings.get(file);
+  if (!backing) return false;
+  const releaseBacking = (candidate) => {
+    candidate.bytesPromise = null;
+    candidate.textPromise = null;
+    candidate.filePromise = null;
+    candidate.sourceBackings?.forEach(releaseBacking);
+  };
+  releaseBacking(backing);
+  return true;
 };

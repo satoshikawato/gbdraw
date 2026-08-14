@@ -91,13 +91,19 @@ import {
   resolveLinearComparisonPlan
 } from '../app/linear-comparisons.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
-import { base64ToBytes, bytesToBase64, readFileBytes } from './file-content-cache.js';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  getSessionResourceSource,
+  readFileBytes
+} from './file-content-cache.js';
 import {
   adoptCurrentSessionResources,
   isSessionResourceFileView
 } from './session-resource-backing.js';
 import { normalizeLogicalResults } from './result-normalization.js';
 import {
+  ingestCatalogBackedSvgResults,
   ingestSvgResults,
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
@@ -168,6 +174,7 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
+import { setResourcePayloadOwner } from './resource-payload-owner.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -2234,10 +2241,28 @@ const restorePaletteStateFromSession = (ui = {}) => {
   }
 };
 
+const serializedFileDescriptors = new WeakMap();
+
 const serializeFile = async (file) => {
   if (!file) return null;
+  const source = getSessionResourceSource(file);
+  if (source?.descriptor) {
+    setResourcePayloadOwner(source.descriptor, file);
+    return source.descriptor;
+  }
+  const cached = serializedFileDescriptors.get(file);
+  if (cached) return cached;
   const bytes = await readFileBytes(file);
-  return {
+  recordStructuralMetric('resourceReencodeCount', 1, {
+    resourceName: String(file.name || 'file')
+  });
+  recordStructuralMetric('base64EncodeCount', 1, {
+    resourceName: String(file.name || 'file')
+  });
+  recordStructuralMetric('encodedByteCount', bytes.byteLength, {
+    resourceName: String(file.name || 'file')
+  });
+  const descriptor = {
     name: file.name || 'file',
     type: file.type || '',
     size: bytes.byteLength,
@@ -2245,6 +2270,9 @@ const serializeFile = async (file) => {
     encoding: 'base64',
     data: bytesToBase64(bytes)
   };
+  setResourcePayloadOwner(descriptor, file);
+  serializedFileDescriptors.set(file, descriptor);
+  return descriptor;
 };
 
 const serializeFileValue = async (value) => (
@@ -3884,20 +3912,26 @@ export const importSession = async (e, options = {}) => {
   let commitStarted = false;
 
   try {
+    recordSessionLifecycleEvent('gzip-to-text-start');
     const text = await readSessionText(file);
+    recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
+    recordSessionLifecycleEvent('json-parse-start');
     let data = JSON.parse(text, (key, value) => {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
         return undefined;
       }
       return value;
     });
+    recordSessionLifecycleEvent('json-parse-end');
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
       return { status: 'legacy' };
     }
 
+    recordSessionLifecycleEvent('current-session-preflight-start');
     const preflight = preflightSessionImport(data);
+    recordSessionLifecycleEvent('current-session-preflight-end');
     data = preflight.data;
     const {
       sourceSessionVersion,
@@ -4171,7 +4205,12 @@ export const importSession = async (e, options = {}) => {
       return legendGroupsChanged || compositionChanged || strokeCount > 0;
     };
 
-    const committedImportedResults = validatedSessionCatalog
+    recordSessionLifecycleEvent('svg-admission-start');
+    const committedImportedResults = currentSchemaSession && validatedSessionCatalog
+      ? ingestCatalogBackedSvgResults(logicalImportedResults, {
+          catalogItems: validatedSessionCatalog.items
+        })
+      : validatedSessionCatalog
       ? prepareCandidateRenderCommit({
           results: logicalImportedResults,
           catalog: validatedSessionCatalog,
@@ -4187,15 +4226,18 @@ export const importSession = async (e, options = {}) => {
       : ingestSvgResults(logicalImportedResults, {
           transformSvg: transformRestoredSessionSvg
         });
+    recordSessionLifecycleEvent('svg-admission-end');
 
     await nextTick();
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
+    recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
     recordSessionLifecycleEvent('firstCommittedPreview', {
       resultCount: state.results.value.length
     });
     await nextTick();
+    recordSessionLifecycleEvent('preview-mount-end');
 
     let currentRecoveryError = null;
     if (currentSchemaSession && missingCatalogSequenceSources) {

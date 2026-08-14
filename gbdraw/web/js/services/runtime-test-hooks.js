@@ -1,5 +1,7 @@
 const testHooks = () => globalThis.__GBDRAW_TEST_HOOKS__;
 
+export const runtimeTestHooksEnabled = () => Boolean(testHooks());
+
 export const recordStructuralMetric = (name, value = 1, detail = {}) => {
   const callback = testHooks()?.onStructuralMetric;
   if (typeof callback !== 'function') return;

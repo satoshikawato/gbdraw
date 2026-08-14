@@ -27,6 +27,8 @@ from gbdraw.web_support.feature_catalog import (
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+_STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
+_STAGED_WORKSPACE_MARKER = ".gbdraw-worker-render-workspace"
 
 
 def _attach_exception_note(error: BaseException, note: str) -> None:
@@ -208,7 +210,92 @@ def render_embedded_canonical_web_request(
                     ) from cleanup_error
 
 
+def render_staged_canonical_web_request(
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    workspace: str | Path,
+) -> dict[str, Any]:
+    """Render a browser request from paths staged by the diagram Worker."""
+
+    if not isinstance(resource_paths, Mapping):
+        raise ValidationError("The staged Web render resource map must be an object.")
+    workspace_path = Path(workspace)
+    resource_directory = workspace_path / "resources"
+    cache_directory = workspace_path.parent / "gbdraw-web-render-resource-cache"
+    output_directory = workspace_path / "outputs"
+    owns_workspace = False
+    render_error: BaseException | None = None
+    try:
+        marker_path = workspace_path / _STAGED_WORKSPACE_MARKER
+        if (
+            not _STAGED_WORKSPACE_RE.fullmatch(workspace_path.name)
+            or not workspace_path.is_dir()
+            or not resource_directory.is_dir()
+            or not marker_path.is_file()
+            or marker_path.is_symlink()
+        ):
+            raise ValidationError("The staged Web render workspace is incomplete.")
+        owns_workspace = True
+        workspace_identity = workspace_path.resolve(strict=True)
+        resource_identity = resource_directory.resolve(strict=True)
+        allowed_resource_parents = {resource_identity}
+        if cache_directory.is_dir():
+            allowed_resource_parents.add(cache_directory.resolve(strict=True))
+        validated_paths: dict[str, Path] = {}
+        for resource_id, raw_path in resource_paths.items():
+            if (
+                not isinstance(resource_id, str)
+                or not _RESOURCE_ID_RE.fullmatch(resource_id)
+            ):
+                raise ValidationError(
+                    f"Invalid staged Web render resource ID: {resource_id!r}."
+                )
+            path = Path(raw_path)
+            if path.parent.resolve(strict=True) != resource_identity:
+                raise ValidationError(
+                    f"Staged Web render resource {resource_id!r} is outside its workspace."
+                )
+            resolved = path.resolve(strict=True)
+            if resolved.parent not in allowed_resource_parents or not resolved.is_file():
+                raise ValidationError(
+                    f"Staged Web render resource {resource_id!r} is outside its workspace."
+                )
+            validated_paths[resource_id] = path
+        if output_directory.exists():
+            raise ValidationError("The staged Web render output directory already exists.")
+        output_directory.mkdir()
+        if output_directory.resolve(strict=True).parent != workspace_identity:
+            raise ValidationError("The staged Web render output directory is invalid.")
+        return render_canonical_web_request(
+            payload,
+            resource_paths=validated_paths,
+            output_directory=output_directory,
+        )
+    except BaseException as exc:
+        render_error = exc
+        raise
+    finally:
+        if owns_workspace:
+            try:
+                shutil.rmtree(workspace_path)
+            except FileNotFoundError:
+                pass
+            except OSError as cleanup_error:
+                if render_error is not None:
+                    _attach_exception_note(
+                        render_error,
+                        "Temporary staged Web render workspace cleanup also failed: "
+                        f"{cleanup_error}",
+                    )
+                else:
+                    raise ValidationError(
+                        "The temporary staged Web render workspace could not be cleaned up."
+                    ) from cleanup_error
+
+
 __all__ = [
     "render_canonical_web_request",
     "render_embedded_canonical_web_request",
+    "render_staged_canonical_web_request",
 ]

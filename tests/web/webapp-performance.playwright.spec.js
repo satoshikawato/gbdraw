@@ -262,8 +262,14 @@ test('WSSV restore and ordinary edits keep History and SVG work bounded', async 
   await assertSessionLoadLeftWorkerIdle(page);
   const restoreProbe = await getProbeSnapshot(page);
   expect(restoreProbe.sanitizeCalls, 'WSSV must cross one sanitizer boundary').toHaveLength(1);
-  expect(restoreProbe.parseCalls, 'WSSV must cross one full SVG parse boundary').toHaveLength(1);
-  expect(restoreProbe.serializeCalls.length, 'WSSV commit may serialize at most once').toBeLessThanOrEqual(1);
+  expect(
+    restoreProbe.parseCalls,
+    'validated current-session catalogs must avoid a detached SVG parse'
+  ).toHaveLength(0);
+  expect(
+    restoreProbe.serializeCalls,
+    'validated current-session catalogs must avoid reserializing the saved SVG'
+  ).toHaveLength(0);
   expect(restoreProbe.resultContentUpdates, 'WSSV must have one final Result commit').toHaveLength(1);
   expect(restoreProbe.previewMounts, 'the committed WSSV Result must mount once').toHaveLength(1);
   expect(restoreProbe.featureIndexBuilds, 'the feature DOM index must be built once per root').toHaveLength(1);

@@ -258,8 +258,12 @@ test('the embedded Python render bridge has no alternate production caller', () 
     new Map([['workers/diagram-generation-worker.js', 1]])
   );
   assert.deepEqual(
-    occurrenceOwners(/\brender_embedded_canonical_web_request\b/g),
+    occurrenceOwners(/\brender_staged_canonical_web_request\b/g),
     new Map([['app/python-helpers.js', 2]])
+  );
+  assert.doesNotMatch(
+    productionSources.get('workers/diagram-generation-worker.js'),
+    /JSON\.stringify\(resources\)/
   );
   assert.deepEqual(
     occurrenceOwners(/\bdef\s+run_canonical_request_wrapper\s*\(/g),

@@ -98,6 +98,10 @@ import {
   createCombinedSessionResourceFileView,
   createSessionResourceFileView
 } from './session-resource-backing.js';
+import {
+  getResourcePayloadOwner,
+  setResourcePayloadOwner
+} from './resource-payload-owner.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -347,7 +351,7 @@ const createResourceBuilder = () => {
     const kindResourceIds = fileResourceIds.get(kind) || new WeakMap();
     const existingResourceId = kindResourceIds.get(entry);
     if (existingResourceId) return existingResourceId;
-    resources[resourceId] = {
+    const descriptor = {
       kind,
       name: normalizeResourceName(resourceId, entry.name),
       type: String(entry.type || 'application/octet-stream'),
@@ -356,6 +360,13 @@ const createResourceBuilder = () => {
       encoding: entry.encoding || 'base64',
       data: entry.data
     };
+    if (typeof entry.checksum === 'string' && entry.checksum.trim()) {
+      descriptor.checksum = entry.checksum;
+    }
+    resources[resourceId] = setResourcePayloadOwner(
+      descriptor,
+      getResourcePayloadOwner(entry)
+    );
     kindResourceIds.set(entry, resourceId);
     fileResourceIds.set(kind, kindResourceIds);
     const originalName = normalizeOriginalResourceName(entry.name);

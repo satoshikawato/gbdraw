@@ -5,7 +5,12 @@ import {
   DIAGRAM_HELPER_OPERATION_NAMES,
   DIAGRAM_HELPER_OPERATIONS
 } from './diagram-worker-protocol.js';
-import { recordStructuralMetric } from './runtime-test-hooks.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric,
+  runtimeTestHooksEnabled
+} from './runtime-test-hooks.js';
+import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
 
@@ -20,9 +25,63 @@ export class DiagramGenerationCanceledError extends Error {
 export const isDiagramGenerationCanceled = (error) =>
   Boolean(error?.canceled || error?.name === 'DiagramGenerationCanceledError');
 
+const decodeGenerationResultContent = (result, resultIndex) => {
+  if (!result || typeof result !== 'object' || typeof result.content === 'string') {
+    return result;
+  }
+  const bytes = result.content instanceof ArrayBuffer
+    ? new Uint8Array(result.content)
+    : ArrayBuffer.isView(result.content)
+      ? new Uint8Array(
+          result.content.buffer,
+          result.content.byteOffset,
+          result.content.byteLength
+        )
+      : null;
+  if (!bytes) return result;
+  recordSessionLifecycleEvent('result-binary-decode-start', {
+    resultIndex,
+    bytes: bytes.byteLength
+  });
+  const content = new TextDecoder().decode(bytes);
+  recordStructuralMetric('resultBinaryDecodeCount', 1, { resultIndex });
+  recordStructuralMetric('resultBinaryDecodedBytes', bytes.byteLength, { resultIndex });
+  recordSessionLifecycleEvent('result-binary-decode-end', {
+    resultIndex,
+    bytes: bytes.byteLength,
+    characters: content.length
+  });
+  return { ...result, content };
+};
+
+const decodeGenerationResults = (results) => (
+  Array.isArray(results)
+    ? results.map(decodeGenerationResultContent)
+    : results
+);
+
+const decodeGenerationMetadata = (metadata) => {
+  const bytes = metadata instanceof ArrayBuffer
+    ? new Uint8Array(metadata)
+    : ArrayBuffer.isView(metadata)
+      ? new Uint8Array(metadata.buffer, metadata.byteOffset, metadata.byteLength)
+      : null;
+  if (!bytes) return metadata;
+  recordSessionLifecycleEvent('result-metadata-binary-decode-start', {
+    bytes: bytes.byteLength
+  });
+  const decoded = JSON.parse(new TextDecoder().decode(bytes));
+  recordStructuralMetric('resultMetadataBinaryDecodeCount');
+  recordStructuralMetric('resultMetadataBinaryDecodedBytes', bytes.byteLength);
+  recordSessionLifecycleEvent('result-metadata-binary-decode-end', {
+    bytes: bytes.byteLength
+  });
+  return decoded;
+};
+
 export const normalizeGenerationResponse = (payload) => {
   if (Array.isArray(payload)) {
-    return { results: payload, metadata: {} };
+    return { results: decodeGenerationResults(payload), metadata: {} };
   }
   if (!payload || typeof payload !== 'object') {
     return { results: [], metadata: {} };
@@ -30,13 +89,16 @@ export const normalizeGenerationResponse = (payload) => {
   if (payload.error) {
     return { results: payload, metadata: {} };
   }
-  const results = Array.isArray(payload.results) ? payload.results : [];
+  const results = Array.isArray(payload.results)
+    ? decodeGenerationResults(payload.results)
+    : [];
+  const decodedMetadata = decodeGenerationMetadata(payload.metadata);
   const metadata = (
-    payload.metadata &&
-    typeof payload.metadata === 'object' &&
-    !Array.isArray(payload.metadata)
+    decodedMetadata &&
+    typeof decodedMetadata === 'object' &&
+    !Array.isArray(decodedMetadata)
   )
-    ? payload.metadata
+    ? decodedMetadata
     : {};
   return { results, metadata };
 };
@@ -51,6 +113,7 @@ let activeRequest = null;
 const activeFeatureRequests = new Set();
 const activeHelperRequests = new Set();
 let nextRequestId = 1;
+const resourceTransport = createDiagramResourceTransport();
 
 const diagramHelperOperationNames = new Set(DIAGRAM_HELPER_OPERATION_NAMES);
 
@@ -122,6 +185,7 @@ const terminateWorker = (error = null) => {
   }
   workerInitialized = false;
   workerCapabilities = null;
+  resourceTransport.reset();
 };
 
 const ensureWorkerInitialized = () => {
@@ -191,7 +255,10 @@ export const getDiagramGenerationWorkerCapabilities = () => workerCapabilities;
 
 const collectTransferList = (payload) => {
   const buffers = new Set();
-  (payload?.files || []).forEach((file) => {
+  [
+    ...(payload?.files || []),
+    ...(payload?.stagedResources || [])
+  ].forEach((file) => {
     if (file?.bytes instanceof ArrayBuffer) {
       buffers.add(file.bytes);
     }
@@ -234,6 +301,13 @@ export const runDiagramGeneration = (payload = {}) => {
     try {
       const currentWorker = await ensureWorkerInitialized();
       if (request.settled || activeRequest !== request) return;
+      const preparedResources = await resourceTransport.prepare(payload);
+      if (request.settled || activeRequest !== request) return;
+      const workerPayload = {
+        request: payload.request,
+        resourceManifest: preparedResources.resourceManifest,
+        stagedResources: preparedResources.stagedResources
+      };
 
       const cleanup = () => {
         currentWorker.removeEventListener('message', handleMessage);
@@ -245,38 +319,58 @@ export const runDiagramGeneration = (payload = {}) => {
         settleActiveRequest(request, () => rejectRequest(error));
       };
 
+      const failWorker = (error) => {
+        fail(error);
+        if (worker === currentWorker) terminateWorker(error);
+      };
+
       function handleMessage(event) {
         const data = event.data || {};
+        if (data.type === 'test-lifecycle' && data.requestId === requestId) {
+          recordSessionLifecycleEvent(data.event?.name, data.event);
+          return;
+        }
         if (data.type !== 'run' || data.requestId !== requestId) return;
         if (data.ok) {
+          let normalized;
+          try {
+            normalized = normalizeGenerationResponse(data.results);
+          } catch (error) {
+            failWorker(error);
+            return;
+          }
+          preparedResources.commit();
           settleActiveRequest(request, () => {
-            resolveRequest({ requestId, ...normalizeGenerationResponse(data.results) });
+            resolveRequest({ requestId, ...normalized });
           });
           return;
         }
-        fail(deserializeWorkerError(data.error, 'Diagram generation failed'));
+        failWorker(deserializeWorkerError(data.error, 'Diagram generation failed'));
       }
 
       function handleError(event) {
-        fail(new Error(event.message || 'Diagram generation worker error'));
+        failWorker(new Error(event.message || 'Diagram generation worker error'));
       }
 
       function handleMessageError() {
-        fail(new Error('Diagram generation worker message could not be decoded'));
+        failWorker(new Error('Diagram generation worker message could not be decoded'));
       }
 
       request.cleanup = cleanup;
       currentWorker.addEventListener('message', handleMessage);
       currentWorker.addEventListener('error', handleError);
       currentWorker.addEventListener('messageerror', handleMessageError);
+      recordSessionLifecycleEvent('worker-post-start', { requestId });
       currentWorker.postMessage(
         {
           type: 'run',
           requestId,
-          payload
+          payload: workerPayload,
+          testLifecycleEnabled: runtimeTestHooksEnabled()
         },
-        collectTransferList(payload)
+        collectTransferList(workerPayload)
       );
+      recordSessionLifecycleEvent('worker-post-end', { requestId });
     } catch (error) {
       if (request.settled || activeRequest !== request) return;
       settleActiveRequest(request, () => rejectRequest(error));

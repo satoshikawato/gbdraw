@@ -13,7 +13,22 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = {};
+let downloadedBlob = null;
+let downloadedFilename = '';
+globalThis.document = {
+  body: { appendChild: (node) => { node.parentNode = globalThis.document.body; } },
+  createElement: () => ({
+    addEventListener() {},
+    click() { downloadedFilename = this.download; },
+    parentNode: null
+  }),
+  removeChild() {}
+};
+URL.createObjectURL = (blob) => {
+  downloadedBlob = blob;
+  return 'blob:audit-download';
+};
+URL.revokeObjectURL = () => {};
 installFakeSvgDom();
 globalThis.alert = () => {};
 globalThis.confirm = () => true;
@@ -225,6 +240,27 @@ const response = (logicalResult, featureCatalog) => ({
   metadata: featureCatalog === undefined ? {} : { featureCatalog }
 });
 
+const storedZipEntries = async (blob) => {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  const entries = [];
+  let offset = 0;
+  while (offset + 30 <= bytes.byteLength && view.getUint32(offset, true) === 0x04034B50) {
+    const size = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    entries.push({
+      name: decoder.decode(bytes.subarray(nameStart, nameStart + nameLength)),
+      text: decoder.decode(bytes.subarray(dataStart, dataStart + size))
+    });
+    offset = dataStart + size;
+  }
+  return entries;
+};
+
 const committedFeatureState = () => structuredClone({
   results: state.results.value,
   selectedResultIndex: state.selectedResultIndex.value,
@@ -249,6 +285,14 @@ const committedFeatureState = () => structuredClone({
 });
 
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
+  const structuralMetrics = {};
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      structuralMetrics[metric.name] = (
+        Number(structuralMetrics[metric.name] || 0) + Number(metric.value || 0)
+      );
+    }
+  };
   const primary = new AuditFile(['LOCUS audit\nORIGIN\n//\n'], 'active.gb', {
     type: 'text/plain',
     lastModified: 7
@@ -355,6 +399,23 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
   assert.equal(state.extractedFeatures.value.length, 1);
   assert.equal(state.biologicalFeatures.value.length, 1);
+  assert.equal(structuralMetrics.canonicalReplayFullSerializationCount || 0, 0);
+  runner.downloadCliHelperFiles();
+  assert.equal(structuralMetrics.canonicalReplayFullSerializationCount, 1);
+  assert.equal(downloadedFilename, 'audit-simple-cli-files.zip');
+  const helperEntries = await storedZipEntries(downloadedBlob);
+  const replayEntry = helperEntries.find(({ name }) => name.endsWith('.gbdraw-session.json'));
+  assert.ok(replayEntry);
+  const replay = JSON.parse(replayEntry.text);
+  assert.equal(replay.format, 'gbdraw-session');
+  assert.equal(replay.version, SESSION_VERSION);
+  assert.equal(replay.renderRequest.schema, 5);
+  assert.ok(Object.keys(replay.resources).length > 0);
+
+  const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
+  assert.equal(Object.hasOwn(firstRunPayload, 'resources'), false);
+  assert.ok(firstRunPayload.resourceManifest.length > 0);
+  assert.ok(firstRunPayload.stagedResources.every(({ bytes }) => bytes instanceof ArrayBuffer));
 
   const committedState = committedFeatureState();
   const committedExtractedFeatureIdentity = state.extractedFeatures.value;
@@ -432,7 +493,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const readyResult = result('ready.svg', 'ready');
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
-  assert.equal(activePrimaryReads, 1);
+  assert.equal(activePrimaryReads, 2);
 
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle',
@@ -868,7 +929,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(payload.request.diagramOptions.annotations.sets[0].id, 'active-annotation');
   assert.equal(payload.request.diagramOptions.depthTracks.length, 1);
   assert.equal(
-    Object.values(payload.resources).some((resource) => (
+    payload.resourceManifest.some((resource) => (
       String(resource?.kind || '').includes('comparison')
     )),
     false

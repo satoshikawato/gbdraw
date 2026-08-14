@@ -22,6 +22,18 @@ await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-f
 await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
 await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule(
+  'gbdraw/web/js/services/diagram-resource-staging.js',
+  'services/diagram-resource-staging.js'
+);
+await copyModule(
+  'gbdraw/web/js/services/canonical-resource-references.js',
+  'services/canonical-resource-references.js'
+);
+await copyModule(
+  'gbdraw/web/js/services/resource-payload-owner.js',
+  'services/resource-payload-owner.js'
+);
 await copyModule('gbdraw/web/js/services/diagram-worker-protocol.js', 'services/diagram-worker-protocol.js');
 await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
 await copyModule('gbdraw/web/js/services/byte-utils.js', 'services/byte-utils.js');
@@ -140,6 +152,17 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
   );
   const errorPayload = { error: { type: 'OutputError', message: 'No output files generated.' } };
   assert.deepEqual(normalizeGenerationResponse(errorPayload), { results: errorPayload, metadata: {} });
+  const binarySvg = new TextEncoder().encode('<svg>µ</svg>');
+  assert.deepEqual(
+    normalizeGenerationResponse({
+      results: [{ name: 'binary.svg', content: binarySvg }],
+      metadata: new TextEncoder().encode(JSON.stringify(metadata))
+    }),
+    {
+      results: [{ name: 'binary.svg', content: '<svg>µ</svg>' }],
+      metadata
+    }
+  );
 }
 
 const parseAttributes = (source) => {

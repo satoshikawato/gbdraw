@@ -56,7 +56,31 @@ const installDiagramWorkerTracking = async (page) => {
           });
           instance.events.push(`helper:request:${String(message.operation || '')}`);
         } else if (message?.type === 'run') {
-          instance.runs.push({ requestId: String(message.requestId ?? '') });
+          const resourceManifest = Array.isArray(message.payload?.resourceManifest)
+            ? message.payload.resourceManifest
+            : [];
+          const stagedResources = Array.isArray(message.payload?.stagedResources)
+            ? message.payload.stagedResources
+            : [];
+          instance.runs.push({
+            requestId: String(message.requestId ?? ''),
+            referencedResourceCount: resourceManifest.length,
+            referencedDeclaredBytes: resourceManifest.reduce(
+              (total, resource) => total + Number(resource?.size || 0),
+              0
+            ),
+            stagedResourceCount: stagedResources.length,
+            stagedResourceBytes: stagedResources.reduce(
+              (total, resource) => total + Number(resource?.bytes?.byteLength || 0),
+              0
+            ),
+            transferCount: transferList.length,
+            transferredBytes: transferList.reduce(
+              (total, item) => total + Number(item?.byteLength || 0),
+              0
+            ),
+            hasBase64ResourceTable: Boolean(message.payload?.resources)
+          });
           instance.events.push('run:request');
         }
       }
@@ -88,6 +112,7 @@ const installDiagramWorkerTracking = async (page) => {
           helpers: [],
           runs: [],
           settlements: [],
+          errors: [],
           events: [],
           terminated: false
         };
@@ -107,6 +132,20 @@ const installDiagramWorkerTracking = async (page) => {
               : ''
           });
           instance.events.push(`${message.type}:${message.ok === true ? 'ok' : 'error'}`);
+        });
+        worker.addEventListener('error', (event) => {
+          instance.errors.push({
+            type: 'error',
+            message: String(event?.message || 'Diagram Worker error')
+          });
+          instance.events.push('worker:error');
+        });
+        worker.addEventListener('messageerror', () => {
+          instance.errors.push({
+            type: 'messageerror',
+            message: 'Diagram Worker message could not be decoded'
+          });
+          instance.events.push('worker:messageerror');
         });
 
         return worker;

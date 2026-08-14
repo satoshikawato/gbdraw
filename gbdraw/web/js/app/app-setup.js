@@ -31,6 +31,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
 import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
+import { recordSessionLifecycleEvent } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
@@ -1933,7 +1934,9 @@ export const createAppSetup = () => {
       if (result?.status === 'ok') {
         await synchronizeLoadedSessionLegendEntries();
       }
+      recordSessionLifecycleEvent('history-baseline-start');
       await history.captureBaseline('Loaded session');
+      recordSessionLifecycleEvent('history-baseline-end');
     }
     return result;
   };

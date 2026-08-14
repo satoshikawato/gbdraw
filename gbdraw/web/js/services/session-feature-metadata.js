@@ -98,6 +98,37 @@ export const addRenderedIdentity = (collection, identity) => {
   collection.totalRenderedCount = collection.renderedIds.size;
 };
 
+export const collectRenderedFeatureIdentitiesFromCatalogItem = (item) => {
+  const collection = createRenderedIdentityCollection();
+  const recordIndexByKey = new Map(
+    (Array.isArray(item?.recordKeys) ? item.recordKeys : []).map(
+      (recordKey, recordIndex) => [String(recordKey || '').trim(), recordIndex]
+    )
+  );
+  const biologicalByKey = new Map();
+  (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).forEach(
+    (feature) => {
+      const recordKey = String(feature?.recordKey || '').trim();
+      const featureId = String(feature?.biologicalFeatureId || '').trim();
+      if (recordKey && featureId) biologicalByKey.set(`${recordKey}\u0000${featureId}`, feature);
+    }
+  );
+  (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
+    const recordKey = String(feature?.recordKey || '').trim();
+    const featureId = String(feature?.biologicalFeatureId || '').trim();
+    const biological = biologicalByKey.get(`${recordKey}\u0000${featureId}`) || {};
+    const renderedId = String(feature?.svgId || '').trim();
+    addRenderedIdentity(collection, {
+      renderedId,
+      stableId: biological.stableFeatureId || featureId || renderedId,
+      recordIndex: recordIndexByKey.get(recordKey),
+      recordId: biological.record_id || biological.recordId || recordKey,
+      elementId: renderedId
+    });
+  });
+  return collection;
+};
+
 /**
  * Build feature identity metadata from the sanitized, detached ingress root.
  * This function never parses SVG text; the ingestion owner supplies the one root.

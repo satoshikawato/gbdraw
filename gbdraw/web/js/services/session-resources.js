@@ -12,6 +12,10 @@ import {
 } from './depth-file-codec.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
+import {
+  collectCanonicalResourceIds,
+  isCanonicalResourceReferenceField
+} from './canonical-resource-references.js';
 
 const resourceBytes = (entry) => {
   if (isEncodedDepthFileEntry(entry)) {
@@ -41,12 +45,6 @@ const bindingForFile = (file, resourceId) => ({
   lastModified: Number(file?.lastModified) || 0
 });
 
-const RESOURCE_REFERENCE_FIELDS = new Set([
-  'resourceId',
-  'gffResourceId',
-  'fastaResourceId'
-]);
-
 const rewriteResourceRefs = (value, aliases) => {
   if (Array.isArray(value)) {
     return value.map((item) => rewriteResourceRefs(item, aliases));
@@ -56,7 +54,7 @@ const rewriteResourceRefs = (value, aliases) => {
     Object.entries(value).map(([key, item]) => [
       key,
       (
-        RESOURCE_REFERENCE_FIELDS.has(key)
+        isCanonicalResourceReferenceField(key)
         && typeof item === 'string'
         && aliases.has(item)
       )
@@ -64,26 +62,6 @@ const rewriteResourceRefs = (value, aliases) => {
         : rewriteResourceRefs(item, aliases)
     ])
   );
-};
-
-const collectResourceRefs = (value, target = new Set()) => {
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectResourceRefs(item, target));
-    return target;
-  }
-  if (!value || typeof value !== 'object') return target;
-  Object.entries(value).forEach(([key, item]) => {
-    if (
-      RESOURCE_REFERENCE_FIELDS.has(key)
-      && typeof item === 'string'
-      && item.trim()
-    ) {
-      target.add(item.trim());
-      return;
-    }
-    collectResourceRefs(item, target);
-  });
-  return target;
 };
 
 const rewriteOriginalNameHints = (webFiles, aliases) => {
@@ -207,7 +185,7 @@ export const buildSessionResources = async (state, committedRequest) => {
     });
   }
 
-  const committedResourceIds = collectResourceRefs(committedRequest.renderRequest);
+  const committedResourceIds = collectCanonicalResourceIds(committedRequest.renderRequest);
   for (const resourceId of committedResourceIds) {
     const entry = committedRequest.resources[resourceId];
     if (!entry) {

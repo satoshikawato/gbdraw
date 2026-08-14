@@ -1,5 +1,6 @@
 import {
   isSessionResourceFileView,
+  releaseSessionResourceContent,
   readSessionResourceBytes,
   readSessionResourceText,
   sessionResourceSource
@@ -71,6 +72,24 @@ export const readFileText = async (file) => {
 };
 
 export const getSessionResourceSource = (file) => sessionResourceSource(file);
+
+export const releaseFileContentCache = (file) => {
+  const key = asCacheKey(file);
+  if (!key) return false;
+  const deleted = fileByteCache.delete(key);
+  return releaseSessionResourceContent(file) || deleted;
+};
+
+export const takeFileBytesForTransfer = async (file) => {
+  const bytes = await readFileBytes(file);
+  const buffer = (
+    bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+      ? bytes.buffer
+      : bytes.slice().buffer
+  );
+  releaseFileContentCache(file);
+  return buffer;
+};
 
 export const cloneFileBytesForTransfer = async (file) => {
   const bytes = await readFileBytes(file);

@@ -442,9 +442,9 @@ const failRendererAfterMigration = async (page) => page.evaluate(async () => {
       !rendererFailureInjected &&
       message?.type === 'run' &&
       message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA &&
-      message?.payload?.resources &&
-      typeof message.payload.resources === 'object' &&
-      !Array.isArray(message.payload.resources)
+      Array.isArray(message?.payload?.resourceManifest) &&
+      Array.isArray(message?.payload?.stagedResources) &&
+      !Object.hasOwn(message.payload, 'resources')
     ) {
       rendererFailureInjected = true;
       message.payload.request = null;
