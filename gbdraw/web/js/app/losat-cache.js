@@ -244,6 +244,33 @@ export const validateProteinIdentityManifest = (manifest) => {
   return true;
 };
 
+const validatedProteinIdentityIndexes = new WeakMap();
+
+export const buildValidatedProteinIdentityIndex = (manifest) => {
+  if (!validateProteinIdentityManifest(manifest)) return null;
+  const runtimeIdsByInstance = new Map();
+  Object.entries(manifest.recordInstances).forEach(([instanceKey, instance]) => {
+    const runtimeIds = new Set(Object.values(instance.runtimeIds));
+    runtimeIdsByInstance.set(instanceKey, runtimeIds);
+  });
+  const index = Object.freeze({});
+  validatedProteinIdentityIndexes.set(index, {
+    manifest,
+    runtimeIdsByInstance,
+    runtimeHandles: null
+  });
+  return index;
+};
+
+export const releaseValidatedProteinIdentityIndex = (index) => (
+  validatedProteinIdentityIndexes.delete(index)
+);
+
+const indexedProteinIdentity = (manifest, index) => {
+  const validated = index && validatedProteinIdentityIndexes.get(index);
+  return validated?.manifest === manifest ? validated : null;
+};
+
 export const mergeProteinIdentityManifests = (manifests) => {
   const merged = emptyProteinIdentityManifest();
   (Array.isArray(manifests) ? manifests : []).forEach((manifest) => {
@@ -260,10 +287,16 @@ export const mergeProteinIdentityManifests = (manifests) => {
   return merged;
 };
 
-export const validateProteinRawEntryReferences = (entry, manifest) => {
-  if (!isProteinRawLosatCacheEntry(entry) || !validateProteinIdentityManifest(manifest)) {
+export const validateProteinRawEntryReferences = (
+  entry,
+  manifest,
+  { identityIndex = null } = {}
+) => {
+  if (!isProteinRawLosatCacheEntry(entry)) {
     return false;
   }
+  const indexedIdentity = indexedProteinIdentity(manifest, identityIndex);
+  if (!indexedIdentity && !validateProteinIdentityManifest(manifest)) return false;
   const queryInstance = manifest.recordInstances[entry.queryRecordInstanceKey];
   const subjectInstance = manifest.recordInstances[entry.subjectRecordInstanceKey];
   if (!queryInstance || !subjectInstance) return false;
@@ -277,8 +310,10 @@ export const validateProteinRawEntryReferences = (entry, manifest) => {
   ) return false;
   return rawProteinTextMatchesBindings(
     entry.text,
-    new Set(Object.values(queryInstance.runtimeIds)),
-    new Set(Object.values(subjectInstance.runtimeIds))
+    indexedIdentity?.runtimeIdsByInstance.get(entry.queryRecordInstanceKey)
+      || new Set(Object.values(queryInstance.runtimeIds)),
+    indexedIdentity?.runtimeIdsByInstance.get(entry.subjectRecordInstanceKey)
+      || new Set(Object.values(subjectInstance.runtimeIds))
   );
 };
 
@@ -446,15 +481,22 @@ const isStrictEmptyDerivedResult = (entry) => {
   return true;
 };
 
-export const validateDerivedProteinReferences = (entry, manifest) => {
-  if (
-    !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateProteinIdentityManifest(manifest)
-  ) return false;
-  const runtimeHandles = new Set();
-  Object.values(manifest.recordInstances).forEach((instance) => {
-    Object.values(instance.runtimeIds || {}).forEach((handle) => runtimeHandles.add(handle));
-  });
+export const validateDerivedProteinReferences = (
+  entry,
+  manifest,
+  { identityIndex = null } = {}
+) => {
+  if (!isLosatDerivedCacheEntry(entry, { allowLegacy: false })) return false;
+  const indexedIdentity = indexedProteinIdentity(manifest, identityIndex);
+  if (!indexedIdentity && !validateProteinIdentityManifest(manifest)) return false;
+  let runtimeHandles = indexedIdentity?.runtimeHandles || null;
+  if (!runtimeHandles) {
+    runtimeHandles = new Set();
+    Object.values(manifest.recordInstances).forEach((instance) => {
+      Object.values(instance.runtimeIds || {}).forEach((handle) => runtimeHandles.add(handle));
+    });
+    if (indexedIdentity) indexedIdentity.runtimeHandles = runtimeHandles;
+  }
   const hasForbiddenLegacyReference = (value) => (
     LEGACY_PROTEIN_REFERENCE_RE.test(value) ||
     LONG_TRANSPORT_ID_RE.test(value) ||
