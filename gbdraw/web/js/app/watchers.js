@@ -26,10 +26,13 @@ import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
   semanticWatchersSuppressed,
+  sessionResourceDiscoveryDeferred,
   refresh
 }) => {
   const suppress = Boolean(
-    rollbackInProgress?.value || semanticWatchersSuppressed?.value
+    rollbackInProgress?.value
+    || semanticWatchersSuppressed?.value
+    || sessionResourceDiscoveryDeferred?.value
   );
   await refresh({ suppress });
   return !suppress;
@@ -112,6 +115,7 @@ export const setupWatchers = ({
     pendingPaletteName,
     fileLegendCaptions,
     semanticFileWatchersSuppressed,
+    sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
     manualPriorityRules,
     manualWhitelist,
@@ -637,6 +641,7 @@ export const setupWatchers = ({
       await runRecordDiscoveryWatcher({
         rollbackInProgress: sessionImportRollbackInProgress,
         semanticWatchersSuppressed: semanticFileWatchersSuppressed,
+        sessionResourceDiscoveryDeferred,
         refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress })
       });
     }
@@ -657,6 +662,7 @@ export const setupWatchers = ({
       await runRecordDiscoveryWatcher({
         rollbackInProgress: sessionImportRollbackInProgress,
         semanticWatchersSuppressed: semanticFileWatchersSuppressed,
+        sessionResourceDiscoveryDeferred,
         refresh: refreshLinearRecordSelectors
       });
     },

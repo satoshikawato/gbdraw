@@ -5,6 +5,7 @@ import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
+import { readFileText } from '../services/file-content-cache.js';
 
 export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
@@ -73,7 +74,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   const importAnnotationTableFile = async (event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
-    importAnnotationTable(await file.text());
+    importAnnotationTable(await readFileText(file));
     event.target.value = '';
   };
   return {

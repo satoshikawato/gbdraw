@@ -25,6 +25,7 @@ await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagr
 await copyModule('gbdraw/web/js/services/diagram-worker-protocol.js', 'services/diagram-worker-protocol.js');
 await copyModule('gbdraw/web/js/services/error-normalization.js', 'services/error-normalization.js');
 await copyModule('gbdraw/web/js/services/file-content-cache.js', 'services/file-content-cache.js');
+await copyModule('gbdraw/web/js/services/depth-file-codec.js', 'services/depth-file-codec.js');
 await copyModule('gbdraw/web/js/services/json-clone.js', 'services/json-clone.js');
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
 await copyModule(
@@ -33,6 +34,11 @@ await copyModule(
 );
 await copyModule('gbdraw/web/js/services/pyodide-assets.js', 'services/pyodide-assets.js');
 await copyModule('gbdraw/web/js/services/runtime-capabilities.js', 'services/runtime-capabilities.js');
+await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
+await copyModule(
+  'gbdraw/web/js/services/session-resource-backing.js',
+  'services/session-resource-backing.js'
+);
 await copyModule('gbdraw/web/js/services/session-feature-metadata.js', 'services/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/services/svg-result-ingestion.js', 'services/svg-result-ingestion.js');
 await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');

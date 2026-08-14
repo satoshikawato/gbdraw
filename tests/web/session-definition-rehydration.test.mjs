@@ -31,7 +31,9 @@ const imported = await importSession({
 });
 
 assert.equal(imported.status, 'ok');
-assert.ok(state.files.c_gb instanceof File);
+assert.equal(state.files.c_gb instanceof File, false);
+assert.equal(typeof state.files.c_gb.arrayBuffer, 'undefined');
+assert.ok(Object.isFrozen(state.files.c_gb));
 assert.ok(state.extractedFeatures.value.length > 0);
 assert.equal(state.featureEditorStatus.status, 'summary-ready');
 assert.equal(state.featureEditorStatus.summaryCount, state.extractedFeatures.value.length);

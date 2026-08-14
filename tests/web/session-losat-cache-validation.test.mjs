@@ -18,6 +18,16 @@ installFakeSvgDom();
 let restoredPrimaryTextReads = 0;
 let restoredPrimaryArrayBufferReads = 0;
 const restoredTextReadsByName = new Map();
+globalThis.__GBDRAW_TEST_HOOKS__ = {
+  onStructuralMetric({ name, resourceName }) {
+    if (name !== 'resourceTextReadCount') return;
+    restoredPrimaryTextReads += 1;
+    restoredTextReadsByName.set(
+      resourceName,
+      (restoredTextReadsByName.get(resourceName) || 0) + 1
+    );
+  }
+};
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
     super(parts, options);

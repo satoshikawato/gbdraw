@@ -1,5 +1,12 @@
 const fileByteCache = new WeakMap();
 
+import {
+  isSessionResourceFileView,
+  readSessionResourceBytes,
+  readSessionResourceText,
+  sessionResourceSource
+} from './session-resource-backing.js';
+
 const asBytes = (value) => (
   value instanceof Uint8Array ? value : new Uint8Array(value || [])
 );
@@ -10,25 +17,40 @@ const asCacheKey = (file) => (
 
 export const readFileBytes = async (file) => {
   const key = asCacheKey(file);
-  if (!key || typeof file.arrayBuffer !== 'function') {
+  const lazyBytes = key && isSessionResourceFileView(file)
+    ? readSessionResourceBytes(file)
+    : null;
+  if (!key || (!lazyBytes && typeof file.arrayBuffer !== 'function')) {
     throw new TypeError('A File-like object with arrayBuffer() is required.');
   }
   let pending = fileByteCache.get(key);
   if (!pending) {
     pending = Promise.resolve()
-      .then(() => file.arrayBuffer())
+      .then(() => lazyBytes || file.arrayBuffer())
       .then((buffer) => new Uint8Array(buffer));
     fileByteCache.set(key, pending);
-    pending.catch(() => {
-      if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
-    });
+    if (!lazyBytes) {
+      pending.catch(() => {
+        if (fileByteCache.get(key) === pending) fileByteCache.delete(key);
+      });
+    }
   }
   return pending;
 };
 
-export const readFileText = async (file) => (
-  bytesToText(await readFileBytes(file))
-);
+export const readFileText = async (file) => {
+  const lazyText = isSessionResourceFileView(file)
+    ? readSessionResourceText(file)
+    : null;
+  if (lazyText) return lazyText;
+  if (typeof file?.arrayBuffer === 'function') {
+    return bytesToText(await readFileBytes(file));
+  }
+  if (typeof file?.text === 'function') return file.text();
+  throw new TypeError('A File-like object with arrayBuffer() or text() is required.');
+};
+
+export const getSessionResourceSource = (file) => sessionResourceSource(file);
 
 export const cloneFileBytesForTransfer = async (file) => {
   const bytes = await readFileBytes(file);

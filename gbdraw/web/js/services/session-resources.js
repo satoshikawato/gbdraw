@@ -1,6 +1,7 @@
 import {
   base64ToBytes,
   bytesToBase64,
+  getSessionResourceSource,
   readFileBytes,
   sha256Hex,
   textToBytes
@@ -9,6 +10,8 @@ import {
   decodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
+import { isAdoptedCanonicalSession } from './session-authority.js';
+import { recordStructuralMetric } from './runtime-test-hooks.js';
 
 const resourceBytes = (entry) => {
   if (isEncodedDepthFileEntry(entry)) {
@@ -84,6 +87,19 @@ const collectResourceRefs = (value, target = new Set()) => {
 };
 
 const rewriteOriginalNameHints = (webFiles, aliases) => {
+  const identityAliases = [...aliases].every(([source, target]) => source === target);
+  if (identityAliases) {
+    const rewritten = { ...(webFiles || {}) };
+    delete rewritten.bindings;
+    if (Array.isArray(rewritten.linearRecordMetadata)) {
+      rewritten.linearRecordMetadata = rewritten.linearRecordMetadata.map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+        const { losatFilename: _losatFilename, ...metadata } = entry;
+        return metadata;
+      });
+    }
+    return rewritten;
+  }
   const rewritten = rewriteResourceRefs(webFiles || {}, aliases);
   delete rewritten.bindings;
   const hints = webFiles?.resourceOriginalNames;
@@ -126,15 +142,52 @@ export const buildSessionResources = async (state, committedRequest) => {
   const resources = {};
   const aliases = new Map();
   const identityToResourceId = new Map();
+  const reuseEncodedResources = isAdoptedCanonicalSession(committedRequest);
   let nextResourceNumber = 1;
+
+  const nextResourceId = () => {
+    let resourceId;
+    do {
+      resourceId = `resource-${String(nextResourceNumber).padStart(4, '0')}`;
+      nextResourceNumber += 1;
+    } while (Object.prototype.hasOwnProperty.call(resources, resourceId));
+    return resourceId;
+  };
+
+  const adoptEncodedResource = (resourceId, descriptor) => {
+    const normalizedId = String(resourceId || '').trim();
+    if (!normalizedId || !descriptor) {
+      throw new Error('An adopted session resource requires an ID and descriptor.');
+    }
+    const existing = resources[normalizedId];
+    if (existing && existing !== descriptor) {
+      const samePayload = (
+        existing.encoding === descriptor.encoding
+        && existing.data === descriptor.data
+        && Number(existing.size) === Number(descriptor.size)
+      );
+      if (!samePayload) {
+        throw new Error(`Conflicting adopted session resource: ${normalizedId}.`);
+      }
+    }
+    resources[normalizedId] = descriptor;
+    aliases.set(normalizedId, normalizedId);
+    return normalizedId;
+  };
 
   const addBytes = async (bytes, metadata = {}) => {
     const identity = `${bytes.byteLength}:${await sha256Hex(bytes)}`;
     const existing = identityToResourceId.get(identity);
     if (existing) return existing;
 
-    const resourceId = `resource-${String(nextResourceNumber).padStart(4, '0')}`;
-    nextResourceNumber += 1;
+    recordStructuralMetric('base64EncodeCount', 1, {
+      resourceName: String(metadata.name || 'file')
+    });
+    recordStructuralMetric('encodedByteCount', bytes.byteLength, {
+      resourceName: String(metadata.name || 'file')
+    });
+    const encoded = bytesToBase64(bytes);
+    const resourceId = nextResourceId();
     identityToResourceId.set(identity, resourceId);
     resources[resourceId] = {
       kind: String(metadata.kind || 'web-file'),
@@ -143,10 +196,16 @@ export const buildSessionResources = async (state, committedRequest) => {
       size: bytes.byteLength,
       lastModified: Number(metadata.lastModified) || 0,
       encoding: 'base64',
-      data: bytesToBase64(bytes)
+      data: encoded
     };
     return resourceId;
   };
+
+  if (reuseEncodedResources) {
+    Object.entries(committedRequest.resources).forEach(([resourceId, descriptor]) => {
+      adoptEncodedResource(resourceId, descriptor);
+    });
+  }
 
   const committedResourceIds = collectResourceRefs(committedRequest.renderRequest);
   for (const resourceId of committedResourceIds) {
@@ -154,12 +213,25 @@ export const buildSessionResources = async (state, committedRequest) => {
     if (!entry) {
       throw new Error(`Committed render resource is missing: ${resourceId}.`);
     }
-    const nextId = await addBytes(resourceBytes(entry), entry);
+    const nextId = reuseEncodedResources
+      ? adoptEncodedResource(resourceId, entry)
+      : await addBytes(resourceBytes(entry), entry);
     aliases.set(resourceId, nextId);
   }
 
   const bindFile = async (file) => {
     if (!file) return null;
+    const source = getSessionResourceSource(file);
+    if (reuseEncodedResources && source?.resourceId && source?.descriptor) {
+      const resourceId = adoptEncodedResource(source.resourceId, source.descriptor);
+      return bindingForFile(file, resourceId);
+    }
+    if (reuseEncodedResources && Array.isArray(source?.descriptors)) {
+      source.descriptors.forEach(({ resourceId, descriptor }) => {
+        adoptEncodedResource(resourceId, descriptor);
+      });
+      return undefined;
+    }
     const bytes = await readFileBytes(file);
     const resourceId = await addBytes(bytes, {
       kind: 'web-file',
@@ -225,8 +297,12 @@ export const buildSessionResources = async (state, committedRequest) => {
     )
   };
 
+  const identityAliases = [...aliases].every(([source, target]) => source === target);
+
   return {
-    renderRequest: rewriteResourceRefs(committedRequest.renderRequest, aliases),
+    renderRequest: identityAliases
+      ? committedRequest.renderRequest
+      : rewriteResourceRefs(committedRequest.renderRequest, aliases),
     resources,
     webFiles: {
       ...rewriteOriginalNameHints(committedRequest.webFiles, aliases),

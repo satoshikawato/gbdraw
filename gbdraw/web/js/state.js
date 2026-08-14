@@ -41,6 +41,7 @@ const generationCancelRequested = ref(false);
 const errorLog = ref(null);
 const sessionTitle = ref('');
 const semanticFileWatchersSuppressed = ref(false);
+const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
 
 const results = ref([]);
@@ -927,6 +928,7 @@ export const state = {
   errorLog,
   sessionTitle,
   semanticFileWatchersSuppressed,
+  sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
   results,
   selectedResultIndex,

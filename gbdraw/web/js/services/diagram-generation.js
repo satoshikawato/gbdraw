@@ -5,6 +5,7 @@ import {
   DIAGRAM_HELPER_OPERATION_NAMES,
   DIAGRAM_HELPER_OPERATIONS
 } from './diagram-worker-protocol.js';
+import { recordStructuralMetric } from './runtime-test-hooks.js';
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
 
@@ -84,6 +85,7 @@ export const deserializeWorkerError = (
 const getWorker = () => {
   if (!worker) {
     worker = new Worker(resolveWorkerUrl(), { type: 'module' });
+    recordStructuralMetric('workerConstructionCount');
     workerInitialized = false;
   }
   return worker;
@@ -179,6 +181,7 @@ const ensureWorkerInitialized = () => {
   currentWorker.addEventListener('error', handleError);
   currentWorker.addEventListener('messageerror', handleMessageError);
   initState = { promise, reject: rejectInit, cleanup };
+  recordStructuralMetric('workerInitializationCount');
   currentWorker.postMessage(buildInitPayload(id));
 
   return promise;

@@ -213,9 +213,10 @@ const installUserUploadedTsv = async (page) => page.evaluate(
 
 const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
   const file = window.__GBDRAW_APP__.linearComparisonPlan.edges[0]?.file;
+  const { readFileBytes } = await import('/gbdraw/web/js/services/file-content-cache.js');
   return {
     name: file?.name || '',
-    bytes: file ? Array.from(new Uint8Array(await file.arrayBuffer())) : []
+    bytes: file ? Array.from(await readFileBytes(file)) : []
   };
 });
 
