@@ -17,6 +17,7 @@ globalThis.document = {};
 installFakeSvgDom();
 let restoredPrimaryTextReads = 0;
 let restoredPrimaryArrayBufferReads = 0;
+const restoredTextReadsByName = new Map();
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
     super(parts, options);
@@ -26,6 +27,10 @@ globalThis.File = class File extends Blob {
 
   async text() {
     restoredPrimaryTextReads += 1;
+    restoredTextReadsByName.set(
+      this.name,
+      (restoredTextReadsByName.get(this.name) || 0) + 1
+    );
     return super.text();
   }
 
@@ -97,6 +102,198 @@ const canonicalResource = (kind, name, text) => ({
   lastModified: 0,
   encoding: 'base64',
   data: btoa(text)
+});
+
+const circularSequenceCoverageSession = ({
+  includeComparisonFasta = false,
+  includeCatalogComparison = false
+} = {}) => {
+  const genbank = `LOCUS       REFERENCE                   8 bp    DNA     linear   UNK 01-JAN-1980
+ACCESSION   REFERENCE
+VERSION     REFERENCE.1
+FEATURES             Location/Qualifiers
+ORIGIN
+        1 aaccggtt
+//
+`;
+  const comparisonFasta = '>comparison\naaaacccc\n';
+  const renderRequest = {
+    schema: 5,
+    mode: 'circular',
+    grouping: 'single',
+    records: [{
+      recordKey: 'reference-record',
+      source: { kind: 'genbank', resourceId: 'reference-record' },
+      selector: null,
+      region: null,
+      presentation: {
+        label: null,
+        subtitle: null,
+        reverseComplement: false,
+        gridRow: null,
+        gridColumn: null
+      }
+    }],
+    diagramOptions: {
+      configOverrides: {},
+      colors: {
+        colorTable: null,
+        colorTableFile: null,
+        defaultColors: null,
+        defaultColorsPalette: 'default',
+        defaultColorsFile: null
+      },
+      selectedFeaturesSet: ['CDS'],
+      featureShapes: { CDS: 'arrow' },
+      plotTitle: '',
+      evalue: 1e-5,
+      bitscore: 50,
+      identity: 70,
+      alignmentLength: 0,
+      tracks: {
+        circularTrackSlots: null,
+        circularTrackAxisIndex: null,
+        linearTrackSlots: null,
+        linearTrackAxisIndex: null,
+        centerReservedRadius: null
+      },
+      output: { legend: 'left', plotTitlePosition: 'none' },
+      pairwiseMatchStyle: 'ribbon',
+      conservationBlastFiles: [{
+        resourceId: 'comparison-blast',
+        representation: 'file'
+      }],
+      ...(includeComparisonFasta
+        ? {
+            conservationFastaFiles: [{
+              resourceId: 'comparison-fasta',
+              representation: 'file'
+            }]
+          }
+        : {}),
+      conservationReference: 'subject',
+      conservationLabels: ['Comparison'],
+      conservationColors: ['#4e79a7'],
+      conservationRingWidth: 14,
+      conservationRingGap: 3
+    },
+    layout: {},
+    comparisons: [],
+    output: {
+      prefix: 'circular-sequence-coverage',
+      formats: ['interactive_svg'],
+      overwrite: false,
+      interactiveMetadataPolicy: 'auto'
+    }
+  };
+  const referenceSource = {
+    key: 'circular:record:0',
+    recordId: 'REFERENCE.1',
+    aliases: ['REFERENCE', 'REFERENCE.1'],
+    sequence: 'AACCGGTT',
+    origin: 'circular-reference',
+    recordIndex: 0
+  };
+  const catalogComparisonSource = {
+    key: 'homology:comparison:0:comparison',
+    recordId: 'comparison',
+    aliases: ['comparison'],
+    sequence: 'AAAACCCC',
+    origin: 'homology-comparison',
+    sourceIndex: 0
+  };
+  return {
+    format: 'gbdraw-session',
+    version: 40,
+    renderRequest,
+    resources: {
+      'reference-record': canonicalResource('genbank', 'reference.gbk', genbank),
+      'comparison-blast': canonicalResource(
+        'conservation-blast-file',
+        'comparison.tsv',
+        'comparison\tREFERENCE.1\t99\t4\t0\t0\t1\t4\t1\t4\t1e-20\t50\n'
+      ),
+      ...(includeComparisonFasta
+        ? {
+            'comparison-fasta': canonicalResource(
+              'conservation-fasta-file',
+              'comparison.fna',
+              comparisonFasta
+            )
+          }
+        : {})
+    },
+    webFiles: { bindings: { schema: 1 } },
+    config: {
+      form: { legend: 'left' },
+      adv: {
+        circular_track_slots_enabled: false,
+        circular_track_slots: [],
+        circular_track_slots_axis_index: null,
+        circular_track_slots_schema_version: 4,
+        linear_track_slots_enabled: false,
+        linear_track_slots: [],
+        linear_track_slots_axis_index: null,
+        linear_track_slots_schema_version: 2
+      },
+      circularConservation: {
+        enabled: true,
+        source: 'upload'
+      }
+    },
+    ui: { mode: 'circular', selectedResultIndex: 0 },
+    results: [{
+      name: 'circular-sequence-coverage',
+      content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g id="diagram"></g></svg>'
+    }],
+    features: {},
+    editorState: {
+      featureCatalog: {
+        schema: 3,
+        items: [{
+          resultIndex: 0,
+          resultName: 'circular-sequence-coverage',
+          recordKeys: ['reference-record'],
+          features: [],
+          biologicalFeatures: [],
+          orthogroups: [],
+          annotations: [],
+          comparisonMatches: [{
+            id: 'homology-comparison-1',
+            match_kind: 'homology',
+            query_record_id: 'comparison',
+            subject_record_id: 'REFERENCE.1',
+            source_index: 0,
+            reference_side: 'subject',
+            qstart: 1,
+            qend: 4,
+            sstart: 1,
+            send: 4
+          }],
+          sequenceSources: [
+            referenceSource,
+            ...(includeCatalogComparison ? [catalogComparisonSource] : [])
+          ]
+        }]
+      }
+    },
+    orthogroupState: {},
+    losatCache: { entries: [] },
+    losatDerivedCache: { entries: [] },
+    proteinIdentityManifest: {
+      schema: 2,
+      proteinSets: {},
+      recordAnalyses: {},
+      recordInstances: {}
+    }
+  };
+};
+
+const importSessionPayload = async (payload) => importSession({
+  target: {
+    files: [new Blob([JSON.stringify(payload)], { type: 'application/json' })],
+    value: 'selected'
+  }
 });
 
 test('canonical protein comparisons rehydrate typed files and pipeline state', async () => {
@@ -576,6 +773,62 @@ ORIGIN
   assert.deepEqual(
     state.matchSequenceRegistry.values().map((source) => source.recordId),
     ['CATALOG.1', 'SECOND.1']
+  );
+});
+
+test('current Circular sessions recover only supplied comparison FASTA sources', async () => {
+  restoredTextReadsByName.clear();
+  const optionalResult = await importSessionPayload(
+    circularSequenceCoverageSession()
+  );
+
+  assert.equal(optionalResult.status, 'ok');
+  assert.equal(restoredTextReadsByName.get('reference.gbk') || 0, 0);
+  assert.equal(restoredTextReadsByName.get('comparison.fna') || 0, 0);
+  assert.equal(
+    state.matchSequenceRegistry.resolve('', 'REFERENCE.1', {
+      origin: 'circular-reference'
+    }).source?.sequence,
+    'AACCGGTT'
+  );
+  assert.equal(
+    state.matchSequenceRegistry.resolve('', 'comparison', {
+      origin: 'homology-comparison',
+      sourceIndex: 0
+    }).source,
+    null
+  );
+
+  restoredTextReadsByName.clear();
+  const recoverableResult = await importSessionPayload(
+    circularSequenceCoverageSession({ includeComparisonFasta: true })
+  );
+
+  assert.equal(recoverableResult.status, 'ok');
+  assert.equal(restoredTextReadsByName.get('reference.gbk'), 1);
+  assert.equal(restoredTextReadsByName.get('comparison.fna'), 1);
+  assert.equal(
+    state.matchSequenceRegistry.resolve('', 'comparison', {
+      origin: 'homology-comparison',
+      sourceIndex: 0
+    }).source?.sequence,
+    'AAAACCCC'
+  );
+
+  restoredTextReadsByName.clear();
+  const catalogResult = await importSessionPayload(
+    circularSequenceCoverageSession({ includeCatalogComparison: true })
+  );
+
+  assert.equal(catalogResult.status, 'ok');
+  assert.equal(restoredTextReadsByName.get('reference.gbk') || 0, 0);
+  assert.equal(restoredTextReadsByName.get('comparison.fna') || 0, 0);
+  assert.equal(
+    state.matchSequenceRegistry.resolve('', 'comparison', {
+      origin: 'homology-comparison',
+      sourceIndex: 0
+    }).source?.sequence,
+    'AAAACCCC'
   );
 });
 

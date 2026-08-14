@@ -283,6 +283,79 @@ const invalidCatalogSourceReason = (source, identity) => {
   return '';
 };
 
+export const resolveCircularComparisonSequenceAvailability = ({
+  files,
+  circularConservation
+} = {}) => {
+  const sourceMode = text(circularConservation?.source).toLowerCase();
+  if (!['upload', 'losat'].includes(sourceMode)) return [];
+
+  const comparisonFiles = sourceMode === 'upload'
+    ? (files?.c_conservation_sequence_sources || [])
+    : (files?.c_conservation_fastas || []);
+  const orderedComparisonFiles = sourceMode === 'upload'
+    ? orderedConservationSources(
+        files?.c_conservation_blasts || [],
+        circularConservation
+      ).map((entry) => comparisonFiles[entry.sourceIndex] || null)
+    : orderedOptionalConservationFiles(
+        comparisonFiles,
+        circularConservation
+      );
+  return orderedComparisonFiles.map((file, sourceIndex) => ({
+    sourceIndex,
+    file: file || null,
+    availability: file ? 'recoverable' : 'never-supplied'
+  }));
+};
+
+const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
+  if (!Array.isArray(inventory)) {
+    return {
+      valid: false,
+      reason: 'The Circular comparison source availability inventory is missing.'
+    };
+  }
+  const matches = inventory.filter((entry) => (
+    entry
+    && typeof entry === 'object'
+    && !Array.isArray(entry)
+    && entry.sourceIndex === sourceIndex
+  ));
+  if (matches.length === 0) {
+    return {
+      valid: false,
+      reason: `The Circular comparison source availability is missing for source index ${sourceIndex}.`
+    };
+  }
+  if (matches.length !== 1) {
+    return {
+      valid: false,
+      reason: `The Circular comparison source availability conflicts for source index ${sourceIndex}.`
+    };
+  }
+
+  const entry = matches[0];
+  const availability = text(entry.availability).toLowerCase();
+  if (!['recoverable', 'never-supplied'].includes(availability)) {
+    return {
+      valid: false,
+      reason: `The Circular comparison source availability is unknown for source index ${sourceIndex}.`
+    };
+  }
+  const hasFile = Boolean(entry.file);
+  if (
+    (availability === 'recoverable' && !hasFile)
+    || (availability === 'never-supplied' && hasFile)
+  ) {
+    return {
+      valid: false,
+      reason: `The Circular comparison source availability conflicts with its FASTA binding at source index ${sourceIndex}.`
+    };
+  }
+  return { valid: true, availability };
+};
+
 /**
  * Decide whether a current feature catalog already contains every sequence
  * source that its feature and match-popup consumers require.
@@ -290,7 +363,8 @@ const invalidCatalogSourceReason = (source, identity) => {
 export const analyzeCatalogSequenceSourceCoverage = ({
   mode,
   catalogFeatureState,
-  renderRequest
+  renderRequest,
+  comparisonSourceAvailability
 } = {}) => {
   const normalizedMode = text(mode).toLowerCase();
   const records = Array.isArray(renderRequest?.records) ? renderRequest.records : [];
@@ -347,6 +421,8 @@ export const analyzeCatalogSequenceSourceCoverage = ({
   const requirements = new Map();
   const failedRequirementKeys = new Set();
   const failureReasons = new Map();
+  const optionalUnavailableRequirementKeys = new Set();
+  const optionalUnavailableReasons = new Map();
   const usedDisplayedRecordKeys = new Set();
   const consumerCounts = { biologicalFeatures: 0, matchEndpoints: 0 };
 
@@ -375,6 +451,16 @@ export const analyzeCatalogSequenceSourceCoverage = ({
     }
     if (recordKey) usedDisplayedRecordKeys.add(recordKey);
     if (resolution?.source) return;
+    if (resolution?.optionalUnavailable) {
+      optionalUnavailableRequirementKeys.add(key);
+      if (!optionalUnavailableReasons.has(key)) {
+        optionalUnavailableReasons.set(key, new Set());
+      }
+      optionalUnavailableReasons.get(key).add(
+        text(resolution.reason) || 'The optional comparison FASTA was never supplied.'
+      );
+      return;
+    }
     failedRequirementKeys.add(key);
     if (!failureReasons.has(key)) failureReasons.set(key, new Set());
     failureReasons.get(key).add(
@@ -496,6 +582,25 @@ export const analyzeCatalogSequenceSourceCoverage = ({
               expectedSource.recordId,
               sourceResolutionContext(expectedSource)
             );
+            if (
+              !resolution.source
+              && expectedOrigin === 'homology-comparison'
+              && expectedSource.recordId
+            ) {
+              const availability = comparisonSourceAvailabilityAt(
+                comparisonSourceAvailability,
+                expectedSource.sourceIndex
+              );
+              if (!availability.valid) {
+                resolution = { source: null, reason: availability.reason };
+              } else if (availability.availability === 'never-supplied') {
+                resolution = {
+                  source: null,
+                  optionalUnavailable: true,
+                  reason: 'The optional comparison FASTA was never supplied.'
+                };
+              }
+            }
           }
           addConsumer({
             kind: 'match-endpoint',
@@ -519,8 +624,20 @@ export const analyzeCatalogSequenceSourceCoverage = ({
       ...requirement,
       reasons: Array.from(failureReasons.get(requirement.key) || [])
     }));
+  const optionalUnavailableConsumers = requiredConsumers
+    .filter(({ key }) => (
+      optionalUnavailableRequirementKeys.has(key)
+      && !failedRequirementKeys.has(key)
+    ))
+    .map((requirement) => ({
+      ...requirement,
+      reasons: Array.from(optionalUnavailableReasons.get(requirement.key) || [])
+    }));
   const resolvedConsumers = requiredConsumers.filter(
-    ({ key }) => !failedRequirementKeys.has(key)
+    ({ key }) => (
+      !failedRequirementKeys.has(key)
+      && !optionalUnavailableRequirementKeys.has(key)
+    )
   );
   const displayedRecordsWithoutConsumers = displayedRecords.filter(
     ({ recordKey }) => !usedDisplayedRecordKeys.has(recordKey)
@@ -530,6 +647,7 @@ export const analyzeCatalogSequenceSourceCoverage = ({
     requiredConsumers,
     resolvedConsumers,
     missingConsumers,
+    optionalUnavailableConsumers,
     invalidCatalogSources,
     consumerCounts,
     displayedRecordsWithoutConsumers
@@ -775,24 +893,13 @@ export const buildRestoredMatchSequenceSources = async ({
     });
   });
 
-  const sourceMode = text(circularConservation?.source).toLowerCase() === 'upload'
-    ? 'upload'
-    : 'losat';
-  const comparisonFiles = sourceMode === 'upload'
-    ? (files?.c_conservation_sequence_sources || [])
-    : (files?.c_conservation_fastas || []);
-  const orderedComparisonFiles = sourceMode === 'upload'
-    ? orderedConservationSources(
-        files?.c_conservation_blasts || [],
-        circularConservation
-      ).map((entry) => comparisonFiles[entry.sourceIndex] || null)
-    : orderedOptionalConservationFiles(
-        comparisonFiles,
-        circularConservation
-      );
-  for (let displayIndex = 0; displayIndex < orderedComparisonFiles.length; displayIndex += 1) {
+  const comparisonSourceAvailability = resolveCircularComparisonSequenceAvailability({
+    files,
+    circularConservation
+  });
+  for (const { sourceIndex: displayIndex, file } of comparisonSourceAvailability) {
     const records = await readInputSequenceRecords(
-      orderedComparisonFiles[displayIndex],
+      file,
       'fasta'
     );
     records.forEach((record) => {

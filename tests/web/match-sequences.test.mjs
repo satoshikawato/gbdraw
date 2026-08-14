@@ -39,11 +39,45 @@ const {
   buildMatchSequenceBundle,
   createSequenceSourceRegistry,
   extractMatchedSpan,
+  resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
 } = await import(pathToFileURL(join(tempDir, 'match-sequences.js')));
 
 const textFile = (value) => ({ text: async () => value });
 const namedTextFile = (name, value) => ({ name, text: async () => value });
+
+const analyzeCircularHomologyCoverage = ({
+  comparisonSource,
+  comparisonSourceAvailability
+} = {}) => analyzeCatalogSequenceSourceCoverage({
+  mode: 'circular',
+  renderRequest: {
+    records: [{ recordKey: 'record-reference' }]
+  },
+  catalogFeatureState: {
+    items: [{
+      recordKeys: ['record-reference'],
+      sequenceSources: [{
+        key: 'circular:record:0',
+        recordId: 'reference',
+        aliases: ['reference'],
+        sequence: 'AACCGGTT',
+        origin: 'circular-reference',
+        recordIndex: 0
+      }, ...(comparisonSource ? [comparisonSource] : [])],
+      biologicalFeatures: [],
+      comparisonMatches: [{
+        id: 'homology-a',
+        match_kind: 'homology',
+        query_record_id: 'comparison',
+        subject_record_id: 'reference',
+        source_index: '0',
+        reference_side: 'subject'
+      }]
+    }]
+  },
+  comparisonSourceAvailability
+});
 
 test('extracts 1-based inclusive forward and reverse IUPAC spans', () => {
   assert.deepEqual(extractMatchedSpan('AACCGGTT', 2, 5), {
@@ -215,36 +249,18 @@ test('coverage reports a match endpoint whose displayed record source is missing
   assert.match(coverage.missingConsumers[0].reasons[0], /unavailable/);
 });
 
-test('coverage reports a homology match endpoint whose comparison source is missing', () => {
-  const referenceSource = {
-    key: 'circular:record:0',
-    recordId: 'reference',
-    aliases: ['reference'],
-    sequence: 'AACCGGTT',
-    origin: 'circular-reference',
-    recordIndex: 0
-  };
-  const coverage = analyzeCatalogSequenceSourceCoverage({
-    mode: 'circular',
-    renderRequest: {
-      records: [{ recordKey: 'record-reference' }]
+test('coverage reports a recoverable homology comparison source missing from the catalog', () => {
+  const comparisonSourceAvailability = resolveCircularComparisonSequenceAvailability({
+    files: {
+      c_conservation_blasts: [namedTextFile('comparison.tsv', '')],
+      c_conservation_sequence_sources: [namedTextFile('comparison.fna', '>comparison\nAAAA\n')]
     },
-    catalogFeatureState: {
-      items: [{
-        recordKeys: ['record-reference'],
-        sequenceSources: [referenceSource],
-        biologicalFeatures: [],
-        comparisonMatches: [{
-          id: 'homology-a',
-          match_kind: 'homology',
-          query_record_id: 'comparison',
-          subject_record_id: 'reference',
-          source_index: '0',
-          reference_side: 'subject'
-        }]
-      }]
+    circularConservation: {
+      source: 'upload',
+      series: [{ sourceIndex: 0 }]
     }
   });
+  const coverage = analyzeCircularHomologyCoverage({ comparisonSourceAvailability });
 
   assert.equal(coverage.complete, false);
   assert.deepEqual(coverage.consumerCounts, {
@@ -262,6 +278,91 @@ test('coverage reports a homology match endpoint whose comparison source is miss
     coverage.missingConsumers[0].exampleConsumers,
     [{ kind: 'match-endpoint', id: 'homology-a/query' }]
   );
+  assert.deepEqual(coverage.optionalUnavailableConsumers, []);
+});
+
+test('coverage reports a never-supplied homology comparison FASTA as optionally unavailable', () => {
+  const comparisonSourceAvailability = resolveCircularComparisonSequenceAvailability({
+    files: {
+      c_conservation_blasts: [namedTextFile('comparison.tsv', '')],
+      c_conservation_sequence_sources: []
+    },
+    circularConservation: {
+      source: 'upload',
+      series: [{ sourceIndex: 0 }]
+    }
+  });
+  const coverage = analyzeCircularHomologyCoverage({ comparisonSourceAvailability });
+
+  assert.equal(coverage.complete, true);
+  assert.deepEqual(coverage.missingConsumers, []);
+  assert.equal(coverage.optionalUnavailableConsumers.length, 1);
+  assert.equal(
+    coverage.optionalUnavailableConsumers[0].expectedSource.sourceIndex,
+    0
+  );
+  assert.deepEqual(
+    coverage.optionalUnavailableConsumers[0].exampleConsumers,
+    [{ kind: 'match-endpoint', id: 'homology-a/query' }]
+  );
+});
+
+test('coverage resolves a catalog comparison source without consulting optional availability', () => {
+  const coverage = analyzeCircularHomologyCoverage({
+    comparisonSource: {
+      key: 'homology:comparison:0:comparison',
+      recordId: 'comparison',
+      aliases: ['comparison'],
+      sequence: 'AAAACCCC',
+      origin: 'homology-comparison',
+      sourceIndex: 0
+    }
+  });
+
+  assert.equal(coverage.complete, true);
+  assert.deepEqual(coverage.missingConsumers, []);
+  assert.deepEqual(coverage.optionalUnavailableConsumers, []);
+  assert.equal(coverage.resolvedConsumers.length, 2);
+});
+
+test('coverage fails closed when comparison source availability is unknown', () => {
+  const coverage = analyzeCircularHomologyCoverage({
+    comparisonSourceAvailability: []
+  });
+
+  assert.equal(coverage.complete, false);
+  assert.equal(coverage.missingConsumers.length, 1);
+  assert.deepEqual(coverage.optionalUnavailableConsumers, []);
+  assert.match(coverage.missingConsumers[0].reasons[0], /availability is missing/);
+});
+
+test('comparison availability preserves nulls and duplicate-name source ordering', () => {
+  const firstBlast = {
+    name: 'duplicate.tsv',
+    size: 12,
+    lastModified: 34,
+    text: async () => ''
+  };
+  const secondBlast = { ...firstBlast };
+  const firstFasta = namedTextFile('first.fna', '>first\nAAAA\n');
+  const availability = resolveCircularComparisonSequenceAvailability({
+    files: {
+      c_conservation_blasts: [firstBlast, secondBlast],
+      c_conservation_sequence_sources: [firstFasta, null]
+    },
+    circularConservation: {
+      source: 'upload',
+      series: [
+        { sourceKey: 'duplicate.tsv|12|34|1', sourceIndex: 1 },
+        { sourceKey: 'duplicate.tsv|12|34|0', sourceIndex: 0 }
+      ]
+    }
+  });
+
+  assert.deepEqual(availability, [
+    { sourceIndex: 0, file: null, availability: 'never-supplied' },
+    { sourceIndex: 1, file: firstFasta, availability: 'recoverable' }
+  ]);
 });
 
 test('builds deterministic single and combined FASTA in query-subject order', () => {
