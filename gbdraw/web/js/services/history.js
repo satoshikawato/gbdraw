@@ -116,6 +116,7 @@ export const createHistoryManager = ({
   applyCheckpoint,
   signatureFor = (value) => JSON.stringify(value),
   fileStore = null,
+  collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
   makeRef = makeBox
@@ -143,6 +144,8 @@ export const createHistoryManager = ({
     intentBuilds: 0,
     artifactCheckpointBuilds: 0,
     signatureComputations: 0,
+    intentSignatureComputations: 0,
+    artifactCheckpointSignatureComputations: 0,
     byteEstimateComputations: 0,
     historySvgBytes: 0
   };
@@ -160,6 +163,11 @@ export const createHistoryManager = ({
 
   const computeSignature = (value, scope) => {
     diagnostics.signatureComputations += 1;
+    if (scope === 'artifact-checkpoint') {
+      diagnostics.artifactCheckpointSignatureComputations += 1;
+    } else if (String(scope || '').startsWith('intent')) {
+      diagnostics.intentSignatureComputations += 1;
+    }
     const signature = signatureFor(value);
     emitHistoryDiagnostic({ type: 'signature', scope, bytes: String(signature || '').length * 2 });
     return signature;
@@ -172,6 +180,16 @@ export const createHistoryManager = ({
     return bytes;
   };
 
+  const collectIntentFileIds = (intent) => {
+    const fileIds = collectHistoryFileIds(intent, new Set());
+    if (typeof collectCurrentFileIds !== 'function') return fileIds;
+    const currentIds = collectCurrentFileIds();
+    if (currentIds && typeof currentIds[Symbol.iterator] === 'function') {
+      for (const fileId of currentIds) fileIds.add(fileId);
+    }
+    return fileIds;
+  };
+
   const captureIntent = async () => {
     capturing.value = true;
     diagnostics.intentBuilds += 1;
@@ -182,7 +200,7 @@ export const createHistoryManager = ({
       return {
         intent,
         signature,
-        fileIds: collectHistoryFileIds(intent, new Set())
+        fileIds: collectIntentFileIds(intent)
       };
     } finally {
       capturing.value = false;
@@ -327,6 +345,20 @@ export const createHistoryManager = ({
     if (!transaction) return;
     transaction.closed = true;
     if (activeTransaction === transaction) activeTransaction = null;
+  };
+
+  const initializeIntentBaseline = async (_label = 'Intent baseline') => {
+    if (restoring.value) return false;
+    if (activeTransaction && !activeTransaction.closed) cancel(activeTransaction);
+    const intentRecord = await captureIntent();
+    clearStack(undoStack);
+    clearRedo();
+    currentCheckpoint = null;
+    currentCheckpointSignature = '';
+    setCurrentIntent(intentRecord);
+    enforceLimits();
+    touch();
+    return true;
   };
 
   const buildPatchEntry = (transaction, afterRecord, options = {}) => {
@@ -476,10 +508,19 @@ export const createHistoryManager = ({
     const execute = async (tx) => {
       try {
         const result = await fn();
+        if (
+          typeof options.shouldCommit === 'function'
+          && !options.shouldCommit(result)
+        ) {
+          if (tx) tx.closed = true;
+          releaseUnreferencedFiles();
+          return result;
+        }
         await commitCheckpoint(tx, options);
         return result;
       } catch (error) {
         if (tx) tx.closed = true;
+        releaseUnreferencedFiles();
         throw error;
       }
     };
@@ -562,7 +603,7 @@ export const createHistoryManager = ({
     setCurrentIntent({
       intent: nextIntent,
       signature,
-      fileIds: collectHistoryFileIds(nextIntent, new Set())
+      fileIds: collectIntentFileIds(nextIntent)
     });
   };
 
@@ -653,6 +694,7 @@ export const createHistoryManager = ({
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
     historyLimitMessage,
+    initializeIntentBaseline,
     redo,
     redoLabel,
     restoring,

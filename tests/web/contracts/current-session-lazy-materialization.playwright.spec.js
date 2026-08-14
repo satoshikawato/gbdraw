@@ -42,6 +42,17 @@ const ZERO_PREVIEW_METRICS = Object.fromEntries(
   STRUCTURAL_METRICS.map((name) => [name, 0])
 );
 
+const ZERO_ARTIFACT_HISTORY_BASELINE = Object.freeze({
+  artifactCheckpointBuilds: 0,
+  artifactCheckpointSignatureComputations: 0,
+  artifactSvgBytes: 0,
+  intentBuilds: 1,
+  intentSignatureComputations: 1,
+  undoCount: 0,
+  redoCount: 0,
+  currentCheckpointAbsent: true
+});
+
 const installLazySessionProbe = async (page) => page.addInitScript((metricNames) => {
   const metricMap = () => Object.fromEntries(metricNames.map((name) => [name, 0]));
   const hookMetrics = metricMap();
@@ -57,6 +68,7 @@ const installLazySessionProbe = async (page) => page.addInitScript((metricNames)
     details,
     lifecycle,
     historyLoaded: false,
+    historyBaseline: null,
     ignoreFile(file) {
       if (file && typeof file === 'object') ignoredFiles.add(file);
     },
@@ -70,6 +82,7 @@ const installLazySessionProbe = async (page) => page.addInitScript((metricNames)
       details.length = 0;
       lifecycle.length = 0;
       this.historyLoaded = false;
+      this.historyBaseline = null;
     },
     snapshot() {
       return {
@@ -81,7 +94,8 @@ const installLazySessionProbe = async (page) => page.addInitScript((metricNames)
         nativeMetrics: { ...nativeMetrics },
         details: details.map((detail) => ({ ...detail })),
         lifecycle: lifecycle.map((event) => ({ ...event })),
-        historyLoaded: this.historyLoaded
+        historyLoaded: this.historyLoaded,
+        historyBaseline: this.historyBaseline ? { ...this.historyBaseline } : null
       };
     }
   };
@@ -141,15 +155,40 @@ const installLazySessionProbe = async (page) => page.addInitScript((metricNames)
 const armHistoryCompletion = (page) => page.evaluate(() => {
   const history = window.__GBDRAW_HISTORY__;
   const probe = window.__GBDRAW_LAZY_SESSION_PROBE__;
-  const original = history.captureBaseline;
+  if (!history?.initializeIntentBaseline) {
+    throw new Error('The lightweight session-import History boundary is unavailable.');
+  }
+  const original = history.initializeIntentBaseline;
   probe.historyLoaded = false;
-  history.captureBaseline = async (label, ...args) => {
-    const result = await original(label, ...args);
-    if (label === 'Loaded session') {
-      probe.historyLoaded = true;
-      history.captureBaseline = original;
+  probe.historyBaseline = null;
+  history.initializeIntentBaseline = async (label, ...args) => {
+    const before = history.getDiagnostics();
+    try {
+      const result = await original(label, ...args);
+      if (label === 'Loaded session') {
+        const after = history.getDiagnostics();
+        probe.historyBaseline = {
+          artifactCheckpointBuilds:
+            after.artifactCheckpointBuilds - before.artifactCheckpointBuilds,
+          artifactCheckpointSignatureComputations:
+            after.artifactCheckpointSignatureComputations
+              - before.artifactCheckpointSignatureComputations,
+          artifactSvgBytes: after.historySvgBytes - before.historySvgBytes,
+          intentBuilds: after.intentBuilds - before.intentBuilds,
+          intentSignatureComputations:
+            after.intentSignatureComputations - before.intentSignatureComputations,
+          undoCount: history.getUndoCount(),
+          redoCount: history.getRedoCount(),
+          currentCheckpointAbsent: history.getCurrentCheckpoint() === null
+        };
+        probe.historyLoaded = true;
+        history.initializeIntentBaseline = original;
+      }
+      return result;
+    } catch (error) {
+      history.initializeIntentBaseline = original;
+      throw error;
     }
-    return result;
   };
 });
 
@@ -234,6 +273,11 @@ const lifecycleTiming = (snapshot) => {
       'current-session-preflight-start',
       'current-session-preflight-end'
     ),
+    historyBaselineMs: phaseDuration(
+      snapshot.lifecycle,
+      'history-baseline-start',
+      'history-baseline-end'
+    ),
     preflightSubphases: Object.fromEntries(
       Object.entries(PREFLIGHT_SUBPHASES).map(([metric, event]) => [
         metric,
@@ -253,6 +297,7 @@ test('synthetic current session restores and exports without materializing resou
 }) => {
   test.setTimeout(180_000);
   await openInstrumentedApp(page);
+  await armHistoryCompletion(page);
 
   const imported = await loadSyntheticSession(page);
   expect(imported).toEqual({ status: 'ok', degradedRecovery: false, message: '' });
@@ -260,6 +305,42 @@ test('synthetic current session restores and exports without materializing resou
   expect(preview.savedPreviewVisible).toBe(true);
   expect(preview.resultCount).toBe(1);
   expect(preview.structural).toEqual(ZERO_PREVIEW_METRICS);
+  expect(preview.historyBaseline).toEqual(ZERO_ARTIFACT_HISTORY_BASELINE);
+
+  const intentHistory = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    const loadedValue = Boolean(app.form.show_scale);
+    const loadedContent = app.results[app.selectedResultIndex]?.content || '';
+    await history.runUndoable('Change coordinate scale', () => {
+      app.form.show_scale = !loadedValue;
+    });
+    const editedValue = Boolean(app.form.show_scale);
+    const undoResult = await history.undo();
+    const undoValue = Boolean(app.form.show_scale);
+    const redoResult = await history.redo();
+    return {
+      loadedValue,
+      editedValue,
+      undoResult,
+      undoValue,
+      redoResult,
+      redoValue: Boolean(app.form.show_scale),
+      undoCount: history.getUndoCount(),
+      redoCount: history.getRedoCount(),
+      previewUnchanged: app.results[app.selectedResultIndex]?.content === loadedContent
+    };
+  });
+  expect(intentHistory).toMatchObject({
+    editedValue: !intentHistory.loadedValue,
+    undoResult: true,
+    undoValue: intentHistory.loadedValue,
+    redoResult: true,
+    redoValue: !intentHistory.loadedValue,
+    undoCount: 1,
+    redoCount: 0,
+    previewUnchanged: true
+  });
 
   await page.evaluate(() => {
     window.__GBDRAW_APP__.sessionTitle = 'lazy-unchanged-export';
@@ -322,6 +403,7 @@ test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, 
   expect(snapshot.savedPreviewVisible).toBe(true);
   expect(snapshot.resultCount).toBe(1);
   expect(snapshot.structural).toEqual(ZERO_PREVIEW_METRICS);
+  expect(snapshot.historyBaseline).toEqual(ZERO_ARTIFACT_HISTORY_BASELINE);
   expect(timing.ready).toMatchObject({
     status: 'success',
     degradedRecovery: false
@@ -329,12 +411,15 @@ test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, 
   expect(timing.firstPreviewMs).toBeGreaterThan(0);
   expect(timing.interactiveReadyMs).toBeGreaterThanOrEqual(timing.firstPreviewMs);
   expect(timing.currentSessionPreflightMs).toBeLessThan(30_000);
+  expect(timing.historyBaselineMs).toBeGreaterThanOrEqual(0);
+  expect(timing.historyBaselineMs).toBeLessThan(30_000);
   expect(preflightStructural.proteinManifestFullValidationCount).toBe(1);
   expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
 
   await testInfo.attach('vibrio-lazy-session-metrics.json', {
     body: Buffer.from(JSON.stringify({
       structural: snapshot.structural,
+      historyBaseline: snapshot.historyBaseline,
       preflightStructural,
       timing
     }, null, 2)),
@@ -342,6 +427,7 @@ test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, 
   });
   console.log(`Vibrio lazy-session evidence: ${JSON.stringify({
     structural: snapshot.structural,
+    historyBaseline: snapshot.historyBaseline,
     preflightStructural,
     timing
   })}`);
@@ -350,16 +436,47 @@ test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, 
 test('Generate materializes only required resources and reuses one Worker', async ({ page }) => {
   test.setTimeout(300_000);
   await openInstrumentedApp(page);
+  await armHistoryCompletion(page);
   expect(await loadSyntheticSession(page)).toMatchObject({
     status: 'ok',
     degradedRecovery: false
   });
   const preview = await probeSnapshot(page);
   expect(preview.structural).toEqual(ZERO_PREVIEW_METRICS);
+  expect(preview.historyBaseline).toEqual(ZERO_ARTIFACT_HISTORY_BASELINE);
 
   const generated = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    const svgIdentity = (content) => {
+      const documentElement = new DOMParser()
+        .parseFromString(String(content || ''), 'image/svg+xml')
+        .documentElement;
+      const normalized = new XMLSerializer().serializeToString(documentElement);
+      let hash = 2166136261;
+      for (let index = 0; index < normalized.length; index += 1) {
+        hash ^= normalized.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+      }
+      return { length: normalized.length, hash: hash >>> 0 };
+    };
+    const snapshotResultState = () => ({
+      names: app.results.map((result) => String(result?.name || '')),
+      svgIdentities: app.results.map((result) => svgIdentity(result?.content)),
+      selectedResultIndex: app.selectedResultIndex,
+      resultCount: app.results.length,
+      featureCount: app.extractedFeatures.length,
+      orthogroupCount: app.orthogroups.length
+    });
+    const loaded = snapshotResultState();
     const first = await app.runAnalysis();
+    const generatedState = snapshotResultState();
+    const firstUndoCount = history.getUndoCount();
+    const firstRedoCount = history.getRedoCount();
+    const undone = await history.undo();
+    const restoredLoadedState = snapshotResultState();
+    const redone = await history.redo();
+    const restoredGeneratedState = snapshotResultState();
     const {
       DIAGRAM_HELPER_OPERATIONS,
       runDiagramHelperOperation
@@ -372,6 +489,14 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     return {
       first,
       second,
+      loaded,
+      generatedState,
+      firstUndoCount,
+      firstRedoCount,
+      undone,
+      restoredLoadedState,
+      redone,
+      restoredGeneratedState,
       helperWidth: Number(helper?.result?.width || 0),
       errorSummary: String(app.errorLog?.summary || '')
     };
@@ -382,6 +507,16 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     errorSummary: ''
   });
   expect(generated.helperWidth).toBeGreaterThan(0);
+  expect(generated.firstUndoCount).toBe(1);
+  expect(generated.firstRedoCount).toBe(0);
+  expect(generated.undone).toBe(true);
+  expect(generated.restoredLoadedState).toEqual(generated.loaded);
+  expect(generated.redone).toBe(true);
+  expect(generated.restoredGeneratedState).toEqual(generated.generatedState);
+  expect(generated.restoredGeneratedState.selectedResultIndex).toBeGreaterThanOrEqual(0);
+  expect(generated.restoredGeneratedState.selectedResultIndex).toBeLessThan(
+    generated.restoredGeneratedState.resultCount
+  );
 
   const snapshot = await probeSnapshot(page);
   const materializedIds = new Set(
@@ -488,6 +623,29 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   expect(afterAccess.structural.resourceByteReadCount).toBe(1);
   expect(afterAccess.structural.workerConstructionCount).toBe(0);
   expect(afterAccess.structural.workerInitializationCount).toBe(0);
+
+  const failedGenerate = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    const loadedContent = app.results[app.selectedResultIndex]?.content || '';
+    const result = await app.runAnalysis();
+    return {
+      status: result?.status,
+      previewCommitted: app.results[app.selectedResultIndex]?.content === loadedContent,
+      previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
+      undoCount: history.getUndoCount(),
+      redoCount: history.getRedoCount(),
+      currentCheckpointAbsent: history.getCurrentCheckpoint() === null
+    };
+  });
+  expect(failedGenerate).toEqual({
+    status: 'error',
+    previewCommitted: true,
+    previewVisible: true,
+    undoCount: 0,
+    redoCount: 0,
+    currentCheckpointAbsent: true
+  });
 });
 
 test('a frozen v39 session round-trips through the legacy migration path', async ({ page }) => {
