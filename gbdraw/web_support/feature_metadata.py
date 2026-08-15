@@ -324,6 +324,7 @@ def extract_features_from_records_payload(
     specific_color_rules: dict | None = None,
     linear_rendered_feature_ids: bool = False,
     include_biological_features: bool = False,
+    include_selector_safety_scope: bool = True,
 ) -> dict[str, object]:
     """Extract feature metadata from processed records.
 
@@ -339,7 +340,12 @@ def extract_features_from_records_payload(
     features: list[dict[str, object]] = []
     biological_features: list[dict[str, object]] = []
     record_ids: list[str] = []
-    selector_safety_scope = _build_selector_safety_scope(records)
+    selector_safety_scope: list[dict[str, object]] = []
+    if include_selector_safety_scope:
+        from gbdraw.api.prepared import record_prepared_input_metric
+
+        record_prepared_input_metric("selectorSafetyScopeBuildCount")
+        selector_safety_scope = _build_selector_safety_scope(records)
     idx = 0
     biological_idx = 0
     for rec_idx, record in enumerate(records):

@@ -3400,11 +3400,14 @@ def _resource_ref(
 
 def _read_canonical_table(file_path: Path, *, context: str) -> DataFrame:
     try:
-        return read_csv(file_path, sep="\t")
+        table = read_csv(file_path, sep="\t")
     except Exception as exc:
         raise CanonicalRequestDecodingError(
             f"Could not decode canonical TSV resource for {context}."
         ) from exc
+    from gbdraw.api.prepared import register_prepared_resource_value
+
+    return register_prepared_resource_value(table, file_path)
 
 
 def _typed_json_resource(
@@ -3476,12 +3479,15 @@ def _read_typed_json_resource(
         raise CanonicalRequestDecodingError(
             f"Canonical JSON resource metadata does not match {path}."
         )
-    return _decode_typed_tree(
+    value = _decode_typed_tree(
         payload["value"],
         expected,
         path=f"{path}.value",
         resource_schema=resource_schema,
     )
+    from gbdraw.api.prepared import register_prepared_resource_value
+
+    return register_prepared_resource_value(value, resource_path)
 
 
 def _encode_typed_tree(value: object) -> Any:

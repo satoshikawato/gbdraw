@@ -11,6 +11,29 @@ const RENDER_RESOURCE_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const RENDER_RESOURCE_TOKEN_RE = /^render-resource-[1-9][0-9]*$/;
 const cachedRenderResources = new Map();
 
+export const buildPreparedResourceIdentityMap = (resourceManifest) => {
+  if (!Array.isArray(resourceManifest)) {
+    throw new TypeError('Prepared resource identities require a resource manifest.');
+  }
+  const identities = {};
+  resourceManifest.forEach((metadata) => {
+    const resourceId = String(metadata?.resourceId || '').trim();
+    const cacheToken = String(metadata?.cacheToken || '');
+    const size = Number(metadata?.size);
+    if (!RENDER_RESOURCE_ID_RE.test(resourceId) || resourceId in identities) {
+      throw new TypeError(`Invalid or duplicate prepared render resource '${resourceId}'.`);
+    }
+    if (!RENDER_RESOURCE_TOKEN_RE.test(cacheToken)) {
+      throw new TypeError(`Invalid cache token for prepared render resource '${resourceId}'.`);
+    }
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new TypeError(`Invalid byte size for prepared render resource '${resourceId}'.`);
+    }
+    identities[resourceId] = { cacheToken, size };
+  });
+  return identities;
+};
+
 const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
   if (!enabled) return;
   self.postMessage({
@@ -826,8 +849,12 @@ const runGeneration = async ({
     });
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-start');
     const resourcePathsJson = JSON.stringify(resourcePaths);
+    const preparedResourceIdentitiesJson = JSON.stringify(
+      buildPreparedResourceIdentityMap(resourceManifest)
+    );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
-      characters: resourcePathsJson.length
+      characters: resourcePathsJson.length,
+      preparedIdentityCharacters: preparedResourceIdentitiesJson.length
     });
     emitTestLifecycle(
       testLifecycleEnabled,
@@ -840,7 +867,8 @@ const runGeneration = async ({
       requestJson,
       resourcePathsJson,
       workspace,
-      testLifecycleEnabled
+      testLifecycleEnabled,
+      preparedResourceIdentitiesJson
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-start');

@@ -5,11 +5,41 @@ globalThis.self = {};
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
+  buildPreparedResourceIdentityMap,
   buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
   resolveGenerationCleanupOutcome,
   serializeError
 } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
+
+const preparedIdentities = buildPreparedResourceIdentityMap([
+  {
+    resourceId: 'record-1-genbank',
+    cacheToken: 'render-resource-7',
+    size: 1234,
+    name: 'secret-name.gbk',
+    path: '/temporary/workspace/0001.bin',
+    kind: 'genbank'
+  }
+]);
+assert.deepEqual(preparedIdentities, {
+  'record-1-genbank': { cacheToken: 'render-resource-7', size: 1234 }
+});
+assert.equal(JSON.stringify(preparedIdentities).includes('secret-name.gbk'), false);
+assert.equal(JSON.stringify(preparedIdentities).includes('/temporary/workspace'), false);
+assert.throws(
+  () => buildPreparedResourceIdentityMap([
+    { resourceId: 'record-1-genbank', cacheToken: 'bad-token', size: 1 }
+  ]),
+  /Invalid cache token/
+);
+assert.throws(
+  () => buildPreparedResourceIdentityMap([
+    { resourceId: 'record-1-genbank', cacheToken: 'render-resource-1', size: 1 },
+    { resourceId: 'record-1-genbank', cacheToken: 'render-resource-2', size: 1 }
+  ]),
+  /duplicate/
+);
 
 const svgBytes = new TextEncoder().encode('<svg />');
 const metadataBytes = new TextEncoder().encode('{"featureCatalog":{}}');

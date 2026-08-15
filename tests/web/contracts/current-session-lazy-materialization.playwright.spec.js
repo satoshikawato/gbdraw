@@ -659,6 +659,138 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.instances[0].terminated).toBe(false);
 });
 
+test('render-only Generate reuses preparation and remains undoable', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openInstrumentedApp(page);
+  await armHistoryCompletion(page);
+  expect(await loadSyntheticSession(page)).toMatchObject({
+    status: 'ok',
+    degradedRecovery: false
+  });
+
+  const first = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    window.__GBDRAW_LAZY_SESSION_PROBE__.reset();
+    const before = history.getDiagnostics();
+    const result = await app.runAnalysis();
+    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const after = history.getDiagnostics();
+    window.__GBDRAW_PREPARED_CACHE_A__ = content;
+    window.__GBDRAW_PREPARED_CACHE_SCALE_A__ = Boolean(app.form.show_scale);
+    return {
+      result,
+      contentLength: content.length,
+      showScale: Boolean(app.form.show_scale),
+      undoCount: history.getUndoCount(),
+      historyEntries: Number(after.artifactReplacementHistoryEntryCount || 0)
+        - Number(before.artifactReplacementHistoryEntryCount || 0),
+      errorSummary: String(app.errorLog?.summary || '')
+    };
+  });
+  const firstProbe = await probeSnapshot(page);
+  expect(first).toMatchObject({
+    result: { status: 'ok' },
+    undoCount: 1,
+    historyEntries: 1,
+    errorSummary: ''
+  });
+  expect(first.contentLength).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.form.show_scale = !Boolean(app.form.show_scale);
+    window.__GBDRAW_LAZY_SESSION_PROBE__.reset();
+  });
+  const second = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    const before = history.getDiagnostics();
+    const result = await app.runAnalysis();
+    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const after = history.getDiagnostics();
+    const undoOk = await history.undo();
+    const afterUndo = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const redoOk = await history.redo();
+    const afterRedo = String(app.results?.[app.selectedResultIndex]?.content || '');
+    return {
+      result,
+      outputChanged: content !== window.__GBDRAW_PREPARED_CACHE_A__,
+      renderOnlyValueChanged:
+        Boolean(app.form.show_scale) !== window.__GBDRAW_PREPARED_CACHE_SCALE_A__,
+      historyEntries: Number(after.artifactReplacementHistoryEntryCount || 0)
+        - Number(before.artifactReplacementHistoryEntryCount || 0),
+      undoOk,
+      undoRestoredA: afterUndo === window.__GBDRAW_PREPARED_CACHE_A__,
+      redoOk,
+      redoRestoredB: afterRedo === content,
+      undoCount: history.getUndoCount(),
+      redoCount: history.getRedoCount(),
+      errorSummary: String(app.errorLog?.summary || '')
+    };
+  });
+  const secondProbe = await probeSnapshot(page);
+  expect(second).toEqual({
+    result: { status: 'ok' },
+    outputChanged: true,
+    renderOnlyValueChanged: true,
+    historyEntries: 1,
+    undoOk: true,
+    undoRestoredA: true,
+    redoOk: true,
+    redoRestoredB: true,
+    undoCount: 2,
+    redoCount: 0,
+    errorSummary: ''
+  });
+
+  const firstPython = firstProbe.lifecycle.find(
+    ({ name }) => name === 'python-diagnostics'
+  );
+  const secondPython = secondProbe.lifecycle.find(
+    ({ name }) => name === 'python-diagnostics'
+  );
+  expect(firstPython?.metrics).toMatchObject({
+    parsedSourceCacheMissCount: 1,
+    parsedSourceParseCount: 1,
+    resolvedRecordCacheMissCount: 1,
+    resolvedRecordBuildCount: 1,
+    interactiveContextCacheMissCount: 1,
+    interactiveContextBuildCount: 1,
+    interactiveFeatureTraversalCount: 1,
+    selectorSafetyScopeBuildCount: 0,
+    preparedInputCacheMutationViolationCount: 0
+  });
+  expect(secondPython?.metrics).toMatchObject({
+    parsedSourceCacheHitCount: 1,
+    parsedSourceParseCount: 0,
+    resolvedRecordCacheHitCount: 1,
+    resolvedRecordBuildCount: 0,
+    interactiveContextCacheHitCount: 1,
+    interactiveContextBuildCount: 0,
+    interactiveFeatureTraversalCount: 0,
+    selectorSafetyScopeBuildCount: 0,
+    preparedInputCacheMutationViolationCount: 0,
+    featureCatalogSvgParseCount: 1,
+    featureCatalogFullDomTraversalCount: 1
+  });
+  expect(Number(secondPython?.metrics?.preparedInputCacheRetainedBytes || 0))
+    .toBeGreaterThan(0);
+  expect(Number(secondPython?.timingsMs?.drawing || 0)).toBeGreaterThan(0);
+  expect(Number(secondPython?.timingsMs?.svgWrite || 0)).toBeGreaterThan(0);
+  expect(Number(secondProbe.hookMetrics.resourceMaterializationCount || 0)).toBe(0);
+  expect(secondProbe.lifecycle.find(
+    ({ name }) => name === 'worker-resource-linking-end'
+  )).toMatchObject({ newlyStagedResourceBytes: 0 });
+
+  const worker = await getDiagramWorkerActivity(page);
+  expect(worker.constructions).toBe(1);
+  expect(worker.initializations).toBe(1);
+  expect(worker.runs).toBe(2);
+  expect(worker.instances).toHaveLength(1);
+  expect(worker.instances[0].terminated).toBe(false);
+});
+
 test('the real Cancel control restores the committed artifact and leaves no History entry', async ({
   page
 }) => {
@@ -785,6 +917,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
   expect(canceledWorker.runs).toBe(1);
   expect(canceledWorker.instances[0].terminated).toBe(true);
 
+  await page.evaluate(() => window.__GBDRAW_LAZY_SESSION_PROBE__.reset());
   const retry = await page.evaluate(async () => ({
     result: await window.__GBDRAW_APP__.runAnalysis(),
     undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
@@ -798,6 +931,21 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     redoCount: 0,
     previewVisible: true,
     errorSummary: ''
+  });
+  const retryProbe = await probeSnapshot(page);
+  const retryPython = retryProbe.lifecycle.find(
+    ({ name }) => name === 'python-diagnostics'
+  );
+  expect(retryPython?.metrics).toMatchObject({
+    parsedSourceCacheHitCount: 0,
+    parsedSourceCacheMissCount: 1,
+    parsedSourceParseCount: 1,
+    resolvedRecordCacheHitCount: 0,
+    resolvedRecordCacheMissCount: 1,
+    resolvedRecordBuildCount: 1,
+    interactiveContextCacheHitCount: 0,
+    interactiveContextCacheMissCount: 1,
+    interactiveContextBuildCount: 1
   });
   const afterRetryWorker = await getDiagramWorkerActivity(page);
   expect(afterRetryWorker.constructions).toBe(2);

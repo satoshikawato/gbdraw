@@ -226,6 +226,48 @@ const generationPhaseAttribution = (outcome, probe) => {
     pythonFeatureCatalogMs: Number(pythonTimings.featureCatalog || 0),
     pythonGeometryMetadataMs: Number(pythonTimings.geometryMetadata || 0),
     pythonArtifactMetrics: { ...pythonMetrics },
+    preparedInputCacheStructural: {
+      parsedSourceCacheHitCount: Number(
+        pythonMetrics.parsedSourceCacheHitCount || 0
+      ),
+      parsedSourceCacheMissCount: Number(
+        pythonMetrics.parsedSourceCacheMissCount || 0
+      ),
+      parsedSourceParseCount: Number(pythonMetrics.parsedSourceParseCount || 0),
+      resolvedRecordCacheHitCount: Number(
+        pythonMetrics.resolvedRecordCacheHitCount || 0
+      ),
+      resolvedRecordCacheMissCount: Number(
+        pythonMetrics.resolvedRecordCacheMissCount || 0
+      ),
+      resolvedRecordBuildCount: Number(
+        pythonMetrics.resolvedRecordBuildCount || 0
+      ),
+      interactiveContextCacheHitCount: Number(
+        pythonMetrics.interactiveContextCacheHitCount || 0
+      ),
+      interactiveContextCacheMissCount: Number(
+        pythonMetrics.interactiveContextCacheMissCount || 0
+      ),
+      interactiveContextBuildCount: Number(
+        pythonMetrics.interactiveContextBuildCount || 0
+      ),
+      interactiveFeatureTraversalCount: Number(
+        pythonMetrics.interactiveFeatureTraversalCount || 0
+      ),
+      selectorSafetyScopeBuildCount: Number(
+        pythonMetrics.selectorSafetyScopeBuildCount || 0
+      ),
+      preparedInputCacheEvictionCount: Number(
+        pythonMetrics.preparedInputCacheEvictionCount || 0
+      ),
+      preparedInputCacheRetainedBytes: Number(
+        pythonMetrics.preparedInputCacheRetainedBytes || 0
+      ),
+      preparedInputCacheMutationViolationCount: Number(
+        pythonMetrics.preparedInputCacheMutationViolationCount || 0
+      )
+    },
     featureCatalogStructural: {
       featureCatalogSvgParseCount: Number(
         pythonMetrics.featureCatalogSvgParseCount || 0
@@ -789,6 +831,43 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     legacyFeatureOverrideScanSkipCount: 2
   });
   expect(secondPhaseAttribution.pythonInvocationMs).toBeGreaterThan(0);
+  expect(firstPhaseAttribution.preparedInputCacheStructural).toMatchObject({
+    parsedSourceCacheHitCount: 0,
+    resolvedRecordCacheHitCount: 0,
+    resolvedRecordCacheMissCount: 1,
+    resolvedRecordBuildCount: 1,
+    interactiveContextCacheHitCount: 0,
+    interactiveContextCacheMissCount: 1,
+    interactiveContextBuildCount: 1,
+    interactiveFeatureTraversalCount: 1,
+    selectorSafetyScopeBuildCount: 0,
+    preparedInputCacheMutationViolationCount: 0
+  });
+  expect(firstPhaseAttribution.preparedInputCacheStructural
+    .parsedSourceCacheMissCount).toBeGreaterThan(0);
+  expect(firstPhaseAttribution.preparedInputCacheStructural
+    .parsedSourceParseCount).toBe(
+      firstPhaseAttribution.preparedInputCacheStructural.parsedSourceCacheMissCount
+    );
+  expect(firstPhaseAttribution.preparedInputCacheStructural
+    .preparedInputCacheRetainedBytes).toBeGreaterThan(0);
+  expect(secondPhaseAttribution.preparedInputCacheStructural).toMatchObject({
+    parsedSourceCacheMissCount: 0,
+    parsedSourceParseCount: 0,
+    resolvedRecordCacheHitCount: 1,
+    resolvedRecordCacheMissCount: 0,
+    resolvedRecordBuildCount: 0,
+    interactiveContextCacheHitCount: 1,
+    interactiveContextCacheMissCount: 0,
+    interactiveContextBuildCount: 0,
+    interactiveFeatureTraversalCount: 0,
+    selectorSafetyScopeBuildCount: 0,
+    preparedInputCacheMutationViolationCount: 0
+  });
+  expect(secondPhaseAttribution.preparedInputCacheStructural
+    .parsedSourceCacheHitCount).toBeGreaterThan(0);
+  expect(secondPhaseAttribution.preparedInputCacheStructural
+    .preparedInputCacheRetainedBytes).toBeGreaterThan(0);
   expect(firstPhaseAttribution.featureCatalogStructural).toMatchObject({
     featureCatalogSvgParseCount: 1,
     featureCatalogFullDomTraversalCount: 1,
