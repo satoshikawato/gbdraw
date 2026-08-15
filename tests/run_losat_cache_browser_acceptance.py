@@ -934,25 +934,33 @@ def _cancel_during_render(page: Any) -> dict[str, Any]:
               entries.length === current.size &&
               entries.every(([key, value]) => current.get(key) === value)
             );
+            const authorityDomains = {
+              proteinIdentityManifestSame:
+                state.proteinIdentityManifest.value === before.proteinIdentityManifest,
+              legacyProteinRawCandidatesSame:
+                state.legacyProteinRawCandidates.value ===
+                  before.legacyProteinRawCandidates,
+              legacyProteinDerivedEvidenceSame:
+                state.legacyProteinDerivedEvidence.value ===
+                  before.legacyProteinDerivedEvidence,
+              losatCacheValuesSame:
+                sameMapEntries(before.losatCache, state.losatCache.value),
+              losatDerivedCacheValuesSame:
+                sameMapEntries(
+                  before.losatDerivedCache,
+                  state.losatDerivedCache.value
+                ),
+              losatCacheInfoSame:
+                state.losatCacheInfo.value === before.losatCacheInfo
+            };
             return {
               result,
               sawRendering,
               cancelInvoked,
               errorSummary: String(app.errorLog?.summary || ''),
               executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
-              authorityRestored: (
-                state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
-                state.legacyProteinRawCandidates.value ===
-                  before.legacyProteinRawCandidates &&
-                state.legacyProteinDerivedEvidence.value ===
-                  before.legacyProteinDerivedEvidence &&
-                sameMapEntries(before.losatCache, state.losatCache.value) &&
-                sameMapEntries(
-                  before.losatDerivedCache,
-                  state.losatDerivedCache.value
-                ) &&
-                state.losatCacheInfo.value === before.losatCacheInfo
-              )
+              ...authorityDomains,
+              authorityRestored: Object.values(authorityDomains).every(Boolean)
             };
           } finally {
             clearInterval(cancelPoll);
@@ -1001,24 +1009,32 @@ def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
               entries.length === current.size &&
               entries.every(([key, value]) => current.get(key) === value)
             );
+            const authorityDomains = {
+              proteinIdentityManifestSame:
+                state.proteinIdentityManifest.value === before.proteinIdentityManifest,
+              legacyProteinRawCandidatesSame:
+                state.legacyProteinRawCandidates.value ===
+                  before.legacyProteinRawCandidates,
+              legacyProteinDerivedEvidenceSame:
+                state.legacyProteinDerivedEvidence.value ===
+                  before.legacyProteinDerivedEvidence,
+              losatCacheValuesSame:
+                sameMapEntries(before.losatCache, state.losatCache.value),
+              losatDerivedCacheValuesSame:
+                sameMapEntries(
+                  before.losatDerivedCache,
+                  state.losatDerivedCache.value
+                ),
+              losatCacheInfoSame:
+                state.losatCacheInfo.value === before.losatCacheInfo
+            };
             return {
               result,
               errorSummary: String(app.errorLog?.summary || ''),
               executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
               rendererFailureInjected,
-              authorityRestored: (
-                state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
-                state.legacyProteinRawCandidates.value ===
-                  before.legacyProteinRawCandidates &&
-                state.legacyProteinDerivedEvidence.value ===
-                  before.legacyProteinDerivedEvidence &&
-                sameMapEntries(before.losatCache, state.losatCache.value) &&
-                sameMapEntries(
-                  before.losatDerivedCache,
-                  state.losatDerivedCache.value
-                ) &&
-                state.losatCacheInfo.value === before.losatCacheInfo
-              )
+              ...authorityDomains,
+              authorityRestored: Object.values(authorityDomains).every(Boolean)
             };
           } finally {
             Worker.prototype.postMessage = originalWorkerPostMessage;
@@ -1043,6 +1059,23 @@ def _assert_telemetry(
         run.get("executorCalls") == expected["workerCalls"],
         "Counting LOSAT executor was called.",
     )
+
+
+def _assert_authority_restored(
+    run: dict[str, Any], label: str, checks: AcceptanceChecks
+) -> None:
+    for field in (
+        "proteinIdentityManifestSame",
+        "legacyProteinRawCandidatesSame",
+        "legacyProteinDerivedEvidenceSame",
+        "losatCacheValuesSame",
+        "losatDerivedCacheValuesSame",
+        "losatCacheInfoSame",
+    ):
+        checks.require(
+            run.get(field) is True,
+            f"{label} did not restore {field}: {run}",
+        )
 
 
 def _inspect_layout(page: Any) -> dict[str, Any]:
@@ -1260,6 +1293,11 @@ def _run_python_adapter() -> int:
                 )
                 legacy_ui_before_cancel = _migration_ui_snapshot(page)
                 canceled_legacy_run = _cancel_during_render(page)
+                _assert_authority_restored(
+                    canceled_legacy_run,
+                    "Legacy render cancellation",
+                    checks,
+                )
                 checks.require(
                     canceled_legacy_run.get("sawRendering")
                     and canceled_legacy_run.get("cancelInvoked")
@@ -1278,6 +1316,11 @@ def _run_python_adapter() -> int:
                 )
                 legacy_ui_before_render_error = _migration_ui_snapshot(page)
                 failed_legacy_run = _fail_renderer_after_migration(page)
+                _assert_authority_restored(
+                    failed_legacy_run,
+                    "Legacy renderer failure",
+                    checks,
+                )
                 checks.require(
                     failed_legacy_run.get("result") == {"status": "error"}
                     and failed_legacy_run.get("authorityRestored")

@@ -11,6 +11,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.api.prepared import record_prepared_input_metric
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.annotations import AnnotationOptions, resolve_annotations
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
@@ -82,6 +83,7 @@ def build_interactive_svg_context(
         resolved_color_rules, _ = preprocess_color_tables(color_table, default_colors)
 
     record_list = list(records)
+    record_prepared_input_metric("interactiveFeatureTraversalCount")
     payload = extract_features_from_records_payload(
         record_list,
         selected_features=selected_features_set,
@@ -89,6 +91,7 @@ def build_interactive_svg_context(
         specific_color_rules=resolved_color_rules,
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,
+        include_selector_safety_scope=False,
     )
     features = payload.get("features", [])
     biological_features = payload.get("biological_features", [])

@@ -15,6 +15,10 @@ from gbdraw.api.request_render import (
     _capture_request_render_diagnostics,
     render_request,
 )
+from gbdraw.api.prepared import (
+    PreparedBiologicalInputCache,
+    PreparedResourceIdentity,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render.track_slot_metadata import (
@@ -30,6 +34,7 @@ from gbdraw.web_support.feature_catalog import (
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+_RESOURCE_CACHE_TOKEN_RE = re.compile(r"^render-resource-[1-9][0-9]*$")
 _STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
 _STAGED_WORKSPACE_MARKER = ".gbdraw-worker-render-workspace"
 
@@ -90,13 +95,53 @@ def render_canonical_web_request(
 ) -> dict[str, Any]:
     """Decode and render one browser request without a CLI translation layer."""
 
-    with _capture_request_render_diagnostics(_diagnostics):
-        return _render_canonical_web_request(
-            payload,
-            resource_paths=resource_paths,
-            output_directory=output_directory,
-            diagnostics=_diagnostics,
+    return _render_canonical_web_request_with_prepared_inputs(
+        payload,
+        resource_paths=resource_paths,
+        output_directory=output_directory,
+        _diagnostics=_diagnostics,
+        _prepared_input_cache=None,
+        _resource_identities=None,
+    )
+
+
+def _render_canonical_web_request_with_prepared_inputs(
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    output_directory: str | Path,
+    _diagnostics: MutableMapping[str, Any] | None,
+    _prepared_input_cache: PreparedBiologicalInputCache | None,
+    _resource_identities: Mapping[str, PreparedResourceIdentity] | None,
+) -> dict[str, Any]:
+    def render() -> dict[str, Any]:
+        with _capture_request_render_diagnostics(_diagnostics):
+            return _render_canonical_web_request(
+                payload,
+                resource_paths=resource_paths,
+                output_directory=output_directory,
+                diagnostics=_diagnostics,
+            )
+
+    if _prepared_input_cache is None:
+        if _resource_identities is not None:
+            raise ValidationError(
+                "Prepared resource identities require a prepared input cache."
+            )
+        return render()
+    if _resource_identities is None:
+        raise ValidationError(
+            "A prepared input cache requires validated resource identities."
         )
+    cache_paths = {
+        resource_paths[resource_id]: identity
+        for resource_id, identity in _resource_identities.items()
+    }
+    with _prepared_input_cache.transaction(
+        resource_paths=cache_paths,
+        diagnostics=_diagnostics,
+    ):
+        return render()
 
 
 def _render_canonical_web_request(
@@ -266,6 +311,25 @@ def render_staged_canonical_web_request(
 ) -> dict[str, Any]:
     """Render a browser request from paths staged by the diagram Worker."""
 
+    return _render_staged_canonical_web_request_with_prepared_inputs(
+        payload,
+        resource_paths=resource_paths,
+        workspace=workspace,
+        _diagnostics=_diagnostics,
+        _prepared_input_cache=None,
+        _resource_identities=None,
+    )
+
+
+def _render_staged_canonical_web_request_with_prepared_inputs(
+    payload: Mapping[str, Any],
+    *,
+    resource_paths: Mapping[str, str | Path],
+    workspace: str | Path,
+    _diagnostics: MutableMapping[str, Any] | None = None,
+    _prepared_input_cache: PreparedBiologicalInputCache | None = None,
+    _resource_identities: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
     if not isinstance(resource_paths, Mapping):
         raise ValidationError("The staged Web render resource map must be an object.")
     workspace_path = Path(workspace)
@@ -310,16 +374,23 @@ def render_staged_canonical_web_request(
                     f"Staged Web render resource {resource_id!r} is outside its workspace."
                 )
             validated_paths[resource_id] = path
+        validated_identities = _validate_prepared_resource_identities(
+            _resource_identities,
+            resource_paths=validated_paths,
+            cache_requested=_prepared_input_cache is not None,
+        )
         if output_directory.exists():
             raise ValidationError("The staged Web render output directory already exists.")
         output_directory.mkdir()
         if output_directory.resolve(strict=True).parent != workspace_identity:
             raise ValidationError("The staged Web render output directory is invalid.")
-        return render_canonical_web_request(
+        return _render_canonical_web_request_with_prepared_inputs(
             payload,
             resource_paths=validated_paths,
             output_directory=output_directory,
             _diagnostics=_diagnostics,
+            _prepared_input_cache=_prepared_input_cache,
+            _resource_identities=validated_identities,
         )
     except BaseException as exc:
         render_error = exc
@@ -341,6 +412,67 @@ def render_staged_canonical_web_request(
                     raise ValidationError(
                         "The temporary staged Web render workspace could not be cleaned up."
                     ) from cleanup_error
+
+
+def _validate_prepared_resource_identities(
+    value: Mapping[str, Mapping[str, Any]] | None,
+    *,
+    resource_paths: Mapping[str, Path],
+    cache_requested: bool,
+) -> dict[str, PreparedResourceIdentity] | None:
+    if value is None:
+        if cache_requested:
+            raise ValidationError(
+                "The staged Web render prepared-resource map is missing."
+            )
+        return None
+    if not cache_requested:
+        raise ValidationError(
+            "Prepared resource identities require a prepared input cache."
+        )
+    if not isinstance(value, Mapping) or set(value) != set(resource_paths):
+        raise ValidationError(
+            "The staged Web render prepared-resource map does not match its manifest."
+        )
+    identities: dict[str, PreparedResourceIdentity] = {}
+    for resource_id, raw_identity in value.items():
+        if (
+            not isinstance(resource_id, str)
+            or not _RESOURCE_ID_RE.fullmatch(resource_id)
+            or not isinstance(raw_identity, Mapping)
+            or set(raw_identity) != {"cacheToken", "size"}
+        ):
+            raise ValidationError(
+                f"Invalid prepared resource identity for {resource_id!r}."
+            )
+        cache_token = raw_identity.get("cacheToken")
+        size = raw_identity.get("size")
+        if (
+            not isinstance(cache_token, str)
+            or not _RESOURCE_CACHE_TOKEN_RE.fullmatch(cache_token)
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+        ):
+            raise ValidationError(
+                f"Invalid prepared resource identity for {resource_id!r}."
+            )
+        try:
+            actual_size = resource_paths[resource_id].resolve(strict=True).stat().st_size
+        except OSError as exc:
+            raise ValidationError(
+                f"Prepared resource {resource_id!r} could not be inspected."
+            ) from exc
+        if actual_size != size:
+            raise ValidationError(
+                f"Prepared resource {resource_id!r} does not match its byte size."
+            )
+        identities[resource_id] = PreparedResourceIdentity(
+            resource_id=resource_id,
+            cache_token=cache_token,
+            size=size,
+        )
+    return identities
 
 
 __all__ = [

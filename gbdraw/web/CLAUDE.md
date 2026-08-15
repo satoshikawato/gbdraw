@@ -41,6 +41,13 @@ planning, loading, diagram assembly, and rendering.
 The application has one Pyodide runtime, owned by the lazy diagram Worker.
 Typed helper operations, generation-time feature extraction, and diagram
 rendering share that runtime; Python must not return to the main thread.
+The Worker may retain a bounded cache of parsed biological sources, resolved
+records, and interactive metadata. Key it only by validated resource tokens and
+the semantic fields used to prepare those values. Every Generate still decodes
+and validates the request, builds the drawing, writes the SVG, and builds the
+feature catalog. Publish cache fills only after the full render succeeds, and
+release them with the Worker; never cache drawings, catalogs, SVG, or final
+results.
 
 App-shell readiness means Vue is mounted and required local UI assets and
 palette definitions are available. It is independent of diagram-Worker

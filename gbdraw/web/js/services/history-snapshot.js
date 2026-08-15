@@ -995,7 +995,7 @@ export const createHistorySnapshotService = ({
       ),
       losatCache,
       losatDerivedCache,
-      losatCacheInfo: cloneJsonData(
+      losatCacheInfo: artifactOwnedValue(
         getGeneratedArtifactRef(state.losatCacheInfo, [])
       ) || [],
       collinearGroups: artifactOwnedValue(
@@ -1187,7 +1187,7 @@ export const createHistorySnapshotService = ({
       );
       setGeneratedArtifactRef(
         state.losatCacheInfo,
-        cloneJsonData(handle.losatCacheInfo) || []
+        handle.losatCacheInfo || []
       );
       setGeneratedArtifactRef(state.collinearGroups, handle.collinearGroups || []);
       if (typeof state.matchSequenceRegistry?.resetTrusted === 'function') {

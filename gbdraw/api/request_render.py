@@ -11,7 +11,16 @@ import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Iterator, Literal, Mapping, MutableMapping, Sequence, TypeAlias
+from typing import (
+    Any,
+    Hashable,
+    Iterator,
+    Literal,
+    Mapping,
+    MutableMapping,
+    Sequence,
+    TypeAlias,
+)
 
 from Bio import SeqIO  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -75,10 +84,24 @@ from .options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
-from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
+from .prepared import (
+    PreparedResourceIdentity,
+    ResolvedFeatureInputs,
+    get_or_build_interactive_context,
+    get_or_build_parsed_source,
+    get_or_build_resolved_records,
+    prepared_input_cache_active,
+    prepared_record_membership,
+    prepared_resource_identity,
+    prepared_resource_value_identity,
+    register_prepared_resource_value,
+    resolve_feature_inputs,
+)
 from .record_planning import (
     ResolvedRecordCollection,
     ResolvedRecordProvenance,
+    _load_source_records,
+    _prepared_source_cache_spec,
     resolve_circular_batch_outputs,
     resolve_circular_options,
     resolve_implicit_record_output_prefix,
@@ -172,13 +195,19 @@ def _resolve_request_option_tables(
     if colors is not None:
         color_table = colors.color_table
         if color_table is None and colors.color_table_file is not None:
-            color_table = read_color_table(colors.color_table_file)
+            color_table = register_prepared_resource_value(
+                read_color_table(colors.color_table_file),
+                colors.color_table_file,
+            )
         default_colors = colors.default_colors
         if default_colors is None and colors.default_colors_file is not None:
-            default_colors = load_default_colors(
-                user_defined_default_colors=colors.default_colors_file,
-                palette=colors.default_colors_palette,
-                load_comparison=load_comparison_colors,
+            default_colors = register_prepared_resource_value(
+                load_default_colors(
+                    user_defined_default_colors=colors.default_colors_file,
+                    palette=colors.default_colors_palette,
+                    load_comparison=load_comparison_colors,
+                ),
+                colors.default_colors_file,
             )
         if colors.color_table_file is not None or colors.default_colors_file is not None:
             colors = replace(
@@ -193,8 +222,11 @@ def _resolve_request_option_tables(
     feature_visibility_table = options.feature_visibility_table
     if options.feature_visibility_table_file is not None:
         if feature_visibility_table is None:
-            feature_visibility_table = read_feature_visibility_file(
-                options.feature_visibility_table_file
+            feature_visibility_table = register_prepared_resource_value(
+                read_feature_visibility_file(
+                    options.feature_visibility_table_file
+                ),
+                options.feature_visibility_table_file,
             )
         changed = True
     label_whitelist_table = options.label_whitelist_table
@@ -204,8 +236,9 @@ def _resolve_request_option_tables(
                 "Pass either label_whitelist_table or label_whitelist_file, not both."
             )
         if label_whitelist_table is None:
-            label_whitelist_table = read_filter_list_file(
-                options.label_whitelist_file
+            label_whitelist_table = register_prepared_resource_value(
+                read_filter_list_file(options.label_whitelist_file),
+                options.label_whitelist_file,
             )
         changed = True
     qualifier_priority_table = options.qualifier_priority_table
@@ -216,8 +249,9 @@ def _resolve_request_option_tables(
                 "qualifier_priority_file, not both."
             )
         if qualifier_priority_table is None:
-            qualifier_priority_table = read_qualifier_priority_file(
-                options.qualifier_priority_file
+            qualifier_priority_table = register_prepared_resource_value(
+                read_qualifier_priority_file(options.qualifier_priority_file),
+                options.qualifier_priority_file,
             )
         changed = True
     label_override_table = options.label_override_table
@@ -227,19 +261,23 @@ def _resolve_request_option_tables(
                 "Pass either label_override_table or label_override_file, not both."
             )
         if label_override_table is None:
-            label_override_table = read_label_override_file(
-                options.label_override_file
+            label_override_table = register_prepared_resource_value(
+                read_label_override_file(options.label_override_file),
+                options.label_override_file,
             )
         changed = True
     annotations = options.annotations
     if annotations is not None and annotations.table_file is not None:
-        annotations = AnnotationOptions(
-            sets=tuple(
-                read_annotation_table(
-                    annotations.table_file,
-                    mode=mode,
+        annotations = register_prepared_resource_value(
+            AnnotationOptions(
+                sets=tuple(
+                    read_annotation_table(
+                        annotations.table_file,
+                        mode=mode,
+                    )
                 )
-            )
+            ),
+            annotations.table_file,
         )
         changed = True
     if not changed:
@@ -266,12 +304,58 @@ class _ComparisonSequenceSources:
     paths: tuple[str | None, ...]
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
 
+    def cache_specs(
+        self,
+    ) -> tuple[
+        tuple[Hashable, frozenset[PreparedResourceIdentity]] | None,
+        ...,
+    ]:
+        specs: list[
+            tuple[Hashable, frozenset[PreparedResourceIdentity]] | None
+        ] = []
+        for path in self.paths:
+            if path is None:
+                specs.append(None)
+                continue
+            identity = prepared_resource_identity(path)
+            specs.append(
+                None
+                if identity is None
+                else (
+                    ("parsed-source-v1", "comparison-fasta", identity),
+                    frozenset({identity}),
+                )
+            )
+        return tuple(specs)
+
     def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
         if self._records is None:
-            self._records = tuple(
-                tuple(SeqIO.parse(path, "fasta")) if path else ()
-                for path in self.paths
-            )
+            loaded: list[tuple[SeqRecord, ...]] = []
+            for path, cache_spec in zip(
+                self.paths,
+                self.cache_specs(),
+                strict=True,
+            ):
+                if not path:
+                    loaded.append(())
+                    continue
+
+                def parse(path: str = path) -> tuple[SeqRecord, ...]:
+                    return tuple(SeqIO.parse(path, "fasta"))
+
+                if cache_spec is None:
+                    loaded.append(parse())
+                    continue
+                key, identities = cache_spec
+                loaded.append(
+                    get_or_build_parsed_source(
+                        key,
+                        identities,
+                        parse,
+                        publish=lambda value: bool(value),
+                    )
+                )
+            self._records = tuple(loaded)
         return self._records
 
 
@@ -900,13 +984,106 @@ def _normalize_request_records(
     request: DiagramRequest,
     inputs: PreparedDiagramInputs,
 ) -> ResolvedRecordCollection:
-    return resolve_record_inputs(
+    def resolve() -> ResolvedRecordCollection:
+        return resolve_record_inputs(
+            request.records,
+            record_options=request.record_options,
+            gff_candidate_features=inputs.gff_candidate_features,
+            gff_keep_all_features=inputs.gff_keep_all_features,
+            genbank_loader=load_gbks,
+            gff_loader=load_gff_fasta,
+        )
+
+    if not prepared_input_cache_active():
+        return resolve()
+    source_specs = tuple(
+        _prepared_source_cache_spec(
+            record_input.source,
+            gff_candidate_features=inputs.gff_candidate_features,
+            gff_keep_all_features=inputs.gff_keep_all_features,
+        )
+        for record_input in request.records
+    )
+    if any(spec is None for spec in source_specs):
+        return resolve()
+    typed_source_specs = tuple(
+        spec for spec in source_specs if spec is not None
+    )
+    seen_source_keys: set[Hashable] = set()
+    for record_input, (source_key, _identities) in zip(
         request.records,
-        record_options=request.record_options,
-        gff_candidate_features=inputs.gff_candidate_features,
-        gff_keep_all_features=inputs.gff_keep_all_features,
-        genbank_loader=load_gbks,
-        gff_loader=load_gff_fasta,
+        typed_source_specs,
+        strict=True,
+    ):
+        if source_key in seen_source_keys:
+            continue
+        seen_source_keys.add(source_key)
+        _load_source_records(
+            record_input.source,
+            gff_candidate_features=inputs.gff_candidate_features,
+            gff_keep_all_features=inputs.gff_keep_all_features,
+            genbank_loader=load_gbks,
+            gff_loader=load_gff_fasta,
+        )
+    resource_identities = frozenset(
+        identity
+        for _key, identities in typed_source_specs
+        for identity in identities
+    )
+    key = (
+        "resolved-records-v1",
+        tuple(source_key for source_key, _identities in typed_source_specs),
+        tuple(_record_input_preparation_key(item) for item in request.records),
+        _record_collection_preparation_key(request.record_options),
+    )
+    return get_or_build_resolved_records(key, resource_identities, resolve)
+
+
+def _selector_preparation_key(value: Any) -> Hashable:
+    if value is None:
+        return None
+    return (value.record_id, value.record_index)
+
+
+def _region_preparation_key(value: Any) -> Hashable:
+    if value is None:
+        return None
+    return (
+        value.record_id,
+        value.record_index,
+        int(value.start),
+        int(value.end),
+        bool(value.reverse_complement),
+    )
+
+
+def _presentation_preparation_key(value: RecordPresentation) -> Hashable:
+    return (
+        value.label,
+        value.subtitle,
+        bool(value.reverse_complement),
+        value.grid_row,
+        value.grid_column,
+    )
+
+
+def _record_input_preparation_key(value: RecordInput) -> Hashable:
+    return (
+        _selector_preparation_key(value.selector),
+        value.cardinality.value,
+        _region_preparation_key(value.region),
+        _presentation_preparation_key(value.presentation),
+        value.record_key,
+    )
+
+
+def _record_collection_preparation_key(
+    value: RecordCollectionOptions,
+) -> Hashable:
+    return (
+        tuple(_region_preparation_key(region) for region in value.regions),
+        tuple(value.labels),
+        tuple(value.subtitles),
     )
 
 
@@ -1773,16 +1950,7 @@ def build_prepared_interactive_context(
     def build() -> InteractiveSvgContext:
         options = prepared.request.options
         inputs = prepared.inputs or _prepare_diagram_inputs(prepared.request)
-        computed_orthogroups = (
-            prepared.linear_metadata.orthogroups
-            if prepared.linear_metadata is not None
-            else None
-        )
-        if computed_orthogroups is None and isinstance(
-            options,
-            LinearDiagramOptions,
-        ):
-            computed_orthogroups = options.orthogroups
+        computed_orthogroups = _prepared_orthogroups(prepared)
         collinearity_search_scope = None
         if (
             isinstance(options, LinearDiagramOptions)
@@ -1810,6 +1978,222 @@ def build_prepared_interactive_context(
     return require_interactive_svg_metadata(build)
 
 
+def _prepared_orthogroups(prepared: PreparedDiagramRequest) -> object | None:
+    computed = (
+        prepared.linear_metadata.orthogroups
+        if prepared.linear_metadata is not None
+        else None
+    )
+    if computed is None and isinstance(prepared.request.options, LinearDiagramOptions):
+        computed = prepared.request.options.orthogroups
+    return computed
+
+
+def _prepared_key_resource_identities(
+    value: object,
+) -> frozenset[PreparedResourceIdentity]:
+    identities: set[PreparedResourceIdentity] = set()
+
+    def collect(item: object) -> None:
+        if isinstance(item, PreparedResourceIdentity):
+            identities.add(item)
+            return
+        if isinstance(item, (tuple, list, frozenset)):
+            for child in item:
+                collect(child)
+
+    collect(value)
+    return frozenset(identities)
+
+
+def _resource_backed_context_key(value: object) -> Hashable | None:
+    if value is None:
+        return ("none",)
+    identity = prepared_resource_value_identity(value)
+    if identity is None:
+        return None
+    return ("resource", identity)
+
+
+def _annotation_style_context_key(value: object | None) -> Hashable:
+    if value is None:
+        return None
+    hatch = getattr(value, "hatch", None)
+    hatch_key = None
+    if hatch is not None:
+        hatch_key = (
+            hatch.angle,
+            hatch.spacing,
+            hatch.color,
+            hatch.width,
+            hatch.cross,
+        )
+    return (
+        value.stroke,
+        value.stroke_width,
+        tuple(value.stroke_dasharray),
+        value.line_cap,
+        value.fill,
+        value.fill_opacity,
+        hatch_key,
+        value.label_color,
+        value.label_font_size,
+        value.label_orientation,
+        value.label_position,
+        value.label_offset,
+    )
+
+
+def _annotation_target_context_key(value: object) -> Hashable:
+    record = getattr(value, "record", None)
+    record_key = _selector_preparation_key(record)
+    if hasattr(value, "start") and hasattr(value, "end"):
+        return (
+            "coordinates",
+            record_key,
+            int(value.start),
+            int(value.end),
+            value.coordinate_space,
+            bool(value.wraps_origin),
+            value.out_of_bounds,
+        )
+    return (
+        "features",
+        record_key,
+        tuple((selector.key, selector.value) for selector in value.selectors),
+        value.envelope,
+        value.circular_path,
+    )
+
+
+def _annotation_context_key(value: AnnotationOptions | None) -> Hashable | None:
+    if value is None:
+        return ("none",)
+    identity = prepared_resource_value_identity(value)
+    if identity is not None:
+        return ("resource", identity)
+    if value.table is not None:
+        table_identity = prepared_resource_value_identity(value.table)
+        return (
+            None
+            if table_identity is None
+            else ("resource-table", table_identity)
+        )
+    if value.table_file is not None:
+        return None
+    return (
+        "inline-annotation-sets-v1",
+        tuple(
+            (
+                annotation_set.id,
+                annotation_set.legend_label,
+                _annotation_style_context_key(annotation_set.default_style),
+                tuple(
+                    (
+                        annotation.id,
+                        _annotation_target_context_key(annotation.target),
+                        annotation.label,
+                        annotation.mark,
+                        annotation.lane,
+                        _annotation_style_context_key(annotation.style),
+                        annotation.legend_label,
+                        tuple(sorted(annotation.metadata.items())),
+                    )
+                    for annotation in annotation_set.annotations
+                ),
+            )
+            for annotation_set in value.sets
+        ),
+    )
+
+
+def _interactive_context_cache_spec(
+    prepared: PreparedDiagramRequest,
+    *,
+    include_feature_catalog: bool,
+) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
+    records = tuple(prepared.records)
+    membership = prepared_record_membership(records)
+    if membership is None:
+        return None
+    options = prepared.request.options
+    inputs = prepared.inputs
+    if inputs is None:
+        return None
+    visibility_key = _resource_backed_context_key(
+        inputs.features.feature_visibility_table
+    )
+    color_key = _resource_backed_context_key(inputs.features.color_table)
+    annotation_key = _annotation_context_key(options.annotations)
+    if None in {visibility_key, color_key, annotation_key}:
+        return None
+    orthogroups = _prepared_orthogroups(prepared)
+    orthogroup_key = _resource_backed_context_key(orthogroups)
+    derived_keys = tuple(
+        (
+            str(entry.get("kind") or ""),
+            str(entry.get("key") or ""),
+            str(entry.get("mode") or ""),
+        )
+        for entry in prepared.losat_derived_cache_entries
+        if str(entry.get("key") or "")
+    )
+    if orthogroups is not None and orthogroup_key is None:
+        if not derived_keys:
+            return None
+        orthogroup_key = ("derived-artifacts", derived_keys)
+    comparison_keys: list[Hashable] = []
+    if inputs.comparison_sequences is not None:
+        for path, spec in zip(
+            inputs.comparison_sequences.paths,
+            inputs.comparison_sequences.cache_specs(),
+            strict=True,
+        ):
+            if path is None:
+                comparison_keys.append(("none",))
+            elif spec is None:
+                return None
+            else:
+                comparison_keys.append(spec[0])
+    record_keys = tuple(
+        str(
+            (getattr(record, "annotations", {}) or {}).get(
+                "gbdraw_record_key",
+                f"record-{index + 1}",
+            )
+        )
+        for index, record in enumerate(records)
+    )
+    collinearity_scope = None
+    if (
+        isinstance(options, LinearDiagramOptions)
+        and prepared.linear_metadata is not None
+        and prepared.linear_metadata.collinearity_result is not None
+        and prepared.linear_metadata.collinearity_result.orthogroups is not None
+    ):
+        collinearity_scope = str(options.collinearity_search_scope)
+    popup_policy = (
+        str(prepared.request.output.interactive_metadata_policy),
+        bool(include_feature_catalog),
+    )
+    key = (
+        "interactive-context-v1",
+        prepared.mode,
+        membership,
+        tuple(options.selected_features_set or DEFAULT_SELECTED_FEATURES),
+        visibility_key,
+        color_key,
+        annotation_key,
+        orthogroup_key,
+        derived_keys,
+        tuple(comparison_keys),
+        record_keys,
+        collinearity_scope,
+        popup_policy,
+    )
+    return key, _prepared_key_resource_identities(key)
+
+
 def _interactive_context(
     prepared: PreparedDiagramRequest,
     *,
@@ -1823,10 +2207,21 @@ def _interactive_context(
     )
     if not needs_interactive_metadata and not include_feature_catalog:
         return None
-    return build_prepared_interactive_context(
+    cache_spec = _interactive_context_cache_spec(
         prepared,
-        comparison_sequence_records=comparison_sequence_records,
+        include_feature_catalog=include_feature_catalog,
     )
+
+    def build() -> InteractiveSvgContext:
+        return build_prepared_interactive_context(
+            prepared,
+            comparison_sequence_records=comparison_sequence_records,
+        )
+
+    if cache_spec is None:
+        return build()
+    key, identities = cache_spec
+    return get_or_build_interactive_context(key, identities, build)
 
 
 def render_request(

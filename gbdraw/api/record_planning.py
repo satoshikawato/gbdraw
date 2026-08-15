@@ -6,7 +6,7 @@ import copy
 import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Literal, Sequence
+from typing import Callable, Hashable, Literal, Sequence
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -33,6 +33,11 @@ from .options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+)
+from .prepared import (
+    PreparedResourceIdentity,
+    get_or_build_parsed_source,
+    prepared_resource_identity,
 )
 from .requests import (
     CircularBatchOutputPolicy,
@@ -256,22 +261,71 @@ def _load_source_records(
     genbank_loader: GenBankLoader,
     gff_loader: GffFastaLoader,
 ) -> tuple[SeqRecord, ...]:
+    def load() -> tuple[SeqRecord, ...]:
+        if isinstance(source, GenBankInputSource):
+            records = genbank_loader([str(source.path)])
+        elif isinstance(source, GffFastaInputSource):
+            records = gff_loader(
+                [str(source.gff_path)],
+                [str(source.fasta_path)],
+                selected_features_set=gff_candidate_features,
+                keep_all_features=gff_keep_all_features,
+            )
+        elif isinstance(source, InMemoryRecordSource):
+            records = [source.record]
+        else:  # pragma: no cover - RecordInput validates this union.
+            raise ValidationError("Unsupported record input source.")
+        if not records:
+            raise ValidationError("A record input source resolved to no records.")
+        return tuple(records)
+
+    cache_spec = _prepared_source_cache_spec(
+        source,
+        gff_candidate_features=gff_candidate_features,
+        gff_keep_all_features=gff_keep_all_features,
+    )
+    if cache_spec is None:
+        return load()
+    key, identities = cache_spec
+    return get_or_build_parsed_source(
+        key,
+        identities,
+        load,
+        publish=lambda value: bool(value),
+    )
+
+
+def _prepared_source_cache_spec(
+    source: RecordInputSource,
+    *,
+    gff_candidate_features: Sequence[str] | None,
+    gff_keep_all_features: bool,
+) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
+    """Build a path-independent parsed-source cache key for a Web resource."""
+
     if isinstance(source, GenBankInputSource):
-        records = genbank_loader([str(source.path)])
-    elif isinstance(source, GffFastaInputSource):
-        records = gff_loader(
-            [str(source.gff_path)],
-            [str(source.fasta_path)],
-            selected_features_set=gff_candidate_features,
-            keep_all_features=gff_keep_all_features,
+        identity = prepared_resource_identity(source.path)
+        if identity is None:
+            return None
+        return ("parsed-source-v1", "genbank", identity), frozenset({identity})
+    if isinstance(source, GffFastaInputSource):
+        gff_identity = prepared_resource_identity(source.gff_path)
+        fasta_identity = prepared_resource_identity(source.fasta_path)
+        if gff_identity is None or fasta_identity is None:
+            return None
+        identities = frozenset({gff_identity, fasta_identity})
+        return (
+            (
+                "parsed-source-v1",
+                "gff-fasta",
+                gff_identity,
+                fasta_identity,
+                tuple(sorted(gff_candidate_features or ())),
+                bool(gff_keep_all_features),
+            ),
+            identities,
         )
-    elif isinstance(source, InMemoryRecordSource):
-        records = [source.record]
-    else:  # pragma: no cover - RecordInput validates this union.
-        raise ValidationError("Unsupported record input source.")
-    if not records:
-        raise ValidationError("A record input source resolved to no records.")
-    return tuple(records)
+    return None
 
 
 def _selector_from_region(region: RegionSpec | None) -> RecordSelector | None:

@@ -11,13 +11,18 @@ from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
     extract_features_from_gff_fasta_json,
 )
-from gbdraw.web_support.request_render import render_staged_canonical_web_request
+from gbdraw.web_support.request_render import (
+    _render_staged_canonical_web_request_with_prepared_inputs as
+    render_staged_canonical_web_request,
+)
 from gbdraw.session_request_codec import encode_canonical_typed_resource
+from gbdraw.api.prepared import PreparedBiologicalInputCache
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
 _WEB_LOSATP_CACHE_ORDER = []
 _WEB_LOSATP_CACHE_LIMIT = 64
+_WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
 
 def _web_losatp_cache_by_name(name):
     if name == "filtered":
@@ -80,16 +85,28 @@ def run_canonical_request_wrapper(
     resource_paths_json,
     workspace,
     diagnostics_enabled=False,
+    resource_identities_json=None,
 ):
     try:
         payload = json.loads(str(request_json))
         resource_paths = json.loads(str(resource_paths_json))
+        resource_identities = None
+        if resource_identities_json is not None and type(resource_identities_json).__name__ not in {"JsNull", "JsUndefined"}:
+            identity_text = str(resource_identities_json).strip()
+            if identity_text and identity_text.lower() not in {"null", "undefined", "none"}:
+                resource_identities = json.loads(identity_text)
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
         result = render_staged_canonical_web_request(
             payload,
             resource_paths=resource_paths,
             workspace=str(workspace),
             _diagnostics=diagnostics,
+            _prepared_input_cache=(
+                _WEB_PREPARED_INPUT_CACHE
+                if resource_identities is not None
+                else None
+            ),
+            _resource_identities=resource_identities,
         )
         if diagnostics is not None:
             for name in (
@@ -107,6 +124,23 @@ def run_canonical_request_wrapper(
                 "geometryMetadata",
             ):
                 diagnostics["timingsMs"].setdefault(name, 0.0)
+            for name in (
+                "parsedSourceCacheHitCount",
+                "parsedSourceCacheMissCount",
+                "parsedSourceParseCount",
+                "resolvedRecordCacheHitCount",
+                "resolvedRecordCacheMissCount",
+                "resolvedRecordBuildCount",
+                "interactiveContextCacheHitCount",
+                "interactiveContextCacheMissCount",
+                "interactiveContextBuildCount",
+                "interactiveFeatureTraversalCount",
+                "selectorSafetyScopeBuildCount",
+                "preparedInputCacheEvictionCount",
+                "preparedInputCacheRetainedBytes",
+                "preparedInputCacheMutationViolationCount",
+            ):
+                diagnostics["metrics"].setdefault(name, 0)
             result["_diagnostics"] = diagnostics
         for item in result.get("results", []):
             content = item.get("content")
