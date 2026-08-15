@@ -20,7 +20,10 @@ import {
 } from '../services/runtime-test-hooks.js';
 import { ingestSvgResults } from '../services/svg-result-ingestion.js';
 import { PAIRWISE_LEGEND_SELECTOR } from './legend/utils.js';
-import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
+import {
+  applyLegendColorOverridesToSvg,
+  applyStrokeOverridesToSvg
+} from './legend/stroke-actions.js';
 
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
@@ -155,6 +158,7 @@ export const prepareReflowResultCommit = ({
   suppressPairwiseIdentityLegend = false,
   features = [],
   featureStrokeOverrides = {},
+  legendColorOverrides = {},
   legendStrokeOverrides = {},
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
 }) => ({
@@ -170,7 +174,11 @@ export const prepareReflowResultCommit = ({
         featureStrokeOverrides,
         legendStrokeOverrides
       }) > 0;
-      return legendChanged || strokeChanged;
+      const legendFillChanged = applyLegendColorOverridesToSvg({
+        svg,
+        legendColorOverrides
+      }) > 0;
+      return legendChanged || strokeChanged || legendFillChanged;
     }
   })
 });
@@ -181,6 +189,7 @@ export const prepareCandidateRenderCommit = ({
   mode = '',
   featureColorOverrides,
   featureStrokeOverrides,
+  legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
   legacyFeatures = [],
@@ -194,6 +203,11 @@ export const prepareCandidateRenderCommit = ({
   recordSessionLifecycleEvent('feature-catalog-adoption-end');
   const fillOverrides = cloneJsonValue(featureColorOverrides, {});
   const strokeOverrides = cloneJsonValue(featureStrokeOverrides, {});
+  const legendFillOverrides = Object.fromEntries(
+    Object.entries(cloneJsonValue(legendColorOverrides, {}))
+      .map(([caption, color]) => [caption, normalizePaint(color, 'legend color')])
+      .filter(([, color]) => Boolean(color))
+  );
   const migrationOptions = (overrideKind) => ({
     legacyFeatures,
     onDiagnostic: (diagnostic) => {
@@ -283,10 +297,15 @@ export const prepareCandidateRenderCommit = ({
         legendStrokeOverrides,
         featureStrokeOverrides: {}
       }) > 0;
+      const legendFillChanged = applyLegendColorOverridesToSvg({
+        svg,
+        legendColorOverrides: legendFillOverrides
+      }) > 0;
       const callerChanged = typeof transformSvg === 'function'
         ? Boolean(transformSvg(svg, { resultIndex }))
         : false;
-      return legendChanged || overridesChanged || legendStrokeChanged || callerChanged;
+      return legendChanged || overridesChanged || legendStrokeChanged ||
+        legendFillChanged || callerChanged;
     }
   });
   recordSessionLifecycleEvent('svg-admission-end');

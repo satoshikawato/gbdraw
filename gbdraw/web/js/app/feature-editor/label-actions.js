@@ -339,6 +339,19 @@ const buildContextKey = (svg, mode) => {
   return `${mode}:${ids.join(',')}`;
 };
 
+const hasFeatureScopedOverrideInSvg = (svg, ...overrideMaps) => {
+  const renderedFeatureIds = new Set(
+    Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
+      .map((element) => normalizeKeyToken(getFeatureIdentity(element)))
+      .filter(Boolean)
+  );
+  return overrideMaps.some((overrides) => (
+    Object.keys(overrides || {}).some(
+      (featureId) => renderedFeatureIds.has(normalizeKeyToken(featureId))
+    )
+  ));
+};
+
 export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   const {
     mode,
@@ -630,7 +643,15 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     if (!svg) return;
 
     const contextKey = buildContextKey(svg, mode.value);
-    if (labelOverrideContextKey.value && labelOverrideContextKey.value !== contextKey) {
+    if (
+      labelOverrideContextKey.value &&
+      labelOverrideContextKey.value !== contextKey &&
+      !hasFeatureScopedOverrideInSvg(
+        svg,
+        labelTextFeatureOverrides,
+        labelVisibilityOverrides
+      )
+    ) {
       clearOverrides();
       labelTextScopeDialog.show = false;
       closeGlobalLabelModeDialog();
@@ -807,9 +828,9 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     if (clickedFeature.value.hasEditableLabel) {
       applyDirectTextToCurrentSvg(featureId, nextText);
     }
-    if (visibilityChanged) {
-      applyDirectVisibilityToCurrentSvg(featureId, clickedFeature.value.labelVisibility);
-    }
+    const visibilityAppliedDirectly = visibilityChanged
+      ? applyDirectVisibilityToCurrentSvg(featureId, clickedFeature.value.labelVisibility)
+      : false;
 
     const requiresGlobalSelection = isGlobalLabelsOff() && (visibilityChanged || textChanged);
     if (requiresGlobalSelection) {
@@ -820,7 +841,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     }
 
     if (visibilityChanged || (!clickedFeature.value.hasEditableLabel && textChanged)) {
-      queueLabelReflow('label-visibility-apply', true);
+      queueLabelReflow('label-visibility-apply', !visibilityAppliedDirectly);
       return;
     }
 

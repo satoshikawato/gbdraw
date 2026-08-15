@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 
-globalThis.crypto = webcrypto;
+if (!globalThis.crypto?.subtle) {
+  Object.defineProperty(globalThis, 'crypto', {
+    configurable: true,
+    enumerable: true,
+    value: webcrypto,
+    writable: true
+  });
+}
 
 globalThis.window = {
   Vue: {

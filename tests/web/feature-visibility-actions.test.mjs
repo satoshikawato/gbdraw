@@ -106,6 +106,14 @@ assert.deepEqual(
 );
 assert.deepEqual(flushes, [{ force: true }, { force: true }]);
 
+assert.equal(actions.setFeatureVisibility(featureA, 'off', {
+  triggerReflow: false,
+  scope: { id: 'feature' }
+}), true);
+assert.equal(featureVisibilityOverrides['feature-a'], 'off');
+assert.deepEqual(flushes, [{ force: true }, { force: true }, {}]);
+delete featureVisibilityOverrides['feature-a'];
+
 const sourceIdFeature = {
   svg_id: 'feature-source-id',
   type: 'CDS',
@@ -258,10 +266,11 @@ actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 delete featureVisibilityOverrides[strictTrigger.svg_id];
 
+flushes.length = 0;
 resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, 2);
-assert.deepEqual(flushes, [{ force: true }, { force: true }]);
+assert.deepEqual(flushes, []);
 
 console.log('feature visibility action tests passed');
