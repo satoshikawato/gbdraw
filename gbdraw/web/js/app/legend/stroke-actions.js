@@ -71,6 +71,24 @@ const getLegendSwatches = (svg, caption) => {
   return swatches;
 };
 
+export const applyLegendColorOverridesToSvg = ({
+  svg,
+  legendColorOverrides = {}
+} = {}) => {
+  if (!svg) return 0;
+  let changedCount = 0;
+  Object.entries(legendColorOverrides || {}).forEach(([caption, color]) => {
+    const normalized = String(color || '').trim();
+    if (!normalized) return;
+    getLegendSwatches(svg, caption).forEach((swatch) => {
+      if (swatch.getAttribute('fill') === normalized) return;
+      swatch.setAttribute('fill', normalized);
+      changedCount += 1;
+    });
+  });
+  return changedCount;
+};
+
 export const applyStrokeOverridesToSvg = ({
   svg,
   features = [],

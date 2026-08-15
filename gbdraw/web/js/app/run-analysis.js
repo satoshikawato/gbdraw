@@ -834,6 +834,7 @@ export const createRunAnalysis = ({
     featureColorOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
+    legendColorOverrides,
     legendStrokeOverrides,
     selectedPalette,
     currentColors,
@@ -4021,6 +4022,7 @@ export const createRunAnalysis = ({
               suppressPairwiseIdentityLegend,
               features: extractedFeatures.value,
               featureStrokeOverrides,
+              legendColorOverrides,
               legendStrokeOverrides
             })
           )
@@ -4033,6 +4035,7 @@ export const createRunAnalysis = ({
               mode: mode.value,
               featureColorOverrides,
               featureStrokeOverrides,
+              legendColorOverrides,
               legendStrokeOverrides,
               manualSpecificRules,
               legacyFeatures: committedArtifactHandle?.features?.extractedFeatures || [],

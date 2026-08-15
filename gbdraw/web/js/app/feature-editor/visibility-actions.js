@@ -209,6 +209,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const applyVisibilityPreviewForScope = (scope, feat, mode) => {
+    let changed = false;
     collectAffectedFeatureIds(scope, feat).forEach((svgId) => {
       const specificHashMode = (scope?.id === 'product' || scope?.id === 'protein_id')
         ? featureVisibilityOverrides[svgId]
@@ -217,8 +218,10 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
         (mode === 'default'
           ? resolveEffectiveFeatureVisibility(svgId, featureVisibilityOverrides, null, featureVisibilityManualRules)
           : mode);
-      applyVisibilityPreviewBySvgId(svgId, effectiveMode);
+      changed = applyVisibilityPreviewBySvgId(svgId, effectiveMode) || changed;
     });
+    if (changed) previewRuntime?.flushActiveResult?.();
+    return changed;
   };
 
   const updateClickedFeatureVisibilityFromRules = (featureIds) => {
@@ -477,13 +480,17 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     return '';
   };
 
-  const reconcileFeatureVisibility = () => applyVisibilityPreviewChanges(
-    uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-      .map((feature) => ({
-        featureId: normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id),
-        mode: getFeatureVisibility(feature)
-      }))
-  );
+  const reconcileFeatureVisibility = () => {
+    const changed = applyVisibilityPreviewChanges(
+      uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
+        .map((feature) => ({
+          featureId: normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id),
+          mode: getFeatureVisibility(feature)
+        }))
+    );
+    if (changed) previewRuntime?.flushActiveResult?.();
+    return changed;
+  };
 
   return {
     addFeatureVisibilityRule,

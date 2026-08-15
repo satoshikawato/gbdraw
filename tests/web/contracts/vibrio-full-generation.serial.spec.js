@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const { writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const {
@@ -90,6 +91,141 @@ const featureCatalogSummary = (page) => page.evaluate(async () => {
     schema: Number(catalog?.schema || 0),
     itemCount: Array.isArray(catalog?.items) ? catalog.items.length : 0
   };
+});
+
+const svgSourceIdentity = (content) => ({
+  characters: String(content || '').length,
+  sha256: createHash('sha256').update(String(content || '')).digest('hex')
+});
+
+const svgComparisonSummary = (content) => {
+  const source = String(content || '');
+  return {
+    comparisonGroups: (source.match(/<g[^>]*\bid="comparison\d+"/g) || []).length,
+    pairwiseMatches: (source.match(/data-gbdraw-pairwise-match-id=/g) || []).length,
+    comparisonLegends: (source.match(/data-gbdraw-role="comparison-legend"/g) || []).length
+  };
+};
+
+const installCanonicalRequestCapture = (page) => page.evaluate(() => {
+  const previousPostMessage = Worker.prototype.postMessage;
+  window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ = [];
+  Worker.prototype.postMessage = function captureCanonicalRequest(message, transfer) {
+    if (message?.type === 'run' && message.payload?.request) {
+      window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__.push(
+        JSON.stringify(message.payload.request)
+      );
+    }
+    if (transfer === undefined) return previousPostMessage.call(this, message);
+    return previousPostMessage.call(this, message, transfer);
+  };
+});
+
+const canonicalRequestEvidence = async (page) => {
+  const serializedRequests = await page.evaluate(() => (
+    [...(window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ || [])]
+  ));
+  return serializedRequests.map((serialized) => {
+    const request = JSON.parse(serialized);
+    return {
+      sha256: createHash('sha256').update(serialized).digest('hex'),
+      schema: Number(request.schema || 0),
+      mode: String(request.mode || ''),
+      recordCount: Array.isArray(request.records) ? request.records.length : 0,
+      comparisonCount: Array.isArray(request.comparisons) ? request.comparisons.length : 0,
+      comparisonKinds: Array.isArray(request.comparisons)
+        ? request.comparisons.map(({ kind }) => String(kind || ''))
+        : [],
+      layout: request.layout || null,
+      colors: request.diagramOptions?.colors || null
+    };
+  });
+};
+
+const activeIntentSummary = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const stable = (value) => {
+    if (Array.isArray(value)) return value.map((item) => stable(item));
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, stable(value[key])])
+    );
+  };
+  const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
+  const overrides = {
+    fills: plain(state.featureColorOverrides),
+    strokes: plain(state.featureStrokeOverrides),
+    visibility: plain(state.featureVisibilityOverrides),
+    labelText: plain(state.labelTextFeatureOverrides),
+    labelVisibility: plain(state.labelVisibilityOverrides),
+    legendColors: plain(state.legendColorOverrides),
+    legendStrokes: plain(state.legendStrokeOverrides)
+  };
+  const digest = async (value) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(stable(value)));
+    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    return [...hash].map((item) => item.toString(16).padStart(2, '0')).join('');
+  };
+  const summary = {
+    mode: state.mode.value,
+    inputType: state.mode.value === 'circular'
+      ? state.cInputType.value
+      : state.lInputType.value,
+    palette: {
+      selected: state.selectedPalette.value,
+      currentColorsSha256: await digest(state.currentColors.value),
+      currentColorCount: Object.keys(state.currentColors.value || {}).length,
+      instantPreview: state.paletteInstantPreviewEnabled.value,
+      applied: state.appliedPaletteName.value,
+      pending: state.pendingPaletteName.value
+    },
+    rules: {
+      specificCount: state.manualSpecificRules.length,
+      specificSha256: await digest(state.manualSpecificRules),
+      priorityCount: state.manualPriorityRules.length,
+      prioritySha256: await digest(state.manualPriorityRules)
+    },
+    filters: {
+      mode: state.filterMode.value,
+      whitelistCount: state.manualWhitelist.length,
+      blacklistText: state.manualBlacklist.value
+    },
+    form: {
+      plotTitle: state.form.plot_title,
+      labelsMode: state.form.labels_mode,
+      showScale: state.form.show_scale,
+      legend: state.form.legend
+    },
+    adv: {
+      axisStrokeWidth: state.adv.axis_stroke_width,
+      labelFontSize: state.adv.label_font_size,
+      featureWidthCircular: state.adv.feature_width_circular,
+      plotTitlePosition: state.adv.plot_title_position
+    },
+    annotationSetIds: state.annotationSets.map(({ id }) => id),
+    circularTracks: {
+      enabled: state.adv.circular_track_slots_enabled,
+      slots: state.adv.circular_track_slots.map(({ id, renderer, enabled }) => ({
+        id,
+        renderer,
+        enabled
+      }))
+    },
+    linearComparisonPlan: plain(state.linearComparisonPlan),
+    linearRecordLayout: {
+      enabled: state.linearRecordLayoutEnabled.value,
+      recordGap: state.linearRecordGap.value,
+      rows: plain(state.linearRecordRows)
+    },
+    layoutPreferences: plain(state.layoutPreferences),
+    editorOverrides: {
+      counts: Object.fromEntries(
+        Object.entries(overrides).map(([name, values]) => [name, Object.keys(values || {}).length])
+      ),
+      sha256: await digest(overrides)
+    }
+  };
+  return { ...summary, sha256: await digest(summary) };
 });
 
 const phaseDuration = (events, startName, endName) => {
@@ -610,6 +746,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       resultCount: Array.isArray(app.results) ? app.results.length : 0
     };
   });
+  const loadedPreviewIdentity = svgSourceIdentity(loaded.originalPreview);
+  const preFirstGenerateActiveIntent = await activeIntentSummary(page);
   const loadProbe = await probeSnapshot(page);
   const ready = loadProbe.lifecycle.find(({ name }) => name === 'interactiveReady');
   const previewMetrics = Object.fromEntries(
@@ -631,7 +769,20 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   ));
   expect(preflightStructural.proteinManifestFullValidationCount).toBe(1);
   expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
+  expect(loadProbe.metrics.currentWriterActiveConfigRestoreCount).toBe(1);
+  expect(loadProbe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
   expect(await featureCatalogSummary(page)).toEqual({ schema: 3, itemCount: 1 });
+  expect(preFirstGenerateActiveIntent.linearComparisonPlan).toEqual({
+    mode: 'none',
+    defaultSource: 'losat',
+    edges: []
+  });
+  expect(preFirstGenerateActiveIntent.linearRecordLayout).toMatchObject({
+    enabled: true,
+    recordGap: 48
+  });
+  expect(preFirstGenerateActiveIntent.linearRecordLayout.rows).toHaveLength(11);
+  await installCanonicalRequestCapture(page);
 
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
   const first = await invokeGeneration(page, terminal, runnerEvidence, terminalSignal);
@@ -649,6 +800,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
+  const firstGeneratedIdentity = svgSourceIdentity(firstGeneratedSvg);
 
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
   const second = await invokeGeneration(page, terminal, runnerEvidence, terminalSignal);
@@ -666,6 +818,36 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
+  const capturedCanonicalRequests = await canonicalRequestEvidence(page);
+  expect(capturedCanonicalRequests).toHaveLength(2);
+  expect(capturedCanonicalRequests[0]).toMatchObject({
+    schema: 5,
+    mode: 'linear',
+    recordCount: 11,
+    comparisonCount: 0,
+    comparisonKinds: [],
+    layout: {
+      recordGapPx: 48,
+      multiRecordPositions: [
+        '#1@1', '#2@1', '#3@1', '#4@2', '#5@2', '#6@3',
+        '#7@3', '#8@4', '#9@4', '#10@5', '#11@5'
+      ]
+    }
+  });
+  expect(capturedCanonicalRequests[1]).toEqual(capturedCanonicalRequests[0]);
+  const loadedComparisonSummary = svgComparisonSummary(loaded.originalPreview);
+  const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
+  const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
+  expect(loadedComparisonSummary.comparisonGroups).toBeGreaterThan(0);
+  expect(loadedComparisonSummary.pairwiseMatches).toBeGreaterThan(0);
+  expect(loadedComparisonSummary.comparisonLegends).toBeGreaterThan(0);
+  expect(firstComparisonSummary).toEqual({
+    comparisonGroups: 0,
+    pairwiseMatches: 0,
+    comparisonLegends: 0
+  });
+  expect(secondComparisonSummary).toEqual(firstComparisonSummary);
+  expect(loaded.originalPreview).not.toBe(firstGeneratedSvg);
   const generatedFeatureCatalogDigest = await featureCatalogDigest(page);
 
   const activity = second.worker;
@@ -937,25 +1119,23 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   expect(afterPing.initializations).toBe(1);
   expect(afterPing.instances[0].terminated).toBe(false);
 
+  const loadedSvgPath = testInfo.outputPath('vibrio-loaded-preview.svg');
   const firstSvgPath = testInfo.outputPath('vibrio-generate-1.svg');
   const secondSvgPath = testInfo.outputPath('vibrio-generate-2.svg');
+  writeFileSync(loadedSvgPath, loaded.originalPreview, 'utf8');
   writeFileSync(firstSvgPath, firstGeneratedSvg, 'utf8');
   writeFileSync(secondSvgPath, secondGeneratedSvg, 'utf8');
+  const svgComparisonCommand = [
+    'import sys',
+    'from tests.utils.svg_compare import compare_svgs',
+    'result = compare_svgs(sys.argv[1], sys.argv[2])',
+    'print(result.message)',
+    'print("\\n".join(result.differences))',
+    'raise SystemExit(0 if result.equal else 1)'
+  ].join(';');
   const semanticComparison = spawnSync(
     process.env.GBDRAW_PYTHON || 'python',
-    [
-      '-c',
-      [
-        'import sys',
-        'from tests.utils.svg_compare import compare_svgs',
-        'result = compare_svgs(sys.argv[1], sys.argv[2])',
-        'print(result.message)',
-        'print("\\n".join(result.differences))',
-        'raise SystemExit(0 if result.equal else 1)'
-      ].join(';'),
-      firstSvgPath,
-      secondSvgPath
-    ],
+    ['-c', svgComparisonCommand, firstSvgPath, secondSvgPath],
     { cwd: repoRoot, encoding: 'utf8' }
   );
   expect(
@@ -1026,6 +1206,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     load: {
       previewMetrics,
       preflightStructural,
+      loadedPreviewIdentity,
+      preFirstGenerateActiveIntent,
       timings: loadTimings(loadProbe.lifecycle)
     },
     generations: {
@@ -1051,6 +1233,14 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     },
     deterministicOutput: {
       comparison: 'tests.utils.svg_compare.compare_svgs',
+      loadedToFirstRelationship: 'divergent-active-draft',
+      loadedToFirstExactBytesEqual: loaded.originalPreview === firstGeneratedSvg,
+      loadedPreviewIdentity,
+      firstGeneratedIdentity,
+      loadedComparisonSummary,
+      firstComparisonSummary,
+      secondComparisonSummary,
+      capturedCanonicalRequests,
       semanticallyEquivalent: semanticComparison.status === 0,
       exactBytesEqual: firstGeneratedSvg === secondGeneratedSvg,
       firstCharacters: firstGeneratedSvg.length,
@@ -1070,6 +1260,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   });
   console.log(`Vibrio full-generation evidence: ${JSON.stringify({
     loadTimings: report.load.timings,
+    loadedPreviewIdentity: report.load.loadedPreviewIdentity,
+    preFirstGenerateActiveIntent: report.load.preFirstGenerateActiveIntent,
     firstGenerateMs: report.generations.firstElapsedMs,
     secondGenerateMs: report.generations.secondElapsedMs,
     referencedResourceCount: report.generations.referencedResourceCount,
