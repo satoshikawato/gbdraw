@@ -78,6 +78,7 @@ export const setupWatchers = ({
     skipCaptureBaseConfig,
     skipPositionReapply,
     skipExtractOnSvgChange,
+    trustedArtifactRestoreInProgress,
     svgContainer,
     layoutPreferences,
     suppressCircularMultiRecordDefaults,
@@ -355,10 +356,11 @@ export const setupWatchers = ({
         previewRuntime?.clearActiveRuntime?.();
       }
 
-      if (!skipExtractOnSvgChange.value) {
+      if (!skipExtractOnSvgChange.value && !trustedArtifactRestoreInProgress.value) {
         measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
       }
       const shouldBindComposition = Boolean(
+        !trustedArtifactRestoreInProgress.value &&
         svg && (
           !isIncrementalEdit ||
           svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null ||
@@ -380,7 +382,7 @@ export const setupWatchers = ({
       measureTiming(timingEntries, 'watch(svgContent) setupLegendDrag', setupLegendDrag);
       measureTiming(timingEntries, 'watch(svgContent) setupDiagramDrag', () => setupDiagramDrag(isIncrementalEdit));
       measureTiming(timingEntries, 'watch(svgContent) attachSvgFeatureHandlers', attachSvgFeatureHandlers);
-      if (shouldSyncLabelEditor()) {
+      if (!trustedArtifactRestoreInProgress.value && shouldSyncLabelEditor()) {
         measureTiming(timingEntries, 'watch(svgContent) syncLabelEditor', syncLabelEditor);
       }
 
@@ -410,7 +412,7 @@ export const setupWatchers = ({
   );
 
   watch(extractedFeatures, () => {
-    if (semanticFileWatchersSuppressed.value) return;
+    if (semanticFileWatchersSuppressed.value || trustedArtifactRestoreInProgress.value) return;
     refreshFeatureVisibilitySelectorCache();
     if (!svgContent.value) return;
     nextTick(() => {
@@ -423,7 +425,10 @@ export const setupWatchers = ({
     });
   });
 
-  watch(featureSelectorSafetyScope, refreshFeatureVisibilitySelectorCache, { immediate: true });
+  watch(featureSelectorSafetyScope, () => {
+    if (trustedArtifactRestoreInProgress.value) return;
+    refreshFeatureVisibilitySelectorCache();
+  }, { immediate: true });
 
   watch(
     [labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides],

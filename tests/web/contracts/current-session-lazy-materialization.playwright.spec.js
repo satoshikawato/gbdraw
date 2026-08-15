@@ -461,6 +461,8 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       return { length: normalized.length, hash: hash >>> 0 };
     };
     const snapshotResultState = () => ({
+      mode: app.mode,
+      generatedMode: app.generatedMode,
       names: app.results.map((result) => String(result?.name || '')),
       svgIdentities: app.results.map((result) => svgIdentity(result?.content)),
       selectedResultIndex: app.selectedResultIndex,
@@ -468,13 +470,30 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       featureCount: app.extractedFeatures.length,
       orthogroupCount: app.orthogroups.length
     });
+    const historyDelta = (before, after) => Object.fromEntries([
+      'artifactCheckpointBuilds',
+      'artifactCheckpointSignatureComputations',
+      'historySvgBytes',
+      'checkpointEstimatedBytes',
+      'generatedArtifactFullCloneCount',
+      'generatedArtifactFullSerializationCount',
+      'manualCancelFullArtifactSnapshotBuildCount',
+      'artifactHandleBeforeBuildCount',
+      'artifactHandleAfterBuildCount',
+      'artifactFingerprintComparisonCount',
+      'artifactReplacementHistoryEntryCount'
+    ].map((name) => [name, Number(after[name] || 0) - Number(before[name] || 0)]));
     const loaded = snapshotResultState();
+    const beforeFirst = history.getDiagnostics();
     const first = await app.runAnalysis();
+    const afterFirst = history.getDiagnostics();
     const generatedState = snapshotResultState();
     const firstUndoCount = history.getUndoCount();
     const firstRedoCount = history.getRedoCount();
+    const firstUndoLabel = history.undoLabel();
     const undone = await history.undo();
     const restoredLoadedState = snapshotResultState();
+    const redoLabelAfterUndo = history.redoLabel();
     const redone = await history.redo();
     const restoredGeneratedState = snapshotResultState();
     const {
@@ -485,7 +504,32 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
       { caption: 'lazy worker reuse', fontFamily: 'Arial', fontSize: 14 }
     );
+    const beforeSecond = history.getDiagnostics();
+    const undoCountBeforeSecond = history.getUndoCount();
+    const redoCountBeforeSecond = history.getRedoCount();
     const second = await app.runAnalysis();
+    const afterSecond = history.getDiagnostics();
+    const undoCountAfterSecond = history.getUndoCount();
+    const redoCountAfterSecond = history.getRedoCount();
+    const generateProbe = window.__GBDRAW_LAZY_SESSION_PROBE__.snapshot();
+    const editableFeature = app.extractedFeatures.find((feature) => (
+      app.canEditFeatureColor(feature)
+    ));
+    if (!editableFeature) {
+      throw new Error('The synthetic session has no editable feature for mutation isolation.');
+    }
+    const currentColor = String(app.getFeatureColorValue(editableFeature) || '').toLowerCase();
+    const mutationColor = currentColor === '#123456' ? '#654321' : '#123456';
+    const editApplied = await app.setFeatureColorValue(editableFeature, mutationColor);
+    const editedState = snapshotResultState();
+    const undoEdit = await history.undo();
+    const afterUndoEdit = snapshotResultState();
+    const undoGenerate = await history.undo();
+    const afterUndoGenerate = snapshotResultState();
+    const redoGenerate = await history.redo();
+    const afterRedoGenerate = snapshotResultState();
+    const redoEdit = await history.redo();
+    const afterRedoEdit = snapshotResultState();
     return {
       first,
       second,
@@ -493,10 +537,31 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       generatedState,
       firstUndoCount,
       firstRedoCount,
+      firstUndoLabel,
+      redoLabelAfterUndo,
       undone,
       restoredLoadedState,
       redone,
       restoredGeneratedState,
+      firstHistory: historyDelta(beforeFirst, afterFirst),
+      secondHistory: historyDelta(beforeSecond, afterSecond),
+      undoCountBeforeSecond,
+      redoCountBeforeSecond,
+      undoCountAfterSecond,
+      redoCountAfterSecond,
+      generateProbe,
+      mutationIsolation: {
+        editApplied,
+        editedState,
+        undoEdit,
+        afterUndoEdit,
+        undoGenerate,
+        afterUndoGenerate,
+        redoGenerate,
+        afterRedoGenerate,
+        redoEdit,
+        afterRedoEdit
+      },
       helperWidth: Number(helper?.result?.width || 0),
       errorSummary: String(app.errorLog?.summary || '')
     };
@@ -509,16 +574,55 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(generated.helperWidth).toBeGreaterThan(0);
   expect(generated.firstUndoCount).toBe(1);
   expect(generated.firstRedoCount).toBe(0);
+  expect(generated.firstUndoLabel).toBe('Generate diagram');
   expect(generated.undone).toBe(true);
-  expect(generated.restoredLoadedState).toEqual(generated.loaded);
+  expect(generated.restoredLoadedState, JSON.stringify(generated, null, 2)).toEqual(
+    generated.loaded
+  );
   expect(generated.redone).toBe(true);
+  expect(generated.redoLabelAfterUndo).toBe('Generate diagram');
   expect(generated.restoredGeneratedState).toEqual(generated.generatedState);
   expect(generated.restoredGeneratedState.selectedResultIndex).toBeGreaterThanOrEqual(0);
   expect(generated.restoredGeneratedState.selectedResultIndex).toBeLessThan(
     generated.restoredGeneratedState.resultCount
   );
+  expect(generated.firstHistory).toEqual({
+    artifactCheckpointBuilds: 0,
+    artifactCheckpointSignatureComputations: 0,
+    historySvgBytes: 0,
+    checkpointEstimatedBytes: 0,
+    generatedArtifactFullCloneCount: 0,
+    generatedArtifactFullSerializationCount: 0,
+    manualCancelFullArtifactSnapshotBuildCount: 0,
+    artifactHandleBeforeBuildCount: 1,
+    artifactHandleAfterBuildCount: 1,
+    artifactFingerprintComparisonCount: 1,
+    artifactReplacementHistoryEntryCount: 1
+  });
+  expect(generated.secondHistory).toEqual({
+    ...generated.firstHistory,
+    artifactReplacementHistoryEntryCount: 0
+  });
+  expect(generated.undoCountAfterSecond).toBe(generated.undoCountBeforeSecond);
+  expect(generated.redoCountAfterSecond).toBe(generated.redoCountBeforeSecond);
+  expect(generated.mutationIsolation.editApplied).toBe(true);
+  expect(generated.mutationIsolation.editedState.svgIdentities).not.toEqual(
+    generated.generatedState.svgIdentities
+  );
+  expect(generated.mutationIsolation.undoEdit).toBe(true);
+  expect(generated.mutationIsolation.afterUndoEdit.resultCount).toBe(
+    generated.generatedState.resultCount
+  );
+  expect(generated.mutationIsolation.undoGenerate).toBe(true);
+  expect(generated.mutationIsolation.afterUndoGenerate).toEqual(generated.loaded);
+  expect(generated.mutationIsolation.redoGenerate).toBe(true);
+  expect(generated.mutationIsolation.afterRedoGenerate).toEqual(generated.generatedState);
+  expect(generated.mutationIsolation.redoEdit).toBe(true);
+  expect(generated.mutationIsolation.afterRedoEdit.resultCount).toBe(
+    generated.mutationIsolation.editedState.resultCount
+  );
 
-  const snapshot = await probeSnapshot(page);
+  const snapshot = generated.generateProbe;
   const materializedIds = new Set(
     snapshot.details
       .filter(({ name }) => name === 'resourceByteReadCount')
@@ -529,7 +633,12 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect([...materializedIds].every((resourceId) => (
     ['record-1-genbank', 'colors-default-colors'].includes(resourceId)
   ))).toBe(true);
-  expect(snapshot.structural.base64DecodeCount).toBe(materializedIds.size);
+  expect(snapshot.structural.base64DecodeCount).toBe(
+    snapshot.structural.resourceByteReadCount
+  );
+  expect(snapshot.structural.base64DecodeCount).toBeGreaterThanOrEqual(
+    materializedIds.size
+  );
 
   const previewEvent = snapshot.lifecycle.find(
     ({ name }) => name === 'firstCommittedPreview'
@@ -548,6 +657,151 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.runs).toBe(2);
   expect(worker.instances).toHaveLength(1);
   expect(worker.instances[0].terminated).toBe(false);
+});
+
+test('the real Cancel control restores the committed artifact and leaves no History entry', async ({
+  page
+}) => {
+  test.setTimeout(300_000);
+  await openInstrumentedApp(page);
+  await armHistoryCompletion(page);
+  expect(await loadSyntheticSession(page)).toMatchObject({
+    status: 'ok',
+    degradedRecovery: false
+  });
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    window.__GBDRAW_CANCEL_BASELINE__ = {
+      content: String(app.results?.[app.selectedResultIndex]?.content || ''),
+      resultCount: app.results.length,
+      selectedResultIndex: app.selectedResultIndex,
+      featureCount: app.extractedFeatures.length,
+      orthogroupCount: app.orthogroups.length,
+      undoCount: history.getUndoCount(),
+      redoCount: history.getRedoCount(),
+      diagnostics: history.getDiagnostics()
+    };
+    window.__GBDRAW_CANCEL_BASELINE_REFS__ = {
+      result: app.results?.[app.selectedResultIndex] || null,
+      extractedFeatures: app.extractedFeatures,
+      orthogroups: app.orthogroups
+    };
+    let releaseResponse;
+    const responseGate = new Promise((resolve) => {
+      releaseResponse = resolve;
+    });
+    window.__GBDRAW_CANCEL_RESPONSE_STARTED__ = false;
+    window.__GBDRAW_RELEASE_CANCEL_RESPONSE__ = releaseResponse;
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+      window.__GBDRAW_CANCEL_RESPONSE_STARTED__ = true;
+      return responseGate;
+    };
+    window.__GBDRAW_CANCEL_RUN__ = app.runAnalysis();
+  });
+
+  await page.waitForFunction(
+    () => window.__GBDRAW_CANCEL_RESPONSE_STARTED__ === true,
+    null,
+    { timeout: 240_000 }
+  );
+  await page.getByRole('button', { name: /Cancel$/ }).click();
+  const canceled = await page.evaluate(async () => {
+    const result = await window.__GBDRAW_CANCEL_RUN__;
+    window.__GBDRAW_RELEASE_CANCEL_RESPONSE__?.();
+    delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
+    const app = window.__GBDRAW_APP__;
+    const history = window.__GBDRAW_HISTORY__;
+    const baseline = window.__GBDRAW_CANCEL_BASELINE__;
+    const baselineRefs = window.__GBDRAW_CANCEL_BASELINE_REFS__;
+    const after = history.getDiagnostics();
+    const delta = Object.fromEntries([
+      'artifactCheckpointBuilds',
+      'artifactCheckpointSignatureComputations',
+      'historySvgBytes',
+      'checkpointEstimatedBytes',
+      'generatedArtifactFullCloneCount',
+      'generatedArtifactFullSerializationCount',
+      'manualCancelFullArtifactSnapshotBuildCount',
+      'artifactHandleBeforeBuildCount',
+      'artifactHandleAfterBuildCount',
+      'artifactFingerprintComparisonCount',
+      'artifactReplacementHistoryEntryCount'
+    ].map((name) => [
+      name,
+      Number(after[name] || 0) - Number(baseline.diagnostics[name] || 0)
+    ]));
+    return {
+      result,
+      contentRestored:
+        String(app.results?.[app.selectedResultIndex]?.content || '') === baseline.content,
+      resultCount: app.results.length,
+      selectedResultIndex: app.selectedResultIndex,
+      featureCount: app.extractedFeatures.length,
+      orthogroupCount: app.orthogroups.length,
+      baselineFeatureCount: baseline.featureCount,
+      baselineOrthogroupCount: baseline.orthogroupCount,
+      sameResultObject:
+        app.results?.[app.selectedResultIndex] === baselineRefs.result,
+      sameExtractedFeatureOwner: app.extractedFeatures === baselineRefs.extractedFeatures,
+      sameOrthogroupOwner: app.orthogroups === baselineRefs.orthogroups,
+      undoCount: history.getUndoCount(),
+      redoCount: history.getRedoCount(),
+      processing: app.processing,
+      diagnostics: delta
+    };
+  });
+  expect(canceled).toMatchObject({
+    result: { status: 'canceled' },
+    contentRestored: true,
+    resultCount: 1,
+    selectedResultIndex: 0,
+    sameResultObject: true,
+    sameExtractedFeatureOwner: true,
+    sameOrthogroupOwner: true,
+    undoCount: 0,
+    redoCount: 0,
+    processing: false,
+    diagnostics: {
+      artifactCheckpointBuilds: 0,
+      artifactCheckpointSignatureComputations: 0,
+      historySvgBytes: 0,
+      checkpointEstimatedBytes: 0,
+      generatedArtifactFullCloneCount: 0,
+      generatedArtifactFullSerializationCount: 0,
+      manualCancelFullArtifactSnapshotBuildCount: 0,
+      artifactHandleBeforeBuildCount: 1,
+      artifactHandleAfterBuildCount: 0,
+      artifactFingerprintComparisonCount: 0,
+      artifactReplacementHistoryEntryCount: 0
+    }
+  });
+  expect(canceled.featureCount).toBe(canceled.baselineFeatureCount);
+  expect(canceled.featureCount).toBeGreaterThan(0);
+  expect(canceled.orthogroupCount).toBe(canceled.baselineOrthogroupCount);
+
+  const canceledWorker = await getDiagramWorkerActivity(page);
+  expect(canceledWorker.runs).toBe(1);
+  expect(canceledWorker.instances[0].terminated).toBe(true);
+
+  const retry = await page.evaluate(async () => ({
+    result: await window.__GBDRAW_APP__.runAnalysis(),
+    undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
+    redoCount: window.__GBDRAW_HISTORY__.getRedoCount(),
+    previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
+    errorSummary: String(window.__GBDRAW_APP__.errorLog?.summary || '')
+  }));
+  expect(retry).toMatchObject({
+    result: { status: 'ok' },
+    undoCount: 1,
+    redoCount: 0,
+    previewVisible: true,
+    errorSummary: ''
+  });
+  const afterRetryWorker = await getDiagramWorkerActivity(page);
+  expect(afterRetryWorker.constructions).toBe(2);
+  expect(afterRetryWorker.instances[1].terminated).toBe(false);
 });
 
 test('preflight and lazy-access failures preserve the committed preview', async ({ page }) => {

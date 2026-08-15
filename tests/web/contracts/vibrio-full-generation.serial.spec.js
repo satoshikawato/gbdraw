@@ -108,7 +108,14 @@ const HISTORY_DIAGNOSTIC_FIELDS = [
   'intentBuilds',
   'intentSignatureComputations',
   'historySvgBytes',
-  'checkpointEstimatedBytes'
+  'checkpointEstimatedBytes',
+  'generatedArtifactFullCloneCount',
+  'generatedArtifactFullSerializationCount',
+  'manualCancelFullArtifactSnapshotBuildCount',
+  'artifactHandleBeforeBuildCount',
+  'artifactHandleAfterBuildCount',
+  'artifactFingerprintComparisonCount',
+  'artifactReplacementHistoryEntryCount'
 ];
 
 const historyStructuralDelta = (events, startName, endName) => {
@@ -148,6 +155,16 @@ const generationPhaseAttribution = (outcome, probe) => {
     events,
     'serialize-canonical-files-start',
     'serialize-canonical-files-end'
+  );
+  const historyBeforeStructural = historyStructuralDelta(
+    events,
+    'generate-history-before-start',
+    'generate-history-before-end'
+  );
+  const historyAfterStructural = historyStructuralDelta(
+    events,
+    'generate-history-after-start',
+    'generate-history-after-end'
   );
   return {
     warmGenerateMs: Number(outcome?.elapsedMs || 0),
@@ -248,6 +265,11 @@ const generationPhaseAttribution = (outcome, probe) => {
       'worker-cleanup-start',
       'worker-cleanup-end'
     ),
+    workerArtifactIdentityMs: durationOrZero(
+      events,
+      'worker-artifact-identity-start',
+      'worker-artifact-identity-end'
+    ),
     resultTransportDecodeMs,
     candidateResultValidationMs: durationOrZero(
       events,
@@ -289,16 +311,12 @@ const generationPhaseAttribution = (outcome, probe) => {
       'generate-history-after-start',
       'generate-history-after-end'
     ),
-    historyBeforeStructural: historyStructuralDelta(
-      events,
-      'generate-history-before-start',
-      'generate-history-before-end'
-    ),
-    historyAfterStructural: historyStructuralDelta(
-      events,
-      'generate-history-after-start',
-      'generate-history-after-end'
-    )
+    historyBeforeStructural,
+    historyAfterStructural,
+    historyStructural: Object.fromEntries(HISTORY_DIAGNOSTIC_FIELDS.map((name) => [
+      name,
+      Number(historyBeforeStructural[name] || 0) + Number(historyAfterStructural[name] || 0)
+    ]))
   };
 };
 
@@ -373,10 +391,28 @@ const invokeGeneration = async (page, terminal, runnerEvidence, terminalSignal) 
   let evaluationError = '';
   const evaluation = page.evaluate(async () => {
       const app = window.__GBDRAW_APP__;
+      const history = window.__GBDRAW_HISTORY__;
+      const diagnosticFields = [
+        'artifactCheckpointBuilds',
+        'artifactCheckpointSignatureComputations',
+        'historySvgBytes',
+        'checkpointEstimatedBytes',
+        'generatedArtifactFullCloneCount',
+        'generatedArtifactFullSerializationCount',
+        'manualCancelFullArtifactSnapshotBuildCount',
+        'artifactHandleBeforeBuildCount',
+        'artifactHandleAfterBuildCount',
+        'artifactFingerprintComparisonCount',
+        'artifactReplacementHistoryEntryCount'
+      ];
+      const historyBefore = history.getDiagnostics();
+      const undoCountBefore = history.getUndoCount();
+      const redoCountBefore = history.getRedoCount();
       const started = performance.now();
       try {
         const result = await app.runAnalysis();
         const selected = app.results?.[app.selectedResultIndex];
+        const historyAfter = history.getDiagnostics();
         return {
           status: String(result?.status || ''),
           elapsedMs: performance.now() - started,
@@ -388,7 +424,15 @@ const invokeGeneration = async (page, terminal, runnerEvidence, terminalSignal) 
           resultCount: Array.isArray(app.results) ? app.results.length : 0,
           generatedSvgCharacters: String(selected?.content || '').length,
           resultCommitted: String(selected?.content || '').includes('<svg'),
-          previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg'))
+          previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
+          undoCountBefore,
+          undoCountAfter: history.getUndoCount(),
+          redoCountBefore,
+          redoCountAfter: history.getRedoCount(),
+          historyStructural: Object.fromEntries(diagnosticFields.map((name) => [
+            name,
+            Number(historyAfter[name] || 0) - Number(historyBefore[name] || 0)
+          ]))
         };
       } catch (error) {
         return {
@@ -588,6 +632,10 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   const resultSvgCharacters = [firstProbe, secondProbe].map((probe) => Number(
     probe.lifecycle.find(({ name }) => name === 'result-svg-characters')?.value || 0
   ));
+  const artifactFingerprints = [firstProbe, secondProbe].map((probe) => String(
+    probe.lifecycle.find(({ name }) => name === 'worker-artifact-identity-end')
+      ?.fingerprint || ''
+  ));
   const firstStructural = {
     canonicalReplayFullSerializationCount: Number(
       firstProbe.metrics.canonicalReplayFullSerializationCount || 0
@@ -683,6 +731,19 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   };
   const firstPhaseAttribution = generationPhaseAttribution(first.outcome, firstProbe);
   const secondPhaseAttribution = generationPhaseAttribution(second.outcome, secondProbe);
+  const expectedWarmGenerateHistory = {
+    artifactCheckpointBuilds: 0,
+    artifactCheckpointSignatureComputations: 0,
+    historySvgBytes: 0,
+    checkpointEstimatedBytes: 0,
+    generatedArtifactFullCloneCount: 0,
+    generatedArtifactFullSerializationCount: 0,
+    manualCancelFullArtifactSnapshotBuildCount: 0,
+    artifactHandleBeforeBuildCount: 1,
+    artifactHandleAfterBuildCount: 1,
+    artifactFingerprintComparisonCount: 1,
+    artifactReplacementHistoryEntryCount: 0
+  };
 
   expect(activity.constructions).toBe(1);
   expect(activity.initializations).toBe(1);
@@ -708,6 +769,16 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     workerInitializationMs: 0,
     workerInitializationReused: true,
     newlyStagedResourceBytes: 0
+  });
+  expect(second.outcome.historyStructural).toEqual(expectedWarmGenerateHistory);
+  expect(secondPhaseAttribution.historyStructural).toMatchObject(
+    expectedWarmGenerateHistory
+  );
+  expect(second.outcome.undoCountAfter).toBe(second.outcome.undoCountBefore);
+  expect(second.outcome.redoCountAfter).toBe(second.outcome.redoCountBefore);
+  expect(first.outcome.historyStructural).toMatchObject({
+    ...expectedWarmGenerateHistory,
+    artifactReplacementHistoryEntryCount: 1
   });
   expect(secondStructural.resourceMaterializationCount).toBe(0);
   expect(secondStructural).toMatchObject({
@@ -759,6 +830,10 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   )).toBe(true);
   expect(resultSvgCharacters).toHaveLength(2);
   expect(resultSvgCharacters.every((characters) => characters > 0)).toBe(true);
+  expect(artifactFingerprints).toHaveLength(2);
+  expect(artifactFingerprints.every((fingerprint) => /^[0-9a-f]{64}$/.test(fingerprint)))
+    .toBe(true);
+  expect(artifactFingerprints[1]).toBe(artifactFingerprints[0]);
   expect(generatedFeatureCatalogDigest).toMatchObject({
     schema: 3,
     itemCount: 1
@@ -810,6 +885,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   ).toBe(0);
 
   const outputsExactlyEqual = firstGeneratedSvg === secondGeneratedSvg;
+  expect(outputsExactlyEqual).toBe(true);
   let historyRoundTrip;
   if (outputsExactlyEqual) {
     historyRoundTrip = await page.evaluate((expectedCharacters) => {
@@ -829,8 +905,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       historyEntryCreated: false,
       undoRedoAttempted: false,
       noOpGeneratePreserved: true,
-      undoCountAfter: 0,
-      redoCountAfter: 0
+      undoCountAfter: second.outcome.undoCountAfter,
+      redoCountAfter: second.outcome.redoCountAfter
     });
   } else {
     historyRoundTrip = await page.evaluate(async ({ firstSvg, secondSvg }) => {
@@ -900,7 +976,10 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       exactBytesEqual: firstGeneratedSvg === secondGeneratedSvg,
       firstCharacters: firstGeneratedSvg.length,
       secondCharacters: secondGeneratedSvg.length,
-      featureCatalog: generatedFeatureCatalogDigest
+      featureCatalog: generatedFeatureCatalogDigest,
+      artifactFingerprints,
+      generatedMetadataFingerprintEqual:
+        artifactFingerprints[0] === artifactFingerprints[1]
     },
     historyRoundTrip,
     structural,

@@ -28,17 +28,20 @@ const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {
 const replaceRuleDerivedFillOverrides = (overrides, features, rules) => {
   const candidates = Array.isArray(features) ? features : [];
   const specificRules = Array.isArray(rules) ? rules : [];
+  const hashRules = [];
+  const qualifierRules = [];
+  specificRules.forEach((rule) => {
+    (text(rule?.qual).toLowerCase() === 'hash' ? hashRules : qualifierRules).push(rule);
+  });
   candidates.forEach((feature) => {
-    for (const rule of specificRules) {
-      if (!ruleMatchesFeature(feature, rule)) continue;
-      const key = featureOverrideKey(feature);
-      if (key) {
-        overrides[key] = {
-          color: rule.color,
-          caption: rule.cap
-        };
-      }
-      break;
+    const rule = hashRules.find((candidate) => ruleMatchesFeature(feature, candidate))
+      || qualifierRules.find((candidate) => ruleMatchesFeature(feature, candidate));
+    const key = rule ? featureOverrideKey(feature) : '';
+    if (key) {
+      overrides[key] = {
+        color: rule.color,
+        caption: rule.cap
+      };
     }
   });
 };

@@ -136,6 +136,18 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     (Array.isArray(nextSources) ? nextSources : []).forEach(register);
   };
 
+  // Artifact History only supplies entries previously produced by this registry.
+  // Re-adopt those immutable entries without normalizing or copying large sequence
+  // strings a second time.
+  const resetTrusted = (nextSources = []) => {
+    sources.clear();
+    ambiguousKeys.clear();
+    (Array.isArray(nextSources) ? nextSources : []).forEach((source) => {
+      const key = text(source?.key);
+      if (key) sources.set(key, source);
+    });
+  };
+
   const resolve = (sourceKey, recordId, context = {}) => {
     const expectedSourceIndex = optionalNonnegativeIntegerStatus(context.sourceIndex);
     const expectedRecordIndex = optionalNonnegativeIntegerStatus(context.recordIndex);
@@ -189,7 +201,14 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
   };
 
   (Array.isArray(initialSources) ? initialSources : []).forEach(register);
-  return { sources, register, reset, resolve, values: () => Array.from(sources.values()) };
+  return {
+    sources,
+    register,
+    reset,
+    resetTrusted,
+    resolve,
+    values: () => Array.from(sources.values())
+  };
 };
 
 const sourceIdentity = (source, overrides = {}) => {

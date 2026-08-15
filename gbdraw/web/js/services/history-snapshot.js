@@ -204,6 +204,18 @@ const getRef = (target, fallback = null) => (
     : fallback
 );
 
+const setGeneratedArtifactRef = (target, value) => {
+  if (target && typeof target === 'object' && 'value' in target) target.value = value;
+};
+
+const getGeneratedArtifactRef = (target, fallback = null) => (
+  target && typeof target === 'object' && 'value' in target ? target.value : fallback
+);
+
+const artifactOwnedValue = (value) => (
+  typeof globalThis.Vue?.toRaw === 'function' ? globalThis.Vue.toRaw(value) : value
+);
+
 const buildDraftIntentData = (state) => ({
   selectedAnnotation: cloneJsonData(getRef(state.selectedAnnotation, null)),
   selectedSpecificPreset: String(getRef(state.selectedSpecificPreset, '') || ''),
@@ -642,10 +654,580 @@ export const createHistorySnapshotService = ({
   }
 
   let afterApplyHistoryIntent = null;
+  let generatedArtifactRuntimeOwner = null;
+  let currentGeneratedArtifactIdentity = null;
+  let currentGeneratedArtifactRetainedBytes = 0;
+  let generatedArtifactRestoreDepth = 0;
+  let restoreSemanticSuppressionBaseline = false;
+  let restoreTrustedStateBaseline = false;
 
   const setAfterApplyHistoryIntent = (callback) => {
     afterApplyHistoryIntent = typeof callback === 'function' ? callback : null;
   };
+
+  const setGeneratedArtifactRuntimeOwner = (owner) => {
+    generatedArtifactRuntimeOwner = (
+      owner
+      && typeof owner.capture === 'function'
+      && typeof owner.restore === 'function'
+    ) ? owner : null;
+  };
+
+  const artifactOwnerReferences = (results) => Object.freeze({
+    results: Object.freeze(
+      (Array.isArray(results) ? results : []).map(artifactOwnedValue)
+    ),
+    featureCatalog: artifactOwnedValue(getGeneratedArtifactRef(state.featureCatalog, null)),
+    extractedFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.extractedFeatures, null)),
+    biologicalFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.biologicalFeatures, null)),
+    featureSelectorSafetyScope: artifactOwnedValue(
+      getGeneratedArtifactRef(state.featureSelectorSafetyScope, null)
+    ),
+    orthogroups: artifactOwnedValue(getGeneratedArtifactRef(state.orthogroups, null)),
+    featureOrthogroupIndex: artifactOwnedValue(
+      getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
+    ),
+    collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
+    trackSlotResolvedGeometry: artifactOwnedValue(
+      getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
+    ),
+    proteinIdentityManifest: artifactOwnedValue(
+      getGeneratedArtifactRef(state.proteinIdentityManifest, null)
+    ),
+    legacyProteinRawCandidates: artifactOwnedValue(
+      getGeneratedArtifactRef(state.legacyProteinRawCandidates, null)
+    ),
+    legacyProteinDerivedEvidence: artifactOwnedValue(
+      getGeneratedArtifactRef(state.legacyProteinDerivedEvidence, null)
+    )
+  });
+
+  const setGeneratedArtifactIdentity = (identity, { results = null } = {}) => {
+    const fingerprint = String(identity?.fingerprint || '').toLowerCase();
+    if (
+      identity?.schema !== 1
+      || identity?.algorithm !== 'SHA-256'
+      || !/^[0-9a-f]{64}$/.test(fingerprint)
+    ) {
+      currentGeneratedArtifactIdentity = null;
+      currentGeneratedArtifactRetainedBytes = 0;
+      return false;
+    }
+    const committedResults = Array.isArray(results)
+      ? results
+      : getGeneratedArtifactRef(state.results, []);
+    currentGeneratedArtifactIdentity = Object.freeze({
+      schema: 1,
+      algorithm: 'SHA-256',
+      fingerprint,
+      ownerReferences: artifactOwnerReferences(committedResults)
+    });
+    currentGeneratedArtifactRetainedBytes = Math.max(
+      0,
+      Number(identity.retainedBytes) || 0
+    );
+    return true;
+  };
+
+  const clearGeneratedArtifactIdentity = ({ retainedBytes = 0 } = {}) => {
+    currentGeneratedArtifactIdentity = null;
+    currentGeneratedArtifactRetainedBytes = Math.max(0, Number(retainedBytes) || 0);
+  };
+
+  const currentArtifactMatchesIdentity = (results, identity) => {
+    const expected = identity?.ownerReferences;
+    if (!expected || expected.results.length !== results.length) return false;
+    if (!expected.results.every((result, index) => (
+      result === artifactOwnedValue(results[index])
+    ))) return false;
+    return (
+      expected.featureCatalog === artifactOwnedValue(
+        getGeneratedArtifactRef(state.featureCatalog, null)
+      )
+      && expected.extractedFeatures === artifactOwnedValue(
+        getGeneratedArtifactRef(state.extractedFeatures, null)
+      )
+      && expected.biologicalFeatures === artifactOwnedValue(
+        getGeneratedArtifactRef(state.biologicalFeatures, null)
+      )
+      && expected.featureSelectorSafetyScope
+        === artifactOwnedValue(getGeneratedArtifactRef(state.featureSelectorSafetyScope, null))
+      && expected.orthogroups === artifactOwnedValue(
+        getGeneratedArtifactRef(state.orthogroups, null)
+      )
+      && expected.featureOrthogroupIndex
+        === artifactOwnedValue(getGeneratedArtifactRef(state.featureOrthogroupIndex, null))
+      && expected.collinearGroups === artifactOwnedValue(
+        getGeneratedArtifactRef(state.collinearGroups, null)
+      )
+      && expected.trackSlotResolvedGeometry
+        === artifactOwnedValue(getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null))
+      && expected.proteinIdentityManifest
+        === artifactOwnedValue(getGeneratedArtifactRef(state.proteinIdentityManifest, null))
+      && expected.legacyProteinRawCandidates
+        === artifactOwnedValue(getGeneratedArtifactRef(state.legacyProteinRawCandidates, null))
+      && expected.legacyProteinDerivedEvidence
+        === artifactOwnedValue(getGeneratedArtifactRef(state.legacyProteinDerivedEvidence, null))
+    );
+  };
+
+  const copyMapEntries = (map) => {
+    const ownedMap = artifactOwnedValue(map);
+    return Object.freeze(
+      Array.from(ownedMap instanceof Map ? ownedMap : new Map(), ([key, value]) => (
+        Object.freeze([key, artifactOwnedValue(value)])
+      ))
+    );
+  };
+
+  const copyObjectEntries = (value) => Object.freeze(
+    Object.entries(value && typeof value === 'object' ? value : {}).map(([key, entry]) => (
+      Object.freeze([key, artifactOwnedValue(entry)])
+    ))
+  );
+
+  const estimateCacheEntries = (entries) => entries.reduce((total, pair) => {
+    const entry = pair?.[1];
+    const rawTextBytes = typeof entry?.text === 'string' ? entry.text.length * 2 : 0;
+    const declaredBytes = Number(entry?.retainedBytes || entry?.byteLength || entry?.size) || 0;
+    const complexFloor = entry && typeof entry === 'object' ? 4096 : 128;
+    return total + Math.max(rawTextBytes, declaredBytes, complexFloor);
+  }, 0);
+
+  const compactGeneratedArtifactSignature = (handle) => JSON.stringify({
+    ui: handle.ui,
+    featureEdits: {
+      selectedFeatureRecordIdx: handle.features.selectedFeatureRecordIdx,
+      featureRecordIds: handle.features.featureRecordIds,
+      featureColorOverrides: handle.features.featureColorOverrides,
+      featureVisibilityManualRules: handle.features.featureVisibilityManualRules,
+      featureVisibilityOverrides: handle.features.featureVisibilityOverrides,
+      labelTextFeatureOverrides: handle.features.labelTextFeatureOverrides,
+      labelOverrideRows: handle.features.labelOverrideRows,
+      labelTextBulkOverrides: handle.features.labelTextBulkOverrides,
+      labelTextFeatureOverrideSources: handle.features.labelTextFeatureOverrideSources,
+      labelVisibilityOverrides: handle.features.labelVisibilityOverrides,
+      labelOverrideContextKey: handle.features.labelOverrideContextKey
+    },
+    editor: {
+      legend: handle.editorState.legend,
+      featureStrokes: handle.editorState.featureStrokes,
+      originalSvgStroke: handle.editorState.originalSvgStroke
+    },
+    orthogroupEdits: {
+      selectedOrthogroupId: handle.orthogroupState.selectedOrthogroupId,
+      selectedOrthogroupAlignmentFeature:
+        handle.orthogroupState.selectedOrthogroupAlignmentFeature,
+      orthogroupNameOverrides: handle.orthogroupState.orthogroupNameOverrides,
+      orthogroupDescriptionOverrides:
+        handle.orthogroupState.orthogroupDescriptionOverrides
+    },
+    presentation: {
+      resultPanelTab: handle.resultPanelTab
+    },
+    cacheEntries: {
+      raw: handle.losatCache.map(([key, value]) => [
+        String(key),
+        String(value?.kind || ''),
+        String(value?.program || ''),
+        String(value?.flow || ''),
+        String(value?.queryCanonicalHash || ''),
+        String(value?.subjectCanonicalHash || ''),
+        String(value?.text || '').length
+      ]),
+      derived: handle.losatDerivedCache.map(([key, value]) => [
+        String(key),
+        String(value?.kind || ''),
+        String(value?.mode || '')
+      ]),
+      display: handle.losatCacheInfo
+    },
+    matchSequences: handle.matchSequenceSources.map((source) => [
+      String(source?.key || ''),
+      String(source?.recordId || ''),
+      String(source?.origin || ''),
+      Number(source?.recordIndex ?? -1),
+      Number(source?.sourceIndex ?? -1),
+      String(source?.sequence || '').length
+    ])
+  });
+
+  const captureGeneratedArtifactHandle = () => {
+    // Vue exposes these owners through reactive proxies. History retains their
+    // raw committed values only after the production mutation audit established
+    // replacement/copy-on-write ownership for every heavy domain below.
+    const results = Object.freeze(
+      [...(getGeneratedArtifactRef(state.results, []) || [])].map(artifactOwnedValue)
+    );
+    const ui = typeof buildUiStateData === 'function'
+      ? buildUiStateData({ includePreviewNavigation: true })
+      : buildFallbackUiStateData(state);
+    const features = {
+      extractedFeatures: artifactOwnedValue(
+        getGeneratedArtifactRef(state.extractedFeatures, [])
+      ),
+      biologicalFeatures: artifactOwnedValue(
+        getGeneratedArtifactRef(state.biologicalFeatures, [])
+      ),
+      featureSelectorSafetyScope: artifactOwnedValue(
+        getGeneratedArtifactRef(state.featureSelectorSafetyScope, [])
+      ),
+      featureRecordIds: Object.freeze([
+        ...(getGeneratedArtifactRef(state.featureRecordIds, []) || [])
+      ]),
+      featureVisibilitySelectorCache: copyObjectEntries(
+        state.featureVisibilitySelectorCache
+      ),
+      selectedFeatureRecordIdx: getGeneratedArtifactRef(state.selectedFeatureRecordIdx, 0),
+      featureColorOverrides: clonePlainObject(state.featureColorOverrides),
+      featureVisibilityManualRules: cloneFeatureVisibilityRules(
+        state.featureVisibilityManualRules
+      ),
+      featureVisibilityOverrides: cloneFeatureVisibilityOverrides(
+        state.featureVisibilityOverrides
+      ),
+      labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
+      labelOverrideRows: cloneJsonData(
+        getGeneratedArtifactRef(state.canonicalLabelOverrideRows, [])
+      ) || [],
+      labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
+      labelTextFeatureOverrideSources: clonePlainObject(
+        state.labelTextFeatureOverrideSources
+      ),
+      labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides),
+      labelOverrideContextKey: String(
+        getGeneratedArtifactRef(state.labelOverrideContextKey, '') || ''
+      )
+    };
+    const editorState = {
+      legend: {
+        entries: cloneJsonData(getGeneratedArtifactRef(state.legendEntries, [])) || [],
+        deletedEntries: cloneJsonData(
+          getGeneratedArtifactRef(state.deletedLegendEntries, [])
+        ) || [],
+        originalOrder: cloneJsonData(
+          getGeneratedArtifactRef(state.originalLegendOrder, [])
+        ) || [],
+        originalColors: clonePlainObject(
+          getGeneratedArtifactRef(state.originalLegendColors, {})
+        ),
+        colorOverrides: clonePlainObject(state.legendColorOverrides),
+        strokeOverrides: clonePlainObject(state.legendStrokeOverrides),
+        addedCaptions: Array.from(
+          getGeneratedArtifactRef(state.addedLegendCaptions, new Set()) || []
+        )
+      },
+      featureStrokes: { overrides: clonePlainObject(state.featureStrokeOverrides) },
+      originalSvgStroke: cloneJsonData(
+        getGeneratedArtifactRef(state.originalSvgStroke, null)
+      ) || {
+        color: null,
+        width: null
+      },
+      featureCatalog: artifactOwnedValue(
+        getGeneratedArtifactRef(state.featureCatalog, null)
+      )
+    };
+    const orthogroupState = {
+      groups: artifactOwnedValue(getGeneratedArtifactRef(state.orthogroups, [])),
+      featureIndex: artifactOwnedValue(
+        getGeneratedArtifactRef(state.featureOrthogroupIndex, new Map())
+      ),
+      selectedOrthogroupId: String(
+        getGeneratedArtifactRef(state.selectedOrthogroupId, '') || ''
+      ),
+      selectedOrthogroupAlignmentFeature: String(
+        getGeneratedArtifactRef(state.selectedOrthogroupAlignmentFeature, '') || ''
+      ),
+      orthogroupNameOverrides: clonePlainObject(state.orthogroupNameOverrides),
+      orthogroupDescriptionOverrides: clonePlainObject(
+        state.orthogroupDescriptionOverrides
+      )
+    };
+    const runState = typeof buildRunStateData === 'function'
+      ? buildRunStateData()
+      : {
+          lastRunInfo: cloneJsonData(getGeneratedArtifactRef(state.lastRunInfo, null)),
+          pairwiseMatchFactors: clonePlainObject(
+            getGeneratedArtifactRef(state.pairwiseMatchFactors, {})
+          )
+        };
+    const losatCache = copyMapEntries(
+      getGeneratedArtifactRef(state.losatCache, new Map())
+    );
+    const losatDerivedCache = copyMapEntries(
+      getGeneratedArtifactRef(state.losatDerivedCache, new Map())
+    );
+    const handle = {
+      kind: 'GeneratedArtifactHandle',
+      ui,
+      results,
+      features,
+      editorState,
+      orthogroupState,
+      runState,
+      trackSlotResolvedGeometry: artifactOwnedValue(
+        getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
+      ),
+      resultGenerationKey: getGeneratedArtifactRef(state.resultGenerationKey, 0),
+      resultPanelTab: getGeneratedArtifactRef(state.resultPanelTab, 'preview'),
+      errorLog: cloneJsonData(getGeneratedArtifactRef(state.errorLog, null)),
+      editableLabels: cloneJsonData(
+        getGeneratedArtifactRef(state.editableLabels, [])
+      ) || [],
+      labelTextScopeDialog: cloneJsonData(state.labelTextScopeDialog || {}) || {},
+      featureEditorStatus: cloneJsonData(state.featureEditorStatus || {}) || {},
+      featureExtractionPending: Boolean(
+        getGeneratedArtifactRef(state.featureExtractionPending, false)
+      ),
+      featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null),
+      labelOverrideBuildWarning: String(
+        getGeneratedArtifactRef(state.labelOverrideBuildWarning, '') || ''
+      ),
+      proteinIdentityManifest: artifactOwnedValue(
+        getGeneratedArtifactRef(state.proteinIdentityManifest, null)
+      ),
+      legacyProteinRawCandidates: artifactOwnedValue(
+        getGeneratedArtifactRef(state.legacyProteinRawCandidates, null)
+      ),
+      legacyProteinDerivedEvidence: artifactOwnedValue(
+        getGeneratedArtifactRef(state.legacyProteinDerivedEvidence, null)
+      ),
+      losatCache,
+      losatDerivedCache,
+      losatCacheInfo: cloneJsonData(
+        getGeneratedArtifactRef(state.losatCacheInfo, [])
+      ) || [],
+      collinearGroups: artifactOwnedValue(
+        getGeneratedArtifactRef(state.collinearGroups, [])
+      ),
+      matchSequenceSources: Object.freeze([
+        ...(state.matchSequenceRegistry?.values?.() || [])
+      ]),
+      runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
+      transportIdentity: null,
+      baseRetainedBytes: currentGeneratedArtifactRetainedBytes,
+      fileIds: Object.freeze([...collectCurrentFileIds(state, fileStore)])
+    };
+    const compactSignature = compactGeneratedArtifactSignature(handle);
+    const transportIdentity = currentArtifactMatchesIdentity(
+      results,
+      currentGeneratedArtifactIdentity
+    ) ? currentGeneratedArtifactIdentity : null;
+    handle.transportIdentity = transportIdentity;
+    const resultUtf16Bytes = results.reduce(
+      (total, result) => total + String(result?.content || '').length * 2,
+      0
+    );
+    const derivedCollectionBytes = (
+      (Array.isArray(features.extractedFeatures) ? features.extractedFeatures.length : 0) * 512
+      + (Array.isArray(features.biologicalFeatures) ? features.biologicalFeatures.length : 0) * 512
+      + features.featureVisibilitySelectorCache.length * 512
+      + (Array.isArray(orthogroupState.groups) ? orthogroupState.groups.length : 0) * 1024
+      + (Array.isArray(handle.collinearGroups) ? handle.collinearGroups.length : 0) * 1024
+      + handle.matchSequenceSources.reduce(
+          (total, source) => total + String(source?.sequence || '').length * 2 + 256,
+          0
+        )
+    );
+    handle.identity = Object.freeze({
+      fingerprint: transportIdentity?.fingerprint || '',
+      compactSignature
+    });
+    handle.retainedBytes = currentGeneratedArtifactRetainedBytes
+      + resultUtf16Bytes + derivedCollectionBytes + estimateCacheEntries(losatCache)
+      + estimateCacheEntries(losatDerivedCache)
+      + Math.max(0, Number(handle.runtimeState?.retainedBytes) || 0)
+      + compactSignature.length * 2;
+    return Object.freeze(handle);
+  };
+
+  const restoreGeneratedArtifactHandle = async (handle) => {
+    if (!handle || handle.kind !== 'GeneratedArtifactHandle') return false;
+    if (generatedArtifactRestoreDepth === 0) {
+      restoreSemanticSuppressionBaseline = Boolean(
+        getGeneratedArtifactRef(state.semanticFileWatchersSuppressed, false)
+      );
+      restoreTrustedStateBaseline = Boolean(
+        getGeneratedArtifactRef(state.trustedArtifactRestoreInProgress, false)
+      );
+    }
+    generatedArtifactRestoreDepth += 1;
+    setGeneratedArtifactRef(state.semanticFileWatchersSuppressed, true);
+    setGeneratedArtifactRef(state.trustedArtifactRestoreInProgress, true);
+    try {
+      closeTransientState(state);
+      const ui = handle.ui || {};
+      if (ui.mode) {
+        setGeneratedArtifactRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+      }
+      if (ui.cInputType) setGeneratedArtifactRef(state.cInputType, ui.cInputType);
+      if (ui.lInputType) setGeneratedArtifactRef(state.lInputType, ui.lInputType);
+      await nextTick();
+
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
+      setGeneratedArtifactRef(state.results, [...handle.results]);
+      setGeneratedArtifactRef(
+        state.selectedResultIndex,
+        handle.results.length > 0
+          ? Math.max(0, Math.min(Number(ui.selectedResultIndex) || 0, handle.results.length - 1))
+          : 0
+      );
+
+      if (typeof applyFeatureStateData === 'function') {
+        applyFeatureStateData(handle.features || {});
+      } else {
+        applyFallbackFeatureStateData(state, handle.features || {});
+      }
+      replacePlainObject(
+        state.featureVisibilitySelectorCache,
+        Object.fromEntries(handle.features?.featureVisibilitySelectorCache || [])
+      );
+      setGeneratedArtifactRef(state.orthogroups, handle.orthogroupState?.groups || []);
+      setGeneratedArtifactRef(
+        state.featureOrthogroupIndex,
+        handle.orthogroupState?.featureIndex || new Map()
+      );
+      setGeneratedArtifactRef(
+        state.selectedOrthogroupId,
+        String(handle.orthogroupState?.selectedOrthogroupId || '')
+      );
+      setGeneratedArtifactRef(
+        state.selectedOrthogroupAlignmentFeature,
+        String(handle.orthogroupState?.selectedOrthogroupAlignmentFeature || '')
+      );
+      replacePlainObject(
+        state.orthogroupNameOverrides,
+        clonePlainObject(handle.orthogroupState?.orthogroupNameOverrides)
+      );
+      replacePlainObject(
+        state.orthogroupDescriptionOverrides,
+        clonePlainObject(handle.orthogroupState?.orthogroupDescriptionOverrides)
+      );
+
+      const trustedEditorState = {
+        ...cloneJsonData({
+          legend: handle.editorState?.legend || {},
+          featureStrokes: handle.editorState?.featureStrokes || {},
+          originalSvgStroke: handle.editorState?.originalSvgStroke || {}
+        }),
+        featureCatalog: handle.editorState?.featureCatalog || null
+      };
+      if (typeof applyEditorStateData === 'function') {
+        applyEditorStateData(trustedEditorState, {
+          normalized: true,
+          adoptCatalog: true
+        });
+      } else {
+        applyEditorIntentData(state, trustedEditorState);
+        setGeneratedArtifactRef(state.featureCatalog, trustedEditorState.featureCatalog);
+      }
+      if (typeof applyRunStateData === 'function') {
+        applyRunStateData(handle.runState || {});
+      } else {
+        setGeneratedArtifactRef(
+          state.lastRunInfo,
+          cloneJsonData(handle.runState?.lastRunInfo) || null
+        );
+        setGeneratedArtifactRef(
+          state.pairwiseMatchFactors,
+          clonePlainObject(handle.runState?.pairwiseMatchFactors)
+        );
+      }
+
+      setGeneratedArtifactRef(
+        state.trackSlotResolvedGeometry,
+        handle.trackSlotResolvedGeometry ?? null
+      );
+      setGeneratedArtifactRef(state.resultGenerationKey, handle.resultGenerationKey ?? 0);
+      setGeneratedArtifactRef(state.resultPanelTab, handle.resultPanelTab || 'preview');
+      setGeneratedArtifactRef(state.errorLog, cloneJsonData(handle.errorLog));
+      setGeneratedArtifactRef(
+        state.editableLabels,
+        cloneJsonData(handle.editableLabels) || []
+      );
+      if (state.labelTextScopeDialog) {
+        Object.assign(
+          state.labelTextScopeDialog,
+          cloneJsonData(handle.labelTextScopeDialog) || {}
+        );
+      }
+      if (state.featureEditorStatus) {
+        Object.assign(
+          state.featureEditorStatus,
+          cloneJsonData(handle.featureEditorStatus) || {}
+        );
+      }
+      setGeneratedArtifactRef(
+        state.featureExtractionPending,
+        Boolean(handle.featureExtractionPending)
+      );
+      setGeneratedArtifactRef(
+        state.featureExtractionError,
+        handle.featureExtractionError ?? null
+      );
+      setGeneratedArtifactRef(
+        state.labelOverrideBuildWarning,
+        handle.labelOverrideBuildWarning || ''
+      );
+      setGeneratedArtifactRef(state.proteinIdentityManifest, handle.proteinIdentityManifest);
+      setGeneratedArtifactRef(
+        state.legacyProteinRawCandidates,
+        handle.legacyProteinRawCandidates
+      );
+      setGeneratedArtifactRef(
+        state.legacyProteinDerivedEvidence,
+        handle.legacyProteinDerivedEvidence
+      );
+      setGeneratedArtifactRef(state.losatCache, new Map(handle.losatCache || []));
+      setGeneratedArtifactRef(
+        state.losatDerivedCache,
+        new Map(handle.losatDerivedCache || [])
+      );
+      setGeneratedArtifactRef(
+        state.losatCacheInfo,
+        cloneJsonData(handle.losatCacheInfo) || []
+      );
+      setGeneratedArtifactRef(state.collinearGroups, handle.collinearGroups || []);
+      if (typeof state.matchSequenceRegistry?.resetTrusted === 'function') {
+        state.matchSequenceRegistry.resetTrusted(handle.matchSequenceSources || []);
+      } else {
+        state.matchSequenceRegistry?.reset?.(handle.matchSequenceSources || []);
+      }
+
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui);
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+      await generatedArtifactRuntimeOwner?.restore?.(handle.runtimeState, { ui });
+      currentGeneratedArtifactIdentity = handle.transportIdentity || null;
+      currentGeneratedArtifactRetainedBytes = Number(handle.baseRetainedBytes) || 0;
+      await nextTick();
+      // The SVG watcher schedules its trusted mount work on a nested nextTick.
+      await nextTick();
+      return true;
+    } finally {
+      generatedArtifactRestoreDepth = Math.max(0, generatedArtifactRestoreDepth - 1);
+      if (generatedArtifactRestoreDepth === 0) {
+        setGeneratedArtifactRef(
+          state.trustedArtifactRestoreInProgress,
+          restoreTrustedStateBaseline
+        );
+        setGeneratedArtifactRef(
+          state.semanticFileWatchersSuppressed,
+          restoreSemanticSuppressionBaseline
+        );
+      }
+    }
+  };
+
+  const compareGeneratedArtifactHandles = (before, after) => Boolean(
+    before?.identity?.fingerprint
+    && before.identity.fingerprint === after?.identity?.fingerprint
+    && before.identity.compactSignature === after?.identity?.compactSignature
+  );
 
   const buildGeneratedArtifactSnapshot = ({ includePreviewNavigation = true } = {}) => {
     const ui = typeof buildUiStateData === 'function'
@@ -938,9 +1520,15 @@ export const createHistorySnapshotService = ({
     applyGeneratedArtifactSnapshot,
     applyHistoryIntent,
     buildArtifactCheckpoint,
+    captureGeneratedArtifactHandle,
+    clearGeneratedArtifactIdentity,
     collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
+    compareGeneratedArtifactHandles,
     buildGeneratedArtifactSnapshot,
     buildHistoryIntent,
+    restoreGeneratedArtifactHandle,
+    setGeneratedArtifactIdentity,
+    setGeneratedArtifactRuntimeOwner,
     setAfterApplyHistoryIntent,
     snapshotSignature
   };

@@ -328,6 +328,189 @@ const createLayoutPreferences = () => ({
 }
 
 {
+  let setting = 'loaded-setting';
+  let artifact = {
+    id: 'loaded',
+    identity: { fingerprint: '', compactSignature: 'loaded' },
+    retainedBytes: 128,
+    fileIds: new Set()
+  };
+  let workerCalls = 0;
+  const restored = [];
+  const history = createHistoryManager({
+    buildIntent: async () => ({ setting }),
+    applyIntent: async (intent) => {
+      setting = intent.setting;
+    },
+    buildCheckpoint: () => {
+      throw new Error('Generate replacement must not build a checkpoint.');
+    },
+    applyCheckpoint: async () => {
+      throw new Error('Generate replacement must not apply a checkpoint.');
+    },
+    captureGeneratedArtifactHandle: () => artifact,
+    restoreGeneratedArtifactHandle: async (handle) => {
+      artifact = handle;
+      restored.push(handle.id);
+    },
+    compareGeneratedArtifactHandles: (before, after) => Boolean(
+      before.identity.fingerprint
+      && before.identity.fingerprint === after.identity.fingerprint
+      && before.identity.compactSignature === after.identity.compactSignature
+    )
+  });
+  const generated = (id, compactSignature = 'stable') => ({
+    id,
+    identity: { fingerprint: id.repeat(64).slice(0, 64), compactSignature },
+    retainedBytes: 256,
+    fileIds: new Set()
+  });
+
+  await history.initializeIntentBaseline('Loaded session');
+  const beforeFirst = history.getDiagnostics();
+  await history.runUndoableArtifactReplacement('Generate A', async (before) => {
+    assert.equal(before.id, 'loaded');
+    workerCalls += 1;
+    artifact = generated('a');
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  const afterFirst = history.getDiagnostics();
+  assert.equal(history.getUndoCount(), 1);
+  assert.equal(afterFirst.artifactHandleBeforeBuildCount - beforeFirst.artifactHandleBeforeBuildCount, 1);
+  assert.equal(afterFirst.artifactHandleAfterBuildCount - beforeFirst.artifactHandleAfterBuildCount, 1);
+  assert.equal(afterFirst.artifactFingerprintComparisonCount - beforeFirst.artifactFingerprintComparisonCount, 1);
+  assert.equal(afterFirst.artifactReplacementHistoryEntryCount - beforeFirst.artifactReplacementHistoryEntryCount, 1);
+  assert.equal(afterFirst.artifactCheckpointBuilds - beforeFirst.artifactCheckpointBuilds, 0);
+  assert.equal(afterFirst.artifactCheckpointSignatureComputations - beforeFirst.artifactCheckpointSignatureComputations, 0);
+  assert.equal(afterFirst.historySvgBytes - beforeFirst.historySvgBytes, 0);
+  assert.equal(afterFirst.checkpointEstimatedBytes - beforeFirst.checkpointEstimatedBytes, 0);
+  assert.equal(afterFirst.generatedArtifactFullCloneCount - beforeFirst.generatedArtifactFullCloneCount, 0);
+  assert.equal(afterFirst.generatedArtifactFullSerializationCount - beforeFirst.generatedArtifactFullSerializationCount, 0);
+  assert.equal(
+    afterFirst.manualCancelFullArtifactSnapshotBuildCount
+      - beforeFirst.manualCancelFullArtifactSnapshotBuildCount,
+    0
+  );
+
+  await history.undo();
+  assert.equal(artifact.id, 'loaded');
+  await history.redo();
+  assert.equal(artifact.id, 'a');
+  assert.equal(workerCalls, 1, 'Undo/Redo must not invoke generation');
+
+  const beforeUnchanged = history.getDiagnostics();
+  const undoCountBeforeUnchanged = history.getUndoCount();
+  const redoCountBeforeUnchanged = history.getRedoCount();
+  await history.runUndoableArtifactReplacement('Generate A unchanged', async () => {
+    workerCalls += 1;
+    artifact = generated('a');
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  const afterUnchanged = history.getDiagnostics();
+  assert.equal(history.getUndoCount(), undoCountBeforeUnchanged);
+  assert.equal(history.getRedoCount(), redoCountBeforeUnchanged);
+  assert.equal(
+    afterUnchanged.artifactReplacementHistoryEntryCount
+      - beforeUnchanged.artifactReplacementHistoryEntryCount,
+    0
+  );
+  assert.equal(afterUnchanged.artifactHandleBeforeBuildCount - beforeUnchanged.artifactHandleBeforeBuildCount, 1);
+  assert.equal(afterUnchanged.artifactHandleAfterBuildCount - beforeUnchanged.artifactHandleAfterBuildCount, 1);
+  assert.equal(
+    afterUnchanged.artifactFingerprintComparisonCount
+      - beforeUnchanged.artifactFingerprintComparisonCount,
+    1
+  );
+
+  const pendingSetting = await history.begin('Change render setting');
+  setting = 'changed-setting';
+  await history.runUndoableArtifactReplacement('Generate B', async () => {
+    workerCalls += 1;
+    artifact = generated('b');
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  assert.equal(pendingSetting.closed, true);
+  assert.equal(pendingSetting.deferAdapterCommit, true);
+  assert.equal(history.undoLabel(), 'Generate B');
+  await history.undo();
+  assert.equal(artifact.id, 'a');
+  assert.equal(setting, 'changed-setting');
+  assert.equal(history.undoLabel(), 'Change render setting');
+  await history.undo();
+  assert.equal(setting, 'loaded-setting');
+  await history.redo();
+  await history.redo();
+  assert.equal(setting, 'changed-setting');
+  assert.equal(artifact.id, 'b');
+
+  await history.runUndoableArtifactReplacement('Generate C', async () => {
+    workerCalls += 1;
+    artifact = generated('c');
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  await history.undo();
+  assert.equal(artifact.id, 'b');
+  await history.undo();
+  assert.equal(artifact.id, 'a');
+  await history.redo();
+  assert.equal(artifact.id, 'b');
+  await history.redo();
+  assert.equal(artifact.id, 'c');
+
+  const countBeforeFailure = history.getUndoCount();
+  const failed = await history.runUndoableArtifactReplacement('Failed Generate', async (before) => {
+    artifact = generated('d');
+    artifact = before;
+    return { status: 'error' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  assert.deepEqual(failed, { status: 'error' });
+  assert.equal(artifact.id, 'c');
+  assert.equal(history.getUndoCount(), countBeforeFailure);
+  assert.equal(history.getRedoCount(), 0);
+
+  await assert.rejects(
+    history.runUndoableArtifactReplacement('Thrown Generate', async () => {
+      artifact = generated('d');
+      throw new Error('injected generation failure');
+    }),
+    /injected generation failure/
+  );
+  assert.equal(artifact.id, 'c');
+  assert.equal(restored.at(-1), 'c');
+}
+
+{
+  let artifact = {
+    identity: { fingerprint: 'a'.repeat(64), compactSignature: 'a' },
+    retainedBytes: 80,
+    fileIds: []
+  };
+  const history = createHistoryManager({
+    maxBytes: 100,
+    buildIntent: async () => ({}),
+    applyIntent: async () => {},
+    buildCheckpoint: () => ({}),
+    applyCheckpoint: async () => {},
+    captureGeneratedArtifactHandle: () => artifact,
+    restoreGeneratedArtifactHandle: async (handle) => {
+      artifact = handle;
+    }
+  });
+  await history.initializeIntentBaseline('Loaded session');
+  await history.runUndoableArtifactReplacement('Oversized Generate', async () => {
+    artifact = {
+      identity: { fingerprint: 'b'.repeat(64), compactSignature: 'b' },
+      retainedBytes: 80,
+      fileIds: []
+    };
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  assert.equal(history.getDiagnostics().artifactReplacementHistoryEntryCount, 1);
+  assert.equal(history.canUndo(), false);
+  assert.match(history.historyLimitMessage.value, /discarded/);
+}
+
+{
   let value = 0;
   const buildState = async () => ({ value });
   const applyState = async (snapshot) => {
@@ -1438,6 +1621,223 @@ const createLayoutPreferences = () => ({
   });
   await history.undo();
   assert.deepEqual(draftState(), after);
+}
+
+{
+  const fileStore = createHistoryFileStore();
+  const resultA = { name: 'a.svg', content: '<svg id="a" />' };
+  const extractedA = [{ svg_id: 'feature-a', payload: 'x'.repeat(100_000) }];
+  const biologicalA = [{ biological_feature_id: 'bio-a', payload: 'y'.repeat(100_000) }];
+  const catalogA = { schema: 3, items: [{ payload: 'z'.repeat(100_000) }] };
+  const groupsA = [{ id: 'group-a', members: ['feature-a'] }];
+  const state = {
+    files: {},
+    linearSeqs: [],
+    linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
+    mode: ref('circular'),
+    cInputType: ref('gb'),
+    lInputType: ref('gb'),
+    results: ref([resultA]),
+    selectedResultIndex: ref(0),
+    extractedFeatures: ref(extractedA),
+    biologicalFeatures: ref(biologicalA),
+    featureCatalog: ref(catalogA),
+    featureSelectorSafetyScope: ref([]),
+    featureRecordIds: ref(['record-a']),
+    selectedFeatureRecordIdx: ref(0),
+    featureColorOverrides: { 'feature-a': '#112233' },
+    featureVisibilityManualRules: [],
+    featureVisibilityOverrides: {},
+    featureVisibilitySelectorCache: {
+      'feature-a': { qualifier: 'hash', value: 'feature-a' }
+    },
+    labelTextFeatureOverrides: {},
+    canonicalLabelOverrideRows: ref([]),
+    labelTextBulkOverrides: {},
+    labelTextFeatureOverrideSources: {},
+    labelVisibilityOverrides: {},
+    labelOverrideContextKey: ref('context-a'),
+    legendEntries: ref([{ caption: 'A', color: '#112233' }]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref(['A']),
+    originalLegendColors: ref({ A: '#112233' }),
+    legendColorOverrides: {},
+    legendStrokeOverrides: {},
+    addedLegendCaptions: ref(new Set()),
+    featureStrokeOverrides: {},
+    originalSvgStroke: ref({ color: '#000000', width: 1 }),
+    orthogroups: ref(groupsA),
+    featureOrthogroupIndex: ref(new Map([['feature-a', 'group-a']])),
+    selectedOrthogroupId: ref('group-a'),
+    selectedOrthogroupAlignmentFeature: ref('feature-a'),
+    orthogroupNameOverrides: {},
+    orthogroupDescriptionOverrides: {},
+    collinearGroups: ref([]),
+    lastRunInfo: ref({ resultCount: 1 }),
+    pairwiseMatchFactors: ref({}),
+    trackSlotResolvedGeometry: ref({ schema: 1 }),
+    resultGenerationKey: ref(1),
+    resultPanelTab: ref('preview'),
+    errorLog: ref(null),
+    editableLabels: ref([]),
+    labelTextScopeDialog: {},
+    featureEditorStatus: { status: 'summary-ready', summaryCount: 1 },
+    featureExtractionPending: ref(false),
+    featureExtractionError: ref(null),
+    labelOverrideBuildWarning: ref(''),
+    proteinIdentityManifest: ref({ schema: 1, records: [] }),
+    legacyProteinRawCandidates: ref({ schema: 1, entries: [] }),
+    legacyProteinDerivedEvidence: ref({ schema: 1, entries: [] }),
+    losatCache: ref(new Map([['raw-a', { text: 'row\n' }]])),
+    losatDerivedCache: ref(new Map()),
+    losatCacheInfo: ref([{ key: 'raw-a' }]),
+    matchSequenceRegistry: {
+      current: [{ key: 'record-a', recordId: 'record-a', aliases: [], sequence: 'ACGT' }],
+      values() { return this.current; },
+      reset(sources) { this.current = sources.map((source) => ({ ...source })); },
+      resetTrusted(sources) { this.current = [...sources]; }
+    },
+    skipCaptureBaseConfig: ref(false),
+    skipPositionReapply: ref(false),
+    skipExtractOnSvgChange: ref(false),
+    trustedArtifactRestoreInProgress: ref(false),
+    semanticFileWatchersSuppressed: ref(false)
+  };
+  let resultAdmissionCalls = 0;
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore,
+    nextTick: async () => {},
+    buildUiStateData: () => ({
+      mode: state.mode.value,
+      cInputType: state.cInputType.value,
+      lInputType: state.lInputType.value,
+      selectedResultIndex: state.selectedResultIndex.value,
+      appliedPaletteName: 'default',
+      appliedPaletteColors: {}
+    }),
+    applyUiStateData: (ui) => {
+      state.mode.value = ui.mode;
+      state.selectedResultIndex.value = ui.selectedResultIndex;
+    },
+    serializeResults: () => {
+      throw new Error('Generated Artifact Handles must not serialize Results.');
+    },
+    applyResultsData: () => {
+      resultAdmissionCalls += 1;
+      throw new Error('Trusted artifact restore must not use Result admission.');
+    },
+    applyFeatureStateData: (features) => {
+      state.extractedFeatures.value = features.extractedFeatures;
+      state.biologicalFeatures.value = features.biologicalFeatures;
+      state.featureSelectorSafetyScope.value = features.featureSelectorSafetyScope;
+      state.featureRecordIds.value = features.featureRecordIds;
+      state.selectedFeatureRecordIdx.value = features.selectedFeatureRecordIdx;
+      Object.assign(state.featureColorOverrides, features.featureColorOverrides);
+    },
+    applyEditorStateData: (editorState, options) => {
+      assert.equal(options.normalized, true);
+      assert.equal(options.adoptCatalog, true);
+      state.legendEntries.value = editorState.legend.entries;
+      state.featureCatalog.value = editorState.featureCatalog;
+    },
+    buildRunStateData: () => ({
+      lastRunInfo: structuredClone(state.lastRunInfo.value),
+      pairwiseMatchFactors: structuredClone(state.pairwiseMatchFactors.value)
+    }),
+    applyRunStateData: (runState) => {
+      state.lastRunInfo.value = structuredClone(runState.lastRunInfo);
+      state.pairwiseMatchFactors.value = structuredClone(runState.pairwiseMatchFactors);
+    }
+  });
+  snapshots.setGeneratedArtifactIdentity({
+    schema: 1,
+    algorithm: 'SHA-256',
+    fingerprint: 'a'.repeat(64),
+    retainedBytes: 400_000
+  }, { results: state.results.value });
+
+  const handleA = snapshots.captureGeneratedArtifactHandle();
+  assert.equal(Object.isFrozen(handleA), true);
+  assert.equal(Object.isFrozen(handleA.results), true);
+  assert.notEqual(handleA.results, state.results.value);
+  assert.equal(handleA.results[0], resultA);
+  assert.equal(handleA.features.extractedFeatures, extractedA);
+  assert.equal(handleA.features.biologicalFeatures, biologicalA);
+  assert.equal(handleA.editorState.featureCatalog, catalogA);
+  assert.equal(handleA.orthogroupState.groups, groupsA);
+  assert.equal(
+    Object.fromEntries(handleA.features.featureVisibilitySelectorCache)['feature-a'].value,
+    'feature-a'
+  );
+  assert.ok(handleA.retainedBytes >= 400_000);
+
+  state.results.value[0] = { name: 'a.svg', content: '<svg id="b" />' };
+  const invalidatedIdentityHandle = snapshots.captureGeneratedArtifactHandle();
+  assert.equal(
+    invalidatedIdentityHandle.identity.fingerprint,
+    '',
+    'Replacing a Result object must invalidate its Worker-byte identity even at equal length.'
+  );
+  state.results.value[0] = { name: 'edited.svg', content: '<svg id="edited" />' };
+  state.featureColorOverrides['feature-a'] = '#abcdef';
+  state.featureVisibilitySelectorCache['feature-a'] = {
+    qualifier: 'hash',
+    value: 'edited-feature'
+  };
+  state.legendEntries.value[0].caption = 'Edited current legend';
+  state.extractedFeatures.value = [{ svg_id: 'feature-b' }];
+  state.biologicalFeatures.value = [{ biological_feature_id: 'bio-b' }];
+  state.featureCatalog.value = { schema: 3, items: [] };
+  state.orthogroups.value = [{ id: 'group-b' }];
+  snapshots.setGeneratedArtifactIdentity({
+    schema: 1,
+    algorithm: 'SHA-256',
+    fingerprint: 'b'.repeat(64),
+    retainedBytes: 1024
+  }, { results: state.results.value });
+  const handleB = snapshots.captureGeneratedArtifactHandle();
+
+  assert.equal(handleA.results[0], resultA);
+  assert.equal(handleA.features.featureColorOverrides['feature-a'], '#112233');
+  assert.equal(handleA.editorState.legend.entries[0].caption, 'A');
+  assert.equal(
+    Object.fromEntries(handleA.features.featureVisibilitySelectorCache)['feature-a'].value,
+    'feature-a'
+  );
+  assert.equal(handleB.results[0].name, 'edited.svg');
+
+  await snapshots.restoreGeneratedArtifactHandle(handleA);
+  assert.equal(resultAdmissionCalls, 0);
+  assert.equal(state.results.value[0], resultA);
+  assert.equal(state.extractedFeatures.value, extractedA);
+  assert.equal(state.biologicalFeatures.value, biologicalA);
+  assert.equal(state.featureCatalog.value, catalogA);
+  assert.equal(state.orthogroups.value, groupsA);
+  assert.equal(state.featureColorOverrides['feature-a'], '#112233');
+  assert.equal(state.legendEntries.value[0].caption, 'A');
+  assert.equal(state.featureVisibilitySelectorCache['feature-a'].value, 'feature-a');
+  const recapturedA = snapshots.captureGeneratedArtifactHandle();
+  assert.equal(recapturedA.identity.fingerprint, 'a'.repeat(64));
+  assert.equal(recapturedA.retainedBytes, handleA.retainedBytes);
+
+  state.results.value[0] = { ...state.results.value[0], content: '<svg id="normal-edit" />' };
+  state.featureColorOverrides['feature-a'] = '#ffffff';
+  state.legendEntries.value[0].caption = 'Normal supported edit';
+  assert.equal(handleA.results[0].content, '<svg id="a" />');
+  assert.equal(handleA.features.featureColorOverrides['feature-a'], '#112233');
+  assert.equal(handleA.editorState.legend.entries[0].caption, 'A');
+
+  await snapshots.restoreGeneratedArtifactHandle(handleB);
+  assert.equal(state.results.value[0].name, 'edited.svg');
+  assert.equal(state.extractedFeatures.value[0].svg_id, 'feature-b');
+
+  await Promise.all([
+    snapshots.restoreGeneratedArtifactHandle(handleA),
+    snapshots.restoreGeneratedArtifactHandle(handleB)
+  ]);
+  assert.equal(state.trustedArtifactRestoreInProgress.value, false);
+  assert.equal(state.semanticFileWatchersSuppressed.value, false);
 }
 
 console.log('history tests passed');

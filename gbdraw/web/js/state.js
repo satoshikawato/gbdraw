@@ -781,6 +781,10 @@ const skipPositionReapply = ref(false);
 // This prevents race condition where watcher overwrites correct legend state
 const skipExtractOnSvgChange = ref(false);
 
+// Trusted Artifact History restores already-validated generated owners directly.
+// Watchers still mount the SVG and handlers, but must not rebuild metadata from it.
+const trustedArtifactRestoreInProgress = ref(false);
+
 const featureKeys = [
   'assembly_gap',
   'C_region',
@@ -1132,6 +1136,7 @@ export const state = {
   skipCaptureBaseConfig,
   skipPositionReapply,
   skipExtractOnSvgChange,
+  trustedArtifactRestoreInProgress,
   normalizePaletteColors,
   normalizePaletteDefinitions,
   featureKeys,

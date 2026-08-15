@@ -4323,6 +4323,7 @@ export const importSession = async (e, options = {}) => {
     return {
       status: 'ok',
       data,
+      decompressedCharacters: text.length,
       degradedRecovery: Boolean(currentRecoveryError)
     };
   } catch (err) {

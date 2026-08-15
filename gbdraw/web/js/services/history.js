@@ -114,6 +114,9 @@ export const createHistoryManager = ({
   applyIntent,
   buildCheckpoint,
   applyCheckpoint,
+  captureGeneratedArtifactHandle = null,
+  restoreGeneratedArtifactHandle = null,
+  compareGeneratedArtifactHandles = null,
   signatureFor = (value) => JSON.stringify(value),
   fileStore = null,
   collectCurrentFileIds = null,
@@ -148,7 +151,14 @@ export const createHistoryManager = ({
     artifactCheckpointSignatureComputations: 0,
     byteEstimateComputations: 0,
     historySvgBytes: 0,
-    checkpointEstimatedBytes: 0
+    checkpointEstimatedBytes: 0,
+    generatedArtifactFullCloneCount: 0,
+    generatedArtifactFullSerializationCount: 0,
+    manualCancelFullArtifactSnapshotBuildCount: 0,
+    artifactHandleBeforeBuildCount: 0,
+    artifactHandleAfterBuildCount: 0,
+    artifactFingerprintComparisonCount: 0,
+    artifactReplacementHistoryEntryCount: 0
   };
   let currentIntent = null;
   let currentIntentSignature = '';
@@ -263,6 +273,11 @@ export const createHistoryManager = ({
   const setCurrentCheckpoint = ({ checkpoint, signature }) => {
     currentCheckpoint = checkpoint;
     currentCheckpointSignature = signature;
+  };
+
+  const clearCurrentCheckpoint = () => {
+    currentCheckpoint = null;
+    currentCheckpointSignature = '';
   };
 
   const entryFileIds = (entry) => (
@@ -556,6 +571,191 @@ export const createHistoryManager = ({
       : execute(transaction);
   };
 
+  const finishArtifactHandleCapture = (handle, phase) => {
+    if (!handle || typeof handle !== 'object') {
+      throw new Error('Generated artifact capture did not return a handle.');
+    }
+    const retainedBytes = Number(handle.retainedBytes);
+    if (!Number.isFinite(retainedBytes) || retainedBytes < 0) {
+      throw new Error('Generated artifact handle has an invalid retained-byte estimate.');
+    }
+    emitHistoryDiagnostic({
+      type: 'capture',
+      scope: 'artifact-replacement',
+      phase,
+      bytes: retainedBytes
+    });
+    return handle;
+  };
+
+  const captureArtifactHandle = (phase) => {
+    if (typeof captureGeneratedArtifactHandle !== 'function') {
+      throw new Error('Generated artifact replacement requires a capture owner.');
+    }
+    capturing.value = true;
+    if (phase === 'before') diagnostics.artifactHandleBeforeBuildCount += 1;
+    else diagnostics.artifactHandleAfterBuildCount += 1;
+    try {
+      const handle = captureGeneratedArtifactHandle({ phase });
+      if (isPromiseLike(handle)) {
+        return Promise.resolve(handle)
+          .then((captured) => finishArtifactHandleCapture(captured, phase))
+          .finally(() => {
+            capturing.value = false;
+          });
+      }
+      const captured = finishArtifactHandleCapture(handle, phase);
+      capturing.value = false;
+      return captured;
+    } catch (error) {
+      capturing.value = false;
+      throw error;
+    }
+  };
+
+  const beginArtifactReplacement = async (label = 'Generate diagram', options = {}) => {
+    if (restoring.value || capturing.value) return null;
+    if (activeTransaction && !activeTransaction.closed) {
+      const pendingIntent = activeTransaction;
+      const previousDeferred = Boolean(pendingIntent.deferAdapterCommit);
+      pendingIntent.deferAdapterCommit = true;
+      try {
+        await commit(pendingIntent);
+      } catch (error) {
+        if (!pendingIntent.closed) pendingIntent.deferAdapterCommit = previousDeferred;
+        throw error;
+      }
+    }
+    notifyCheckpointCapture(options, 'before-start');
+    const before = await captureArtifactHandle('before');
+    notifyCheckpointCapture(options, 'before-end');
+    emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-replacement', label });
+    return {
+      label,
+      before,
+      closed: false,
+      source: options.source || ''
+    };
+  };
+
+  const sameArtifactHandles = (before, after) => {
+    diagnostics.artifactFingerprintComparisonCount += 1;
+    const same = typeof compareGeneratedArtifactHandles === 'function'
+      ? Boolean(compareGeneratedArtifactHandles(before, after))
+      : Boolean(
+          before?.identity?.fingerprint
+          && before.identity.fingerprint === after?.identity?.fingerprint
+          && before.identity.compactSignature === after?.identity?.compactSignature
+        );
+    emitHistoryDiagnostic({
+      type: 'compare',
+      scope: 'artifact-replacement',
+      equal: same
+    });
+    return same;
+  };
+
+  const artifactHandleFileIds = (handle) => new Set(handle?.fileIds || []);
+
+  const commitAppliedArtifactReplacement = async (transaction, options = {}) => {
+    if (!transaction || transaction.closed) return false;
+    notifyCheckpointCapture(options, 'after-start');
+    const after = await captureArtifactHandle('after');
+    const intent = await captureIntent();
+    transaction.closed = true;
+    setCurrentIntent(intent);
+    clearCurrentCheckpoint();
+
+    if (sameArtifactHandles(transaction.before, after)) {
+      emitHistoryDiagnostic({
+        type: 'commit',
+        scope: 'artifact-replacement',
+        label: transaction.label,
+        created: false
+      });
+      releaseUnreferencedFiles();
+      touch();
+      notifyCheckpointCapture(options, 'after-end');
+      return false;
+    }
+
+    const fileIds = artifactHandleFileIds(transaction.before);
+    artifactHandleFileIds(after).forEach((id) => fileIds.add(id));
+    const entry = {
+      type: 'artifact-replacement',
+      label: transaction.label || options.label || 'Generate diagram',
+      before: transaction.before,
+      after,
+      byteSize: Math.max(
+        1,
+        (Number(transaction.before.retainedBytes) || 0) + (Number(after.retainedBytes) || 0)
+      ),
+      fileIds
+    };
+    diagnostics.byteEstimateComputations += 1;
+    diagnostics.artifactReplacementHistoryEntryCount += 1;
+    emitHistoryDiagnostic({
+      type: 'size',
+      scope: 'artifact-replacement',
+      bytes: entry.byteSize
+    });
+    pushUndoEntry(entry);
+    clearRedo();
+    enforceLimits();
+    touch();
+    emitHistoryDiagnostic({
+      type: 'commit',
+      scope: 'artifact-replacement',
+      label: entry.label,
+      created: true,
+      bytes: entry.byteSize
+    });
+    notifyCheckpointCapture(options, 'after-end');
+    return true;
+  };
+
+  const restoreArtifactHandle = async (handle) => {
+    if (typeof restoreGeneratedArtifactHandle !== 'function') {
+      throw new Error('Generated artifact replacement requires a restore owner.');
+    }
+    restoring.value = true;
+    try {
+      await restoreGeneratedArtifactHandle(handle);
+    } finally {
+      restoring.value = false;
+    }
+    clearCurrentCheckpoint();
+    await refreshCurrentIntent();
+  };
+
+  const runUndoableArtifactReplacement = async (label, fn, options = {}) => {
+    if (typeof fn !== 'function') return undefined;
+    if (restoring.value || capturing.value) return fn(null);
+    const transaction = await beginArtifactReplacement(label, options);
+    try {
+      const result = await fn(transaction?.before || null);
+      if (
+        typeof options.shouldCommit === 'function'
+        && !options.shouldCommit(result)
+      ) {
+        if (transaction) transaction.closed = true;
+        await refreshCurrentIntent();
+        releaseUnreferencedFiles();
+        touch();
+        return result;
+      }
+      await commitAppliedArtifactReplacement(transaction, options);
+      return result;
+    } catch (error) {
+      if (transaction) {
+        transaction.closed = true;
+        await restoreArtifactHandle(transaction.before);
+      }
+      releaseUnreferencedFiles();
+      throw error;
+    }
+  };
+
   const normalizeCommand = (label, command) => {
     if (!command || typeof command !== 'object' || command.noop) return null;
     if (typeof command.apply !== 'function') {
@@ -644,6 +844,10 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
   };
 
+  const applyArtifactReplacementEntry = async (handle) => {
+    await restoreArtifactHandle(handle);
+  };
+
   const applyCommandWithFlag = async (entry, direction) => {
     restoring.value = true;
     try {
@@ -666,6 +870,8 @@ export const createHistoryManager = ({
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.before);
+    } else if (entry.type === 'artifact-replacement') {
+      await applyArtifactReplacementEntry(entry.before);
     } else {
       await applyIntentEntry(entry, 'undo');
     }
@@ -688,6 +894,8 @@ export const createHistoryManager = ({
       await refreshCurrentIntent();
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.after);
+    } else if (entry.type === 'artifact-replacement') {
+      await applyArtifactReplacementEntry(entry.after);
     } else {
       await applyIntentEntry(entry, 'redo');
     }
@@ -705,12 +913,14 @@ export const createHistoryManager = ({
 
   return {
     begin,
+    beginArtifactReplacement,
     beginCheckpoint,
     cancel,
     captureBaseline,
     canRedo,
     canUndo,
     commit,
+    commitAppliedArtifactReplacement,
     commitCheckpoint,
     getCurrentCheckpoint: () => currentCheckpoint,
     getCurrentCheckpointSignature: () => currentCheckpointSignature,
@@ -727,6 +937,7 @@ export const createHistoryManager = ({
     capturing,
     revision,
     runUndoable,
+    runUndoableArtifactReplacement,
     runUndoableCheckpoint,
     runUndoableCommand,
     undo,

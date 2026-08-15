@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
 
 globalThis.self = {};
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const {
+  buildGeneratedArtifactTransportIdentity,
   collectGenerationResultTransferList,
   resolveGenerationCleanupOutcome,
   serializeError
@@ -16,6 +19,37 @@ assert.deepEqual(
     metadata: metadataBytes
   }),
   [svgBytes.buffer, metadataBytes.buffer]
+);
+const firstIdentity = await buildGeneratedArtifactTransportIdentity({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: metadataBytes
+});
+const sameIdentity = await buildGeneratedArtifactTransportIdentity({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: metadataBytes
+});
+const changedIdentity = await buildGeneratedArtifactTransportIdentity({
+  results: [{ name: 'changed.svg', content: svgBytes }],
+  metadata: metadataBytes
+});
+const changedContentIdentity = await buildGeneratedArtifactTransportIdentity({
+  results: [{ name: 'out.svg', content: new TextEncoder().encode('<svg>b</svg>') }],
+  metadata: metadataBytes
+});
+const changedMetadataIdentity = await buildGeneratedArtifactTransportIdentity({
+  results: [{ name: 'out.svg', content: svgBytes }],
+  metadata: new TextEncoder().encode('{"featureCatalog":{"schema":4}}')
+});
+assert.match(firstIdentity.fingerprint, /^[0-9a-f]{64}$/);
+assert.equal(firstIdentity.fingerprint, sameIdentity.fingerprint);
+assert.notEqual(firstIdentity.fingerprint, changedIdentity.fingerprint);
+assert.notEqual(firstIdentity.fingerprint, changedContentIdentity.fingerprint);
+assert.notEqual(firstIdentity.fingerprint, changedMetadataIdentity.fingerprint);
+assert.equal(
+  firstIdentity.retainedBytes,
+  svgBytes.byteLength
+    + metadataBytes.byteLength * 2
+    + new TextEncoder().encode('out.svg').byteLength
 );
 
 const pythonPayload = {

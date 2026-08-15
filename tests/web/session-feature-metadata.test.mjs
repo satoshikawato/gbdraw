@@ -144,14 +144,22 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
 
 {
   const legacyResults = [{ name: 'out.svg', content: '<svg />' }];
-  assert.deepEqual(normalizeGenerationResponse(legacyResults), { results: legacyResults, metadata: {} });
+  assert.deepEqual(normalizeGenerationResponse(legacyResults), {
+    results: legacyResults,
+    metadata: {},
+    artifactIdentity: null
+  });
   const metadata = { trackSlotGeometry: { schema: 1, mode: 'linear', records: [] } };
   assert.deepEqual(
     normalizeGenerationResponse({ results: legacyResults, metadata }),
-    { results: legacyResults, metadata }
+    { results: legacyResults, metadata, artifactIdentity: null }
   );
   const errorPayload = { error: { type: 'OutputError', message: 'No output files generated.' } };
-  assert.deepEqual(normalizeGenerationResponse(errorPayload), { results: errorPayload, metadata: {} });
+  assert.deepEqual(normalizeGenerationResponse(errorPayload), {
+    results: errorPayload,
+    metadata: {},
+    artifactIdentity: null
+  });
   const binarySvg = new TextEncoder().encode('<svg>µ</svg>');
   assert.deepEqual(
     normalizeGenerationResponse({
@@ -160,7 +168,8 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
     }),
     {
       results: [{ name: 'binary.svg', content: '<svg>µ</svg>' }],
-      metadata
+      metadata,
+      artifactIdentity: null
     }
   );
 }

@@ -79,15 +79,40 @@ const decodeGenerationMetadata = (metadata) => {
   return decoded;
 };
 
+const normalizeGeneratedArtifactIdentity = (identity) => {
+  const fingerprint = String(identity?.fingerprint || '').toLowerCase();
+  if (
+    identity?.schema !== 1
+    || identity?.algorithm !== 'SHA-256'
+    || !/^[0-9a-f]{64}$/.test(fingerprint)
+  ) return null;
+  const retainedBytes = Number(identity.retainedBytes);
+  const resultBytes = Number(identity.resultBytes);
+  const metadataBytes = Number(identity.metadataBytes);
+  if (
+    !Number.isSafeInteger(retainedBytes) || retainedBytes < 0
+    || !Number.isSafeInteger(resultBytes) || resultBytes < 0
+    || !Number.isSafeInteger(metadataBytes) || metadataBytes < 0
+  ) return null;
+  return Object.freeze({
+    schema: 1,
+    algorithm: 'SHA-256',
+    fingerprint,
+    retainedBytes,
+    resultBytes,
+    metadataBytes
+  });
+};
+
 export const normalizeGenerationResponse = (payload) => {
   if (Array.isArray(payload)) {
-    return { results: decodeGenerationResults(payload), metadata: {} };
+    return { results: decodeGenerationResults(payload), metadata: {}, artifactIdentity: null };
   }
   if (!payload || typeof payload !== 'object') {
-    return { results: [], metadata: {} };
+    return { results: [], metadata: {}, artifactIdentity: null };
   }
   if (payload.error) {
-    return { results: payload, metadata: {} };
+    return { results: payload, metadata: {}, artifactIdentity: null };
   }
   const results = Array.isArray(payload.results)
     ? decodeGenerationResults(payload.results)
@@ -100,7 +125,11 @@ export const normalizeGenerationResponse = (payload) => {
   )
     ? decodedMetadata
     : {};
-  return { results, metadata };
+  return {
+    results,
+    metadata,
+    artifactIdentity: normalizeGeneratedArtifactIdentity(payload.artifactIdentity)
+  };
 };
 
 const resolveWorkerUrl = () => new URL('../workers/diagram-generation-worker.js', import.meta.url).toString();
@@ -332,7 +361,7 @@ export const runDiagramGeneration = (payload = {}) => {
         if (worker === currentWorker) terminateWorker(error);
       };
 
-      function handleMessage(event) {
+      async function handleMessage(event) {
         const data = event.data || {};
         if (data.type === 'test-lifecycle' && data.requestId === requestId) {
           recordSessionLifecycleEvent(data.event?.name, data.event);
@@ -340,6 +369,18 @@ export const runDiagramGeneration = (payload = {}) => {
         }
         if (data.type !== 'run' || data.requestId !== requestId) return;
         if (data.ok) {
+          const beforeResponse = runtimeTestHooksEnabled()
+            ? globalThis.__GBDRAW_TEST_HOOKS__?.beforeDiagramGenerationResponse
+            : null;
+          if (typeof beforeResponse === 'function') {
+            try {
+              await beforeResponse({ requestId });
+            } catch (error) {
+              failWorker(error);
+              return;
+            }
+            if (request.settled || activeRequest !== request) return;
+          }
           let normalized;
           try {
             normalized = normalizeGenerationResponse(data.results);
