@@ -1630,6 +1630,15 @@ const createLayoutPreferences = () => ({
   const biologicalA = [{ biological_feature_id: 'bio-a', payload: 'y'.repeat(100_000) }];
   const catalogA = { schema: 3, items: [{ payload: 'z'.repeat(100_000) }] };
   const groupsA = [{ id: 'group-a', members: ['feature-a'] }];
+  const proteinIdentityManifestA = { schema: 2, records: [{ id: 'manifest-a' }] };
+  const legacyProteinRawCandidatesA = { schema: 1, entries: [{ id: 'raw-a' }] };
+  const legacyProteinDerivedEvidenceA = {
+    schema: 1,
+    entries: [{ id: 'derived-evidence-a' }]
+  };
+  const rawCacheValueA = { text: 'raw-a\n' };
+  const derivedCacheValueA = { payload: { id: 'derived-a' } };
+  const losatCacheInfoA = [{ key: 'raw-a' }];
   const state = {
     files: {},
     linearSeqs: [],
@@ -1685,12 +1694,12 @@ const createLayoutPreferences = () => ({
     featureExtractionPending: ref(false),
     featureExtractionError: ref(null),
     labelOverrideBuildWarning: ref(''),
-    proteinIdentityManifest: ref({ schema: 1, records: [] }),
-    legacyProteinRawCandidates: ref({ schema: 1, entries: [] }),
-    legacyProteinDerivedEvidence: ref({ schema: 1, entries: [] }),
-    losatCache: ref(new Map([['raw-a', { text: 'row\n' }]])),
-    losatDerivedCache: ref(new Map()),
-    losatCacheInfo: ref([{ key: 'raw-a' }]),
+    proteinIdentityManifest: ref(proteinIdentityManifestA),
+    legacyProteinRawCandidates: ref(legacyProteinRawCandidatesA),
+    legacyProteinDerivedEvidence: ref(legacyProteinDerivedEvidenceA),
+    losatCache: ref(new Map([['raw-a', rawCacheValueA]])),
+    losatDerivedCache: ref(new Map([['derived-a', derivedCacheValueA]])),
+    losatCacheInfo: ref(losatCacheInfoA),
     matchSequenceRegistry: {
       current: [{ key: 'record-a', recordId: 'record-a', aliases: [], sequence: 'ACGT' }],
       values() { return this.current; },
@@ -1703,6 +1712,32 @@ const createLayoutPreferences = () => ({
     trustedArtifactRestoreInProgress: ref(false),
     semanticFileWatchersSuppressed: ref(false)
   };
+  const captureAuthorityOwners = () => ({
+    proteinIdentityManifest: state.proteinIdentityManifest.value,
+    legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
+    legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
+    losatCache: Array.from(state.losatCache.value.entries()),
+    losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
+    losatCacheInfo: state.losatCacheInfo.value
+  });
+  const assertAuthorityOwners = (expected) => {
+    assert.equal(state.proteinIdentityManifest.value, expected.proteinIdentityManifest);
+    assert.equal(state.legacyProteinRawCandidates.value, expected.legacyProteinRawCandidates);
+    assert.equal(
+      state.legacyProteinDerivedEvidence.value,
+      expected.legacyProteinDerivedEvidence
+    );
+    assert.equal(state.losatCache.value.size, expected.losatCache.length);
+    expected.losatCache.forEach(([key, value]) => {
+      assert.equal(state.losatCache.value.get(key), value);
+    });
+    assert.equal(state.losatDerivedCache.value.size, expected.losatDerivedCache.length);
+    expected.losatDerivedCache.forEach(([key, value]) => {
+      assert.equal(state.losatDerivedCache.value.get(key), value);
+    });
+    assert.equal(state.losatCacheInfo.value, expected.losatCacheInfo);
+  };
+  const authorityOwnersA = captureAuthorityOwners();
   let resultAdmissionCalls = 0;
   const snapshots = createHistorySnapshotService({
     state,
@@ -1766,6 +1801,12 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.features.biologicalFeatures, biologicalA);
   assert.equal(handleA.editorState.featureCatalog, catalogA);
   assert.equal(handleA.orthogroupState.groups, groupsA);
+  assert.equal(handleA.proteinIdentityManifest, proteinIdentityManifestA);
+  assert.equal(handleA.legacyProteinRawCandidates, legacyProteinRawCandidatesA);
+  assert.equal(handleA.legacyProteinDerivedEvidence, legacyProteinDerivedEvidenceA);
+  assert.equal(handleA.losatCache[0][1], rawCacheValueA);
+  assert.equal(handleA.losatDerivedCache[0][1], derivedCacheValueA);
+  assert.equal(handleA.losatCacheInfo, losatCacheInfoA);
   assert.equal(
     Object.fromEntries(handleA.features.featureVisibilitySelectorCache)['feature-a'].value,
     'feature-a'
@@ -1790,6 +1831,22 @@ const createLayoutPreferences = () => ({
   state.biologicalFeatures.value = [{ biological_feature_id: 'bio-b' }];
   state.featureCatalog.value = { schema: 3, items: [] };
   state.orthogroups.value = [{ id: 'group-b' }];
+  const proteinIdentityManifestB = { schema: 2, records: [{ id: 'manifest-b' }] };
+  const legacyProteinRawCandidatesB = { schema: 1, entries: [{ id: 'raw-b' }] };
+  const legacyProteinDerivedEvidenceB = {
+    schema: 1,
+    entries: [{ id: 'derived-evidence-b' }]
+  };
+  const rawCacheValueB = { text: 'raw-b\n' };
+  const derivedCacheValueB = { payload: { id: 'derived-b' } };
+  const losatCacheInfoB = [{ key: 'raw-b' }];
+  state.proteinIdentityManifest.value = proteinIdentityManifestB;
+  state.legacyProteinRawCandidates.value = legacyProteinRawCandidatesB;
+  state.legacyProteinDerivedEvidence.value = legacyProteinDerivedEvidenceB;
+  state.losatCache.value = new Map([['raw-b', rawCacheValueB]]);
+  state.losatDerivedCache.value = new Map([['derived-b', derivedCacheValueB]]);
+  state.losatCacheInfo.value = losatCacheInfoB;
+  const authorityOwnersB = captureAuthorityOwners();
   snapshots.setGeneratedArtifactIdentity({
     schema: 1,
     algorithm: 'SHA-256',
@@ -1806,7 +1863,19 @@ const createLayoutPreferences = () => ({
     'feature-a'
   );
   assert.equal(handleB.results[0].name, 'edited.svg');
+  assert.equal(handleB.proteinIdentityManifest, proteinIdentityManifestB);
+  assert.equal(handleB.legacyProteinRawCandidates, legacyProteinRawCandidatesB);
+  assert.equal(handleB.legacyProteinDerivedEvidence, legacyProteinDerivedEvidenceB);
+  assert.equal(handleB.losatCache[0][1], rawCacheValueB);
+  assert.equal(handleB.losatDerivedCache[0][1], derivedCacheValueB);
+  assert.equal(handleB.losatCacheInfo, losatCacheInfoB);
 
+  state.proteinIdentityManifest.value = { schema: 2, records: [{ id: 'replacement' }] };
+  state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
+  state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+  state.losatCache.value = new Map([['replacement', { text: 'replacement\n' }]]);
+  state.losatDerivedCache.value = new Map([['replacement', { payload: {} }]]);
+  state.losatCacheInfo.value = [{ key: 'replacement' }];
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   assert.equal(resultAdmissionCalls, 0);
   assert.equal(state.results.value[0], resultA);
@@ -1817,6 +1886,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.featureColorOverrides['feature-a'], '#112233');
   assert.equal(state.legendEntries.value[0].caption, 'A');
   assert.equal(state.featureVisibilitySelectorCache['feature-a'].value, 'feature-a');
+  assertAuthorityOwners(authorityOwnersA);
   const recapturedA = snapshots.captureGeneratedArtifactHandle();
   assert.equal(recapturedA.identity.fingerprint, 'a'.repeat(64));
   assert.equal(recapturedA.retainedBytes, handleA.retainedBytes);
@@ -1831,6 +1901,7 @@ const createLayoutPreferences = () => ({
   await snapshots.restoreGeneratedArtifactHandle(handleB);
   assert.equal(state.results.value[0].name, 'edited.svg');
   assert.equal(state.extractedFeatures.value[0].svg_id, 'feature-b');
+  assertAuthorityOwners(authorityOwnersB);
 
   await Promise.all([
     snapshots.restoreGeneratedArtifactHandle(handleA),
@@ -1838,6 +1909,86 @@ const createLayoutPreferences = () => ({
   ]);
   assert.equal(state.trustedArtifactRestoreInProgress.value, false);
   assert.equal(state.semanticFileWatchersSuppressed.value, false);
+
+  await snapshots.restoreGeneratedArtifactHandle(handleA);
+  const installAuthorityOwnersB = () => {
+    state.results.value = [...handleB.results];
+    state.proteinIdentityManifest.value = authorityOwnersB.proteinIdentityManifest;
+    state.legacyProteinRawCandidates.value = authorityOwnersB.legacyProteinRawCandidates;
+    state.legacyProteinDerivedEvidence.value =
+      authorityOwnersB.legacyProteinDerivedEvidence;
+    state.losatCache.value = new Map(authorityOwnersB.losatCache);
+    state.losatDerivedCache.value = new Map(authorityOwnersB.losatDerivedCache);
+    state.losatCacheInfo.value = authorityOwnersB.losatCacheInfo;
+    snapshots.setGeneratedArtifactIdentity({
+      schema: 1,
+      algorithm: 'SHA-256',
+      fingerprint: 'b'.repeat(64),
+      retainedBytes: 1024
+    }, { results: state.results.value });
+  };
+  const ownerHistory = createHistoryManager({
+    fileStore,
+    buildIntent: async () => ({}),
+    applyIntent: async () => {},
+    buildCheckpoint: () => {
+      throw new Error('LOSAT authority History must not build a full checkpoint.');
+    },
+    applyCheckpoint: async () => {
+      throw new Error('LOSAT authority History must not apply a full checkpoint.');
+    },
+    captureGeneratedArtifactHandle: snapshots.captureGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
+    compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
+  });
+  await ownerHistory.initializeIntentBaseline('LOSAT authority baseline');
+  let successfulGenerateCalls = 0;
+  await ownerHistory.runUndoableArtifactReplacement('Generate LOSAT owners B', async () => {
+    successfulGenerateCalls += 1;
+    installAuthorityOwnersB();
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  assertAuthorityOwners(authorityOwnersB);
+  assert.equal(ownerHistory.getUndoCount(), 1);
+
+  await ownerHistory.undo();
+  assertAuthorityOwners(authorityOwnersA);
+  await ownerHistory.redo();
+  assertAuthorityOwners(authorityOwnersB);
+  assert.equal(successfulGenerateCalls, 1, 'Undo/Redo must not rerun Generate.');
+
+  const installDiscardedAuthorityOwners = (status) => {
+    state.proteinIdentityManifest.value = { schema: 2, records: [{ id: status }] };
+    state.legacyProteinRawCandidates.value = { schema: 1, entries: [{ id: status }] };
+    state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [{ id: status }] };
+    state.losatCache.value = new Map([[status, { text: `${status}\n` }]]);
+    state.losatDerivedCache.value = new Map([[status, { payload: { id: status } }]]);
+    state.losatCacheInfo.value = [{ key: status }];
+  };
+  const undoCountBeforeDiscardedRuns = ownerHistory.getUndoCount();
+  await assert.rejects(
+    ownerHistory.runUndoableArtifactReplacement('Failed LOSAT Generate', async () => {
+      installDiscardedAuthorityOwners('failed');
+      throw new Error('injected LOSAT generation failure');
+    }),
+    /injected LOSAT generation failure/
+  );
+  assertAuthorityOwners(authorityOwnersB);
+
+  for (const status of ['error', 'canceled', 'stale']) {
+    const result = await ownerHistory.runUndoableArtifactReplacement(
+      `${status} LOSAT Generate`,
+      async (before) => {
+        installDiscardedAuthorityOwners(status);
+        await snapshots.restoreGeneratedArtifactHandle(before);
+        return { status };
+      },
+      { shouldCommit: (outcome) => outcome.status === 'ok' }
+    );
+    assert.deepEqual(result, { status });
+    assertAuthorityOwners(authorityOwnersB);
+  }
+  assert.equal(ownerHistory.getUndoCount(), undoCountBeforeDiscardedRuns);
 }
 
 console.log('history tests passed');

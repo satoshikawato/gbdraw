@@ -399,21 +399,26 @@ const cancelDuringRender = async (page) => page.evaluate(async () => {
       entries.length === current.size &&
       entries.every(([key, value]) => current.get(key) === value)
     );
+    const authorityDomains = {
+      proteinIdentityManifestSame:
+        state.proteinIdentityManifest.value === before.proteinIdentityManifest,
+      legacyProteinRawCandidatesSame:
+        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates,
+      legacyProteinDerivedEvidenceSame:
+        state.legacyProteinDerivedEvidence.value === before.legacyProteinDerivedEvidence,
+      losatCacheValuesSame: sameMapEntries(before.losatCache, state.losatCache.value),
+      losatDerivedCacheValuesSame:
+        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value),
+      losatCacheInfoSame: state.losatCacheInfo.value === before.losatCacheInfo
+    };
     return {
       result,
       runRequestIssued: Boolean(heldCanonicalRun),
       cancelInvoked,
       errorSummary: String(app.errorLog?.summary || ''),
       executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
-      authorityRestored: (
-        state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
-        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates &&
-        state.legacyProteinDerivedEvidence.value ===
-          before.legacyProteinDerivedEvidence &&
-        sameMapEntries(before.losatCache, state.losatCache.value) &&
-        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value) &&
-        state.losatCacheInfo.value === before.losatCacheInfo
-      )
+      ...authorityDomains,
+      authorityRestored: Object.values(authorityDomains).every(Boolean)
     };
   } finally {
     Worker.prototype.postMessage = originalWorkerPostMessage;
@@ -457,20 +462,25 @@ const failRendererAfterMigration = async (page) => page.evaluate(async () => {
       entries.length === current.size &&
       entries.every(([key, value]) => current.get(key) === value)
     );
+    const authorityDomains = {
+      proteinIdentityManifestSame:
+        state.proteinIdentityManifest.value === before.proteinIdentityManifest,
+      legacyProteinRawCandidatesSame:
+        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates,
+      legacyProteinDerivedEvidenceSame:
+        state.legacyProteinDerivedEvidence.value === before.legacyProteinDerivedEvidence,
+      losatCacheValuesSame: sameMapEntries(before.losatCache, state.losatCache.value),
+      losatDerivedCacheValuesSame:
+        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value),
+      losatCacheInfoSame: state.losatCacheInfo.value === before.losatCacheInfo
+    };
     return {
       result,
       errorSummary: String(app.errorLog?.summary || ''),
       executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
       rendererFailureInjected,
-      authorityRestored: (
-        state.proteinIdentityManifest.value === before.proteinIdentityManifest &&
-        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates &&
-        state.legacyProteinDerivedEvidence.value ===
-          before.legacyProteinDerivedEvidence &&
-        sameMapEntries(before.losatCache, state.losatCache.value) &&
-        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value) &&
-        state.losatCacheInfo.value === before.losatCacheInfo
-      )
+      ...authorityDomains,
+      authorityRestored: Object.values(authorityDomains).every(Boolean)
     };
   } finally {
     Worker.prototype.postMessage = originalWorkerPostMessage;
@@ -834,6 +844,12 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
     cancelInvoked: true,
     errorSummary: '',
     executorCalls: 0,
+    proteinIdentityManifestSame: true,
+    legacyProteinRawCandidatesSame: true,
+    legacyProteinDerivedEvidenceSame: true,
+    losatCacheValuesSame: true,
+    losatDerivedCacheValuesSame: true,
+    losatCacheInfoSame: true,
     authorityRestored: true
   });
   expect(await migrationUiSnapshot(page)).toEqual(legacyUiBeforeCancel);
@@ -842,6 +858,12 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
   await settleAppRender(page);
   expect(failedLegacyRun).toMatchObject({
     result: { status: 'error' },
+    proteinIdentityManifestSame: true,
+    legacyProteinRawCandidatesSame: true,
+    legacyProteinDerivedEvidenceSame: true,
+    losatCacheValuesSame: true,
+    losatDerivedCacheValuesSame: true,
+    losatCacheInfoSame: true,
     authorityRestored: true,
     executorCalls: 0,
     rendererFailureInjected: true
