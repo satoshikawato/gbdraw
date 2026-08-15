@@ -148,6 +148,7 @@ def _render_canonical_web_request(
                     item.interactive_context,
                     result_index=result_index,
                     result_name=result_name,
+                    _diagnostics=diagnostics,
                 )
             )
         with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):

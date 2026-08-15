@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from importlib import resources
 import json
 import math
 import re
+from typing import Callable, Literal
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, replace
-from importlib import resources
-from typing import Callable, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import GbdrawError
 
@@ -45,6 +46,7 @@ _FEATURE_STABLE_ID_KEYS = (
     "feature_svg_id",
     "featureSvgId",
 )
+_FEATURE_STABLE_ID_EXTRA_KEYS = frozenset(_FEATURE_STABLE_ID_KEYS[2:])
 _FEATURE_RENDERED_ID_KEYS = (
     "rendered_feature_svg_id",
     "renderedFeatureSvgId",
@@ -90,16 +92,42 @@ class InteractiveSvgContext:
     collinearity_search_scope: Literal["adjacent", "all"] | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class _RenderedFeatureEntry:
     svg_id: str
-    element: ET.Element
     fill: str
     stable_id: str
     stable_id_supplied: bool
+    stable_id_attribute: str
     record_index: int | None
     record_index_supplied: bool
+    record_index_attribute: str
     source_index: int | None
+    label_attribute: str
+    dom_id: str
+    fill_target: bool
+
+    @property
+    def payload_stable_id(self) -> str:
+        """Return the legacy payload identity from the selected DOM part."""
+
+        return _FEATURE_RECORD_SUFFIX_RE.sub(
+            "",
+            _normalize_feature_id(
+                _first_text(self.stable_id_attribute, self.svg_id)
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class _ResolvedRenderedFeature:
+    svg_id: str
+    entry: _RenderedFeatureEntry
+    feature: Mapping[str, object] | None
+    record_index: int | None
+    stable_feature_id: str
+    feature_index: int | None
+    fallback_index: int
 
 
 def _local_name(tag: str) -> str:
@@ -126,6 +154,27 @@ def _remove_class_token(element: ET.Element, token: str) -> None:
 
 
 def _compact_wire_value(value: object) -> object | None:
+    value_type = type(value)
+    if value_type is dict:
+        compact = {
+            str(key): normalized
+            for key, entry in value.items()
+            if (normalized := _compact_wire_value(entry)) is not None
+        }
+        return compact or None
+    if value_type is list or value_type is tuple:
+        items = [
+            normalized
+            for entry in value
+            if (normalized := _compact_wire_value(entry)) is not None
+        ]
+        return items or None
+    if value_type is str:
+        return value or None
+    if value_type is bool:
+        return value or None
+    if value is None or value_type in {int, float, bytes}:
+        return value
     if isinstance(value, Mapping):
         compact = {
             str(key): normalized
@@ -136,7 +185,7 @@ def _compact_wire_value(value: object) -> object | None:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         items = [normalized for entry in value if (normalized := _compact_wire_value(entry)) is not None]
         return items or None
-    if value is None or value == "" or value is False:
+    if value == "" or value is False:
         return None
     return value
 
@@ -176,22 +225,40 @@ def _consistent_text_alias(
     *,
     normalize: Callable[[object], str] = lambda value: str(value).strip(),
 ) -> tuple[str, bool]:
-    values = {
-        normalize(payload.get(key))
-        for key in keys
-        if key in payload
-        and payload.get(key) is not None
-        and str(payload.get(key)).strip()
-    }
-    values.discard("")
-    if len(values) > 1:
-        return "", False
-    return (next(iter(values), ""), True)
+    resolved = ""
+    for key in keys:
+        if key not in payload:
+            continue
+        raw = payload.get(key)
+        if raw is None or not str(raw).strip():
+            continue
+        value = normalize(raw)
+        if not value:
+            continue
+        if resolved and value != resolved:
+            return "", False
+        resolved = value
+    return resolved, True
 
 
 def _feature_stable_id_status(
     feature: Mapping[str, object],
 ) -> tuple[str, bool]:
+    stable_feature_id = feature.get("stable_feature_id")
+    stable_svg_id = feature.get("stable_svg_id")
+    if (
+        type(stable_feature_id) is str
+        and stable_feature_id == stable_svg_id
+        and stable_feature_id
+        and type(feature) is dict
+        and feature.keys().isdisjoint(_FEATURE_STABLE_ID_EXTRA_KEYS)
+    ):
+        normalized = _FEATURE_RECORD_SUFFIX_RE.sub(
+            "",
+            _normalize_feature_id(stable_feature_id),
+        )
+        if normalized:
+            return normalized, True
     stable_id, valid = _consistent_text_alias(
         feature,
         _FEATURE_STABLE_ID_KEYS,
@@ -220,7 +287,9 @@ def _feature_stable_id_status(
 def _strict_nonnegative_integer(value: object) -> int | None:
     if isinstance(value, bool):
         return None
-    text = str(value).strip()
+    if type(value) is int:
+        return value if value >= 0 else None
+    text = value.strip() if type(value) is str else str(value).strip()
     if not _NONNEGATIVE_INTEGER_RE.fullmatch(text):
         return None
     return int(text)
@@ -230,20 +299,26 @@ def _consistent_nonnegative_integer_alias(
     payload: Mapping[str, object],
     keys: Sequence[str],
 ) -> tuple[int | None, bool]:
-    values: set[int] = set()
+    resolved: int | None = None
     for key in keys:
         if key not in payload:
             continue
         raw = payload.get(key)
-        if raw is None or str(raw).strip() == "":
+        if raw is None:
             continue
-        parsed = _strict_nonnegative_integer(raw)
+        if type(raw) is int:
+            parsed = raw if raw >= 0 else None
+        else:
+            text = raw.strip() if type(raw) is str else str(raw).strip()
+            if not text:
+                continue
+            parsed = _strict_nonnegative_integer(text)
         if parsed is None:
             return None, False
-        values.add(parsed)
-    if len(values) > 1:
-        return None, False
-    return (next(iter(values), None), True)
+        if resolved is not None and parsed != resolved:
+            return None, False
+        resolved = parsed
+    return resolved, True
 
 
 def _feature_record_index_status(
@@ -297,14 +372,20 @@ def _is_match_candidate(element: ET.Element) -> bool:
     )
 
 
-def _element_match_id_status(element: ET.Element) -> tuple[str, bool]:
+def _match_id_status(attributes: Mapping[str, object]) -> tuple[str, bool]:
     return _consistent_text_alias(
         {
-            "match_id": element.get("data-gbdraw-match-id"),
-            "pairwise_match_id": element.get("data-gbdraw-pairwise-match-id"),
+            "match_id": attributes.get("data-gbdraw-match-id"),
+            "pairwise_match_id": attributes.get(
+                "data-gbdraw-pairwise-match-id"
+            ),
         },
         ("match_id", "pairwise_match_id"),
     )
+
+
+def _element_match_id_status(element: ET.Element) -> tuple[str, bool]:
+    return _match_id_status(element.attrib)
 
 
 def _catalog_match_id_status(match: Mapping[str, object]) -> tuple[str, bool]:
@@ -378,63 +459,111 @@ def _rendered_element_identity(
     )
 
 
+def _rendered_feature_entry(
+    element: ET.Element,
+) -> _RenderedFeatureEntry | None:
+    """Snapshot the catalog-relevant state of one rendered Feature element."""
+
+    if not _is_feature_candidate(element):
+        return None
+    svg_id = _element_feature_id(element)
+    if not svg_id:
+        return None
+    (
+        stable_id,
+        stable_id_supplied,
+        record_index,
+        record_index_supplied,
+        source_index,
+    ) = _rendered_element_identity(svg_id, element)
+    return _RenderedFeatureEntry(
+        svg_id=svg_id,
+        fill=str(element.get("fill") or "#94a3b8"),
+        stable_id=stable_id,
+        stable_id_supplied=stable_id_supplied,
+        stable_id_attribute=str(
+            element.get("data-gbdraw-stable-feature-id") or ""
+        ),
+        record_index=record_index,
+        record_index_supplied=record_index_supplied,
+        record_index_attribute=str(
+            element.get("data-gbdraw-record-index") or ""
+        ),
+        source_index=source_index,
+        label_attribute=str(element.get("data-label") or ""),
+        dom_id=str(element.get("id") or ""),
+        fill_target=_is_feature_fill_target(element),
+    )
+
+
+def _merge_rendered_feature_entry(
+    entries: dict[str, _RenderedFeatureEntry],
+    entry: _RenderedFeatureEntry,
+) -> None:
+    """Merge one DOM part without changing first-rendered Feature order."""
+
+    existing = entries.get(entry.svg_id)
+    if existing is None:
+        entries[entry.svg_id] = entry
+        return
+    if (
+        (
+            existing.stable_id_supplied
+            and entry.stable_id_supplied
+            and existing.stable_id != entry.stable_id
+        )
+        or (
+            existing.record_index_supplied
+            and entry.record_index_supplied
+            and existing.record_index != entry.record_index
+        )
+        or (
+            existing.source_index is not None
+            and entry.source_index is not None
+            and existing.source_index != entry.source_index
+        )
+    ):
+        raise GbdrawError(
+            f"Rendered feature SVG ID {entry.svg_id!r} has conflicting DOM identity."
+        )
+
+    selected = (
+        existing
+        if existing.fill_target or not entry.fill_target
+        else entry
+    )
+    entries[entry.svg_id] = replace(
+        selected,
+        stable_id=(
+            existing.stable_id
+            if existing.stable_id_supplied
+            else entry.stable_id
+        ),
+        stable_id_supplied=(
+            existing.stable_id_supplied or entry.stable_id_supplied
+        ),
+        record_index=(
+            existing.record_index
+            if existing.record_index is not None
+            else entry.record_index
+        ),
+        record_index_supplied=(
+            existing.record_index_supplied or entry.record_index_supplied
+        ),
+        source_index=(
+            existing.source_index
+            if existing.source_index is not None
+            else entry.source_index
+        ),
+    )
+
+
 def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEntry]:
     entries: dict[str, _RenderedFeatureEntry] = {}
     for element in root.iter():
-        if not _is_feature_candidate(element):
-            continue
-        svg_id = _element_feature_id(element)
-        if not svg_id:
-            continue
-        (
-            stable_id,
-            stable_id_supplied,
-            record_index,
-            record_index_supplied,
-            source_index,
-        ) = _rendered_element_identity(svg_id, element)
-        existing = entries.get(svg_id)
-        if existing is not None:
-            if (
-                (
-                    existing.stable_id_supplied
-                    and stable_id_supplied
-                    and existing.stable_id != stable_id
-                )
-                or (
-                    existing.record_index_supplied
-                    and record_index_supplied
-                    and existing.record_index != record_index
-                )
-                or (
-                    existing.source_index is not None
-                    and source_index is not None
-                    and existing.source_index != source_index
-                )
-            ):
-                raise GbdrawError(
-                    f"Rendered feature SVG ID {svg_id!r} has conflicting DOM identity."
-                )
-            if existing.stable_id_supplied:
-                stable_id = existing.stable_id
-            stable_id_supplied = existing.stable_id_supplied or stable_id_supplied
-            record_index = existing.record_index if existing.record_index is not None else record_index
-            record_index_supplied = (
-                existing.record_index_supplied or record_index_supplied
-            )
-            source_index = existing.source_index if existing.source_index is not None else source_index
-            if _is_feature_fill_target(existing.element) or not _is_feature_fill_target(element):
-                element = existing.element
-        entries[svg_id] = _RenderedFeatureEntry(
-            svg_id=svg_id,
-            element=element,
-            fill=str(element.get("fill") or "#94a3b8"),
-            stable_id=stable_id,
-            stable_id_supplied=stable_id_supplied,
-            record_index=record_index,
-            record_index_supplied=record_index_supplied,
-            source_index=source_index,
-        )
+        entry = _rendered_feature_entry(element)
+        if entry is not None:
+            _merge_rendered_feature_entry(entries, entry)
     return entries
 
 
@@ -483,9 +612,9 @@ def _rendered_entry_agrees_with_identity(
 
 
 def _rendered_feature_id_index(
-    root: ET.Element,
+    rendered: Mapping[str, _RenderedFeatureEntry],
 ) -> dict[tuple[str, int | None, str], str]:
-    """Index only feature IDs that are present in the final SVG DOM."""
+    """Index identities from already collected final-SVG Feature entries."""
 
     index: dict[tuple[str, int | None, str], str] = {}
     ambiguous: set[tuple[str, int | None, str]] = set()
@@ -500,7 +629,7 @@ def _rendered_feature_id_index(
             return
         index[key] = rendered_id
 
-    for rendered_id, entry in _collect_rendered_features(root).items():
+    for rendered_id, entry in rendered.items():
         if entry.stable_id:
             add(("stable", entry.record_index, entry.stable_id), rendered_id)
         add(("rendered", entry.record_index, rendered_id), rendered_id)
@@ -769,8 +898,8 @@ def _fallback_feature_payload(
     feature_index: int,
 ) -> dict[str, object]:
     fill_color = entry.fill
-    stable_svg_id = _first_text(entry.element.get("data-gbdraw-stable-feature-id"), svg_id)
-    label = _first_text(entry.element.get("data-label"), entry.element.get("id"), svg_id)
+    stable_svg_id = _first_text(entry.stable_id_attribute, svg_id)
+    label = _first_text(entry.label_attribute, entry.dom_id, svg_id)
     search_labels = []
     for value in (label, svg_id):
         if value and value not in search_labels:
@@ -782,9 +911,7 @@ def _fallback_feature_payload(
         "display_label": label,
         "search_labels": search_labels,
         "record_id": "",
-        "record_idx": _int_or_none(
-            entry.element.get("data-gbdraw-record-index")
-        ),
+        "record_idx": _int_or_none(entry.record_index_attribute),
         "feature_index": feature_index,
         "type": "Feature",
         "start": None,
@@ -812,22 +939,17 @@ def _fallback_feature_payload(
     }
 
 
-def _feature_payloads(
-    root: ET.Element,
-    context: InteractiveSvgContext,
-) -> list[dict[str, object]]:
-    rendered = _collect_rendered_features(root)
-    if not rendered:
-        return []
-    rendered_index = _rendered_feature_id_index(root)
+def _resolve_rendered_features(
+    rendered: Mapping[str, _RenderedFeatureEntry],
+    features: Sequence[Mapping[str, object]],
+) -> Iterator[_ResolvedRenderedFeature]:
+    """Resolve source metadata to final-DOM Features without building popups."""
 
-    payloads: list[dict[str, object]] = []
+    if not rendered:
+        return
+    rendered_index = _rendered_feature_id_index(rendered)
     seen: set[str] = set()
-    stable_ids_by_rendered_id: dict[str, str] = {}
-    popup_mode: Literal["rich", "simple"] = (
-        "simple" if context.popup_mode == "simple" else "rich"
-    )
-    for feature in context.features:
+    for feature in features:
         record_index, record_index_valid = _feature_record_index_status(feature)
         stable_feature_id, stable_feature_id_valid = _feature_stable_id_status(
             feature
@@ -891,16 +1013,63 @@ def _feature_payloads(
                 f"Multiple feature metadata entries resolve to rendered SVG ID "
                 f"{mapped_svg_id!r}."
             )
-        svg_id = (
-            mapped_svg_id
-            if mapped_svg_id in rendered and mapped_svg_id not in seen
-            else ""
-        )
-        if not svg_id or svg_id not in rendered or svg_id in seen:
+        if not mapped_svg_id or mapped_entry is None:
             continue
-        seen.add(svg_id)
-        if stable_feature_id:
-            stable_ids_by_rendered_id[svg_id] = stable_feature_id
+        seen.add(mapped_svg_id)
+        yield _ResolvedRenderedFeature(
+            svg_id=mapped_svg_id,
+            entry=mapped_entry,
+            feature=feature,
+            record_index=record_index,
+            stable_feature_id=stable_feature_id,
+            feature_index=feature_index,
+            fallback_index=-1,
+        )
+
+    for fallback_index, (svg_id, entry) in enumerate(rendered.items()):
+        if svg_id in seen:
+            continue
+        yield _ResolvedRenderedFeature(
+            svg_id=svg_id,
+            entry=entry,
+            feature=None,
+            record_index=_int_or_none(entry.record_index_attribute),
+            stable_feature_id=_first_text(
+                entry.stable_id_attribute,
+                svg_id,
+            ),
+            feature_index=fallback_index,
+            fallback_index=fallback_index,
+        )
+
+
+def _feature_payloads_from_rendered(
+    rendered: Mapping[str, _RenderedFeatureEntry],
+    context: InteractiveSvgContext,
+) -> list[dict[str, object]]:
+    payloads: list[dict[str, object]] = []
+    popup_mode: Literal["rich", "simple"] = (
+        "simple" if context.popup_mode == "simple" else "rich"
+    )
+    for resolved in _resolve_rendered_features(rendered, context.features):
+        feature = resolved.feature
+        if feature is None:
+            payloads.append(
+                dict(
+                    _compact_wire_value(
+                        _fallback_feature_payload(
+                            resolved.svg_id,
+                            resolved.entry,
+                            feature_index=resolved.fallback_index,
+                        )
+                    )
+                    or {}
+                )
+            )
+            continue
+        svg_id = resolved.svg_id
+        record_index = resolved.record_index
+        feature_index = resolved.feature_index
         fallback_label = _get_feature_label(feature)
         display_label = fallback_label
         orthogroup_entry = _feature_orthogroup_entry(feature)
@@ -926,7 +1095,7 @@ def _feature_payloads(
                 feature.get("stable_svg_id"),
                 feature.get("stableFeatureSvgId"),
                 feature.get("stable_feature_id"),
-                rendered[svg_id].element.get("data-gbdraw-stable-feature-id"),
+                resolved.entry.stable_id_attribute,
                 svg_id,
             ),
             "label": fallback_label,
@@ -999,37 +1168,19 @@ def _feature_payloads(
             )
         payloads.append(dict(_compact_wire_value(payload) or {}))
 
-    for element in root.iter():
-        stable_feature_id = stable_ids_by_rendered_id.get(_element_feature_id(element))
-        if stable_feature_id:
-            element.set("data-gbdraw-stable-feature-id", stable_feature_id)
-
-    for fallback_index, (svg_id, entry) in enumerate(rendered.items()):
-        if svg_id in seen:
-            continue
-        seen.add(svg_id)
-        payloads.append(
-            dict(
-                _compact_wire_value(
-                    _fallback_feature_payload(
-                        svg_id,
-                        entry,
-                        feature_index=fallback_index,
-                    )
-                )
-                or {}
-            )
-        )
-
-    feature_ids = {str(feature.get("svg_id") or "").strip() for feature in payloads}
-    for element in root.iter():
-        if not _is_feature_candidate(element):
-            continue
-        if _element_feature_id(element) not in feature_ids:
-            continue
-        element.set("data-gbdraw-interactive-feature", "true")
-        _add_class_token(element, "gbdraw-interactive-feature")
     return payloads
+
+
+def _feature_payloads(
+    root: ET.Element,
+    context: InteractiveSvgContext,
+) -> list[dict[str, object]]:
+    """Resolve Feature payloads without mutating the supplied SVG tree."""
+
+    return _feature_payloads_from_rendered(
+        _collect_rendered_features(root),
+        context,
+    )
 
 
 def _extract_template_literal(source: str, name: str) -> str:

@@ -70,6 +70,28 @@ const probeSnapshot = (page) => page.evaluate(() => (
   window.__GBDRAW_VIBRIO_GENERATE_PROBE__.snapshot()
 ));
 
+const featureCatalogDigest = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const catalog = state.featureCatalog?.value ?? null;
+  const encoded = new TextEncoder().encode(JSON.stringify(catalog));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoded));
+  return {
+    sha256: [...digest].map((value) => value.toString(16).padStart(2, '0')).join(''),
+    jsonBytes: encoded.byteLength,
+    schema: Number(catalog?.schema || 0),
+    itemCount: Array.isArray(catalog?.items) ? catalog.items.length : 0
+  };
+});
+
+const featureCatalogSummary = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const catalog = state.featureCatalog?.value ?? null;
+  return {
+    schema: Number(catalog?.schema || 0),
+    itemCount: Array.isArray(catalog?.items) ? catalog.items.length : 0
+  };
+});
+
 const phaseDuration = (events, startName, endName) => {
   const start = events.find(({ name }) => name === startName);
   const end = events.find(({ name }) => name === endName);
@@ -187,6 +209,35 @@ const generationPhaseAttribution = (outcome, probe) => {
     pythonFeatureCatalogMs: Number(pythonTimings.featureCatalog || 0),
     pythonGeometryMetadataMs: Number(pythonTimings.geometryMetadata || 0),
     pythonArtifactMetrics: { ...pythonMetrics },
+    featureCatalogStructural: {
+      featureCatalogSvgParseCount: Number(
+        pythonMetrics.featureCatalogSvgParseCount || 0
+      ),
+      featureCatalogFullDomTraversalCount: Number(
+        pythonMetrics.featureCatalogFullDomTraversalCount || 0
+      ),
+      featureCatalogRenderedFeatureCollectionCount: Number(
+        pythonMetrics.featureCatalogRenderedFeatureCollectionCount || 0
+      ),
+      featureCatalogCatalogOnlyDomMutationCount: Number(
+        pythonMetrics.featureCatalogCatalogOnlyDomMutationCount || 0
+      ),
+      featureCatalogDomElementCount: Number(
+        pythonMetrics.featureCatalogDomElementCount || 0
+      ),
+      featureCatalogFeatureCandidateCount: Number(
+        pythonMetrics.featureCatalogFeatureCandidateCount || 0
+      ),
+      featureCatalogUniqueRenderedFeatureCount: Number(
+        pythonMetrics.featureCatalogUniqueRenderedFeatureCount || 0
+      ),
+      featureCatalogMatchCandidateCount: Number(
+        pythonMetrics.featureCatalogMatchCandidateCount || 0
+      ),
+      featureCatalogAnnotationCandidateCount: Number(
+        pythonMetrics.featureCatalogAnnotationCandidateCount || 0
+      )
+    },
     workerResultPreparationMs: durationOrZero(
       events,
       'result-object-conversion-start',
@@ -494,6 +545,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   ));
   expect(preflightStructural.proteinManifestFullValidationCount).toBe(1);
   expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
+  expect(await featureCatalogSummary(page)).toEqual({ schema: 3, itemCount: 1 });
 
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
   const first = await invokeGeneration(page, terminal, runnerEvidence, terminalSignal);
@@ -528,6 +580,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
+  const generatedFeatureCatalogDigest = await featureCatalogDigest(page);
 
   const activity = second.worker;
   const runs = activity?.instances?.[0]?.runs || [];
@@ -665,6 +718,29 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     legacyFeatureOverrideScanSkipCount: 2
   });
   expect(secondPhaseAttribution.pythonInvocationMs).toBeGreaterThan(0);
+  expect(firstPhaseAttribution.featureCatalogStructural).toMatchObject({
+    featureCatalogSvgParseCount: 1,
+    featureCatalogFullDomTraversalCount: 1,
+    featureCatalogRenderedFeatureCollectionCount: 1,
+    featureCatalogCatalogOnlyDomMutationCount: 0
+  });
+  expect(secondPhaseAttribution.featureCatalogStructural).toMatchObject({
+    featureCatalogSvgParseCount: 1,
+    featureCatalogFullDomTraversalCount: 1,
+    featureCatalogRenderedFeatureCollectionCount: 1,
+    featureCatalogCatalogOnlyDomMutationCount: 0
+  });
+  for (const phase of [firstPhaseAttribution, secondPhaseAttribution]) {
+    const catalog = phase.featureCatalogStructural;
+    expect(catalog.featureCatalogDomElementCount).toBeGreaterThan(0);
+    expect(catalog.featureCatalogFeatureCandidateCount).toBeGreaterThan(0);
+    expect(catalog.featureCatalogUniqueRenderedFeatureCount).toBeGreaterThan(0);
+    expect(catalog.featureCatalogFeatureCandidateCount).toBeGreaterThanOrEqual(
+      catalog.featureCatalogUniqueRenderedFeatureCount
+    );
+    expect(catalog.featureCatalogMatchCandidateCount).toBeGreaterThanOrEqual(0);
+    expect(catalog.featureCatalogAnnotationCandidateCount).toBeGreaterThanOrEqual(0);
+  }
   expect(secondProbe.lifecycle.filter(({ name }) => name === 'python-diagnostics')).toHaveLength(1);
   expect(structural).toMatchObject({
     canonicalReplayFullSerializationCount: 0,
@@ -683,6 +759,12 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   )).toBe(true);
   expect(resultSvgCharacters).toHaveLength(2);
   expect(resultSvgCharacters.every((characters) => characters > 0)).toBe(true);
+  expect(generatedFeatureCatalogDigest).toMatchObject({
+    schema: 3,
+    itemCount: 1
+  });
+  expect(generatedFeatureCatalogDigest.sha256).toMatch(/^[0-9a-f]{64}$/);
+  expect(generatedFeatureCatalogDigest.jsonBytes).toBeGreaterThan(0);
 
   const workerPing = await page.evaluate(async () => {
     const {
@@ -817,7 +899,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       semanticallyEquivalent: semanticComparison.status === 0,
       exactBytesEqual: firstGeneratedSvg === secondGeneratedSvg,
       firstCharacters: firstGeneratedSvg.length,
-      secondCharacters: secondGeneratedSvg.length
+      secondCharacters: secondGeneratedSvg.length,
+      featureCatalog: generatedFeatureCatalogDigest
     },
     historyRoundTrip,
     structural,
