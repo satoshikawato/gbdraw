@@ -803,8 +803,9 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
-  buildGeneratedArtifactSnapshot,
-  applyGeneratedArtifactSnapshot,
+  captureGeneratedArtifactHandle,
+  restoreGeneratedArtifactHandle,
+  setGeneratedArtifactIdentity = null,
   resetPreviewViewport,
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
@@ -902,10 +903,10 @@ export const createRunAnalysis = ({
     labelReflowLastError
   } = state;
   if (
-    typeof buildGeneratedArtifactSnapshot !== 'function'
-    || typeof applyGeneratedArtifactSnapshot !== 'function'
+    typeof captureGeneratedArtifactHandle !== 'function'
+    || typeof restoreGeneratedArtifactHandle !== 'function'
   ) {
-    throw new Error('createRunAnalysis requires generated artifact snapshot handlers.');
+    throw new Error('createRunAnalysis requires generated artifact handle handlers.');
   }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
@@ -924,6 +925,34 @@ export const createRunAnalysis = ({
   const cloneCliHelperFiles = (files) => (
     (Array.isArray(files) ? files : []).map((file) => ({ ...file }))
   );
+  const captureGeneratedArtifactRuntimeState = () => {
+    const helperFiles = cloneCliHelperFiles(latestCliHelperFiles);
+    return {
+      latestCliHelperFiles: helperFiles,
+      latestCliHelperArchiveName,
+      losatTelemetry: cloneJsonValue(globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__, null),
+      retainedBytes: helperFiles.reduce((total, file) => (
+        total
+        + String(file?.name || '').length * 2
+        + String(file?.data || '').length * 2
+        + Math.max(0, Number(file?.retainedBytes) || 0)
+        + 256
+      ), String(latestCliHelperArchiveName || '').length * 2 + 16_384)
+    };
+  };
+  const restoreGeneratedArtifactRuntimeState = (runtimeState = {}, { ui = {} } = {}) => {
+    latestCliHelperFiles = cloneCliHelperFiles(runtimeState?.latestCliHelperFiles);
+    latestCliHelperArchiveName = String(
+      runtimeState?.latestCliHelperArchiveName || 'out-cli-files.zip'
+    );
+    globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
+      runtimeState?.losatTelemetry,
+      null
+    );
+    if (typeof resetPreviewViewport === 'function') {
+      resetPreviewViewport({ pan: ui?.canvasPan });
+    }
+  };
   const recordDiscoverySuppressed = () => Boolean(
     semanticFileWatchersSuppressed?.value ||
     sessionImportRollbackInProgress?.value
@@ -952,6 +981,7 @@ export const createRunAnalysis = ({
         if (!entry) return null;
         return {
           name: String(helper?.name || entry.name || 'helper.tsv'),
+          retainedBytes: Math.max(0, Number(entry.retainedBytes) || 0),
           ...(typeof entry.buildData === 'function'
             ? { buildData: entry.buildData }
             : { data: entry.data })
@@ -1480,7 +1510,8 @@ export const createRunAnalysis = ({
   const runAnalysisInternal = async ({
     runMode = 'manual',
     requestId = 0,
-    comparisonPlanSnapshot = null
+    comparisonPlanSnapshot = null,
+    generatedArtifactHandle = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
@@ -1504,6 +1535,20 @@ export const createRunAnalysis = ({
     let keepProcessingStatus = false;
     let generationAbortController = null;
     let generationAbortSignal = null;
+    const committedArtifactHandle = isReflow
+      ? null
+      : (generatedArtifactHandle || await captureGeneratedArtifactHandle());
+    const restoreCommittedArtifact = async () => {
+      if (!committedArtifactHandle) return;
+      await restoreGeneratedArtifactHandle(committedArtifactHandle);
+    };
+    const finishCanceledManualRun = async () => {
+      await restoreCommittedArtifact();
+      errorLog.value = null;
+      processingStatus.value = 'Canceled.';
+      keepProcessingStatus = true;
+      return { status: 'canceled' };
+    };
     const setProcessingStatus = (message) => {
       if (!isReflow) processingStatus.value = String(message || '');
     };
@@ -1551,12 +1596,15 @@ export const createRunAnalysis = ({
           activeLosatAbortController = null;
         }
         generationCancelRequested.value = false;
-        return { status: 'canceled' };
+        return finishCanceledManualRun();
       }
       if (prepared?.error) {
         const message = String(prepared.error);
         if (isReflow) labelReflowLastError.value = message;
-        else errorLog.value = formatJsError(new Error(message));
+        else {
+          await restoreCommittedArtifact();
+          errorLog.value = formatJsError(new Error(message));
+        }
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
@@ -1590,10 +1638,11 @@ export const createRunAnalysis = ({
             activeLosatAbortController = null;
           }
           generationCancelRequested.value = false;
-          return { status: 'canceled' };
+          return finishCanceledManualRun();
         }
         if (!circularDiscoveryMatchesCurrentInput()) {
           const message = circularRecordDiscovery.error || 'Could not read records from the circular input file(s).';
+          await restoreCommittedArtifact();
           errorLog.value = formatJsError(new Error(message));
           if (activeLosatAbortController === generationAbortController) {
             activeLosatAbortController = null;
@@ -1607,6 +1656,7 @@ export const createRunAnalysis = ({
       if (isReflow) {
         labelReflowLastError.value = depthInputError;
       } else {
+        await restoreCommittedArtifact();
         errorLog.value = formatJsError(new Error(depthInputError));
       }
       if (activeLosatAbortController === generationAbortController) {
@@ -1615,86 +1665,6 @@ export const createRunAnalysis = ({
       return { status: 'error' };
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
-    const manualCancelSnapshot = isReflow
-      ? null
-      : {
-          artifact: buildGeneratedArtifactSnapshot(),
-          resultIdentity: results.value,
-          extractedFeatureIdentity: extractedFeatures.value,
-          biologicalFeatureIdentity: biologicalFeatures?.value,
-          trackSlotResolvedGeometry: cloneJsonValue(trackSlotResolvedGeometry.value || null, null),
-          resultGenerationKey: resultGenerationKey?.value ?? 0,
-          resultPanelTab: resultPanelTab.value,
-          errorLog: cloneJsonValue(errorLog.value, null),
-          latestCliHelperFiles: cloneCliHelperFiles(latestCliHelperFiles),
-          latestCliHelperArchiveName,
-          matchSequenceSources: matchSequenceRegistry?.values?.() || [],
-          editableLabels: cloneJsonValue(editableLabels.value || [], []),
-          labelTextScopeDialog: cloneJsonValue(labelTextScopeDialog, {}),
-          featureEditorStatus: cloneJsonValue(featureEditorStatus || {}, {}),
-          featureExtractionPending: featureExtractionPending.value,
-          featureExtractionError: featureExtractionError.value,
-          labelOverrideBuildWarning: labelOverrideBuildWarning.value,
-          proteinIdentityManifest: proteinIdentityManifest.value,
-          legacyProteinRawCandidates: legacyProteinRawCandidates.value,
-          legacyProteinDerivedEvidence: legacyProteinDerivedEvidence.value,
-          losatCache: Array.from(losatCache.value || new Map()),
-          losatDerivedCache: Array.from(losatDerivedCache.value || new Map()),
-          losatCacheInfo: losatCacheInfo.value,
-          collinearGroups: collinearGroups.value,
-          losatTelemetry: cloneJsonValue(
-            globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
-            null
-          )
-        };
-    const restoreManualCancelSnapshot = () => {
-      if (!manualCancelSnapshot) return;
-      applyGeneratedArtifactSnapshot(manualCancelSnapshot.artifact, { restoreResults: false });
-      results.value = manualCancelSnapshot.resultIdentity;
-      extractedFeatures.value = manualCancelSnapshot.extractedFeatureIdentity;
-      if (biologicalFeatures) {
-        biologicalFeatures.value = manualCancelSnapshot.biologicalFeatureIdentity;
-      }
-      trackSlotResolvedGeometry.value = manualCancelSnapshot.trackSlotResolvedGeometry;
-      if (typeof resetPreviewViewport === 'function') {
-        resetPreviewViewport({ pan: manualCancelSnapshot.artifact.ui?.canvasPan });
-      }
-      if (resultGenerationKey) {
-        resultGenerationKey.value = manualCancelSnapshot.resultGenerationKey;
-      }
-      resultPanelTab.value = manualCancelSnapshot.resultPanelTab;
-      errorLog.value = cloneJsonValue(manualCancelSnapshot.errorLog, null);
-      latestCliHelperFiles = cloneCliHelperFiles(manualCancelSnapshot.latestCliHelperFiles);
-      latestCliHelperArchiveName = manualCancelSnapshot.latestCliHelperArchiveName;
-      matchSequenceRegistry?.reset?.(manualCancelSnapshot.matchSequenceSources);
-      editableLabels.value = cloneJsonValue(manualCancelSnapshot.editableLabels, []);
-      Object.assign(
-        labelTextScopeDialog,
-        cloneJsonValue(manualCancelSnapshot.labelTextScopeDialog, {})
-      );
-      setFeatureEditorStatus(cloneJsonValue(manualCancelSnapshot.featureEditorStatus, {}));
-      featureExtractionPending.value = manualCancelSnapshot.featureExtractionPending;
-      featureExtractionError.value = manualCancelSnapshot.featureExtractionError;
-      labelOverrideBuildWarning.value = manualCancelSnapshot.labelOverrideBuildWarning;
-      proteinIdentityManifest.value = manualCancelSnapshot.proteinIdentityManifest;
-      legacyProteinRawCandidates.value = manualCancelSnapshot.legacyProteinRawCandidates;
-      legacyProteinDerivedEvidence.value = manualCancelSnapshot.legacyProteinDerivedEvidence;
-      losatCache.value = new Map(manualCancelSnapshot.losatCache);
-      losatDerivedCache.value = new Map(manualCancelSnapshot.losatDerivedCache);
-      losatCacheInfo.value = manualCancelSnapshot.losatCacheInfo;
-      collinearGroups.value = manualCancelSnapshot.collinearGroups;
-      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
-        manualCancelSnapshot.losatTelemetry,
-        null
-      );
-    };
-    const finishCanceledManualRun = () => {
-      restoreManualCancelSnapshot();
-      errorLog.value = null;
-      processingStatus.value = 'Canceled.';
-      keepProcessingStatus = true;
-      return { status: 'canceled' };
-    };
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
       ? editableLabels.value.map((entry) => ({ ...entry }))
       : [];
@@ -1820,7 +1790,7 @@ export const createRunAnalysis = ({
       const recordDeferredGeneratedCliFile = (
         path,
         buildData,
-        { name = '', slot = '' } = {}
+        { name = '', slot = '', retainedBytes = 0 } = {}
       ) => {
         const normalizedPath = String(path || '').trim();
         if (!normalizedPath) return;
@@ -1833,6 +1803,7 @@ export const createRunAnalysis = ({
           path: normalizedPath,
           name: displayName,
           slot: String(slot || '').trim(),
+          retainedBytes: Math.max(0, Number(retainedBytes) || 0),
           buildData
         });
       };
@@ -3980,7 +3951,11 @@ export const createRunAnalysis = ({
       });
       recordDeferredGeneratedCliFile(canonicalReplayPath, buildCanonicalReplayText, {
         name: canonicalReplayName,
-        slot: 'generatedFiles.canonical_render_session'
+        slot: 'generatedFiles.canonical_render_session',
+        retainedBytes:
+          canonicalResourceDeclaredBytes
+          + canonicalResourceBase64Characters * 2
+          + 65_536
       });
       const gbdrawStartedAt = getNow();
       const generationResponse = await runDiagramGeneration({
@@ -4003,7 +3978,7 @@ export const createRunAnalysis = ({
           labelReflowLastError.value = formatPythonError(res.error)?.summary || 'Auto reflow failed';
           return { status: 'error' };
         }
-        restoreManualCancelSnapshot();
+        await restoreCommittedArtifact();
         errorLog.value = formatPythonError(res.error);
         return { status: 'error' };
       }
@@ -4015,7 +3990,7 @@ export const createRunAnalysis = ({
         if (!isReflow && generationCancelRequested.value) {
           return finishCanceledManualRun();
         }
-        if (!isReflow) restoreManualCancelSnapshot();
+        if (!isReflow) await restoreCommittedArtifact();
         return { status: 'stale' };
       }
 
@@ -4034,7 +4009,7 @@ export const createRunAnalysis = ({
       if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-start');
       const candidateCatalog = isReflow
         ? null
-        : validateFeatureCatalog(generationMetadata.featureCatalog, res);
+        : validateFeatureCatalog(generationMetadata.featureCatalog, res, { adopt: true });
       if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-end');
       recordSessionLifecycleEvent('result-admission-start');
       const candidateCommit = isReflow
@@ -4060,7 +4035,7 @@ export const createRunAnalysis = ({
               featureStrokeOverrides,
               legendStrokeOverrides,
               manualSpecificRules,
-              legacyFeatures: manualCancelSnapshot?.artifact?.features?.extractedFeatures || [],
+              legacyFeatures: committedArtifactHandle?.features?.extractedFeatures || [],
               suppressPairwiseIdentityLegend
             })
           );
@@ -4073,7 +4048,7 @@ export const createRunAnalysis = ({
         ) {
           return finishCanceledManualRun();
         }
-        if (!isReflow) restoreManualCancelSnapshot();
+        if (!isReflow) await restoreCommittedArtifact();
         return { status: 'stale' };
       }
 
@@ -4185,6 +4160,11 @@ export const createRunAnalysis = ({
       if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
         adoptCanonicalRenderArtifacts(canonical);
       }
+      if (!isReflow && typeof setGeneratedArtifactIdentity === 'function') {
+        setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
+          results: candidateCommit.results
+        });
+      }
       return { status: 'ok' };
     } catch (e) {
       if (!legacyPromotionCommitted) {
@@ -4204,7 +4184,7 @@ export const createRunAnalysis = ({
         labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
         return { status: 'error' };
       }
-      restoreManualCancelSnapshot();
+      await restoreCommittedArtifact();
       errorLog.value = formatJsError(e);
       return { status: 'error' };
     } finally {
@@ -4221,9 +4201,13 @@ export const createRunAnalysis = ({
     }
   };
 
-  const runAnalysis = async (comparisonPlanSnapshot = null) => runAnalysisInternal({
+  const runAnalysis = async (
+    comparisonPlanSnapshot = null,
+    generatedArtifactHandle = null
+  ) => runAnalysisInternal({
     runMode: 'manual',
-    comparisonPlanSnapshot
+    comparisonPlanSnapshot,
+    generatedArtifactHandle
   });
 
   const cancelRunAnalysis = () => {
@@ -4302,6 +4286,8 @@ export const createRunAnalysis = ({
   return {
     runAnalysis,
     cancelRunAnalysis,
+    captureGeneratedArtifactRuntimeState,
+    restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
     refreshCircularRecordOrder,
     downloadCliHelperFiles,

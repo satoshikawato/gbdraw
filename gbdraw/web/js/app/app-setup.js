@@ -973,6 +973,9 @@ export const createAppSetup = () => {
     applyIntent: historySnapshots.applyHistoryIntent,
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
     applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
@@ -1829,7 +1832,9 @@ export const createAppSetup = () => {
     downloadLosatPair,
     setLosatPairFilename,
     clearLosatCache,
-    getLosatPairDefaultName
+    getLosatPairDefaultName,
+    captureGeneratedArtifactRuntimeState,
+    restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
     state,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
@@ -1841,14 +1846,19 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
-    buildGeneratedArtifactSnapshot: historySnapshots.buildGeneratedArtifactSnapshot,
-    applyGeneratedArtifactSnapshot: historySnapshots.applyGeneratedArtifactSnapshot,
+    captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
       reconcileAnnotationRecordBindings(annotationSets, catalog);
       return validateAnnotationRecordTargets(annotationSets, catalog);
     }
+  });
+  historySnapshots.setGeneratedArtifactRuntimeOwner({
+    capture: captureGeneratedArtifactRuntimeState,
+    restore: restoreGeneratedArtifactRuntimeState
   });
   const resultsManager = createResultsManager({
     state,
@@ -1931,6 +1941,11 @@ export const createAppSetup = () => {
       })
     });
     if (result?.status === 'ok' || result?.status === 'legacy') {
+      historySnapshots.clearGeneratedArtifactIdentity({
+        retainedBytes: result?.status === 'ok'
+          ? Number(result.decompressedCharacters || 0) * 2
+          : 0
+      });
       await nextTick();
       if (result?.status === 'ok') {
         await synchronizeLoadedSessionLegendEntries();
@@ -2202,24 +2217,30 @@ export const createAppSetup = () => {
         : {}
     });
   };
-  const runAnalysis = async () => history.runUndoableCheckpoint('Generate diagram', async () => {
-    cancelDefinitionUpdate();
-    const comparisonPlanSnapshot = mode.value === 'linear'
-      ? linearComparisonResolution.value
-      : null;
+  const runAnalysis = async () => history.runUndoableArtifactReplacement(
+    'Generate diagram',
+    async (generatedArtifactHandle) => {
+      cancelDefinitionUpdate();
+      const comparisonPlanSnapshot = mode.value === 'linear'
+        ? linearComparisonResolution.value
+        : null;
 
-    const result = await runGeneratedDiagramAnalysis(comparisonPlanSnapshot);
-    if (result?.status === 'error' && mode.value === 'linear') {
-      await focusLinearComparisonIssue();
+      const result = await runGeneratedDiagramAnalysis(
+        comparisonPlanSnapshot,
+        generatedArtifactHandle
+      );
+      if (result?.status === 'error' && mode.value === 'linear') {
+        await focusLinearComparisonIssue();
+      }
+      if (result?.status === 'ok') {
+        featureSelection.clearFeatureSelection({ clearStatus: true });
+      }
+      return result;
+    }, {
+      shouldCommit: (result) => result?.status === 'ok',
+      onCheckpointCapture: recordGenerateHistoryCapture
     }
-    if (result?.status === 'ok') {
-      featureSelection.clearFeatureSelection({ clearStatus: true });
-    }
-    return result;
-  }, {
-    shouldCommit: (result) => result?.status === 'ok',
-    onCheckpointCapture: recordGenerateHistoryCapture
-  });
+  );
 
   const cancelGeneration = () => {
     cancelRunAnalysis();

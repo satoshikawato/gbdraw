@@ -193,9 +193,17 @@ const artifactSnapshots = createHistorySnapshotService({
   buildRunStateData,
   applyRunStateData
 });
-const generatedArtifactSnapshotOptions = {
-  buildGeneratedArtifactSnapshot: artifactSnapshots.buildGeneratedArtifactSnapshot,
-  applyGeneratedArtifactSnapshot: artifactSnapshots.applyGeneratedArtifactSnapshot
+const generatedArtifactHandleOptions = {
+  captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
+  restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
+  setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity
+};
+const wireGeneratedArtifactRuntimeOwner = (runner) => {
+  artifactSnapshots.setGeneratedArtifactRuntimeOwner({
+    capture: runner.captureGeneratedArtifactRuntimeState,
+    restore: runner.restoreGeneratedArtifactRuntimeState
+  });
+  return runner;
 };
 
 const result = (name, marker) => ({
@@ -353,8 +361,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   let failArtifactAdoption = false;
   let cancelDuringCandidate = false;
   let runner;
-  runner = createRunAnalysis({
-    ...generatedArtifactSnapshotOptions,
+  runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
@@ -384,7 +392,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       state.canvasPan.y = Number(pan?.y) || 0;
       if (!pan) state.zoom.value = 1;
     }
-  });
+  }));
 
   const committedResult = result('audit-simple.svg', 'committed');
   const committedCatalog = validCatalog(committedResult.name);
@@ -470,7 +478,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(await runner.runAnalysis(), { status: 'canceled' });
   cancelDuringCandidate = false;
   assert.deepEqual(committedFeatureState(), canceledState);
-  assert.equal(state.results.value, canceledResultIdentity);
+  assert.notEqual(state.results.value, canceledResultIdentity);
+  assert.deepEqual(state.results.value, canceledResultIdentity);
+  assert.equal(state.results.value[0], canceledResultIdentity[0]);
   assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.processingStatus.value, 'Canceled.');
@@ -828,8 +838,8 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     throw new Error('mode none must not execute LOSAT');
   };
 
-  const runner = createRunAnalysis({
-    ...generatedArtifactSnapshotOptions,
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: (snapshot, recordCatalog) => {
       serializeCalls += 1;
@@ -861,7 +871,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       state.canvasPan.y = Number(pan?.y) || 0;
       if (!pan) state.zoom.value = 1;
     }
-  });
+  }));
 
   const linearResult = result('linear-none.svg', 'linear-none');
   workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
@@ -956,7 +966,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   await runner.cancelRunAnalysis();
   releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await canceledRun, { status: 'canceled' });
-  assert.equal(state.results.value, committedResults);
+  assert.notEqual(state.results.value, committedResults);
+  assert.deepEqual(state.results.value, committedResults);
+  assert.equal(state.results.value[0], committedResults[0]);
   assert.equal(state.processing.value, false);
   assert.equal(state.generationCancelRequested.value, false);
   assert.equal(serializeCalls, 1);

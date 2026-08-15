@@ -37,6 +37,78 @@ export const collectGenerationResultTransferList = (payload) => {
   return Array.from(buffers);
 };
 
+const bytesForDigest = (value) => {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return null;
+};
+
+const hexDigest = async (bytes) => {
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * Build a private identity from the buffers that are already being transferred.
+ * SVG and metadata payloads are never re-encoded or concatenated here. Each large
+ * buffer is hashed independently and only the compact digest manifest is encoded
+ * for the final ordered digest.
+ */
+export const buildGeneratedArtifactTransportIdentity = async (payload) => {
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const encoder = new TextEncoder();
+  const resultManifest = [];
+  let resultBytes = 0;
+  let resultNameBytes = 0;
+
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index] || {};
+    const nameBytes = encoder.encode(String(result.name || ''));
+    const contentBytes = bytesForDigest(result.content);
+    if (!contentBytes) {
+      throw new Error('Generated SVG content was not encoded for Worker transport.');
+    }
+    resultBytes += contentBytes.byteLength;
+    resultNameBytes += nameBytes.byteLength;
+    resultManifest.push({
+      index,
+      nameBytes: nameBytes.byteLength,
+      nameSha256: await hexDigest(nameBytes),
+      contentBytes: contentBytes.byteLength,
+      contentSha256: await hexDigest(contentBytes)
+    });
+  }
+
+  const metadataBytes = bytesForDigest(payload?.metadata);
+  if (!metadataBytes) {
+    throw new Error('Generated metadata was not encoded for Worker transport.');
+  }
+  const manifest = {
+    schema: 1,
+    results: resultManifest,
+    metadata: {
+      bytes: metadataBytes.byteLength,
+      sha256: await hexDigest(metadataBytes)
+    }
+  };
+  const fingerprint = await hexDigest(encoder.encode(JSON.stringify(manifest)));
+  return Object.freeze({
+    schema: 1,
+    algorithm: 'SHA-256',
+    fingerprint,
+    resultBytes,
+    resultNameBytes,
+    metadataBytes: metadataBytes.byteLength,
+    // Parsed metadata retains strings and object structure in addition to the
+    // transferred UTF-8 representation. Two bytes per source byte is a bounded,
+    // deliberately conservative owner estimate; Result UTF-16 strings are added
+    // separately by the main-thread handle.
+    retainedBytes: resultBytes + resultNameBytes + metadataBytes.byteLength * 2
+  });
+};
+
 export const serializeError = (error) => {
   const normalized = normalizeUserFacingError(error);
   return {
@@ -852,12 +924,21 @@ const runGeneration = async ({
     workspaceError = error;
   }
   emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-cleanup-end');
-  return resolveGenerationCleanupOutcome({
+  const outcome = resolveGenerationCleanupOutcome({
     result,
     primaryError,
     destroyError,
     workspaceError
   });
+  if (!outcome?.error) {
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-start');
+    outcome.artifactIdentity = await buildGeneratedArtifactTransportIdentity(outcome);
+    emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-artifact-identity-end', {
+      fingerprint: outcome.artifactIdentity.fingerprint,
+      retainedBytes: outcome.artifactIdentity.retainedBytes
+    });
+  }
+  return outcome;
 };
 
 const runFeatureExtraction = async ({

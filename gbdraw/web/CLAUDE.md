@@ -82,6 +82,9 @@ During an artifact History transaction, the captured `before` checkpoint is the
 current checkpoint until the `after` capture replaces it. Do not retain an older
 equivalent current checkpoint alongside the transaction copy.
 
+Generate is an already-applied immutable artifact replacement. It must not use
+full checkpoint cloning or signing, and its pre-state is the sole rollback authority.
+
 Keep top-level `create*` entry points in `js/app/*.js`. Put larger,
 single-purpose helpers in the matching subfolder instead of growing another
 general utility module.
