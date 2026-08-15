@@ -12,20 +12,27 @@ import {
 export const createLegendManager = ({
   state,
   history = null,
-  previewRuntime = null
+  previewRuntime = null,
+  legendHelperOperations = null
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({
     state,
     layoutActions,
+    previewRuntime,
+    legendHelperOperations
+  });
+  const sortActions = createLegendSortActions({
+    state,
+    extractLegendEntries: entryActions.extractLegendEntries,
     previewRuntime
   });
-  const sortActions = createLegendSortActions({ state, extractLegendEntries: entryActions.extractLegendEntries });
   const strokeActions = createLegendStrokeActions({ state, previewRuntime });
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
-    history
+    history,
+    previewRuntime
   });
 
   return {

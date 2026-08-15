@@ -832,10 +832,12 @@ export const createRunAnalysis = ({
     skipPositionReapply,
     matchSequenceRegistry,
     featureColorOverrides,
+    featureVisibilityOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
     legendColorOverrides,
     legendStrokeOverrides,
+    legendEntries,
     selectedPalette,
     currentColors,
     paletteDefinitions,
@@ -4021,9 +4023,17 @@ export const createRunAnalysis = ({
               results: res,
               suppressPairwiseIdentityLegend,
               features: extractedFeatures.value,
+              featureColorOverrides,
               featureStrokeOverrides,
+              featureVisibilityOverrides,
+              labelTextFeatureOverrides,
+              labelTextBulkOverrides,
+              labelTextFeatureOverrideSources,
+              labelVisibilityOverrides,
               legendColorOverrides,
-              legendStrokeOverrides
+              legendStrokeOverrides,
+              legendEntries: legendEntries.value,
+              manualSpecificRules
             })
           )
         : measureTiming(
@@ -4035,8 +4045,14 @@ export const createRunAnalysis = ({
               mode: mode.value,
               featureColorOverrides,
               featureStrokeOverrides,
+              featureVisibilityOverrides,
+              labelTextFeatureOverrides,
+              labelTextBulkOverrides,
+              labelTextFeatureOverrideSources,
+              labelVisibilityOverrides,
               legendColorOverrides,
               legendStrokeOverrides,
+              legendEntries: legendEntries.value,
               manualSpecificRules,
               legacyFeatures: committedArtifactHandle?.features?.extractedFeatures || [],
               suppressPairwiseIdentityLegend

@@ -77,6 +77,8 @@ fallback.
 | LOSAT dispatch and workers | `js/services/losat.js`, `js/workers/losat-*` |
 | SVG/PNG/PDF downloads | `js/services/export.js` |
 | SVG Result admission and sanitization | `js/services/svg-result-ingestion.js` |
+| Mounted SVG edit commits | `js/app/preview-runtime.js` |
+| Fresh SVG editor-state replay | `js/app/editor-svg-projection.js` |
 | Feature-editor entry point | `js/app/feature-editor.js` |
 | Feature-editor helpers | `js/app/feature-editor/` |
 | Right-side editor drawer state and transitions | `js/app/right-drawer.js` |
@@ -133,6 +135,12 @@ the same action and replace the Result when it completes. A rerender failure mus
 keep any direct edit already applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
+
+`preview-runtime.js` is the only owner that serializes a mounted DOM edit back
+to its selected Result. Each action uses `commitDomEdit`; a compound edit writes
+once, and a no-op does not write. `editor-svg-projection.js` applies explicit
+canonical Feature, Label, and Legend state to newly admitted SVGs. Replay code
+calls that projection directly, never a UI action or a hidden Generate.
 
 ## Request and session boundary
 

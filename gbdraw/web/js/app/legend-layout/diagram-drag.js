@@ -9,12 +9,12 @@ import {
   isMultiRecordCanvasSvg,
   isRecordGroup
 } from '../record-groups.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
-export const createDiagramDragActions = ({ state, history = null }) => {
+export const createDiagramDragActions = ({ state, history = null, previewRuntime }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createDiagramDragActions requires the preview runtime edit protocol.');
+  }
   const {
-    results,
-    selectedResultIndex,
     svgContainer,
     diagramElements,
     diagramElementIds,
@@ -31,8 +31,7 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     plotTitleAutoTransform,
     plotTitleUserOffset,
     layoutRepositionMode,
-    zoom,
-    skipCaptureBaseConfig
+    zoom
   } = state;
 
   const LEGEND_GROUP_IDS = new Set([
@@ -87,10 +86,12 @@ export const createDiagramDragActions = ({ state, history = null }) => {
 
   const persistCurrentSvg = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
-    const idx = selectedResultIndex.value;
-    if (!svg || idx < 0 || results.value.length <= idx) return;
-    skipCaptureBaseConfig.value = true;
-    results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+    if (!svg) return false;
+    return previewRuntime.commitDomEdit({
+      reason: 'diagram-position',
+      invalidateIndexes: ['legend'],
+      mutate: () => true
+    }).changed;
   };
 
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';

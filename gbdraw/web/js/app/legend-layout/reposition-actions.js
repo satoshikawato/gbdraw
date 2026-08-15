@@ -1,4 +1,3 @@
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
@@ -24,8 +23,12 @@ const setLegendVariant = (legendGroup, side) => {
 
 export const createLegendRepositionActions = ({
   state,
-  legendActions
+  legendActions,
+  previewRuntime
 }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createLegendRepositionActions requires the preview runtime edit protocol.');
+  }
   const {
     svgContent,
     svgContainer,
@@ -38,9 +41,6 @@ export const createLegendRepositionActions = ({
     plotTitleAutoTransform,
     plotTitleUserOffset,
     canvasPadding,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
     skipPositionReapply
   } = state;
   const {
@@ -48,15 +48,12 @@ export const createLegendRepositionActions = ({
     reflowSingleLegendLayout
   } = legendActions;
   const persist = (svg) => {
-    skipCaptureBaseConfig.value = true;
     skipPositionReapply.value = true;
-    const index = selectedResultIndex.value;
-    if (index >= 0 && index < results.value.length) {
-      results.value[index] = {
-        ...results.value[index],
-        content: serializeCleanSvg(svg)
-      };
-    }
+    return previewRuntime.commitDomEdit({
+      reason: 'legend-reposition',
+      invalidateIndexes: ['legend'],
+      mutate: () => true
+    }).changed;
   };
 
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {

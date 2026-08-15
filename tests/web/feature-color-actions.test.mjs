@@ -108,33 +108,85 @@ const featureElementsById = new Map();
 let previewFillApplyCount = 0;
 let previewFlushCount = 0;
 let previewDirty = false;
+let previewBatchDepth = 0;
 const svgContainer = ref(null);
 const clickedFeature = ref(null);
 const originalSvgStroke = ref({ color: null, width: null });
 const featureStrokeOverrides = {};
 const legendStrokeOverrides = {};
+const flushPreview = () => {
+  if (!previewDirty) return false;
+  previewDirty = false;
+  previewFlushCount += 1;
+  return true;
+};
 const previewRuntime = {
-  applyFeatureFillChanges: (changes) => {
-    let updated = false;
-    for (const change of changes) {
-      if (previewFillColors.get(change.featureId) === change.color) continue;
-      previewFillColors.set(change.featureId, change.color);
-      previewFillApplyCount += 1;
-      updated = true;
-    }
-    if (updated) previewDirty = true;
-    return updated;
-  },
-  flushActiveResult: () => {
-    if (!previewDirty) return false;
-    previewDirty = false;
-    previewFlushCount += 1;
-    return true;
-  },
-  getActiveRuntime: () => ({ dirty: previewDirty }),
-  markActiveResultDirty: () => {
+  commitDomEdit: ({ reason = 'test-edit', mutate }) => {
+    const outcome = mutate({ svg: svgContainer.value?.querySelector?.('svg') || null, resultIndex: 0 });
+    const changed = outcome !== false && outcome !== 0 && outcome !== null && outcome !== undefined;
+    if (!changed) return { changed: false, flushed: false, resultIndex: 0, reason };
     previewDirty = true;
-    return true;
+    return {
+      changed: true,
+      flushed: previewBatchDepth === 0 ? flushPreview() : false,
+      resultIndex: 0,
+      reason
+    };
+  },
+  runDomEdit: async ({ action }) => {
+    const outer = previewBatchDepth === 0;
+    previewBatchDepth += 1;
+    try {
+      const result = await action();
+      if (outer) flushPreview();
+      return result;
+    } finally {
+      previewBatchDepth -= 1;
+    }
+  },
+  applyFeatureFillChanges(changes) {
+    return this.commitDomEdit({
+      reason: 'feature-fill',
+      mutate: () => {
+        let updated = 0;
+        for (const change of changes) {
+          if (previewFillColors.get(change.featureId) === change.color) continue;
+          previewFillColors.set(change.featureId, change.color);
+          previewFillApplyCount += 1;
+          updated += 1;
+        }
+        return updated;
+      }
+    }).changed;
+  },
+  applyFeatureStrokeChanges(changes) {
+    return this.commitDomEdit({
+      reason: 'feature-stroke',
+      mutate: () => {
+        let updated = 0;
+        for (const change of changes) {
+          for (const element of featureElementsById.get(change.featureId) || []) {
+            if (Object.hasOwn(change, 'strokeColor')) {
+              const value = change.strokeColor;
+              if (element.getAttribute('stroke') !== value) {
+                if (value === null) element.removeAttribute('stroke');
+                else element.setAttribute('stroke', value);
+                updated += 1;
+              }
+            }
+            if (Object.hasOwn(change, 'strokeWidth')) {
+              const value = change.strokeWidth === null ? null : String(Number(change.strokeWidth));
+              if (element.getAttribute('stroke-width') !== value) {
+                if (value === null) element.removeAttribute('stroke-width');
+                else element.setAttribute('stroke-width', value);
+                updated += 1;
+              }
+            }
+          }
+        }
+        return updated;
+      }
+    }).changed;
   }
 };
 

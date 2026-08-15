@@ -15,6 +15,14 @@ export const createFeatureColorActions = ({
   featureSvgActions,
   previewRuntime = null
 }) => {
+  if (
+    typeof previewRuntime?.commitDomEdit !== 'function'
+    || typeof previewRuntime?.runDomEdit !== 'function'
+    || typeof previewRuntime?.applyFeatureFillChanges !== 'function'
+    || typeof previewRuntime?.applyFeatureStrokeChanges !== 'function'
+  ) {
+    throw new Error('createFeatureColorActions requires the preview runtime edit protocol.');
+  }
   const {
     appliedPaletteColors,
     manualSpecificRules,
@@ -69,13 +77,13 @@ export const createFeatureColorActions = ({
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
-  let colorActionDepth = 0;
-  let colorActionChangedPreview = false;
 
   const markColorPreviewDirty = (reason = 'feature-color') => {
-    const marked = previewRuntime?.markActiveResultDirty?.(reason) === true;
-    colorActionChangedPreview = colorActionChangedPreview || marked;
-    return marked;
+    if (typeof previewRuntime?.commitDomEdit !== 'function') return false;
+    return previewRuntime.commitDomEdit({
+      reason,
+      mutate: () => true
+    }).changed;
   };
 
   const applyFeatureColorPreview = (feature, color) => {
@@ -92,31 +100,13 @@ export const createFeatureColorActions = ({
       [{ featureId, color }],
       { reason: 'feature-color' }
     ) === true;
-    colorActionChangedPreview = colorActionChangedPreview || updated;
     return updated;
   };
 
-  const runColorAction = async (action) => {
-    const isOuterAction = colorActionDepth === 0;
-    const wasDirty = Boolean(previewRuntime?.getActiveRuntime?.()?.dirty);
-    if (isOuterAction) colorActionChangedPreview = false;
-    colorActionDepth += 1;
-    let completed = false;
-    try {
-      const result = await action();
-      completed = true;
-      return result;
-    } finally {
-      colorActionDepth -= 1;
-      if (isOuterAction) {
-        const becameDirty = !wasDirty && Boolean(previewRuntime?.getActiveRuntime?.()?.dirty);
-        if (completed && (colorActionChangedPreview || becameDirty) && previewRuntime?.flushActiveResult) {
-          previewRuntime.flushActiveResult();
-        }
-        colorActionChangedPreview = false;
-      }
-    }
-  };
+  const runColorAction = (action) => previewRuntime.runDomEdit({
+    reason: 'feature-style-action',
+    action
+  });
 
   const colorAction = (action) => (...args) => runColorAction(() => action(...args));
 
@@ -751,37 +741,36 @@ export const createFeatureColorActions = ({
   const renameLegendEntryInSvg = (oldCaption, newCaption, color = null) => {
     const svg = getCurrentSvg();
     if (!svg) return false;
+    const committed = previewRuntime.commitDomEdit({
+      reason: 'legend-rename',
+      invalidateIndexes: ['legend'],
+      mutate: () => {
+        let updated = false;
+        for (const targetGroup of getAllFeatureLegendGroups(svg)) {
+          const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
+          if (!entryGroup) continue;
 
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return false;
+          entryGroup.setAttribute('data-legend-key', newCaption);
+          const textEl = entryGroup.querySelector('text');
+          if (textEl) textEl.textContent = newCaption;
 
-    let updated = false;
-
-    for (const targetGroup of targetGroups) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
-      if (!entryGroup) continue;
-
-      entryGroup.setAttribute('data-legend-key', newCaption);
-      const textEl = entryGroup.querySelector('text');
-      if (textEl) {
-        textEl.textContent = newCaption;
-      }
-
-      if (color) {
-        const paths = entryGroup.querySelectorAll('path');
-        for (const path of paths) {
-          const fill = path.getAttribute('fill');
-          if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-            path.setAttribute('fill', color);
-            break;
+          if (color) {
+            const paths = entryGroup.querySelectorAll('path');
+            for (const path of paths) {
+              const fill = path.getAttribute('fill');
+              if (fill && fill !== 'none' && !fill.startsWith('url(')) {
+                path.setAttribute('fill', color);
+                break;
+              }
+            }
           }
+          updated = true;
         }
+        if (updated) compactLegendEntries(svg);
+        return updated;
       }
-
-      updated = true;
-    }
-
-    if (!updated) return false;
+    });
+    if (!committed.changed) return false;
 
     moveCaptionStateKey(legendColorOverrides, oldCaption, newCaption);
     moveCaptionStateKey(legendStrokeOverrides, oldCaption, newCaption);
@@ -797,9 +786,7 @@ export const createFeatureColorActions = ({
       }
     }
 
-    compactLegendEntries(svg);
     onLegendGeometryChanged();
-    persistCurrentSvg(svg);
     return true;
   };
 
@@ -1513,19 +1500,11 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (normalizedStrokeColor === null && normalizedStrokeWidth === null) return false;
     const firstElement = elements[0] || null;
-    let changed = false;
-
-    elements.forEach((element) => {
-      if (normalizedStrokeColor !== null && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
-        element.setAttribute('stroke', normalizedStrokeColor);
-        changed = true;
-      }
-      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-        element.setAttribute('stroke-width', normalizedStrokeWidth);
-        changed = true;
-      }
-    });
-
+    const changed = previewRuntime.applyFeatureStrokeChanges([{
+      featureId: svgId,
+      ...(normalizedStrokeColor !== null ? { strokeColor: normalizedStrokeColor } : {}),
+      ...(normalizedStrokeWidth !== null ? { strokeWidth: normalizedStrokeWidth } : {})
+    }], { reason: 'feature-stroke' });
     if (!changed) return false;
     recordFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, {
       strokeColor: normalizedStrokeColor,
@@ -1536,8 +1515,6 @@ export const createFeatureColorActions = ({
 
     if (normalizedStrokeColor !== null) clickedFeature.value.strokeColor = normalizedStrokeColor;
     if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
-
-    persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1579,20 +1556,11 @@ export const createFeatureColorActions = ({
 
     const originalColor = originalSvgStroke.value.color;
     const originalWidth = normalizeStrokeWidthValue(originalSvgStroke.value.width);
-    let changed = false;
-
-    elements.forEach((element) => {
-      if (!strokeColorAttributeMatches(element, originalColor)) {
-        if (originalColor === null) element.removeAttribute('stroke');
-        else element.setAttribute('stroke', originalColor);
-        changed = true;
-      }
-      if (!strokeWidthAttributeMatches(element, originalWidth)) {
-        if (originalWidth === null) element.removeAttribute('stroke-width');
-        else element.setAttribute('stroke-width', originalWidth);
-        changed = true;
-      }
-    });
+    const changed = previewRuntime.applyFeatureStrokeChanges([{
+      featureId: svgId,
+      strokeColor: originalColor,
+      strokeWidth: originalWidth
+    }], { reason: 'feature-stroke-reset' });
 
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const overrideKey = featureStrokeKey(feature, svgId);
@@ -1602,7 +1570,6 @@ export const createFeatureColorActions = ({
     clickedFeature.value.strokeWidth = originalWidth ?? '';
     clearFeatureStrokeOverride(feature, svgId);
 
-    if (changed) persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1655,16 +1622,13 @@ export const createFeatureColorActions = ({
       delete override.strokeColor;
       if (!hasOwn(override, 'strokeWidth')) delete featureStrokeOverrides[key];
     }
-    elements.forEach((element) => {
-      if (strokeColorAttributeMatches(element, inheritedColor)) return;
-      if (inheritedColor === null || inheritedColor === '') {
-        element.removeAttribute('stroke');
-      } else {
-        element.setAttribute('stroke', inheritedColor);
-      }
-    });
+    if (domChanged) {
+      previewRuntime.applyFeatureStrokeChanges([{
+        featureId: clickedFeature.value.svg_id,
+        strokeColor: inheritedColor || null
+      }], { reason: 'feature-stroke-color-reset' });
+    }
     clickedFeature.value.strokeColor = inheritedColor || '';
-    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
@@ -1731,10 +1695,7 @@ export const createFeatureColorActions = ({
     const svgId = clickedFeature.value.svg_id;
 
     if (choice === 'this' || choice === 'this_with_legend') {
-      const elements = getFeatureFillElements(svg, svgId);
-      elements.forEach((el) => {
-        el.setAttribute('fill', defaultColor);
-      });
+      applyFeatureColorPreview(feat, defaultColor);
 
       clickedFeature.value.color = defaultColor;
 
@@ -1771,13 +1732,13 @@ export const createFeatureColorActions = ({
       console.log(`Reset fill color to default (${defaultColor}) for feature: ${svgId}`);
     } else if (choice === 'all') {
       const matchingFeatures = extractedFeatures.value.filter((f) => getFeatureCaption(f) === caption);
-
-      for (const matchFeat of matchingFeatures) {
-        const elements = getFeatureFillElements(svg, matchFeat.svg_id);
-        elements.forEach((el) => {
-          el.setAttribute('fill', defaultColor);
-        });
-      }
+      previewRuntime.applyFeatureFillChanges(
+        matchingFeatures.map((matchFeat) => ({
+          featureId: matchFeat.svg_id,
+          color: defaultColor
+        })),
+        { reason: 'bulk-feature-fill-reset' }
+      );
 
       clickedFeature.value.color = defaultColor;
 
@@ -1798,8 +1759,6 @@ export const createFeatureColorActions = ({
         `Reset fill color to default (${defaultColor}) for all ${matchingFeatures.length} features with caption: ${caption}`
       );
     }
-
-    persistCurrentSvg(svg);
 
     clickedFeature.value = null;
   };
@@ -1833,7 +1792,7 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    let updatedCount = 0;
+    const changes = [];
     targetFeatures.forEach((feature) => {
       const elements = getFeatureElements(svg, feature.svg_id);
       if (elements.length === 0) return;
@@ -1849,28 +1808,17 @@ export const createFeatureColorActions = ({
         originalStrokeColor: firstElement?.getAttribute('stroke') ?? null,
         originalStrokeWidth: firstElement?.getAttribute('stroke-width') ?? null
       });
-      elements.forEach((element) => {
-        let changed = false;
-        if (normalizedStrokeColor && !strokeColorAttributeMatches(element, normalizedStrokeColor)) {
-          element.setAttribute('stroke', normalizedStrokeColor);
-          changed = true;
-        }
-        if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-          element.setAttribute('stroke-width', normalizedStrokeWidth);
-          changed = true;
-        }
-        if (changed) updatedCount += 1;
+      changes.push({
+        featureId: feature.svg_id,
+        ...(normalizedStrokeColor ? { strokeColor: normalizedStrokeColor } : {}),
+        ...(normalizedStrokeWidth !== null ? { strokeWidth: normalizedStrokeWidth } : {})
       });
       if (clickedFeature.value?.svg_id === feature.svg_id) {
         if (normalizedStrokeColor) clickedFeature.value.strokeColor = normalizedStrokeColor;
         if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
       }
     });
-
-    if (updatedCount > 0) {
-      persistCurrentSvg(svg, 'feature-stroke');
-    }
-    return updatedCount > 0;
+    return previewRuntime.applyFeatureStrokeChanges(changes, { reason: 'bulk-feature-stroke' });
   };
 
   const applyStrokeToLegendEntry = (caption, strokeColor, strokeWidth) => {
@@ -1882,36 +1830,43 @@ export const createFeatureColorActions = ({
     const normalizedStrokeWidth = normalizeStrokeWidthValue(strokeWidth);
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
-    let domChanged = false;
     let originalSwatchStroke = null;
     const escapedCaption = globalThis.CSS?.escape
       ? globalThis.CSS.escape(targetLegendEntry.caption)
       : String(targetLegendEntry.caption).replace(/["\\]/g, '\\$&');
-    for (const targetGroup of getAllFeatureLegendGroups(svg)) {
-      const entryGroup = targetGroup.querySelector(
-        `g[data-legend-key="${escapedCaption}"]`
-      );
-      if (!entryGroup) continue;
-      const swatch = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
-        const fill = path.getAttribute('fill');
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-      if (!swatch) continue;
-      if (!originalSwatchStroke) {
-        originalSwatchStroke = {
-          color: swatch.getAttribute('stroke'),
-          width: normalizeStrokeWidthValue(swatch.getAttribute('stroke-width'))
-        };
+    const domChanged = previewRuntime.commitDomEdit({
+      reason: 'legend-stroke',
+      invalidateIndexes: ['legend'],
+      mutate: () => {
+        let updated = false;
+        for (const targetGroup of getAllFeatureLegendGroups(svg)) {
+          const entryGroup = targetGroup.querySelector(
+            `g[data-legend-key="${escapedCaption}"]`
+          );
+          if (!entryGroup) continue;
+          const swatch = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
+            const fill = path.getAttribute('fill');
+            return fill && fill !== 'none' && !fill.startsWith('url(');
+          });
+          if (!swatch) continue;
+          if (!originalSwatchStroke) {
+            originalSwatchStroke = {
+              color: swatch.getAttribute('stroke'),
+              width: normalizeStrokeWidthValue(swatch.getAttribute('stroke-width'))
+            };
+          }
+          if (normalizedStrokeColor && !strokeColorAttributeMatches(swatch, normalizedStrokeColor)) {
+            swatch.setAttribute('stroke', normalizedStrokeColor);
+            updated = true;
+          }
+          if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(swatch, normalizedStrokeWidth)) {
+            swatch.setAttribute('stroke-width', normalizedStrokeWidth);
+            updated = true;
+          }
+        }
+        return updated;
       }
-      if (normalizedStrokeColor && !strokeColorAttributeMatches(swatch, normalizedStrokeColor)) {
-        swatch.setAttribute('stroke', normalizedStrokeColor);
-        domChanged = true;
-      }
-      if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(swatch, normalizedStrokeWidth)) {
-        swatch.setAttribute('stroke-width', normalizedStrokeWidth);
-        domChanged = true;
-      }
-    }
+    }).changed;
 
     const overrideKey = targetLegendEntry.caption;
     const previousOverride = legendStrokeOverrides[overrideKey] || {};
@@ -1930,7 +1885,6 @@ export const createFeatureColorActions = ({
       || normalizeStrokeWidthValue(previousOverride.strokeWidth)
         !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
     if (stateChanged) legendStrokeOverrides[overrideKey] = nextOverride;
-    if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
     return domChanged || stateChanged;
   };
 

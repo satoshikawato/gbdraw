@@ -10,9 +10,13 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-actions-
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+const visibilityActionsSource = await readFile(
+  join(sourceDir, 'feature-editor', 'visibility-actions.js'),
+  'utf8'
+);
 await writeFile(
   join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'),
-  await readFile(join(sourceDir, 'feature-editor', 'visibility-actions.js'), 'utf8'),
+  visibilityActionsSource,
   'utf8'
 );
 await writeFile(join(tempDir, 'app', 'feature-visibility.js'), await readFile(join(sourceDir, 'feature-visibility.js'), 'utf8'), 'utf8');
@@ -32,6 +36,7 @@ await writeFile(
 const { createFeatureVisibilityActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'visibility-actions.js'))
 );
+assert.doesNotMatch(visibilityActionsSource, /flushActiveResult|serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
 const ref = (value) => ({ value });
 const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A' };
@@ -44,7 +49,6 @@ const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
-const flushes = [];
 
 const actions = createFeatureVisibilityActions({
   state: {
@@ -75,10 +79,6 @@ const actions = createFeatureVisibilityActions({
     selectResult: (index) => {
       selectedResultIndex.value = index;
       return true;
-    },
-    flushActiveResult: (options = {}) => {
-      flushes.push(options);
-      return true;
     }
   }
 });
@@ -95,7 +95,6 @@ assert.deepEqual(
   appliedPreviewChanges[0].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'off'], ['feature-b', 'off']]
 );
-assert.deepEqual(flushes, [{ force: true }]);
 
 assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
@@ -104,14 +103,14 @@ assert.deepEqual(
   appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'on'], ['feature-b', 'on']]
 );
-assert.deepEqual(flushes, [{ force: true }, { force: true }]);
 
 assert.equal(actions.setFeatureVisibility(featureA, 'off', {
   triggerReflow: false,
   scope: { id: 'feature' }
 }), true);
 assert.equal(featureVisibilityOverrides['feature-a'], 'off');
-assert.deepEqual(flushes, [{ force: true }, { force: true }, {}]);
+assert.equal(appliedPreviewChanges.length, 3);
+assert.deepEqual(appliedPreviewChanges.at(-1).changes, [{ featureId: 'feature-a', mode: 'off' }]);
 delete featureVisibilityOverrides['feature-a'];
 
 const sourceIdFeature = {
@@ -266,11 +265,10 @@ actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 delete featureVisibilityOverrides[strictTrigger.svg_id];
 
-flushes.length = 0;
+const previewCallCountBeforeStaleCommand = appliedPreviewChanges.length;
 resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);
 assert.deepEqual(featureVisibilityOverrides, {});
-assert.equal(appliedPreviewChanges.length, 2);
-assert.deepEqual(flushes, []);
+assert.equal(appliedPreviewChanges.length, previewCallCountBeforeStaleCommand);
 
 console.log('feature visibility action tests passed');

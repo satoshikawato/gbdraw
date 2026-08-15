@@ -1,9 +1,10 @@
 import { getAllFeatureLegendGroups, parseTransform, parseTransformXY } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 
-export const createLegendSortActions = ({ state, extractLegendEntries }) => {
-  const { svgContainer, legendEntries, originalLegendOrder, selectedResultIndex, results, skipCaptureBaseConfig } =
-    state;
+export const createLegendSortActions = ({ state, extractLegendEntries, previewRuntime }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createLegendSortActions requires the preview runtime edit protocol.');
+  }
+  const { svgContainer, legendEntries, originalLegendOrder } = state;
 
   const getCurrentSvg = () => {
     if (!svgContainer.value) return null;
@@ -54,12 +55,11 @@ export const createLegendSortActions = ({ state, extractLegendEntries }) => {
   };
 
   const persistLegendSvg = (svg) => {
-    skipCaptureBaseConfig.value = true;
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-    }
-
+    previewRuntime.commitDomEdit({
+      reason: 'legend-sort',
+      invalidateIndexes: ['legend'],
+      mutate: () => true
+    });
     extractLegendEntries();
   };
 

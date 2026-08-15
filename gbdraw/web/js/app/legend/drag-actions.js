@@ -1,5 +1,4 @@
 import { parseTransform } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
@@ -7,10 +6,16 @@ import {
 } from '../legend-layout/composition-actions.js';
 import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
 
-export const createLegendDragActions = ({ state, extractLegendEntries, history = null }) => {
+export const createLegendDragActions = ({
+  state,
+  extractLegendEntries,
+  history = null,
+  previewRuntime
+}) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createLegendDragActions requires the preview runtime edit protocol.');
+  }
   const {
-    results,
-    selectedResultIndex,
     svgContainer,
     legendDragging,
     legendDragStart,
@@ -18,8 +23,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     legendInitialTransform,
     legendCurrentOffset,
     layoutRepositionMode,
-    zoom,
-    skipCaptureBaseConfig
+    zoom
   } = state;
   let legendDragFrameId = null;
   let pendingLegendPointer = null;
@@ -125,11 +129,11 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
 
     if (completedDragContext?.svg) {
       const svg = completedDragContext.svg;
-      const idx = selectedResultIndex.value;
-      if (svg && idx >= 0 && results.value.length > idx) {
-        skipCaptureBaseConfig.value = true;
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      }
+      previewRuntime.commitDomEdit({
+        reason: 'legend-position',
+        invalidateIndexes: ['legend'],
+        mutate: () => Boolean(svg)
+      });
     }
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
@@ -166,11 +170,11 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
 
-    skipCaptureBaseConfig.value = true;
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-    }
+    previewRuntime.commitDomEdit({
+      reason: 'legend-position-reset',
+      invalidateIndexes: ['legend'],
+      mutate: () => true
+    });
   };
 
   const resetLegendPosition = () => {

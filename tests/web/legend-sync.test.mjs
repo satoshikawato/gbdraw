@@ -201,6 +201,17 @@ const mockLegendEntry = (caption, color, x) => {
 
   let dirtyMarks = 0;
   let layoutRefreshes = 0;
+  const previewRuntime = {
+    commitDomEdit: ({ reason = 'test-edit', mutate }) => {
+      const outcome = mutate({ svg, resultIndex: 0 });
+      const changed = outcome !== false && outcome !== 0 && outcome !== null && outcome !== undefined;
+      if (changed) dirtyMarks += 1;
+      return { changed, flushed: changed, resultIndex: 0, reason };
+    },
+    runDomEdit: async ({ action }) => action(),
+    getActiveRuntime: () => ({ resultIndex: 0 }),
+    mountResultSvg: () => {}
+  };
   const state = {
     results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
     selectedResultIndex: ref(0),
@@ -227,11 +238,10 @@ const mockLegendEntry = (caption, color, x) => {
       reflowDualLegendLayout: () => { layoutRefreshes += 1; },
       updatePairwiseLegendPositions: () => { layoutRefreshes += 1; }
     },
-    previewRuntime: {
-      applyLegendChanges: () => {
-        dirtyMarks += 1;
-        return true;
-      }
+    previewRuntime,
+    legendHelperOperations: {
+      measureText: async () => ({ result: { width: 10 } }),
+      generateEntrySvg: async () => ({ result: { rect: '', text: '' } })
     }
   });
 
@@ -311,12 +321,7 @@ const mockLegendEntry = (caption, color, x) => {
   state.originalSvgStroke = ref({ color: null, width: null });
   const strokeActions = createLegendStrokeActions({
     state,
-    previewRuntime: {
-      markActiveResultDirty: () => {
-        dirtyMarks += 1;
-        return true;
-      }
-    }
+    previewRuntime
   });
   assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
   const strokeColorDirtyMarks = dirtyMarks;

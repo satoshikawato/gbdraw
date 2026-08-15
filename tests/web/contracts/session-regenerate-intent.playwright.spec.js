@@ -7,6 +7,10 @@ const {
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
+const {
+  expectBiologicalOwnersUnchanged,
+  expectDirectEditFlushed
+} = require('../helpers/live-svg-edit-contract.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sourceSessionPath = join(
@@ -735,36 +739,6 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
     structural: window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_PROBE__?.snapshot?.() || null
   };
 });
-
-const expectBiologicalOwnersUnchanged = (snapshot) => {
-  expect(snapshot.structural).toMatchObject({
-    directEditFeatureCatalogReplacementCount: 0,
-    directEditExtractedFeatureReplacementCount: 0,
-    directEditBiologicalFeatureReplacementCount: 0,
-    directEditOrthogroupReplacementCount: 0
-  });
-};
-
-const expectDirectEditFlushed = (before, after) => {
-  expect(after.result.sha256).not.toBe(before.result.sha256);
-  expect(after.structural.directEditResultFlushCount).toBeGreaterThan(
-    before.structural.directEditResultFlushCount
-  );
-  expect(after.structural.directEditSvgSerializationCount).toBeGreaterThan(
-    before.structural.directEditSvgSerializationCount
-  );
-  expect(after.history.artifactReplacementHistoryEntryCount).toBe(
-    before.history.artifactReplacementHistoryEntryCount
-  );
-  expect(after.history.artifactCheckpointBuilds).toBe(before.history.artifactCheckpointBuilds);
-  expect(after.history.generatedArtifactFullCloneCount).toBe(
-    before.history.generatedArtifactFullCloneCount
-  );
-  expect(after.history.generatedArtifactFullSerializationCount).toBe(
-    before.history.generatedArtifactFullSerializationCount
-  );
-  expectBiologicalOwnersUnchanged(after);
-};
 
 const capturePageEvidence = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
@@ -1515,7 +1489,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(afterVisibility.overrides.visibility).toBe('off');
   await captureIdleWorkerStage(page, 'after feature visibility', idleWorkerStages);
 
-  const labelApplied = await page.evaluate(async ({ text }) => {
+  const labelTextApplied = await page.evaluate(async ({ text }) => {
     const app = window.__GBDRAW_APP__;
     const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
     const requested = await app.requestLabelTextChangeByFeatureId(
@@ -1523,12 +1497,26 @@ test('loaded current preview supports direct edits before the first Generate', a
       text
     );
     await app.handleLabelTextScopeChoice('single');
-    app.openFeatureEditorFromList(targetState.labelFeature, { clientX: 240, clientY: 240 });
-    if (!app.clickedFeature?.hasEditableLabel) {
-      throw new Error('The loaded Feature label could not be reopened for direct editing.');
-    }
-    app.clickedFeature.labelText = text;
-    await app.updateClickedFeatureLabelText();
+    return {
+      requested,
+      textOverride: app.labelTextFeatureOverrides[targetState.labelFeatureId]
+    };
+  }, { text: DIRECT_LABEL_TEXT });
+  expect(labelTextApplied).toEqual({
+    requested: true,
+    textOverride: DIRECT_LABEL_TEXT
+  });
+  await settleMountedDom(page);
+  const afterLabelText = await captureLoadedPreviewDirectEditState(page);
+  expectDirectEditFlushed(afterVisibility, afterLabelText);
+  expect(afterLabelText.dom.label).toEqual({ text: DIRECT_LABEL_TEXT, display: null });
+  expect(afterLabelText.resultDom.label).toEqual({ text: DIRECT_LABEL_TEXT, display: null });
+  expect(afterLabelText.overrides.labelText).toBe(DIRECT_LABEL_TEXT);
+  await captureIdleWorkerStage(page, 'after label text', idleWorkerStages);
+
+  const labelVisibilityApplied = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
     app.openFeatureEditorFromList(
       targetState.labelVisibilityFeature,
       { clientX: 260, clientY: 260 }
@@ -1538,56 +1526,72 @@ test('loaded current preview supports direct edits before the first Generate', a
     }
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
-    return {
-      requested,
-      textOverride: app.labelTextFeatureOverrides[targetState.labelFeatureId],
-      visibilityOverride:
-        app.labelVisibilityOverrides[targetState.labelVisibilityFeatureId]
-    };
-  }, { text: DIRECT_LABEL_TEXT });
-  expect(labelApplied).toEqual({
-    requested: true,
-    textOverride: DIRECT_LABEL_TEXT,
-    visibilityOverride: 'off'
+    return app.labelVisibilityOverrides[targetState.labelVisibilityFeatureId];
   });
+  expect(labelVisibilityApplied).toBe('off');
   await settleMountedDom(page);
   const afterLabel = await captureLoadedPreviewDirectEditState(page);
-  expectDirectEditFlushed(afterVisibility, afterLabel);
+  expectDirectEditFlushed(afterLabelText, afterLabel);
   expectLabelEdited(afterLabel);
   expect(afterLabel.overrides).toMatchObject({
     labelText: DIRECT_LABEL_TEXT,
     labelVisibility: 'off'
   });
-  await captureIdleWorkerStage(page, 'after label text and visibility', idleWorkerStages);
+  await captureIdleWorkerStage(page, 'after label visibility', idleWorkerStages);
 
-  const legendApplied = await page.evaluate(async ({ color, stroke, strokeWidth }) => {
+  const legendFillApplied = await page.evaluate(({ color }) => {
     const app = window.__GBDRAW_APP__;
     const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
     const index = app.legendEntries.findIndex(
       (entry) => entry.caption === targetState.legendCaption
     );
     if (index < 0) throw new Error('The loaded legend entry is no longer available.');
-    return {
-      color: app.updateLegendEntryColor(index, color),
-      stroke: await app.setLegendEntryStrokeColorValue(index, stroke),
-      strokeWidth: app.updateLegendEntryStrokeWidth(index, strokeWidth)
-    };
-  }, {
-    color: DIRECT_LEGEND_COLOR,
-    stroke: DIRECT_LEGEND_STROKE,
-    strokeWidth: DIRECT_LEGEND_STROKE_WIDTH
-  });
-  expect(legendApplied).toEqual({ color: true, stroke: true, strokeWidth: true });
+    return app.updateLegendEntryColor(index, color);
+  }, { color: DIRECT_LEGEND_COLOR });
+  expect(legendFillApplied).toBe(true);
+  await settleMountedDom(page);
+  const afterLegendFill = await captureLoadedPreviewDirectEditState(page);
+  expectDirectEditFlushed(afterLabel, afterLegendFill);
+  expect(afterLegendFill.dom.legend?.fill).toBe(DIRECT_LEGEND_COLOR);
+  expect(afterLegendFill.resultDom.legend?.fill).toBe(DIRECT_LEGEND_COLOR);
+  expect(afterLegendFill.overrides.legendColor).toBe(DIRECT_LEGEND_COLOR);
+  await captureIdleWorkerStage(page, 'after legend fill', idleWorkerStages);
+
+  const legendStrokeApplied = await page.evaluate(async ({ stroke }) => {
+    const app = window.__GBDRAW_APP__;
+    const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
+    const index = app.legendEntries.findIndex(
+      (entry) => entry.caption === targetState.legendCaption
+    );
+    return app.setLegendEntryStrokeColorValue(index, stroke);
+  }, { stroke: DIRECT_LEGEND_STROKE });
+  expect(legendStrokeApplied).toBe(true);
+  await settleMountedDom(page);
+  const afterLegendStroke = await captureLoadedPreviewDirectEditState(page);
+  expectDirectEditFlushed(afterLegendFill, afterLegendStroke);
+  expect(afterLegendStroke.dom.legend?.stroke).toBe(DIRECT_LEGEND_STROKE);
+  expect(afterLegendStroke.resultDom.legend?.stroke).toBe(DIRECT_LEGEND_STROKE);
+  await captureIdleWorkerStage(page, 'after legend stroke color', idleWorkerStages);
+
+  const legendStrokeWidthApplied = await page.evaluate(({ strokeWidth }) => {
+    const app = window.__GBDRAW_APP__;
+    const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
+    const index = app.legendEntries.findIndex(
+      (entry) => entry.caption === targetState.legendCaption
+    );
+    return app.updateLegendEntryStrokeWidth(index, strokeWidth);
+  }, { strokeWidth: DIRECT_LEGEND_STROKE_WIDTH });
+  expect(legendStrokeWidthApplied).toBe(true);
   await settleMountedDom(page);
   const afterLegend = await captureLoadedPreviewDirectEditState(page);
-  expectDirectEditFlushed(afterLabel, afterLegend);
+  expectDirectEditFlushed(afterLegendStroke, afterLegend);
   expectLegendEdited(afterLegend);
   expect(afterLegend.overrides.legendColor).toBe(DIRECT_LEGEND_COLOR);
   expect(afterLegend.overrides.legendStroke).toMatchObject({
     strokeColor: DIRECT_LEGEND_STROKE,
     strokeWidth: DIRECT_LEGEND_STROKE_WIDTH
   });
-  await captureIdleWorkerStage(page, 'after legend color', idleWorkerStages);
+  await captureIdleWorkerStage(page, 'after legend stroke width', idleWorkerStages);
 
   const titleSummary = page.locator('summary[aria-label="Title & Legend"]');
   const titleDetails = titleSummary.locator('..');
@@ -1649,10 +1653,8 @@ test('loaded current preview supports direct edits before the first Generate', a
   const directMetrics = await page.evaluate(() => (
     window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_PROBE__.stop()
   ));
-  expect(directMetrics.directEditResultFlushCount).toBeGreaterThanOrEqual(7);
-  expect(directMetrics.directEditSvgSerializationCount).toBeGreaterThanOrEqual(
-    directMetrics.directEditResultFlushCount
-  );
+  expect(directMetrics.directEditResultFlushCount).toBe(10);
+  expect(directMetrics.directEditSvgSerializationCount).toBe(10);
   expect(directMetrics).toMatchObject({
     directEditFeatureCatalogReplacementCount: 0,
     directEditExtractedFeatureReplacementCount: 0,

@@ -216,7 +216,16 @@ const dragFixture = () => {
 
   try {
     const { legend, state, svg } = dragFixture();
-    const actions = createLegendDragActions({ state, extractLegendEntries: () => {} });
+    const actions = createLegendDragActions({
+      state,
+      extractLegendEntries: () => {},
+      previewRuntime: {
+        commitDomEdit: ({ reason = 'test-edit', mutate }) => {
+          const changed = Boolean(mutate({ svg, resultIndex: 0 }));
+          return { changed, flushed: changed, resultIndex: 0, reason };
+        }
+      }
+    });
     actions.startLegendDrag({
       clientX: 100,
       clientY: 200,

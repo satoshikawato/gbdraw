@@ -30,7 +30,11 @@ import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  disposeDiagramGenerationWorker,
+  runDiagramHelperOperation
+} from '../services/diagram-generation.js';
 import { recordSessionLifecycleEvent } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
@@ -51,6 +55,7 @@ import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
 import { setupHistoryShortcuts } from './history-shortcuts.js';
 import { createPreviewRuntime } from './preview-runtime.js';
+import { createEditorSvgProjection } from './editor-svg-projection.js';
 import {
   createOrthogroupEditor,
   resolveUniqueOrthogroupMemberForFeature
@@ -970,7 +975,10 @@ export const createAppSetup = () => {
   });
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: historySnapshots.applyHistoryIntent,
+    applyIntent: (intent, context) => previewRuntime.runDomEdit({
+      reason: 'history-intent-apply',
+      action: () => historySnapshots.applyHistoryIntent(intent, context)
+    }),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
     applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
@@ -1010,7 +1018,17 @@ export const createAppSetup = () => {
   const legendActions = createLegendManager({
     state,
     history,
-    previewRuntime
+    previewRuntime,
+    legendHelperOperations: {
+      measureText: (payload) => runDiagramHelperOperation(
+        DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
+        payload
+      ),
+      generateEntrySvg: (payload) => runDiagramHelperOperation(
+        DIAGRAM_HELPER_OPERATIONS.GENERATE_LEGEND_ENTRY_SVG,
+        payload
+      )
+    }
   });
   const svgActions = createSvgStyles({
     state,
@@ -1820,7 +1838,7 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, legendActions, history });
+  const legendLayout = createLegendLayout({ state, legendActions, history, previewRuntime });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
@@ -1863,7 +1881,8 @@ export const createAppSetup = () => {
   const resultsManager = createResultsManager({
     state,
     legendLayout,
-    rerenderLinearDefinitions: runLabelReflow
+    rerenderLinearDefinitions: runLabelReflow,
+    previewRuntime
   });
 
   setupWatchers({
@@ -2037,31 +2056,58 @@ export const createAppSetup = () => {
     handleGlobalLabelModeChoice,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
-    reconcileFeatureVisibility,
-    reconcileLabelOverrides,
     resetAllLabelTextOverrides
   } = featureActions;
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
-    if (changedDomains.has('ui')) {
-      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
-    }
-    if (changedDomains.has('config') || changedDomains.has('features')) {
-      svgActions.applyPaletteToSvg();
-      svgActions.applySpecificRulesToSvg();
-    }
-    if (changedDomains.has('features')) {
-      reconcileFeatureVisibility();
-      reconcileLabelOverrides();
-    }
-    if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true });
-      reconcileStrokeOverrides({ changes });
-      reconcileLabelOverrides();
-    }
-    await nextTick();
+    await previewRuntime.runDomEdit({
+      reason: 'history-intent-replay',
+      action: async () => {
+        if (changedDomains.has('ui')) {
+          legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
+        }
+        if (changedDomains.has('config') || changedDomains.has('features')) {
+          svgActions.applyPaletteToSvg();
+        }
+        if (changedDomains.has('editorState')) {
+          reconcileLegendEntries({ restoreColorState: true });
+          reconcileStrokeOverrides({ changes });
+        }
+        if (
+          changedDomains.has('config')
+          || changedDomains.has('features')
+          || changedDomains.has('editorState')
+        ) {
+          syncLabelEditor();
+          const projection = createEditorSvgProjection({
+            features: extractedFeatures.value,
+            featureColorOverrides,
+            featureStrokeOverrides,
+            featureVisibilityOverrides,
+            labelTextFeatureOverrides,
+            labelTextBulkOverrides,
+            labelTextFeatureOverrideSources,
+            labelVisibilityOverrides,
+            legendColorOverrides,
+            legendStrokeOverrides,
+            legendEntries: legendEntries.value,
+            manualSpecificRules
+          });
+          previewRuntime.commitDomEdit({
+            reason: 'history-editor-svg-projection',
+            invalidateIndexes: ['features', 'legend'],
+            mutate: ({ svg }) => projection.project(svg, {
+              resetFeatureVisibility: true,
+              resetLabelState: true
+            }).changed
+          });
+          syncLabelEditor();
+        }
+        await nextTick();
+      }
+    });
   });
 
   const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;

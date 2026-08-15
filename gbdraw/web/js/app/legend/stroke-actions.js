@@ -1,36 +1,22 @@
 import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
 import {
   FEATURE_SELECTOR,
-  getFeatureElementIndex,
   getFeatureElements
 } from '../feature-editor/svg-actions.js';
 import { getAllFeatureLegendGroups } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import {
+  applyLegendColorOverridesToSvg,
+  applyStrokeOverridesToSvg,
+  getLegendSwatches
+} from '../editor-svg-projection.js';
 import {
   featureOverrideKey,
   migrateLegacyFeatureOverrides
 } from '../../services/feature-override-identity.js';
 
-const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+export { applyLegendColorOverridesToSvg, applyStrokeOverridesToSvg };
 
-const applyStrokeAttributes = (element, strokeColor, strokeWidth) => {
-  let changed = false;
-  const color = String(strokeColor || '').trim();
-  if (color && element.getAttribute('stroke') !== color) {
-    element.setAttribute('stroke', color);
-    changed = true;
-  }
-  if (strokeWidth !== undefined && strokeWidth !== null && strokeWidth !== '') {
-    const numericWidth = Number(strokeWidth);
-    if (!Number.isFinite(numericWidth) || numericWidth < 0) return changed;
-    const width = String(numericWidth);
-    if (element.getAttribute('stroke-width') !== width) {
-      element.setAttribute('stroke-width', width);
-      changed = true;
-    }
-  }
-  return changed;
-};
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 
 const restoreStrokeAttributes = (element, originalColor, originalWidth) => {
   let changed = false;
@@ -57,85 +43,16 @@ const restoreStrokeAttributes = (element, originalColor, originalWidth) => {
   return changed;
 };
 
-const getLegendSwatches = (svg, caption) => {
-  const swatches = [];
-  getAllFeatureLegendGroups(svg).forEach((targetGroup) => {
-    const entryGroup = Array.from(targetGroup.querySelectorAll('g[data-legend-key]'))
-      .find((entry) => entry.getAttribute('data-legend-key') === caption);
-    const swatch = Array.from(entryGroup?.querySelectorAll?.('path') || []).find((path) => {
-      const fill = path.getAttribute('fill');
-      return fill && fill !== 'none' && !fill.startsWith('url(');
-    });
-    if (swatch) swatches.push(swatch);
-  });
-  return swatches;
-};
-
-export const applyLegendColorOverridesToSvg = ({
-  svg,
-  legendColorOverrides = {}
-} = {}) => {
-  if (!svg) return 0;
-  let changedCount = 0;
-  Object.entries(legendColorOverrides || {}).forEach(([caption, color]) => {
-    const normalized = String(color || '').trim();
-    if (!normalized) return;
-    getLegendSwatches(svg, caption).forEach((swatch) => {
-      if (swatch.getAttribute('fill') === normalized) return;
-      swatch.setAttribute('fill', normalized);
-      changedCount += 1;
-    });
-  });
-  return changedCount;
-};
-
-export const applyStrokeOverridesToSvg = ({
-  svg,
-  features = [],
-  legendStrokeOverrides = {},
-  featureStrokeOverrides = {}
-} = {}) => {
-  if (!svg) return 0;
-  const featureIndex = getFeatureElementIndex(svg);
-  let changedCount = 0;
-  const applyToFeature = (feature, overrides) => {
-    if (!overrides || typeof overrides !== 'object') return;
-    getFeatureElements(svg, feature?.svg_id, featureIndex).forEach((element) => {
-      if (applyStrokeAttributes(element, overrides.strokeColor, overrides.strokeWidth)) {
-        changedCount += 1;
-      }
-    });
-  };
-
-  Object.entries(legendStrokeOverrides || {}).forEach(([caption, overrides]) => {
-    if (!overrides || typeof overrides !== 'object') return;
-    (Array.isArray(features) ? features : [])
-      .filter((feature) => getFeatureCaption(feature) === caption)
-      .forEach((feature) => applyToFeature(feature, overrides));
-    getLegendSwatches(svg, caption).forEach((swatch) => {
-      if (applyStrokeAttributes(swatch, overrides.strokeColor, overrides.strokeWidth)) {
-        changedCount += 1;
-      }
-    });
-  });
-
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const key = featureOverrideKey(feature);
-    if (key) applyToFeature(feature, featureStrokeOverrides?.[key]);
-  });
-  return changedCount;
-};
-
 export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createLegendStrokeActions requires the preview runtime edit protocol.');
+  }
   const {
     extractedFeatures,
     legendEntries,
     legendStrokeOverrides,
     featureStrokeOverrides,
     originalSvgStroke,
-    results,
-    selectedResultIndex,
-    skipCaptureBaseConfig,
     svgContainer,
     manualSpecificRules
   } = state;
@@ -153,17 +70,15 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     };
   };
 
-  const persistStrokeEdit = (svg, reason = 'feature-stroke') => {
-    skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.markActiveResultDirty?.(reason)) {
-      previewRuntime.flushActiveResult?.();
-      return;
-    }
-    const resultIdx = selectedResultIndex.value;
-    if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
-    }
-  };
+  const commitStrokeMutation = (reason, mutate) => previewRuntime.commitDomEdit({
+    reason,
+    invalidateIndexes: ['features', 'legend'],
+    mutate
+  }).changed;
+
+  const persistStrokeEdit = (svg, reason = 'feature-stroke') => (
+    svg ? commitStrokeMutation(reason, () => true) : false
+  );
 
   const getLegendEntryStrokeColor = (idx) => {
     const entry = legendEntries.value[idx];

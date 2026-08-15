@@ -2,7 +2,6 @@ import { parseTransform } from './legend-layout/transform-utils.js';
 import { COMPOSITION_ROLE_ATTRIBUTE } from './legend-layout/composition-actions.js';
 import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
 import { isMultiRecordCanvasSvg } from './record-groups.js';
-import { serializeCleanSvg } from '../services/svg-serialization.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
@@ -54,8 +53,12 @@ const preserveDefinitionGroupDomIdentity = (existingGroup, importedGroup) => {
 export const createResultsManager = ({
   state,
   legendLayout,
-  rerenderLinearDefinitions = null
+  rerenderLinearDefinitions = null,
+  previewRuntime
 }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createResultsManager requires the preview runtime edit protocol.');
+  }
   const {
     svgContent,
     mode,
@@ -66,9 +69,6 @@ export const createResultsManager = ({
     linearSeqs,
     form,
     adv,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
     paletteDefinitions,
     selectedPalette,
     currentColors,
@@ -80,6 +80,11 @@ export const createResultsManager = ({
     normalizePaletteColors
   } = state;
   const { refreshCompositionGeometry } = legendLayout;
+  const commitDefinitionEdit = () => previewRuntime.commitDomEdit({
+    reason: 'definition-text',
+    invalidateIndexes: ['legend'],
+    mutate: () => true
+  });
 
   let definitionUpdateTimeout = null;
   const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -331,12 +336,7 @@ export const createResultsManager = ({
         });
 
         if (updated) {
-          skipCaptureBaseConfig.value = true;
-          const idx = selectedResultIndex.value;
-          if (idx >= 0 && results.value.length > idx) {
-            results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-          }
-
+          commitDefinitionEdit();
           console.log('Definition text updated');
         }
       } catch (e) {
@@ -441,11 +441,7 @@ export const createResultsManager = ({
       }
 
       if (updated) {
-        skipCaptureBaseConfig.value = true;
-        const idx = selectedResultIndex.value;
-        if (idx >= 0 && results.value.length > idx) {
-          results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-        }
+        commitDefinitionEdit();
       }
     }
   };

@@ -129,7 +129,7 @@ import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
 import { prepareCandidateRenderCommit } from '../app/candidate-render.js';
-import { applyStrokeOverridesToSvg } from '../app/legend/stroke-actions.js';
+import { createEditorSvgProjection } from '../app/editor-svg-projection.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
@@ -4353,7 +4353,21 @@ export const importSession = async (e, options = {}) => {
     });
 
     const restoredFeatureState = currentCatalogFeatureState || features || {};
-    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
+    const restoredEditorProjection = createEditorSvgProjection({
+      features: restoredFeatureState.extractedFeatures || [],
+      featureColorOverrides: state.featureColorOverrides,
+      featureStrokeOverrides: state.featureStrokeOverrides,
+      featureVisibilityOverrides: state.featureVisibilityOverrides,
+      labelTextFeatureOverrides: state.labelTextFeatureOverrides,
+      labelTextBulkOverrides: state.labelTextBulkOverrides,
+      labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
+      labelVisibilityOverrides: state.labelVisibilityOverrides,
+      legendColorOverrides: state.legendColorOverrides,
+      legendStrokeOverrides: state.legendStrokeOverrides,
+      legendEntries: state.legendEntries.value,
+      manualSpecificRules: state.manualSpecificRules
+    });
+    const transformRestoredSessionSvg = (svg, { applyEditorProjection = true } = {}) => {
       const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
       let compositionChanged = false;
       if (
@@ -4378,15 +4392,10 @@ export const importSession = async (e, options = {}) => {
         });
         compositionChanged = true;
       }
-      const strokeCount = applyStrokes
-        ? applyStrokeOverridesToSvg({
-            svg,
-            features: restoredFeatureState.extractedFeatures || [],
-            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
-          })
-        : 0;
-      return legendGroupsChanged || compositionChanged || strokeCount > 0;
+      const projectionChanged = applyEditorProjection
+        ? restoredEditorProjection.project(svg).changed
+        : false;
+      return legendGroupsChanged || compositionChanged || projectionChanged;
     };
 
     recordSessionLifecycleEvent('svg-admission-start');
@@ -4401,11 +4410,18 @@ export const importSession = async (e, options = {}) => {
           mode: state.mode.value,
           featureColorOverrides: state.featureColorOverrides,
           featureStrokeOverrides: state.featureStrokeOverrides,
+          featureVisibilityOverrides: state.featureVisibilityOverrides,
+          labelTextFeatureOverrides: state.labelTextFeatureOverrides,
+          labelTextBulkOverrides: state.labelTextBulkOverrides,
+          labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
+          labelVisibilityOverrides: state.labelVisibilityOverrides,
+          legendColorOverrides: state.legendColorOverrides,
           legendStrokeOverrides: state.legendStrokeOverrides,
+          legendEntries: state.legendEntries.value,
           manualSpecificRules: state.manualSpecificRules,
           legacyFeatures: features?.extractedFeatures || [],
           preparedFeatureState: currentCatalogFeatureState,
-          transformSvg: (svg) => transformRestoredSessionSvg(svg, { applyStrokes: false })
+          transformSvg: (svg) => transformRestoredSessionSvg(svg, { applyEditorProjection: false })
         }).results
       : ingestSvgResults(logicalImportedResults, {
           transformSvg: transformRestoredSessionSvg

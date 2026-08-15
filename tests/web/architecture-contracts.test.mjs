@@ -165,7 +165,6 @@ test('Worker construction and the diagram-generation client have explicit owners
   assert.deepEqual(importersOf('services/diagram-generation.js'), [
     'app/app-setup.js',
     'app/feature-metadata-extraction.js',
-    'app/legend/entry-actions.js',
     'app/record-discovery.js',
     'app/results.js',
     'app/run-analysis.js'
@@ -327,6 +326,83 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
   assert.deepEqual(occurrenceOwners(/\bapplyHistorySnapshot\b/g), new Map());
+});
+
+test('live SVG edits and fresh-SVG replay have explicit single owners', () => {
+  const directEditorModules = [
+    'app/feature-editor/color-actions.js',
+    'app/feature-editor/label-actions.js',
+    'app/feature-editor/svg-actions.js',
+    'app/feature-editor/visibility-actions.js',
+    'app/legend/entry-actions.js',
+    'app/legend/stroke-actions.js',
+    'app/legend/drag-actions.js',
+    'app/legend/sort-actions.js',
+    'app/legend-layout/canvas-actions.js',
+    'app/legend-layout/diagram-drag.js',
+    'app/legend-layout/reposition-actions.js',
+    'app/results.js',
+    'app/svg-styles.js'
+  ];
+  const ordinaryDirectActionModules = directEditorModules.filter(
+    (owner) => owner !== 'app/results.js'
+  );
+  directEditorModules.forEach((owner) => {
+    const source = productionSources.get(owner) || '';
+    assert.doesNotMatch(source, /\bserializeCleanSvg\b/, `${owner} must use the live edit owner`);
+    assert.doesNotMatch(
+      source,
+      /(?:state\.)?results\.value\[[^\]]+\]\s*=/,
+      `${owner} must not replace Result SVG content`
+    );
+  });
+  ordinaryDirectActionModules.forEach((owner) => {
+    assert.doesNotMatch(
+      productionSources.get(owner) || '',
+      /diagram-generation|run-analysis/,
+      `${owner} must not own rendering`
+    );
+  });
+
+  assert.deepEqual(
+    occurrenceOwners(/state\.results\.value\[[^\]]+\]\s*=/g),
+    new Map([['app/preview-runtime.js', 1]])
+  );
+  assert.deepEqual(
+    occurrenceOwners(/\.flushActiveResult\s*\(/g),
+    new Map([
+      ['app/app-setup.js', 1],
+      ['services/config.js', 1]
+    ])
+  );
+
+  const projectionSource = productionSources.get('app/editor-svg-projection.js') || '';
+  [
+    'featureColorOverrides',
+    'featureStrokeOverrides',
+    'featureVisibilityOverrides',
+    'labelTextFeatureOverrides',
+    'labelVisibilityOverrides',
+    'legendColorOverrides',
+    'legendStrokeOverrides',
+    'manualSpecificRules',
+    'suppressPairwiseIdentityLegend'
+  ].forEach((ownerToken) => assert.match(projectionSource, new RegExp(`\\b${ownerToken}\\b`)));
+  assert.ok(
+    directImports.get('app/candidate-render.js')?.has('app/editor-svg-projection.js'),
+    'Generate and reflow admission must use the projection owner'
+  );
+  assert.ok(
+    directImports.get('services/config.js')?.has('app/editor-svg-projection.js'),
+    'session replay must use the projection owner when replay is required'
+  );
+
+  ordinaryDirectActionModules.forEach((owner) => {
+    const reachable = reachableModules(join(JAVASCRIPT_ROOT, owner), staticDirectImports);
+    assert.equal(reachable.has('services/diagram-generation.js'), false, owner);
+    assert.equal(reachable.has('app/run-analysis.js'), false, owner);
+    assert.deepEqual([...reachable].filter((path) => path.startsWith('workers/')), [], owner);
+  });
 });
 
 test('right drawer availability and transitions have one production owner', () => {

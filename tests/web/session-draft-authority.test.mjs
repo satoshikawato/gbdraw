@@ -1124,7 +1124,15 @@ const malformedCompositionSvg = {
 const malformedCompositionContainer = {
   querySelector: (selector) => selector === 'svg' ? malformedCompositionSvg : null
 };
-const legendCanvasActions = createLegendCanvasActions({ state });
+const legendCanvasActions = createLegendCanvasActions({
+  state,
+  previewRuntime: {
+    commitDomEdit: ({ reason = 'test-edit', mutate }) => {
+      const changed = Boolean(mutate({ svg: malformedCompositionSvg, resultIndex: 0 }));
+      return { changed, flushed: changed, resultIndex: 0, reason };
+    }
+  }
+});
 alerts.length = 0;
 const originalConsoleError = console.error;
 console.error = () => {};

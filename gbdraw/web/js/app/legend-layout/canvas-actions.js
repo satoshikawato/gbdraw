@@ -1,10 +1,12 @@
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
 
-export const createLegendCanvasActions = ({ state }) => {
+export const createLegendCanvasActions = ({ state, previewRuntime }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createLegendCanvasActions requires the preview runtime edit protocol.');
+  }
   const {
     svgContainer,
     canvasPadding,
@@ -17,24 +19,19 @@ export const createLegendCanvasActions = ({ state }) => {
     plotTitleAutoTransform,
     plotTitleUserOffset,
     generatedLegendPosition,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
     skipPositionReapply
   } = state;
 
   const currentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
 
   const persistCurrentSvg = (svg = currentSvg()) => {
-    const index = selectedResultIndex.value;
-    if (!svg || index < 0 || index >= results.value.length) return false;
-    skipCaptureBaseConfig.value = true;
+    if (!svg) return false;
     skipPositionReapply.value = true;
-    results.value[index] = {
-      ...results.value[index],
-      content: serializeCleanSvg(svg)
-    };
-    return true;
+    return previewRuntime.commitDomEdit({
+      reason: 'canvas-layout',
+      invalidateIndexes: ['legend'],
+      mutate: () => true
+    }).changed;
   };
 
   const applyCanvasPadding = () => {

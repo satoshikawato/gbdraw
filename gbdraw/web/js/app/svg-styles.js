@@ -17,7 +17,6 @@ import {
 } from './feature-dom.js';
 import { ruleMatchesFeature } from './feature-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
-import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
@@ -45,6 +44,9 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
 );
 
 export const createSvgStyles = ({ state, watch, nextTick, legendActions, previewRuntime = null }) => {
+  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+    throw new Error('createSvgStyles requires the preview runtime edit protocol.');
+  }
   const {
     svgContent,
     extractedFeatures,
@@ -54,9 +56,6 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     featureColorOverrides,
     legendColorOverrides,
     pairwiseMatchFactors,
-    results,
-    selectedResultIndex,
-    skipCaptureBaseConfig,
     svgContainer,
     adv,
     mode,
@@ -66,12 +65,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
   const { getAllFeatureLegendGroups } = legendActions;
 
   const persistSvgEdit = (svg, reason) => {
-    skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.markActiveResultDirty?.(reason)) return;
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-    }
+    if (!svg) return false;
+    return previewRuntime.commitDomEdit({
+      reason,
+      invalidateIndexes: ['features', 'legend', 'pairwiseMatches', 'orthogroupComparisons'],
+      mutate: () => true
+    }).changed;
   };
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {

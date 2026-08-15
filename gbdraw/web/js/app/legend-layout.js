@@ -6,13 +6,14 @@ import {
   resetCompositionUserDeltas
 } from './legend-layout/composition-actions.js';
 
-export const createLegendLayout = ({ state, legendActions, history = null }) => {
-  const diagramActions = createDiagramDragActions({ state, history });
-  const canvasActions = createLegendCanvasActions({ state });
+export const createLegendLayout = ({ state, legendActions, history = null, previewRuntime }) => {
+  const diagramActions = createDiagramDragActions({ state, history, previewRuntime });
+  const canvasActions = createLegendCanvasActions({ state, previewRuntime });
   const repositionActions = createLegendRepositionActions({
     state,
     legendActions,
-    diagramActions
+    diagramActions,
+    previewRuntime
   });
 
   const resetAllPositions = () => {

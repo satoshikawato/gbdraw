@@ -6,7 +6,6 @@ import {
   buildPairwiseMatchPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import {
@@ -42,9 +41,13 @@ export const createFeatureSvgActions = ({
   featureSelection = null,
   previewRuntime = null
 }) => {
+  if (
+    typeof previewRuntime?.applyFeatureFillChanges !== 'function'
+    || typeof previewRuntime?.applyFeatureVisibilityChanges !== 'function'
+  ) {
+    throw new Error('createFeatureSvgActions requires the preview runtime edit protocol.');
+  }
   const {
-    results,
-    selectedResultIndex,
     isPanning,
     orthogroups,
     collinearGroups,
@@ -64,7 +67,6 @@ export const createFeatureSvgActions = ({
     selectedAnnotation,
     featurePopupSize,
     featureSelectionDrag,
-    skipCaptureBaseConfig,
     adv
   } = state;
   const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -604,44 +606,14 @@ export const createFeatureSvgActions = ({
       return;
     }
 
-    if (previewRuntime?.applyFeatureFillChanges) {
-      const updated = previewRuntime.applyFeatureFillChanges(
-        [{ featureId: svgId, color }],
-        { reason: 'feature-fill' }
-      );
-      if (updated) {
-        console.log(`Instant preview: updated feature ${svgId} to ${color}`);
-      } else {
-        console.log(`Instant preview: element ${svgId} not found in SVG`);
-      }
-      return;
-    }
-
-    if (!svgContainer.value) return;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    try {
-      const elements = getFeatureFillElements(svg, svgId);
-      let updated = elements.length > 0;
-
-      if (updated) {
-        elements.forEach((el) => el.setAttribute('fill', color));
-      }
-
-      if (updated) {
-        const newContent = serializeCleanSvg(svg);
-        skipCaptureBaseConfig.value = true;
-        const idx = selectedResultIndex.value;
-        if (idx >= 0 && results.value.length > idx) {
-          results.value[idx] = { ...results.value[idx], content: newContent };
-        }
-        console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
-      } else {
-        console.log(`Instant preview: element ${svgId} not found in SVG`);
-      }
-    } catch (e) {
-      console.error('Instant preview error:', e);
+    const updated = previewRuntime.applyFeatureFillChanges(
+      [{ featureId: svgId, color }],
+      { reason: 'feature-fill' }
+    );
+    if (updated) {
+      console.log(`Instant preview: updated feature ${svgId} to ${color}`);
+    } else {
+      console.log(`Instant preview: element ${svgId} not found in SVG`);
     }
   };
 
@@ -681,44 +653,7 @@ export const createFeatureSvgActions = ({
       .filter((change) => change.featureId);
     if (normalizedChanges.length === 0) return false;
 
-    if (previewRuntime?.applyFeatureVisibilityChanges) {
-      return previewRuntime.applyFeatureVisibilityChanges(normalizedChanges, { reason });
-    }
-
-    if (!svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-
-    try {
-      let updated = false;
-      normalizedChanges.forEach(({ featureId, mode }) => {
-        const elements = getFeatureElements(svg, featureId);
-        if (!elements || elements.length === 0) {
-          console.log(`Instant preview: element ${featureId} not found for visibility update`);
-          return;
-        }
-        elements.forEach((el) => {
-          if (mode === 'off') {
-            el.setAttribute('display', 'none');
-          } else {
-            el.removeAttribute('display');
-          }
-          updated = true;
-        });
-      });
-      if (!updated) return false;
-
-      const newContent = serializeCleanSvg(svg);
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: newContent };
-      }
-      return true;
-    } catch (e) {
-      console.error('Instant visibility preview error:', e);
-      return false;
-    }
+    return previewRuntime.applyFeatureVisibilityChanges(normalizedChanges, { reason });
   };
 
   const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => (
