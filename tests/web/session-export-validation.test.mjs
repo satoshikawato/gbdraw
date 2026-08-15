@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
+
+globalThis.crypto = webcrypto;
 
 globalThis.window = {
   Vue: {
@@ -9,7 +13,14 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-globalThis.document = {};
+globalThis.document = {
+  body: { appendChild: () => {} },
+  createElement: () => ({
+    addEventListener: () => {},
+    click: () => {},
+    parentNode: null
+  })
+};
 
 const {
   adoptCanonicalRenderArtifacts,
@@ -142,28 +153,41 @@ assert.deepEqual(state.circularConservation.series, [{
   label: 'Retained',
   sourceIndex: 0
 }]);
+state.files.c_conservation_blasts = [];
+state.files.c_conservation_fastas = [];
+state.files.c_conservation_sequence_sources = [];
+state.files.c_conservation_blasts_source = null;
 
 let downloadedBlobs = 0;
+let downloadedBlob = null;
 let compressionAttempts = 0;
 const originalCreateObjectUrl = URL.createObjectURL;
 const OriginalCompressionStream = globalThis.CompressionStream;
-URL.createObjectURL = () => {
+URL.createObjectURL = (blob) => {
   downloadedBlobs += 1;
-  return 'blob:unexpected-session';
+  downloadedBlob = blob;
+  return 'blob:active-draft-session';
 };
 globalThis.CompressionStream = function CountingCompressionStream(...args) {
   compressionAttempts += 1;
   return new OriginalCompressionStream(...args);
 };
 try {
-  await assert.rejects(
-    exportSession('stale-active-draft'),
-    /Generate again before using Save Session\. The active Custom Track draft has changed/
+  const saved = await exportSession('divergent-active-draft');
+  assert.equal(saved.status, 'saved');
+  const session = JSON.parse(gunzipSync(
+    Buffer.from(await saved.blob.arrayBuffer())
+  ).toString('utf8'));
+  assert.equal(session.config.adv.circular_track_slots[0].width, '16px');
+  assert.equal(
+    session.renderRequest.diagramOptions.tracks.circularTrackSlots[0].width,
+    null
   );
 } finally {
   URL.createObjectURL = originalCreateObjectUrl;
   globalThis.CompressionStream = OriginalCompressionStream;
 }
-assert.equal(inputReads, 0, 'active-draft rejection must happen before resource reads');
-assert.equal(compressionAttempts, 0, 'active-draft rejection must happen before gzip Blob creation');
-assert.equal(downloadedBlobs, 0, 'active-draft rejection must not create a download Blob URL');
+assert.ok(inputReads > 0, 'saving must bind the active input file');
+assert.equal(compressionAttempts, 1);
+assert.equal(downloadedBlobs, 1);
+assert.ok(downloadedBlob instanceof Blob);
