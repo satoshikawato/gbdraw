@@ -1454,7 +1454,9 @@ export const createHistorySnapshotService = ({
         applyOrthogroupIntentData(state, intent.orthogroupState || {});
       }
       await nextTick();
-      if (afterApplyHistoryIntent) await afterApplyHistoryIntent(intent, { ...context, domains });
+      if (afterApplyHistoryIntent && context.rollback !== true) {
+        await afterApplyHistoryIntent(intent, { ...context, domains });
+      }
     } finally {
       setRef(suppressRef, previousSuppressed);
       if (suppressDiscoveryWake) {

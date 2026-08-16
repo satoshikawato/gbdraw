@@ -147,6 +147,9 @@ globalThis.DOMParser = class {
 const { createResultsManager } = await import(
   pathToFileURL(join(tempDir, 'app', 'results.js'))
 );
+const { createPreviewRuntime } = await import(
+  pathToFileURL(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js'))
+);
 
 const ref = (value) => ({ value });
 const deferred = () => {
@@ -329,4 +332,208 @@ test('same SVG element with a new document admission rejects a suspended definit
 
   assert.equal(fixture.previewRuntime.commitCount, 0);
   assert.equal(document.svg.getElementById('definition-a').getAttribute('data-version'), 'old');
+});
+
+const createRealPreviewFixture = ({ document, secondDocument = null } = {}) => {
+  const firstResult = { name: 'result.svg', content: '<svg data-owner="captured"></svg>' };
+  const secondResult = { name: 'second.svg', content: '<svg data-owner="second"></svg>' };
+  const state = {
+    adv: {
+      def_font_size: null,
+      keep_full_definition_with_plot_title: false,
+      plot_title_font_size: null,
+      plot_title_position: 'none'
+    },
+    appliedPaletteColors: ref({}),
+    appliedPaletteName: ref('default'),
+    cInputType: ref('gb'),
+    currentColors: ref({}),
+    files: { c_gb: { name: 'source.gbk' } },
+    form: { plot_title: '', species: '', strain: '' },
+    linearSeqs: [],
+    mode: ref('circular'),
+    normalizePaletteColors: (colors) => colors,
+    paletteDefinitions: ref({}),
+    paletteInstantPreviewEnabled: ref(true),
+    pendingPaletteColors: ref({}),
+    pendingPaletteName: ref(''),
+    resultGenerationKey: ref('generation-1'),
+    results: ref([firstResult, secondResult]),
+    selectedPalette: ref('default'),
+    selectedResultIndex: ref(0),
+    shouldDeferCircularPreviewUpdates: ref(false),
+    skipCaptureBaseConfig: ref(false),
+    svgContainer: ref({
+      querySelector: (selector) => selector === 'svg' ? document.svg : null
+    }),
+    svgContent: ref('<svg></svg>')
+  };
+  const previewRuntime = createPreviewRuntime({
+    state,
+    serializeSvg: (svg) => {
+      const version = svg.getElementById('definition-a')?.getAttribute('data-version') || '';
+      return `<svg data-version="${version}"></svg>`;
+    }
+  });
+  previewRuntime.mountResultSvg(0, document.svg);
+  const manager = createResultsManager({
+    state,
+    legendLayout: { refreshCompositionGeometry() {} },
+    previewRuntime
+  });
+  let scheduled = null;
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (callback) => {
+    scheduled = callback;
+    return 1;
+  };
+  try {
+    manager.scheduleDefinitionUpdate();
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+  return {
+    firstResult,
+    manager,
+    previewRuntime,
+    runScheduled: scheduled,
+    secondDocument,
+    secondResult,
+    state
+  };
+};
+
+test('same-object Result content replacement makes a suspended definition token stale', async () => {
+  const document = createSvg('same-result-owner');
+  const helperGate = deferred();
+  let helperCalls = 0;
+  globalThis.__GBDRAW_CLONE_FILE_BYTES__ = async () => new Uint8Array([1, 2, 3]);
+  globalThis.__GBDRAW_RESULTS_HELPER__ = () => {
+    helperCalls += 1;
+    return helperGate.promise;
+  };
+  const fixture = createRealPreviewFixture({ document });
+  const canonicalState = { untouched: true };
+  const beforeDomVersion = document.definition.getAttribute('data-version');
+
+  fixture.runScheduled();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(helperCalls, 1);
+  fixture.firstResult.content = '<svg data-owner="newer-same-object"></svg>';
+  helperGate.resolve(helperResponse);
+  await new Promise(setImmediate);
+  await new Promise(setImmediate);
+
+  assert.equal(fixture.state.results.value[0], fixture.firstResult);
+  assert.equal(
+    fixture.firstResult.content,
+    '<svg data-owner="newer-same-object"></svg>'
+  );
+  assert.equal(document.definition.getAttribute('data-version'), beforeDomVersion);
+  assert.deepEqual(canonicalState, { untouched: true });
+});
+
+test('Result content token controls distinguish value equality and owner replacement', () => {
+  const firstDocument = createSvg('token-controls-first');
+  const secondDocument = createSvg('token-controls-second');
+  const fixture = createRealPreviewFixture({
+    document: firstDocument,
+    secondDocument
+  });
+
+  const sameContentToken = fixture.previewRuntime.captureDomEditToken();
+  fixture.firstResult.content = String(fixture.firstResult.content);
+  assert.equal(fixture.previewRuntime.isDomEditTokenCurrent(sameContentToken), true);
+
+  const replacedObjectToken = fixture.previewRuntime.captureDomEditToken();
+  fixture.state.results.value[0] = { ...fixture.firstResult };
+  assert.equal(fixture.previewRuntime.isDomEditTokenCurrent(replacedObjectToken), false);
+  fixture.state.results.value[0] = fixture.firstResult;
+
+  const replacedArrayToken = fixture.previewRuntime.captureDomEditToken();
+  fixture.state.results.value = [...fixture.state.results.value];
+  assert.equal(fixture.previewRuntime.isDomEditTokenCurrent(replacedArrayToken), false);
+
+  fixture.state.results.value = [fixture.firstResult, fixture.secondResult];
+  fixture.previewRuntime.mountResultSvg(0, firstDocument.svg);
+  const awayAndBackToken = fixture.previewRuntime.captureDomEditToken();
+  fixture.state.svgContainer.value = {
+    querySelector: (selector) => selector === 'svg' ? secondDocument.svg : null
+  };
+  fixture.previewRuntime.selectResult(1);
+  fixture.previewRuntime.mountResultSvg(1, secondDocument.svg);
+  fixture.previewRuntime.selectResult(0);
+  fixture.state.svgContainer.value = {
+    querySelector: (selector) => selector === 'svg' ? firstDocument.svg : null
+  };
+  fixture.previewRuntime.mountResultSvg(0, firstDocument.svg);
+  assert.equal(fixture.previewRuntime.isDomEditTokenCurrent(awayAndBackToken), false);
+});
+
+test('a Result replaced before remount cannot authorize edits from the old mounted SVG', () => {
+  const document = createSvg('unmounted-replacement');
+  const fixture = createRealPreviewFixture({ document });
+  const replacement = {
+    ...fixture.firstResult,
+    content: '<svg data-owner="replacement-before-remount"></svg>'
+  };
+
+  fixture.state.results.value[0] = replacement;
+
+  assert.equal(fixture.previewRuntime.captureDomEditToken(), null);
+  assert.deepEqual(fixture.previewRuntime.commitDomEdit({
+    reason: 'unmounted-replacement-probe',
+    mutate: () => {
+      document.definition.setAttribute('data-version', 'must-not-run');
+      return true;
+    }
+  }), {
+    changed: false,
+    flushed: false,
+    resultIndex: null,
+    reason: 'unmounted-replacement-probe'
+  });
+  assert.equal(
+    replacement.content,
+    '<svg data-owner="replacement-before-remount"></svg>'
+  );
+  assert.notEqual(document.definition.getAttribute('data-version'), 'must-not-run');
+});
+
+test('same-object content replaced before capture cannot authorize the old mounted SVG', async () => {
+  const document = createSvg('same-owner-before-capture');
+  const fixture = createRealPreviewFixture({ document });
+
+  fixture.firstResult.content = '<svg data-owner="same-owner-new-content"></svg>';
+
+  assert.equal(fixture.previewRuntime.captureDomEditToken(), null);
+  assert.equal(fixture.previewRuntime.commitDomEdit({
+    reason: 'same-owner-before-capture',
+    mutate: () => {
+      document.definition.setAttribute('data-version', 'must-not-run');
+      return true;
+    }
+  }).changed, false);
+  assert.equal(
+    fixture.firstResult.content,
+    '<svg data-owner="same-owner-new-content"></svg>'
+  );
+  assert.notEqual(document.definition.getAttribute('data-version'), 'must-not-run');
+  const canonical = { mode: 'default' };
+  assert.throws(() => fixture.previewRuntime.runDomEditSync({
+    reason: 'same-owner-canonical-sync',
+    canonicalState: [{ target: canonical }],
+    action: () => {
+      canonical.mode = 'off';
+    }
+  }), (error) => error?.name === 'StaleDomEditError');
+  await assert.rejects(fixture.previewRuntime.runDomEditTransaction({
+    reason: 'same-owner-canonical-async',
+    canonicalState: [{ target: canonical }],
+    action: async () => {
+      canonical.mode = 'on';
+    }
+  }), (error) => error?.name === 'StaleDomEditError');
+  assert.deepEqual(canonical, { mode: 'default' });
 });

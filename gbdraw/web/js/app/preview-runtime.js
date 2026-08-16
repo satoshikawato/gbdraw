@@ -9,12 +9,7 @@ import {
 } from '../services/svg-result-ingestion.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { createDomMutationJournal } from './dom-mutation-journal.js';
-
-const normalizeVisibilityMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'suppress') return 'exclude_matching';
-  return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
-};
+import { applyFeatureVisibility } from './feature-visibility-dom.js';
 
 const normalizeChanges = (changes) => {
   if (!Array.isArray(changes)) return [];
@@ -33,12 +28,14 @@ const makeRuntime = (
   resultIndex,
   svg,
   resultOwner,
+  mountedResultContent,
   mountRevision,
   documentAdmissionIdentity = newDocumentAdmissionIdentity()
 ) => ({
   resultIndex,
   svg,
   resultOwner,
+  mountedResultContent,
   mountRevision,
   documentAdmissionIdentity,
   dirty: false,
@@ -64,6 +61,7 @@ const makeRuntime = (
  * @property {object} runtime Mounted preview runtime.
  * @property {object} svg Mounted SVG element.
  * @property {object} result Mounted Result artifact.
+ * @property {*} resultContent Immutable Result content captured with the target.
  * @property {object[]} resultsOwner Mounted Result collection identity.
  * @property {number} resultIndex Mounted Result index.
  * @property {number} mountRevision Mounted SVG ownership revision.
@@ -78,7 +76,14 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
 
   let activeRuntime = null;
   let activeDomEditBatch = null;
+  let activeDomEditLease = null;
   let mountRevision = 0;
+
+  const liveEditBusyError = () => {
+    const error = new Error('Another live edit transaction is still in progress.');
+    error.name = 'LiveEditBusyError';
+    return error;
+  };
 
   const getMountedSvg = () => state.svgContainer?.value?.querySelector?.('svg') || null;
 
@@ -100,12 +105,19 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       && activeRuntime.resultOwner === state.results.value[normalizedIndex]
     ) {
       activeRuntime.documentAdmissionIdentity = newDocumentAdmissionIdentity();
+      activeRuntime.mountedResultContent = activeRuntime.resultOwner?.content;
       return activeRuntime;
     }
     releaseActiveResult();
     mountRevision += 1;
     const resultOwner = state.results.value[normalizedIndex];
-    activeRuntime = makeRuntime(normalizedIndex, svg, resultOwner, mountRevision);
+    activeRuntime = makeRuntime(
+      normalizedIndex,
+      svg,
+      resultOwner,
+      resultOwner?.content,
+      mountRevision
+    );
     markCommittedSvgResultMounted(resultOwner);
     return activeRuntime;
   };
@@ -125,7 +137,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     if (!activeRuntime || activeRuntime.svg !== svg || activeRuntime.resultIndex !== resultIndex) {
       return mountResultSvg(resultIndex, svg);
     }
-    if (activeRuntime.resultOwner !== state.results.value[resultIndex]) return null;
+    if (
+      activeRuntime.resultOwner !== state.results.value[resultIndex]
+      || activeRuntime.mountedResultContent !== state.results.value[resultIndex]?.content
+    ) return null;
     return activeRuntime;
   };
 
@@ -140,6 +155,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       || resultIndex < 0
       || resultIndex >= results.length
       || !results[resultIndex]
+      || runtime.resultOwner !== results[resultIndex]
+      || runtime.mountedResultContent !== results[resultIndex].content
     ) {
       return null;
     }
@@ -147,6 +164,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       runtime,
       svg: runtime.svg,
       result: results[resultIndex],
+      resultContent: results[resultIndex].content,
       resultsOwner: results,
       resultIndex,
       mountRevision: runtime.mountRevision,
@@ -158,12 +176,15 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   const isCurrentCommitTarget = (target) => Boolean(
     target
     && activeRuntime === target.runtime
+    && target.runtime?.resultOwner === target.result
+    && target.runtime?.mountedResultContent === target.resultContent
     && target.runtime?.mountRevision === target.mountRevision
     && target.runtime?.documentAdmissionIdentity === target.documentAdmissionIdentity
     && getMountedSvg() === target.svg
     && Number(state.selectedResultIndex?.value || 0) === target.resultIndex
     && state.results.value === target.resultsOwner
     && target.resultsOwner[target.resultIndex] === target.result
+    && target.result.content === target.resultContent
     && String(state.resultGenerationKey?.value ?? '') === target.generationKey
   );
 
@@ -175,18 +196,26 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   const isDomEditTokenCurrent = (targetToken) => isCurrentCommitTarget(targetToken);
 
   const recordTargetRejection = (target, reason = 'preview-edit') => {
+    const staleContent = Boolean(
+      target?.result
+      && Object.prototype.hasOwnProperty.call(target, 'resultContent')
+      && target.result.content !== target.resultContent
+    );
     recordStructuralMetric('staleDomEditTargetRejectionCount', 1, {
       reason: String(reason || 'preview-edit'),
-      resultIndex: Number(target?.resultIndex ?? -1)
+      resultIndex: Number(target?.resultIndex ?? -1),
+      staleContent
     });
+    if (staleContent) {
+      recordStructuralMetric('liveEditStaleContentTokenCount', 1, {
+        reason: String(reason || 'preview-edit'),
+        resultIndex: Number(target?.resultIndex ?? -1)
+      });
+    }
   };
 
   const rejectStaleTarget = (target, reason = 'preview-edit') => {
     recordTargetRejection(target, reason);
-    if (target?.runtime) {
-      target.runtime.dirty = false;
-      target.runtime.dirtyReasons.clear();
-    }
   };
 
   const normalizeInvalidationKeys = (keys) => (
@@ -215,7 +244,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     dirtyReasons: new Set(runtime.dirtyReasons),
     indexes: { ...runtime.indexes },
     lastInvalidationReason: runtime.lastInvalidationReason,
-    resultOwner: runtime.resultOwner
+    resultOwner: runtime.resultOwner,
+    mountedResultContent: runtime.mountedResultContent
   });
 
   const restoreRuntimeState = (runtime, snapshot) => {
@@ -224,6 +254,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     runtime.indexes = { ...snapshot.indexes };
     runtime.lastInvalidationReason = snapshot.lastInvalidationReason;
     runtime.resultOwner = snapshot.resultOwner;
+    runtime.mountedResultContent = snapshot.mountedResultContent;
   };
 
   const captureCommitState = (target) => ({
@@ -232,18 +263,158 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     skipCaptureBaseConfig: state.skipCaptureBaseConfig?.value
   });
 
-  const restoreCommitState = (target, snapshot, replacement = null) => {
-    if (
-      replacement
-      && target.resultsOwner[target.resultIndex] === replacement
-      && state.results.value === target.resultsOwner
-    ) {
-      target.resultsOwner[target.resultIndex] = snapshot.resultOwner;
+  const captureCanonicalStateTargets = (mutation, targets = []) => {
+    (Array.isArray(targets) ? targets : []).forEach((descriptor) => {
+      const target = descriptor?.target;
+      if (target === null || target === undefined) return;
+      if (Object.prototype.hasOwnProperty.call(descriptor, 'key')) {
+        mutation.captureProperty(target, descriptor.key, { deep: Boolean(descriptor.deep) });
+      } else {
+        mutation.captureState(target, { deep: descriptor?.deep !== false });
+      }
+    });
+  };
+
+  const captureCanonicalState = (targets = []) => {
+    const mutation = createDomMutationJournal();
+    captureCanonicalStateTargets(mutation, targets);
+    return mutation;
+  };
+
+  const attachRollbackErrors = (primaryError, errors) => {
+    if (!Array.isArray(errors) || errors.length === 0) return primaryError;
+    let error = primaryError instanceof Error
+      ? primaryError
+      : new Error(String(primaryError), { cause: primaryError });
+    const secondaryErrors = Object.freeze([
+      ...(Array.isArray(error.rollbackErrors) ? error.rollbackErrors : []),
+      ...errors
+    ]);
+    try {
+      Object.defineProperty(error, 'rollbackErrors', {
+        configurable: true,
+        enumerable: false,
+        value: secondaryErrors
+      });
+    } catch (_attachError) {
+      const wrapped = new Error(error.message, { cause: error });
+      wrapped.name = error.name;
+      Object.defineProperty(wrapped, 'rollbackErrors', {
+        enumerable: false,
+        value: secondaryErrors
+      });
+      error = wrapped;
     }
-    restoreRuntimeState(target.runtime, snapshot.runtime);
-    if (state.skipCaptureBaseConfig) {
-      state.skipCaptureBaseConfig.value = snapshot.skipCaptureBaseConfig;
+    return error;
+  };
+
+  // A Result collection setter can install the replacement and then throw. Keep
+  // that otherwise-unobservable replacement associated with the primary error
+  // so every outer transaction owner can retry the Result restore after it has
+  // rolled back the independent DOM, canonical, and runtime state.
+  const failedResultReplacements = new WeakMap();
+  const failedResultReplacement = (error, fallback = null) => (
+    (error && typeof error === 'object' && failedResultReplacements.get(error)) || fallback
+  );
+
+  const recordMetricSafely = (name, value, detail, errors) => {
+    try {
+      recordStructuralMetric(name, value, detail);
+    } catch (error) {
+      errors.push(error instanceof Error ? error : new Error(String(error)));
     }
+  };
+
+  const rollbackJournal = (mutation, { reason, resultIndex } = {}) => {
+    if (!mutation) return [];
+    let errors;
+    try {
+      errors = [...mutation.rollback()];
+    } catch (error) {
+      errors = [error];
+    }
+    const detail = {
+      reason: String(reason || 'preview-edit'),
+      resultIndex: Number(resultIndex ?? -1)
+    };
+    const rollbackFailureCount = errors.length;
+    if (mutation.domChangeCount > 0) {
+      recordMetricSafely('liveEditDomRollbackCount', 1, detail, errors);
+    }
+    if (mutation.stateChangeCount > 0 || mutation.capturedStateOwnerCount > 0) {
+      recordMetricSafely('liveEditCanonicalRollbackCount', 1, detail, errors);
+      if (rollbackFailureCount > 0) {
+        recordMetricSafely('liveEditCanonicalRollbackFailureCount', rollbackFailureCount, {
+          ...detail,
+          errorCount: rollbackFailureCount
+        }, errors);
+      }
+    }
+    return errors;
+  };
+
+  const rollbackJournals = (mutations, canonicalMutation, detail) => {
+    const errors = [];
+    for (let index = mutations.length - 1; index >= 0; index -= 1) {
+      errors.push(...rollbackJournal(mutations[index], detail));
+    }
+    errors.push(...rollbackJournal(canonicalMutation, detail));
+    return errors;
+  };
+
+  const restoreCommitState = (target, snapshot, replacement = null, reason = 'preview-edit') => {
+    const errors = [];
+    let resultRestored = false;
+    try {
+      if (
+        replacement
+        && target.resultsOwner[target.resultIndex] === replacement
+        && state.results.value === target.resultsOwner
+      ) {
+        target.resultsOwner[target.resultIndex] = snapshot.resultOwner;
+        resultRestored = true;
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error : new Error(String(error)));
+    }
+    const runtimeRestorations = [
+      () => { target.runtime.dirty = snapshot.runtime.dirty; },
+      () => { target.runtime.dirtyReasons = new Set(snapshot.runtime.dirtyReasons); },
+      () => { target.runtime.indexes = { ...snapshot.runtime.indexes }; },
+      () => { target.runtime.lastInvalidationReason = snapshot.runtime.lastInvalidationReason; },
+      () => { target.runtime.resultOwner = snapshot.runtime.resultOwner; },
+      () => { target.runtime.mountedResultContent = snapshot.runtime.mountedResultContent; }
+    ];
+    runtimeRestorations.forEach((restore) => {
+      try {
+        restore();
+      } catch (error) {
+        errors.push(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    try {
+      if (state.skipCaptureBaseConfig) {
+        state.skipCaptureBaseConfig.value = snapshot.skipCaptureBaseConfig;
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error : new Error(String(error)));
+    }
+    recordMetricSafely('liveEditResultRestoreCount', 1, {
+      reason: String(reason || 'preview-edit'),
+      resultIndex: target.resultIndex,
+      resultRestored
+    }, errors);
+    return errors;
+  };
+
+  const restoreCommitStateSafely = (target, snapshot, replacement, reason, errors) => {
+    errors.push(...restoreCommitState(target, snapshot, replacement, reason));
+  };
+
+  const staleRollbackError = (reason) => {
+    const error = new Error(`Live edit target became stale during ${String(reason || 'preview-edit')}.`);
+    error.name = 'StaleDomEditError';
+    return error;
   };
 
   const flushCommitTarget = (target, { markIncremental = true } = {}) => {
@@ -270,24 +441,46 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       ...target.result,
       content
     };
+    if (!isCurrentCommitTarget(target)) {
+      rejectStaleTarget(target, target.runtime.dirtyReasons.values().next().value);
+      return { flushed: false, replacement: null, stale: true };
+    }
     try {
       state.results.value[target.resultIndex] = nextResult;
+      // Vue deep refs expose a reactive proxy rather than the raw object that was
+      // assigned. The installed owner is the identity every later token and
+      // rollback comparison must use.
+      const installedReplacement = target.resultsOwner[target.resultIndex];
       recordStructuralMetric('domEditResultReplacementCount', 1, {
         resultIndex: target.resultIndex,
         resultOwnerBefore: target.result,
-        resultOwnerAfter: nextResult,
+        resultOwnerAfter: installedReplacement,
         resultsOwner: target.resultsOwner,
         svgOwner: target.svg
       });
-      target.runtime.resultOwner = nextResult;
+      target.runtime.resultOwner = installedReplacement;
+      target.runtime.mountedResultContent = installedReplacement?.content;
       target.runtime.dirty = false;
       target.runtime.dirtyReasons.clear();
-      return { flushed: true, replacement: nextResult, stale: false };
+      return { flushed: true, replacement: installedReplacement, stale: false };
     } catch (error) {
-      if (state.results.value === target.resultsOwner && target.resultsOwner[target.resultIndex] === nextResult) {
-        target.resultsOwner[target.resultIndex] = target.result;
+      const rollbackErrors = [];
+      const installedReplacement = state.results.value === target.resultsOwner
+        && target.resultsOwner[target.resultIndex] !== target.result
+        ? target.resultsOwner[target.resultIndex]
+        : null;
+      if (installedReplacement) {
+        try {
+          target.resultsOwner[target.resultIndex] = target.result;
+        } catch (rollbackError) {
+          rollbackErrors.push(
+            rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError))
+          );
+        }
       }
-      throw error;
+      const primaryError = attachRollbackErrors(error, rollbackErrors);
+      if (installedReplacement) failedResultReplacements.set(primaryError, installedReplacement);
+      throw primaryError;
     }
   };
 
@@ -328,6 +521,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     if (typeof mutate !== 'function') {
       throw new TypeError('commitDomEdit requires a synchronous mutate callback.');
     }
+    if (activeDomEditLease) throw liveEditBusyError();
     const target = targetToken || activeDomEditBatch?.target || resolveActiveCommitTarget();
     if (!target) {
       return { changed: false, flushed: false, resultIndex: null, reason };
@@ -347,19 +541,33 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     try {
       outcome = mutate({ ...target, mutation });
     } catch (error) {
-      mutation.rollback();
-      throw error;
+      const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+      if (commitState) {
+        restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+      }
+      throw attachRollbackErrors(error, rollbackErrors);
     }
     if (outcome && typeof outcome.then === 'function') {
-      mutation.rollback();
-      throw new TypeError('commitDomEdit mutate callback must be synchronous.');
+      const error = new TypeError('commitDomEdit mutate callback must be synchronous.');
+      const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+      if (commitState) {
+        restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+      }
+      throw attachRollbackErrors(error, rollbackErrors);
     }
     const changed = mutationChanged(outcome) || (journalChangesAffectResult && mutation.changed);
     if (!isCurrentCommitTarget(target)) {
-      mutation.rollback();
-      rejectStaleTarget(target, reason);
+      const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
       if (activeDomEditBatch) activeDomEditBatch.stale = true;
-      else restoreCommitState(target, commitState);
+      else restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+      try {
+        rejectStaleTarget(target, reason);
+      } catch (error) {
+        rollbackErrors.push(error instanceof Error ? error : new Error(String(error)));
+      }
+      if (rollbackErrors.length > 0) {
+        throw attachRollbackErrors(staleRollbackError(reason), rollbackErrors);
+      }
       return { changed: false, flushed: false, resultIndex: target.resultIndex, reason };
     }
     if (!changed) {
@@ -375,11 +583,16 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       return { changed: true, flushed: false, resultIndex: target.resultIndex, reason };
     }
     let flushStatus = { flushed: false, replacement: null, stale: false };
+    let rollbackComplete = false;
     try {
       flushStatus = flushCommitTarget(target);
       if (flushStatus.stale) {
-        mutation.rollback();
-        restoreCommitState(target, commitState);
+        const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+        restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+        rollbackComplete = true;
+        if (rollbackErrors.length > 0) {
+          throw attachRollbackErrors(staleRollbackError(reason), rollbackErrors);
+        }
         return { changed: false, flushed: false, resultIndex: target.resultIndex, reason };
       }
       const result = {
@@ -398,9 +611,16 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       mutation.commit();
       return result;
     } catch (error) {
-      mutation.rollback();
-      restoreCommitState(target, commitState, flushStatus.replacement);
-      throw error;
+      if (rollbackComplete) throw error;
+      const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+      restoreCommitStateSafely(
+        target,
+        commitState,
+        failedResultReplacement(error, flushStatus.replacement),
+        reason,
+        rollbackErrors
+      );
+      throw attachRollbackErrors(error, rollbackErrors);
     }
   };
 
@@ -413,154 +633,345 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     reason = 'preview-edit',
     invalidateIndexes = []
   } = {}) => {
+    if (activeDomEditLease) throw liveEditBusyError();
     const target = resolveActiveCommitTarget();
     if (!target) return null;
     const commitState = captureCommitState(target);
     const mutation = createDomMutationJournal();
     let changed = false;
     let closed = false;
-
-    const closeStale = () => {
-      mutation.rollback();
-      rejectStaleTarget(target, reason);
-      restoreCommitState(target, commitState);
-      closed = true;
-      return false;
+    let terminalError = null;
+    let lease = null;
+    const release = () => {
+      if (activeDomEditLease === lease) activeDomEditLease = null;
     };
 
-    return {
+    const closeStale = () => {
+      if (terminalError) throw terminalError;
+      const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+      restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+      try {
+        rejectStaleTarget(target, reason);
+      } catch (error) {
+        rollbackErrors.push(error instanceof Error ? error : new Error(String(error)));
+      }
+      closed = true;
+      release();
+      terminalError = attachRollbackErrors(staleRollbackError(reason), rollbackErrors);
+      throw terminalError;
+    };
+
+    lease = {
       get current() {
         return !closed && isCurrentCommitTarget(target);
       },
       get target() {
         return target;
       },
-      mutate(callback) {
+      mutate(callback, { journalChangesAffectResult = true } = {}) {
+        if (terminalError) throw terminalError;
         if (closed) return false;
         if (!isCurrentCommitTarget(target)) return closeStale();
         if (typeof callback !== 'function') throw new TypeError('DOM edit lease requires a mutate callback.');
+        const domChangeCountBefore = mutation.domChangeCount;
+        const stateChangeCountBefore = mutation.stateChangeCount;
         let outcome;
         try {
           outcome = callback({ ...target, mutation });
         } catch (error) {
-          mutation.rollback();
-          restoreCommitState(target, commitState);
+          const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+          restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
           closed = true;
-          throw error;
+          release();
+          throw attachRollbackErrors(error, rollbackErrors);
         }
         if (outcome && typeof outcome.then === 'function') {
-          mutation.rollback();
-          restoreCommitState(target, commitState);
+          const error = new TypeError('DOM edit lease mutate callback must be synchronous.');
+          const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+          restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
           closed = true;
-          throw new TypeError('DOM edit lease mutate callback must be synchronous.');
+          release();
+          throw attachRollbackErrors(error, rollbackErrors);
         }
-        changed = mutationChanged(outcome) || mutation.changed || changed;
+        const outcomeChanged = mutationChanged(outcome);
+        const journalChanged = (
+          mutation.domChangeCount > domChangeCountBefore
+          || mutation.stateChangeCount > stateChangeCountBefore
+        );
+        changed = outcomeChanged || (journalChangesAffectResult && journalChanged) || changed;
         if (!isCurrentCommitTarget(target)) return closeStale();
-        return mutationChanged(outcome) || mutation.changed;
+        return outcomeChanged || journalChanged;
       },
       commit() {
+        if (terminalError) throw terminalError;
         if (closed) return false;
         if (!isCurrentCommitTarget(target)) return closeStale();
         closed = true;
-        if (!changed) {
-          mutation.commit();
-          return false;
-        }
-        recordDomChange(target, reason, invalidateIndexes);
-        let flushStatus = { flushed: false, replacement: null, stale: false };
         try {
-          flushStatus = flushCommitTarget(target);
-          if (flushStatus.stale) {
-            mutation.rollback();
-            restoreCommitState(target, commitState);
+          if (!changed) {
+            mutation.commit();
             return false;
           }
-          recordStructuralMetric('domEditLeaseCommitCount', 1, {
-            reason: String(reason || 'preview-edit'),
-            resultIndex: target.resultIndex,
-            resultOwner: target.result,
-            resultsOwner: target.resultsOwner,
-            svgOwner: target.svg
-          });
-          mutation.commit();
-          return flushStatus.flushed;
-        } catch (error) {
-          mutation.rollback();
-          restoreCommitState(target, commitState, flushStatus.replacement);
-          throw error;
+          recordDomChange(target, reason, invalidateIndexes);
+          let flushStatus = { flushed: false, replacement: null, stale: false };
+          let rollbackComplete = false;
+          try {
+            flushStatus = flushCommitTarget(target);
+            if (flushStatus.stale) {
+              const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+              restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+              rollbackComplete = true;
+              throw attachRollbackErrors(staleRollbackError(reason), rollbackErrors);
+            }
+            recordStructuralMetric('domEditLeaseCommitCount', 1, {
+              reason: String(reason || 'preview-edit'),
+              resultIndex: target.resultIndex,
+              resultOwner: target.result,
+              resultsOwner: target.resultsOwner,
+              svgOwner: target.svg
+            });
+            mutation.commit();
+            return flushStatus.flushed;
+          } catch (error) {
+            if (rollbackComplete) throw error;
+            const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+            restoreCommitStateSafely(
+              target,
+              commitState,
+              failedResultReplacement(error, flushStatus.replacement),
+              reason,
+              rollbackErrors
+            );
+            throw attachRollbackErrors(error, rollbackErrors);
+          }
+        } finally {
+          release();
         }
       },
       cancel() {
         if (closed) return false;
         closed = true;
-        const hadChanges = changed || mutation.changed;
-        mutation.rollback();
-        return hadChanges;
+        try {
+          const hadChanges = changed || mutation.changed;
+          const rollbackErrors = rollbackJournal(mutation, { reason, resultIndex: target.resultIndex });
+          if (rollbackErrors.length > 0) {
+            throw attachRollbackErrors(
+              new Error(`Live edit lease cancellation failed during ${String(reason || 'preview-edit')}.`),
+              rollbackErrors
+            );
+          }
+          return hadChanges;
+        } finally {
+          release();
+        }
       }
     };
+    activeDomEditLease = lease;
+    return lease;
+  };
+
+  const settleDomEditBatch = ({ completedBatch, target, commitState, reason }) => {
+    let flushStatus = { flushed: false, replacement: null, stale: false };
+    let rollbackComplete = false;
+    try {
+      if (!completedBatch.stale && !isCurrentCommitTarget(target)) {
+        completedBatch.stale = true;
+        rejectStaleTarget(target, reason);
+      }
+      if (completedBatch.stale) {
+        const rollbackErrors = rollbackJournals(
+          completedBatch.mutations,
+          completedBatch.canonicalMutation,
+          { reason, resultIndex: target.resultIndex }
+        );
+        restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+        rollbackComplete = true;
+        if (rollbackErrors.length > 0) {
+          throw attachRollbackErrors(staleRollbackError(reason), rollbackErrors);
+        }
+        return false;
+      }
+      if (completedBatch.changed) {
+        flushStatus = flushCommitTarget(target);
+        if (flushStatus.stale) {
+          const rollbackErrors = rollbackJournals(
+            completedBatch.mutations,
+            completedBatch.canonicalMutation,
+            { reason, resultIndex: target.resultIndex }
+          );
+          restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+          rollbackComplete = true;
+          if (rollbackErrors.length > 0) {
+            throw attachRollbackErrors(staleRollbackError(reason), rollbackErrors);
+          }
+          return false;
+        }
+      }
+      completedBatch.mutations.forEach((mutation) => mutation.commit());
+      completedBatch.canonicalMutation.commit();
+      return true;
+    } catch (error) {
+      if (rollbackComplete) throw error;
+      const rollbackErrors = rollbackJournals(
+        completedBatch.mutations,
+        completedBatch.canonicalMutation,
+        { reason, resultIndex: target.resultIndex }
+      );
+      restoreCommitStateSafely(
+        target,
+        commitState,
+        failedResultReplacement(error, flushStatus.replacement),
+        reason,
+        rollbackErrors
+      );
+      throw attachRollbackErrors(error, rollbackErrors);
+    }
+  };
+
+  const startDomEditBatch = ({ reason, canonicalState }) => {
+    const target = resolveActiveCommitTarget();
+    if (!target) return null;
+    const batch = {
+      target,
+      changed: false,
+      stale: false,
+      reason,
+      mutations: [],
+      canonicalMutation: captureCanonicalState(canonicalState)
+    };
+    return { batch, commitState: captureCommitState(target), target };
+  };
+
+  const rollbackActionFailure = ({ batch, commitState, target, reason }, error) => {
+    const rollbackErrors = rollbackJournals(
+      batch.mutations,
+      batch.canonicalMutation,
+      { reason, resultIndex: target.resultIndex }
+    );
+    restoreCommitStateSafely(target, commitState, null, reason, rollbackErrors);
+    throw attachRollbackErrors(error, rollbackErrors);
   };
 
   /**
    * Batch only the synchronous prefix of a user action. If the action returns a
    * Promise, direct edits are committed before the first asynchronous settlement;
    * later continuation edits resolve a new current target. Mounted ownership is
-   * never retained across await.
+   * never retained across await. The optional canonicalState descriptors capture
+   * only small editor-owned arrays, maps, sets, refs, and plain objects.
    *
    * @template T
    * @param {Object} options
    * @param {string} [options.reason]
    * @param {() => (T|Promise<T>)} options.action
+   * @param {Array<object>} [options.canonicalState]
    * @returns {Promise<T>}
    */
-  const runDomEdit = async ({ reason = 'preview-edit', action } = {}) => {
+  const runDomEdit = async ({
+    reason = 'preview-edit',
+    action,
+    canonicalState = []
+  } = {}) => {
     if (typeof action !== 'function') throw new TypeError('runDomEdit requires an action callback.');
-    if (activeDomEditBatch) return action();
+    if (activeDomEditBatch) {
+      captureCanonicalStateTargets(activeDomEditBatch.canonicalMutation, canonicalState);
+      return action();
+    }
 
-    const target = resolveActiveCommitTarget();
-    if (!target) return action();
-    const commitState = captureCommitState(target);
-    activeDomEditBatch = { target, changed: false, stale: false, reason, mutations: [] };
+    const context = startDomEditBatch({ reason, canonicalState });
+    if (!context) {
+      if (getMountedSvg()) throw staleRollbackError(reason);
+      return action();
+    }
+    activeDomEditBatch = context.batch;
     let result;
     try {
       result = action();
     } catch (error) {
-      for (let index = activeDomEditBatch.mutations.length - 1; index >= 0; index -= 1) {
-        activeDomEditBatch.mutations[index].rollback();
-      }
-      restoreCommitState(target, commitState);
       activeDomEditBatch = null;
-      throw error;
+      return rollbackActionFailure(context, error);
     }
     const completedBatch = activeDomEditBatch;
     activeDomEditBatch = null;
-    let flushStatus = { flushed: false, replacement: null, stale: false };
-    try {
-      if (completedBatch.stale) {
-        for (let index = completedBatch.mutations.length - 1; index >= 0; index -= 1) {
-          completedBatch.mutations[index].rollback();
-        }
-        restoreCommitState(target, commitState);
-        return await result;
-      }
-      if (completedBatch.changed) {
-        flushStatus = flushCommitTarget(target);
-        if (flushStatus.stale) {
-          for (let index = completedBatch.mutations.length - 1; index >= 0; index -= 1) {
-            completedBatch.mutations[index].rollback();
-          }
-          restoreCommitState(target, commitState);
-          return await result;
-        }
-      }
-      completedBatch.mutations.forEach((mutation) => mutation.commit());
-    } catch (error) {
-      for (let index = completedBatch.mutations.length - 1; index >= 0; index -= 1) {
-        completedBatch.mutations[index].rollback();
-      }
-      restoreCommitState(target, commitState, flushStatus.replacement);
-      throw error;
-    }
+    settleDomEditBatch({ ...context, completedBatch, reason });
     return await result;
+  };
+
+  /**
+   * Keep one explicit mounted-document lease across an asynchronous user action.
+   * Callers must route every DOM mutation through the supplied lease; canonical
+   * editor state is captured at action entry and the Result is serialized once,
+   * after the final continuation has settled.
+   */
+  const runDomEditTransaction = async ({
+    reason = 'preview-edit',
+    action,
+    canonicalState = [],
+    invalidateIndexes = []
+  } = {}) => {
+    if (typeof action !== 'function') {
+      throw new TypeError('runDomEditTransaction requires an action callback.');
+    }
+    const lease = beginDomEditLease({ reason, invalidateIndexes });
+    if (!lease) {
+      if (getMountedSvg()) throw staleRollbackError(reason);
+      return action({ lease: null, target: null });
+    }
+    lease.mutate(({ mutation }) => {
+      captureCanonicalStateTargets(mutation, canonicalState);
+      return false;
+    });
+    try {
+      const result = await action({ lease, target: lease.target });
+      lease.commit();
+      return result;
+    } catch (error) {
+      const rollbackErrors = [];
+      try {
+        lease.cancel();
+      } catch (rollbackError) {
+        if (Array.isArray(rollbackError?.rollbackErrors)) {
+          rollbackErrors.push(...rollbackError.rollbackErrors);
+        } else {
+          rollbackErrors.push(
+            rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError))
+          );
+        }
+      }
+      throw attachRollbackErrors(error, rollbackErrors);
+    }
+  };
+
+  const runDomEditSync = ({
+    reason = 'preview-edit',
+    action,
+    canonicalState = []
+  } = {}) => {
+    if (typeof action !== 'function') throw new TypeError('runDomEditSync requires an action callback.');
+    if (activeDomEditBatch) {
+      captureCanonicalStateTargets(activeDomEditBatch.canonicalMutation, canonicalState);
+      return action();
+    }
+
+    const context = startDomEditBatch({ reason, canonicalState });
+    if (!context) {
+      if (getMountedSvg()) throw staleRollbackError(reason);
+      return action();
+    }
+    activeDomEditBatch = context.batch;
+    let result;
+    try {
+      result = action();
+      if (result && typeof result.then === 'function') {
+        throw new TypeError('runDomEditSync action callback must be synchronous.');
+      }
+    } catch (error) {
+      activeDomEditBatch = null;
+      return rollbackActionFailure(context, error);
+    }
+    const completedBatch = activeDomEditBatch;
+    activeDomEditBatch = null;
+    settleDomEditBatch({ ...context, completedBatch, reason });
+    return result;
   };
 
   const invalidatePreviewIndexes = (reason = 'unknown', keys = null) => {
@@ -576,13 +987,18 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     const target = resolveActiveCommitTarget();
     if (!target) return false;
     if (!force && !target.runtime.dirty) return false;
-    const runtimeState = captureRuntimeState(target.runtime);
+    const commitState = captureCommitState(target);
     if (force && !target.runtime.dirty) target.runtime.dirty = true;
     try {
       return flushCommitTarget(target, { markIncremental }).flushed;
     } catch (error) {
-      restoreRuntimeState(target.runtime, runtimeState);
-      throw error;
+      const rollbackErrors = restoreCommitState(
+        target,
+        commitState,
+        failedResultReplacement(error),
+        'flush-active-result'
+      );
+      throw attachRollbackErrors(error, rollbackErrors);
     }
   };
 
@@ -607,9 +1023,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return indexed;
   };
 
-  const getFeatureElements = (featureId) => {
+  const getFeatureElementsForRuntime = (runtime, featureId) => {
     const normalizedId = normalizeFeatureIdentity(featureId);
-    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
     if (!runtime?.svg || !normalizedId) return [];
 
     const featureIndex = runtime.indexes.features || buildFeatureIndex(runtime);
@@ -620,61 +1035,60 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return byId ? [byId] : [];
   };
 
-  const applyFeatureFillChanges = (changes, { reason = 'feature-fill' } = {}) => {
+  const getFeatureElements = (featureId) => (
+    getFeatureElementsForRuntime(activeRuntime || ensureRuntimeForCurrentSvg(), featureId)
+  );
+
+  const applyFeatureFillChanges = (changes, { reason = 'feature-fill', lease = null } = {}) => {
     const normalized = normalizeChanges(changes);
     if (normalized.length === 0) return false;
-    return commitDomEdit({
-      reason,
-      invalidateIndexes: ['features'],
-      mutate: ({ mutation }) => {
+    const mutate = ({ mutation }) => {
         let updated = 0;
         normalized.forEach((change) => {
           const color = String(change?.color || '').trim();
           if (!color) return;
-          filterFeatureFillTargets(getFeatureElements(change.featureId)).forEach((element) => {
+          const elements = lease
+            ? getFeatureElementsForRuntime(lease.target.runtime, change.featureId)
+            : getFeatureElements(change.featureId);
+          filterFeatureFillTargets(elements).forEach((element) => {
             if (element.getAttribute?.('fill') === color) return;
             mutation.setAttribute(element, 'fill', color);
             updated += 1;
           });
         });
         return updated;
-      }
-    }).changed;
+      };
+    if (lease) return lease.mutate(mutate);
+    return commitDomEdit({ reason, invalidateIndexes: ['features'], mutate }).changed;
   };
 
-  const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility' } = {}) => {
+  const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility', lease = null } = {}) => {
     const normalized = normalizeChanges(changes);
     if (normalized.length === 0) return false;
-    return commitDomEdit({
-      reason,
-      invalidateIndexes: ['features'],
-      mutate: ({ mutation }) => {
+    const mutate = ({ mutation }) => {
         let updated = 0;
         normalized.forEach((change) => {
-          const mode = normalizeVisibilityMode(change?.mode);
-          getFeatureElements(change.featureId).forEach((element) => {
-            if (mode === 'off') {
-              if (element.getAttribute?.('display') === 'none') return;
-              mutation.setAttribute(element, 'display', 'none');
-            } else {
-              if (element.getAttribute?.('display') === null) return;
-              mutation.removeAttribute(element, 'display');
-            }
-            updated += 1;
+          const elements = lease
+            ? getFeatureElementsForRuntime(lease.target.runtime, change.featureId)
+            : getFeatureElements(change.featureId);
+          elements.forEach((element) => {
+            if (applyFeatureVisibility(element, change?.mode, {
+              markPreview: true,
+              mutation,
+              reason
+            })) updated += 1;
           });
         });
         return updated;
-      }
-    }).changed;
+      };
+    if (lease) return lease.mutate(mutate);
+    return commitDomEdit({ reason, invalidateIndexes: ['features'], mutate }).changed;
   };
 
-  const applyFeatureStrokeChanges = (changes, { reason = 'feature-stroke' } = {}) => {
+  const applyFeatureStrokeChanges = (changes, { reason = 'feature-stroke', lease = null } = {}) => {
     const normalized = normalizeChanges(changes);
     if (normalized.length === 0) return false;
-    return commitDomEdit({
-      reason,
-      invalidateIndexes: ['features'],
-      mutate: ({ mutation }) => {
+    const mutate = ({ mutation }) => {
         let updated = 0;
         normalized.forEach((change) => {
           const hasStrokeColor = Object.hasOwn(change, 'strokeColor');
@@ -686,7 +1100,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
           const normalizedWidth = strokeWidth === null || strokeWidth === undefined || strokeWidth === ''
             ? null
             : String(Number(strokeWidth));
-          getFeatureElements(change.featureId).forEach((element) => {
+          const elements = lease
+            ? getFeatureElementsForRuntime(lease.target.runtime, change.featureId)
+            : getFeatureElements(change.featureId);
+          elements.forEach((element) => {
             let changed = false;
             if (hasStrokeColor && element.getAttribute?.('stroke') !== strokeColor) {
               if (strokeColor === null) mutation.removeAttribute(element, 'stroke');
@@ -702,8 +1119,9 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
           });
         });
         return updated;
-      }
-    }).changed;
+      };
+    if (lease) return lease.mutate(mutate);
+    return commitDomEdit({ reason, invalidateIndexes: ['features'], mutate }).changed;
   };
 
   return {
@@ -721,6 +1139,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     isDomEditTokenCurrent,
     mountResultSvg,
     runDomEdit,
+    runDomEditTransaction,
+    runDomEditSync,
     selectResult
   };
 };

@@ -393,12 +393,38 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     setStateProperty(mutation, labelOverrideBuildWarning, 'value', '');
   };
 
-  const commitLabelMutation = (reason, mutate, { journalChangesAffectResult = true } = {}) => previewRuntime.commitDomEdit({
+  const canonicalLabelState = () => [
+    { target: labelTextFeatureOverrides },
+    { target: labelTextBulkOverrides },
+    { target: labelTextFeatureOverrideSources },
+    { target: labelVisibilityOverrides },
+    { target: clickedFeature, key: 'value' },
+    ...(clickedFeature.value ? [{ target: clickedFeature.value, deep: false }] : []),
+    { target: editableLabels, key: 'value', deep: true },
+    { target: labelTextScopeDialog, deep: false },
+    { target: labelOverrideContextKey, key: 'value' },
+    { target: labelOverrideBuildWarning, key: 'value' }
+  ];
+
+  const commitLabelMutation = (
     reason,
-    invalidateIndexes: ['features'],
-    journalChangesAffectResult,
-    mutate: (target) => mutate(target)
-  });
+    mutate,
+    { journalChangesAffectResult = true, lease = null } = {}
+  ) => {
+    if (lease) {
+      const changed = lease.mutate(
+        (target) => mutate(target),
+        { journalChangesAffectResult }
+      );
+      return { changed, resultIndex: lease.target?.resultIndex ?? null };
+    }
+    return previewRuntime.commitDomEdit({
+      reason,
+      invalidateIndexes: ['features'],
+      journalChangesAffectResult,
+      mutate: (target) => mutate(target)
+    });
+  };
 
   const queueLabelReflow = (reason, force = false) => {
     labelReflowLastError.value = null;
@@ -651,7 +677,10 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       textChanged = applyStoredOverridesToSvg(svg, mutation);
       visibilityChanged = applyStoredVisibilityOverridesToSvg(svg, mutation);
       return textChanged || visibilityChanged;
-    }, { journalChangesAffectResult: false });
+    }, {
+      journalChangesAffectResult: false,
+      lease: options?.lease || null
+    });
     if (committed.resultIndex === null) return;
     if (shouldClearOverrides) {
       labelTextScopeDialog.show = false;
@@ -803,6 +832,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const baselineText = sourceText;
     const directOutcome = await previewRuntime.runDomEdit({
       reason: 'feature-label-action',
+      canonicalState: canonicalLabelState(),
       action: () => {
         const outcome = {
           hasEditableLabel: Boolean(clickedFeature.value?.hasEditableLabel),

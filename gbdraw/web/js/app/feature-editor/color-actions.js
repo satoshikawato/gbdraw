@@ -42,7 +42,8 @@ export const createFeatureColorActions = ({
     originalSvgStroke,
     featureStrokeOverrides,
     skipExtractOnSvgChange,
-    addedLegendCaptions
+    addedLegendCaptions,
+    semanticFileWatchersSuppressed
   } = state;
 
   const {
@@ -54,7 +55,7 @@ export const createFeatureColorActions = ({
     getAllFeatureLegendGroups,
     onLegendGeometryChanged
   } = legendActions;
-  const { applySpecificRulesToSvg } = svgActions;
+  const { applySpecificRulesToSvg: applySpecificRulesToSvgRaw } = svgActions;
   const {
     countFeaturesMatchingRule,
     findExistingColorForCaption,
@@ -66,7 +67,8 @@ export const createFeatureColorActions = ({
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
-    getLabelSpecificRule
+    getLabelSpecificRule,
+    refreshFeatureOverrides
   } = ruleActions;
   const { getFeatureElements, getFeatureFillElements } = featureSvgActions;
   const normalizeCaption = (value) => String(value || '').trim();
@@ -77,6 +79,30 @@ export const createFeatureColorActions = ({
   const isHashSpecificRule = (rule) => String(rule?.qual || '').toLowerCase() === 'hash';
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
+
+  let activeColorTransaction = null;
+  const activeColorLease = () => activeColorTransaction?.lease || null;
+  const markLegendGeometryChanged = () => {
+    if (activeColorTransaction) activeColorTransaction.legendGeometryChanged = true;
+    else onLegendGeometryChanged();
+  };
+
+  const commitColorDomEdit = ({ reason, invalidateIndexes = [], mutate }) => {
+    const lease = activeColorLease();
+    if (lease) {
+      return {
+        changed: lease.mutate(mutate),
+        flushed: false,
+        resultIndex: lease.target.resultIndex,
+        reason
+      };
+    }
+    return previewRuntime.commitDomEdit({ reason, invalidateIndexes, mutate });
+  };
+
+  const applySpecificRulesToSvg = () => (
+    applySpecificRulesToSvgRaw({ lease: activeColorLease() })
+  );
 
   const applyFeatureColorPreview = (feature, color) => {
     const featureId = String(
@@ -90,17 +116,75 @@ export const createFeatureColorActions = ({
     if (!featureId || !previewRuntime?.applyFeatureFillChanges) return false;
     const updated = previewRuntime.applyFeatureFillChanges(
       [{ featureId, color }],
-      { reason: 'feature-color' }
+      { reason: 'feature-color', lease: activeColorLease() }
     ) === true;
     return updated;
   };
 
+  const canonicalColorState = () => [
+    { target: manualSpecificRules },
+    { target: featureColorOverrides },
+    { target: featureStrokeOverrides },
+    { target: legendStrokeOverrides },
+    { target: legendColorOverrides },
+    { target: legendEntries, key: 'value', deep: true },
+    { target: originalLegendOrder, key: 'value', deep: true },
+    { target: originalLegendColors, key: 'value', deep: true },
+    { target: addedLegendCaptions, key: 'value', deep: true },
+    { target: clickedFeature, key: 'value' },
+    ...(clickedFeature.value ? [{ target: clickedFeature.value, deep: false }] : []),
+    { target: featureStyleScopeDialog, deep: false },
+    { target: resetColorDialog, deep: false },
+    { target: legendRenameDialog, deep: false },
+    { target: skipExtractOnSvgChange, key: 'value' },
+    ...(semanticFileWatchersSuppressed
+      ? [{ target: semanticFileWatchersSuppressed, key: 'value' }]
+      : [])
+  ];
+
   const runColorAction = (action) => previewRuntime.runDomEdit({
     reason: 'feature-style-action',
+    canonicalState: canonicalColorState(),
     action
   });
 
-  const colorAction = (action) => (...args) => runColorAction(() => action(...args));
+  const runColorTransaction = async (action) => {
+    if (activeColorTransaction) {
+      throw new Error('A Feature color transaction is already active.');
+    }
+    const context = { lease: null, legendGeometryChanged: false };
+    const execute = async (lease) => {
+      const watchersSuppressedBefore = Boolean(semanticFileWatchersSuppressed?.value);
+      context.lease = lease;
+      activeColorTransaction = context;
+      if (semanticFileWatchersSuppressed) semanticFileWatchersSuppressed.value = true;
+      try {
+        const outcome = await action();
+        refreshFeatureOverrides?.(extractedFeatures.value);
+        if (context.legendGeometryChanged) {
+          onLegendGeometryChanged({ lease });
+          context.legendGeometryChanged = false;
+        }
+        return outcome;
+      } finally {
+        if (semanticFileWatchersSuppressed) {
+          semanticFileWatchersSuppressed.value = watchersSuppressedBefore;
+        }
+        activeColorTransaction = null;
+      }
+    };
+    const result = typeof previewRuntime.runDomEditTransaction === 'function'
+      ? await previewRuntime.runDomEditTransaction({
+          reason: 'feature-style-action',
+          canonicalState: canonicalColorState(),
+          invalidateIndexes: ['features', 'legend'],
+          action: ({ lease }) => execute(lease)
+        })
+      : await runColorAction(() => execute(null));
+    return result;
+  };
+
+  const colorAction = (action) => (...args) => runColorTransaction(() => action(...args));
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {
     if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
@@ -293,7 +377,18 @@ export const createFeatureColorActions = ({
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
   const addLegendEntry = async (caption, color, options = {}) => {
-    return addLegendEntryRaw(caption, color, options);
+    const lease = activeColorLease();
+    const added = await addLegendEntryRaw(caption, color, lease
+      ? {
+          ...options,
+          commit: false,
+          lease,
+          reflow: false,
+          throwOnError: true
+        }
+      : options);
+    if (added && lease) markLegendGeometryChanged();
+    return added;
   };
 
   const updateLegendEntryColorByCaption = (caption, color) => {
@@ -305,12 +400,21 @@ export const createFeatureColorActions = ({
     if (overrideChanged) {
       legendColorOverrides[resolvedCaption] = color;
     }
-    const updated = updateLegendEntryColorByCaptionRaw(resolvedCaption, color) === true;
+    const updated = updateLegendEntryColorByCaptionRaw(
+      resolvedCaption,
+      color,
+      { lease: activeColorLease() }
+    ) === true;
     return updated || overrideChanged;
   };
 
   const removeLegendEntry = (caption) => {
-    return removeLegendEntryRaw(caption) === true;
+    const lease = activeColorLease();
+    const removed = removeLegendEntryRaw(caption, lease
+      ? { lease, reflow: false, notifyGeometry: false }
+      : undefined) === true;
+    if (removed && lease) markLegendGeometryChanged();
+    return removed;
   };
 
   const exactHashRulesForFeature = (feature) => manualSpecificRules.filter(
@@ -696,7 +800,7 @@ export const createFeatureColorActions = ({
   const renameLegendEntryInSvg = (oldCaption, newCaption, color = null) => {
     const svg = getCurrentSvg();
     if (!svg) return false;
-    const committed = previewRuntime.commitDomEdit({
+    const committed = commitColorDomEdit({
       reason: 'legend-rename',
       invalidateIndexes: ['legend'],
       mutate: ({ mutation }) => {
@@ -721,7 +825,7 @@ export const createFeatureColorActions = ({
           }
           updated = true;
         }
-        if (updated) compactLegendEntries(svg);
+        if (updated && !activeColorLease()) compactLegendEntries(svg);
         return updated;
       }
     });
@@ -740,7 +844,7 @@ export const createFeatureColorActions = ({
       }
     }
 
-    onLegendGeometryChanged();
+    markLegendGeometryChanged();
     return true;
   };
 
@@ -1102,6 +1206,7 @@ export const createFeatureColorActions = ({
 
     const existingLegendEntry = findLegendEntryByCaption(normalizedTargetCaption);
     let finalCaption = existingLegendEntry?.caption || normalizedTargetCaption;
+    let legendEntryAdded = false;
 
     if (existingLegendEntry) {
       updateLegendEntryColorByCaption(existingLegendEntry.caption, color);
@@ -1109,10 +1214,11 @@ export const createFeatureColorActions = ({
       const addedCaption = await addLegendEntry(normalizedTargetCaption, color);
       if (addedCaption && typeof addedCaption === 'string') {
         finalCaption = addedCaption;
-        addedLegendCaptions.value.add(addedCaption);
+        legendEntryAdded = true;
       }
     }
 
+    if (legendEntryAdded) addedLegendCaptions.value.add(finalCaption);
     const labelRule = preferLabelRules
       ? getSafeLabelSpecificRule(features, normalizedTargetCaption)
       : null;
@@ -1130,10 +1236,10 @@ export const createFeatureColorActions = ({
       featureColorOverrides[featureOverrideKey(feature)] = { color, caption: finalCaption };
       updateClickedFeatureLegendState(feature, finalCaption, color);
     }
-
     applySpecificRulesToSvg();
     await reclaimOrphanedBaseCaptions();
     extractLegendEntries();
+    return true;
   };
 
   const applyColorToLegendSpecificRules = (targetCaption, color, captionFeatures = []) => {
@@ -1457,7 +1563,7 @@ export const createFeatureColorActions = ({
       featureId: svgId,
       ...(normalizedStrokeColor !== null ? { strokeColor: normalizedStrokeColor } : {}),
       ...(normalizedStrokeWidth !== null ? { strokeWidth: normalizedStrokeWidth } : {})
-    }], { reason: 'feature-stroke' });
+    }], { reason: 'feature-stroke', lease: activeColorLease() });
     if (!changed) return false;
     recordFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, {
       strokeColor: normalizedStrokeColor,
@@ -1513,7 +1619,7 @@ export const createFeatureColorActions = ({
       featureId: svgId,
       strokeColor: originalColor,
       strokeWidth: originalWidth
-    }], { reason: 'feature-stroke-reset' });
+    }], { reason: 'feature-stroke-reset', lease: activeColorLease() });
 
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const overrideKey = featureStrokeKey(feature, svgId);
@@ -1579,7 +1685,7 @@ export const createFeatureColorActions = ({
       previewRuntime.applyFeatureStrokeChanges([{
         featureId: clickedFeature.value.svg_id,
         strokeColor: inheritedColor || null
-      }], { reason: 'feature-stroke-color-reset' });
+      }], { reason: 'feature-stroke-color-reset', lease: activeColorLease() });
     }
     clickedFeature.value.strokeColor = inheritedColor || '';
     return true;
@@ -1690,7 +1796,7 @@ export const createFeatureColorActions = ({
           featureId: matchFeat.svg_id,
           color: defaultColor
         })),
-        { reason: 'bulk-feature-fill-reset' }
+        { reason: 'bulk-feature-fill-reset', lease: activeColorLease() }
       );
 
       clickedFeature.value.color = defaultColor;
@@ -1731,8 +1837,7 @@ export const createFeatureColorActions = ({
     const targetColor = resolveColorToHex(color) || String(color || '').trim();
     const targetCaption = normalizeCaption(caption);
     if (targetFeatures.length === 0 || !targetColor || !targetCaption) return false;
-    await applyColorToFeatureGroup(targetFeatures, targetCaption, targetColor);
-    return true;
+    return await applyColorToFeatureGroup(targetFeatures, targetCaption, targetColor);
   };
 
   const applyStrokeToSelectedFeatures = (features, strokeColor, strokeWidth) => {
@@ -1771,7 +1876,10 @@ export const createFeatureColorActions = ({
         if (normalizedStrokeWidth !== null) clickedFeature.value.strokeWidth = normalizedStrokeWidth;
       }
     });
-    return previewRuntime.applyFeatureStrokeChanges(changes, { reason: 'bulk-feature-stroke' });
+    return previewRuntime.applyFeatureStrokeChanges(changes, {
+      reason: 'bulk-feature-stroke',
+      lease: activeColorLease()
+    });
   };
 
   const applyStrokeToLegendEntry = (caption, strokeColor, strokeWidth) => {
@@ -1787,7 +1895,7 @@ export const createFeatureColorActions = ({
     const escapedCaption = globalThis.CSS?.escape
       ? globalThis.CSS.escape(targetLegendEntry.caption)
       : String(targetLegendEntry.caption).replace(/["\\]/g, '\\$&');
-    const domChanged = previewRuntime.commitDomEdit({
+    const domChanged = commitColorDomEdit({
       reason: 'legend-stroke',
       invalidateIndexes: ['legend'],
       mutate: ({ mutation }) => {

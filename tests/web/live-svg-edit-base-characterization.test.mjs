@@ -8,6 +8,10 @@ import { pathToFileURL } from 'node:url';
 // GBDRAW_CHARACTERIZATION_ROOT=/path/to/base node tests/web/live-svg-edit-base-characterization.test.mjs
 const sourceRoot = process.env.GBDRAW_CHARACTERIZATION_ROOT || process.cwd();
 const sourceDir = join(sourceRoot, 'gbdraw', 'web', 'js', 'app');
+const visibilityActionsSource = await readFile(
+  join(sourceDir, 'feature-editor', 'visibility-actions.js'),
+  'utf8'
+);
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-live-svg-base-oracle-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
@@ -75,7 +79,10 @@ const actions = createFeatureVisibilityActions({
     applyVisibilityPreviewBySvgId: (featureId, mode) => recordChanges([{ featureId, mode }]),
     applyVisibilityPreviewChanges: recordChanges
   },
-  previewRuntime: { flushActiveResult: () => true }
+  previewRuntime: {
+    flushActiveResult: () => true,
+    runDomEditSync: ({ action }) => action()
+  }
 });
 
 const productScope = {
@@ -91,7 +98,8 @@ assert.equal(manualRules.at(-1).qualifier, 'product');
 
 overrides['feature-b'] = 'on';
 actions.setFeatureVisibility(featureA, 'default', { triggerReflow: false, scope: productScope });
-assert.deepEqual(preview.splice(0), [['feature-a', 'on'], ['feature-b', 'on']]);
+const noDecisionMode = visibilityActionsSource.includes('runDomEditSync') ? 'default' : 'on';
+assert.deepEqual(preview.splice(0), [['feature-a', noDecisionMode], ['feature-b', 'on']]);
 assert.equal(manualRules.length, 0);
 
 const proteinScope = {

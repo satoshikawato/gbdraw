@@ -144,7 +144,6 @@ export const setupWatchers = ({
   const { applyPaletteToSvg, applySpecificRulesToSvg } = svgActions;
   const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
   const {
-    applyCanvasPadding,
     captureBaseConfig,
     captureOriginalStroke,
     repositionForLegendChange,
@@ -276,14 +275,6 @@ export const setupWatchers = ({
       if (String(pendingPaletteName.value || '').trim() === '') return;
       applyPaletteDraftToPreview();
     }
-  );
-
-  watch(
-    canvasPadding,
-    () => {
-      applyCanvasPadding();
-    },
-    { deep: true }
   );
 
   watch(

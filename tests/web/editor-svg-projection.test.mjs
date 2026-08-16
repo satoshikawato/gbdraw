@@ -8,6 +8,7 @@ import {
   createEditorSvgProjection,
   setLabelText
 } from '../../gbdraw/web/js/app/editor-svg-projection.js';
+import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import {
   FakeSvgElement,
   appendEditableLabel,
@@ -497,8 +498,368 @@ test('History replay resets removed Feature visibility without changing fresh re
   const history = buildSvg({ includeSuppressedLegend: false });
   history.featureElement.setAttribute('display', 'none');
   const result = projection.project(history.svg, { resetFeatureVisibility: true });
-  assert.equal(result.changed, true);
-  assert.equal(history.featureElement.getAttribute('display'), null);
+  assert.equal(result.changed, false);
+  assert.equal(history.featureElement.getAttribute('display'), 'none');
+});
+
+test('renderer-hidden direct on and default round-trip while an absent Feature is a no-op', () => {
+  const fixture = buildSvg({ includeSuppressedLegend: false });
+  fixture.featureElement.setAttribute('display', 'none');
+  const directOn = createEditorSvgProjection({
+    features: [feature],
+    featureVisibilityOverrides: { 'rendered-a': 'on' }
+  });
+  assert.equal(directOn.project(fixture.svg).changed, true);
+  assert.equal(fixture.featureElement.getAttribute('display'), null);
+
+  const directDefault = createEditorSvgProjection({
+    features: [feature],
+    featureVisibilityOverrides: { 'rendered-a': 'default' }
+  });
+  assert.equal(directDefault.project(fixture.svg, { resetFeatureVisibility: true }).changed, true);
+  assert.equal(fixture.featureElement.getAttribute('display'), 'none');
+
+  const absent = buildSvg({ includeFeature: false, labels: 0, includeSuppressedLegend: false });
+  assert.equal(directDefault.project(absent.svg).changed, false);
+});
+
+test('History manager replays renderer visibility provenance through undo and redo', async () => {
+  const fixture = buildSvg({ includeSuppressedLegend: false });
+  fixture.featureElement.setAttribute('display', 'none');
+  let mode = 'default';
+  const apply = (nextMode) => createEditorSvgProjection({
+    features: [feature],
+    featureVisibilityOverrides: nextMode === 'default' ? {} : { 'rendered-a': nextMode }
+  }).project(fixture.svg, { resetFeatureVisibility: true });
+  const history = createHistoryManager({
+    buildIntent: () => ({ mode }),
+    applyIntent: (intent) => {
+      mode = intent.mode;
+      apply(mode);
+    },
+    buildCheckpoint: () => ({ mode }),
+    applyCheckpoint: () => {}
+  });
+  await history.captureBaseline('renderer visibility baseline');
+  await history.runUndoable('Force Feature visible', () => {
+    mode = 'on';
+    apply(mode);
+  });
+  assert.equal(fixture.featureElement.getAttribute('display'), null);
+  await history.undo();
+  assert.equal(fixture.featureElement.getAttribute('display'), 'none');
+  await history.redo();
+  assert.equal(fixture.featureElement.getAttribute('display'), null);
+});
+
+test('Feature visibility provenance survives History, Save/Load, fresh Generate, and reflow projection', () => {
+  const metrics = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => metrics.push(metric)
+  };
+  try {
+    const manualOn = createEditorSvgProjection({
+      features: [feature],
+      featureVisibilityManualRules: [{
+        recordId: '*',
+        featureType: 'CDS',
+        qualifier: 'product',
+        value: '^Unrelated feature caption$',
+        action: 'show'
+      }]
+    });
+    const noEditorDecision = createEditorSvgProjection({ features: [feature] });
+
+    const historyFixture = buildSvg({ includeSuppressedLegend: false });
+    historyFixture.featureElement.setAttribute('display', 'none');
+    assert.equal(manualOn.project(historyFixture.svg).changed, true);
+    assert.equal(historyFixture.featureElement.getAttribute('display'), null);
+    assert.equal(
+      historyFixture.featureElement.getAttribute('data-gbdraw-feature-renderer-display'),
+      'none'
+    );
+    assert.equal(
+      historyFixture.featureElement.getAttribute('data-gbdraw-feature-visibility-preview'),
+      'on'
+    );
+
+    const undo = noEditorDecision.project(historyFixture.svg, { resetFeatureVisibility: true });
+    assert.equal(undo.changed, true);
+    assert.equal(historyFixture.featureElement.getAttribute('display'), 'none');
+    assert.equal(
+      historyFixture.featureElement.getAttribute('data-gbdraw-feature-visibility-preview'),
+      null
+    );
+    assert.equal(manualOn.project(historyFixture.svg).changed, true);
+    assert.equal(historyFixture.featureElement.getAttribute('display'), null);
+
+    for (const boundary of ['Save/Load', 'fresh Generate', 'reflow']) {
+      const fresh = buildSvg({ includeSuppressedLegend: false });
+      fresh.featureElement.setAttribute('display', 'none');
+      assert.equal(manualOn.project(fresh.svg).changed, true, boundary);
+      assert.equal(fresh.featureElement.getAttribute('display'), null, boundary);
+      assert.equal(
+        fresh.featureElement.getAttribute('data-gbdraw-feature-renderer-display'),
+        'none',
+        boundary
+      );
+    }
+
+    const visibleWithManualOff = buildSvg({ includeSuppressedLegend: false });
+    const manualOff = createEditorSvgProjection({
+      features: [feature],
+      featureVisibilityOverrides: { 'rendered-a': 'default' },
+      featureVisibilityManualRules: [{
+        recordId: '*',
+        featureType: 'CDS',
+        qualifier: 'product',
+        value: '^Unrelated feature caption$',
+        action: 'off'
+      }]
+    });
+    assert.equal(manualOff.project(visibleWithManualOff.svg).changed, true);
+    assert.equal(visibleWithManualOff.featureElement.getAttribute('display'), 'none');
+    assert.equal(
+      noEditorDecision.project(visibleWithManualOff.svg, { resetFeatureVisibility: true }).changed,
+      true
+    );
+    assert.equal(visibleWithManualOff.featureElement.getAttribute('display'), null);
+
+    assert.ok(
+      metrics.filter(({ name }) => name === 'featureRendererBaselineCaptureCount').length >= 6
+    );
+  } finally {
+    if (previousHooks === undefined) delete globalThis.__GBDRAW_TEST_HOOKS__;
+    else globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+});
+
+const appendPositionedLegendEntry = (parent, caption, x, y) => {
+  const entry = parent.appendChild(new FakeSvgElement('g', { 'data-legend-key': caption }));
+  entry.appendChild(new FakeSvgElement('path', {
+    fill: '#111111',
+    transform: `translate(${x},${y})`
+  }));
+  entry.appendChild(new FakeSvgElement('text', {
+    transform: `translate(${x},${y})`
+  }, caption));
+  return entry;
+};
+
+const buildPositionedLegendSvg = ({ orientation, anchors }) => {
+  const svg = new FakeSvgElement('svg');
+  const legend = svg.appendChild(new FakeSvgElement('g', { id: 'legend' }));
+  const featureLegend = legend.appendChild(new FakeSvgElement('g', {
+    id: orientation === 'horizontal' ? 'feature_legend_h' : 'feature_legend_v'
+  }));
+  anchors.forEach(({ caption, x, y }) => appendPositionedLegendEntry(featureLegend, caption, x, y));
+  return { featureLegend, svg };
+};
+
+const projectAddedLegendEntries = ({ orientation, anchors, captions }) => {
+  const fixture = buildPositionedLegendSvg({ orientation, anchors });
+  const originalCaptions = anchors.map((entry) => entry.caption);
+  const projection = createEditorSvgProjection({
+    legendEntries: captions.map((caption) => ({ caption, color: '#111111' })),
+    originalLegendOrder: originalCaptions,
+    addedLegendCaptions: captions.filter((caption) => !originalCaptions.includes(caption))
+  });
+  projection.project(fixture.svg);
+  return Object.fromEntries(
+    fixture.featureLegend.querySelectorAll('g[data-legend-key]').map((entry) => [
+      entry.getAttribute('data-legend-key'),
+      entry.querySelector('text').getAttribute('transform')
+    ])
+  );
+};
+
+test('Legend replay extrapolates renderer-owned horizontal and vertical slot topology', () => {
+  assert.deepEqual(projectAddedLegendEntries({
+    orientation: 'horizontal',
+    anchors: [
+      { caption: 'A', x: 20, y: 0 },
+      { caption: 'B', x: 120, y: 0 }
+    ],
+    captions: ['A', 'B', 'C', 'D']
+  }), {
+    A: 'translate(20,0)',
+    B: 'translate(120,0)',
+    C: 'translate(220, 0)',
+    D: 'translate(320, 0)'
+  });
+  assert.deepEqual(projectAddedLegendEntries({
+    orientation: 'vertical',
+    anchors: [
+      { caption: 'A', x: 0, y: 10 },
+      { caption: 'B', x: 0, y: 30 }
+    ],
+    captions: ['A', 'B', 'C']
+  }), {
+    A: 'translate(0,10)',
+    B: 'translate(0,30)',
+    C: 'translate(0, 50)'
+  });
+});
+
+test('Legend replay continues wrapped renderer rows before starting the next row', () => {
+  assert.deepEqual(projectAddedLegendEntries({
+    orientation: 'horizontal',
+    anchors: [
+      { caption: 'A', x: 0, y: 0 },
+      { caption: 'B', x: 100, y: 0 },
+      { caption: 'C', x: 0, y: 20 }
+    ],
+    captions: ['A', 'B', 'C', 'D', 'E']
+  }), {
+    A: 'translate(0,0)',
+    B: 'translate(100,0)',
+    C: 'translate(0,20)',
+    D: 'translate(100, 20)',
+    E: 'translate(0, 40)'
+  });
+});
+
+test('Legend replay reuses a removed renderer slot before extrapolating another slot', () => {
+  const fixture = buildPositionedLegendSvg({
+    orientation: 'horizontal',
+    anchors: [
+      { caption: 'A', x: 20, y: 0 },
+      { caption: 'B', x: 120, y: 0 }
+    ]
+  });
+  const projection = createEditorSvgProjection({
+    legendEntries: [
+      { caption: 'A', color: '#111111' },
+      { caption: 'C', color: '#111111' }
+    ],
+    deletedLegendEntries: [{ caption: 'B', originalCaption: 'B' }],
+    originalLegendOrder: ['A', 'B'],
+    addedLegendCaptions: ['C']
+  });
+
+  projection.project(fixture.svg);
+  assert.deepEqual(
+    fixture.featureLegend.querySelectorAll('g[data-legend-key]').map((entry) => [
+      entry.getAttribute('data-legend-key'),
+      entry.querySelector('text').getAttribute('transform')
+    ]),
+    [
+      ['A', 'translate(20,0)'],
+      ['C', 'translate(120, 0)']
+    ]
+  );
+});
+
+test('horizontal Legend topology is stable across undo/redo and fresh admission boundaries', () => {
+  const metrics = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => metrics.push(metric)
+  };
+  const fixture = buildPositionedLegendSvg({
+    orientation: 'horizontal',
+    anchors: [
+      { caption: 'A', x: 20, y: 0 },
+      { caption: 'B', x: 120, y: 0 }
+    ]
+  });
+  const withAddedEntry = createEditorSvgProjection({
+    legendEntries: [
+      { caption: 'A', color: '#111111' },
+      { caption: 'B', color: '#111111' },
+      { caption: 'C', color: '#111111' }
+    ],
+    originalLegendOrder: ['A', 'B'],
+    addedLegendCaptions: ['C']
+  });
+  const withoutAddedEntry = createEditorSvgProjection({
+    legendEntries: [
+      { caption: 'A', color: '#111111' },
+      { caption: 'B', color: '#111111' }
+    ],
+    originalLegendOrder: ['A', 'B']
+  });
+
+  withAddedEntry.project(fixture.svg);
+  assert.equal(
+    fixture.featureLegend.querySelector('g[data-legend-key="C"]')
+      .querySelector('text').getAttribute('transform'),
+    'translate(220, 0)'
+  );
+  withoutAddedEntry.project(fixture.svg);
+  assert.deepEqual(
+    fixture.featureLegend.querySelectorAll('g[data-legend-key]')
+      .map((entry) => entry.getAttribute('data-legend-key')),
+    ['A', 'B']
+  );
+  withAddedEntry.project(fixture.svg);
+  assert.equal(
+    fixture.featureLegend.querySelector('g[data-legend-key="C"]')
+      .querySelector('text').getAttribute('transform'),
+    'translate(220, 0)'
+  );
+
+  for (const boundary of ['Save/Load', 'fresh Generate', 'reflow']) {
+    assert.equal(projectAddedLegendEntries({
+      orientation: 'horizontal',
+      anchors: [
+        { caption: 'A', x: 20, y: 0 },
+        { caption: 'B', x: 120, y: 0 }
+      ],
+      captions: ['A', 'B', 'C']
+    }).C, 'translate(220, 0)', boundary);
+  }
+  assert.ok(metrics.some(({ name }) => name === 'legendTopologyResolutionCount'));
+  if (previousHooks === undefined) delete globalThis.__GBDRAW_TEST_HOOKS__;
+  else globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+});
+
+test('History manager restores and reapplies a horizontal renderer Legend slot', async () => {
+  const fixture = buildPositionedLegendSvg({
+    orientation: 'horizontal',
+    anchors: [
+      { caption: 'A', x: 20, y: 0 },
+      { caption: 'B', x: 120, y: 0 }
+    ]
+  });
+  let captions = ['A', 'B'];
+  const apply = () => createEditorSvgProjection({
+    legendEntries: captions.map((caption) => ({ caption, color: '#111111' })),
+    originalLegendOrder: ['A', 'B'],
+    addedLegendCaptions: captions.filter((caption) => !['A', 'B'].includes(caption))
+  }).project(fixture.svg);
+  const history = createHistoryManager({
+    buildIntent: () => ({ captions: [...captions] }),
+    applyIntent: (intent) => {
+      captions = [...intent.captions];
+      apply();
+    },
+    buildCheckpoint: () => ({ captions: [...captions] }),
+    applyCheckpoint: () => {}
+  });
+  await history.captureBaseline('horizontal Legend baseline');
+  await history.runUndoable('Add horizontal Legend entry', () => {
+    captions.push('C');
+    apply();
+  });
+  assert.equal(
+    fixture.featureLegend.querySelector('g[data-legend-key="C"]')
+      .querySelector('text').getAttribute('transform'),
+    'translate(220, 0)'
+  );
+  await history.undo();
+  assert.deepEqual(
+    fixture.featureLegend.querySelectorAll('g[data-legend-key]')
+      .map((entry) => entry.getAttribute('data-legend-key')),
+    ['A', 'B']
+  );
+  await history.redo();
+  assert.equal(
+    fixture.featureLegend.querySelector('g[data-legend-key="C"]')
+      .querySelector('text').getAttribute('transform'),
+    'translate(220, 0)'
+  );
 });
 
 test('invalid persisted paint fails before an invalid value is projected', () => {

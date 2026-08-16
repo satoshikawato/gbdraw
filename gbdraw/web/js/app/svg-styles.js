@@ -64,13 +64,15 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
   const { getAllFeatureLegendGroups } = legendActions;
 
-  const commitSvgMutation = (reason, mutate) => (
-    previewRuntime.commitDomEdit({
+  const commitSvgMutation = (reason, mutate, { lease = null } = {}) => {
+    const apply = ({ svg, mutation }) => mutate(svg, mutation);
+    if (lease) return lease.mutate(apply);
+    return previewRuntime.commitDomEdit({
       reason,
       invalidateIndexes: ['features', 'legend', 'pairwiseMatches', 'orthogroupComparisons'],
-      mutate: ({ svg, mutation }) => mutate(svg, mutation)
-    }).changed
-  );
+      mutate: apply
+    }).changed;
+  };
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors, mutation) => {
     let updated = false;
@@ -91,7 +93,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
   const applyPaletteToSvg = ({
     recolorPairwise = false,
-    recolorCollinear = false
+    recolorCollinear = false,
+    lease = null
   } = {}) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
@@ -316,10 +319,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     return updatedCount;
-    });
+    }, { lease });
   };
 
-  const applySpecificRulesToSvg = () => {
+  const applySpecificRulesToSvg = (options = {}) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!manualSpecificRules.length) return;
     if (!svgContainer.value) return;
@@ -366,7 +369,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
     return updatedCount;
-    });
+    }, options);
   };
 
   const applyStylesToSvg = () => {

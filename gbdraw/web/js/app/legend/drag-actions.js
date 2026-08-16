@@ -90,6 +90,11 @@ export const createLegendDragActions = ({
       invalidateIndexes: ['legend']
     });
     if (!lease) return;
+    lease.mutate(({ mutation }) => {
+      mutation.captureState(legendCurrentOffset);
+      mutation.captureProperty(legendInitialTransform, 'value', { deep: true });
+      return false;
+    });
 
     e.preventDefault();
     e.stopPropagation();
@@ -142,13 +147,38 @@ export const createLegendDragActions = ({
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (completedDragContext?.svg) legendDragLease?.commit?.();
-    else legendDragLease?.cancel?.();
+    const completedLease = legendDragLease;
+    const completedTxPromise = legendDragTxPromise;
     legendDragLease = null;
-
-    const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
-    if (tx && history?.commit) await history.commit(tx);
+
+    try {
+      if (completedDragContext?.svg) completedLease?.commit?.();
+      else completedLease?.cancel?.();
+      const tx = completedTxPromise ? await completedTxPromise : null;
+      if (tx && history?.commit) await history.commit(tx);
+    } catch (error) {
+      try {
+        completedLease?.cancel?.();
+      } catch (rollbackError) {
+        if (error instanceof Error) {
+          Object.defineProperty(error, 'rollbackErrors', {
+            configurable: true,
+            value: Object.freeze([
+              ...(Array.isArray(error.rollbackErrors) ? error.rollbackErrors : []),
+              rollbackError
+            ])
+          });
+        }
+      }
+      try {
+        const tx = completedTxPromise ? await completedTxPromise : null;
+        if (tx && history?.cancel) history.cancel(tx);
+      } catch (_historyError) {
+        // The live-edit failure remains primary; History has no committed entry.
+      }
+      throw error;
+    }
   };
 
   const refreshLegendDragAffordances = () => {
@@ -176,6 +206,8 @@ export const createLegendDragActions = ({
         if (!legendGroup) return false;
         const automatic = binding.metadata.legend?.automaticTranslation || [0, 0];
         const initial = { x: automatic[0], y: automatic[1] };
+        mutation.captureProperty(legendInitialTransform, 'value', { deep: true });
+        mutation.captureState(legendCurrentOffset);
         const changed = mutation.setAttribute(
           legendGroup,
           'transform',

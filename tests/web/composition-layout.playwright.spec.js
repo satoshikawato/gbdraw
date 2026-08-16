@@ -257,6 +257,237 @@ test('legacy normalization is explicit and malformed current metadata never fall
   expect(result.malformedHasMetadata).toBe(false);
 });
 
+test('detached Legend admission preserves renderer anchors and updates wrapped composition geometry', async ({ page }) => {
+  await page.goto('/');
+  const origin = new URL(page.url()).origin;
+  await page.addScriptTag({ url: '/gbdraw/web/vendor/dompurify/purify.min.js' });
+
+  const result = await page.evaluate(async ({ origin }) => {
+    const { createEditorSvgProjection } = await import(
+      `${origin}/gbdraw/web/js/app/editor-svg-projection.js`
+    );
+    const { ingestSvgResult } = await import(
+      `${origin}/gbdraw/web/js/services/svg-result-ingestion.js`
+    );
+    const { prepareReflowResultCommit } = await import(
+      `${origin}/gbdraw/web/js/app/candidate-render.js`
+    );
+    const role = 'data-gbdraw-composition-role';
+    const target = (name, automaticTranslation, boundsKey, bounds) => ({
+      automaticTranslation,
+      [boundsKey]: bounds,
+      role: name,
+      selector: `[${role}="${name}"]`
+    });
+    const metadata = (legendBounds) => ({
+      legend: target('legend', [16, 16], 'localBounds', legendBounds),
+      legendReflow: { colorRectSize: 14, lineHeight: 24, textXOffset: 22 },
+      legendSide: 'top',
+      overlayObstacles: [],
+      overlayPolicy: {
+        candidateScoreOrder: [
+          'totalAnchorDistance',
+          'xAnchorDistance',
+          'yAnchorDistance',
+          'nearEdgeX',
+          'nearEdgeY'
+        ],
+        canvasGrowthCandidateOrder: ['horizontal', 'vertical'],
+        canvasGrowthScoreOrder: ['addedArea', 'addedExtent', 'candidateOrder'],
+        quadrantBoundaryRatio: 0.5
+      },
+      primary: target('primary', [16, 78], 'finalBounds', {
+        x: 16, y: 78, width: 300, height: 100
+      }),
+      spacing: {
+        dockGapPx: 24,
+        edgePaddingPx: 16,
+        overlayClearancePx: 8,
+        stackGapPx: 20,
+        titleGapPx: 20
+      },
+      title: null,
+      titleSide: 'none'
+    });
+    const entry = (caption, x, y) => [
+      `<g data-legend-key="${caption}">`,
+      `<path d="M 0,-7 L 14,-7 L 14,7 L 0,7 z" fill="#123456" stroke="#222" stroke-width="2" transform="translate(${x - 22},${y})"/>`,
+      `<text dominant-baseline="central" font-family="sans-serif" font-size="14" text-anchor="start" transform="translate(${x},${y})">${caption}</text>`,
+      '</g>'
+    ].join('');
+    const source = ({ entries, legendBounds }) => {
+      const composition = JSON.stringify(metadata(legendBounds))
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;');
+      return [
+        `<svg xmlns="http://www.w3.org/2000/svg" data-gbdraw-composition-schema="1" data-gbdraw-composition="${composition}" viewBox="0 0 332 194" width="332px" height="194px">`,
+        `<g ${role}="primary" id="plot" transform="translate(16,78)"><rect width="300" height="100" fill="#ddd"/></g>`,
+        `<g ${role}="legend" id="legend" transform="translate(16,16)">`,
+        '<path d="M -1,-1 L 261,-1 L 261,49 L -1,49 z" fill="none" stroke="none" stroke-width="0"/>',
+        ...entries,
+        '</g></svg>'
+      ].join('');
+    };
+    const admit = (content, canonical) => {
+      const projection = createEditorSvgProjection(canonical);
+      return ingestSvgResult(
+        { content, name: 'detached.svg', format: 'svg' },
+        { transformSvg: (svg) => projection.project(svg).changed }
+      );
+    };
+    const read = (content) => {
+      const document = new DOMParser().parseFromString(content, 'image/svg+xml');
+      const svg = document.documentElement;
+      const entries = Object.fromEntries(Array.from(svg.querySelectorAll('g[data-legend-key]')).map(
+        (group) => [
+          group.getAttribute('data-legend-key'),
+          group.querySelector('text').getAttribute('transform')
+        ]
+      ));
+      return {
+        entries,
+        metadata: JSON.parse(svg.getAttribute('data-gbdraw-composition')),
+        viewBox: svg.getAttribute('viewBox')
+      };
+    };
+    const detachedProbe = new DOMParser().parseFromString(
+      source({ entries: [entry('A', 22, 7)], legendBounds: { x: -1, y: -1, width: 70, height: 16 } }),
+      'image/svg+xml'
+    ).getElementById('legend').getBBox();
+
+    const singleCanonical = {
+      legendEntries: [
+        { caption: 'A', color: '#123456' },
+        { caption: 'B', color: '#123456' }
+      ],
+      originalLegendOrder: ['A'],
+      addedLegendCaptions: ['B']
+    };
+    const single = read(admit(source({
+      entries: [entry('A', 22, 7)],
+      legendBounds: { x: -1, y: -1, width: 70, height: 16 }
+    }), singleCanonical).content);
+
+    const wrappedSource = source({
+      entries: [entry('A', 60, 7), entry('B', 160, 7), entry('C', 135, 31)],
+      legendBounds: { x: 37, y: -1, width: 168, height: 40 }
+    });
+    const wrappedCanonical = {
+      legendEntries: [
+        { caption: 'A', color: '#123456' },
+        { caption: 'B', color: '#123456' },
+        { caption: 'C', color: '#123456' },
+        { caption: 'D', color: '#123456' },
+        { caption: 'A deliberately wide added Legend caption', color: '#123456' }
+      ],
+      originalLegendOrder: ['A', 'B', 'C'],
+      addedLegendCaptions: ['D', 'A deliberately wide added Legend caption']
+    };
+    const admittedWrappedResult = admit(wrappedSource, wrappedCanonical);
+    const wrapped = read(admittedWrappedResult.content);
+    const measurementContext = document.createElement('canvas').getContext('2d');
+    measurementContext.font = 'normal normal 14px sans-serif';
+    const expectedDAnchorX = 135 + 14 + measurementContext.measureText('C').width + 44;
+    const repeated = prepareReflowResultCommit({
+      results: [{
+        content: admittedWrappedResult.content,
+        name: 'detached.svg',
+        format: 'svg'
+      }],
+      ...wrappedCanonical
+    });
+    const reflowed = read(repeated.results[0].content);
+    return {
+      detachedProbe: {
+        x: detachedProbe.x,
+        y: detachedProbe.y,
+        width: detachedProbe.width,
+        height: detachedProbe.height
+      },
+      single,
+      expectedDAnchorX,
+      wrapped,
+      reflowed
+    };
+  }, { origin });
+
+  expect(result.detachedProbe).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+  expect(result.single.entries.A).toBe('translate(22,7)');
+  expect(result.single.entries.B).toMatch(/^translate\([^,]+, 7\)$/);
+
+  expect(result.wrapped.entries.A).toBe('translate(60,7)');
+  expect(result.wrapped.entries.B).toBe('translate(160,7)');
+  expect(result.wrapped.entries.C).toBe('translate(135,31)');
+  const position = (transform) => transform.match(/[+-]?[\d.]+/g).map(Number);
+  const [, cY] = position(result.wrapped.entries.C);
+  const [dX, dY] = position(result.wrapped.entries.D);
+  const [, wideY] = position(
+    result.wrapped.entries['A deliberately wide added Legend caption']
+  );
+  expect(dX).toBeCloseTo(result.expectedDAnchorX, 8);
+  expect(dY).toBe(cY);
+  expect(wideY).toBeGreaterThan(dY);
+  expect(result.wrapped.metadata.legend.localBounds.height).toBeGreaterThan(40);
+  expect(result.wrapped.viewBox).not.toBe('0 0 332 194');
+  expect(result.reflowed.entries).toEqual(result.wrapped.entries);
+  expect(result.reflowed.metadata).toEqual(result.wrapped.metadata);
+  expect(result.reflowed.viewBox).toBe(result.wrapped.viewBox);
+});
+
+test('fill-only Legend replay preserves real renderer composition geometry', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const source = await fetch('/examples/tutorial-9-arrow-geometry-linear.svg').then(
+      (response) => response.text()
+    );
+    const svg = new DOMParser().parseFromString(source, 'image/svg+xml').documentElement;
+    const entry = svg.querySelector('g[data-legend-key]');
+    const caption = entry?.getAttribute('data-legend-key') || '';
+    const swatch = Array.from(entry?.querySelectorAll('path') || []).find((path) => {
+      const fill = path.getAttribute('fill');
+      return fill && fill !== 'none' && !fill.startsWith('url(');
+    });
+    const geometry = () => ({
+      composition: svg.getAttribute('data-gbdraw-composition'),
+      height: svg.getAttribute('height'),
+      originalViewBox: svg.getAttribute('data-original-view-box'),
+      transforms: Array.from(svg.querySelectorAll('[data-gbdraw-composition-role]')).map(
+        (element) => [
+          element.getAttribute('data-gbdraw-composition-role'),
+          element.getAttribute('transform')
+        ]
+      ),
+      viewBox: svg.getAttribute('viewBox'),
+      width: svg.getAttribute('width')
+    });
+    const beforeGeometry = geometry();
+    const beforeFill = swatch?.getAttribute('fill') || '';
+    const nextFill = beforeFill.toLowerCase() === '#abcdef' ? '#123456' : '#abcdef';
+    const { createEditorSvgProjection } = await import(
+      '/gbdraw/web/js/app/editor-svg-projection.js'
+    );
+    const projection = createEditorSvgProjection({
+      legendColorOverrides: { [caption]: nextFill }
+    });
+    const projectionResult = projection.project(svg);
+    return {
+      afterFill: swatch?.getAttribute('fill') || '',
+      afterGeometry: geometry(),
+      beforeFill,
+      beforeGeometry,
+      caption,
+      nextFill,
+      projectionResult
+    };
+  });
+
+  expect(result.caption).not.toBe('');
+  expect(result.beforeFill).not.toBe(result.nextFill);
+  expect(result.afterFill).toBe(result.nextFill);
+  expect(result.projectionResult.changed).toBe(true);
+  expect(result.afterGeometry).toEqual(result.beforeGeometry);
+});
+
 test('frozen v39 session is admitted once with usable composition geometry', async ({ page }) => {
   test.setTimeout(180000);
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });

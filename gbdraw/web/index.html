@@ -4488,24 +4488,24 @@
                             <div></div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Top</label>
-                                <input type="number" v-model.number="canvasPadding.top" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.top" @change="updateCanvasPadding('top', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div></div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Left</label>
-                                <input type="number" v-model.number="canvasPadding.left" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.left" @change="updateCanvasPadding('left', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div class="flex items-center justify-center">
                                 <i class="ph ph-selection-background text-slate-300 text-lg"></i>
                             </div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Right</label>
-                                <input type="number" v-model.number="canvasPadding.right" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.right" @change="updateCanvasPadding('right', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div></div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Bottom</label>
-                                <input type="number" v-model.number="canvasPadding.bottom" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
+                                <input type="number" :value="canvasPadding.bottom" @change="updateCanvasPadding('bottom', $event.target.value)" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center">
                             </div>
                             <div></div>
                         </div>
@@ -4831,8 +4831,8 @@
                         </div>
                         <div>
                             <label class="text-xs font-medium text-slate-500 block mb-1">Feature visibility</label>
-                            <select v-model="clickedFeature.featureVisibility"
-                                    @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
+                            <select :value="clickedFeature.featureVisibility"
+                                    @change="updateClickedFeatureVisibility($event.target.value)"
                                     data-history-managed
                                     aria-label="Feature visibility"
                                     class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">

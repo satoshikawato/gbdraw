@@ -692,14 +692,19 @@ export const measureCompositionTargetLocalBounds = (target) => {
   return translated(targetFinalBounds(target), -leading.x, -leading.y);
 };
 
-const setLeading = (target, automaticTranslation, delta) => {
+const setLeading = (target, automaticTranslation, delta, mutation = null) => {
+  const value = replaceLeadingTranslate(
+    target.getAttribute('transform'),
+    automaticTranslation[0] + delta[0],
+    automaticTranslation[1] + delta[1]
+  );
+  if (mutation) {
+    mutation.setAttribute(target, 'transform', value);
+    return;
+  }
   target.setAttribute(
     'transform',
-    replaceLeadingTranslate(
-      target.getAttribute('transform'),
-      automaticTranslation[0] + delta[0],
-      automaticTranslation[1] + delta[1]
-    )
+    value
   );
 };
 
@@ -729,6 +734,15 @@ const editorPadding = (value) => {
 };
 
 export const applyCompositionEdit = (svg, options = {}) => {
+  const mutation = options.mutation || null;
+  const setAttribute = (target, name, value) => {
+    if (mutation) mutation.setAttribute(target, name, value);
+    else target.setAttribute(name, value);
+  };
+  const removeAttribute = (target, name) => {
+    if (mutation) mutation.removeAttribute(target, name);
+    else target.removeAttribute(name);
+  };
   const binding = bindCompositionMetadata(svg);
   const metadata = binding.metadata;
   const deltas = userDeltas(binding);
@@ -751,7 +765,18 @@ export const applyCompositionEdit = (svg, options = {}) => {
   // for a safe, layout-neutral import. The first explicit layout edit happens
   // on the already-mounted SVG, so replace that conservative primary envelope
   // with the authoritative painted bounds as part of the same user action.
-  const planningMetadata = metadata.legacyNormalized
+  const explicitPrimaryBounds = options.primaryFinalBounds
+    ? validateBounds(options.primaryFinalBounds, 'primaryFinalBounds', { positive: true })
+    : null;
+  const planningMetadata = explicitPrimaryBounds
+    ? {
+        ...metadata,
+        primary: {
+          ...metadata.primary,
+          finalBounds: explicitPrimaryBounds
+        }
+      }
+    : metadata.legacyNormalized
     ? {
         ...metadata,
         primary: {
@@ -770,7 +795,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
   });
   const primaryPlacement = plan.placements.primary;
   binding.primary.targets.forEach((target, index) => {
-    setLeading(target, primaryPlacement.automaticTranslation, deltas.primary[index]);
+    setLeading(target, primaryPlacement.automaticTranslation, deltas.primary[index], mutation);
   });
 
   let legendPayload = null;
@@ -779,9 +804,9 @@ export const applyCompositionEdit = (svg, options = {}) => {
     const automatic = placement
       ? placement.automaticTranslation
       : metadata.legend.automaticTranslation;
-    if (placement) setLeading(legendTarget, automatic, deltas.legend || [0, 0]);
-    if (legendSide === 'none') legendTarget.setAttribute('display', 'none');
-    else legendTarget.removeAttribute('display');
+    if (placement) setLeading(legendTarget, automatic, deltas.legend || [0, 0], mutation);
+    if (legendSide === 'none') setAttribute(legendTarget, 'display', 'none');
+    else removeAttribute(legendTarget, 'display');
     legendPayload = targetPayload(
       'legend',
       wireTranslation(automatic),
@@ -796,9 +821,9 @@ export const applyCompositionEdit = (svg, options = {}) => {
     const automatic = placement
       ? placement.automaticTranslation
       : metadata.title.automaticTranslation;
-    if (placement) setLeading(titleTarget, automatic, deltas.title || [0, 0]);
-    if (titleSide === 'none') titleTarget.setAttribute('display', 'none');
-    else titleTarget.removeAttribute('display');
+    if (placement) setLeading(titleTarget, automatic, deltas.title || [0, 0], mutation);
+    if (titleSide === 'none') setAttribute(titleTarget, 'display', 'none');
+    else removeAttribute(titleTarget, 'display');
     titlePayload = targetPayload(
       'title',
       wireTranslation(automatic),
@@ -825,25 +850,23 @@ export const applyCompositionEdit = (svg, options = {}) => {
   };
   const baseWidth = wireNumber(plan.width);
   const baseHeight = wireNumber(plan.height);
-  if (svg.dataset) {
-    svg.dataset.originalViewBox = `0 0 ${baseWidth} ${baseHeight}`;
-    svg.dataset.originalWidth = String(baseWidth);
-    svg.dataset.originalHeight = String(baseHeight);
-  }
+  setAttribute(svg, 'data-original-view-box', `0 0 ${baseWidth} ${baseHeight}`);
+  setAttribute(svg, 'data-original-width', String(baseWidth));
+  setAttribute(svg, 'data-original-height', String(baseHeight));
   const padding = editorPadding(options.canvasPadding);
   if (padding) {
     const width = baseWidth + padding.left + padding.right;
     const height = baseHeight + padding.top + padding.bottom;
-    svg.setAttribute('viewBox', `${-padding.left} ${-padding.top} ${wireNumber(width)} ${wireNumber(height)}`);
-    svg.setAttribute('width', `${wireNumber(width)}px`);
-    svg.setAttribute('height', `${wireNumber(height)}px`);
+    setAttribute(svg, 'viewBox', `${-padding.left} ${-padding.top} ${wireNumber(width)} ${wireNumber(height)}`);
+    setAttribute(svg, 'width', `${wireNumber(width)}px`);
+    setAttribute(svg, 'height', `${wireNumber(height)}px`);
   } else {
-    svg.setAttribute('viewBox', `0 0 ${baseWidth} ${baseHeight}`);
-    svg.setAttribute('width', `${baseWidth}px`);
-    svg.setAttribute('height', `${baseHeight}px`);
+    setAttribute(svg, 'viewBox', `0 0 ${baseWidth} ${baseHeight}`);
+    setAttribute(svg, 'width', `${baseWidth}px`);
+    setAttribute(svg, 'height', `${baseHeight}px`);
   }
-  svg.setAttribute(COMPOSITION_SCHEMA_ATTRIBUTE, String(COMPOSITION_SCHEMA_VERSION));
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
+  setAttribute(svg, COMPOSITION_SCHEMA_ATTRIBUTE, String(COMPOSITION_SCHEMA_VERSION));
+  setAttribute(svg, COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
   return bindCompositionMetadata(svg);
 };
 
@@ -851,27 +874,33 @@ export const reconcileCompositionTitle = (
   svg,
   titleTarget,
   titleSide = 'none',
-  { canvasPadding = null } = {}
+  { canvasPadding = null, mutation = null } = {}
 ) => {
   const metadata = parseCompositionMetadata(svg);
   if (!TITLE_SIDES.has(titleSide)) fail(`Unknown title side ${JSON.stringify(titleSide)}.`);
 
   targetsFor(svg, ROLE_SELECTORS.title).forEach((target) => {
-    if (target !== titleTarget) target.removeAttribute(COMPOSITION_ROLE_ATTRIBUTE);
+    if (target !== titleTarget) {
+      if (mutation) mutation.removeAttribute(target, COMPOSITION_ROLE_ATTRIBUTE);
+      else target.removeAttribute(COMPOSITION_ROLE_ATTRIBUTE);
+    }
   });
 
   let titlePayload = null;
   if (titleTarget) {
-    if (titleSide !== 'none') titleTarget.removeAttribute('display');
+    if (titleSide !== 'none') {
+      if (mutation) mutation.removeAttribute(titleTarget, 'display');
+      else titleTarget.removeAttribute('display');
+    }
     let leading = readLeadingTranslate(titleTarget.getAttribute?.('transform') || '');
     if (!leading.found) {
-      titleTarget.setAttribute(
-        'transform',
-        prependTranslate(titleTarget.getAttribute?.('transform'), 0, 0)
-      );
+      const transform = prependTranslate(titleTarget.getAttribute?.('transform'), 0, 0);
+      if (mutation) mutation.setAttribute(titleTarget, 'transform', transform);
+      else titleTarget.setAttribute('transform', transform);
       leading = readLeadingTranslate(titleTarget.getAttribute('transform'));
     }
-    titleTarget.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, 'title');
+    if (mutation) mutation.setAttribute(titleTarget, COMPOSITION_ROLE_ATTRIBUTE, 'title');
+    else titleTarget.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, 'title');
     titlePayload = metadata.title || targetPayload(
       'title',
       wireTranslation([leading.x, leading.y]),
@@ -885,33 +914,41 @@ export const reconcileCompositionTitle = (
     title: titlePayload,
     titleSide: titleTarget ? titleSide : 'none'
   };
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
+  if (mutation) mutation.setAttribute(svg, COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
+  else svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
   return applyCompositionEdit(svg, {
     titleSide: nextMetadata.titleSide,
     titleLocalBounds: titleTarget ? measureCompositionTargetLocalBounds(titleTarget) : null,
-    canvasPadding
+    canvasPadding,
+    mutation
   });
 };
 
-export const resetCompositionUserDeltas = (svg) => {
+export const resetCompositionUserDeltas = (svg, { mutation = null } = {}) => {
   const binding = bindCompositionMetadata(svg);
   binding.primary.targets.forEach((target) => {
-    setLeading(target, binding.metadata.primary.automaticTranslation, [0, 0]);
+    setLeading(target, binding.metadata.primary.automaticTranslation, [0, 0], mutation);
   });
   if (binding.legend.metadata) {
     setLeading(
       binding.legend.targets[0],
       binding.legend.metadata.automaticTranslation,
-      [0, 0]
+      [0, 0],
+      mutation
     );
   }
   if (binding.title.metadata) {
-    setLeading(binding.title.targets[0], binding.title.metadata.automaticTranslation, [0, 0]);
+    setLeading(
+      binding.title.targets[0],
+      binding.title.metadata.automaticTranslation,
+      [0, 0],
+      mutation
+    );
   }
   return binding;
 };
 
-export const applyCompositionUserDeltas = (svg, deltas = {}) => {
+export const applyCompositionUserDeltas = (svg, deltas = {}, { mutation = null } = {}) => {
   const binding = bindCompositionMetadata(svg);
   let changed = false;
 
@@ -924,7 +961,13 @@ export const applyCompositionUserDeltas = (svg, deltas = {}) => {
     const nextX = automaticTranslation[0] + x;
     const nextY = automaticTranslation[1] + y;
     if (current.x === nextX && current.y === nextY) return;
-    setLeading(target, automaticTranslation, [x, y]);
+    const nextTransform = replaceLeadingTranslate(
+      target.getAttribute?.('transform'),
+      nextX,
+      nextY
+    );
+    if (mutation) mutation.setAttribute(target, 'transform', nextTransform);
+    else target.setAttribute('transform', nextTransform);
     changed = true;
   };
 

@@ -72,7 +72,7 @@ assert.match(
   /resetAllPositions[\s\S]+persistCurrentSvg\(svg,[\s\S]+resetCompositionUserDeltas/
 );
 assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
-assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);
+assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(/g) || []).length >= 4);
 assert.match(
   appSetupSource,
   /setLegendGeometryChangedHandler\(legendLayout\.refreshLegendGeometry\)/
@@ -221,6 +221,7 @@ const mockLegendEntry = (caption, color, x) => {
   let dirtyMarks = 0;
   let layoutRefreshes = 0;
   const previewRuntime = {
+    runDomEditSync: ({ action }) => action(),
     commitDomEdit: ({ reason = 'test-edit', mutate }) => {
       const mutation = createDomMutationJournal();
       const outcome = mutate({ svg, resultIndex: 0, mutation });

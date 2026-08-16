@@ -49,8 +49,14 @@ const clickedFeature = ref({ svg_id: 'feature-a', featureVisibility: 'default' }
 const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
+const results = ref([
+  { name: 'one.svg', content: '<svg data-result="one"></svg>' },
+  { name: 'two.svg', content: '<svg data-result="two"></svg>' }
+]);
 const appliedPreviewChanges = [];
 const labelLayoutDirtyReason = ref('');
+let replaceResultOwnerOnCommit = false;
+let resultCommitRevision = 0;
 
 const actions = createFeatureVisibilityActions({
   state: {
@@ -64,7 +70,7 @@ const actions = createFeatureVisibilityActions({
     featureVisibilityScopeDialog,
     labelLayoutDirtyReason,
     resultGenerationKey,
-    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+    results,
     selectedResultIndex,
     svgContainer: ref({
       querySelector: (selector) => (selector === 'svg' ? {} : null)
@@ -78,6 +84,17 @@ const actions = createFeatureVisibilityActions({
     }
   },
   previewRuntime: {
+    runDomEditSync: ({ action }) => {
+      const changed = action();
+      if (changed && replaceResultOwnerOnCommit) {
+        const resultIndex = Number(selectedResultIndex.value || 0);
+        results.value[resultIndex] = {
+          ...results.value[resultIndex],
+          content: `<svg data-result-commit="${++resultCommitRevision}"></svg>`
+        };
+      }
+      return changed;
+    },
     selectResult: (index) => {
       selectedResultIndex.value = index;
       return true;
@@ -103,7 +120,7 @@ assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, 2);
 assert.deepEqual(
   appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
-  [['feature-a', 'on'], ['feature-b', 'on']]
+  [['feature-a', 'default'], ['feature-b', 'default']]
 );
 
 assert.equal(actions.setFeatureVisibility(featureA, 'off', {
@@ -154,8 +171,8 @@ actions.setFeatureVisibility(productFeatureA, 'default', {
 assert.deepEqual(
   appliedPreviewChanges.at(-1).changes,
   [
-    { featureId: 'product-feature-a', mode: 'on' },
-    { featureId: 'product-feature-b', mode: 'on' }
+    { featureId: 'product-feature-a', mode: 'default' },
+    { featureId: 'product-feature-b', mode: 'default' }
   ]
 );
 assert.equal(featureVisibilityManualRules.length, 0);
@@ -183,7 +200,7 @@ assert.equal(actions.addFeatureVisibilityRule(), true);
 assert.equal(labelLayoutDirtyReason.value, 'feature-visibility-rule-add');
 assert.deepEqual(
   appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
-  ['on', 'on']
+  ['default', 'default']
 );
 assert.equal(actions.setFeatureVisibilityRuleField(0, 'featureType', 'CDS'), true);
 assert.equal(actions.setFeatureVisibilityRuleField(0, 'value', '^shared product$'), true);
@@ -199,7 +216,7 @@ assert.deepEqual(
 assert.equal(actions.removeFeatureVisibilityRule(0), true);
 assert.deepEqual(
   appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
-  ['on', 'on']
+  ['default', 'default']
 );
 
 featureVisibilityManualRules.push(
@@ -377,10 +394,63 @@ actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 delete featureVisibilityOverrides[strictTrigger.svg_id];
 
+replaceResultOwnerOnCommit = true;
+const rollingResultCommand = actions.buildSelectedFeaturesVisibilityCommand([featureA], 'off');
+const resultOwnerBeforeApply = results.value[0];
+assert.equal(await rollingResultCommand.apply(), true);
+const resultOwnerAfterApply = results.value[0];
+assert.notEqual(resultOwnerAfterApply, resultOwnerBeforeApply);
+assert.equal(featureVisibilityOverrides['feature-a'], 'off');
+assert.equal(await rollingResultCommand.revert(), true);
+const resultOwnerAfterUndo = results.value[0];
+assert.notEqual(resultOwnerAfterUndo, resultOwnerAfterApply);
+assert.deepEqual(featureVisibilityOverrides, {});
+assert.equal(await rollingResultCommand.apply(), true);
+assert.notEqual(results.value[0], resultOwnerAfterUndo);
+assert.equal(featureVisibilityOverrides['feature-a'], 'off');
+assert.equal(await rollingResultCommand.revert(), true);
+assert.deepEqual(featureVisibilityOverrides, {});
+replaceResultOwnerOnCommit = false;
+
 const previewCallCountBeforeStaleCommand = appliedPreviewChanges.length;
 resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, previewCallCountBeforeStaleCommand);
+
+resultGenerationKey.value = 'generation-1';
+selectedResultIndex.value = 0;
+const selectionDriftCommand = actions.buildSelectedFeaturesVisibilityCommand([featureA], 'off');
+selectedResultIndex.value = 1;
+globalThis.window = {
+  requestAnimationFrame: (callback) => {
+    selectedResultIndex.value = 1;
+    callback();
+  }
+};
+assert.equal(await selectionDriftCommand.apply(), false);
+assert.deepEqual(featureVisibilityOverrides, {});
+
+selectedResultIndex.value = 0;
+const generationDriftCommand = actions.buildSelectedFeaturesVisibilityCommand([featureA], 'off');
+selectedResultIndex.value = 1;
+globalThis.window.requestAnimationFrame = (callback) => {
+  resultGenerationKey.value = 'generation-2';
+  callback();
+};
+assert.equal(await generationDriftCommand.apply(), false);
+assert.deepEqual(featureVisibilityOverrides, {});
+
+resultGenerationKey.value = 'generation-1';
+selectedResultIndex.value = 0;
+const contentDriftCommand = actions.buildSelectedFeaturesVisibilityCommand([featureA], 'off');
+selectedResultIndex.value = 1;
+globalThis.window.requestAnimationFrame = (callback) => {
+  results.value[0].content = '<svg data-result="newer-one"></svg>';
+  callback();
+};
+assert.equal(await contentDriftCommand.apply(), false);
+assert.deepEqual(featureVisibilityOverrides, {});
+delete globalThis.window;
 
 console.log('feature visibility action tests passed');

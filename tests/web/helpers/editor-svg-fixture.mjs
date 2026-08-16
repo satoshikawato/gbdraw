@@ -8,6 +8,11 @@ const selectorMatches = (element, selectorRaw) => {
   if (selector === 'g[data-legend-key]') {
     return element.tagName === 'g' && element.hasAttribute('data-legend-key');
   }
+  const keyedLegend = selector.match(/^g\[data-legend-key="([^"]*)"\]$/);
+  if (keyedLegend) {
+    return element.tagName === 'g'
+      && element.getAttribute('data-legend-key') === keyedLegend[1];
+  }
   if (selector === '[transform]') return element.hasAttribute('transform');
   if (/^(?:path|polygon|rect)\[data-gbdraw-feature-id\]$/.test(selector)) {
     return element.tagName === selector.split('[', 1)[0]
@@ -111,6 +116,14 @@ export class FakeSvgElement {
     replacement.parentElement = this;
     this.children[index] = replacement;
     return current;
+  }
+
+  replaceChildren(...children) {
+    this.children.forEach((child) => {
+      child.parentElement = null;
+    });
+    this.children = [];
+    children.forEach((child) => this.appendChild(child));
   }
 
   remove() {

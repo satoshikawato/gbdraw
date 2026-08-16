@@ -447,6 +447,11 @@ export const featureVisibilityRuleMatchesFeature = (feature, ruleRaw) => {
     .some((value) => pattern.test(value));
 };
 
+/**
+ * Resolve editor visibility without consuming renderer DOM state.
+ * Precedence is direct Feature override, first matching ordered manual rule,
+ * captured renderer baseline, then default (no editor decision).
+ */
 export const resolveEffectiveFeatureVisibility = (
   featureOrId,
   overrides = {},
@@ -462,33 +467,35 @@ export const resolveEffectiveFeatureVisibility = (
   if (identities.length === 0) return 'default';
   for (const identity of identities) {
     const override = getFeatureVisibilityOverride(overrides, identity);
-    if (override !== 'default') return override;
-  }
-  for (const identity of identities) {
-    const cached = normalizeVisibilityMode(getCacheValue(baseVisibilityCache, identity));
-    if (cached !== 'default') return cached;
+    if (override === 'on' || override === 'off') return override;
   }
   if (feature) {
     for (const rule of Array.isArray(manualRules) ? manualRules : []) {
       if (featureVisibilityRuleMatchesFeature(feature, rule)) {
-        return featureVisibilityActionToMode(rule.action);
+        const mode = featureVisibilityActionToMode(rule.action);
+        if (mode === 'on' || mode === 'off') return mode;
       }
     }
-    return 'on';
-  }
-  for (const rule of Array.isArray(manualRules) ? manualRules : []) {
-    const normalized = normalizeFeatureVisibilityRule(rule);
-    if (normalized.qualifier.toLowerCase() !== 'hash') continue;
-    if (normalized.recordId !== '*' || normalized.featureType !== '*') continue;
-    try {
-      if (new RegExp(normalized.value).test(featureId)) {
-        return featureVisibilityActionToMode(normalized.action);
+  } else {
+    for (const rule of Array.isArray(manualRules) ? manualRules : []) {
+      const normalized = normalizeFeatureVisibilityRule(rule);
+      if (normalized.qualifier.toLowerCase() !== 'hash') continue;
+      if (normalized.recordId !== '*' || normalized.featureType !== '*') continue;
+      try {
+        if (new RegExp(normalized.value).test(featureId)) {
+          const mode = featureVisibilityActionToMode(normalized.action);
+          if (mode === 'on' || mode === 'off') return mode;
+        }
+      } catch (_err) {
+        return 'default';
       }
-    } catch (_err) {
-      return 'default';
     }
   }
-  return 'on';
+  for (const identity of identities) {
+    const cached = normalizeVisibilityMode(getCacheValue(baseVisibilityCache, identity));
+    if (cached === 'on' || cached === 'off') return cached;
+  }
+  return 'default';
 };
 
 const isEditorRuleForFeatureId = (rule, featureId) => {

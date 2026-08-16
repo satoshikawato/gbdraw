@@ -79,6 +79,7 @@ export const createLegendEntryActions = ({
   if (
     typeof previewRuntime?.commitDomEdit !== 'function'
     || typeof previewRuntime?.beginDomEditLease !== 'function'
+    || typeof previewRuntime?.runDomEditSync !== 'function'
   ) {
     throw new Error('createLegendEntryActions requires the preview runtime edit protocol.');
   }
@@ -128,7 +129,8 @@ export const createLegendEntryActions = ({
     return templates.get(targetGroupKey(targetGroup, targetIndex)) || templates.values().next().value || null;
   };
 
-  const applyLegendMutation = (reason, mutate) => {
+  const applyLegendMutation = (reason, mutate, { lease = null } = {}) => {
+    if (lease) return lease.mutate(mutate);
     return previewRuntime.commitDomEdit({
       reason,
       invalidateIndexes: ['legend'],
@@ -136,11 +138,51 @@ export const createLegendEntryActions = ({
     }).changed;
   };
 
+  const canonicalLegendState = () => [
+    { target: legendEntries, key: 'value', deep: true },
+    { target: deletedLegendEntries, key: 'value', deep: true },
+    { target: originalLegendOrder, key: 'value', deep: true },
+    { target: originalLegendColors, key: 'value', deep: true },
+    { target: legendStrokeOverrides },
+    { target: legendColorOverrides },
+    { target: manualSpecificRules },
+    { target: retiredEntryTemplates },
+    { target: newLegendCaption, key: 'value' },
+    { target: newLegendColor, key: 'value' }
+  ];
+  const legendAction = (reason, action) => (...args) => {
+    const options = args.at(-1);
+    if (options?.lease) return action(...args);
+    return previewRuntime.runDomEditSync({
+      reason,
+      canonicalState: canonicalLegendState(),
+      action: () => action(...args)
+    });
+  };
+
   const setLegendGeometryChangedHandler = (handler) => {
     legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
   };
 
-  const onLegendGeometryChanged = () => legendGeometryChangedHandler?.();
+  const onLegendGeometryChanged = (options = {}) => legendGeometryChangedHandler?.(options);
+
+  const cancelLeaseAfterFailure = (lease, error, { throwPrimary = true } = {}) => {
+    try {
+      lease.cancel();
+    } catch (rollbackError) {
+      if (error instanceof Error) {
+        Object.defineProperty(error, 'rollbackErrors', {
+          configurable: true,
+          value: Object.freeze([
+            ...(Array.isArray(error.rollbackErrors) ? error.rollbackErrors : []),
+            rollbackError
+          ])
+        });
+      }
+    }
+    if (throwPrimary) throw error;
+    return error;
+  };
 
   const addLegendEntry = async (caption, color, options = {}) => {
     const owner = String(options.owner || '').trim();
@@ -441,8 +483,8 @@ export const createLegendEntryActions = ({
             currentLegendGroup?.querySelector('#legend_horizontal')
             && currentLegendGroup?.querySelector('#legend_vertical')
           );
-          if (hasDualLegends) reflowDualLegendLayout(targetSvg);
-          else updatePairwiseLegendPositions(targetSvg);
+          if (hasDualLegends) reflowDualLegendLayout(targetSvg, mutation);
+          else updatePairwiseLegendPositions(targetSvg, mutation);
         }
         return preparedEntries.length;
       });
@@ -450,19 +492,19 @@ export const createLegendEntryActions = ({
         if (!sharedLease) editLease.cancel();
         return false;
       }
+      if (!sharedLease && shouldReflow) onLegendGeometryChanged({ lease: editLease });
       if (!sharedLease) editLease.commit();
-      if (shouldReflow) onLegendGeometryChanged();
 
       return caption;
     } catch (e) {
-      if (!sharedLease) editLease.cancel();
+      if (!sharedLease) cancelLeaseAfterFailure(editLease, e, { throwPrimary: false });
       console.error('Failed to add legend entry:', e);
       if (options.throwOnError) throw e;
       return false;
     }
   };
 
-  const updateLegendEntryColorByCaption = (caption, color) => {
+  const updateLegendEntryColorByCaption = (caption, color, options = {}) => {
     if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
@@ -486,7 +528,7 @@ export const createLegendEntryActions = ({
         }
       }
       return changed;
-    });
+    }, options);
 
     if (updated) {
       console.log(`Updated legend entry color: "${caption}" to ${color}`);
@@ -510,13 +552,14 @@ export const createLegendEntryActions = ({
     return entryGroup !== null;
   };
 
-  const removeLegendEntry = (caption) => {
+  const removeLegendEntry = (caption, options = {}) => {
     if (!svgContainer.value) return false;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
 
     const removed = applyLegendMutation('legend-remove', ({ svg: targetSvg, mutation }) => {
+      mutation.captureState(retiredEntryTemplates);
       let changed = false;
       getAllFeatureLegendGroups(targetSvg).forEach((targetGroup, targetIndex) => {
         const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(caption)}"]`);
@@ -526,19 +569,19 @@ export const createLegendEntryActions = ({
           changed = true;
         }
       });
-      if (changed) compactLegendEntries(targetSvg);
+      if (changed && options.reflow !== false) compactLegendEntries(targetSvg, mutation);
       return changed;
-    });
+    }, options);
 
     if (removed) {
-      onLegendGeometryChanged();
+      if (options.notifyGeometry !== false) onLegendGeometryChanged();
       console.log(`Removed legend entry: "${caption}"`);
     }
 
     return removed;
   };
 
-  const reconcileLegendEntries = ({ restoreColorState = false } = {}) => {
+  const reconcileLegendEntries = ({ restoreColorState = false, lease = null } = {}) => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const targetGroups = getAllFeatureLegendGroups(svg);
@@ -567,6 +610,8 @@ export const createLegendEntryActions = ({
 
     const restoredCaptions = new Set();
     const changed = applyLegendMutation('legend-reconcile', ({ svg: targetSvg, mutation }) => {
+      mutation.captureState(retiredEntryTemplates);
+      mutation.captureProperty(legendEntries, 'value', { deep: true });
       let domChanged = false;
       getAllFeatureLegendGroups(targetSvg).forEach((targetGroup, targetIndex) => {
       const initialGroups = directLegendEntryGroups(targetGroup);
@@ -659,17 +704,17 @@ export const createLegendEntryActions = ({
       const hasDualLegends = Boolean(
         legendGroup?.querySelector('#legend_horizontal') && legendGroup?.querySelector('#legend_vertical')
       );
-      if (hasDualLegends) reflowDualLegendLayout(targetSvg);
-      else updatePairwiseLegendPositions(targetSvg);
+      if (hasDualLegends) reflowDualLegendLayout(targetSvg, mutation);
+      else updatePairwiseLegendPositions(targetSvg, mutation);
       return true;
-    });
+    }, { lease });
 
     if (restoreColorState && entryColorStateChanged) {
       legendEntries.value = desiredEntries;
     }
     if (!changed) return restoreColorState && entryColorStateChanged;
     restoredCaptions.forEach((caption) => retiredEntryTemplates.delete(caption));
-    onLegendGeometryChanged();
+    onLegendGeometryChanged({ lease });
     return true;
   };
 
@@ -683,7 +728,12 @@ export const createLegendEntryActions = ({
       invalidateIndexes: ['legend']
     });
     if (!lease) return emptyDiff;
-    const editorSnapshot = legendEntries.value.map((entry) => ({ ...entry }));
+    lease.mutate(({ mutation }) => {
+      mutation.captureProperty(legendEntries, 'value', { deep: true });
+      mutation.captureProperty(originalLegendOrder, 'value', { deep: true });
+      mutation.captureProperty(originalLegendColors, 'value', { deep: true });
+      return false;
+    });
     const provenance = new Map(
       previousFileIntents.map((entry) => [String(entry?.caption || '').trim(), normalizedColor(entry?.color)])
     );
@@ -775,25 +825,23 @@ export const createLegendEntryActions = ({
         if (!added) throw new Error(`Failed to add Legend entry "${entry.caption}".`);
       }
       if (!lease.current) throw new Error('The mounted Legend changed during file synchronization.');
-      lease.mutate(({ svg: targetSvg }) => {
+      lease.mutate(({ svg: targetSvg, mutation }) => {
         if (diff.add.length + diff.update.length + diff.remove.length === 0) return false;
         const legendGroup = targetSvg.getElementById('legend');
         const hasDualLegends = Boolean(
           legendGroup?.querySelector('#legend_horizontal')
           && legendGroup?.querySelector('#legend_vertical')
         );
-        if (hasDualLegends) reflowDualLegendLayout(targetSvg);
-        else updatePairwiseLegendPositions(targetSvg);
+        if (hasDualLegends) reflowDualLegendLayout(targetSvg, mutation);
+        else updatePairwiseLegendPositions(targetSvg, mutation);
         return true;
       });
-      lease.commit();
-      onLegendGeometryChanged();
+      onLegendGeometryChanged({ lease });
       extractLegendEntries();
+      lease.commit();
       return diff;
     } catch (error) {
-      lease.cancel();
-      legendEntries.value = editorSnapshot;
-      throw error;
+      return cancelLeaseAfterFailure(lease, error);
     }
   };
 
@@ -936,8 +984,8 @@ export const createLegendEntryActions = ({
       const legendGroup = targetSvg.getElementById('legend');
       const hasDualLegends =
         !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
-      if (hasDualLegends) reflowDualLegendLayout(targetSvg);
-      else updatePairwiseLegendPositions(targetSvg);
+      if (hasDualLegends) reflowDualLegendLayout(targetSvg, mutation);
+      else updatePairwiseLegendPositions(targetSvg, mutation);
       return true;
     });
     if (!changed) return false;
@@ -963,13 +1011,37 @@ export const createLegendEntryActions = ({
   };
 
   const addNewLegendEntry = async () => {
-    if (!newLegendCaption.value.trim()) return;
-
-    const added = await addLegendEntry(newLegendCaption.value.trim(), newLegendColor.value);
-    if (added) {
-      newLegendCaption.value = '';
-      newLegendColor.value = '#808080';
-      setTimeout(() => extractLegendEntries(), 100);
+    const caption = newLegendCaption.value.trim();
+    if (!caption) return false;
+    const lease = previewRuntime.beginDomEditLease({
+      reason: 'legend-add-new',
+      invalidateIndexes: ['legend']
+    });
+    if (!lease) return false;
+    try {
+      const added = await addLegendEntry(caption, newLegendColor.value, {
+        commit: false,
+        lease,
+        reflow: false,
+        throwOnError: true
+      });
+      if (!added) throw new Error(`Failed to add Legend entry "${caption}".`);
+      lease.mutate(({ mutation }) => {
+        mutation.captureProperty(legendEntries, 'value', { deep: true });
+        mutation.captureProperty(originalLegendOrder, 'value', { deep: true });
+        mutation.captureProperty(originalLegendColors, 'value', { deep: true });
+        mutation.captureProperty(newLegendCaption, 'value');
+        mutation.captureProperty(newLegendColor, 'value');
+        extractLegendEntries();
+        newLegendCaption.value = '';
+        newLegendColor.value = '#808080';
+        return true;
+      });
+      onLegendGeometryChanged({ lease });
+      lease.commit();
+      return true;
+    } catch (error) {
+      return cancelLeaseAfterFailure(lease, error);
     }
   };
 
@@ -983,30 +1055,57 @@ export const createLegendEntryActions = ({
     extractLegendEntries();
   };
 
-  const restoreDeletedLegendEntries = () => {
-    if (deletedLegendEntries.value.length === 0) return;
+  const restoreDeletedLegendEntries = async () => {
+    const entries = deletedLegendEntries.value.map((entry) => ({ ...entry }));
+    if (entries.length === 0) return false;
+    const lease = previewRuntime.beginDomEditLease({
+      reason: 'legend-restore-deleted',
+      invalidateIndexes: ['legend']
+    });
+    if (!lease) return false;
 
-    for (const entry of deletedLegendEntries.value) {
-      addLegendEntry(entry.caption, entry.color);
+    try {
+      for (const entry of entries) {
+        const restored = await addLegendEntry(entry.caption, entry.color, {
+          commit: false,
+          lease,
+          reflow: false,
+          throwOnError: true
+        });
+        if (!restored) throw new Error(`Failed to restore Legend entry "${entry.caption}".`);
+      }
+      if (!lease.current) throw new Error('The mounted Legend changed while restoring deleted entries.');
+      lease.mutate(({ mutation }) => {
+        mutation.captureProperty(deletedLegendEntries, 'value', { deep: true });
+        mutation.captureProperty(legendEntries, 'value', { deep: true });
+        mutation.captureProperty(originalLegendOrder, 'value', { deep: true });
+        mutation.captureProperty(originalLegendColors, 'value', { deep: true });
+        deletedLegendEntries.value = [];
+        extractLegendEntries();
+        return true;
+      });
+      onLegendGeometryChanged({ lease });
+      lease.commit();
+      return true;
+    } catch (error) {
+      return cancelLeaseAfterFailure(lease, error);
     }
-    deletedLegendEntries.value = [];
-    extractLegendEntries();
   };
 
   return {
     addLegendEntry,
     addNewLegendEntry,
-    deleteLegendEntry,
+    deleteLegendEntry: legendAction('legend-delete', deleteLegendEntry),
     extractLegendEntries,
     legendEntryExists,
     onLegendGeometryChanged,
-    removeLegendEntry,
-    reconcileLegendEntries,
+    removeLegendEntry: legendAction('legend-remove', removeLegendEntry),
+    reconcileLegendEntries: legendAction('legend-reconcile', reconcileLegendEntries),
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
     syncFileLegendEntries,
-    updateLegendEntryCaption,
-    updateLegendEntryColor,
-    updateLegendEntryColorByCaption
+    updateLegendEntryCaption: legendAction('legend-rename', updateLegendEntryCaption),
+    updateLegendEntryColor: legendAction('legend-fill', updateLegendEntryColor),
+    updateLegendEntryColorByCaption: legendAction('legend-fill', updateLegendEntryColorByCaption)
   };
 };

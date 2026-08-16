@@ -3,10 +3,21 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
+
+import { FakeSvgElement } from './helpers/editor-svg-fixture.mjs';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
 const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
+const featureVisibilityDomSourcePath = join(
+  repoRoot,
+  'gbdraw',
+  'web',
+  'js',
+  'app',
+  'feature-visibility-dom.js'
+);
 const mutationJournalSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'dom-mutation-journal.js');
 const serviceNames = [
   'runtime-test-hooks.js',
@@ -23,6 +34,11 @@ await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
 await writeFile(
+  join(tempDir, 'app', 'feature-visibility-dom.js'),
+  await readFile(featureVisibilityDomSourcePath, 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'app', 'dom-mutation-journal.js'),
   await readFile(mutationJournalSourcePath, 'utf8'),
   'utf8'
@@ -33,6 +49,9 @@ await Promise.all(serviceNames.map(async (name) => {
 }));
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
+const { createDomMutationJournal } = await import(
+  pathToFileURL(join(tempDir, 'app', 'dom-mutation-journal.js'))
+);
 
 const ref = (value) => ({ value });
 
@@ -75,7 +94,9 @@ const featureBConnector = new FakeFeatureElement('feature-b__line1', {
   part: 'connector',
   fill: 'none'
 });
-const svg = makeSvg([featureA, featureBConnector, featureBBlock]);
+const rendererHiddenFeature = new FakeFeatureElement('renderer-hidden-feature');
+rendererHiddenFeature.setAttribute('display', 'none');
+const svg = makeSvg([featureA, featureBConnector, featureBBlock, rendererHiddenFeature]);
 let replacementCount = 0;
 const resultItems = new Proxy([
   { name: 'one.svg', content: '<svg id="old-one"></svg>' },
@@ -107,6 +128,12 @@ const runtime = createPreviewRuntime({
 });
 
 runtime.mountResultSvg(0, svg);
+assert.equal(runtime.applyFeatureVisibilityChanges([{
+  featureId: 'renderer-hidden-feature',
+  mode: 'exclude_matching'
+}]), false);
+assert.equal(rendererHiddenFeature.getAttribute('display'), 'none');
+assert.equal(rendererHiddenFeature.getAttribute('data-gbdraw-feature-visibility-preview'), null);
 const directCommit = runtime.commitDomEdit({
   reason: 'direct-contract',
   invalidateIndexes: ['legend'],
@@ -437,9 +464,61 @@ for (const raceCase of raceCases) {
   const currentOwner = raceCase.replace(fixture);
   const currentContent = currentOwner.content;
   gate.resolve();
-  assert.equal(await settlement, false, raceCase.name);
+  await assert.rejects(
+    settlement,
+    (error) => error?.name === 'StaleDomEditError',
+    raceCase.name
+  );
   assert.equal(currentOwner.content, currentContent, raceCase.name);
   assert.equal(fixture.oldFeature.getAttribute('fill'), '#111111', raceCase.name);
+}
+
+{
+  const fixture = createLeaseRaceFixture();
+  const lease = fixture.runtime.beginDomEditLease({ reason: 'editor-only-lease-metadata' });
+  assert.equal(lease.mutate(({ mutation }) => {
+    mutation.setAttribute(fixture.oldFeature, 'data-label-editable', 'true');
+    return false;
+  }, { journalChangesAffectResult: false }), true);
+  assert.equal(lease.mutate(() => false), false, 'prior journal entries do not taint later no-ops');
+  assert.equal(lease.commit(), false);
+  assert.equal(fixture.oldFeature.getAttribute('data-label-editable'), 'true');
+  assert.equal(fixture.state.results.value[0], fixture.initialResult);
+  assert.equal(fixture.initialResult.content, '<svg data-owner="old"></svg>');
+  assert.equal(fixture.runtime.getActiveRuntime().dirty, false);
+}
+
+{
+  const fixture = createLeaseRaceFixture();
+  const lease = fixture.runtime.beginDomEditLease({
+    reason: 'exclusive-async-edit',
+    invalidateIndexes: ['features']
+  });
+  assert.equal(lease.mutate(({ mutation }) => (
+    mutation.setAttribute(fixture.oldFeature, 'fill', '#abcdef')
+  )), true);
+  const competingCanonical = { visibility: 'default' };
+
+  assert.throws(() => fixture.runtime.runDomEditSync({
+    reason: 'competing-live-edit',
+    canonicalState: [{ target: competingCanonical }],
+    action: () => {
+      competingCanonical.visibility = 'off';
+      return fixture.runtime.commitDomEdit({
+        reason: 'competing-visibility',
+        mutate: ({ mutation }) => mutation.setAttribute(fixture.oldFeature, 'display', 'none')
+      });
+    }
+  }), (error) => error?.name === 'LiveEditBusyError');
+
+  assert.deepEqual(competingCanonical, { visibility: 'default' });
+  assert.equal(fixture.oldFeature.getAttribute('fill'), '#abcdef');
+  assert.equal(fixture.oldFeature.getAttribute('display'), null);
+  assert.equal(fixture.state.results.value[0], fixture.initialResult);
+  assert.equal(fixture.initialResult.content, '<svg data-owner="old"></svg>');
+  assert.equal(lease.cancel(), true);
+  assert.equal(fixture.oldFeature.getAttribute('fill'), '#111111');
+  assert.equal(fixture.runtime.getActiveRuntime().dirty, false);
 }
 
 {
@@ -470,6 +549,337 @@ for (const raceCase of raceCases) {
   assert.equal(active.dirty, true);
   assert.deepEqual([...active.dirtyReasons], ['existing-edit']);
   assert.equal(active.indexes.legend, retainedLegendIndex);
+}
+
+{
+  const earlier = { value: 'before-earlier' };
+  let middleValue = 'before-middle';
+  const middle = {};
+  Object.defineProperty(middle, 'value', {
+    configurable: true,
+    enumerable: true,
+    get: () => middleValue,
+    set: (value) => {
+      if (value === 'before-middle') throw new Error('middle undo failed');
+      middleValue = value;
+    }
+  });
+  const later = { value: 'before-later' };
+  const mutation = createDomMutationJournal();
+  mutation.setProperty(earlier, 'value', 'after-earlier');
+  mutation.setProperty(middle, 'value', 'after-middle');
+  mutation.setProperty(later, 'value', 'after-later');
+
+  const rollbackErrors = mutation.rollback();
+  assert.equal(earlier.value, 'before-earlier');
+  assert.equal(middle.value, 'after-middle');
+  assert.equal(later.value, 'before-later');
+  assert.deepEqual(rollbackErrors.map((error) => error.message), ['middle undo failed']);
+  assert.equal(mutation.rollback(), rollbackErrors, 'double rollback is idempotent');
+  assert.throws(() => mutation.commit(), /rolled back/);
+}
+
+{
+  const sourceParent = new FakeSvgElement('g', { id: 'source-parent' });
+  const sourceBefore = sourceParent.appendChild(new FakeSvgElement('path', { id: 'source-before' }));
+  const replacement = sourceParent.appendChild(new FakeSvgElement('path', { id: 'replacement' }));
+  const sourceAfter = sourceParent.appendChild(new FakeSvgElement('path', { id: 'source-after' }));
+  const targetParent = new FakeSvgElement('g', { id: 'target-parent' });
+  const targetBefore = targetParent.appendChild(new FakeSvgElement('path', { id: 'target-before' }));
+  const current = targetParent.appendChild(new FakeSvgElement('path', { id: 'current' }));
+  const targetAfter = targetParent.appendChild(new FakeSvgElement('path', { id: 'target-after' }));
+  const mutation = createDomMutationJournal();
+
+  mutation.replaceChild(targetParent, replacement, current);
+  assert.deepEqual(targetParent.children, [targetBefore, replacement, targetAfter]);
+  assert.deepEqual(sourceParent.children, [sourceBefore, sourceAfter]);
+  assert.deepEqual(mutation.rollback(), []);
+  assert.deepEqual(targetParent.children, [targetBefore, current, targetAfter]);
+  assert.deepEqual(sourceParent.children, [sourceBefore, replacement, sourceAfter]);
+}
+
+{
+  const originalParent = new FakeSvgElement('g');
+  const before = originalParent.appendChild(new FakeSvgElement('path', { id: 'before' }));
+  const moved = originalParent.appendChild(new FakeSvgElement('path', { id: 'moved' }));
+  const after = originalParent.appendChild(new FakeSvgElement('path', { id: 'after' }));
+  const secondParent = new FakeSvgElement('g');
+  const thirdParent = new FakeSvgElement('g');
+  const thirdAnchor = thirdParent.appendChild(new FakeSvgElement('path', { id: 'third-anchor' }));
+  const outer = createDomMutationJournal();
+  const inner = createDomMutationJournal();
+
+  outer.appendChild(secondParent, moved);
+  inner.insertBefore(thirdParent, moved, thirdAnchor);
+  assert.deepEqual(inner.rollback(), []);
+  assert.deepEqual(secondParent.children, [moved]);
+  assert.deepEqual(outer.rollback(), []);
+  assert.deepEqual(originalParent.children, [before, moved, after]);
+}
+
+{
+  const rollbackMetrics = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => rollbackMetrics.push(metric)
+  };
+  const rollbackFeature = new FakeFeatureElement('rollback-feature', { fill: '#111111' });
+  const rollbackSvg = makeSvg([rollbackFeature]);
+  const originalResult = { name: 'rollback.svg', content: '<svg data-owner="original"></svg>' };
+  const rollbackState = {
+    results: ref([originalResult]),
+    selectedResultIndex: ref(0),
+    resultGenerationKey: ref('rollback-generation'),
+    skipCaptureBaseConfig: ref(false),
+    svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? rollbackSvg : null })
+  };
+  const rollbackRuntime = createPreviewRuntime({
+    state: rollbackState,
+    serializeSvg: () => {
+      throw new Error('serialization failed');
+    }
+  });
+  rollbackRuntime.mountResultSvg(0, rollbackSvg);
+  const retainedFeatureIndex = { retained: true };
+  rollbackRuntime.getActiveRuntime().indexes.features = retainedFeatureIndex;
+  let fragileValue = 'before';
+  const fragile = {};
+  Object.defineProperty(fragile, 'value', {
+    configurable: true,
+    enumerable: true,
+    get: () => fragileValue,
+    set: (value) => {
+      if (value === 'before') throw new Error('rollback setter failed');
+      fragileValue = value;
+    }
+  });
+
+  let caught = null;
+  try {
+    rollbackRuntime.commitDomEdit({
+      reason: 'rollback-error-restoration',
+      invalidateIndexes: ['features'],
+      mutate: ({ mutation }) => {
+        mutation.setAttribute(rollbackFeature, 'fill', '#abcdef');
+        mutation.setProperty(fragile, 'value', 'after');
+        return true;
+      }
+    });
+  } catch (error) {
+    caught = error;
+  }
+  assert.equal(caught?.message, 'serialization failed');
+  assert.deepEqual(caught?.rollbackErrors?.map((error) => error.message), ['rollback setter failed']);
+  assert.equal(rollbackFeature.getAttribute('fill'), '#111111');
+  assert.equal(fragile.value, 'after');
+  assert.equal(rollbackState.results.value[0], originalResult);
+  assert.equal(rollbackRuntime.getActiveRuntime().dirty, false);
+  assert.deepEqual([...rollbackRuntime.getActiveRuntime().dirtyReasons], []);
+  assert.equal(rollbackRuntime.getActiveRuntime().indexes.features, retainedFeatureIndex);
+  assert.equal(rollbackState.skipCaptureBaseConfig.value, false);
+  const rollbackMetricNames = new Set(rollbackMetrics.map(({ name }) => name));
+  assert.equal(rollbackMetricNames.has('liveEditDomRollbackCount'), true);
+  assert.equal(rollbackMetricNames.has('liveEditCanonicalRollbackCount'), true);
+  assert.equal(rollbackMetricNames.has('liveEditCanonicalRollbackFailureCount'), true);
+  assert.equal(rollbackMetricNames.has('liveEditResultRestoreCount'), true);
+  if (previousHooks === undefined) delete globalThis.__GBDRAW_TEST_HOOKS__;
+  else globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+}
+
+{
+  const resultSetterFeature = new FakeFeatureElement('result-setter-feature', { fill: '#111111' });
+  const resultSetterSvg = makeSvg([resultSetterFeature]);
+  const originalResult = { name: 'setter.svg', content: '<svg data-owner="original"></svg>' };
+  const resultItems = [originalResult];
+  let replacementAttempts = 0;
+  let restoreAttempts = 0;
+  const proxiedResults = new Proxy(resultItems, {
+    set(target, property, value) {
+      if (String(property) !== '0') return Reflect.set(target, property, value);
+      if (value !== originalResult) {
+        replacementAttempts += 1;
+        Reflect.set(target, property, value);
+        throw new Error('primary Result setter failure');
+      }
+      restoreAttempts += 1;
+      if (restoreAttempts === 1) throw new Error('Result rollback setter failure');
+      return Reflect.set(target, property, value);
+    }
+  });
+  const resultSetterState = {
+    results: ref(proxiedResults),
+    selectedResultIndex: ref(0),
+    resultGenerationKey: ref('setter-generation'),
+    skipCaptureBaseConfig: ref(false),
+    svgContainer: ref({
+      querySelector: (selector) => selector === 'svg' ? resultSetterSvg : null
+    })
+  };
+  const resultSetterRuntime = createPreviewRuntime({
+    state: resultSetterState,
+    serializeSvg: () => '<svg data-owner="replacement"></svg>'
+  });
+  resultSetterRuntime.mountResultSvg(0, resultSetterSvg);
+  const retainedFeatureIndex = { retained: true };
+  resultSetterRuntime.getActiveRuntime().indexes.features = retainedFeatureIndex;
+
+  let caught = null;
+  try {
+    resultSetterRuntime.commitDomEdit({
+      reason: 'partial-result-setter-failure',
+      invalidateIndexes: ['features'],
+      mutate: ({ mutation }) => mutation.setAttribute(resultSetterFeature, 'fill', '#abcdef')
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.equal(caught?.message, 'primary Result setter failure');
+  assert.deepEqual(
+    caught?.rollbackErrors?.map((error) => error.message),
+    ['Result rollback setter failure']
+  );
+  assert.equal(replacementAttempts, 1);
+  assert.equal(restoreAttempts, 2, 'the outer transaction retries the failed Result restore');
+  assert.equal(resultSetterState.results.value[0], originalResult);
+  assert.equal(resultSetterFeature.getAttribute('fill'), '#111111');
+  assert.equal(resultSetterRuntime.getActiveRuntime().dirty, false);
+  assert.deepEqual([...resultSetterRuntime.getActiveRuntime().dirtyReasons], []);
+  assert.equal(resultSetterRuntime.getActiveRuntime().indexes.features, retainedFeatureIndex);
+  assert.equal(resultSetterState.skipCaptureBaseConfig.value, false);
+}
+
+{
+  const vueContext = {};
+  runInNewContext(
+    await readFile(join(repoRoot, 'gbdraw', 'web', 'vendor', 'vue', 'vue.global.js'), 'utf8'),
+    vueContext
+  );
+  const vueResults = vueContext.Vue.ref([
+    { name: 'reactive.svg', content: '<svg data-owner="original"></svg>' }
+  ]);
+  const originalOwner = vueResults.value[0];
+  const reactiveFeature = new FakeFeatureElement('reactive-result-feature', { fill: '#111111' });
+  const reactiveSvg = makeSvg([reactiveFeature]);
+  const reactiveState = {
+    results: vueResults,
+    selectedResultIndex: ref(0),
+    resultGenerationKey: ref('reactive-generation'),
+    skipCaptureBaseConfig: ref(false),
+    svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? reactiveSvg : null })
+  };
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: ({ name }) => {
+      if (name === 'domEditResultReplacementCount') throw new Error('metric failed');
+    }
+  };
+  const reactiveRuntime = createPreviewRuntime({
+    state: reactiveState,
+    serializeSvg: () => '<svg data-owner="replacement"></svg>'
+  });
+  reactiveRuntime.mountResultSvg(0, reactiveSvg);
+
+  assert.throws(() => reactiveRuntime.commitDomEdit({
+    reason: 'reactive-result-owner-failure',
+    mutate: ({ mutation }) => mutation.setAttribute(reactiveFeature, 'fill', '#abcdef')
+  }), /metric failed/);
+
+  assert.equal(reactiveState.results.value[0], originalOwner);
+  assert.equal(reactiveState.results.value[0].content, '<svg data-owner="original"></svg>');
+  assert.equal(reactiveRuntime.getActiveRuntime().resultOwner, originalOwner);
+  assert.equal(reactiveFeature.getAttribute('fill'), '#111111');
+  assert.equal(reactiveRuntime.getActiveRuntime().dirty, false);
+  if (previousHooks === undefined) delete globalThis.__GBDRAW_TEST_HOOKS__;
+  else globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+}
+
+{
+  const nested = { value: 'before' };
+  const items = [nested, 'retained'];
+  const mapped = new Map([['retained', nested]]);
+  const selected = new Set(['retained']);
+  const stateOwner = {
+    scalar: 'before',
+    removed: 'retained',
+    nested,
+    items,
+    mapped,
+    selected
+  };
+  const mutation = createDomMutationJournal();
+  mutation.captureState(stateOwner);
+  stateOwner.scalar = 'after';
+  delete stateOwner.removed;
+  stateOwner.added = true;
+  stateOwner.nested.value = 'after';
+  stateOwner.items = ['replacement'];
+  mapped.delete('retained');
+  mapped.set('added', 'after');
+  selected.delete('retained');
+  selected.add('added');
+
+  assert.deepEqual(mutation.rollback(), []);
+  assert.equal(stateOwner.scalar, 'before');
+  assert.equal(stateOwner.removed, 'retained');
+  assert.equal(Object.hasOwn(stateOwner, 'added'), false);
+  assert.equal(stateOwner.nested, nested);
+  assert.equal(nested.value, 'before');
+  assert.equal(stateOwner.items, items);
+  assert.deepEqual(items, [nested, 'retained']);
+  assert.deepEqual([...mapped], [['retained', nested]]);
+  assert.deepEqual([...selected], ['retained']);
+}
+
+{
+  const originalParent = new FakeSvgElement('g');
+  const before = originalParent.appendChild(new FakeSvgElement('path', { id: 'before' }));
+  const moved = originalParent.appendChild(new FakeSvgElement('path', { id: 'moved' }));
+  const after = originalParent.appendChild(new FakeSvgElement('path', { id: 'after' }));
+  const middleParent = new FakeSvgElement('g');
+  const finalParent = new FakeSvgElement('g');
+  const mutation = createDomMutationJournal();
+  mutation.appendChild(middleParent, moved);
+  mutation.appendChild(finalParent, moved);
+  mutation.setAttribute(moved, 'fill', '#111111');
+  mutation.setAttribute(moved, 'fill', '#222222');
+
+  assert.deepEqual(mutation.rollback(), []);
+  assert.deepEqual(originalParent.children, [before, moved, after]);
+  assert.deepEqual(middleParent.children, []);
+  assert.deepEqual(finalParent.children, []);
+  assert.equal(moved.getAttribute('fill'), null);
+}
+
+{
+  const sourceParent = new FakeSvgElement('g');
+  const sourceBefore = sourceParent.appendChild(new FakeSvgElement('path', { id: 'source-before' }));
+  const incoming = sourceParent.appendChild(new FakeSvgElement('path', { id: 'incoming' }));
+  const sourceAfter = sourceParent.appendChild(new FakeSvgElement('path', { id: 'source-after' }));
+  const targetParent = new FakeSvgElement('g');
+  const first = targetParent.appendChild(new FakeSvgElement('path', { id: 'first' }));
+  const second = targetParent.appendChild(new FakeSvgElement('path', { id: 'second' }));
+  const mutation = createDomMutationJournal();
+  mutation.replaceChildren(targetParent, incoming);
+
+  assert.deepEqual(mutation.rollback(), []);
+  assert.deepEqual(targetParent.children, [first, second]);
+  assert.deepEqual(sourceParent.children, [sourceBefore, incoming, sourceAfter]);
+}
+
+{
+  const sourceParent = new FakeSvgElement('g');
+  const firstSource = sourceParent.appendChild(new FakeSvgElement('path', { id: 'first-source' }));
+  const secondSource = sourceParent.appendChild(new FakeSvgElement('path', { id: 'second-source' }));
+  const thirdSource = sourceParent.appendChild(new FakeSvgElement('path', { id: 'third-source' }));
+  const targetParent = new FakeSvgElement('g');
+  const retained = targetParent.appendChild(new FakeSvgElement('path', { id: 'retained' }));
+  const mutation = createDomMutationJournal();
+  mutation.replaceChildren(targetParent, secondSource, firstSource);
+
+  assert.deepEqual(mutation.rollback(), []);
+  assert.deepEqual(targetParent.children, [retained]);
+  assert.deepEqual(sourceParent.children, [firstSource, secondSource, thirdSource]);
 }
 
 console.log('preview runtime tests passed');

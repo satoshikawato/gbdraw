@@ -60,6 +60,12 @@ export const getAllFeatureLegendGroups = (svg) => {
     return groups;
   }
 
+  const horizontalFeatureLegend = legendGroup.querySelector('#feature_legend_h');
+  const verticalFeatureLegend = legendGroup.querySelector('#feature_legend_v');
+  if (horizontalFeatureLegend) groups.push(horizontalFeatureLegend);
+  if (verticalFeatureLegend) groups.push(verticalFeatureLegend);
+  if (groups.length > 0) return groups;
+
   const featureLegendGroup = legendGroup.querySelector('#feature_legend');
   return featureLegendGroup ? [featureLegendGroup] : [legendGroup];
 };

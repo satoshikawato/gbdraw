@@ -7,16 +7,26 @@ import {
 
 const isHorizontalSide = (side) => side === 'top' || side === 'bottom';
 
-const setLegendVariant = (legendGroup, side) => {
+const setLegendVariant = (legendGroup, side, mutation = null) => {
   const horizontal = legendGroup?.querySelector?.('#legend_horizontal') || null;
   const vertical = legendGroup?.querySelector?.('#legend_vertical') || null;
   if (!horizontal || !vertical) return false;
   if (isHorizontalSide(side)) {
-    horizontal.removeAttribute('display');
-    vertical.setAttribute('display', 'none');
+    if (mutation) {
+      mutation.removeAttribute(horizontal, 'display');
+      mutation.setAttribute(vertical, 'display', 'none');
+    } else {
+      horizontal.removeAttribute('display');
+      vertical.setAttribute('display', 'none');
+    }
   } else {
-    horizontal.setAttribute('display', 'none');
-    vertical.removeAttribute('display');
+    if (mutation) {
+      mutation.setAttribute(horizontal, 'display', 'none');
+      mutation.removeAttribute(vertical, 'display');
+    } else {
+      horizontal.setAttribute('display', 'none');
+      vertical.removeAttribute('display');
+    }
   }
   return true;
 };
@@ -47,14 +57,29 @@ export const createLegendRepositionActions = ({
     reflowDualLegendLayout,
     reflowSingleLegendLayout
   } = legendActions;
-  const commitReposition = (svg, mutate) => {
-    const changed = previewRuntime.commitDomEdit({
+  const captureRepositionState = (mutation) => {
+    mutation.captureProperty(generatedLegendPosition, 'value');
+    mutation.captureProperty(diagramElements, 'value');
+    mutation.captureProperty(diagramElementOriginalTransforms, 'value', { deep: true });
+    mutation.captureState(diagramOffset);
+    mutation.captureProperty(legendInitialTransform, 'value', { deep: true });
+    mutation.captureState(legendCurrentOffset);
+    mutation.captureProperty(plotTitleAutoTransform, 'value', { deep: true });
+    mutation.captureState(plotTitleUserOffset);
+    mutation.captureProperty(skipPositionReapply, 'value');
+  };
+  const commitReposition = (svg, mutate, { lease = null } = {}) => {
+    const apply = ({ svg: targetSvg, mutation }) => {
+      if (targetSvg !== svg) return false;
+      captureRepositionState(mutation);
+      return mutate({ svg: targetSvg, mutation });
+    };
+    const changed = lease
+      ? lease.mutate(apply)
+      : previewRuntime.commitDomEdit({
       reason: 'legend-reposition',
       invalidateIndexes: ['legend'],
-      mutate: ({ svg: targetSvg, mutation }) => {
-        if (targetSvg !== svg) return false;
-        return mutate({ svg: targetSvg, mutation });
-      }
+      mutate: apply
     }).changed;
     if (changed) skipPositionReapply.value = true;
     return changed;
@@ -104,7 +129,7 @@ export const createLegendRepositionActions = ({
     }
   };
 
-  const repositionForLegendChange = (newPosition, _oldPosition, _options = {}) => {
+  const repositionForLegendChange = (newPosition, _oldPosition, options = {}) => {
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
@@ -118,9 +143,9 @@ export const createLegendRepositionActions = ({
     return commitReposition(svg, ({ svg: targetSvg, mutation }) => {
       if (legendGroup && newPosition !== 'none') {
         mutation.removeAttribute(legendGroup, 'display');
-        const hasDualLegend = setLegendVariant(legendGroup, newPosition);
+        const hasDualLegend = setLegendVariant(legendGroup, newPosition, mutation);
         if (hasDualLegend) {
-          reflowDualLegendLayout(targetSvg);
+          reflowDualLegendLayout(targetSvg, mutation);
         } else {
           const widthHint = isHorizontalSide(newPosition)
             ? binding.metadata.primary.finalBounds.width
@@ -128,25 +153,31 @@ export const createLegendRepositionActions = ({
           reflowSingleLegendLayout(
             targetSvg,
             isHorizontalSide(newPosition) ? 'horizontal' : 'vertical',
-            widthHint
+            widthHint,
+            mutation
           );
         }
       }
 
-      const nextBinding = applyCompositionEdit(targetSvg, { legendSide: newPosition, canvasPadding });
+      const nextBinding = applyCompositionEdit(targetSvg, {
+        legendSide: newPosition,
+        canvasPadding,
+        mutation
+      });
       syncStateFromComposition(targetSvg, nextBinding);
       return true;
-    });
+    }, options);
   };
 
-  const refreshLegendGeometry = () => {
+  const refreshLegendGeometry = (options = {}) => {
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const binding = bindCompositionMetadata(svg);
     if (!binding.legend.metadata || binding.metadata.legendSide === 'none') return false;
     return repositionForLegendChange(binding.metadata.legendSide, binding.metadata.legendSide, {
-      preserveManualOffsets: true
+      preserveManualOffsets: true,
+      ...options
     });
   };
 
@@ -154,17 +185,18 @@ export const createLegendRepositionActions = ({
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
-    return commitReposition(svg, ({ svg: targetSvg }) => {
+    return commitReposition(svg, ({ svg: targetSvg, mutation }) => {
       const binding = titleTarget === undefined
         ? applyCompositionEdit(targetSvg, {
             titleSide: titleSide ?? bindCompositionMetadata(targetSvg).metadata.titleSide,
-            canvasPadding
+            canvasPadding,
+            mutation
           })
         : reconcileCompositionTitle(
             targetSvg,
             titleTarget,
             titleSide ?? (titleTarget ? 'bottom' : 'none'),
-            { canvasPadding }
+            { canvasPadding, mutation }
           );
       syncStateFromComposition(targetSvg, binding);
       return true;

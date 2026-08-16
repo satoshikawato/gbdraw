@@ -44,7 +44,10 @@ const restoreStrokeAttributes = (element, originalColor, originalWidth, mutation
 };
 
 export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
-  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+  if (
+    typeof previewRuntime?.commitDomEdit !== 'function'
+    || typeof previewRuntime?.runDomEditSync !== 'function'
+  ) {
     throw new Error('createLegendStrokeActions requires the preview runtime edit protocol.');
   }
   const {
@@ -70,11 +73,32 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     };
   };
 
-  const commitStrokeMutation = (reason, mutate) => previewRuntime.commitDomEdit({
-    reason,
-    invalidateIndexes: ['features', 'legend'],
-    mutate
-  }).changed;
+  const commitStrokeMutation = (reason, mutate, { lease = null } = {}) => (
+    lease
+      ? lease.mutate(mutate)
+      : previewRuntime.commitDomEdit({
+          reason,
+          invalidateIndexes: ['features', 'legend'],
+          mutate
+        }).changed
+  );
+
+  const canonicalStrokeState = () => [
+    { target: legendStrokeOverrides },
+    { target: featureStrokeOverrides },
+    { target: legendEntries, key: 'value', deep: true },
+    { target: originalSvgStroke, key: 'value', deep: true },
+    { target: manualSpecificRules }
+  ];
+  const strokeAction = (reason, action) => (...args) => {
+    const options = args.at(-1);
+    if (options?.lease) return action(...args);
+    return previewRuntime.runDomEditSync({
+      reason,
+      canonicalState: canonicalStrokeState(),
+      action: () => action(...args)
+    });
+  };
 
   const getLegendEntryStrokeColor = (idx) => {
     const entry = legendEntries.value[idx];
@@ -387,7 +411,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     return totalUpdated > 0;
   };
 
-  const reconcileStrokeOverrides = ({ changes = null } = {}) => {
+  const reconcileStrokeOverrides = ({ changes = null, lease = null } = {}) => {
     const originalColor = originalSvgStroke.value.color;
     const originalWidth = originalSvgStroke.value.width;
     const historyChanges = Array.isArray(changes) ? changes : null;
@@ -431,6 +455,8 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     migrateLegacyFeatureOverrides(featureStrokeOverrides, extractedFeatures.value);
     let updatedCount = 0;
     commitStrokeMutation('history-stroke-reconcile', ({ svg, mutation }) => {
+      mutation.captureState(legendStrokeOverrides);
+      mutation.captureState(featureStrokeOverrides);
       if (historyChanges) {
         legendBaselines.forEach((baseline, caption) => {
           const baselineColor = hasOwn(baseline, 'originalStrokeColor')
@@ -499,21 +525,30 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
         mutation
       });
       return updatedCount;
-    });
+    }, { lease });
     return updatedCount > 0;
   };
 
   return {
-    applyStrokeToFeaturesByCaption,
+    applyStrokeToFeaturesByCaption: strokeAction('legend-stroke', applyStrokeToFeaturesByCaption),
     captureOriginalStrokeValues,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
-    reconcileStrokeOverrides,
-    reapplyStrokeOverrides,
-    resetAllStrokes,
-    resetLegendEntryStroke,
-    setLegendEntryStrokeColorValue,
-    updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth
+    reconcileStrokeOverrides: strokeAction('legend-stroke-reconcile', reconcileStrokeOverrides),
+    reapplyStrokeOverrides: strokeAction('legend-stroke-reapply', reapplyStrokeOverrides),
+    resetAllStrokes: strokeAction('legend-stroke-reset-all', resetAllStrokes),
+    resetLegendEntryStroke: strokeAction('legend-stroke-reset', resetLegendEntryStroke),
+    setLegendEntryStrokeColorValue: strokeAction(
+      'legend-stroke-color',
+      setLegendEntryStrokeColorValue
+    ),
+    updateLegendEntryStrokeColor: strokeAction(
+      'legend-stroke-color',
+      updateLegendEntryStrokeColor
+    ),
+    updateLegendEntryStrokeWidth: strokeAction(
+      'legend-stroke-width',
+      updateLegendEntryStrokeWidth
+    )
   };
 };

@@ -818,10 +818,46 @@ export const createHistoryManager = ({
   };
 
   const applyIntentEntry = async (entry, direction) => {
-    const nextIntent = applyIntentPatch(currentIntent || {}, entry.changes, direction);
+    const previousIntent = currentIntent || {};
+    const nextIntent = applyIntentPatch(previousIntent, entry.changes, direction);
     restoring.value = true;
     try {
-      await applyIntent(nextIntent, { changes: entry.changes, direction });
+      try {
+        await applyIntent(nextIntent, { changes: entry.changes, direction });
+      } catch (error) {
+        const rollbackErrors = [];
+        const restoredDomains = new Set(
+          Array.isArray(error?.historyRestoredDomains) ? error.historyRestoredDomains : []
+        );
+        const rollbackChanges = entry.changes.filter(
+          (change) => !restoredDomains.has(change?.path?.[0])
+        );
+        if (rollbackChanges.length > 0) {
+          try {
+            await applyIntent(previousIntent, {
+              changes: rollbackChanges,
+              direction: 'rollback',
+              rollback: true
+            });
+          } catch (rollbackError) {
+            rollbackErrors.push(
+              rollbackError instanceof Error
+                ? rollbackError
+                : new Error(String(rollbackError))
+            );
+          }
+        }
+        if (rollbackErrors.length > 0 && error instanceof Error) {
+          Object.defineProperty(error, 'rollbackErrors', {
+            configurable: true,
+            value: Object.freeze([
+              ...(Array.isArray(error.rollbackErrors) ? error.rollbackErrors : []),
+              ...rollbackErrors
+            ])
+          });
+        }
+        throw error;
+      }
     } finally {
       restoring.value = false;
     }

@@ -12,7 +12,13 @@ export const createFeatureEditor = ({
   featureSelection = null,
   previewRuntime = null
 }) => {
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
+  const ruleActions = createFeatureRuleActions({
+    state,
+    nextTick,
+    legendActions,
+    svgActions,
+    previewRuntime
+  });
   const labelActions = createFeatureLabelActions({ state, previewRuntime });
   const featureSvgActions = createFeatureSvgActions({
     state,

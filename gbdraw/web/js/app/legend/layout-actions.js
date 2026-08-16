@@ -8,6 +8,16 @@ import {
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
 export const createLegendLayoutActions = () => {
+  const setAttribute = (element, name, value, mutation = null) => (
+    mutation
+      ? mutation.setAttribute(element, name, value)
+      : (element.setAttribute(name, value), true)
+  );
+  const removeAttribute = (element, name, mutation = null) => (
+    mutation
+      ? mutation.removeAttribute(element, name)
+      : (element.removeAttribute(name), true)
+  );
   const getHorizontalWrapWidth = (svg) => {
     if (!svg) return null;
     return parseCompositionMetadata(svg).primary.finalBounds.width;
@@ -21,7 +31,7 @@ export const createLegendLayoutActions = () => {
     return metrics;
   };
 
-  const centerHorizontalRows = (entries, textXOffset, availableWidth) => {
+  const centerHorizontalRows = (entries, textXOffset, availableWidth, mutation = null) => {
     if (!Number.isFinite(availableWidth) || availableWidth <= 0 || !Array.isArray(entries) || entries.length === 0) {
       return;
     }
@@ -60,9 +70,14 @@ export const createLegendLayoutActions = () => {
         const shiftedX = Number(entry.newX) + shiftX;
         const y = Number(entry.newY);
         entry.newX = shiftedX;
-        entry.text.setAttribute('transform', `translate(${shiftedX}, ${y})`);
+        setAttribute(entry.text, 'transform', `translate(${shiftedX}, ${y})`, mutation);
         if (entry.rect) {
-          entry.rect.setAttribute('transform', `translate(${shiftedX - textXOffset}, ${y})`);
+          setAttribute(
+            entry.rect,
+            'transform',
+            `translate(${shiftedX - textXOffset}, ${y})`,
+            mutation
+          );
         }
       });
     });
@@ -99,7 +114,7 @@ export const createLegendLayoutActions = () => {
     return fallbackWidth;
   };
 
-  const centerSingleComparisonLegendParts = (pairwiseLegend) => {
+  const centerSingleComparisonLegendParts = (pairwiseLegend, mutation = null) => {
     const parts = getSingleComparisonLegendParts(pairwiseLegend);
     if (!parts) return;
 
@@ -109,19 +124,19 @@ export const createLegendLayoutActions = () => {
     const titlePos = parseTransformXY(title.getAttribute('transform'));
     const barPos = parseTransformXY(bar.getAttribute('transform'));
 
-    title.setAttribute('text-anchor', 'middle');
-    title.setAttribute('transform', `translate(${titleX}, ${titlePos.y})`);
-    bar.setAttribute('transform', `translate(${barX}, ${barPos.y})`);
+    setAttribute(title, 'text-anchor', 'middle', mutation);
+    setAttribute(title, 'transform', `translate(${titleX}, ${titlePos.y})`, mutation);
+    setAttribute(bar, 'transform', `translate(${barX}, ${barPos.y})`, mutation);
 
     percentLabels.forEach((label) => {
       const labelPos = parseTransformXY(label.getAttribute('transform'));
       const text = String(label.textContent || '').trim();
       const x = text === '100%' ? barX + barWidth : barX;
-      label.setAttribute('transform', `translate(${x}, ${labelPos.y})`);
+      setAttribute(label, 'transform', `translate(${x}, ${labelPos.y})`, mutation);
     });
   };
 
-  const updatePairwiseLegendPositions = (svg) => {
+  const updatePairwiseLegendPositions = (svg, mutation = null) => {
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return;
 
@@ -133,7 +148,7 @@ export const createLegendLayoutActions = () => {
       const legendSide = parseCompositionMetadata(svg).legendSide;
       const layout = legendSide === 'top' || legendSide === 'bottom' ? 'horizontal' : 'vertical';
       const maxWidth = layout === 'horizontal' ? getHorizontalWrapWidth(svg) : null;
-      reflowSingleLegendLayout(svg, layout, maxWidth);
+      reflowSingleLegendLayout(svg, layout, maxWidth, mutation);
       return;
     }
 
@@ -144,7 +159,7 @@ export const createLegendLayoutActions = () => {
       const vPairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
 
       if (vFeatureLegend && vPairwiseLegend) {
-        centerSingleComparisonLegendParts(vPairwiseLegend);
+        centerSingleComparisonLegendParts(vPairwiseLegend, mutation);
 
         let maxFeatureY = 0;
         const featureTexts = vFeatureLegend.querySelectorAll('text');
@@ -155,7 +170,7 @@ export const createLegendLayoutActions = () => {
 
         const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
 
-        vPairwiseLegend.setAttribute('transform', `translate(0, ${newPairwiseY})`);
+        setAttribute(vPairwiseLegend, 'transform', `translate(0, ${newPairwiseY})`, mutation);
         console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
       }
     }
@@ -165,7 +180,7 @@ export const createLegendLayoutActions = () => {
       const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
 
       if (hFeatureLegend && hPairwiseLegend) {
-        centerSingleComparisonLegendParts(hPairwiseLegend);
+        centerSingleComparisonLegendParts(hPairwiseLegend, mutation);
 
         let minFeatureY = Infinity,
           maxFeatureY = -Infinity;
@@ -198,7 +213,12 @@ export const createLegendLayoutActions = () => {
             newPairwiseY = (featureHeight - pairwiseHeight) / 2;
           }
 
-          hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
+          setAttribute(
+            hPairwiseLegend,
+            'transform',
+            `translate(${pairwiseX}, ${newPairwiseY})`,
+            mutation
+          );
           console.log(`Repositioned horizontal pairwise legend to y=${newPairwiseY}`);
         }
       }
@@ -206,7 +226,7 @@ export const createLegendLayoutActions = () => {
 
   };
 
-  const reflowDualLegendLayout = (svg) => {
+  const reflowDualLegendLayout = (svg, mutation = null) => {
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return;
 
@@ -226,10 +246,10 @@ export const createLegendLayoutActions = () => {
 
       const pairwiseLegend = getLegendChildById(legend, 'pairwise_legend');
 
-      featureGroup.setAttribute('transform', 'translate(0, 0)');
+      setAttribute(featureGroup, 'transform', 'translate(0, 0)', mutation);
       if (pairwiseLegend) {
-        pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
-        centerSingleComparisonLegendParts(pairwiseLegend);
+        setAttribute(pairwiseLegend, 'transform', 'translate(0, 0)', mutation);
+        centerSingleComparisonLegendParts(pairwiseLegend, mutation);
       }
 
       const {
@@ -292,9 +312,14 @@ export const createLegendLayoutActions = () => {
           }
           const newX = cursorX + textXOffset;
 
-          entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+          setAttribute(entry.text, 'transform', `translate(${newX}, ${newY})`, mutation);
           if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
+            setAttribute(
+              entry.rect,
+              'transform',
+              `translate(${newX - textXOffset}, ${newY})`,
+              mutation
+            );
           }
           entry.newX = newX;
           entry.newY = newY;
@@ -302,15 +327,15 @@ export const createLegendLayoutActions = () => {
 
           cursorX += entryWidth;
         });
-        centerHorizontalRows(entries, textXOffset, wrapWidth);
+        centerHorizontalRows(entries, textXOffset, wrapWidth, mutation);
       } else {
         entries.sort((a, b) => a.y - b.y);
 
         let newY = rectSize / 2;
         entries.forEach((entry) => {
-          entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
+          setAttribute(entry.text, 'transform', `translate(${textXOffset}, ${newY})`, mutation);
           if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(0, ${newY})`);
+            setAttribute(entry.rect, 'transform', `translate(0, ${newY})`, mutation);
           }
           newY += lineHeight;
         });
@@ -333,48 +358,53 @@ export const createLegendLayoutActions = () => {
           const featureYOffset = pairwiseHeight > featureHeight ? (pairwiseHeight - featureHeight) / 2 : 0;
           const pairwiseYOffset = featureHeight > pairwiseHeight ? (featureHeight - pairwiseHeight) / 2 : 0;
           if (featureYOffset > 0) {
-            featureGroup.setAttribute('transform', `translate(0, ${featureYOffset})`);
+            setAttribute(featureGroup, 'transform', `translate(0, ${featureYOffset})`, mutation);
           }
           const pairwiseX = featureBBox.x + featureWidth + textXOffset;
-          pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseYOffset})`);
+          setAttribute(
+            pairwiseLegend,
+            'transform',
+            `translate(${pairwiseX}, ${pairwiseYOffset})`,
+            mutation
+          );
         } else {
           const featureXOffset =
             pairwiseAlignmentWidth > featureWidth ? (pairwiseAlignmentWidth - featureWidth) / 2 : 0;
-          featureGroup.setAttribute('transform', `translate(${featureXOffset}, 0)`);
+          setAttribute(featureGroup, 'transform', `translate(${featureXOffset}, 0)`, mutation);
           const pairwiseY = featureHeight + lineHeight / 2;
-          pairwiseLegend.setAttribute('transform', `translate(0, ${pairwiseY})`);
+          setAttribute(pairwiseLegend, 'transform', `translate(0, ${pairwiseY})`, mutation);
         }
       }
     };
 
     const horizontalDisplay = horizontalLegend.getAttribute('display');
     const verticalDisplay = verticalLegend.getAttribute('display');
-    horizontalLegend.removeAttribute('display');
-    verticalLegend.removeAttribute('display');
+    removeAttribute(horizontalLegend, 'display', mutation);
+    removeAttribute(verticalLegend, 'display', mutation);
 
     layoutLegendGroup(horizontalLegend, 'horizontal', horizontalWidth);
     layoutLegendGroup(verticalLegend, 'vertical', horizontalWidth);
 
     if (horizontalDisplay !== null) {
-      horizontalLegend.setAttribute('display', horizontalDisplay);
+      setAttribute(horizontalLegend, 'display', horizontalDisplay, mutation);
     } else {
-      horizontalLegend.removeAttribute('display');
+      removeAttribute(horizontalLegend, 'display', mutation);
     }
 
     if (verticalDisplay !== null) {
-      verticalLegend.setAttribute('display', verticalDisplay);
+      setAttribute(verticalLegend, 'display', verticalDisplay, mutation);
     } else {
-      verticalLegend.removeAttribute('display');
+      removeAttribute(verticalLegend, 'display', mutation);
     }
 
   };
 
-  const compactLegendEntries = (svg) => {
+  const compactLegendEntries = (svg, mutation = null) => {
     const legendGroup = svg.getElementById('legend');
     const hasDualLegends =
       !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
     if (hasDualLegends) {
-      reflowDualLegendLayout(svg);
+      reflowDualLegendLayout(svg, mutation);
       return;
     }
 
@@ -443,28 +473,28 @@ export const createLegendLayoutActions = () => {
           }
           const newX = cursorX + textXOffset;
 
-          entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+          setAttribute(entry.text, 'transform', `translate(${newX}, ${newY})`, mutation);
           entry.newX = newX;
           entry.newY = newY;
           entry.textWidth = textBBox.width;
 
           if (entry.rect) {
             const expectedRectX = newX - textXOffset;
-            entry.rect.setAttribute('transform', `translate(${expectedRectX}, ${newY})`);
+            setAttribute(entry.rect, 'transform', `translate(${expectedRectX}, ${newY})`, mutation);
           }
 
           cursorX += entryWidth;
         });
-        centerHorizontalRows(entries, textXOffset, maxWidth);
+        centerHorizontalRows(entries, textXOffset, maxWidth, mutation);
       } else {
         entries.sort((a, b) => a.y - b.y);
 
         let newY = rectSize / 2;
         entries.forEach((entry) => {
-          entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
+          setAttribute(entry.text, 'transform', `translate(${textXOffset}, ${newY})`, mutation);
 
           if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(0, ${newY})`);
+            setAttribute(entry.rect, 'transform', `translate(0, ${newY})`, mutation);
           }
 
           newY += lineHeight;
@@ -472,10 +502,10 @@ export const createLegendLayoutActions = () => {
       }
     }
 
-    updatePairwiseLegendPositions(svg);
+    updatePairwiseLegendPositions(svg, mutation);
   };
 
-  const reflowSingleLegendLayout = (svg, layout, maxWidthOverride = null) => {
+  const reflowSingleLegendLayout = (svg, layout, maxWidthOverride = null, mutation = null) => {
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return null;
 
@@ -500,11 +530,11 @@ export const createLegendLayoutActions = () => {
       return true;
     });
     if (!isRootLegendGroup) {
-      featureLegendGroup.setAttribute('transform', 'translate(0, 0)');
+      setAttribute(featureLegendGroup, 'transform', 'translate(0, 0)', mutation);
     }
     if (pairwiseLegend) {
-      pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
-      centerSingleComparisonLegendParts(pairwiseLegend);
+      setAttribute(pairwiseLegend, 'transform', 'translate(0, 0)', mutation);
+      centerSingleComparisonLegendParts(pairwiseLegend, mutation);
     }
 
     const featureOffset = { x: 0, y: 0 };
@@ -588,9 +618,14 @@ export const createLegendLayoutActions = () => {
         }
         const newX = cursorX + textXOffset;
 
-        entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
+        setAttribute(entry.text, 'transform', `translate(${newX}, ${newY})`, mutation);
         if (entry.rect) {
-          entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
+          setAttribute(
+            entry.rect,
+            'transform',
+            `translate(${newX - textXOffset}, ${newY})`,
+            mutation
+          );
         }
         entry.newX = newX;
         entry.newY = newY;
@@ -598,15 +633,15 @@ export const createLegendLayoutActions = () => {
 
         cursorX += entryWidth;
       });
-      centerHorizontalRows(entries, textXOffset, maxFeatureWidth);
+      centerHorizontalRows(entries, textXOffset, maxFeatureWidth, mutation);
     } else {
       entries.sort((a, b) => a.y - b.y);
       let newY = rectSize / 2;
       entries.forEach((entry) => {
         const textBBox = entry.text.getBBox();
-        entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
+        setAttribute(entry.text, 'transform', `translate(${textXOffset}, ${newY})`, mutation);
         if (entry.rect) {
-          entry.rect.setAttribute('transform', `translate(0, ${newY})`);
+          setAttribute(entry.rect, 'transform', `translate(0, ${newY})`, mutation);
         }
         entry.newX = textXOffset;
         entry.newY = newY;
@@ -649,21 +684,36 @@ export const createLegendLayoutActions = () => {
       }
 
       if (!isRootLegendGroup) {
-        featureLegendGroup.setAttribute('transform', `translate(${featureShiftX}, ${featureShiftY})`);
+        setAttribute(
+          featureLegendGroup,
+          'transform',
+          `translate(${featureShiftX}, ${featureShiftY})`,
+          mutation
+        );
       } else if (featureShiftX !== 0 || featureShiftY !== 0) {
         entries.forEach((entry) => {
           const shiftedX = Number(entry.newX) + featureShiftX;
           const shiftedY = Number(entry.newY) + featureShiftY;
           entry.newX = shiftedX;
           entry.newY = shiftedY;
-          entry.text.setAttribute('transform', `translate(${shiftedX}, ${shiftedY})`);
+          setAttribute(entry.text, 'transform', `translate(${shiftedX}, ${shiftedY})`, mutation);
           if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(${shiftedX - textXOffset}, ${shiftedY})`);
+            setAttribute(
+              entry.rect,
+              'transform',
+              `translate(${shiftedX - textXOffset}, ${shiftedY})`,
+              mutation
+            );
           }
         });
       }
       const adjustedPairwiseY = pairwiseY - pairwiseContentOffsetY;
-      pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${adjustedPairwiseY})`);
+      setAttribute(
+        pairwiseLegend,
+        'transform',
+        `translate(${pairwiseX}, ${adjustedPairwiseY})`,
+        mutation
+      );
     }
 
     const bbox = legendGroup.getBBox();

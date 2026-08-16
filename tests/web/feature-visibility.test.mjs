@@ -433,7 +433,30 @@ assert.deepEqual(
   assert.equal(resolveEffectiveFeatureVisibility(feature, {}, null, orderedRules), 'off');
   assert.equal(resolveEffectiveFeatureVisibility(feature, {}, null, [...orderedRules].reverse()), 'on');
   assert.equal(resolveEffectiveFeatureVisibility(feature, { 'f.product': 'on' }, null, orderedRules), 'on');
-  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, { 'f.product': 'off' }, [...orderedRules].reverse()), 'off');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, { 'f.product': 'off' }, [...orderedRules].reverse()), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, { 'f.product': 'off' }, []), 'off');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, { 'f.product': 'on' }, { 'f.product': 'off' }, []), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, { 'f.product': 'off' }, { 'f.product': 'on' }, []), 'off');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, { 'f.product': 'on' }, [orderedRules[0]]), 'off');
+  assert.equal(
+    resolveEffectiveFeatureVisibility(
+      feature,
+      { 'f.product': 'exclude_matching' },
+      { 'f.product': 'off' },
+      [{ ...orderedRules[1], action: 'exclude_matching' }]
+    ),
+    'off'
+  );
+  assert.equal(
+    resolveEffectiveFeatureVisibility(
+      feature,
+      {},
+      { 'f.product': 'off' },
+      [{ ...orderedRules[0], action: 'exclude_matching' }, orderedRules[1]]
+    ),
+    'on'
+  );
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, null, []), 'default');
 }
 
 console.log('feature visibility tests passed');

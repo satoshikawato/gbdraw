@@ -13,7 +13,13 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 
-export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
+export const createFeatureRuleActions = ({
+  state,
+  nextTick,
+  legendActions,
+  svgActions = null,
+  previewRuntime = null
+}) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -34,10 +40,102 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
     addedLegendCaptions,
-    fileLegendCaptions
+    fileLegendCaptions,
+    semanticFileWatchersSuppressed,
+    legendEntries,
+    originalLegendOrder,
+    originalLegendColors
   } = state;
 
-  const { addLegendEntry, removeLegendEntry, extractLegendEntries } = legendActions;
+  const {
+    addLegendEntry: addLegendEntryRaw,
+    removeLegendEntry: removeLegendEntryRaw,
+    extractLegendEntries,
+    onLegendGeometryChanged
+  } = legendActions;
+  const applyPaletteToSvg = svgActions?.applyPaletteToSvg || (() => false);
+  const applySpecificRulesToSvg = svgActions?.applySpecificRulesToSvg || (() => false);
+  let activeSpecificRuleLease = null;
+  let legendGeometryChanged = false;
+
+  const canonicalSpecificRuleState = () => [
+    { target: manualSpecificRules },
+    { target: featureColorOverrides },
+    { target: addedLegendCaptions, key: 'value', deep: true },
+    { target: fileLegendCaptions, key: 'value', deep: true },
+    { target: legendEntries, key: 'value', deep: true },
+    { target: originalLegendOrder, key: 'value', deep: true },
+    { target: originalLegendColors, key: 'value', deep: true },
+    { target: newSpecRule, deep: false },
+    { target: currentColors, key: 'value', deep: true },
+    { target: specificRulePresetLoading, key: 'value' },
+    { target: adv, key: 'legend_box_size' },
+    { target: adv, key: 'legend_font_size' },
+    ...(semanticFileWatchersSuppressed
+      ? [{ target: semanticFileWatchersSuppressed, key: 'value' }]
+      : [])
+  ];
+
+  const addLegendEntry = async (caption, color) => {
+    const added = await addLegendEntryRaw(caption, color, activeSpecificRuleLease
+      ? {
+          commit: false,
+          lease: activeSpecificRuleLease,
+          reflow: false,
+          throwOnError: true
+        }
+      : undefined);
+    if (added && activeSpecificRuleLease) legendGeometryChanged = true;
+    return added;
+  };
+
+  const removeLegendEntry = (caption) => {
+    const removed = removeLegendEntryRaw(caption, activeSpecificRuleLease
+      ? {
+          lease: activeSpecificRuleLease,
+          reflow: false,
+          notifyGeometry: false
+        }
+      : undefined);
+    if (removed && activeSpecificRuleLease) legendGeometryChanged = true;
+    return removed;
+  };
+
+  const refreshSpecificRuleDom = () => {
+    const options = { lease: activeSpecificRuleLease };
+    applyPaletteToSvg(options);
+    applySpecificRulesToSvg(options);
+    refreshFeatureOverrides(extractedFeatures.value);
+  };
+
+  const runSpecificRuleAction = async (action) => {
+    if (typeof previewRuntime?.runDomEditTransaction !== 'function') return action();
+    if (activeSpecificRuleLease) throw new Error('A specific-rule transaction is already active.');
+    const watchersSuppressedBefore = Boolean(semanticFileWatchersSuppressed?.value);
+    legendGeometryChanged = false;
+    return previewRuntime.runDomEditTransaction({
+      reason: 'specific-color-rule-action',
+      canonicalState: canonicalSpecificRuleState(),
+      invalidateIndexes: ['features', 'legend'],
+      action: async ({ lease }) => {
+        activeSpecificRuleLease = lease;
+        if (semanticFileWatchersSuppressed) semanticFileWatchersSuppressed.value = true;
+        try {
+          const result = await action();
+          if (legendGeometryChanged) onLegendGeometryChanged?.({ lease });
+          return result;
+        } finally {
+          if (semanticFileWatchersSuppressed) {
+            semanticFileWatchersSuppressed.value = watchersSuppressedBefore;
+          }
+          activeSpecificRuleLease = null;
+          legendGeometryChanged = false;
+        }
+      }
+    });
+  };
+
+  const specificRuleAction = (action) => (...args) => runSpecificRuleAction(() => action(...args));
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeFeatureIdKey = (value) => String(value || '').trim().toLowerCase();
@@ -45,9 +143,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
 
   const setSpecificRuleField = (index, field, value) => {
-    if (!specificRuleFields.has(field)) return;
+    if (!specificRuleFields.has(field)) return false;
     const current = manualSpecificRules[index];
-    if (!current) return;
+    if (!current) return false;
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
 
     if (field === 'val') {
@@ -55,26 +153,43 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
         new RegExp(nextValue);
       } catch (e) {
         alert('Invalid Regular Expression: ' + e.message);
-        return;
+        return false;
       }
     }
 
     const nextRule = { ...current, [field]: nextValue };
     delete nextRule.fromFile;
     manualSpecificRules.splice(index, 1, nextRule);
+    if (field === 'cap' && current.cap && !manualSpecificRules.some((rule) => rule.cap === current.cap)) {
+      removeLegendEntry(current.cap);
+      addedLegendCaptions.value.delete(current.cap);
+      fileLegendCaptions.value.delete(current.cap);
+    }
+    refreshSpecificRuleDom();
+    return true;
   };
 
   const moveSpecificRule = (index, offset) => {
     const target = index + offset;
-    if (target < 0 || target >= manualSpecificRules.length) return;
+    if (target < 0 || target >= manualSpecificRules.length) return false;
     const [rule] = manualSpecificRules.splice(index, 1);
     manualSpecificRules.splice(target, 0, rule);
+    refreshSpecificRuleDom();
+    return true;
   };
 
   const removeSpecificRule = (index) => {
     const rule = manualSpecificRules[index];
-    if (rule?.cap) fileLegendCaptions.value.delete(rule.cap);
+    if (!rule) return false;
     manualSpecificRules.splice(index, 1);
+    if (rule.cap && !manualSpecificRules.some((candidate) => candidate.cap === rule.cap)) {
+      removeLegendEntry(rule.cap);
+      addedLegendCaptions.value.delete(rule.cap);
+      fileLegendCaptions.value.delete(rule.cap);
+    }
+    refreshSpecificRuleDom();
+    extractLegendEntries();
+    return true;
   };
 
   const downloadSpecificRulesTsv = () => {
@@ -221,6 +336,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     }
 
     newSpecRule.val = '';
+    refreshSpecificRuleDom();
+    return true;
   };
 
   const clearAllSpecificRules = async () => {
@@ -228,10 +345,14 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
     for (const cap of captionsToRemove) {
       await removeLegendEntry(cap);
+      addedLegendCaptions.value.delete(cap);
+      fileLegendCaptions.value.delete(cap);
     }
 
     manualSpecificRules.splice(0);
+    refreshSpecificRuleDom();
     extractLegendEntries();
+    return true;
   };
 
   const applySpecificRulePreset = async () => {
@@ -282,9 +403,13 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       } else {
         extractLegendEntries();
       }
+      refreshSpecificRuleDom();
+      return true;
     } catch (e) {
       console.error('Failed to load specific rule preset:', e);
       alert('Failed to load preset. Please check the preset file and format.');
+      if (activeSpecificRuleLease) throw e;
+      return false;
     } finally {
       specificRulePresetLoading.value = false;
     }
@@ -466,10 +591,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     getFeatureShape,
     setFeatureShape,
     addPriorityRule,
-    addSpecificRule,
-    applySpecificRulePreset,
+    addSpecificRule: specificRuleAction(addSpecificRule),
+    applySpecificRulePreset: specificRuleAction(applySpecificRulePreset),
     canEditFeatureColor,
-    clearAllSpecificRules,
+    clearAllSpecificRules: specificRuleAction(clearAllSpecificRules),
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,
     findExistingColorForCaption,
@@ -485,10 +610,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLabelSpecificRule,
-    moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
-    moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
+    moveSpecificRuleDown: specificRuleAction((index) => moveSpecificRule(index, 1)),
+    moveSpecificRuleUp: specificRuleAction((index) => moveSpecificRule(index, -1)),
     refreshFeatureOverrides,
-    removeSpecificRule,
-    setSpecificRuleField
+    removeSpecificRule: specificRuleAction(removeSpecificRule),
+    setSpecificRuleField: specificRuleAction(setSpecificRuleField)
   };
 };

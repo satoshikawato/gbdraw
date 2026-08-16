@@ -4,7 +4,10 @@ import {
 } from './composition-actions.js';
 
 export const createLegendCanvasActions = ({ state, previewRuntime }) => {
-  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+  if (
+    typeof previewRuntime?.commitDomEdit !== 'function'
+    || typeof previewRuntime?.runDomEditSync !== 'function'
+  ) {
     throw new Error('createLegendCanvasActions requires the preview runtime edit protocol.');
   }
   const {
@@ -14,6 +17,7 @@ export const createLegendCanvasActions = ({ state, previewRuntime }) => {
     diagramElements,
     diagramElementOriginalTransforms,
     diagramOffset,
+    lengthBarUserOffset,
     legendInitialTransform,
     legendCurrentOffset,
     plotTitleAutoTransform,
@@ -23,24 +27,47 @@ export const createLegendCanvasActions = ({ state, previewRuntime }) => {
   } = state;
 
   const currentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
+  const canonicalCanvasState = () => [
+    { target: canvasPadding },
+    { target: diagramElements, key: 'value' },
+    { target: diagramElementOriginalTransforms, key: 'value', deep: true },
+    { target: diagramOffset },
+    { target: lengthBarUserOffset },
+    { target: legendInitialTransform, key: 'value', deep: true },
+    { target: legendCurrentOffset },
+    { target: plotTitleAutoTransform, key: 'value', deep: true },
+    { target: plotTitleUserOffset },
+    { target: generatedLegendPosition, key: 'value' },
+    { target: skipPositionReapply, key: 'value' }
+  ];
+  const runCanvasAction = (reason, action) => previewRuntime.runDomEditSync({
+    reason,
+    canonicalState: canonicalCanvasState(),
+    action
+  });
 
   const persistCurrentSvg = (
     svg = currentSvg(),
     mutate,
-    reason = 'canvas-layout'
+    reason = 'canvas-layout',
+    { lease = null } = {}
   ) => {
     if (!svg) return false;
     if (typeof mutate !== 'function') {
       throw new TypeError('persistCurrentSvg requires the SVG mutation callback.');
     }
-    const changed = previewRuntime.commitDomEdit({
-      reason,
-      invalidateIndexes: ['legend'],
-      mutate: ({ svg: targetSvg, mutation }) => {
+    const apply = ({ svg: targetSvg, mutation }) => {
         if (targetSvg !== svg) return false;
+        mutation.captureProperty(skipPositionReapply, 'value');
         return mutate({ svg: targetSvg, mutation });
-      }
-    }).changed;
+      };
+    const changed = lease
+      ? lease.mutate(apply)
+      : previewRuntime.commitDomEdit({
+          reason,
+          invalidateIndexes: ['legend'],
+          mutate: apply
+        }).changed;
     if (changed) skipPositionReapply.value = true;
     return changed;
   };
@@ -80,24 +107,23 @@ export const createLegendCanvasActions = ({ state, previewRuntime }) => {
     });
   };
 
-  const resetCanvasPadding = () => {
+  const resetCanvasPadding = () => runCanvasAction('canvas-padding-reset', () => {
     canvasPadding.top = 0;
     canvasPadding.right = 0;
     canvasPadding.bottom = 0;
     canvasPadding.left = 0;
-    const svg = currentSvg();
-    if (!svg) return;
-    return persistCurrentSvg(svg, ({ svg: targetSvg, mutation }) => {
-      bindCompositionMetadata(targetSvg);
-      let changed = false;
-      if (targetSvg.dataset.originalViewBox) {
-        changed = mutation.setAttribute(targetSvg, 'viewBox', targetSvg.dataset.originalViewBox) || changed;
-      }
-      if (targetSvg.dataset.originalWidth) {
-        changed = mutation.setAttribute(targetSvg, 'width', `${targetSvg.dataset.originalWidth}px`) || changed;
-        changed = mutation.setAttribute(targetSvg, 'height', `${targetSvg.dataset.originalHeight}px`) || changed;
-      }
-      return changed;
+    return applyCanvasPadding();
+  });
+
+  const updateCanvasPadding = (side, value) => {
+    if (!['top', 'right', 'bottom', 'left'].includes(side)) return false;
+    const nextValue = Number(value);
+    if (!Number.isFinite(nextValue) || nextValue < 0 || canvasPadding[side] === nextValue) {
+      return false;
+    }
+    return runCanvasAction('canvas-padding-update', () => {
+      canvasPadding[side] = nextValue;
+      return applyCanvasPadding();
     });
   };
 
@@ -167,6 +193,8 @@ export const createLegendCanvasActions = ({ state, previewRuntime }) => {
     captureBaseConfig,
     captureOriginalStroke,
     persistCurrentSvg,
-    resetCanvasPadding
+    resetCanvasPadding,
+    runCanvasAction,
+    updateCanvasPadding
   };
 };

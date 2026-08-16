@@ -973,12 +973,66 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
+  const historyEditorCanonicalState = () => [
+    { target: state.featureColorOverrides },
+    { target: state.featureStrokeOverrides },
+    { target: state.featureVisibilityOverrides },
+    { target: state.featureVisibilityManualRules },
+    { target: state.labelTextFeatureOverrides },
+    { target: state.labelTextBulkOverrides },
+    { target: state.labelTextFeatureOverrideSources },
+    { target: state.labelVisibilityOverrides },
+    { target: state.manualSpecificRules },
+    { target: state.legendColorOverrides },
+    { target: state.legendStrokeOverrides },
+    { target: state.legendEntries, key: 'value', deep: true },
+    { target: state.deletedLegendEntries, key: 'value', deep: true },
+    { target: state.originalLegendOrder, key: 'value', deep: true },
+    { target: state.originalLegendColors, key: 'value', deep: true },
+    { target: state.addedLegendCaptions, key: 'value', deep: true },
+    { target: state.selectedFeatureRecordIdx, key: 'value' },
+    { target: state.labelOverrideContextKey, key: 'value' },
+    { target: state.editableLabels, key: 'value', deep: true },
+    { target: state.clickedFeature, key: 'value', deep: true },
+    { target: state.clickedPairwiseMatch, key: 'value', deep: true },
+    { target: state.clickedLabel, key: 'value', deep: true },
+    { target: state.featureStyleScopeDialog, deep: false },
+    { target: state.resetColorDialog, deep: false },
+    { target: state.legendRenameDialog, deep: false },
+    { target: state.labelTextScopeDialog, deep: false },
+    { target: state.featureVisibilityScopeDialog, deep: false },
+    { target: state.globalLabelModeDialog, deep: false },
+    { target: state.semanticFileWatchersSuppressed, key: 'value' }
+  ].filter(({ target }) => target !== null && target !== undefined);
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: (intent, context) => previewRuntime.runDomEdit({
-      reason: 'history-intent-apply',
-      action: () => historySnapshots.applyHistoryIntent(intent, context)
-    }),
+    applyIntent: (intent, context = {}) => {
+      if (context.rollback === true) {
+        return historySnapshots.applyHistoryIntent(intent, context);
+      }
+      let ownsMountedTransaction = false;
+      return previewRuntime.runDomEditTransaction({
+          reason: 'history-intent-apply',
+          canonicalState: historyEditorCanonicalState(),
+          invalidateIndexes: ['features', 'legend'],
+          action: ({ lease }) => {
+            ownsMountedTransaction = Boolean(lease);
+            return historySnapshots.applyHistoryIntent(intent, {
+              ...context,
+              lease
+            });
+          }
+        })
+        .catch((error) => {
+          if (ownsMountedTransaction && error && typeof error === 'object') {
+            Object.defineProperty(error, 'historyRestoredDomains', {
+              configurable: true,
+              value: Object.freeze(['features', 'editorState'])
+            });
+          }
+          throw error;
+        });
+    },
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
     applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
@@ -2060,28 +2114,32 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (
+    _intent,
+    { domains, changes, lease = null } = {}
+  ) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
-    await previewRuntime.runDomEdit({
-      reason: 'history-intent-replay',
-      action: async () => {
+    const replay = async () => {
         if (changedDomains.has('ui')) {
-          legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
+          legendLayout.reconcileCompositionUserDeltas(
+            _intent?.ui?.compositionUserDeltas,
+            { lease }
+          );
         }
         if (changedDomains.has('config') || changedDomains.has('features')) {
-          svgActions.applyPaletteToSvg();
+          svgActions.applyPaletteToSvg({ lease });
         }
         if (changedDomains.has('editorState')) {
-          reconcileLegendEntries({ restoreColorState: true });
-          reconcileStrokeOverrides({ changes });
+          reconcileLegendEntries({ restoreColorState: true, lease });
+          reconcileStrokeOverrides({ changes, lease });
         }
         if (
           changedDomains.has('config')
           || changedDomains.has('features')
           || changedDomains.has('editorState')
         ) {
-          syncLabelEditor();
+          syncLabelEditor({ lease });
           const projection = createEditorSvgProjection({
             features: extractedFeatures.value,
             featureColorOverrides,
@@ -2100,19 +2158,27 @@ export const createAppSetup = () => {
             addedLegendCaptions: Array.from(addedLegendCaptions.value),
             manualSpecificRules
           });
-          previewRuntime.commitDomEdit({
-            reason: 'history-editor-svg-projection',
-            invalidateIndexes: ['features', 'legend'],
-            mutate: ({ svg, mutation }) => projection.project(svg, {
+          const project = ({ svg, mutation }) => projection.project(svg, {
               resetFeatureVisibility: true,
               resetLabelState: true,
               mutation
-            }).changed
-          });
-          syncLabelEditor();
+            }).changed;
+          if (lease) lease.mutate(project);
+          else {
+            previewRuntime.commitDomEdit({
+              reason: 'history-editor-svg-projection',
+              invalidateIndexes: ['features', 'legend'],
+              mutate: project
+            });
+          }
+          syncLabelEditor({ lease });
         }
         await nextTick();
-      }
+      };
+    if (lease) return replay();
+    return previewRuntime.runDomEdit({
+      reason: 'history-intent-replay',
+      action: replay
     });
   });
 
@@ -2285,6 +2351,12 @@ export const createAppSetup = () => {
         await focusLinearComparisonIssue();
       }
       if (result?.status === 'ok') {
+        // Result ownership changes before Vue admits the corresponding SVG.
+        // Do not expose a successful Generate to another live edit until the
+        // mounted document and selected Result can be captured together.
+        await nextTick();
+        const mountedSvg = svgContainer.value?.querySelector?.('svg') || null;
+        if (mountedSvg) previewRuntime.mountResultSvg(selectedResultIndex.value, mountedSvg);
         featureSelection.clearFeatureSelection({ clearStatus: true });
       }
       return result;
@@ -2378,7 +2450,7 @@ export const createAppSetup = () => {
     clickedFeature.value = null;
   };
 
-  const { resetAllPositions, resetCanvasPadding } = legendLayout;
+  const { resetAllPositions, resetCanvasPadding, updateCanvasPadding } = legendLayout;
 
   const resetSettings = () => {
     const proceed = window.confirm(
@@ -3610,6 +3682,7 @@ export const createAppSetup = () => {
     canvasPadding,
     showCanvasControls,
     resetCanvasPadding,
+    updateCanvasPadding,
     definitionLineStyleRows,
     getDefinitionLineStyleSize,
     setDefinitionLineStyleSize,

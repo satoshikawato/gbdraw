@@ -1130,7 +1130,8 @@ const legendCanvasActions = createLegendCanvasActions({
     commitDomEdit: ({ reason = 'test-edit', mutate }) => {
       const changed = Boolean(mutate({ svg: malformedCompositionSvg, resultIndex: 0 }));
       return { changed, flushed: changed, resultIndex: 0, reason };
-    }
+    },
+    runDomEditSync: ({ action }) => action()
   }
 });
 alerts.length = 0;

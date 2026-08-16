@@ -95,6 +95,12 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
       invalidateIndexes: ['legend']
     });
     if (!lease) return false;
+    lease.mutate(({ mutation }) => {
+      mutation.captureState(diagramOffset);
+      mutation.captureState(lengthBarUserOffset);
+      mutation.captureState(plotTitleUserOffset);
+      return false;
+    });
     diagramDragLease?.cancel?.();
     diagramDragLease = lease;
     activeDragSvg = svg;
@@ -436,28 +442,55 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
       lengthBarUserOffset.x = activeLengthBarOffsetStart.x + deltaX;
       lengthBarUserOffset.y = activeLengthBarOffsetStart.y + deltaY;
     }
-    diagramDragLease?.commit?.();
+    const completedLease = diagramDragLease;
+    const completedTxPromise = diagramDragTxPromise;
+    const completedElements = activeDragElements;
     diagramDragLease = null;
+    diagramDragTxPromise = null;
     activeDragSvg = null;
 
-    diagramDragging.value = false;
-    plotTitleDragging.value = false;
-    document.removeEventListener('mousemove', onDiagramDrag);
-    document.removeEventListener('mouseup', endDiagramDrag);
+    try {
+      completedLease?.commit?.();
+      const tx = completedTxPromise ? await completedTxPromise : null;
+      if (tx && history?.commit) await history.commit(tx);
+    } catch (error) {
+      try {
+        completedLease?.cancel?.();
+      } catch (rollbackError) {
+        if (error instanceof Error) {
+          Object.defineProperty(error, 'rollbackErrors', {
+            configurable: true,
+            value: Object.freeze([
+              ...(Array.isArray(error.rollbackErrors) ? error.rollbackErrors : []),
+              rollbackError
+            ])
+          });
+        }
+      }
+      try {
+        const tx = completedTxPromise ? await completedTxPromise : null;
+        if (tx && history?.cancel) history.cancel(tx);
+      } catch (_historyError) {
+        // The live-edit failure remains primary; History has no committed entry.
+      }
+      throw error;
+    } finally {
+      diagramDragging.value = false;
+      plotTitleDragging.value = false;
+      document.removeEventListener('mousemove', onDiagramDrag);
+      document.removeEventListener('mouseup', endDiagramDrag);
 
-    activeDragElements.forEach((el) => {
-      el.style.opacity = '1';
-      el.style.willChange = '';
-    });
-    activeDragElements = [];
-    activeDragOriginalTransforms = new Map();
-    activeDragMode = 'group';
-    activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
-    activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
-    pendingDiagramPointer = null;
-    const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
-    diagramDragTxPromise = null;
-    if (tx && history?.commit) await history.commit(tx);
+      completedElements.forEach((el) => {
+        el.style.opacity = '1';
+        el.style.willChange = '';
+      });
+      activeDragElements = [];
+      activeDragOriginalTransforms = new Map();
+      activeDragMode = 'group';
+      activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
+      activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
+      pendingDiagramPointer = null;
+    }
   };
 
   const setupDiagramDrag = (preserveOffset = false) => {
