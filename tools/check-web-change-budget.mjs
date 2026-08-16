@@ -346,10 +346,19 @@ const policyRevision = basePolicySource === null ? `${head || 'working tree'} (b
 const policy = parsePolicy(policySource, policyRevision);
 let proposedPolicy = null;
 const policyContractions = [];
+const policyExpansions = [];
 const missingPolicyKeys = [];
+const addedPolicyKeys = [];
+let policyTopLevelKeysMatch = true;
 if (basePolicySource !== null && changed.has(policyPath)) {
   proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
+  const baseTopLevelKeys = Object.keys(policy).sort();
+  const proposedTopLevelKeys = Object.keys(proposedPolicy).sort();
+  policyTopLevelKeysMatch = JSON.stringify(baseTopLevelKeys) === JSON.stringify(proposedTopLevelKeys);
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
+    Object.keys(proposedPolicy[section]).forEach((name) => {
+      if (!Object.hasOwn(policy[section], name)) addedPolicyKeys.push(`${section}.${name}`);
+    });
     Object.entries(policy[section]).forEach(([name, allowedPaths]) => {
       if (!Object.hasOwn(proposedPolicy[section], name)) {
         missingPolicyKeys.push(`${section}.${name}`);
@@ -357,6 +366,10 @@ if (basePolicySource !== null && changed.has(policyPath)) {
       const proposedPaths = new Set(proposedPolicy[section][name] || []);
       allowedPaths.forEach((path) => {
         if (!proposedPaths.has(path)) policyContractions.push(`${section}.${name}: ${path}`);
+      });
+      const basePaths = new Set(allowedPaths);
+      proposedPaths.forEach((path) => {
+        if (!basePaths.has(path)) policyExpansions.push(`${section}.${name}: ${path}`);
       });
     });
   }
@@ -401,6 +414,19 @@ const unapprovedCapabilities = capabilityCoverageViolations(policy);
 const proposedPolicyExclusions = proposedPolicy
   ? capabilityCoverageViolations(proposedPolicy)
   : [];
+const pureSafePolicyContraction = Boolean(
+  productionPaths.length
+  && proposedPolicy
+  && changedGuards.length === 1
+  && changedGuards[0] === policyPath
+  && policyContractions.length
+  && !policyExpansions.length
+  && !missingPolicyKeys.length
+  && !addedPolicyKeys.length
+  && policyTopLevelKeysMatch
+  && !unapprovedCapabilities.length
+  && !proposedPolicyExclusions.length
+);
 
 const dependencySections = [
   'dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'
@@ -482,7 +508,7 @@ if (addedBinaryRuntimePaths.length) {
 if (changedVendorPaths.length) {
   integrityViolations.push('changes under gbdraw/web/vendor/ are not allowed');
 }
-if (productionPaths.length && changedGuards.length) {
+if (productionPaths.length && changedGuards.length && !pureSafePolicyContraction) {
   integrityViolations.push('production runtime files and Web guard/CI files changed together');
 }
 if (changedCheckerImplementations.length && changedAuthorities.length) {
@@ -552,6 +578,10 @@ const report = [
   '',
   ...list(policyContractions),
   '',
+  '## Added privileged allowlist entries',
+  '',
+  ...list(policyExpansions),
+  '',
   '## Active privileged owners/importers excluded by proposed policy',
   '',
   ...list(proposedPolicyExclusions),
@@ -559,6 +589,10 @@ const report = [
   '## Missing base privileged allowlist keys',
   '',
   ...list(missingPolicyKeys),
+  '',
+  '## Added privileged allowlist keys',
+  '',
+  ...list(addedPolicyKeys),
   '',
   '## Report-only cache/token/handle/journal/protocol/manager names',
   '',

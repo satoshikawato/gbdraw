@@ -468,6 +468,7 @@ const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
 const BUDGET_FIXTURE = Object.freeze({
   '.github/workflows/test.yml': 'name: baseline\n',
   '.github/workflows/web-base-policy.yml': 'name: baseline policy\n',
+  'docs/internal/WEB_CHANGE_POLICY.md': '# Baseline Web change policy\n',
   'package.json': '{"private":true}\n',
   'tests/web/architecture-contracts.test.mjs': '// baseline contract\n',
   'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
@@ -566,6 +567,42 @@ const writeBudgetFiles = (write, count) => {
   }
 };
 
+const cloneBudgetPolicy = () => JSON.parse(JSON.stringify(BUDGET_POLICY));
+const writeBudgetPolicy = (write, policy, space = 2) => {
+  write('tools/web-change-policy.json', `${JSON.stringify(policy, null, space)}\n`);
+};
+const removePolicyPath = (policy, section, key, path) => {
+  policy[section][key] = policy[section][key].filter((candidate) => candidate !== path);
+};
+const removeEditorOwnerUse = (write) => write(
+  'gbdraw/web/js/app/editor.js',
+  "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+    + 'export const editExistingOwner = () => 1;\n'
+);
+const removeEditorOwnerAndImporterUse = (write) => write(
+  'gbdraw/web/js/app/editor.js',
+  'export const editExistingOwner = () => 1;\n'
+);
+const applySingleOwnerContraction = (write) => {
+  const policy = cloneBudgetPolicy();
+  removePolicyPath(
+    policy,
+    'allowedPrivilegedOwners',
+    'Diagram Worker',
+    'app/editor.js'
+  );
+  writeBudgetPolicy(write, policy);
+  removeEditorOwnerUse(write);
+};
+const runRevisionChangeBudgetCase = (mutate, environment = {}) => withChangeBudgetRepository(
+  ({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    mutate(write);
+    const head = commit('runtime and policy change');
+    return execute({ base, head, environment });
+  }
+);
+
 const assertNonWaivableWorkingTreeFailure = (mutate, expectedPatterns, context = '') => {
   BUDGET_PROFILES.forEach(({ environment, name }) => {
     const result = runChangeBudgetCase(mutate, environment);
@@ -580,6 +617,15 @@ const assertNonWaivableRevisionFailure = (execute, base, head, expectedPatterns)
     assert.equal(result.status, 1, result.output);
     expectedPatterns.forEach((pattern) => assert.match(result.output, pattern));
   }
+};
+
+const assertRevisionChangeBudgetFailure = (mutate, expectedPatterns) => {
+  withChangeBudgetRepository(({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    mutate(write);
+    const head = commit('invalid runtime and policy change');
+    assertNonWaivableRevisionFailure(execute, base, head, expectedPatterns);
+  });
 };
 
 test('fixed profiles enforce exact production-file boundaries', () => {
@@ -791,6 +837,292 @@ test('privileged ownership and import contractions do not require a policy edit'
   assert.match(result.output, /Result: \*\*PASS\*\*/);
 });
 
+test('runtime removal may contract its now-inactive owner authorization in one revision', () => {
+  const result = runRevisionChangeBudgetCase(applySingleOwnerContraction);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(
+    result.output,
+    /allowedPrivilegedOwners\.Diagram Worker: app\/editor\.js/
+  );
+});
+
+test('runtime removal may contract exactly its inactive owner and importer authorizations', () => {
+  const result = runRevisionChangeBudgetCase((write) => {
+    const policy = cloneBudgetPolicy();
+    removePolicyPath(
+      policy,
+      'allowedPrivilegedOwners',
+      'Diagram Worker',
+      'app/editor.js'
+    );
+    removePolicyPath(
+      policy,
+      'allowedPrivilegedImporters',
+      'services/diagram-generation.js',
+      'app/editor.js'
+    );
+    writeBudgetPolicy(write, policy);
+    removeEditorOwnerAndImporterUse(write);
+  });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(
+    result.output,
+    /allowedPrivilegedImporters\.services\/diagram-generation\.js: app\/editor\.js/
+  );
+});
+
+test('safe contraction passes at every exact ordinary and architecture budget limit', () => {
+  BUDGET_PROFILES.forEach((profile) => {
+    const result = runRevisionChangeBudgetCase((write) => {
+      applySingleOwnerContraction(write);
+      const additionalFiles = profile.productionFiles - 2;
+      const appendedLines = profile.netAdditions - additionalFiles;
+      const replacementLines = (
+        profile.grossChurn - profile.netAdditions - 2
+      ) / 2;
+      write(
+        'gbdraw/web/js/app/budget-lines.js',
+        budgetLineSource(replacementLines, appendedLines)
+      );
+      writeBudgetFiles(write, additionalFiles);
+    }, profile.environment);
+    assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
+    assert.match(result.output, /Result: \*\*PASS\*\*/);
+    assert.match(
+      result.output,
+      new RegExp(`Production file limit: ${profile.productionFiles}`)
+    );
+    assert.match(result.output, new RegExp(`Gross churn: ${profile.grossChurn}`));
+    assert.match(result.output, new RegExp(`Net additions: ${profile.netAdditions}`));
+  });
+});
+
+test('runtime and policy cannot self-authorize a new privileged owner', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const policy = cloneBudgetPolicy();
+    policy.allowedPrivilegedOwners['Diagram Worker'].push('app/secondary.js');
+    writeBudgetPolicy(write, policy);
+    write(
+      'gbdraw/web/js/app/secondary.js',
+      'export const editSecondaryOwner = () => runDiagramGeneration();\n'
+    );
+  }, [
+    /production runtime files and Web guard\/CI files changed together/,
+    /Diagram Worker: owner app\/secondary\.js/,
+    /privileged capability owners or importers exceed the base allowlist/,
+    /allowedPrivilegedOwners\.Diagram Worker: app\/secondary\.js/
+  ]);
+});
+
+test('runtime and policy cannot self-authorize a new privileged importer', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const policy = cloneBudgetPolicy();
+    policy.allowedPrivilegedImporters['services/diagram-generation.js'].push(
+      'app/secondary.js'
+    );
+    writeBudgetPolicy(write, policy);
+    write(
+      'gbdraw/web/js/app/secondary.js',
+      "import '../services/diagram-generation.js';\n"
+        + 'export const editSecondaryOwner = () => 1;\n'
+    );
+  }, [
+    /production runtime files and Web guard\/CI files changed together/,
+    /services\/diagram-generation\.js: importer app\/secondary\.js/,
+    /privileged capability owners or importers exceed the base allowlist/,
+    /allowedPrivilegedImporters\.services\/diagram-generation\.js: app\/secondary\.js/
+  ]);
+});
+
+test('runtime contraction cannot mix removal with a new authorization', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const policy = cloneBudgetPolicy();
+    removePolicyPath(
+      policy,
+      'allowedPrivilegedOwners',
+      'Diagram Worker',
+      'app/editor.js'
+    );
+    policy.allowedPrivilegedOwners['Diagram Worker'].push('app/secondary.js');
+    writeBudgetPolicy(write, policy);
+    removeEditorOwnerUse(write);
+  }, [
+    /production runtime files and Web guard\/CI files changed together/,
+    /allowedPrivilegedOwners\.Diagram Worker: app\/editor\.js/,
+    /allowedPrivilegedOwners\.Diagram Worker: app\/secondary\.js/
+  ]);
+});
+
+test('runtime contraction cannot remove an authorization still active at head', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const policy = cloneBudgetPolicy();
+    removePolicyPath(
+      policy,
+      'allowedPrivilegedOwners',
+      'Diagram Worker',
+      'app/editor.js'
+    );
+    writeBudgetPolicy(write, policy);
+    write(
+      'gbdraw/web/js/app/editor.js',
+      "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+        + 'export const editExistingOwner = () => runDiagramGeneration(1);\n'
+    );
+  }, [
+    /production runtime files and Web guard\/CI files changed together/,
+    /Diagram Worker: owner app\/editor\.js/,
+    /proposed privileged capability allowlist excludes active owners or importers/
+  ]);
+});
+
+test('runtime contraction cannot delete a capability key', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const policy = cloneBudgetPolicy();
+    delete policy.allowedPrivilegedOwners['Diagram Worker'];
+    writeBudgetPolicy(write, policy);
+    removeEditorOwnerUse(write);
+  }, [
+    /production runtime files and Web guard\/CI files changed together/,
+    /allowedPrivilegedOwners\.Diagram Worker/,
+    /proposed privileged capability policy is missing base allowlist keys/
+  ]);
+});
+
+test('runtime contraction cannot delete a privileged import-target key', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const policy = cloneBudgetPolicy();
+    delete policy.allowedPrivilegedImporters['workers/diagram-generation-worker.js'];
+    writeBudgetPolicy(write, policy);
+    removeEditorOwnerUse(write);
+  }, [
+    /production runtime files and Web guard\/CI files changed together/,
+    /allowedPrivilegedImporters\.workers\/diagram-generation-worker\.js/,
+    /proposed privileged capability policy is missing base allowlist keys/
+  ]);
+});
+
+test('runtime contraction cannot add privileged policy keys', () => {
+  const keyCases = [
+    {
+      key: 'allowedPrivilegedOwners',
+      name: 'Future capability',
+      expected: /allowedPrivilegedOwners\.Future capability/
+    },
+    {
+      key: 'allowedPrivilegedImporters',
+      name: 'services/future-privileged-target.js',
+      expected: /allowedPrivilegedImporters\.services\/future-privileged-target\.js/
+    }
+  ];
+  keyCases.forEach(({ key, name, expected }) => {
+    assertRevisionChangeBudgetFailure((write) => {
+      const policy = cloneBudgetPolicy();
+      removePolicyPath(
+        policy,
+        'allowedPrivilegedOwners',
+        'Diagram Worker',
+        'app/editor.js'
+      );
+      policy[key][name] = [];
+      writeBudgetPolicy(write, policy);
+      removeEditorOwnerUse(write);
+    }, [
+      /production runtime files and Web guard\/CI files changed together/,
+      expected
+    ]);
+  });
+});
+
+test('runtime plus a semantically unchanged policy remains separated', () => {
+  assertRevisionChangeBudgetFailure((write) => {
+    const reorderedPolicy = {
+      allowedPrivilegedOwners: BUDGET_POLICY.allowedPrivilegedOwners,
+      allowedPrivilegedImporters: BUDGET_POLICY.allowedPrivilegedImporters
+    };
+    writeBudgetPolicy(write, reorderedPolicy, 0);
+    write(
+      'gbdraw/web/js/services/diagram-generation.js',
+      'export const runDiagramGeneration = () => 2;\n'
+    );
+  }, [/production runtime files and Web guard\/CI files changed together/]);
+});
+
+test('runtime plus policy contraction rejects every additional guard change', () => {
+  const guardCases = [
+    ['checker', 'tools/check-web-change-budget.mjs'],
+    ['source parser', 'tools/web-change-source.mjs'],
+    ['architecture contracts', 'tests/web/architecture-contracts.test.mjs'],
+    ['normal workflow', '.github/workflows/test.yml'],
+    ['trusted-base workflow', '.github/workflows/web-base-policy.yml'],
+    ['policy documentation', 'docs/internal/WEB_CHANGE_POLICY.md']
+  ];
+  guardCases.forEach(([name, path]) => {
+    assertRevisionChangeBudgetFailure((write) => {
+      applySingleOwnerContraction(write);
+      const comment = path.endsWith('.mjs') ? '//' : '#';
+      write(path, `${BUDGET_FIXTURE[path]}\n${comment} ${name} changed\n`);
+    }, [/production runtime files and Web guard\/CI files changed together/]);
+  });
+});
+
+test('safe contraction cannot exceed the selected production file budget', () => {
+  BUDGET_PROFILES.forEach((profile) => {
+    const result = runRevisionChangeBudgetCase((write) => {
+      applySingleOwnerContraction(write);
+      writeBudgetFiles(write, profile.productionFiles);
+    }, profile.environment);
+    assert.equal(result.status, 1, `${profile.name}\n${result.output}`);
+    assert.match(
+      result.output,
+      new RegExp(
+        `production files changed exceed ${profile.name} limit `
+        + `\\(${profile.productionFiles + 1} > ${profile.productionFiles}\\)`
+      )
+    );
+  });
+});
+
+test('safe contraction does not waive dependency, vendor, or binary integrity', () => {
+  const cases = [
+    {
+      mutate: (write) => write(
+        'package.json',
+        '{"private":true,"dependencies":{"left-pad":"1.3.0"}}\n'
+      ),
+      expected: /new production dependencies are not allowed/
+    },
+    {
+      mutate: (write) => write(
+        'gbdraw/web/js/app/secondary.js',
+        "import 'left-pad';\nexport const editSecondaryOwner = () => 1;\n"
+      ),
+      expected: /bare production import: gbdraw\/web\/js\/app\/secondary\.js: left-pad/
+    },
+    {
+      mutate: (write) => write(
+        'gbdraw/web/vendor/library.js',
+        'globalThis.vendorLibrary = false;\n'
+      ),
+      expected: /changes under gbdraw\/web\/vendor\/ are not allowed/
+    },
+    {
+      mutate: (write) => write(
+        'gbdraw/web/js/runtime.bin',
+        Buffer.from([0, 1, 2, 3])
+      ),
+      expected: /added binary runtime files are not allowed/
+    }
+  ];
+  cases.forEach(({ mutate, expected }) => {
+    assertRevisionChangeBudgetFailure((write) => {
+      applySingleOwnerContraction(write);
+      mutate(write);
+    }, [expected]);
+  });
+});
+
 test('unapproved privileged expansion fails against the base allowlist', () => {
   const mutate = (write) => {
     write(
@@ -963,5 +1295,39 @@ test('base-policy execution ignores a PR-modified checker and detects its runtim
     });
     assert.equal(result.status, 1, result.output);
     assert.match(result.output, /production runtime files and Web guard\/CI files changed together/);
+  });
+});
+
+test('trusted-base execution rejects self-authorization despite a successful head checker', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    const policy = cloneBudgetPolicy();
+    policy.allowedPrivilegedOwners['Diagram Worker'].push('app/secondary.js');
+    writeBudgetPolicy(write, policy);
+    write(
+      'gbdraw/web/js/app/secondary.js',
+      'export const editSecondaryOwner = () => runDiagramGeneration();\n'
+    );
+    write('tools/check-web-change-budget.mjs', 'process.exit(0);\n');
+    const head = commit('malicious head checker self-authorizes expansion');
+
+    const headChecker = spawnSync(
+      process.execPath,
+      [join(root, 'tools/check-web-change-budget.mjs'), '--base', base, '--head', head],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    assert.equal(headChecker.status, 0, `${headChecker.stdout}${headChecker.stderr}`);
+
+    const trustedBase = execute({ base, head });
+    assert.equal(trustedBase.status, 1, trustedBase.output);
+    assert.match(
+      trustedBase.output,
+      /production runtime files and Web guard\/CI files changed together/
+    );
+    assert.match(
+      trustedBase.output,
+      /privileged capability owners or importers exceed the base allowlist/
+    );
+    assert.match(trustedBase.output, /Diagram Worker: owner app\/secondary\.js/);
   });
 });

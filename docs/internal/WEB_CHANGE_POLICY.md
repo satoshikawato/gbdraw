@@ -20,7 +20,8 @@ binary file in production scope.
 
 ## Guard separation
 
-Web runtime files cannot change in the same pull request as these guard files:
+Except for the pure policy contraction described below, Web runtime files cannot
+change in the same pull request as these guard files:
 
 ```text
 tools/check-web-change-budget.mjs
@@ -32,9 +33,10 @@ tests/web/architecture-contracts.test.mjs
 .github/workflows/web-base-policy.yml
 ```
 
-The checker implementation and source parser also cannot change together with
-`tools/web-change-policy.json` or either policy workflow. This prevents one pull
-request from changing both the enforcement code and its authority data.
+The exception applies only when `tools/web-change-policy.json` is the sole changed
+guard file. The checker implementation and source parser cannot change together
+with that policy or either policy workflow. This prevents one pull request from
+changing both the enforcement code and its authority data.
 
 New modules, exports, `create*` declarations, reactive declarations, watchers,
 compatibility-like names, session fields, and resource-like names remain in the
@@ -53,21 +55,38 @@ Expansion uses two pull requests in this order:
    workflows. Apply the `architecture-change` label when the implementation needs
    the larger finite profile.
 
-Contraction also uses two pull requests, in the opposite order:
+Contraction may use two pull requests, in the opposite order:
 
 1. Submit the runtime pull request that removes the owner or importer use. Do not
    edit the policy in that pull request.
 2. After the runtime change merges, submit a guard-only pull request that removes
    the stale path from `tools/web-change-policy.json`.
 
-The base policy remains authoritative for expansion. A proposed policy change is
-also checked against the head runtime, so it cannot remove a path that still owns
-or imports a privileged capability. Runtime and guard changes remain prohibited
-in the same pull request.
+Alternatively, the runtime removal and its corresponding policy contraction may
+be submitted in one pull request. A same-pull-request contraction is permitted
+only when it removes at least one owner or importer path, adds none, preserves
+the exact capability and import-target key sets without additions, removals, or
+renames, and leaves every policy array as a subset of its base-policy array.
+`tools/web-change-policy.json` must be the only changed guard file. A
+formatting-only or reordered policy change is not a contraction.
 
 A contraction removes path entries only. Every capability and import-target key
 present in the base policy must remain in the proposed policy, including keys
 whose arrays are empty.
+
+This narrow same-pull-request path is safe because:
+
+- no authorization is added;
+- the base policy remains authoritative for every runtime expansion;
+- the proposed policy must still cover every privileged owner and importer active
+  in the head runtime;
+- the checker, source parser, architecture test, documentation, and workflows
+  remain unchanged; and
+- trusted-base execution remains authoritative.
+
+The ordinary or architecture production budget and the dependency, vendor,
+binary, and other integrity checks still apply in full. Any other runtime/guard
+combination remains prohibited.
 
 ## Trusted base check
 
@@ -75,7 +94,9 @@ The pull request workflow runs the normal tests from the pull request checkout.
 The separate `pull_request_target` workflow provides the required
 `Web base policy (trusted base)` check. It checks out the base SHA, fetches the
 pull request head only as Git data, and runs the checker from the base checkout.
-It does not check out or execute pull request code.
+It does not check out or execute pull request code. A proposed head policy is read
+only as inert JSON data; neither a head policy nor a head checker can authorize
+itself.
 
 The checker reports uncertain naming signals without failing the check. These
 signals include cache, token, handle, journal, protocol, manager, compatibility,
