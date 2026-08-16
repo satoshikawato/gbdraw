@@ -324,11 +324,16 @@ const basePolicySource = readRevisionFile(base, policyPath);
 const policySource = basePolicySource ?? readHeadFile(policyPath);
 const policyRevision = basePolicySource === null ? `${head || 'working tree'} (bootstrap)` : base;
 const policy = parsePolicy(policySource, policyRevision);
+let proposedPolicy = null;
 const policyContractions = [];
+const missingPolicyKeys = [];
 if (basePolicySource !== null && changed.has(policyPath)) {
-  const proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
+  proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
   for (const section of ['allowedPrivilegedImporters', 'allowedPrivilegedOwners']) {
     Object.entries(policy[section]).forEach(([name, allowedPaths]) => {
+      if (!Object.hasOwn(proposedPolicy[section], name)) {
+        missingPolicyKeys.push(`${section}.${name}`);
+      }
       const proposedPaths = new Set(proposedPolicy[section][name] || []);
       allowedPaths.forEach((path) => {
         if (!proposedPaths.has(path)) policyContractions.push(`${section}.${name}: ${path}`);
@@ -341,34 +346,41 @@ const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => 
   path,
   readHeadFile(path) || ''
 ]));
-const unapprovedCapabilities = [];
 
 const importerTargets = new Set(capabilitySpecs.flatMap((capability) => capability.imports));
-importerTargets.forEach((target) => {
-  const allowed = new Set(policy.allowedPrivilegedImporters[target] || []);
-  allProductionSources.forEach((source, path) => {
-    const imports = importSpecifiers(source)
-      .map((specifier) => resolvedProductionImport(path, specifier));
-    if (imports.includes(target)) {
+const capabilityCoverageViolations = (candidatePolicy) => {
+  const violations = [];
+  importerTargets.forEach((target) => {
+    const allowed = new Set(candidatePolicy.allowedPrivilegedImporters[target] || []);
+    allProductionSources.forEach((source, path) => {
+      const imports = importSpecifiers(source)
+        .map((specifier) => resolvedProductionImport(path, specifier));
+      if (imports.includes(target)) {
+        const relativePath = path.slice('gbdraw/web/js/'.length);
+        if (!allowed.has(relativePath)) {
+          violations.push(`${target}: importer ${relativePath}`);
+        }
+      }
+    });
+  });
+
+  capabilitySpecs.forEach((capability) => {
+    const allowed = new Set(candidatePolicy.allowedPrivilegedOwners[capability.name] || []);
+    allProductionSources.forEach((source, path) => {
+      if (!capability.owner.test(maskJavaScript(source))) return;
       const relativePath = path.slice('gbdraw/web/js/'.length);
       if (!allowed.has(relativePath)) {
-        unapprovedCapabilities.push(`${target}: importer ${relativePath}`);
+        violations.push(`${capability.name}: owner ${relativePath}`);
       }
-    }
+    });
   });
-});
+  return violations.sort();
+};
 
-capabilitySpecs.forEach((capability) => {
-  const allowed = new Set(policy.allowedPrivilegedOwners[capability.name] || []);
-  allProductionSources.forEach((source, path) => {
-    if (!capability.owner.test(maskJavaScript(source))) return;
-    const relativePath = path.slice('gbdraw/web/js/'.length);
-    if (!allowed.has(relativePath)) {
-      unapprovedCapabilities.push(`${capability.name}: owner ${relativePath}`);
-    }
-  });
-});
-unapprovedCapabilities.sort();
+const unapprovedCapabilities = capabilityCoverageViolations(policy);
+const proposedPolicyExclusions = proposedPolicy
+  ? capabilityCoverageViolations(proposedPolicy)
+  : [];
 
 const dependencySections = [
   'dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies'
@@ -442,8 +454,11 @@ if (productionPaths.length && changedGuards.length) {
 if (unapprovedCapabilities.length) {
   integrityViolations.push('privileged capability owners or importers exceed the base allowlist');
 }
-if (policyContractions.length) {
-  integrityViolations.push('privileged capability allowlists may only expand');
+if (proposedPolicyExclusions.length) {
+  integrityViolations.push('proposed privileged capability allowlist excludes active owners or importers');
+}
+if (missingPolicyKeys.length) {
+  integrityViolations.push('proposed privileged capability policy is missing base allowlist keys');
 }
 const enforcedViolations = [
   ...integrityViolations,
@@ -492,6 +507,14 @@ const report = [
   '## Removed privileged allowlist entries',
   '',
   ...list(policyContractions),
+  '',
+  '## Active privileged owners/importers excluded by proposed policy',
+  '',
+  ...list(proposedPolicyExclusions),
+  '',
+  '## Missing base privileged allowlist keys',
+  '',
+  ...list(missingPolicyKeys),
   '',
   '## Report-only cache/token/handle/journal/protocol/manager names',
   '',

@@ -8,7 +8,7 @@ guard files in one pull request.
 
 ## Changing a privileged owner or importer
 
-Use two pull requests in this order:
+Expansion uses two pull requests in this order:
 
 1. Submit a guard-only preauthorization pull request. Add the proposed owner or
    importer path to `tools/web-change-policy.json`. Do not change Web runtime
@@ -19,9 +19,21 @@ Use two pull requests in this order:
    workflows. Apply the `architecture-change` label when the implementation also
    needs an ordinary budget exception.
 
-The allowlists are upper bounds. Removing an owner or importer from runtime does
-not require a policy edit. Adding an owner or importer fails until its path is in
-the base branch allowlist.
+Contraction also uses two pull requests, in the opposite order:
+
+1. Submit the runtime pull request that removes the owner or importer use. Do not
+   edit the policy in that pull request.
+2. After the runtime change merges, submit a guard-only pull request that removes
+   the stale path from `tools/web-change-policy.json`.
+
+The base policy remains authoritative for expansion. A proposed policy change is
+also checked against the head runtime, so it cannot remove a path that still owns
+or imports a privileged capability. Runtime and guard changes remain prohibited
+in the same pull request.
+
+A contraction removes path entries only. Every capability and import-target key
+present in the base policy must remain in the proposed policy, including keys
+whose arrays are empty.
 
 ## Trusted base check
 

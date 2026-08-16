@@ -427,7 +427,8 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
 const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
-    'services/diagram-generation.js': ['app/editor.js']
+    'services/diagram-generation.js': ['app/editor.js'],
+    'workers/diagram-generation-worker.js': []
   },
   allowedPrivilegedOwners: {
     'Diagram Worker': [
@@ -453,6 +454,7 @@ const BUDGET_FIXTURE = Object.freeze({
     "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
     + 'export const editExistingOwner = () => runDiagramGeneration();\n'
   ),
+  'gbdraw/web/js/app/future-owner.js': 'export const futureOwnerPlaceholder = () => 1;\n',
   'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 1;\n',
   'gbdraw/web/js/services/diagram-generation.js': (
     'export const runDiagramGeneration = () => 1;\n'
@@ -526,6 +528,14 @@ const runChangeBudgetCase = (mutate, environment = {}) => withChangeBudgetReposi
     return execute({ environment });
   }
 );
+
+const assertNonWaivableRevisionFailure = (execute, base, head, expectedPatterns) => {
+  for (const environment of [{}, { WEB_ARCHITECTURE_CHANGE: 'true' }]) {
+    const result = execute({ base, head, environment });
+    assert.equal(result.status, 1, result.output);
+    expectedPatterns.forEach((pattern) => assert.match(result.output, pattern));
+  }
+};
 
 test('the Web change-budget checker rejects ordinary surface increases', () => {
   const cases = [
@@ -609,16 +619,98 @@ test('unapproved privileged expansion fails against the base allowlist', () => {
   );
 });
 
-test('privileged allowlists cannot contract', () => {
-  const result = runChangeBudgetCase((write) => {
+test('an unused privileged owner allowlist entry can contract', () => {
+  withChangeBudgetRepository(({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
     const policy = JSON.parse(JSON.stringify(BUDGET_POLICY));
     policy.allowedPrivilegedOwners['Diagram Worker'] = policy.allowedPrivilegedOwners[
       'Diagram Worker'
     ].filter((path) => path !== 'app/future-owner.js');
     write('tools/web-change-policy.json', `${JSON.stringify(policy, null, 2)}\n`);
+
+    const head = commit('remove inactive owner allowlist entry');
+    const result = execute({ base, head });
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Result: \*\*PASS\*\*/);
+    assert.match(
+      result.output,
+      /allowedPrivilegedOwners\.Diagram Worker: app\/future-owner\.js/
+    );
+    assert.doesNotMatch(
+      result.output,
+      /proposed privileged capability allowlist excludes active owners or importers/
+    );
   });
-  assert.equal(result.status, 1, result.output);
-  assert.match(result.output, /privileged capability allowlists may only expand/);
+});
+
+test('an active privileged owner allowlist entry cannot contract', () => {
+  withChangeBudgetRepository(({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    const policy = JSON.parse(JSON.stringify(BUDGET_POLICY));
+    policy.allowedPrivilegedOwners['Diagram Worker'] = policy.allowedPrivilegedOwners[
+      'Diagram Worker'
+    ].filter((path) => path !== 'app/editor.js');
+    write('tools/web-change-policy.json', `${JSON.stringify(policy, null, 2)}\n`);
+
+    const head = commit('remove active owner allowlist entry');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /Diagram Worker: owner app\/editor\.js/,
+      /proposed privileged capability allowlist excludes active owners or importers/
+    ]);
+  });
+});
+
+test('an active privileged importer allowlist entry cannot contract', () => {
+  withChangeBudgetRepository(({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    const policy = JSON.parse(JSON.stringify(BUDGET_POLICY));
+    policy.allowedPrivilegedImporters['services/diagram-generation.js'] = [];
+    write('tools/web-change-policy.json', `${JSON.stringify(policy, null, 2)}\n`);
+
+    const head = commit('remove active importer allowlist entry');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /services\/diagram-generation\.js: importer app\/editor\.js/,
+      /proposed privileged capability allowlist excludes active owners or importers/
+    ]);
+  });
+});
+
+test('a policy change cannot self-authorize privileged runtime expansion', () => {
+  withChangeBudgetRepository(({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    const policy = JSON.parse(JSON.stringify(BUDGET_POLICY));
+    policy.allowedPrivilegedImporters['services/diagram-generation.js'].push('app/secondary.js');
+    policy.allowedPrivilegedOwners['Diagram Worker'].push('app/secondary.js');
+    write('tools/web-change-policy.json', `${JSON.stringify(policy, null, 2)}\n`);
+    write(
+      'gbdraw/web/js/app/secondary.js',
+      "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+        + 'export const editSecondaryOwner = () => runDiagramGeneration();\n'
+    );
+
+    const head = commit('expand runtime and proposed allowlist together');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /production runtime files and Web guard\/CI files changed together/,
+      /privileged capability owners or importers exceed the base allowlist/,
+      /services\/diagram-generation\.js: importer app\/secondary\.js/,
+      /Diagram Worker: owner app\/secondary\.js/
+    ]);
+  });
+});
+
+test('base privileged allowlist keys cannot disappear', () => {
+  withChangeBudgetRepository(({ commit, execute, git, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    const policy = JSON.parse(JSON.stringify(BUDGET_POLICY));
+    delete policy.allowedPrivilegedImporters['workers/diagram-generation-worker.js'];
+    write('tools/web-change-policy.json', `${JSON.stringify(policy, null, 2)}\n`);
+
+    const head = commit('delete empty importer allowlist key');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /allowedPrivilegedImporters\.workers\/diagram-generation-worker\.js/,
+      /proposed privileged capability policy is missing base allowlist keys/
+    ]);
+  });
 });
 
 test('privileged expansion requires policy preauthorization on the base revision', () => {

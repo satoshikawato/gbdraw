@@ -1,6 +1,6 @@
 # Web change containment implementation plan
 
-Status: planned; implementation not started
+Status: in progress; Phase 0 complete; Phase 1 revision evidence pending
 
 Date: 2026-08-16
 
@@ -808,9 +808,9 @@ Update a phase only after its named gate passes.
 
 | Phase | Status | Evidence | Deviations | Remaining risk |
 | --- | --- | --- | --- | --- |
-| External Gate 0A | pending | None | None | `main` lacks verified independent-review enforcement |
-| Phase 0 | pending | None | None | Baseline may move |
-| Phase 1 / PR A | pending | None | None | All contractions still fail |
+| External Gate 0A | pending | Public branch metadata reports `protected: false`; authenticated `gh` access is unavailable | None | `main` lacks verified independent-review enforcement |
+| Phase 0 | complete | Fetched `origin/main`; base and merge base `43c14ddec49835458f6bac88aa134a7d755c89b1`; head `0b1bfa2b3314763eb3131551906507d4a886eef4`; clean pre-edit tree; branch diff contains only the two implementation-plan documents; checker PASS; 138 JavaScript modules with 71 at or below 200 lines, 85 at or below 300, 100 at or below 500, and 38 above 500 | The head advanced from the plan's recorded `6298b009610a14f1f5484833bd71eae12d344d2b` to `0b1bfa2b3314763eb3131551906507d4a886eef4` only through the plan-document commit; Web behavior is unchanged | The mutable base may move before PR A is committed |
+| Phase 1 / PR A | pending | Local implementation: syntax PASS, 24/24 focused tests PASS through revision fixtures, working-tree checker PASS, forbidden runtime/policy/workflow/dependency diff empty | None | No immutable PR A head SHA or revision-range result exists without commit authorization; External Gate 0A is pending |
 | Phase 2 / PR B1 | pending | None | None | The trusted checker does not enforce bounded profiles |
 | External Gate 0B | pending | None | None | Governance paths lack verified Code Owner enforcement |
 | Phases 3-4 / PR B2 | pending | None | None | Version 2 and metadata remain inactive |
