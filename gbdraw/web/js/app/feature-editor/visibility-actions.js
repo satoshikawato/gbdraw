@@ -37,7 +37,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     svgContainer
   } = state;
 
-  const { applyVisibilityPreviewBySvgId, applyVisibilityPreviewChanges } = featureSvgActions;
+  const { applyVisibilityPreviewChanges } = featureSvgActions;
   const ruleFields = new Set(['recordId', 'featureType', 'qualifier', 'value', 'action']);
 
   const normalizeText = (value) => String(value ?? '').trim();
@@ -209,8 +209,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
   };
 
   const applyVisibilityPreviewForScope = (scope, feat, mode) => {
-    let changed = false;
-    collectAffectedFeatureIds(scope, feat).forEach((svgId) => {
+    const changes = collectAffectedFeatureIds(scope, feat).map((svgId) => {
       const specificHashMode = (scope?.id === 'product' || scope?.id === 'protein_id')
         ? featureVisibilityOverrides[svgId]
         : '';
@@ -218,10 +217,9 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
         (mode === 'default'
           ? resolveEffectiveFeatureVisibility(svgId, featureVisibilityOverrides, null, featureVisibilityManualRules)
           : mode);
-      changed = applyVisibilityPreviewBySvgId(svgId, effectiveMode) || changed;
+      return { featureId: svgId, mode: effectiveMode };
     });
-    if (changed) previewRuntime?.flushActiveResult?.();
-    return changed;
+    return applyVisibilityPreviewChanges(changes);
   };
 
   const updateClickedFeatureVisibilityFromRules = (featureIds) => {
@@ -304,9 +302,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
         { reason }
       );
       if (!updated && !overrideChanged) return false;
-      if (updated && previewRuntime?.flushActiveResult) {
-        previewRuntime.flushActiveResult({ force: true });
-      }
       updateClickedFeatureVisibilityFromRules(affectedFeatureIds);
       markFeatureVisibilityLabelLayoutDirty(reason);
       return true;
@@ -488,7 +483,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
           mode: getFeatureVisibility(feature)
         }))
     );
-    if (changed) previewRuntime?.flushActiveResult?.();
     return changed;
   };
 

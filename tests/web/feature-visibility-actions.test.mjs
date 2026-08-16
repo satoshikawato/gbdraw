@@ -44,7 +44,6 @@ const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
-const flushes = [];
 
 const actions = createFeatureVisibilityActions({
   state: {
@@ -65,7 +64,6 @@ const actions = createFeatureVisibilityActions({
     })
   },
   featureSvgActions: {
-    applyVisibilityPreviewBySvgId: () => true,
     applyVisibilityPreviewChanges: (changes, options = {}) => {
       appliedPreviewChanges.push({ changes, reason: options.reason });
       return true;
@@ -76,10 +74,7 @@ const actions = createFeatureVisibilityActions({
       selectedResultIndex.value = index;
       return true;
     },
-    flushActiveResult: (options = {}) => {
-      flushes.push(options);
-      return true;
-    }
+    flushActiveResult: () => assert.fail('visibility actions must not flush Results directly')
   }
 });
 
@@ -95,7 +90,6 @@ assert.deepEqual(
   appliedPreviewChanges[0].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'off'], ['feature-b', 'off']]
 );
-assert.deepEqual(flushes, [{ force: true }]);
 
 assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
@@ -104,14 +98,17 @@ assert.deepEqual(
   appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'on'], ['feature-b', 'on']]
 );
-assert.deepEqual(flushes, [{ force: true }, { force: true }]);
 
 assert.equal(actions.setFeatureVisibility(featureA, 'off', {
   triggerReflow: false,
   scope: { id: 'feature' }
 }), true);
 assert.equal(featureVisibilityOverrides['feature-a'], 'off');
-assert.deepEqual(flushes, [{ force: true }, { force: true }, {}]);
+assert.equal(appliedPreviewChanges.length, 3);
+assert.deepEqual(
+  appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),
+  [['feature-a', 'off']]
+);
 delete featureVisibilityOverrides['feature-a'];
 
 const sourceIdFeature = {
@@ -266,11 +263,10 @@ actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 delete featureVisibilityOverrides[strictTrigger.svg_id];
 
-flushes.length = 0;
+const previewChangeCountBeforeStaleApply = appliedPreviewChanges.length;
 resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);
 assert.deepEqual(featureVisibilityOverrides, {});
-assert.equal(appliedPreviewChanges.length, 2);
-assert.deepEqual(flushes, []);
+assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 
 console.log('feature visibility action tests passed');

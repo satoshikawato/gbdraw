@@ -210,8 +210,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       });
     });
 
-    if (updated > 0) markActiveResultDirty(reason);
-    return updated > 0;
+    if (updated === 0) return false;
+    markActiveResultDirty(reason);
+    flushActiveResult();
+    return true;
   };
 
   const applyFeatureStrokeChanges = (changes, { reason = 'feature-stroke' } = {}) => {
