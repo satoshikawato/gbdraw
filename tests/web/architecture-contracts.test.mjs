@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
+  mkdtempSync,
   readFileSync,
-  readdirSync
+  readdirSync,
+  rmSync,
+  writeFileSync
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import {
   dirname,
   extname,
@@ -345,4 +351,209 @@ test('right drawer availability and transitions have one production owner', () =
     /:disabled="!isRightDrawerTabAvailable\('orthogroups'\)"/
   );
   assert.doesNotMatch(INDEX_HTML, /rightDrawerTab\s*\|\|/);
+});
+
+test('privileged capabilities keep their current import boundaries', () => {
+  const expectedImporters = new Map([
+    ['services/session-request.js', [
+      'app/run-analysis.js',
+      'services/config.js',
+      'services/gallery-session-migration.js'
+    ]],
+    ['app/python-helpers.js', ['workers/diagram-generation-worker.js']],
+    ['services/diagram-worker-protocol.js', [
+      'services/diagram-generation.js',
+      'workers/diagram-generation-worker.js'
+    ]],
+    ['services/diagram-resource-staging.js', ['services/diagram-generation.js']],
+    ['services/resource-payload-owner.js', [
+      'services/config.js',
+      'services/diagram-resource-staging.js',
+      'services/session-request.js'
+    ]],
+    ['services/svg-serialization.js', [
+      'app/app-setup.js',
+      'app/feature-editor/label-actions.js',
+      'app/feature-editor/svg-actions.js',
+      'app/feature-search/preview-svg.js',
+      'app/feature-selection.js',
+      'app/legend-layout/canvas-actions.js',
+      'app/legend-layout/diagram-drag.js',
+      'app/legend-layout/reposition-actions.js',
+      'app/legend/drag-actions.js',
+      'app/legend/entry-actions.js',
+      'app/legend/sort-actions.js',
+      'app/legend/stroke-actions.js',
+      'app/results.js',
+      'app/svg-styles.js',
+      'services/config.js',
+      'services/export.js',
+      'services/history-snapshot.js',
+      'services/standalone-interactivity.js',
+      'services/svg-result-ingestion.js'
+    ]],
+    ['services/history.js', ['app/app-setup.js']],
+    ['services/history-snapshot.js', ['app/app-setup.js']],
+    ['services/config.js', ['app/app-setup.js']],
+    ['services/gallery-session-migration.js', ['services/config.js']],
+    ['services/session-authority.js', [
+      'services/config.js',
+      'services/session-resources.js'
+    ]],
+    ['services/session-file.js', ['services/config.js']],
+    ['app/feature-editor.js', ['app/app-setup.js']],
+    ['app/legend.js', ['app/app-setup.js']],
+    ['app/preview-runtime.js', ['app/app-setup.js']],
+    ['app/right-drawer.js', ['app/app-setup.js', 'services/config.js']]
+  ]);
+
+  expectedImporters.forEach((expected, target) => {
+    assert.deepEqual(importersOf(target), expected, target);
+  });
+
+  assert.deepEqual(
+    [...occurrenceOwners(
+      /\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/g
+    ).keys()].sort(),
+    [
+      'app/feature-editor/label-actions.js',
+      'app/feature-editor/svg-actions.js',
+      'app/legend-layout/canvas-actions.js',
+      'app/legend-layout/diagram-drag.js',
+      'app/legend-layout/reposition-actions.js',
+      'app/legend/drag-actions.js',
+      'app/legend/entry-actions.js',
+      'app/legend/sort-actions.js',
+      'app/legend/stroke-actions.js',
+      'app/preview-runtime.js',
+      'app/results.js',
+      'app/run-analysis.js',
+      'app/svg-styles.js',
+      'services/config.js'
+    ]
+  );
+  assert.deepEqual(
+    [...occurrenceOwners(
+      /\b(?:createHistoryManager|beginCheckpoint|commitCheckpoint|buildArtifactCheckpoint)\b/g
+    ).keys()].sort(),
+    ['app/app-setup.js', 'services/history-snapshot.js', 'services/history.js']
+  );
+});
+
+const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');
+const BUDGET_FIXTURE = Object.freeze({
+  '.github/workflows/test.yml': 'name: baseline\n',
+  'package.json': '{"private":true}\n',
+  'tests/web/architecture-contracts.test.mjs': '// baseline contract\n',
+  'tools/check-web-change-budget.mjs': '// baseline checker\n',
+  'gbdraw/web/js/app/editor.js': 'export const editExistingOwner = () => 1;\n',
+  'gbdraw/web/js/services/diagram-generation.js': (
+    'export const runDiagramGeneration = () => 1;\n'
+  )
+});
+
+const writeFixtureFile = (root, path, content) => {
+  const target = join(root, path);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, content, 'utf8');
+};
+
+const runChangeBudgetCase = (mutate, extraEnvironment = {}) => {
+  const root = mkdtempSync(join(tmpdir(), 'gbdraw-web-budget-'));
+  try {
+    Object.entries(BUDGET_FIXTURE).forEach(([path, content]) => {
+      writeFixtureFile(root, path, content);
+    });
+    const git = (args) => spawnSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    assert.equal(git(['init', '--quiet']).status, 0);
+    assert.equal(git(['config', 'user.email', 'web-budget@example.invalid']).status, 0);
+    assert.equal(git(['config', 'user.name', 'Web Budget Test']).status, 0);
+    assert.equal(git(['add', '.']).status, 0);
+    assert.equal(git(['commit', '--quiet', '-m', 'baseline']).status, 0);
+    mutate((path, content) => writeFixtureFile(root, path, content));
+    const result = spawnSync(process.execPath, [CHANGE_BUDGET_CHECKER], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, ...extraEnvironment },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    return {
+      status: result.status,
+      output: `${result.stdout || ''}${result.stderr || ''}`
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
+
+test('the Web change-budget checker rejects ordinary surface increases', () => {
+  const cases = [
+    {
+      name: 'dummy production module',
+      mutate: (write) => write('gbdraw/web/js/app/dummy.js', 'export const dummy = true;\n'),
+      expected: /new production JavaScript modules are not allowed/
+    },
+    {
+      name: 'diagram-generation importer from an editor module',
+      mutate: (write) => write(
+        'gbdraw/web/js/app/editor.js',
+        "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+          + 'export const editExistingOwner = () => runDiagramGeneration();\n'
+      ),
+      expected: /Diagram Worker: importer .*app\/editor\.js/
+    },
+    {
+      name: 'production dependency',
+      mutate: (write) => write(
+        'package.json',
+        '{"private":true,"dependencies":{"left-pad":"1.3.0"}}\n'
+      ),
+      expected: /new production dependencies are not allowed/
+    },
+    {
+      name: 'production and guard co-change',
+      mutate: (write) => {
+        write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+        write('.github/workflows/test.yml', 'name: changed guard\n');
+      },
+      expected: /production runtime files and Web guard\/CI files changed together/
+    }
+  ];
+
+  cases.forEach(({ name, mutate, expected }) => {
+    const result = runChangeBudgetCase(mutate);
+    assert.equal(result.status, 1, `${name}\n${result.output}`);
+    assert.match(result.output, expected, name);
+  });
+});
+
+test('the Web change-budget checker allows an owner-internal edit', () => {
+  const result = runChangeBudgetCase((write) => {
+    write(
+      'gbdraw/web/js/services/diagram-generation.js',
+      'export const runDiagramGeneration = () => 2;\n'
+    );
+  });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Result: \*\*PASS\*\*/);
+});
+
+test('architecture-change metadata waives budgets but not guard integrity', () => {
+  const exception = { WEB_ARCHITECTURE_CHANGE: 'true' };
+  const waived = runChangeBudgetCase((write) => {
+    write('gbdraw/web/js/app/dummy.js', 'export const dummy = true;\n');
+  }, exception);
+  assert.equal(waived.status, 0, waived.output);
+  assert.match(waived.output, /Rules waived by architecture-change/);
+
+  const mixed = runChangeBudgetCase((write) => {
+    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+    write('tools/check-web-change-budget.mjs', '// changed checker\n');
+  }, exception);
+  assert.equal(mixed.status, 1, mixed.output);
+  assert.match(mixed.output, /production runtime files and Web guard\/CI files changed together/);
 });
