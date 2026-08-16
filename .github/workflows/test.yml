@@ -8,6 +8,7 @@ on:
     branches: ["main", "refactoring", "develop"]
   pull_request:
     branches: ["main"]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
