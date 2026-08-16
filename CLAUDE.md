@@ -278,6 +278,12 @@ normal test runs do not write to `tests/reference_outputs/`.
 
 ## Documentation
 
+- Always read and apply
+  `.agents/skills/refactor-gbdraw-web-safely/SKILL.md` before moving,
+  centralizing, splitting, replacing, or deleting existing Web behavior,
+  ownership boundaries, replay paths, Result handling, sessions, History,
+  Workers, caches, or asynchronous state transitions. Establish base
+  characterization before production edits and use an independent oracle.
 - Public documentation has four teaching routes: Tutorials, Technical
   documentation, FAQ, and Gallery. `docs/DOCS.md` is the navigation authority.
 - Use the fewest public pages that answer distinct reader questions. Coverage

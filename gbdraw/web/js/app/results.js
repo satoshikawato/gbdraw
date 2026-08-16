@@ -80,11 +80,6 @@ export const createResultsManager = ({
     normalizePaletteColors
   } = state;
   const { refreshCompositionGeometry } = legendLayout;
-  const commitDefinitionEdit = () => previewRuntime.commitDomEdit({
-    reason: 'definition-text',
-    invalidateIndexes: ['legend'],
-    mutate: () => true
-  });
 
   let definitionUpdateTimeout = null;
   const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -201,19 +196,17 @@ export const createResultsManager = ({
     return parts;
   };
 
-  const applyMixedText = (textEl, rawText) => {
-    while (textEl.firstChild) {
-      textEl.removeChild(textEl.firstChild);
-    }
+  const applyMixedText = (textEl, rawText, mutation) => {
     const parts = parseMixedContentText(rawText);
-    parts.forEach((part) => {
+    const children = parts.map((part) => {
       const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
       tspan.textContent = part.text || '';
       if (part.italic) {
         tspan.setAttribute('font-style', 'italic');
       }
-      textEl.appendChild(tspan);
+      return tspan;
     });
+    return mutation.replaceChildren(textEl, ...children);
   };
 
   const parseGroupSvg = (svgMarkup) => {
@@ -299,44 +292,50 @@ export const createResultsManager = ({
             .map((entry) => String(entry?.definition_group_id || '').trim())
             .filter(Boolean)
         );
-        let updated = false;
-        definitionEntries.forEach((entry) => {
-          const definitionGroupId = entry?.definition_group_id;
-          const definitionSvg = entry?.svg;
-          if (!definitionGroupId || !definitionSvg) return;
+        const committed = previewRuntime.commitDomEdit({
+          reason: 'definition-text',
+          invalidateIndexes: ['legend'],
+          mutate: ({ svg: targetSvg, mutation }) => {
+            if (targetSvg !== svg) return false;
+            let updated = false;
+            definitionEntries.forEach((entry) => {
+              const definitionGroupId = entry?.definition_group_id;
+              const definitionSvg = entry?.svg;
+              if (!definitionGroupId || !definitionSvg) return;
 
-          const newGroup = parseGroupSvg(definitionSvg);
-          if (!newGroup) return;
-          const existingGroup = findRecordDefinitionGroup(svg, entry);
-          const importedGroup = svg.ownerDocument.importNode(newGroup, true);
+              const newGroup = parseGroupSvg(definitionSvg);
+              if (!newGroup) return;
+              const existingGroup = findRecordDefinitionGroup(targetSvg, entry);
+              const importedGroup = targetSvg.ownerDocument.importNode(newGroup, true);
 
-          if (existingGroup) {
-            preserveDefinitionGroupDomIdentity(existingGroup, importedGroup);
-            existingGroup.parentNode.replaceChild(importedGroup, existingGroup);
-            updated = true;
-            return;
-          }
+              if (existingGroup) {
+                preserveDefinitionGroupDomIdentity(existingGroup, importedGroup);
+                mutation.replaceChild(existingGroup.parentNode, importedGroup, existingGroup);
+                updated = true;
+                return;
+              }
 
-          if (definitionGroupId === 'plot_title') {
-            svg.appendChild(importedGroup);
-            updated = true;
+              if (definitionGroupId === 'plot_title') {
+                mutation.appendChild(targetSvg, importedGroup);
+                updated = true;
+              }
+            });
+
+            const stalePlotTitleGroup = targetSvg.getElementById('plot_title');
+            if (stalePlotTitleGroup && !desiredGroupIds.has('plot_title')) {
+              mutation.removeNode(stalePlotTitleGroup);
+              updated = true;
+            }
+            return updated;
           }
         });
 
-        const stalePlotTitleGroup = svg.getElementById('plot_title');
-        if (stalePlotTitleGroup && !desiredGroupIds.has('plot_title')) {
-          stalePlotTitleGroup.remove();
-          updated = true;
-        }
-
-        const plotTitleGroup = svg.getElementById('plot_title');
-        refreshCompositionGeometry({
-          titleSide: plotTitleGroup ? normalizedPlotTitlePosition : 'none',
-          titleTarget: plotTitleGroup
-        });
-
-        if (updated) {
-          commitDefinitionEdit();
+        if (committed.changed) {
+          const plotTitleGroup = svg.getElementById('plot_title');
+          refreshCompositionGeometry({
+            titleSide: plotTitleGroup ? normalizedPlotTitlePosition : 'none',
+            titleTarget: plotTitleGroup
+          });
           console.log('Definition text updated');
         }
       } catch (e) {
@@ -351,35 +350,7 @@ export const createResultsManager = ({
         return;
       }
 
-      const plotTitleGroup = svg.getElementById('plot_title');
-      const groups = Array.from(svg.querySelectorAll('g[id]'))
-        .filter((group) => {
-          const id = group.getAttribute('id');
-          if (!id) return false;
-          if (
-            id === 'plot_title' ||
-            id === 'legend' ||
-            id === 'feature_legend' ||
-            id === 'pairwise_legend' ||
-            group.matches?.(COMPARISON_LEGEND_SELECTOR) ||
-            id === 'horizontal_legend' ||
-            id === 'vertical_legend' ||
-            id === 'length_bar'
-          ) {
-            return false;
-          }
-          const hasText = group.querySelectorAll('text').length > 0;
-          if (!hasText) return false;
-          const hasShapes =
-            group.querySelectorAll('path, line, rect, polygon, polyline, circle').length > 0;
-          return !hasShapes;
-        })
-        .sort((a, b) => parseTransform(a.getAttribute('transform')).y - parseTransform(b.getAttribute('transform')).y);
-
-      if (groups.length === 0) return;
-
       const labels = linearSeqs.map((seq) => (seq.definition ?? '').toString());
-      let updated = false;
       const parsedDefinitionFontSize =
         adv.def_font_size !== null && adv.def_font_size !== undefined && adv.def_font_size !== ''
           ? Number(adv.def_font_size)
@@ -391,57 +362,69 @@ export const createResultsManager = ({
           ? String(parsedDefinitionFontSize)
           : null;
 
-      groups.forEach((group, idx) => {
-        const label = labels[idx] ?? '';
-        const texts = Array.from(group.querySelectorAll('text'));
-        if (texts.length === 0) return;
-        const nextLabel = label.trim() ? label.trim() : group.getAttribute('id') || '';
-        applyMixedText(texts[0], nextLabel);
-        updated = true;
-        if (fontSizeOverride) {
-          texts.forEach((t) => {
-            if (t.getAttribute('font-size') !== fontSizeOverride) {
-              t.setAttribute('font-size', fontSizeOverride);
-              updated = true;
+      const titleText = String(form.plot_title || '').trim();
+      const titleFontSize =
+        adv.plot_title_font_size !== null &&
+        adv.plot_title_font_size !== undefined &&
+        adv.plot_title_font_size !== ''
+          ? Number(adv.plot_title_font_size)
+          : null;
+      const normalizedTitlePosition = String(adv.plot_title_position || 'bottom').trim().toLowerCase();
+      const safeTitlePosition = ['center', 'top', 'bottom'].includes(normalizedTitlePosition)
+        ? normalizedTitlePosition
+        : 'bottom';
+      const committed = previewRuntime.commitDomEdit({
+        reason: 'definition-text',
+        invalidateIndexes: ['legend'],
+        mutate: ({ svg: targetSvg, mutation }) => {
+          if (targetSvg !== svg) return false;
+          const plotTitleGroup = targetSvg.getElementById('plot_title');
+          const groups = Array.from(targetSvg.querySelectorAll('g[id]'))
+            .filter((group) => {
+              const id = group.getAttribute('id');
+              if (!id) return false;
+              if (
+                id === 'plot_title' || id === 'legend' || id === 'feature_legend'
+                || id === 'pairwise_legend' || group.matches?.(COMPARISON_LEGEND_SELECTOR)
+                || id === 'horizontal_legend' || id === 'vertical_legend' || id === 'length_bar'
+              ) return false;
+              return group.querySelectorAll('text').length > 0
+                && group.querySelectorAll('path, line, rect, polygon, polyline, circle').length === 0;
+            })
+            .sort((a, b) => parseTransform(a.getAttribute('transform')).y - parseTransform(b.getAttribute('transform')).y);
+          if (groups.length === 0) return false;
+          let updated = false;
+          groups.forEach((group, idx) => {
+            const label = labels[idx] ?? '';
+            const texts = Array.from(group.querySelectorAll('text'));
+            if (texts.length === 0) return;
+            const nextLabel = label.trim() ? label.trim() : group.getAttribute('id') || '';
+            updated = applyMixedText(texts[0], nextLabel, mutation) || updated;
+            if (fontSizeOverride) {
+              texts.forEach((targetText) => {
+                updated = mutation.setAttribute(targetText, 'font-size', fontSizeOverride) || updated;
+              });
             }
           });
+          if (plotTitleGroup) {
+            const titleTexts = Array.from(plotTitleGroup.querySelectorAll('text'));
+            if (titleTexts.length > 0) {
+              updated = applyMixedText(titleTexts[0], titleText, mutation) || updated;
+            }
+            if (titleFontSize !== null && Number.isFinite(titleFontSize) && titleFontSize > 0) {
+              titleTexts.forEach((targetText) => {
+                updated = mutation.setAttribute(targetText, 'font-size', String(titleFontSize)) || updated;
+              });
+            }
+          }
+          return updated;
         }
       });
-
-      if (plotTitleGroup) {
-        const titleText = String(form.plot_title || '').trim();
-        const titleTexts = Array.from(plotTitleGroup.querySelectorAll('text'));
-        if (titleTexts.length > 0) {
-          applyMixedText(titleTexts[0], titleText);
-          updated = true;
+      if (committed.changed) {
+        const plotTitleGroup = svg.getElementById('plot_title');
+        if (plotTitleGroup) {
+          refreshCompositionGeometry({ titleSide: safeTitlePosition, titleTarget: plotTitleGroup });
         }
-        const titleFontSize =
-          adv.plot_title_font_size !== null &&
-          adv.plot_title_font_size !== undefined &&
-          adv.plot_title_font_size !== ''
-            ? Number(adv.plot_title_font_size)
-            : null;
-        if (titleFontSize !== null && Number.isFinite(titleFontSize) && titleFontSize > 0) {
-          titleTexts.forEach((t) => {
-            if (t.getAttribute('font-size') !== String(titleFontSize)) {
-              t.setAttribute('font-size', String(titleFontSize));
-              updated = true;
-            }
-          });
-        }
-        const normalizedTitlePosition = String(adv.plot_title_position || 'bottom').trim().toLowerCase();
-        const safeTitlePosition = ['center', 'top', 'bottom'].includes(normalizedTitlePosition)
-          ? normalizedTitlePosition
-          : 'bottom';
-        refreshCompositionGeometry({
-          titleSide: safeTitlePosition,
-          titleTarget: plotTitleGroup
-        });
-        updated = true;
-      }
-
-      if (updated) {
-        commitDefinitionEdit();
       }
     }
   };

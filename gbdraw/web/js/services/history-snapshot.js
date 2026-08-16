@@ -27,7 +27,7 @@ const replacePlainObject = (target, source) => {
 };
 
 const replaceRefArray = (target, source) => {
-  if (!target || typeof target !== 'object' || !Object.prototype.hasOwnProperty.call(target, 'value')) return;
+  if (!target || typeof target !== 'object' || !('value' in target)) return;
   target.value = Array.isArray(source) ? cloneJsonData(source) : [];
 };
 
@@ -193,13 +193,13 @@ const replaceFeatureVisibilityState = (state, features = {}) => {
 };
 
 const setRef = (target, value) => {
-  if (target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')) {
+  if (target && typeof target === 'object' && 'value' in target) {
     target.value = value;
   }
 };
 
 const getRef = (target, fallback = null) => (
-  target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')
+  target && typeof target === 'object' && 'value' in target
     ? target.value
     : fallback
 );
@@ -1389,7 +1389,17 @@ export const createHistorySnapshotService = ({
       : null;
     const suppressRef = state.semanticFileWatchersSuppressed;
     const previousSuppressed = getRef(suppressRef, false);
+    const discoveryDeferredRef = state.sessionResourceDiscoveryDeferred;
+    const previousDiscoveryDeferred = getRef(discoveryDeferredRef, false);
+    const suppressDiscoveryWake = Boolean(
+      discoveryDeferredRef
+      && typeof discoveryDeferredRef === 'object'
+      && 'value' in discoveryDeferredRef
+      && !domains.has('files')
+      && !domains.has('ui')
+    );
     setRef(suppressRef, true);
+    if (suppressDiscoveryWake) setRef(discoveryDeferredRef, true);
     try {
       if (domains.has('ui')) {
         const ui = intent.ui || {};
@@ -1447,6 +1457,13 @@ export const createHistorySnapshotService = ({
       if (afterApplyHistoryIntent) await afterApplyHistoryIntent(intent, { ...context, domains });
     } finally {
       setRef(suppressRef, previousSuppressed);
+      if (suppressDiscoveryWake) {
+        // The discovery watchers observe semantic suppression but intentionally
+        // do not observe this defer flag. Let the suppression-only wake settle
+        // while deferred so a config/editor Undo does not materialize sources.
+        await nextTick();
+        setRef(discoveryDeferredRef, previousDiscoveryDeferred);
+      }
     }
   };
 

@@ -6,6 +6,12 @@ Guidance for automated agents working in this repository.
 - コード1行増やすごとに技術負債が増えると心得よ。
 - See `CLAUDE.md` for project-wide guidance.
 - If working on the web UI, also read `gbdraw/web/CLAUDE.md`.
+- Before moving, centralizing, splitting, or replacing existing Web behavior,
+  read and apply
+  `.agents/skills/refactor-gbdraw-web-safely/SKILL.md`.
+- Behavior-preserving Web refactors establish base characterization tests
+  before production edits. The new implementation must not serve as its own
+  behavioral oracle.
 
 ## Project Summary
 
@@ -31,6 +37,9 @@ pytest tests/test_output_comparison.py::TestGenerateReferences --update-referenc
 # Lint
 ruff check gbdraw/
 
+# Web behavior-preserving refactor guardrails
+npm run test:web:refactor-guards
+
 # Prepare the generated browser wheel for offline web packaging/tests
 python tools/prepare_browser_wheel.py
 
@@ -54,6 +63,22 @@ python -m build
 - The JavaScript specs under `tests/web/*.playwright.spec.js` require Node's `@playwright/test`. Verify it with `node -e "console.log(require.resolve('@playwright/test'))"` before trying to run those specs.
 - If Node's `@playwright/test` is unavailable, use Python Playwright for targeted browser checks instead of skipping browser verification.
 - In Codex/agent sandboxes, Chromium may fail with `sandbox_host_linux.cc ... Operation not permitted`. When that happens, rerun the same local browser check with the required sandbox escalation rather than reporting that Playwright is unavailable.
+
+## Behavior-preserving Web refactors
+
+- Characterize the base before editing production code.
+- Keep renderer-owned state and editor-owned overrides as separate provenance
+  domains.
+- Treat validated Feature catalogs, extracted Features, biological Features,
+  orthogroups, sequences, SVG, and Results as large borrowed owners. Do not
+  JSON-clone or JSON-serialize them as defensive copying.
+- Keep mounted SVG and selected Result ownership synchronous. If ownership must
+  cross `await`, use and revalidate an explicit lease.
+- Use production-connected counters and independent oracles. Dummy counters and
+  comparison of two paths using the same new helper are not evidence.
+- Run `npm run test:web:refactor-guards` before handoff.
+- Require a separate adversarial review for cross-cutting Web refactors.
+- Do not declare completion while a required CI failure is red or unclassified.
 
 ## Expectations When Editing
 

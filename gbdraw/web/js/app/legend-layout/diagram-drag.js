@@ -11,7 +11,10 @@ import {
 } from '../record-groups.js';
 
 export const createDiagramDragActions = ({ state, history = null, previewRuntime }) => {
-  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+  if (
+    typeof previewRuntime?.commitDomEdit !== 'function'
+    || typeof previewRuntime?.beginDomEditLease !== 'function'
+  ) {
     throw new Error('createDiagramDragActions requires the preview runtime edit protocol.');
   }
   const {
@@ -59,6 +62,8 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
   let diagramDragFrameId = null;
   let pendingDiagramPointer = null;
   let diagramDragTxPromise = null;
+  let diagramDragLease = null;
+  let activeDragSvg = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
@@ -84,25 +89,27 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
       : null;
   };
 
-  const persistCurrentSvg = () => {
-    const svg = svgContainer.value?.querySelector?.('svg');
-    if (!svg) return false;
-    return previewRuntime.commitDomEdit({
+  const beginPositionLease = (svg) => {
+    const lease = previewRuntime.beginDomEditLease({
       reason: 'diagram-position',
-      invalidateIndexes: ['legend'],
-      mutate: () => true
-    }).changed;
+      invalidateIndexes: ['legend']
+    });
+    if (!lease) return false;
+    diagramDragLease?.cancel?.();
+    diagramDragLease = lease;
+    activeDragSvg = svg;
+    return true;
   };
 
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
   const isPlotTitleGroup = (group) => (group?.id || '') === 'plot_title';
 
-  const setTranslate = (el, x, y) => {
+  const setTranslate = (el, x, y, mutation = null) => {
     if (!el) return;
-    el.setAttribute(
-      'transform',
-      replaceLeadingTranslate(el.getAttribute('transform'), x, y)
-    );
+    const value = replaceLeadingTranslate(el.getAttribute('transform'), x, y);
+    if (mutation) return mutation.setAttribute(el, 'transform', value);
+    el.setAttribute('transform', value);
+    return true;
   };
 
   const normalizeTransform = (transform) => {
@@ -126,12 +133,12 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     }
   };
 
-  const applyPlotTitleTransform = (group = plotTitleElement.value) => {
+  const applyPlotTitleTransform = (group = plotTitleElement.value, mutation = null) => {
     if (!group) return;
     const autoTransform = normalizeTransform(plotTitleAutoTransform.value);
     const nextX = autoTransform.x + plotTitleUserOffset.x;
     const nextY = autoTransform.y + plotTitleUserOffset.y;
-    setTranslate(group, nextX, nextY);
+    return setTranslate(group, nextX, nextY, mutation);
   };
 
   const clearPlotTitleState = () => {
@@ -145,21 +152,21 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     activePlotTitleOffsetStart = { x: 0, y: 0 };
   };
 
-  const applyLengthBarTransform = () => {
+  const applyLengthBarTransform = (mutation = null) => {
     const group = lengthBarElement.value;
     if (!group) return;
     const base = normalizeTransform(lengthBarOriginalTransform.value);
     const nextX = base.x + lengthBarUserOffset.x;
     const nextY = base.y + lengthBarUserOffset.y;
-    setTranslate(group, nextX, nextY);
+    return setTranslate(group, nextX, nextY, mutation);
   };
 
-  const resetLengthBarPosition = () => {
+  const resetLengthBarPosition = (mutation = null) => {
     lengthBarUserOffset.x = 0;
     lengthBarUserOffset.y = 0;
     if (lengthBarElement.value) {
       lengthBarElement.value.style.opacity = '1';
-      applyLengthBarTransform();
+      applyLengthBarTransform(mutation);
     }
   };
 
@@ -242,9 +249,10 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     setElementCursor(plotTitleElement.value, enabled ? 'grab' : '');
   };
 
-  const startLengthBarDrag = (e, group) => {
+  const startLengthBarDrag = (e, group, svg) => {
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
+    if (!beginPositionLease(svg)) return;
 
     e.preventDefault();
     cancelDiagramDragFrame();
@@ -266,9 +274,10 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     document.addEventListener('mouseup', endDiagramDrag);
   };
 
-  const startPlotTitleDrag = (e, group) => {
+  const startPlotTitleDrag = (e, group, svg) => {
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
+    if (!beginPositionLease(svg)) return;
 
     e.preventDefault();
     cancelDiagramDragFrame();
@@ -306,13 +315,13 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
 
     const clickedLengthBar = e.target.closest('#length_bar');
     if (clickedLengthBar) {
-      startLengthBarDrag(e, clickedLengthBar);
+      startLengthBarDrag(e, clickedLengthBar, svg);
       return;
     }
 
     const clickedPlotTitle = e.target.closest('#plot_title');
     if (clickedPlotTitle) {
-      startPlotTitleDrag(e, clickedPlotTitle);
+      startPlotTitleDrag(e, clickedPlotTitle, svg);
       return;
     }
 
@@ -339,6 +348,7 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     }
 
     e.preventDefault();
+    if (!beginPositionLease(svg)) return;
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
     beginDragTransaction(activeDragMode === 'record' ? 'Move record' : 'Move diagram');
@@ -371,25 +381,28 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     const deltaX = (clientX - dragStart.x) / zoom.value;
     const deltaY = (clientY - dragStart.y) / zoom.value;
 
-    if (activeDragMode === 'plot_title') {
-      plotTitleUserOffset.x = activePlotTitleOffsetStart.x + deltaX;
-      plotTitleUserOffset.y = activePlotTitleOffsetStart.y + deltaY;
-      applyPlotTitleTransform(activeDragElements[0] || plotTitleElement.value);
-      return;
-    }
+    return diagramDragLease?.mutate?.(({ svg, mutation }) => {
+      if (svg !== activeDragSvg) return false;
+      if (activeDragMode === 'plot_title') {
+        plotTitleUserOffset.x = activePlotTitleOffsetStart.x + deltaX;
+        plotTitleUserOffset.y = activePlotTitleOffsetStart.y + deltaY;
+        return applyPlotTitleTransform(activeDragElements[0] || plotTitleElement.value, mutation);
+      }
 
-    if (activeDragMode === 'length_bar') {
-      const group = activeDragElements[0];
-      const original = activeDragOriginalTransforms.get(group) || { x: 0, y: 0 };
-      setTranslate(group, original.x + deltaX, original.y + deltaY);
-      return;
-    }
+      if (activeDragMode === 'length_bar') {
+        const group = activeDragElements[0];
+        const original = activeDragOriginalTransforms.get(group) || { x: 0, y: 0 };
+        return setTranslate(group, original.x + deltaX, original.y + deltaY, mutation);
+      }
 
-    activeDragElements.forEach((el) => {
-      const original = activeDragOriginalTransforms.get(el) || { x: 0, y: 0 };
-      const newX = original.x + deltaX;
-      const newY = original.y + deltaY;
-      setTranslate(el, newX, newY);
+      let changed = false;
+      activeDragElements.forEach((el) => {
+        const original = activeDragOriginalTransforms.get(el) || { x: 0, y: 0 };
+        const newX = original.x + deltaX;
+        const newY = original.y + deltaY;
+        changed = setTranslate(el, newX, newY, mutation) || changed;
+      });
+      return changed;
     });
   };
 
@@ -423,6 +436,9 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
       lengthBarUserOffset.x = activeLengthBarOffsetStart.x + deltaX;
       lengthBarUserOffset.y = activeLengthBarOffsetStart.y + deltaY;
     }
+    diagramDragLease?.commit?.();
+    diagramDragLease = null;
+    activeDragSvg = null;
 
     diagramDragging.value = false;
     plotTitleDragging.value = false;
@@ -439,7 +455,6 @@ export const createDiagramDragActions = ({ state, history = null, previewRuntime
     activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
-    persistCurrentSvg();
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
     if (tx && history?.commit) await history.commit(tx);

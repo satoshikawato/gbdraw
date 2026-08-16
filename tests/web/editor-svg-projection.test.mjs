@@ -69,6 +69,71 @@ const completeProjection = () => createEditorSvgProjection({
   suppressPairwiseIdentityLegend: true
 });
 
+test('base label visibility provenance transitions remain stable', () => {
+  // Independent transition table observed at PR base 3a098d8f in
+  // createLabelActions.applyLabelVisibilityPreview(). The expected state is
+  // specified here rather than derived from the projection implementation.
+  const cases = [
+    {
+      name: 'renderer-hidden default',
+      display: 'none',
+      editorMarker: null,
+      mode: 'default',
+      expectedDisplay: 'none',
+      expectedMarker: null,
+      expectedChanged: false
+    },
+    {
+      name: 'editor-hidden default',
+      display: 'none',
+      editorMarker: 'off',
+      mode: 'default',
+      expectedDisplay: null,
+      expectedMarker: null,
+      expectedChanged: true
+    },
+    {
+      name: 'explicit on overrides renderer hiding',
+      display: 'none',
+      editorMarker: null,
+      mode: 'on',
+      expectedDisplay: null,
+      expectedMarker: null,
+      expectedChanged: true
+    },
+    {
+      name: 'explicit off owns hiding',
+      display: null,
+      editorMarker: null,
+      mode: 'off',
+      markPreview: true,
+      expectedDisplay: 'none',
+      expectedMarker: 'off',
+      expectedChanged: true
+    }
+  ];
+
+  cases.forEach((entry) => {
+    const label = new FakeSvgElement('text');
+    label.appendChild(new FakeSvgElement('textPath', {}, 'path label'));
+    if (entry.display !== null) label.setAttribute('display', entry.display);
+    if (entry.editorMarker !== null) {
+      label.setAttribute('data-gbdraw-label-visibility-preview', entry.editorMarker);
+    }
+    assert.equal(
+      applyLabelVisibility(label, entry.mode, { markPreview: Boolean(entry.markPreview) }),
+      entry.expectedChanged,
+      entry.name
+    );
+    assert.equal(label.getAttribute('display'), entry.expectedDisplay, entry.name);
+    assert.equal(
+      label.getAttribute('data-gbdraw-label-visibility-preview'),
+      entry.expectedMarker,
+      entry.name
+    );
+  });
+});
+
 test('the projection owner applies every persisted editor domain to a fresh SVG', () => {
   const fixture = buildSvg();
   const projection = completeProjection();
@@ -217,6 +282,145 @@ test('legend rename replay preserves a fresh renderer palette without an explici
   assert.equal(fixture.legend.swatch.getAttribute('fill'), '#f59e0b');
 });
 
+test('fresh-SVG projection replays Legend add, delete, rename, duplicate, color, and order state', () => {
+  const fixture = buildSvg({ includeSuppressedLegend: false });
+  const appendEntry = (caption, color, y) => {
+    const entry = fixture.legend.featureLegend.appendChild(
+      new FakeSvgElement('g', { 'data-legend-key': caption })
+    );
+    entry.appendChild(new FakeSvgElement('path', {
+      fill: color,
+      transform: `translate(0, ${y})`
+    }));
+    entry.appendChild(new FakeSvgElement('text', {
+      transform: `translate(20, ${y})`
+    }, caption));
+    return entry;
+  };
+  fixture.legend.swatch.setAttribute('transform', 'translate(0, 0)');
+  fixture.legend.entry.querySelector('text').setAttribute('transform', 'translate(20, 0)');
+  appendEntry('Legend B', '#222222', 20);
+  appendEntry('Legend C', '#333333', 40);
+
+  const projection = createEditorSvgProjection({
+    legendEntries: [
+      { caption: 'Legend B', originalCaption: 'Legend B', color: '#222222' },
+      { caption: 'Renamed A', originalCaption: 'Legend A', color: '#abcdef' },
+      { caption: 'Renamed A (1)', originalCaption: 'Renamed A (1)', color: '#fedcba' }
+    ],
+    deletedLegendEntries: [
+      { caption: 'Legend C', originalCaption: 'Legend C', color: '#333333' }
+    ],
+    originalLegendOrder: ['Renamed A', 'Legend B', 'Legend C'],
+    addedLegendCaptions: ['Renamed A (1)'],
+    legendColorOverrides: {
+      'Renamed A': '#abcdef',
+      'Renamed A (1)': '#fedcba'
+    }
+  });
+  assert.equal(projection.project(fixture.svg).changed, true);
+
+  const projected = fixture.legend.featureLegend.children;
+  assert.deepEqual(
+    projected.map((entry) => entry.getAttribute('data-legend-key')),
+    ['Legend B', 'Renamed A', 'Renamed A (1)']
+  );
+  assert.deepEqual(
+    projected.map((entry) => entry.querySelector('text').textContent),
+    ['Legend B', 'Renamed A', 'Renamed A (1)']
+  );
+  assert.deepEqual(
+    projected.map((entry) => entry.querySelector('path').getAttribute('fill')),
+    ['#222222', '#abcdef', '#fedcba']
+  );
+  assert.deepEqual(
+    projected.map((entry) => entry.querySelector('text').getAttribute('transform')),
+    ['translate(20, 0)', 'translate(20, 20)', 'translate(20, 40)']
+  );
+});
+
+test('a late Legend projection failure rolls back earlier Legend mutations', () => {
+  const fixture = buildSvg({ includeSuppressedLegend: false });
+  const secondEntry = fixture.legend.featureLegend.appendChild(
+    new FakeSvgElement('g', { 'data-legend-key': 'Legend B' })
+  );
+  const secondSwatch = secondEntry.appendChild(new FakeSvgElement('path', { fill: '#222222' }));
+  secondEntry.appendChild(new FakeSvgElement('text', {}, 'Legend B'));
+  const originalSetter = secondSwatch.setAttribute.bind(secondSwatch);
+  secondSwatch.setAttribute = (name, value) => {
+    if (name === 'fill' && value === '#bbbbbb') throw new Error('late Legend mutation failed');
+    originalSetter(name, value);
+  };
+  const projection = createEditorSvgProjection({
+    legendColorOverrides: {
+      'Legend A': '#aaaaaa',
+      'Legend B': '#bbbbbb'
+    }
+  });
+
+  assert.throws(() => projection.project(fixture.svg), /late Legend mutation failed/);
+  assert.equal(fixture.legend.swatch.getAttribute('fill'), '#111111');
+  assert.equal(secondSwatch.getAttribute('fill'), '#222222');
+});
+
+test('projection borrows the validated Feature owner without cloning or serializing it', () => {
+  const metrics = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => metrics.push(metric)
+  };
+  try {
+    const features = [feature];
+    const projection = createEditorSvgProjection({ features });
+    projection.project(buildSvg({ includeSuppressedLegend: false }).svg);
+    const borrowed = metrics.find((metric) => metric.name === 'editorProjectionBorrowedFeatureOwnerCount');
+    assert.equal(borrowed.featureOwner, features);
+    assert.equal(
+      metrics.find((metric) => metric.name === 'editorProjectionFullFeatureCloneCount').value,
+      0
+    );
+    assert.equal(
+      metrics.find((metric) => metric.name === 'editorProjectionFullFeatureSerializationCount').value,
+      0
+    );
+  } finally {
+    if (previousHooks === undefined) delete globalThis.__GBDRAW_TEST_HOOKS__;
+    else globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+  }
+});
+
+test('fresh projection applies ordered product rules while direct Feature overrides win', () => {
+  const fixture = buildSvg({ includeSuppressedLegend: false });
+  const secondFeatureElement = appendFeature(fixture.svg, 'rendered-b');
+  const secondFeature = {
+    recordKey: 'record-b',
+    biologicalFeatureId: 'biological-b',
+    svg_id: 'rendered-b',
+    type: 'CDS',
+    product: 'shared product',
+    qualifiers: { protein_id: ['WP_B.1'] }
+  };
+  const firstFeature = {
+    ...feature,
+    product: 'shared product',
+    qualifiers: { protein_id: ['WP_A.1'] }
+  };
+  const projection = createEditorSvgProjection({
+    features: [firstFeature, secondFeature],
+    featureVisibilityOverrides: { 'rendered-b': 'on' },
+    featureVisibilityManualRules: [{
+      recordId: '*',
+      featureType: 'CDS',
+      qualifier: 'product',
+      value: '^shared product$',
+      action: 'off'
+    }]
+  });
+  projection.project(fixture.svg);
+  assert.equal(fixture.featureElement.getAttribute('display'), 'none');
+  assert.equal(secondFeatureElement.getAttribute('display'), null);
+});
+
 test('catalog-backed admission fails when a required rendered Feature binding is missing', () => {
   const fixture = buildSvg({ includeFeature: false, labels: 0, includeSuppressedLegend: false });
   const projection = createEditorSvgProjection({ features: [feature] });
@@ -263,6 +467,8 @@ test('History replay can reset removed label overrides before applying current s
   const fixture = buildSvg({ includeSuppressedLegend: false });
   fixture.labelElements[0].textContent = 'stale edit';
   fixture.labelElements[0].setAttribute('display', 'none');
+  fixture.labelElements[0].setAttribute('data-gbdraw-label-visibility-preview', 'off');
+  fixture.labelElements[0].setAttribute('data-gbdraw-label-renderer-display', '');
   const projection = createEditorSvgProjection({});
   const result = projection.project(fixture.svg, { resetLabelState: true });
   assert.equal(result.changed, true);
@@ -292,4 +498,33 @@ test('invalid persisted paint fails before an invalid value is projected', () =>
   });
   assert.throws(() => projection.project(fixture.svg), /Invalid feature fill override/);
   assert.equal(fixture.featureElement.getAttribute('fill'), '#111111');
+});
+
+test('projection rolls back an early DOM mutation when a later target fails', () => {
+  const fixture = buildSvg({ includeSuppressedLegend: false });
+  const secondElement = appendFeature(fixture.svg, 'rendered-b');
+  const secondFeature = {
+    id: 'feature-b',
+    recordKey: 'record-b',
+    biologicalFeatureId: 'biological-b',
+    svg_id: 'rendered-b',
+    type: 'CDS',
+    qualifiers: {}
+  };
+  const originalSetAttribute = secondElement.setAttribute.bind(secondElement);
+  secondElement.setAttribute = (name, value) => {
+    if (name === 'fill' && value === '#fedcba') throw new Error('late projection target failed');
+    originalSetAttribute(name, value);
+  };
+  const projection = createEditorSvgProjection({
+    features: [feature, secondFeature],
+    featureColorOverrides: {
+      [stableKey]: { color: '#abcdef' },
+      ['record-b\u0000biological-b']: { color: '#fedcba' }
+    }
+  });
+
+  assert.throws(() => projection.project(fixture.svg), /late projection target failed/);
+  assert.equal(fixture.featureElement.getAttribute('fill'), '#111111');
+  assert.equal(secondElement.getAttribute('fill'), '#111111');
 });

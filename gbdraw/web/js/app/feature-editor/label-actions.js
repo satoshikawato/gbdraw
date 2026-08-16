@@ -5,7 +5,7 @@ import {
   parseLabelOverrideTsv,
   selectStableFeatureKey
 } from './label-override-table.js';
-import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
+import { FEATURE_SELECTOR, getFeatureElementIndex, getFeatureIdentity } from './svg-actions.js';
 import {
   EDITABLE_LABEL_SELECTOR,
   applyLabelVisibility,
@@ -318,20 +318,16 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
 };
 
 const buildContextKey = (svg, mode) => {
-  const ids = Array.from(
-    new Set(
-      Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
-        .map((el) => getFeatureIdentity(el))
-        .filter((value) => value && value.trim() !== '')
-    )
-  ).sort();
+  const ids = Array.from(getFeatureElementIndex(svg).keys())
+    .filter((value) => value && value.trim() !== '')
+    .sort();
   return `${mode}:${ids.join(',')}`;
 };
 
 const hasFeatureScopedOverrideInSvg = (svg, ...overrideMaps) => {
   const renderedFeatureIds = new Set(
-    Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
-      .map((element) => normalizeKeyToken(getFeatureIdentity(element)))
+    Array.from(getFeatureElementIndex(svg).keys())
+      .map((featureId) => normalizeKeyToken(featureId))
       .filter(Boolean)
   );
   return overrideMaps.some((overrides) => (
@@ -584,7 +580,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       : 'No editable feature label for this feature in current diagram.';
   };
 
-  const syncLabelEditor = () => {
+  const syncLabelEditor = (options = {}) => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -604,6 +600,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       closeGlobalLabelModeDialog();
     }
     labelOverrideContextKey.value = contextKey;
+    if (options?.contextOnly) return;
 
     const featureGeometry = collectFeatureGeometry(svg);
     const labelElements = collectEditableLabelElements(svg, mode.value);

@@ -17,6 +17,7 @@ export const prepareReflowResultCommit = ({
   featureColorOverrides = {},
   featureStrokeOverrides = {},
   featureVisibilityOverrides = {},
+  featureVisibilityManualRules = [],
   labelTextFeatureOverrides = {},
   labelTextBulkOverrides = {},
   labelTextFeatureOverrideSources = {},
@@ -24,6 +25,9 @@ export const prepareReflowResultCommit = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   legendEntries = [],
+  deletedLegendEntries = [],
+  originalLegendOrder = [],
+  addedLegendCaptions = [],
   manualSpecificRules = [],
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify
 }) => {
@@ -32,6 +36,7 @@ export const prepareReflowResultCommit = ({
     featureColorOverrides,
     featureStrokeOverrides,
     featureVisibilityOverrides,
+    featureVisibilityManualRules,
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
@@ -39,6 +44,9 @@ export const prepareReflowResultCommit = ({
     legendColorOverrides,
     legendStrokeOverrides,
     legendEntries,
+    deletedLegendEntries,
+    originalLegendOrder,
+    addedLegendCaptions,
     manualSpecificRules,
     suppressPairwiseIdentityLegend
   });
@@ -57,6 +65,7 @@ export const prepareCandidateRenderCommit = ({
   featureColorOverrides,
   featureStrokeOverrides,
   featureVisibilityOverrides = {},
+  featureVisibilityManualRules = [],
   labelTextFeatureOverrides = {},
   labelTextBulkOverrides = {},
   labelTextFeatureOverrideSources = {},
@@ -64,6 +73,9 @@ export const prepareCandidateRenderCommit = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   legendEntries = [],
+  deletedLegendEntries = [],
+  originalLegendOrder = [],
+  addedLegendCaptions = [],
   manualSpecificRules = [],
   legacyFeatures = [],
   preparedFeatureState = null,
@@ -137,6 +149,7 @@ export const prepareCandidateRenderCommit = ({
     featureColorOverrides: fillOverrides,
     featureStrokeOverrides: strokeOverrides,
     featureVisibilityOverrides,
+    featureVisibilityManualRules,
     labelTextFeatureOverrides,
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
@@ -144,6 +157,9 @@ export const prepareCandidateRenderCommit = ({
     legendColorOverrides,
     legendStrokeOverrides,
     legendEntries,
+    deletedLegendEntries,
+    originalLegendOrder,
+    addedLegendCaptions,
     manualSpecificRules,
     suppressPairwiseIdentityLegend
   });

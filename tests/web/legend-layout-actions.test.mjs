@@ -220,6 +220,22 @@ const dragFixture = () => {
       state,
       extractLegendEntries: () => {},
       previewRuntime: {
+        beginDomEditLease: () => ({
+          current: true,
+          mutate: (mutate) => Boolean(mutate({
+            svg,
+            resultIndex: 0,
+            mutation: {
+              setAttribute: (element, name, value) => {
+                if (element.getAttribute(name) === String(value)) return false;
+                element.setAttribute(name, value);
+                return true;
+              }
+            }
+          })),
+          commit: () => true,
+          cancel: () => false
+        }),
         commitDomEdit: ({ reason = 'test-edit', mutate }) => {
           const changed = Boolean(mutate({ svg, resultIndex: 0 }));
           return { changed, flushed: changed, resultIndex: 0, reason };

@@ -12,7 +12,10 @@ export const createLegendDragActions = ({
   history = null,
   previewRuntime
 }) => {
-  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+  if (
+    typeof previewRuntime?.commitDomEdit !== 'function'
+    || typeof previewRuntime?.beginDomEditLease !== 'function'
+  ) {
     throw new Error('createLegendDragActions requires the preview runtime edit protocol.');
   }
   const {
@@ -29,6 +32,7 @@ export const createLegendDragActions = ({
   let pendingLegendPointer = null;
   let legendDragTxPromise = null;
   let legendDragContext = null;
+  let legendDragLease = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
@@ -59,10 +63,15 @@ export const createLegendDragActions = ({
     const newX = legendOriginalTransform.value.x + deltaX;
     const newY = legendOriginalTransform.value.y + deltaY;
 
-    legendGroup.setAttribute(
-      'transform',
-      replaceLeadingTranslate(legendGroup.getAttribute('transform'), newX, newY)
-    );
+    const changed = legendDragLease?.mutate?.(({ svg, mutation }) => {
+      if (svg !== legendDragContext?.svg) return false;
+      return mutation.setAttribute(
+        legendGroup,
+        'transform',
+        replaceLeadingTranslate(legendGroup.getAttribute('transform'), newX, newY)
+      );
+    });
+    if (!changed) return;
     legendCurrentOffset.x = newX - legendInitialTransform.value.x;
     legendCurrentOffset.y = newY - legendInitialTransform.value.y;
   };
@@ -76,6 +85,11 @@ export const createLegendDragActions = ({
     const binding = bindCompositionMetadata(svg);
     const legendGroup = binding.legend.targets[0] || null;
     if (!legendGroup) return;
+    const lease = previewRuntime.beginDomEditLease({
+      reason: 'legend-position',
+      invalidateIndexes: ['legend']
+    });
+    if (!lease) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -83,6 +97,7 @@ export const createLegendDragActions = ({
     cancelLegendDragFrame();
     pendingLegendPointer = null;
     legendDragContext = { binding, svg };
+    legendDragLease = lease;
     legendDragTxPromise = history?.begin
       ? history.begin('Move legend', { source: 'legend-drag' })
       : null;
@@ -127,14 +142,9 @@ export const createLegendDragActions = ({
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (completedDragContext?.svg) {
-      const svg = completedDragContext.svg;
-      previewRuntime.commitDomEdit({
-        reason: 'legend-position',
-        invalidateIndexes: ['legend'],
-        mutate: () => Boolean(svg)
-      });
-    }
+    if (completedDragContext?.svg) legendDragLease?.commit?.();
+    else legendDragLease?.cancel?.();
+    legendDragLease = null;
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
@@ -156,25 +166,30 @@ export const createLegendDragActions = ({
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
-    const binding = bindCompositionMetadata(svg);
-    const legendGroup = binding.legend.targets[0] || null;
-    if (!legendGroup) return;
-
-    const automatic = binding.metadata.legend?.automaticTranslation || [0, 0];
-    const initial = { x: automatic[0], y: automatic[1] };
-    legendInitialTransform.value = initial;
-    legendGroup.setAttribute(
-      'transform',
-      replaceLeadingTranslate(legendGroup.getAttribute('transform'), initial.x, initial.y)
-    );
-    legendCurrentOffset.x = 0;
-    legendCurrentOffset.y = 0;
-
-    previewRuntime.commitDomEdit({
+    const committed = previewRuntime.commitDomEdit({
       reason: 'legend-position-reset',
       invalidateIndexes: ['legend'],
-      mutate: () => true
+      mutate: ({ svg: targetSvg, mutation }) => {
+        if (targetSvg !== svg) return false;
+        const binding = bindCompositionMetadata(targetSvg);
+        const legendGroup = binding.legend.targets[0] || null;
+        if (!legendGroup) return false;
+        const automatic = binding.metadata.legend?.automaticTranslation || [0, 0];
+        const initial = { x: automatic[0], y: automatic[1] };
+        const changed = mutation.setAttribute(
+          legendGroup,
+          'transform',
+          replaceLeadingTranslate(legendGroup.getAttribute('transform'), initial.x, initial.y)
+        );
+        if (changed) {
+          legendInitialTransform.value = initial;
+          legendCurrentOffset.x = 0;
+          legendCurrentOffset.y = 0;
+        }
+        return changed;
+      }
     });
+    return committed.changed;
   };
 
   const resetLegendPosition = () => {

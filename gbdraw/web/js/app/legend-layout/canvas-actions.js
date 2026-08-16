@@ -24,39 +24,60 @@ export const createLegendCanvasActions = ({ state, previewRuntime }) => {
 
   const currentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
 
-  const persistCurrentSvg = (svg = currentSvg()) => {
+  const persistCurrentSvg = (
+    svg = currentSvg(),
+    mutate,
+    reason = 'canvas-layout'
+  ) => {
     if (!svg) return false;
-    skipPositionReapply.value = true;
-    return previewRuntime.commitDomEdit({
-      reason: 'canvas-layout',
+    if (typeof mutate !== 'function') {
+      throw new TypeError('persistCurrentSvg requires the SVG mutation callback.');
+    }
+    const changed = previewRuntime.commitDomEdit({
+      reason,
       invalidateIndexes: ['legend'],
-      mutate: () => true
+      mutate: ({ svg: targetSvg, mutation }) => {
+        if (targetSvg !== svg) return false;
+        return mutate({ svg: targetSvg, mutation });
+      }
     }).changed;
+    if (changed) skipPositionReapply.value = true;
+    return changed;
   };
 
   const applyCanvasPadding = () => {
     const svg = currentSvg();
     if (!svg) return;
-    bindCompositionMetadata(svg);
-    const currentViewBox = svg.dataset.originalViewBox || svg.getAttribute('viewBox');
-    if (!svg.dataset.originalViewBox) svg.dataset.originalViewBox = currentViewBox;
-    const [baseX, baseY, baseWidth, baseHeight] = String(svg.dataset.originalViewBox)
-      .trim().split(/\s+/).map(Number);
-    if ([baseX, baseY, baseWidth, baseHeight].some((value) => !Number.isFinite(value))) {
-      throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
-    }
-    const originalWidth = Number.parseFloat(svg.dataset.originalWidth || svg.getAttribute('width')) || baseWidth;
-    const originalHeight = Number.parseFloat(svg.dataset.originalHeight || svg.getAttribute('height')) || baseHeight;
-    if (!svg.dataset.originalWidth) {
-      svg.dataset.originalWidth = String(originalWidth);
-      svg.dataset.originalHeight = String(originalHeight);
-    }
-    const width = baseWidth + canvasPadding.left + canvasPadding.right;
-    const height = baseHeight + canvasPadding.top + canvasPadding.bottom;
-    svg.setAttribute('viewBox', `${baseX - canvasPadding.left} ${baseY - canvasPadding.top} ${width} ${height}`);
-    svg.setAttribute('width', `${originalWidth * (width / baseWidth)}px`);
-    svg.setAttribute('height', `${originalHeight * (height / baseHeight)}px`);
-    persistCurrentSvg(svg);
+    return persistCurrentSvg(svg, ({ svg: targetSvg, mutation }) => {
+      bindCompositionMetadata(targetSvg);
+      const currentViewBox = targetSvg.dataset.originalViewBox || targetSvg.getAttribute('viewBox');
+      const originalViewBox = targetSvg.dataset.originalViewBox || currentViewBox;
+      const [baseX, baseY, baseWidth, baseHeight] = String(originalViewBox)
+        .trim().split(/\s+/).map(Number);
+      if ([baseX, baseY, baseWidth, baseHeight].some((value) => !Number.isFinite(value))) {
+        throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
+      }
+      const originalWidth = Number.parseFloat(targetSvg.dataset.originalWidth || targetSvg.getAttribute('width')) || baseWidth;
+      const originalHeight = Number.parseFloat(targetSvg.dataset.originalHeight || targetSvg.getAttribute('height')) || baseHeight;
+      let changed = false;
+      if (!targetSvg.dataset.originalViewBox) {
+        changed = mutation.setAttribute(targetSvg, 'data-original-view-box', currentViewBox) || changed;
+      }
+      if (!targetSvg.dataset.originalWidth) {
+        changed = mutation.setAttribute(targetSvg, 'data-original-width', originalWidth) || changed;
+        changed = mutation.setAttribute(targetSvg, 'data-original-height', originalHeight) || changed;
+      }
+      const width = baseWidth + canvasPadding.left + canvasPadding.right;
+      const height = baseHeight + canvasPadding.top + canvasPadding.bottom;
+      changed = mutation.setAttribute(
+        targetSvg,
+        'viewBox',
+        `${baseX - canvasPadding.left} ${baseY - canvasPadding.top} ${width} ${height}`
+      ) || changed;
+      changed = mutation.setAttribute(targetSvg, 'width', `${originalWidth * (width / baseWidth)}px`) || changed;
+      changed = mutation.setAttribute(targetSvg, 'height', `${originalHeight * (height / baseHeight)}px`) || changed;
+      return changed;
+    });
   };
 
   const resetCanvasPadding = () => {
@@ -66,13 +87,18 @@ export const createLegendCanvasActions = ({ state, previewRuntime }) => {
     canvasPadding.left = 0;
     const svg = currentSvg();
     if (!svg) return;
-    bindCompositionMetadata(svg);
-    if (svg.dataset.originalViewBox) svg.setAttribute('viewBox', svg.dataset.originalViewBox);
-    if (svg.dataset.originalWidth) {
-      svg.setAttribute('width', `${svg.dataset.originalWidth}px`);
-      svg.setAttribute('height', `${svg.dataset.originalHeight}px`);
-    }
-    persistCurrentSvg(svg);
+    return persistCurrentSvg(svg, ({ svg: targetSvg, mutation }) => {
+      bindCompositionMetadata(targetSvg);
+      let changed = false;
+      if (targetSvg.dataset.originalViewBox) {
+        changed = mutation.setAttribute(targetSvg, 'viewBox', targetSvg.dataset.originalViewBox) || changed;
+      }
+      if (targetSvg.dataset.originalWidth) {
+        changed = mutation.setAttribute(targetSvg, 'width', `${targetSvg.dataset.originalWidth}px`) || changed;
+        changed = mutation.setAttribute(targetSvg, 'height', `${targetSvg.dataset.originalHeight}px`) || changed;
+      }
+      return changed;
+    });
   };
 
   const captureOriginalStroke = () => {

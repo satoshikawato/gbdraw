@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 
 globalThis.location = { href: 'https://example.test/gbdraw/web/' };
 delete globalThis.loadPyodide;
+const structuralMetrics = [];
+globalThis.__GBDRAW_TEST_HOOKS__ = {
+  onStructuralMetric: (metric) => structuralMetrics.push(metric)
+};
 
 const { EXPECTED_WEB_RUNTIME_CAPABILITIES } = await import(
   '../../gbdraw/web/js/services/runtime-capabilities.js'
@@ -112,6 +116,20 @@ const helper = await runDiagramHelperOperation(
   }
 );
 assert.equal(helper.result.records[0].record_id, 'shared-worker');
+assert.deepEqual(
+  structuralMetrics
+    .filter(({ name }) => [
+      'workerConstructionCount',
+      'workerInitializationCount',
+      'pythonHelperRequestCount'
+    ].includes(name))
+    .map(({ name, value }) => [name, value]),
+  [
+    ['pythonHelperRequestCount', 1],
+    ['workerConstructionCount', 1],
+    ['workerInitializationCount', 1]
+  ]
+);
 const helperWorker = FakeWorker.instances[0];
 assert.equal(FakeWorker.instances.length, 1);
 assert.equal(helperWorker.messages.filter(({ type }) => type === 'init').length, 1);

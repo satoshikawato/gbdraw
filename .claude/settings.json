@@ -3,5 +3,19 @@
     "allow": [
       "Bash(git commit:*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/run-web-refactor-guards.sh",
+            "args": [],
+            "timeout": 300
+          }
+        ]
+      }
+    ]
   }
 }

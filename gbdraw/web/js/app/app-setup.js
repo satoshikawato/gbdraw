@@ -1968,6 +1968,7 @@ export const createAppSetup = () => {
       await nextTick();
       if (result?.status === 'ok') {
         await synchronizeLoadedSessionLegendEntries();
+        syncLabelEditor({ contextOnly: true });
       }
       recordSessionLifecycleEvent('history-baseline-start');
       await history.initializeIntentBaseline('Loaded session');
@@ -2086,6 +2087,7 @@ export const createAppSetup = () => {
             featureColorOverrides,
             featureStrokeOverrides,
             featureVisibilityOverrides,
+            featureVisibilityManualRules,
             labelTextFeatureOverrides,
             labelTextBulkOverrides,
             labelTextFeatureOverrideSources,
@@ -2093,6 +2095,9 @@ export const createAppSetup = () => {
             legendColorOverrides,
             legendStrokeOverrides,
             legendEntries: legendEntries.value,
+            deletedLegendEntries: deletedLegendEntries.value,
+            originalLegendOrder: originalLegendOrder.value,
+            addedLegendCaptions: Array.from(addedLegendCaptions.value),
             manualSpecificRules
           });
           previewRuntime.commitDomEdit({

@@ -6,6 +6,7 @@ import {
   applyLabelVisibility,
   applyLegendColorOverridesToSvg,
   applyStrokeOverridesToSvg,
+  createEditorSvgProjection,
   setLabelText
 } from '../../gbdraw/web/js/app/editor-svg-projection.js';
 import {
@@ -28,7 +29,8 @@ const createFixture = ({ includeSecondFeature = false } = {}) => {
   const { swatch } = appendFeatureLegend(svg, 'Legend A');
   let replacementCount = 0;
   const initialContent = serializeFakeSvg(svg);
-  const results = new Proxy([{ name: 'diagram.svg', content: initialContent }], {
+  const initialResult = { name: 'diagram.svg', content: initialContent };
+  const results = new Proxy([initialResult], {
     set(target, property, value) {
       if (/^\d+$/.test(String(property))) replacementCount += 1;
       target[property] = value;
@@ -42,6 +44,12 @@ const createFixture = ({ includeSecondFeature = false } = {}) => {
     svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svg : null })
   };
   let serializationCount = 0;
+  const structuralMetrics = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      structuralMetrics.push(metric);
+    }
+  };
   const runtime = createPreviewRuntime({
     state,
     serializeSvg: (targetSvg) => {
@@ -53,11 +61,13 @@ const createFixture = ({ includeSecondFeature = false } = {}) => {
   return {
     feature,
     initialContent,
+    initialResult,
     label,
     runtime,
     secondFeature,
     state,
     swatch,
+    structuralMetrics,
     counts: {
       replacements: () => replacementCount,
       serializations: () => serializationCount
@@ -105,7 +115,11 @@ const directEditCases = [
       canonical.labelText['feature-a'] = 'edited label';
       return fixture.runtime.commitDomEdit({
         reason: 'label-text',
-        mutate: () => setLabelText(fixture.label, 'edited label')
+        mutate: ({ mutation }) => setLabelText(
+          fixture.label,
+          'edited label',
+          { mutation }
+        )
       }).changed;
     },
     assertDom: ({ label }) => assert.equal(label.textContent, 'edited label')
@@ -116,7 +130,11 @@ const directEditCases = [
       canonical.labelVisibility['feature-a'] = 'off';
       return fixture.runtime.commitDomEdit({
         reason: 'label-visibility',
-        mutate: () => applyLabelVisibility(fixture.label, 'off', { markPreview: true })
+        mutate: ({ mutation }) => applyLabelVisibility(
+          fixture.label,
+          'off',
+          { markPreview: true, mutation }
+        )
       }).changed;
     },
     assertDom: ({ label }) => assert.equal(label.getAttribute('display'), 'none')
@@ -128,9 +146,10 @@ const directEditCases = [
       return fixture.runtime.commitDomEdit({
         reason: 'legend-fill',
         invalidateIndexes: ['legend'],
-        mutate: () => applyLegendColorOverridesToSvg({
-          svg: fixture.state.svgContainer.value.querySelector('svg'),
-          legendColorOverrides: canonical.legendFills
+        mutate: ({ svg, mutation }) => applyLegendColorOverridesToSvg({
+          svg,
+          legendColorOverrides: canonical.legendFills,
+          mutation
         })
       }).changed;
     },
@@ -143,9 +162,10 @@ const directEditCases = [
       return fixture.runtime.commitDomEdit({
         reason: 'legend-stroke',
         invalidateIndexes: ['legend'],
-        mutate: () => applyStrokeOverridesToSvg({
-          svg: fixture.state.svgContainer.value.querySelector('svg'),
-          legendStrokeOverrides: canonical.legendStrokes
+        mutate: ({ svg, mutation }) => applyStrokeOverridesToSvg({
+          svg,
+          legendStrokeOverrides: canonical.legendStrokes,
+          mutation
         })
       }).changed;
     },
@@ -168,20 +188,6 @@ for (const directEditCase of directEditCases) {
       legendFills: {},
       legendStrokes: {}
     };
-    const owners = {
-      featureCatalog: {},
-      extractedFeatures: [],
-      biologicalFeatures: [],
-      orthogroups: []
-    };
-    const ownerReferences = { ...owners };
-    const execution = {
-      workerConstruction: 0,
-      workerInitialization: 0,
-      workerRuns: 0,
-      pythonCalls: 0,
-      historyEntries: 0
-    };
     const canonicalBefore = JSON.stringify(canonical);
 
     assert.equal(directEditCase.apply(fixture, canonical), true);
@@ -190,21 +196,29 @@ for (const directEditCase of directEditCases) {
     assert.notEqual(fixture.state.results.value[0].content, fixture.initialContent);
     assert.equal(fixture.counts.serializations(), 1);
     assert.equal(fixture.counts.replacements(), 1);
-    assert.deepEqual(execution, {
-      workerConstruction: 0,
-      workerInitialization: 0,
-      workerRuns: 0,
-      pythonCalls: 0,
-      historyEntries: 0
-    });
-    Object.entries(ownerReferences).forEach(([key, owner]) => assert.equal(owners[key], owner));
+    const replacementMetric = fixture.structuralMetrics.find(
+      ({ name }) => name === 'domEditResultReplacementCount'
+    );
+    assert.ok(replacementMetric, 'the assertion observes the production commit boundary');
+    assert.equal(replacementMetric.resultOwnerBefore, fixture.initialResult);
+    assert.equal(replacementMetric.resultOwnerAfter, fixture.state.results.value[0]);
+    assert.equal(replacementMetric.resultsOwner, fixture.state.results.value);
+    assert.equal(replacementMetric.svgOwner, fixture.state.svgContainer.value.querySelector('svg'));
+    assert.deepEqual(
+      fixture.structuralMetrics.filter(({ name }) => [
+        'workerConstructionCount',
+        'workerInitializationCount',
+        'pythonHelperRequestCount'
+      ].includes(name)),
+      [],
+      'the shared production hook observed no Worker or Python helper lifecycle event'
+    );
 
     const resultAfterFirstEdit = fixture.state.results.value[0];
     assert.equal(directEditCase.apply(fixture, canonical), false);
     assert.equal(fixture.state.results.value[0], resultAfterFirstEdit);
     assert.equal(fixture.counts.serializations(), 1);
     assert.equal(fixture.counts.replacements(), 1);
-    assert.equal(execution.historyEntries, 0);
   });
 }
 
@@ -229,7 +243,11 @@ test('a failed optional reflow does not roll back an already committed direct ed
   const canonical = { labelText: { 'feature-a': 'edited before reflow' } };
   const committed = fixture.runtime.commitDomEdit({
     reason: 'label-text-before-reflow',
-    mutate: () => setLabelText(fixture.label, canonical.labelText['feature-a'])
+    mutate: ({ mutation }) => setLabelText(
+      fixture.label,
+      canonical.labelText['feature-a'],
+      { mutation }
+    )
   });
   const committedResult = fixture.state.results.value[0];
   assert.deepEqual(committed, {
@@ -248,4 +266,70 @@ test('a failed optional reflow does not roll back an already committed direct ed
   assert.equal(fixture.state.results.value[0], committedResult);
   assert.equal(fixture.counts.serializations(), 1);
   assert.equal(fixture.counts.replacements(), 1);
+});
+
+test('Linear direct edit and fresh-render replay converge through the shared owner', () => {
+  const mounted = createFixture();
+  mounted.state.svgContainer.value.querySelector('svg').setAttribute('data-diagram-mode', 'linear');
+  assert.equal(mounted.runtime.applyFeatureFillChanges([
+    { featureId: 'feature-a', color: '#0f766e' }
+  ]), true);
+
+  const freshSvg = new FakeSvgElement('svg', { 'data-diagram-mode': 'linear' });
+  const freshFeature = appendFeature(freshSvg, 'feature-a');
+  const features = [{
+    svg_id: 'feature-a',
+    recordKey: 'linear-record',
+    biologicalFeatureId: 'linear-feature',
+    type: 'CDS'
+  }];
+  createEditorSvgProjection({
+    features,
+    featureColorOverrides: {
+      ['linear-record\u0000linear-feature']: { color: '#0f766e' }
+    }
+  }).project(freshSvg);
+
+  assert.equal(mounted.feature.getAttribute('fill'), '#0f766e');
+  assert.equal(freshFeature.getAttribute('fill'), '#0f766e');
+});
+
+test('multi-Result edit isolates Result 2 and its saved selection round-trips all artifacts', () => {
+  const firstSvg = new FakeSvgElement('svg');
+  const secondSvg = new FakeSvgElement('svg');
+  appendFeature(firstSvg, 'feature-a');
+  const secondFeature = appendFeature(secondSvg, 'feature-a');
+  const firstResult = { name: 'record-1.svg', content: serializeFakeSvg(firstSvg) };
+  const secondResult = { name: 'record-2.svg', content: serializeFakeSvg(secondSvg) };
+  const results = [firstResult, secondResult];
+  let mountedSvg = firstSvg;
+  const state = {
+    results: ref(results),
+    selectedResultIndex: ref(0),
+    skipCaptureBaseConfig: ref(false),
+    svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? mountedSvg : null })
+  };
+  const runtime = createPreviewRuntime({ state, serializeSvg: serializeFakeSvg });
+  runtime.mountResultSvg(0, firstSvg);
+  runtime.selectResult(1);
+  mountedSvg = secondSvg;
+  runtime.mountResultSvg(1, secondSvg);
+
+  assert.equal(runtime.applyFeatureFillChanges([
+    { featureId: 'feature-a', color: '#7c3aed' }
+  ]), true);
+  assert.equal(state.results.value[0], firstResult);
+  assert.equal(state.results.value[0].content, firstResult.content);
+  assert.notEqual(state.results.value[1], secondResult);
+  assert.equal(secondFeature.getAttribute('fill'), '#7c3aed');
+
+  const saved = JSON.stringify({
+    results: state.results.value,
+    ui: { selectedResultIndex: state.selectedResultIndex.value }
+  });
+  const loaded = JSON.parse(saved);
+  assert.deepEqual(loaded.results.map(({ name }) => name), ['record-1.svg', 'record-2.svg']);
+  assert.equal(loaded.results[0].content, firstResult.content);
+  assert.equal(loaded.results[1].content, state.results.value[1].content);
+  assert.equal(loaded.ui.selectedResultIndex, 1);
 });

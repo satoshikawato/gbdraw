@@ -122,7 +122,28 @@ const flushPreview = () => {
 };
 const previewRuntime = {
   commitDomEdit: ({ reason = 'test-edit', mutate }) => {
-    const outcome = mutate({ svg: svgContainer.value?.querySelector?.('svg') || null, resultIndex: 0 });
+    const mutation = {
+      setAttribute: (element, name, value) => {
+        if (element.getAttribute(name) === String(value)) return false;
+        element.setAttribute(name, value);
+        return true;
+      },
+      removeAttribute: (element, name) => {
+        if (element.getAttribute(name) === null) return false;
+        element.removeAttribute(name);
+        return true;
+      },
+      setTextContent: (element, value) => {
+        if (String(element.textContent ?? '') === String(value ?? '')) return false;
+        element.textContent = String(value ?? '');
+        return true;
+      }
+    };
+    const outcome = mutate({
+      svg: svgContainer.value?.querySelector?.('svg') || null,
+      resultIndex: 0,
+      mutation
+    });
     const changed = outcome !== false && outcome !== 0 && outcome !== null && outcome !== undefined;
     if (!changed) return { changed: false, flushed: false, resultIndex: 0, reason };
     previewDirty = true;
@@ -410,8 +431,8 @@ assert.equal(previewFlushCount, noOpFlushCount);
 const compoundFlushCount = previewFlushCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
 assert.equal(previewFlushCount - compoundFlushCount, 1);
-assert.equal(addLegendEntryOptions.at(-1)?.commit, false);
-assert.equal(removeLegendEntryOptions.at(-1)?.commit, false);
+assert.equal(addLegendEntryOptions.at(-1)?.commit, undefined);
+assert.equal(removeLegendEntryOptions.at(-1)?.commit, undefined);
 legendEntries.value = [];
 
 const outsideLabelGroup = {
@@ -749,6 +770,6 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
 assert.equal(addLegendEntryOptions.length > 0, true);
 assert.equal(removeLegendEntryOptions.length > 0, true);
 assert.equal(updateLegendEntryColorOptions.length > 0, true);
-assert.equal(addLegendEntryOptions.every((options) => options.commit === false), true);
-assert.equal(removeLegendEntryOptions.every((options) => options.commit === false), true);
-assert.equal(updateLegendEntryColorOptions.every((options) => options.commit === false), true);
+assert.equal(addLegendEntryOptions.every((options) => options.commit === undefined), true);
+assert.equal(removeLegendEntryOptions.every((options) => options.commit === undefined), true);
+assert.equal(updateLegendEntryColorOptions.every((options) => options.commit === undefined), true);

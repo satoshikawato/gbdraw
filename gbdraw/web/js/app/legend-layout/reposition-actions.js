@@ -47,13 +47,17 @@ export const createLegendRepositionActions = ({
     reflowDualLegendLayout,
     reflowSingleLegendLayout
   } = legendActions;
-  const persist = (svg) => {
-    skipPositionReapply.value = true;
-    return previewRuntime.commitDomEdit({
+  const commitReposition = (svg, mutate) => {
+    const changed = previewRuntime.commitDomEdit({
       reason: 'legend-reposition',
       invalidateIndexes: ['legend'],
-      mutate: () => true
+      mutate: ({ svg: targetSvg, mutation }) => {
+        if (targetSvg !== svg) return false;
+        return mutate({ svg: targetSvg, mutation });
+      }
     }).changed;
+    if (changed) skipPositionReapply.value = true;
+    return changed;
   };
 
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
@@ -111,27 +115,28 @@ export const createLegendRepositionActions = ({
       throw new Error('This diagram has no legend composition target. Regenerate it with a legend before changing its side.');
     }
 
-    if (legendGroup && newPosition !== 'none') {
-      legendGroup.removeAttribute('display');
-      const hasDualLegend = setLegendVariant(legendGroup, newPosition);
-      if (hasDualLegend) {
-        reflowDualLegendLayout(svg);
-      } else {
-        const widthHint = isHorizontalSide(newPosition)
-          ? binding.metadata.primary.finalBounds.width
-          : null;
-        reflowSingleLegendLayout(
-          svg,
-          isHorizontalSide(newPosition) ? 'horizontal' : 'vertical',
-          widthHint
-        );
+    return commitReposition(svg, ({ svg: targetSvg, mutation }) => {
+      if (legendGroup && newPosition !== 'none') {
+        mutation.removeAttribute(legendGroup, 'display');
+        const hasDualLegend = setLegendVariant(legendGroup, newPosition);
+        if (hasDualLegend) {
+          reflowDualLegendLayout(targetSvg);
+        } else {
+          const widthHint = isHorizontalSide(newPosition)
+            ? binding.metadata.primary.finalBounds.width
+            : null;
+          reflowSingleLegendLayout(
+            targetSvg,
+            isHorizontalSide(newPosition) ? 'horizontal' : 'vertical',
+            widthHint
+          );
+        }
       }
-    }
 
-    const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
-    syncStateFromComposition(svg, nextBinding);
-    persist(svg);
-    return true;
+      const nextBinding = applyCompositionEdit(targetSvg, { legendSide: newPosition, canvasPadding });
+      syncStateFromComposition(targetSvg, nextBinding);
+      return true;
+    });
   };
 
   const refreshLegendGeometry = () => {
@@ -149,20 +154,21 @@ export const createLegendRepositionActions = ({
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
-    const binding = titleTarget === undefined
-      ? applyCompositionEdit(svg, {
-          titleSide: titleSide ?? bindCompositionMetadata(svg).metadata.titleSide,
-          canvasPadding
-        })
-      : reconcileCompositionTitle(
-          svg,
-          titleTarget,
-          titleSide ?? (titleTarget ? 'bottom' : 'none'),
-          { canvasPadding }
-        );
-    syncStateFromComposition(svg, binding);
-    persist(svg);
-    return true;
+    return commitReposition(svg, ({ svg: targetSvg }) => {
+      const binding = titleTarget === undefined
+        ? applyCompositionEdit(targetSvg, {
+            titleSide: titleSide ?? bindCompositionMetadata(targetSvg).metadata.titleSide,
+            canvasPadding
+          })
+        : reconcileCompositionTitle(
+            targetSvg,
+            titleTarget,
+            titleSide ?? (titleTarget ? 'bottom' : 'none'),
+            { canvasPadding }
+          );
+      syncStateFromComposition(targetSvg, binding);
+      return true;
+    });
   };
 
   return {

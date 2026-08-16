@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
 const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
+const mutationJournalSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'dom-mutation-journal.js');
 const serviceNames = [
   'runtime-test-hooks.js',
   'session-feature-metadata.js',
@@ -21,6 +22,11 @@ await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
+await writeFile(
+  join(tempDir, 'app', 'dom-mutation-journal.js'),
+  await readFile(mutationJournalSourcePath, 'utf8'),
+  'utf8'
+);
 await Promise.all(serviceNames.map(async (name) => {
   const servicePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', name);
   await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
@@ -184,31 +190,44 @@ assert.equal(featureBConnector.getAttribute('fill'), 'none');
 assert.equal(featureBBlock.getAttribute('display'), 'none');
 assert.equal(featureBConnector.getAttribute('display'), 'none');
 assert.equal(featureBBlock.getAttribute('stroke'), '#333333');
-assert.equal(serializeCount, 3);
-assert.equal(replacementCount, 3);
+assert.equal(serializeCount, 4, 'the synchronous prefix and post-await continuation commit separately');
+assert.equal(replacementCount, 4);
 
 await assert.rejects(
   runtime.runDomEdit({
     reason: 'failed-compound-edit',
-    action: async () => {
+    action: () => {
       runtime.commitDomEdit({
         reason: 'partial-edit',
-        mutate: () => {
-          featureA.setAttribute('data-partial-edit', 'true');
-          return true;
-        }
+        mutate: ({ mutation }) => mutation.setAttribute(featureA, 'data-partial-edit', 'true')
       });
       throw new Error('action failed');
     }
   }),
   /action failed/
 );
-assert.equal(serializeCount, 3);
-assert.equal(replacementCount, 3);
-assert.equal(runtime.getActiveRuntime().dirty, true);
-assert.equal(runtime.flushActiveResult(), true);
 assert.equal(serializeCount, 4);
 assert.equal(replacementCount, 4);
+assert.equal(featureA.getAttribute('data-partial-edit'), null);
+assert.equal(runtime.getActiveRuntime().dirty, false);
+assert.equal(runtime.flushActiveResult(), false);
+
+const featureAFillBeforeFailedBulk = featureA.getAttribute('fill');
+const featureBSetAttribute = featureBBlock.setAttribute.bind(featureBBlock);
+featureBBlock.setAttribute = (name, value) => {
+  if (name === 'fill' && value === '#badbad') throw new Error('second target failed');
+  featureBSetAttribute(name, value);
+};
+assert.throws(() => runtime.applyFeatureFillChanges([
+  { featureId: 'feature-a', color: '#123456' },
+  { featureId: 'feature-b', color: '#badbad' }
+]), /second target failed/);
+assert.equal(featureA.getAttribute('fill'), featureAFillBeforeFailedBulk);
+assert.equal(featureBBlock.getAttribute('fill'), '#abcdef');
+assert.equal(runtime.getActiveRuntime().dirty, false);
+assert.equal(serializeCount, 4);
+assert.equal(replacementCount, 4);
+featureBBlock.setAttribute = featureBSetAttribute;
 
 failSerialization = true;
 assert.throws(() => runtime.commitDomEdit({
@@ -258,5 +277,117 @@ assert.equal(legacyBlock.getAttribute('fill'), '#fedcba');
 assert.equal(legacyConnector.getAttribute('fill'), 'none');
 assert.equal(serializeCount, 6);
 assert.equal(replacementCount, 6);
+
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
+
+const createLeaseRaceFixture = () => {
+  const oldFeature = new FakeFeatureElement('race-feature', { fill: '#111111' });
+  const oldSvg = makeSvg([oldFeature]);
+  const initialResult = { name: 'race.svg', content: '<svg data-owner="old"></svg>' };
+  const raceState = {
+    results: ref([initialResult, { name: 'second.svg', content: '<svg data-owner="second"></svg>' }]),
+    selectedResultIndex: ref(0),
+    resultGenerationKey: ref('generation-1'),
+    skipCaptureBaseConfig: ref(false),
+    svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? oldSvg : null })
+  };
+  const raceRuntime = createPreviewRuntime({
+    state: raceState,
+    serializeSvg: (targetSvg) => `<svg data-fill="${targetSvg.elements[0]?.getAttribute('fill') || ''}"></svg>`
+  });
+  raceRuntime.mountResultSvg(0, oldSvg);
+  return { initialResult, oldFeature, oldSvg, runtime: raceRuntime, state: raceState };
+};
+
+const raceCases = [
+  {
+    name: 'selected Result switch',
+    replace: ({ runtime: raceRuntime, state: raceState }) => {
+      const nextSvg = makeSvg([new FakeFeatureElement('race-feature', { fill: '#222222' })]);
+      raceState.selectedResultIndex.value = 1;
+      raceState.svgContainer.value = { querySelector: (selector) => selector === 'svg' ? nextSvg : null };
+      raceRuntime.mountResultSvg(1, nextSvg);
+      return raceState.results.value[1];
+    }
+  },
+  {
+    name: 'same-index Result replacement',
+    replace: ({ state: raceState }) => {
+      const replacement = { name: 'race.svg', content: '<svg data-owner="replacement"></svg>' };
+      raceState.results.value[0] = replacement;
+      return replacement;
+    }
+  },
+  {
+    name: 'Generate replacement',
+    replace: ({ runtime: raceRuntime, state: raceState }) => {
+      const replacement = { name: 'generated.svg', content: '<svg data-owner="generated"></svg>' };
+      const nextSvg = makeSvg([new FakeFeatureElement('race-feature', { fill: '#333333' })]);
+      raceState.resultGenerationKey.value = 'generation-2';
+      raceState.results.value = [replacement];
+      raceState.svgContainer.value = { querySelector: (selector) => selector === 'svg' ? nextSvg : null };
+      raceRuntime.mountResultSvg(0, nextSvg);
+      return replacement;
+    }
+  },
+  {
+    name: 'session Load document replacement',
+    replace: ({ runtime: raceRuntime, state: raceState }) => {
+      const replacement = { name: 'loaded.svg', content: '<svg data-owner="loaded"></svg>' };
+      const nextSvg = makeSvg([new FakeFeatureElement('race-feature', { fill: '#444444' })]);
+      raceState.results.value = [replacement];
+      raceState.svgContainer.value = { querySelector: (selector) => selector === 'svg' ? nextSvg : null };
+      raceRuntime.mountResultSvg(0, nextSvg);
+      return replacement;
+    }
+  },
+  {
+    name: 'History artifact replacement',
+    replace: ({ runtime: raceRuntime, state: raceState }) => {
+      const replacement = { name: 'history.svg', content: '<svg data-owner="history"></svg>' };
+      const nextSvg = makeSvg([new FakeFeatureElement('race-feature', { fill: '#555555' })]);
+      raceState.results.value[0] = replacement;
+      raceState.svgContainer.value = { querySelector: (selector) => selector === 'svg' ? nextSvg : null };
+      raceRuntime.mountResultSvg(0, nextSvg);
+      return replacement;
+    }
+  },
+  {
+    name: 'SVG remount',
+    replace: ({ runtime: raceRuntime, state: raceState }) => {
+      const retainedResult = raceState.results.value[0];
+      const nextSvg = makeSvg([new FakeFeatureElement('race-feature', { fill: '#666666' })]);
+      raceState.svgContainer.value = { querySelector: (selector) => selector === 'svg' ? nextSvg : null };
+      raceRuntime.mountResultSvg(0, nextSvg);
+      return retainedResult;
+    }
+  }
+];
+
+for (const raceCase of raceCases) {
+  const fixture = createLeaseRaceFixture();
+  const lease = fixture.runtime.beginDomEditLease({ reason: `race-${raceCase.name}` });
+  assert.ok(lease);
+  assert.equal(lease.mutate(({ mutation }) => (
+    mutation.setAttribute(fixture.oldFeature, 'fill', '#abcdef')
+  )), true);
+  const gate = deferred();
+  const settlement = (async () => {
+    await gate.promise;
+    return lease.commit();
+  })();
+  const currentOwner = raceCase.replace(fixture);
+  const currentContent = currentOwner.content;
+  gate.resolve();
+  assert.equal(await settlement, false, raceCase.name);
+  assert.equal(currentOwner.content, currentContent, raceCase.name);
+  assert.equal(fixture.oldFeature.getAttribute('fill'), '#111111', raceCase.name);
+}
 
 console.log('preview runtime tests passed');

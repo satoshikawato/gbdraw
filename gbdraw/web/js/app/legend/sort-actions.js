@@ -43,81 +43,67 @@ export const createLegendSortActions = ({ state, extractLegendEntries, previewRu
     return groupOffset;
   };
 
-  const translateEntryGroupChildren = (entryGroup, deltaX, deltaY) => {
+  const translateEntryGroupChildren = (entryGroup, deltaX, deltaY, mutation) => {
     if (!entryGroup) return;
     if (Math.abs(deltaX) < 1e-6 && Math.abs(deltaY) < 1e-6) return;
 
     const transformedNodes = entryGroup.querySelectorAll('[transform]');
     transformedNodes.forEach((node) => {
       const { x, y } = parseTransform(node.getAttribute('transform'));
-      node.setAttribute('transform', `translate(${x + deltaX}, ${y + deltaY})`);
+      mutation.setAttribute(node, 'transform', `translate(${x + deltaX}, ${y + deltaY})`);
     });
-  };
-
-  const persistLegendSvg = (svg) => {
-    previewRuntime.commitDomEdit({
-      reason: 'legend-sort',
-      invalidateIndexes: ['legend'],
-      mutate: () => true
-    });
-    extractLegendEntries();
   };
 
   const applyLegendEntryOrder = (captionOrder) => {
-    const svg = getCurrentSvg();
-    if (!svg) return;
+    if (!getCurrentSvg()) return false;
+    const committed = previewRuntime.commitDomEdit({
+      reason: 'legend-sort',
+      invalidateIndexes: ['legend'],
+      mutate: ({ svg, mutation }) => {
+        const targetGroups = getAllFeatureLegendGroups(svg);
+        if (targetGroups.length === 0) return false;
+        let changed = false;
 
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return;
-
-    let changed = false;
-
-    for (const targetGroup of targetGroups) {
-      const entryGroups = getEntryGroups(targetGroup);
-      if (entryGroups.length < 2) continue;
-
-      const groupByCaption = new Map(entryGroups.map((entryGroup) => [getEntryCaption(entryGroup), entryGroup]));
-      const orderedGroups = captionOrder.map((caption) => groupByCaption.get(caption)).filter(Boolean);
-      if (orderedGroups.length < 2) continue;
-
-      const positionedEntries = entryGroups
-        .map((entryGroup) => ({ entryGroup, anchor: getEntryAnchor(entryGroup) }))
-        .sort((a, b) => {
-          const yDelta = a.anchor.y - b.anchor.y;
-          if (Math.abs(yDelta) < 1) return a.anchor.x - b.anchor.x;
-          return yDelta;
-        });
-
-      const slots = positionedEntries.map(({ anchor }) => anchor);
-      orderedGroups.forEach((entryGroup, idx) => {
-        const targetAnchor = slots[idx];
-        if (!targetAnchor) return;
-
-        const currentAnchor = getEntryAnchor(entryGroup);
-        const deltaX = targetAnchor.x - currentAnchor.x;
-        const deltaY = targetAnchor.y - currentAnchor.y;
-        if (Math.abs(deltaX) >= 1e-6 || Math.abs(deltaY) >= 1e-6) {
-          translateEntryGroupChildren(entryGroup, deltaX, deltaY);
-          changed = true;
+        for (const targetGroup of targetGroups) {
+          const entryGroups = getEntryGroups(targetGroup);
+          if (entryGroups.length < 2) continue;
+          const groupByCaption = new Map(
+            entryGroups.map((entryGroup) => [getEntryCaption(entryGroup), entryGroup])
+          );
+          const orderedGroups = captionOrder.map((caption) => groupByCaption.get(caption)).filter(Boolean);
+          if (orderedGroups.length < 2) continue;
+          const positionedEntries = entryGroups
+            .map((entryGroup) => ({ entryGroup, anchor: getEntryAnchor(entryGroup) }))
+            .sort((a, b) => {
+              const yDelta = a.anchor.y - b.anchor.y;
+              if (Math.abs(yDelta) < 1) return a.anchor.x - b.anchor.x;
+              return yDelta;
+            });
+          const slots = positionedEntries.map(({ anchor }) => anchor);
+          orderedGroups.forEach((entryGroup, idx) => {
+            const targetAnchor = slots[idx];
+            if (!targetAnchor) return;
+            const currentAnchor = getEntryAnchor(entryGroup);
+            const deltaX = targetAnchor.x - currentAnchor.x;
+            const deltaY = targetAnchor.y - currentAnchor.y;
+            if (Math.abs(deltaX) >= 1e-6 || Math.abs(deltaY) >= 1e-6) {
+              translateEntryGroupChildren(entryGroup, deltaX, deltaY, mutation);
+              changed = true;
+            }
+          });
+          const remainingGroups = entryGroups.filter((entryGroup) => !orderedGroups.includes(entryGroup));
+          const nextGroups = [...orderedGroups, ...remainingGroups];
+          const orderChanged = nextGroups.some((entryGroup, index) => entryGroups[index] !== entryGroup);
+          if (orderChanged) {
+            nextGroups.forEach((entryGroup) => mutation.appendChild(targetGroup, entryGroup));
+            changed = true;
+          }
         }
-      });
-
-      const remainingGroups = entryGroups.filter((entryGroup) => !orderedGroups.includes(entryGroup));
-      [...orderedGroups, ...remainingGroups].forEach((entryGroup) => targetGroup.appendChild(entryGroup));
-    }
-
-    if (!changed) {
-      const currentOrder = legendEntries.value.map((entry) => entry.caption);
-      const normalizedRequested = captionOrder.filter(Boolean);
-      if (
-        currentOrder.length === normalizedRequested.length &&
-        currentOrder.every((caption, idx) => caption === normalizedRequested[idx])
-      ) {
-        return;
+        return changed;
       }
-    }
-
-    persistLegendSvg(svg);
+    });
+    if (committed.changed) extractLegendEntries();
+    return committed.changed;
   };
 
   const getVisibleLegendOrder = () => legendEntries.value.map((entry) => entry.caption).filter(Boolean);

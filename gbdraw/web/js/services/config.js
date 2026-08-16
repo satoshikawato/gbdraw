@@ -4353,20 +4353,29 @@ export const importSession = async (e, options = {}) => {
     });
 
     const restoredFeatureState = currentCatalogFeatureState || features || {};
-    const restoredEditorProjection = createEditorSvgProjection({
-      features: restoredFeatureState.extractedFeatures || [],
-      featureColorOverrides: state.featureColorOverrides,
-      featureStrokeOverrides: state.featureStrokeOverrides,
-      featureVisibilityOverrides: state.featureVisibilityOverrides,
-      labelTextFeatureOverrides: state.labelTextFeatureOverrides,
-      labelTextBulkOverrides: state.labelTextBulkOverrides,
-      labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
-      labelVisibilityOverrides: state.labelVisibilityOverrides,
-      legendColorOverrides: state.legendColorOverrides,
-      legendStrokeOverrides: state.legendStrokeOverrides,
-      legendEntries: state.legendEntries.value,
-      manualSpecificRules: state.manualSpecificRules
-    });
+    let restoredEditorProjection = null;
+    const getRestoredEditorProjection = () => {
+      if (restoredEditorProjection) return restoredEditorProjection;
+      restoredEditorProjection = createEditorSvgProjection({
+        features: restoredFeatureState.extractedFeatures || [],
+        featureColorOverrides: state.featureColorOverrides,
+        featureStrokeOverrides: state.featureStrokeOverrides,
+        featureVisibilityOverrides: state.featureVisibilityOverrides,
+        featureVisibilityManualRules: state.featureVisibilityManualRules,
+        labelTextFeatureOverrides: state.labelTextFeatureOverrides,
+        labelTextBulkOverrides: state.labelTextBulkOverrides,
+        labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
+        labelVisibilityOverrides: state.labelVisibilityOverrides,
+        legendColorOverrides: state.legendColorOverrides,
+        legendStrokeOverrides: state.legendStrokeOverrides,
+        legendEntries: state.legendEntries.value,
+        deletedLegendEntries: state.deletedLegendEntries.value,
+        originalLegendOrder: state.originalLegendOrder.value,
+        addedLegendCaptions: Array.from(state.addedLegendCaptions.value),
+        manualSpecificRules: state.manualSpecificRules
+      });
+      return restoredEditorProjection;
+    };
     const transformRestoredSessionSvg = (svg, { applyEditorProjection = true } = {}) => {
       const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
       let compositionChanged = false;
@@ -4393,7 +4402,7 @@ export const importSession = async (e, options = {}) => {
         compositionChanged = true;
       }
       const projectionChanged = applyEditorProjection
-        ? restoredEditorProjection.project(svg).changed
+        ? getRestoredEditorProjection().project(svg).changed
         : false;
       return legendGroupsChanged || compositionChanged || projectionChanged;
     };
@@ -4411,6 +4420,7 @@ export const importSession = async (e, options = {}) => {
           featureColorOverrides: state.featureColorOverrides,
           featureStrokeOverrides: state.featureStrokeOverrides,
           featureVisibilityOverrides: state.featureVisibilityOverrides,
+          featureVisibilityManualRules: state.featureVisibilityManualRules,
           labelTextFeatureOverrides: state.labelTextFeatureOverrides,
           labelTextBulkOverrides: state.labelTextBulkOverrides,
           labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
@@ -4418,6 +4428,9 @@ export const importSession = async (e, options = {}) => {
           legendColorOverrides: state.legendColorOverrides,
           legendStrokeOverrides: state.legendStrokeOverrides,
           legendEntries: state.legendEntries.value,
+          deletedLegendEntries: state.deletedLegendEntries.value,
+          originalLegendOrder: state.originalLegendOrder.value,
+          addedLegendCaptions: Array.from(state.addedLegendCaptions.value),
           manualSpecificRules: state.manualSpecificRules,
           legacyFeatures: features?.extractedFeatures || [],
           preparedFeatureState: currentCatalogFeatureState,

@@ -64,14 +64,13 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
   const { getAllFeatureLegendGroups } = legendActions;
 
-  const persistSvgEdit = (svg, reason) => {
-    if (!svg) return false;
-    return previewRuntime.commitDomEdit({
+  const commitSvgMutation = (reason, mutate) => (
+    previewRuntime.commitDomEdit({
       reason,
       invalidateIndexes: ['features', 'legend', 'pairwiseMatches', 'orthogroupComparisons'],
-      mutate: () => true
-    }).changed;
-  };
+      mutate: ({ svg, mutation }) => mutate(svg, mutation)
+    }).changed
+  );
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
@@ -96,10 +95,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
   } = {}) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
+    return commitSvgMutation('palette-style', (svg) => {
     const colors = appliedPaletteColors.value;
     const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
     const featureLookup = featuresBySvgId?.value || new Map();
@@ -319,19 +315,15 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       });
     }
 
-    if (updatedCount > 0) {
-      persistSvgEdit(svg, 'palette-style');
-    }
+    return updatedCount;
+    });
   };
 
   const applySpecificRulesToSvg = () => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!manualSpecificRules.length) return;
     if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
+    return commitSvgMutation('specific-rule-style', (svg) => {
     const featureElementIndex = getFeatureElementIndex(svg);
     let updatedCount = 0;
 
@@ -371,18 +363,16 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     });
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'specific-rule-style');
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
+    return updatedCount;
+    });
   };
 
   const applyStylesToSvg = () => {
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
+    return commitSvgMutation('diagram-style', (svg) => {
     let updatedCount = 0;
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
@@ -509,18 +499,16 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'diagram-style');
       console.log(`Applied styles: updated ${updatedCount} elements`);
     }
+    return updatedCount;
+    });
   };
 
   const applyTrackVisibility = () => {
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
+    return commitSvgMutation('track-visibility', (svg) => {
     let updated = false;
 
     const gcContentGroups = getGroupsByBaseIds(
@@ -577,9 +565,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updated) {
-      persistSvgEdit(svg, 'track-visibility');
       console.log('Track visibility updated');
     }
+    return updated;
+    });
   };
 
   watch(

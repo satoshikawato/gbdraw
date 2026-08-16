@@ -32,6 +32,9 @@ const { createLegendEntryActions } = await import(
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
+const { createDomMutationJournal } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'dom-mutation-journal.js'))
+);
 assert.equal(SPECIFIC_COLOR_FILE_OWNER, 'specific-color-file');
 assert.deepEqual(parseTransformXY('translate(12.5,-3.25)'), { x: 12.5, y: -3.25 });
 assert.deepEqual(parseTransformXY('translate(.5 2e1)'), { x: 0.5, y: 20 });
@@ -66,7 +69,7 @@ assert.doesNotMatch(repositionSource, /data-horizontal-viewbox|data-vertical-vie
 assert.doesNotMatch(repositionSource, /0\.025|0\.85|0\.875|0\.75/);
 assert.match(
   legendLayoutSource,
-  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+persistCurrentSvg\(svg\)/
+  /resetAllPositions[\s\S]+persistCurrentSvg\(svg,[\s\S]+resetCompositionUserDeltas/
 );
 assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
 assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);
@@ -136,6 +139,12 @@ class MockElement {
   }
 
   get id() { return this.getAttribute('id') || ''; }
+  get parentNode() { return this.parentElement; }
+  get nextSibling() {
+    if (!this.parentElement) return null;
+    const index = this.parentElement.children.indexOf(this);
+    return index >= 0 ? this.parentElement.children[index + 1] || null : null;
+  }
   getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
   hasAttribute(name) { return this.attributes.has(name); }
   setAttribute(name, value) { this.attributes.set(name, String(value)); }
@@ -146,6 +155,16 @@ class MockElement {
     }
     child.parentElement = this;
     this.children.push(child);
+    return child;
+  }
+  insertBefore(child, reference = null) {
+    if (child.parentElement) {
+      child.parentElement.children = child.parentElement.children.filter((entry) => entry !== child);
+    }
+    child.parentElement = this;
+    const index = reference ? this.children.indexOf(reference) : -1;
+    if (index < 0) this.children.push(child);
+    else this.children.splice(index, 0, child);
     return child;
   }
   remove() {
@@ -203,12 +222,37 @@ const mockLegendEntry = (caption, color, x) => {
   let layoutRefreshes = 0;
   const previewRuntime = {
     commitDomEdit: ({ reason = 'test-edit', mutate }) => {
-      const outcome = mutate({ svg, resultIndex: 0 });
+      const mutation = createDomMutationJournal();
+      const outcome = mutate({ svg, resultIndex: 0, mutation });
       const changed = outcome !== false && outcome !== 0 && outcome !== null && outcome !== undefined;
       if (changed) dirtyMarks += 1;
+      mutation.commit();
       return { changed, flushed: changed, resultIndex: 0, reason };
     },
-    runDomEdit: async ({ action }) => action(),
+    beginDomEditLease: () => {
+      const mutation = createDomMutationJournal();
+      let changed = false;
+      let current = true;
+      return {
+        get current() { return current; },
+        mutate: (mutate) => {
+          const outcome = mutate({ svg, resultIndex: 0, mutation });
+          changed = changed || (outcome !== false && outcome !== 0 && outcome !== null && outcome !== undefined);
+          return changed;
+        },
+        commit: () => {
+          current = false;
+          mutation.commit();
+          if (changed) dirtyMarks += 1;
+          return changed;
+        },
+        cancel: () => {
+          current = false;
+          mutation.rollback();
+          return changed;
+        }
+      };
+    },
     getActiveRuntime: () => ({ resultIndex: 0 }),
     mountResultSvg: () => {}
   };

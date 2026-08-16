@@ -43,24 +43,26 @@ const featureA = { svg_id: 'feature-a', type: 'CDS', label: 'A' };
 const featureB = { svg_id: 'feature-b', type: 'CDS', label: 'B' };
 const extractedFeatures = ref([featureA, featureB]);
 const orthogroups = ref([]);
+const featureVisibilityManualRules = [];
 const featureVisibilityOverrides = {};
 const clickedFeature = ref({ svg_id: 'feature-a', featureVisibility: 'default' });
 const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
+const labelLayoutDirtyReason = ref('');
 
 const actions = createFeatureVisibilityActions({
   state: {
     clickedFeature,
     extractedFeatures,
     orthogroups,
-    featureVisibilityManualRules: [],
+    featureVisibilityManualRules,
     featureVisibilityRules: ref([]),
     featureVisibilityOverrides,
     featureVisibilitySelectorCache: {},
     featureVisibilityScopeDialog,
-    labelLayoutDirtyReason: ref(''),
+    labelLayoutDirtyReason,
     resultGenerationKey,
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex,
@@ -112,6 +114,116 @@ assert.equal(featureVisibilityOverrides['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
 assert.deepEqual(appliedPreviewChanges.at(-1).changes, [{ featureId: 'feature-a', mode: 'off' }]);
 delete featureVisibilityOverrides['feature-a'];
+
+const productFeatureA = {
+  svg_id: 'product-feature-a',
+  type: 'CDS',
+  product: 'shared product',
+  qualifiers: { protein_id: ['WP_PRODUCT_A.1'] }
+};
+const productFeatureB = {
+  svg_id: 'product-feature-b',
+  type: 'CDS',
+  product: 'shared product',
+  qualifiers: { protein_id: ['WP_PRODUCT_B.1'] }
+};
+extractedFeatures.value = [productFeatureA, productFeatureB];
+const productScope = {
+  id: 'product',
+  featureType: 'CDS',
+  qualifier: 'product',
+  value: 'shared product',
+  label: 'Exact product: shared product'
+};
+assert.equal(actions.setFeatureVisibility(productFeatureA, 'off', {
+  triggerReflow: false,
+  scope: productScope
+}), true);
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes,
+  [
+    { featureId: 'product-feature-a', mode: 'off' },
+    { featureId: 'product-feature-b', mode: 'off' }
+  ]
+);
+assert.equal(featureVisibilityManualRules.at(-1).qualifier, 'product');
+actions.setFeatureVisibility(productFeatureA, 'default', {
+  triggerReflow: false,
+  scope: productScope
+});
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes,
+  [
+    { featureId: 'product-feature-a', mode: 'on' },
+    { featureId: 'product-feature-b', mode: 'on' }
+  ]
+);
+assert.equal(featureVisibilityManualRules.length, 0);
+
+const proteinScope = {
+  id: 'protein_id',
+  featureType: 'CDS',
+  qualifier: 'protein_id',
+  value: 'WP_PRODUCT_B.1',
+  label: 'Exact protein ID: WP_PRODUCT_B.1'
+};
+assert.equal(actions.setFeatureVisibility(productFeatureB, 'off', {
+  triggerReflow: false,
+  scope: proteinScope
+}), true);
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes,
+  [{ featureId: 'product-feature-b', mode: 'off' }]
+);
+assert.equal(featureVisibilityManualRules.at(-1).qualifier, 'protein_id');
+featureVisibilityManualRules.splice(0);
+
+extractedFeatures.value = [productFeatureA, productFeatureB];
+assert.equal(actions.addFeatureVisibilityRule(), true);
+assert.equal(labelLayoutDirtyReason.value, 'feature-visibility-rule-add');
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
+  ['on', 'on']
+);
+assert.equal(actions.setFeatureVisibilityRuleField(0, 'featureType', 'CDS'), true);
+assert.equal(actions.setFeatureVisibilityRuleField(0, 'value', '^shared product$'), true);
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
+  ['off', 'off']
+);
+assert.equal(actions.setFeatureVisibilityRuleField(0, 'action', 'show'), true);
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
+  ['on', 'on']
+);
+assert.equal(actions.removeFeatureVisibilityRule(0), true);
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
+  ['on', 'on']
+);
+
+featureVisibilityManualRules.push(
+  {
+    id: 'ordered-off', source: 'manual', recordId: '*', featureType: 'CDS',
+    qualifier: 'product', value: '^shared product$', action: 'off'
+  },
+  {
+    id: 'ordered-on', source: 'manual', recordId: '*', featureType: 'CDS',
+    qualifier: 'product', value: '^shared product$', action: 'show'
+  }
+);
+actions.reconcileFeatureVisibility();
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
+  ['off', 'off']
+);
+assert.equal(actions.moveFeatureVisibilityRuleDown(0), true);
+assert.deepEqual(
+  appliedPreviewChanges.at(-1).changes.map((change) => change.mode),
+  ['on', 'on']
+);
+featureVisibilityManualRules.splice(0);
+extractedFeatures.value = [featureA, featureB];
 
 const sourceIdFeature = {
   svg_id: 'feature-source-id',

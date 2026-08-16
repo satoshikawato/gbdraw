@@ -529,6 +529,9 @@ export const runDiagramHelperOperation = (operation, payload = {}) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return Promise.reject(new TypeError('Diagram helper payload must be an object.'));
   }
+  recordStructuralMetric('pythonHelperRequestCount', 1, {
+    operation: normalizedOperation
+  });
   return runAuxiliaryWorkerRequest({
     type: 'helper',
     operation: normalizedOperation,

@@ -33,6 +33,7 @@ for (const filename of [
 }
 for (const filename of [
   'feature-selector.js',
+  'feature-utils.js',
   'feature-visibility.js',
   'layout-preferences.js',
   'plot-title-position.js'
@@ -51,6 +52,15 @@ const { createHistorySnapshotService } = await import(
 );
 
 const ref = (value) => ({ value });
+const accessorRef = (initialValue) => {
+  let value = initialValue;
+  const prototype = {};
+  Object.defineProperty(prototype, 'value', {
+    get: () => value,
+    set: (nextValue) => { value = nextValue; }
+  });
+  return Object.create(prototype);
+};
 const makeFile = (name, size = 10) => ({ name, size, type: 'text/plain', lastModified: 1 });
 const createLayoutPreferences = () => ({
   circular: {
@@ -1989,6 +1999,90 @@ const createLayoutPreferences = () => ({
     assertAuthorityOwners(authorityOwnersB);
   }
   assert.equal(ownerHistory.getUndoCount(), undoCountBeforeDiscardedRuns);
+}
+
+{
+  const fileStore = createHistoryFileStore();
+  const semanticFileWatchersSuppressed = accessorRef(false);
+  const sessionResourceDiscoveryDeferred = accessorRef(false);
+  const selectedFeatureRecordIdx = accessorRef(7);
+  const labelOverrideContextKey = accessorRef('after-context');
+  const legendEntries = accessorRef([{ caption: 'After', color: '#222222' }]);
+  const deletedLegendEntries = accessorRef([{ caption: 'Before' }]);
+  const addedLegendCaptions = accessorRef(new Set(['After']));
+  assert.equal(Object.hasOwn(semanticFileWatchersSuppressed, 'value'), false);
+
+  const state = {
+    semanticFileWatchersSuppressed,
+    sessionResourceDiscoveryDeferred,
+    selectedFeatureRecordIdx,
+    featureColorOverrides: { after: { color: '#222222', caption: 'After' } },
+    featureVisibilityManualRules: [],
+    featureVisibilityOverrides: {},
+    labelTextFeatureOverrides: {},
+    labelTextBulkOverrides: {},
+    labelTextFeatureOverrideSources: {},
+    labelVisibilityOverrides: {},
+    labelOverrideContextKey,
+    legendEntries,
+    deletedLegendEntries,
+    legendColorOverrides: { After: '#222222' },
+    legendStrokeOverrides: {},
+    addedLegendCaptions,
+    featureStrokeOverrides: {}
+  };
+  const suppressionDuringReplay = [];
+  const discoveryDeferralDuringReplay = [];
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore,
+    nextTick: async () => {
+      suppressionDuringReplay.push(semanticFileWatchersSuppressed.value);
+      discoveryDeferralDuringReplay.push(sessionResourceDiscoveryDeferred.value);
+    }
+  });
+  let suppressionDuringProjection = null;
+  snapshots.setAfterApplyHistoryIntent(async () => {
+    suppressionDuringProjection = semanticFileWatchersSuppressed.value;
+    assert.equal(sessionResourceDiscoveryDeferred.value, true);
+  });
+
+  await snapshots.applyHistoryIntent({
+    features: {
+      selectedFeatureRecordIdx: 2,
+      featureColorOverrides: { before: { color: '#111111', caption: 'Before' } },
+      featureVisibilityManualRules: [],
+      featureVisibilityOverrides: {},
+      labelTextFeatureOverrides: {},
+      labelTextBulkOverrides: {},
+      labelTextFeatureOverrideSources: {},
+      labelVisibilityOverrides: {},
+      labelOverrideContextKey: 'before-context'
+    },
+    editorState: {
+      legend: {
+        entries: [{ caption: 'Before', color: '#111111' }],
+        deletedEntries: [],
+        colorOverrides: { Before: '#111111' },
+        strokeOverrides: {},
+        addedCaptions: ['Before']
+      },
+      featureStrokes: { overrides: {} }
+    }
+  }, {
+    changes: [{ path: ['features'] }, { path: ['editorState'] }]
+  });
+
+  assert.deepEqual(suppressionDuringReplay, [true, false]);
+  assert.deepEqual(discoveryDeferralDuringReplay, [true, true]);
+  assert.equal(suppressionDuringProjection, true);
+  assert.equal(semanticFileWatchersSuppressed.value, false);
+  assert.equal(sessionResourceDiscoveryDeferred.value, false);
+  assert.equal(selectedFeatureRecordIdx.value, 2);
+  assert.equal(labelOverrideContextKey.value, 'before-context');
+  assert.deepEqual(legendEntries.value, [{ caption: 'Before', color: '#111111' }]);
+  assert.deepEqual(deletedLegendEntries.value, []);
+  assert.deepEqual(Array.from(addedLegendCaptions.value), ['Before']);
 }
 
 console.log('history tests passed');

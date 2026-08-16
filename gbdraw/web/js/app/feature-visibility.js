@@ -3,6 +3,7 @@ import {
   exactRegexValue,
   selectFeatureSelector
 } from './feature-selector.js';
+import { getFeatureHashCandidates } from './feature-utils.js';
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -382,18 +383,99 @@ const getCacheValue = (cache, featureId) => {
   return cache[featureId];
 };
 
+const featureIdentityCandidates = (feature, additional = []) => [...new Set([
+  ...(Array.isArray(additional) ? additional : []),
+  feature?.rendered_svg_id,
+  feature?.renderedSvgId,
+  feature?.rendered_feature_svg_id,
+  feature?.renderedFeatureSvgId,
+  feature?.svg_id,
+  feature?.svgId,
+  feature?.featureId,
+  feature?.feature_id,
+  feature?.id,
+  ...getFeatureHashCandidates(feature)
+].map(normalizeCell).filter(Boolean))];
+
+const featureQualifierValues = (feature, qualifierRaw) => {
+  const qualifier = normalizeCell(qualifierRaw).toLowerCase();
+  if (!feature || !qualifier) return [];
+  const qualifiers = feature.qualifiers && typeof feature.qualifiers === 'object'
+    ? feature.qualifiers
+    : {};
+  const matchingKey = Object.keys(qualifiers).find((key) => key.toLowerCase() === qualifier);
+  const raw = matchingKey ? qualifiers[matchingKey] : feature[qualifier];
+  const values = Array.isArray(raw) ? raw : [raw];
+  return values.map(normalizeCell).filter(Boolean);
+};
+
+const featureRuleValueCandidates = (feature, qualifierRaw) => {
+  const qualifier = normalizeCell(qualifierRaw).toLowerCase();
+  if (qualifier === 'hash') return getFeatureHashCandidates(feature);
+  if (qualifier === 'location') {
+    const start = feature?.start;
+    const end = feature?.end;
+    return start === undefined || end === undefined ? [] : [`${start}..${end}`];
+  }
+  if (qualifier === 'record_location') {
+    const recordId = normalizeCell(feature?.record_id ?? feature?.recordId ?? feature?.record);
+    const location = featureRuleValueCandidates(feature, 'location')[0] || '';
+    const strandToken = normalizeCell(feature?.strand).toLowerCase();
+    const strand = ['positive', 'plus', 'forward', '1'].includes(strandToken)
+      ? '+'
+      : (['negative', 'minus', 'reverse', '-1'].includes(strandToken) ? '-' : strandToken);
+    return recordId && location && strand ? [`${recordId}:${location}:${strand}`] : [];
+  }
+  return featureQualifierValues(feature, qualifier);
+};
+
+export const featureVisibilityRuleMatchesFeature = (feature, ruleRaw) => {
+  if (!feature || !ruleRaw) return false;
+  const rule = normalizeFeatureVisibilityRule(ruleRaw);
+  if (!rule.value) return false;
+  const recordId = normalizeCell(feature?.record_id ?? feature?.recordId ?? feature?.record);
+  const featureType = normalizeCell(feature?.type ?? feature?.featureType ?? feature?.feature_type);
+  if (rule.recordId !== '*' && rule.recordId !== recordId) return false;
+  if (rule.featureType !== '*' && rule.featureType !== featureType) return false;
+  let pattern;
+  try {
+    pattern = new RegExp(rule.value, 'i');
+  } catch (_error) {
+    return false;
+  }
+  return featureRuleValueCandidates(feature, rule.qualifier)
+    .some((value) => pattern.test(value));
+};
+
 export const resolveEffectiveFeatureVisibility = (
-  featureIdRaw,
+  featureOrId,
   overrides = {},
   baseVisibilityCache = null,
-  manualRules = []
+  manualRules = [],
+  { overrideKeys = [] } = {}
 ) => {
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId) return 'default';
-  const override = getFeatureVisibilityOverride(overrides, featureId);
-  if (override !== 'default') return override;
-  const cached = normalizeVisibilityMode(getCacheValue(baseVisibilityCache, featureId));
-  if (cached !== 'default') return cached;
+  const feature = featureOrId && typeof featureOrId === 'object' ? featureOrId : null;
+  const featureId = feature ? '' : normalizeCell(featureOrId);
+  const identities = feature
+    ? featureIdentityCandidates(feature, overrideKeys)
+    : (featureId ? [featureId] : []);
+  if (identities.length === 0) return 'default';
+  for (const identity of identities) {
+    const override = getFeatureVisibilityOverride(overrides, identity);
+    if (override !== 'default') return override;
+  }
+  for (const identity of identities) {
+    const cached = normalizeVisibilityMode(getCacheValue(baseVisibilityCache, identity));
+    if (cached !== 'default') return cached;
+  }
+  if (feature) {
+    for (const rule of Array.isArray(manualRules) ? manualRules : []) {
+      if (featureVisibilityRuleMatchesFeature(feature, rule)) {
+        return featureVisibilityActionToMode(rule.action);
+      }
+    }
+    return 'on';
+  }
   for (const rule of Array.isArray(manualRules) ? manualRules : []) {
     const normalized = normalizeFeatureVisibilityRule(rule);
     if (normalized.qualifier.toLowerCase() !== 'hash') continue;

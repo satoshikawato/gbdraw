@@ -8,6 +8,7 @@ const selectorMatches = (element, selectorRaw) => {
   if (selector === 'g[data-legend-key]') {
     return element.tagName === 'g' && element.hasAttribute('data-legend-key');
   }
+  if (selector === '[transform]') return element.hasAttribute('transform');
   if (/^(?:path|polygon|rect)\[data-gbdraw-feature-id\]$/.test(selector)) {
     return element.tagName === selector.split('[', 1)[0]
       && element.hasAttribute('data-gbdraw-feature-id');
@@ -48,6 +49,20 @@ export class FakeSvgElement {
     return this.getAttribute('id') || '';
   }
 
+  get parentNode() {
+    return this.parentElement;
+  }
+
+  get childNodes() {
+    return this.children;
+  }
+
+  get nextSibling() {
+    if (!this.parentElement) return null;
+    const index = this.parentElement.children.indexOf(this);
+    return index >= 0 ? this.parentElement.children[index + 1] || null : null;
+  }
+
   getAttribute(name) {
     return this.attributes.has(name) ? this.attributes.get(name) : null;
   }
@@ -73,10 +88,46 @@ export class FakeSvgElement {
     return child;
   }
 
+  insertBefore(child, reference = null) {
+    if (child.parentElement) {
+      child.parentElement.children = child.parentElement.children.filter((item) => item !== child);
+    }
+    child.parentElement = this;
+    const index = reference ? this.children.indexOf(reference) : -1;
+    if (index < 0) this.children.push(child);
+    else this.children.splice(index, 0, child);
+    return child;
+  }
+
+  replaceChild(replacement, current) {
+    const index = this.children.indexOf(current);
+    if (index < 0) throw new Error('replacement target is not a child');
+    if (replacement.parentElement) {
+      replacement.parentElement.children = replacement.parentElement.children.filter(
+        (item) => item !== replacement
+      );
+    }
+    current.parentElement = null;
+    replacement.parentElement = this;
+    this.children[index] = replacement;
+    return current;
+  }
+
   remove() {
     if (!this.parentElement) return;
     this.parentElement.children = this.parentElement.children.filter((item) => item !== this);
     this.parentElement = null;
+  }
+
+  cloneNode(deep = false) {
+    const clone = new FakeSvgElement(
+      this.tagName,
+      Object.fromEntries(this.attributes),
+      this.textContent
+    );
+    clone.style = { ...this.style };
+    if (deep) this.children.forEach((child) => clone.appendChild(child.cloneNode(true)));
+    return clone;
   }
 
   querySelectorAll(selector) {
@@ -155,4 +206,3 @@ export const serializeFakeSvg = (svg) => {
   });
   return JSON.stringify(serialize(svg));
 };
-

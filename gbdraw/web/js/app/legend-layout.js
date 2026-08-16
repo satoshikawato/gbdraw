@@ -19,20 +19,23 @@ export const createLegendLayout = ({ state, legendActions, history = null, previ
   const resetAllPositions = () => {
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
     if (!svg) return;
-    diagramActions.resetLengthBarPosition();
-    const binding = resetCompositionUserDeltas(svg);
-    repositionActions.syncStateFromComposition(svg, binding);
-    canvasActions.persistCurrentSvg(svg);
+    canvasActions.persistCurrentSvg(svg, ({ svg: targetSvg, mutation }) => {
+      diagramActions.resetLengthBarPosition(mutation);
+      const binding = resetCompositionUserDeltas(targetSvg);
+      repositionActions.syncStateFromComposition(targetSvg, binding);
+      return true;
+    }, 'composition-position-reset');
   };
 
   const reconcileCompositionUserDeltas = (deltas) => {
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
     if (!svg || !deltas) return false;
-    const { binding, changed } = applyCompositionUserDeltas(svg, deltas);
-    if (!changed) return false;
-    repositionActions.syncStateFromComposition(svg, binding);
-    canvasActions.persistCurrentSvg(svg);
-    return true;
+    return canvasActions.persistCurrentSvg(svg, ({ svg: targetSvg }) => {
+      const { binding, changed } = applyCompositionUserDeltas(targetSvg, deltas);
+      if (!changed) return false;
+      repositionActions.syncStateFromComposition(targetSvg, binding);
+      return true;
+    }, 'composition-position-replay');
   };
 
   return {

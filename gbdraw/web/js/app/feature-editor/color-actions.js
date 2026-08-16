@@ -78,14 +78,6 @@ export const createFeatureColorActions = ({
   const SUFFIXED_CAPTION_PATTERN = /^(.*?)\s*\((\d+)\)$/;
   const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 
-  const markColorPreviewDirty = (reason = 'feature-color') => {
-    if (typeof previewRuntime?.commitDomEdit !== 'function') return false;
-    return previewRuntime.commitDomEdit({
-      reason,
-      mutate: () => true
-    }).changed;
-  };
-
   const applyFeatureColorPreview = (feature, color) => {
     const featureId = String(
       feature?.rendered_svg_id
@@ -300,42 +292,8 @@ export const createFeatureColorActions = ({
 
   const getCurrentSvg = () => svgContainer.value?.querySelector('svg') || null;
 
-  const persistCurrentSvg = (svg = getCurrentSvg(), reason = 'feature-color') => {
-    if (!svg) return false;
-    return markColorPreviewDirty(reason);
-  };
-
-  const getLiveLegendColor = (caption) => {
-    const svg = getCurrentSvg();
-    const normalizedCaption = normalizeCaption(caption);
-    if (!svg || !normalizedCaption) return null;
-    const escapedCaption = globalThis.CSS?.escape
-      ? globalThis.CSS.escape(normalizedCaption)
-      : normalizedCaption.replace(/["\\]/g, '\\$&');
-    for (const targetGroup of getAllFeatureLegendGroups(svg)) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${escapedCaption}"]`);
-      if (!entryGroup) continue;
-      const colorPath = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
-        const fill = path.getAttribute('fill');
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-      if (colorPath) return colorPath.getAttribute('fill');
-    }
-    return null;
-  };
-
   const addLegendEntry = async (caption, color, options = {}) => {
-    const beforeColor = getLiveLegendColor(caption);
-    const addedCaption = await addLegendEntryRaw(caption, color, { ...options, commit: false });
-    if (!addedCaption) return addedCaption;
-    if (
-      !beforeColor
-      || !captionsMatch(addedCaption, caption)
-      || !colorsMatch(beforeColor, color)
-    ) {
-      markColorPreviewDirty('feature-color-legend');
-    }
-    return addedCaption;
+    return addLegendEntryRaw(caption, color, options);
   };
 
   const updateLegendEntryColorByCaption = (caption, color) => {
@@ -347,15 +305,12 @@ export const createFeatureColorActions = ({
     if (overrideChanged) {
       legendColorOverrides[resolvedCaption] = color;
     }
-    const updated = updateLegendEntryColorByCaptionRaw(resolvedCaption, color, { commit: false }) === true;
-    if (updated) markColorPreviewDirty('feature-color-legend');
+    const updated = updateLegendEntryColorByCaptionRaw(resolvedCaption, color) === true;
     return updated || overrideChanged;
   };
 
   const removeLegendEntry = (caption) => {
-    const removed = removeLegendEntryRaw(caption, { commit: false }) === true;
-    if (removed) markColorPreviewDirty('feature-color-legend');
-    return removed;
+    return removeLegendEntryRaw(caption) === true;
   };
 
   const exactHashRulesForFeature = (feature) => manualSpecificRules.filter(
@@ -744,22 +699,22 @@ export const createFeatureColorActions = ({
     const committed = previewRuntime.commitDomEdit({
       reason: 'legend-rename',
       invalidateIndexes: ['legend'],
-      mutate: () => {
+      mutate: ({ mutation }) => {
         let updated = false;
         for (const targetGroup of getAllFeatureLegendGroups(svg)) {
           const entryGroup = targetGroup.querySelector(`g[data-legend-key="${CSS.escape(oldCaption)}"]`);
           if (!entryGroup) continue;
 
-          entryGroup.setAttribute('data-legend-key', newCaption);
+          mutation.setAttribute(entryGroup, 'data-legend-key', newCaption);
           const textEl = entryGroup.querySelector('text');
-          if (textEl) textEl.textContent = newCaption;
+          if (textEl) mutation.setTextContent(textEl, newCaption);
 
           if (color) {
             const paths = entryGroup.querySelectorAll('path');
             for (const path of paths) {
               const fill = path.getAttribute('fill');
               if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                path.setAttribute('fill', color);
+                mutation.setAttribute(path, 'fill', color);
                 break;
               }
             }
@@ -780,7 +735,6 @@ export const createFeatureColorActions = ({
     const legendEntry = legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
     if (legendEntry) {
       legendEntry.caption = newCaption;
-      legendEntry.originalCaption = newCaption;
       if (color) {
         legendEntry.color = color;
       }
@@ -1182,7 +1136,7 @@ export const createFeatureColorActions = ({
     extractLegendEntries();
   };
 
-  const applyColorToLegendSpecificRules = async (targetCaption, color, captionFeatures = []) => {
+  const applyColorToLegendSpecificRules = (targetCaption, color, captionFeatures = []) => {
     const normalizedTargetCaption = normalizeCaption(targetCaption);
     if (!normalizedTargetCaption) return false;
     const normalizedColor = String(color || '').trim();
@@ -1261,7 +1215,6 @@ export const createFeatureColorActions = ({
     });
 
     applySpecificRulesToSvg();
-    await nextTick();
     extractLegendEntries();
     refreshLegendEntryFeatureIds([finalCaption]);
     return true;
@@ -1431,7 +1384,7 @@ export const createFeatureColorActions = ({
       }
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
-      if (!(await applyColorToLegendSpecificRules(targetLegendName, color, allFeatures))) {
+      if (!applyColorToLegendSpecificRules(targetLegendName, color, allFeatures)) {
         await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
       }
     } else if (choice === 'displayLabel') {
@@ -1837,7 +1790,7 @@ export const createFeatureColorActions = ({
     const domChanged = previewRuntime.commitDomEdit({
       reason: 'legend-stroke',
       invalidateIndexes: ['legend'],
-      mutate: () => {
+      mutate: ({ mutation }) => {
         let updated = false;
         for (const targetGroup of getAllFeatureLegendGroups(svg)) {
           const entryGroup = targetGroup.querySelector(
@@ -1856,11 +1809,11 @@ export const createFeatureColorActions = ({
             };
           }
           if (normalizedStrokeColor && !strokeColorAttributeMatches(swatch, normalizedStrokeColor)) {
-            swatch.setAttribute('stroke', normalizedStrokeColor);
+            mutation.setAttribute(swatch, 'stroke', normalizedStrokeColor);
             updated = true;
           }
           if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(swatch, normalizedStrokeWidth)) {
-            swatch.setAttribute('stroke-width', normalizedStrokeWidth);
+            mutation.setAttribute(swatch, 'stroke-width', normalizedStrokeWidth);
             updated = true;
           }
         }

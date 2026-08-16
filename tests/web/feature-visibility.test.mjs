@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-visibility.js');
 const selectorSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-selector.js');
+const featureUtilsSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-utils.js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
@@ -17,6 +18,11 @@ await writeFile(
 await writeFile(
   join(tempDir, 'feature-selector.js'),
   await readFile(selectorSourcePath, 'utf8'),
+  'utf8'
+);
+await writeFile(
+  join(tempDir, 'feature-utils.js'),
+  await readFile(featureUtilsSourcePath, 'utf8'),
   'utf8'
 );
 
@@ -413,6 +419,21 @@ assert.deepEqual(
     ),
     'on'
   );
+
+  const feature = {
+    svg_id: 'f.product',
+    type: 'CDS',
+    product: 'shared product',
+    qualifiers: { protein_id: ['WP_000001.1'] }
+  };
+  const orderedRules = [
+    { recordId: '*', featureType: 'CDS', qualifier: 'product', value: '^shared product$', action: 'off' },
+    { recordId: '*', featureType: 'CDS', qualifier: 'protein_id', value: '^WP_000001\\.1$', action: 'show' }
+  ];
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, null, orderedRules), 'off');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, null, [...orderedRules].reverse()), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, { 'f.product': 'on' }, null, orderedRules), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, { 'f.product': 'off' }, [...orderedRules].reverse()), 'off');
 }
 
 console.log('feature visibility tests passed');

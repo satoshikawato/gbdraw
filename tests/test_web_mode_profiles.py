@@ -39,6 +39,9 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     candidate_source = (WEB_ROOT / "js" / "app" / "candidate-render.js").read_text(
         encoding="utf-8"
     )
+    projection_source = (
+        WEB_ROOT / "js" / "app" / "editor-svg-projection.js"
+    ).read_text(encoding="utf-8")
     request_source = (WEB_ROOT / "js" / "services" / "session-request.js").read_text(
         encoding="utf-8"
     )
@@ -76,10 +79,11 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
         "suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend("
         in run_source
     )
-    assert "import { PAIRWISE_LEGEND_SELECTOR }" in candidate_source
-    assert "querySelectorAll(PAIRWISE_LEGEND_SELECTOR)" in candidate_source
+    assert "createEditorSvgProjection" in candidate_source
+    assert "PAIRWISE_LEGEND_SELECTOR" in projection_source
+    assert "querySelectorAll(PAIRWISE_LEGEND_SELECTOR)" in projection_source
     assert (
         """querySelectorAll(
       '[data-gbdraw-role="comparison-legend"]"""
-        not in candidate_source
+        not in projection_source
     )
