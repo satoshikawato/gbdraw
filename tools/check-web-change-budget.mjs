@@ -25,6 +25,12 @@ for (let index = 2; index < process.argv.length; index += 1) {
 const base = argumentsByName.get('--base') || process.env.WEB_CHANGE_BASE || 'HEAD';
 const head = argumentsByName.get('--head') || process.env.WEB_CHANGE_HEAD || '';
 const architectureChange = process.env.WEB_ARCHITECTURE_CHANGE === 'true';
+const budgetProfiles = Object.freeze({
+  ordinary: Object.freeze({ productionFiles: 8, grossChurn: 800, netAdditions: 100 }),
+  architecture: Object.freeze({ productionFiles: 12, grossChurn: 1500, netAdditions: 400 })
+});
+const selectedProfileName = architectureChange ? 'architecture' : 'ordinary';
+const selectedProfile = budgetProfiles[selectedProfileName];
 const diffRefs = head ? [base, head] : [base];
 
 const parseDiffLines = (output) => output.trim()
@@ -99,6 +105,8 @@ const productionTotals = productionPaths.reduce((totals, path) => {
   }
   return totals;
 }, { additions: 0, deletions: 0, binary: 0 });
+const productionGrossChurn = productionTotals.additions + productionTotals.deletions;
+const productionNetAdditions = productionTotals.additions - productionTotals.deletions;
 
 const newModules = productionJavaScriptPaths.filter((path) => changed.get(path) === 'A');
 const addedBinaryRuntimePaths = productionPaths.filter((path) => {
@@ -117,6 +125,18 @@ const guardPaths = new Set([
   '.github/workflows/web-base-policy.yml'
 ]);
 const changedGuards = [...changed.keys()].filter((path) => guardPaths.has(path)).sort();
+const checkerImplementationPaths = new Set([
+  'tools/check-web-change-budget.mjs',
+  'tools/web-change-source.mjs'
+]);
+const authorityPaths = new Set([
+  policyPath,
+  '.github/workflows/test.yml',
+  '.github/workflows/web-base-policy.yml'
+]);
+const changedCheckerImplementations = [...changed.keys()]
+  .filter((path) => checkerImplementationPaths.has(path));
+const changedAuthorities = [...changed.keys()].filter((path) => authorityPaths.has(path));
 
 const exportedNames = (source = '') => {
   const code = maskJavaScript(source);
@@ -432,24 +452,43 @@ newProductionDependencies.push(
 dependencyChanges.push(...newBareImports.map((entry) => `bare production import: ${entry}`));
 dependencyChanges.push(...changedVendorPaths.map((path) => `vendored runtime file changed: ${path}`));
 
-const ordinaryViolations = [];
-if (newModules.length) ordinaryViolations.push('new production JavaScript modules are not allowed');
-if (newProductionDependencies.length) ordinaryViolations.push('new production dependencies are not allowed');
-if (newExports.length) ordinaryViolations.push('new public exports are not allowed');
-if (newCreateOwners.length) ordinaryViolations.push('new create* owners are not allowed');
-if (newReactiveState.length || newWatchers.length) {
-  ordinaryViolations.push('new reactive state or watcher calls are not allowed');
+const budgetViolations = [];
+if (productionPaths.length > selectedProfile.productionFiles) {
+  budgetViolations.push(
+    `production files changed exceed ${selectedProfileName} limit `
+    + `(${productionPaths.length} > ${selectedProfile.productionFiles})`
+  );
 }
-if (addedBinaryRuntimePaths.length) ordinaryViolations.push('added binary runtime files are not allowed');
-if (changedVendorPaths.length) ordinaryViolations.push('changes under gbdraw/web/vendor/ are not allowed');
-if (productionPaths.length > 8) ordinaryViolations.push('more than 8 production files changed');
-if (productionTotals.additions - productionTotals.deletions > 100) {
-  ordinaryViolations.push('production additions exceed deletions by more than 100 lines');
+if (productionGrossChurn > selectedProfile.grossChurn) {
+  budgetViolations.push(
+    `production gross churn exceeds ${selectedProfileName} limit `
+    + `(${productionGrossChurn} > ${selectedProfile.grossChurn})`
+  );
+}
+if (productionNetAdditions > selectedProfile.netAdditions) {
+  budgetViolations.push(
+    `production net additions exceed ${selectedProfileName} limit `
+    + `(${productionNetAdditions} > ${selectedProfile.netAdditions})`
+  );
 }
 
 const integrityViolations = [];
+if (newProductionDependencies.length) {
+  integrityViolations.push('new production dependencies are not allowed');
+}
+if (addedBinaryRuntimePaths.length) {
+  integrityViolations.push('added binary runtime files are not allowed');
+}
+if (changedVendorPaths.length) {
+  integrityViolations.push('changes under gbdraw/web/vendor/ are not allowed');
+}
 if (productionPaths.length && changedGuards.length) {
   integrityViolations.push('production runtime files and Web guard/CI files changed together');
+}
+if (changedCheckerImplementations.length && changedAuthorities.length) {
+  integrityViolations.push(
+    'Web checker/source parser and authority policy/workflow files changed together'
+  );
 }
 if (unapprovedCapabilities.length) {
   integrityViolations.push('privileged capability owners or importers exceed the base allowlist');
@@ -462,7 +501,7 @@ if (missingPolicyKeys.length) {
 }
 const enforcedViolations = [
   ...integrityViolations,
-  ...(architectureChange ? [] : ordinaryViolations)
+  ...budgetViolations
 ];
 
 const list = (values) => values.length ? values.map((value) => `- ${value}`) : ['- None'];
@@ -474,7 +513,11 @@ const report = [
   `- Head: \`${head || 'working tree'}\``,
   `- Privileged allowlist revision: \`${policyRevision}\``,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
-  `- Architecture exception: ${architectureChange ? 'active' : 'inactive'} (PR label \`architecture-change\`)`,
+  `- Selected profile: ${selectedProfileName}`,
+  `- Production file limit: ${selectedProfile.productionFiles}`,
+  `- Gross churn limit: ${selectedProfile.grossChurn}`,
+  `- Net-addition limit: ${selectedProfile.netAdditions}`,
+  `- \`architecture-change\` label: ${architectureChange ? 'present' : 'absent'}`,
   `- Result: **${enforcedViolations.length ? 'FAIL' : 'PASS'}**`,
   '',
   '## Production files touched',
@@ -485,18 +528,19 @@ const report = [
   '',
   `- Additions: ${productionTotals.additions}`,
   `- Deletions: ${productionTotals.deletions}`,
-  `- Net additions: ${productionTotals.additions - productionTotals.deletions}`,
+  `- Gross churn: ${productionGrossChurn}`,
+  `- Net additions: ${productionNetAdditions}`,
   `- Binary production files: ${productionTotals.binary}`,
   '',
-  '## New production modules',
+  '## Report-only new production modules',
   '',
   ...list(newModules),
   '',
-  '## New exports and create* owners',
+  '## Report-only new exports and create* owners',
   '',
   ...list([...newExports, ...newCreateOwners]),
   '',
-  '## New reactive state/watchers',
+  '## Report-only new reactive state/watchers',
   '',
   ...list([...newReactiveState, ...newWatchers]),
   '',
@@ -543,9 +587,6 @@ const report = [
   '## Violations',
   '',
   ...list(enforcedViolations),
-  ...(architectureChange && ordinaryViolations.length
-    ? ['', '## Rules waived by architecture-change', '', ...list(ordinaryViolations)]
-    : []),
   ''
 ].join('\n');
 

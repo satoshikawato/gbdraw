@@ -1,8 +1,9 @@
 # Web change containment implementation plan
 
-Status: in progress; revised to reduced scope; safe allowlist
-contraction is implemented on the current branch but not merged; the finite
-budget change and remote protection gate remain pending
+Status: in progress; safe allowlist contraction is committed on the current
+branch but not merged; finite profiles are implemented and verified in the
+working tree; historical acceptance is complete; ordered merges and remote
+protection remain pending
 
 Date: 2026-08-16
 
@@ -235,9 +236,13 @@ Recorded local evidence at `f91770cb694e72c830c46ca3cfe3b0945c73a80f`:
 - the range contained no Web runtime, workflow, dependency, or real policy-data
   change.
 
-Because this plan revision changes the eventual pull-request head, rerun the
-range checks with the final immutable head before merge. Do not treat the
-implementation commit above as the final PR head.
+The current immutable branch head
+`665777bda24ab8a9f8634f079f7c01225227c199` also passes the checker against
+base `43c14ddec49835458f6bac88aa134a7d755c89b1`. `git diff --check` passes for
+that range, which contains this plan and the three Phase 1 owner files but no
+Web runtime, workflow, dependency, policy JSON, generated-artifact, or
+reference-output change. Rerun the range if the pull-request base or head
+changes before merge.
 
 ### External Gate A: protect `main`
 
@@ -261,11 +266,16 @@ capture. Do not test protection with a direct or force push.
 
 ### Phase 2 / Pull Request B: enforce the minimal finite profiles
 
-Status: pending
+Status: local implementation complete and verified in the working tree; Pull
+Request B remains pending
 
 Dependencies: Pull Request A merged. External Gate A should be active before
 Pull Request B merges, but lack of settings authorization does not block local
 implementation and verification.
+
+The local implementation is currently stacked as uncommitted work above the
+Phase 1 branch. It must become a separate Pull Request B after Pull Request A
+merges; it must not be folded into Pull Request A.
 
 Owned behavior files:
 
@@ -321,9 +331,25 @@ git status --short --untracked-files=all
 The final range must contain no policy JSON, workflow, Web runtime, dependency,
 generated-artifact, or reference-output change.
 
+Recorded local evidence:
+
+- `node --check tools/check-web-change-budget.mjs`: passed;
+- `node --test tests/web/architecture-contracts.test.mjs`: 30/30 passed;
+- `node --test tests/web/*.test.mjs`: 229/229 passed;
+- ordinary and architecture working-tree checker runs both passed with zero
+  production files and zero production churn;
+- exact boundary fixtures cover both profiles for file count, gross churn, and
+  net additions, including exact-limit and limit-plus-one cases; and
+- `git diff --check HEAD` passed. The behavior diff contains only the three
+  Phase 2 owner files; this plan is the only additional working-tree file.
+
+No exact Pull Request B base/head evidence exists because Pull Request A has not
+merged and the Phase 2 work has not been committed. This is the remaining local
+range-verification dependency.
+
 ### Phase 3: historical acceptance
 
-Status: pending; run after Phase 2 implementation
+Status: complete locally; final Pull Request B range remains pending
 
 Use read-only `git diff --numstat` measurements rather than adding a historical
 policy-injection framework. Reconfirm:
@@ -335,6 +361,20 @@ policy-injection framework. Reconfirm:
 
 Both must exceed the architecture profile. Temporary-repository fixtures, not
 historical source copies, prove exact checker boundary behavior.
+
+Recomputed read-only evidence:
+
+```text
+base: 3a098d8f25bb308833b7c0d82c6edd27e8e9a485
+first commit: ac797e59be47afcc20c370225394da21f03b7b0a
+  21 production files; 1,398 additions; 1,048 deletions; gross 2,446
+final head: 476fb10abfa1f588c20415cf5c1fd58ef57ae9f0
+  35 production files; 5,501 additions; 2,138 deletions; gross 7,639
+```
+
+Both ranges exceed the architecture limits of 12 production files and 1,500
+lines of gross churn. The historical tip is not an ancestor of the current
+`HEAD`; no #337 commit or file content was applied to the working tree.
 
 ### Follow-up observation
 
@@ -357,12 +397,12 @@ Update a row only after its named evidence exists.
 
 | Phase | Status | Evidence | Remaining risk |
 | --- | --- | --- | --- |
-| Plan reduction | complete | Replaced the 850-line plan with this 382-line contract, removed the completed 458-line task prompt, passed `git diff --check`, and confirmed the prospective PR diff contains only the plan plus the three Phase 1 owner files | Final immutable PR head still requires commit-range verification |
+| Plan reduction | complete | Replaced the 850-line plan with the reduced contract, removed the completed 458-line task prompt, passed `git diff --check`, and confirmed the prospective PR diff contains only the plan plus the three Phase 1 owner files | Pull Request A base or head changes require another range check |
 | Phase 0 | complete | Base `43c14dde`; current implementation commit `f91770cb`; no Web runtime change | Base may advance before merge |
-| Phase 1 / PR A | implementation complete; merge pending | Exact base/head checker PASS at `f91770cb`; after plan revision, 24/24 focused tests and the working-tree checker also pass | Final PR head must be reverified after plan revision |
+| Phase 1 / PR A | implementation complete; merge pending | Exact checker PASS from base `43c14dde` to current head `665777bd`; range `git diff --check` passed and contains no Web runtime, workflow, dependency, or policy JSON change | Rerun if the PR base or head changes; merge remains external |
 | External Gate A | pending | No authenticated protection evidence recorded | Required checks are not yet proven unavoidable |
-| Phase 2 / PR B | pending | None | Architecture label still waives ordinary limits on the current base |
-| Phase 3 | pending | Prior measurements recorded; must be recomputed after Phase 2 | New checker has not been tested against its finite boundaries |
+| Phase 2 / PR B | local implementation complete; PR pending | Checker syntax PASS; focused 30/30; Web Node 229/229; both working-tree profiles PASS; exact and plus-one fixtures cover all three finite limits | Pull Request A must merge first; Phase 2 needs a separate immutable base/head range |
+| Phase 3 | complete locally | Recomputed #337: first commit 21 files / gross 2,446; final diff 35 files / gross 7,639 | Historical evidence is complete; Pull Request B range is still pending |
 
 ## 6. Completion rule
 

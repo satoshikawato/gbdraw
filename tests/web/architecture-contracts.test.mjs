@@ -438,6 +438,33 @@ const BUDGET_POLICY = Object.freeze({
     ]
   }
 });
+const BUDGET_PROFILES = Object.freeze([
+  Object.freeze({
+    name: 'ordinary',
+    environment: Object.freeze({}),
+    productionFiles: 8,
+    grossChurn: 800,
+    netAdditions: 100
+  }),
+  Object.freeze({
+    name: 'architecture',
+    environment: Object.freeze({ WEB_ARCHITECTURE_CHANGE: 'true' }),
+    productionFiles: 12,
+    grossChurn: 1500,
+    netAdditions: 400
+  })
+]);
+const BUDGET_LINE_CAPACITY = 800;
+const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
+  ...Array.from(
+    { length: BUDGET_LINE_CAPACITY },
+    (_, index) => `const budgetLine${index} = ${index < changedLines ? 1 : 0};`
+  ),
+  ...Array.from(
+    { length: appendedLines },
+    (_, index) => `const appendedBudgetLine${index} = 1;`
+  )
+].join('\n') + '\n';
 const BUDGET_FIXTURE = Object.freeze({
   '.github/workflows/test.yml': 'name: baseline\n',
   '.github/workflows/web-base-policy.yml': 'name: baseline policy\n',
@@ -456,6 +483,7 @@ const BUDGET_FIXTURE = Object.freeze({
   ),
   'gbdraw/web/js/app/future-owner.js': 'export const futureOwnerPlaceholder = () => 1;\n',
   'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 1;\n',
+  'gbdraw/web/js/app/budget-lines.js': budgetLineSource(),
   'gbdraw/web/js/services/diagram-generation.js': (
     'export const runDiagramGeneration = () => 1;\n'
   ),
@@ -529,6 +557,23 @@ const runChangeBudgetCase = (mutate, environment = {}) => withChangeBudgetReposi
   }
 );
 
+const writeBudgetFiles = (write, count) => {
+  for (let index = 0; index < count; index += 1) {
+    write(
+      `gbdraw/web/js/app/budget-file-${index}.js`,
+      `const budgetFile${index} = ${index};\n`
+    );
+  }
+};
+
+const assertNonWaivableWorkingTreeFailure = (mutate, expectedPatterns, context = '') => {
+  BUDGET_PROFILES.forEach(({ environment, name }) => {
+    const result = runChangeBudgetCase(mutate, environment);
+    assert.equal(result.status, 1, `${context} ${name}\n${result.output}`);
+    expectedPatterns.forEach((pattern) => assert.match(result.output, pattern));
+  });
+};
+
 const assertNonWaivableRevisionFailure = (execute, base, head, expectedPatterns) => {
   for (const environment of [{}, { WEB_ARCHITECTURE_CHANGE: 'true' }]) {
     const result = execute({ base, head, environment });
@@ -537,20 +582,138 @@ const assertNonWaivableRevisionFailure = (execute, base, head, expectedPatterns)
   }
 };
 
-test('the Web change-budget checker rejects ordinary surface increases', () => {
+test('fixed profiles enforce exact production-file boundaries', () => {
+  BUDGET_PROFILES.forEach((profile) => {
+    const exact = runChangeBudgetCase(
+      (write) => writeBudgetFiles(write, profile.productionFiles),
+      profile.environment
+    );
+    assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
+    assert.match(exact.output, new RegExp(`Selected profile: ${profile.name}`));
+    assert.match(exact.output, new RegExp(`Production file limit: ${profile.productionFiles}`));
+
+    const excess = runChangeBudgetCase(
+      (write) => writeBudgetFiles(write, profile.productionFiles + 1),
+      profile.environment
+    );
+    assert.equal(excess.status, 1, `${profile.name} excess\n${excess.output}`);
+    assert.match(
+      excess.output,
+      new RegExp(
+        `production files changed exceed ${profile.name} limit `
+        + `\\(${profile.productionFiles + 1} > ${profile.productionFiles}\\)`
+      )
+    );
+  });
+});
+
+test('fixed profiles enforce exact gross-churn boundaries', () => {
+  BUDGET_PROFILES.forEach((profile) => {
+    const replacementLines = profile.grossChurn / 2;
+    const exact = runChangeBudgetCase((write) => {
+      write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(replacementLines));
+    }, profile.environment);
+    assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
+    assert.match(exact.output, new RegExp(`Gross churn: ${profile.grossChurn}`));
+
+    const excess = runChangeBudgetCase((write) => {
+      write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(replacementLines, 1));
+    }, profile.environment);
+    assert.equal(excess.status, 1, `${profile.name} excess\n${excess.output}`);
+    assert.match(
+      excess.output,
+      new RegExp(
+        `production gross churn exceeds ${profile.name} limit `
+        + `\\(${profile.grossChurn + 1} > ${profile.grossChurn}\\)`
+      )
+    );
+  });
+});
+
+test('fixed profiles enforce exact net-addition boundaries', () => {
+  BUDGET_PROFILES.forEach((profile) => {
+    const exact = runChangeBudgetCase((write) => {
+      write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(0, profile.netAdditions));
+    }, profile.environment);
+    assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
+    assert.match(exact.output, new RegExp(`Net additions: ${profile.netAdditions}`));
+
+    const excess = runChangeBudgetCase((write) => {
+      write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(0, profile.netAdditions + 1));
+    }, profile.environment);
+    assert.equal(excess.status, 1, `${profile.name} excess\n${excess.output}`);
+    assert.match(
+      excess.output,
+      new RegExp(
+        `production net additions exceed ${profile.name} limit `
+        + `\\(${profile.netAdditions + 1} > ${profile.netAdditions}\\)`
+      )
+    );
+  });
+});
+
+test('the architecture label selects larger finite limits', () => {
+  const mutate = (write) => writeBudgetFiles(write, 9);
+  const ordinary = runChangeBudgetCase(mutate);
+  assert.equal(ordinary.status, 1, ordinary.output);
+  assert.match(ordinary.output, /production files changed exceed ordinary limit \(9 > 8\)/);
+
+  const architecture = runChangeBudgetCase(mutate, { WEB_ARCHITECTURE_CHANGE: 'true' });
+  assert.equal(architecture.status, 0, architecture.output);
+  assert.match(architecture.output, /Selected profile: architecture/);
+  assert.doesNotMatch(architecture.output, /waived/i);
+});
+
+test('net-zero rewrites above gross limits fail in both profiles', () => {
+  BUDGET_PROFILES.forEach((profile) => {
+    const result = runChangeBudgetCase((write) => {
+      write(
+        'gbdraw/web/js/app/budget-lines.js',
+        budgetLineSource((profile.grossChurn / 2) + 1)
+      );
+    }, profile.environment);
+    assert.equal(result.status, 1, `${profile.name}\n${result.output}`);
+    assert.match(result.output, /Net additions: 0/);
+    assert.match(result.output, /production gross churn exceeds .* limit/);
+  });
+});
+
+test('new module, export, create, reactive, and watcher signals are report-only', () => {
+  BUDGET_PROFILES.forEach(({ environment, name }) => {
+    const result = runChangeBudgetCase((write) => {
+      write(
+        'gbdraw/web/js/app/report-signals.js',
+        'export const createBudgetOwner = () => 1;\n'
+          + 'export const budgetState = ref(0);\n'
+          + 'watch(budgetState, () => {});\n'
+      );
+    }, environment);
+    assert.equal(result.status, 0, `${name}\n${result.output}`);
+    assert.match(result.output, /Report-only new production modules/);
+    assert.match(result.output, /gbdraw\/web\/js\/app\/report-signals\.js/);
+    assert.match(result.output, /createBudgetOwner/);
+    assert.match(result.output, /budgetState \(ref\)/);
+    assert.match(result.output, /\+1 watcher call/);
+  });
+});
+
+test('dependency, vendor, binary, and runtime/guard rules are non-waivable', () => {
   const cases = [
     {
-      name: 'dummy production module',
-      mutate: (write) => write('gbdraw/web/js/app/dummy.js', 'export const dummy = true;\n'),
-      expected: /new production JavaScript modules are not allowed/
-    },
-    {
-      name: 'production dependency',
+      name: 'manifest production dependency',
       mutate: (write) => write(
         'package.json',
         '{"private":true,"dependencies":{"left-pad":"1.3.0"}}\n'
       ),
       expected: /new production dependencies are not allowed/
+    },
+    {
+      name: 'bare production import',
+      mutate: (write) => write(
+        'gbdraw/web/js/app/secondary.js',
+        "import 'left-pad';\nexport const editSecondaryOwner = () => 1;\n"
+      ),
+      expected: /bare production import: gbdraw\/web\/js\/app\/secondary\.js: left-pad/
     },
     {
       name: 'binary runtime file',
@@ -576,9 +739,33 @@ test('the Web change-budget checker rejects ordinary surface increases', () => {
   ];
 
   cases.forEach(({ name, mutate, expected }) => {
-    const result = runChangeBudgetCase(mutate);
-    assert.equal(result.status, 1, `${name}\n${result.output}`);
-    assert.match(result.output, expected, name);
+    assertNonWaivableWorkingTreeFailure(mutate, [expected], name);
+  });
+});
+
+test('checker implementation and authority files cannot change together', () => {
+  const implementationPaths = [
+    'tools/check-web-change-budget.mjs',
+    'tools/web-change-source.mjs'
+  ];
+  const authorityPaths = [
+    'tools/web-change-policy.json',
+    '.github/workflows/test.yml',
+    '.github/workflows/web-base-policy.yml'
+  ];
+
+  implementationPaths.forEach((implementationPath) => {
+    authorityPaths.forEach((authorityPath) => {
+      assertNonWaivableWorkingTreeFailure((write) => {
+        write(implementationPath, `${BUDGET_FIXTURE[implementationPath]}\n// changed\n`);
+        write(
+          authorityPath,
+          authorityPath === 'tools/web-change-policy.json'
+            ? `${JSON.stringify(BUDGET_POLICY)}\n`
+            : `${BUDGET_FIXTURE[authorityPath]}# changed\n`
+        );
+      }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
+    });
   });
 });
 
@@ -605,18 +792,17 @@ test('privileged ownership and import contractions do not require a policy edit'
 });
 
 test('unapproved privileged expansion fails against the base allowlist', () => {
-  const result = runChangeBudgetCase((write) => {
+  const mutate = (write) => {
     write(
       'gbdraw/web/js/app/secondary.js',
       "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
         + 'export const editSecondaryOwner = () => runDiagramGeneration();\n'
     );
-  });
-  assert.equal(result.status, 1, result.output);
-  assert.match(
-    result.output,
-    /services\/diagram-generation\.js: importer app\/secondary\.js/
-  );
+  };
+  assertNonWaivableWorkingTreeFailure(mutate, [
+    /services\/diagram-generation\.js: importer app\/secondary\.js/,
+    /privileged capability owners or importers exceed the base allowlist/
+  ]);
 });
 
 test('an unused privileged owner allowlist entry can contract', () => {
@@ -753,30 +939,14 @@ test('comments, strings, and local session object keys are not hard failures', (
   assert.match(result.output, /Report-only session object keys and compatibility names/);
 });
 
-test('index.html growth counts against the runtime line budget', () => {
+test('index.html growth counts against the net-addition budget', () => {
   const result = runChangeBudgetCase((write) => {
     const additions = Array.from({ length: 110 }, (_, index) => `<div>${index}</div>`);
     write('gbdraw/web/index.html', `<main>baseline</main>\n${additions.join('\n')}\n`);
   });
   assert.equal(result.status, 1, result.output);
   assert.match(result.output, /M gbdraw\/web\/index\.html/);
-  assert.match(result.output, /production additions exceed deletions by more than 100 lines/);
-});
-
-test('architecture-change metadata waives budgets but not guard integrity', () => {
-  const exception = { WEB_ARCHITECTURE_CHANGE: 'true' };
-  const waived = runChangeBudgetCase((write) => {
-    write('gbdraw/web/js/app/dummy.js', 'export const dummy = true;\n');
-  }, exception);
-  assert.equal(waived.status, 0, waived.output);
-  assert.match(waived.output, /Rules waived by architecture-change/);
-
-  const mixed = runChangeBudgetCase((write) => {
-    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
-    write('tools/web-change-policy.json', `${JSON.stringify(BUDGET_POLICY)}\n`);
-  }, exception);
-  assert.equal(mixed.status, 1, mixed.output);
-  assert.match(mixed.output, /production runtime files and Web guard\/CI files changed together/);
+  assert.match(result.output, /production net additions exceed ordinary limit \(110 > 100\)/);
 });
 
 test('base-policy execution ignores a PR-modified checker and detects its runtime co-change', () => {
