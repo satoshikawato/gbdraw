@@ -366,24 +366,35 @@ test('a late Legend projection failure rolls back earlier Legend mutations', () 
 test('projection borrows the validated Feature owner without cloning or serializing it', () => {
   const metrics = [];
   const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  const previousStructuredClone = globalThis.structuredClone;
+  const previousStringify = JSON.stringify;
+  let featureCloneCalls = 0;
+  let featureSerializationCalls = 0;
   globalThis.__GBDRAW_TEST_HOOKS__ = {
     onStructuralMetric: (metric) => metrics.push(metric)
   };
   try {
     const features = [feature];
+    globalThis.structuredClone = (value, ...args) => {
+      if (value === features) featureCloneCalls += 1;
+      return previousStructuredClone(value, ...args);
+    };
+    JSON.stringify = (value, ...args) => {
+      if (value === features) featureSerializationCalls += 1;
+      return previousStringify(value, ...args);
+    };
     const projection = createEditorSvgProjection({ features });
     projection.project(buildSvg({ includeSuppressedLegend: false }).svg);
     const borrowed = metrics.find((metric) => metric.name === 'editorProjectionBorrowedFeatureOwnerCount');
+    const accessed = metrics.find((metric) => metric.name === 'editorProjectionFeatureBindingAccessCount');
     assert.equal(borrowed.featureOwner, features);
-    assert.equal(
-      metrics.find((metric) => metric.name === 'editorProjectionFullFeatureCloneCount').value,
-      0
-    );
-    assert.equal(
-      metrics.find((metric) => metric.name === 'editorProjectionFullFeatureSerializationCount').value,
-      0
-    );
+    assert.equal(accessed.featureOwner, features);
+    assert.equal(accessed.value, 1);
+    assert.equal(featureCloneCalls, 0);
+    assert.equal(featureSerializationCalls, 0);
   } finally {
+    globalThis.structuredClone = previousStructuredClone;
+    JSON.stringify = previousStringify;
     if (previousHooks === undefined) delete globalThis.__GBDRAW_TEST_HOOKS__;
     else globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
   }

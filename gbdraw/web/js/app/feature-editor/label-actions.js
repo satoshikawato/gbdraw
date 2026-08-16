@@ -17,6 +17,7 @@ import {
 import { downloadTextFile } from '../../services/text-download.js';
 import { readFileText } from '../../services/file-content-cache.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { createDomMutationJournal } from '../dom-mutation-journal.js';
 
 export const EXCLUDED_GROUP_SELECTOR = [
   '#legend',
@@ -371,18 +372,32 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     labelReflowLastError
   } = state;
 
-  const clearOverrides = () => {
-    Object.keys(labelTextFeatureOverrides).forEach((key) => delete labelTextFeatureOverrides[key]);
-    Object.keys(labelTextBulkOverrides).forEach((key) => delete labelTextBulkOverrides[key]);
-    Object.keys(labelTextFeatureOverrideSources).forEach((key) => delete labelTextFeatureOverrideSources[key]);
-    Object.keys(labelVisibilityOverrides).forEach((key) => delete labelVisibilityOverrides[key]);
-    labelOverrideBuildWarning.value = '';
+  const setStateProperty = (mutation, target, key, value) => {
+    if (mutation) return mutation.setProperty(target, key, value);
+    if (Object.is(target[key], value)) return false;
+    target[key] = value;
+    return true;
+  };
+  const deleteStateProperty = (mutation, target, key) => {
+    if (mutation) return mutation.deleteProperty(target, key);
+    if (!Object.prototype.hasOwnProperty.call(target, key)) return false;
+    delete target[key];
+    return true;
   };
 
-  const commitLabelMutation = (reason, mutate) => previewRuntime.commitDomEdit({
+  const clearOverrides = (mutation = null) => {
+    Object.keys(labelTextFeatureOverrides).forEach((key) => deleteStateProperty(mutation, labelTextFeatureOverrides, key));
+    Object.keys(labelTextBulkOverrides).forEach((key) => deleteStateProperty(mutation, labelTextBulkOverrides, key));
+    Object.keys(labelTextFeatureOverrideSources).forEach((key) => deleteStateProperty(mutation, labelTextFeatureOverrideSources, key));
+    Object.keys(labelVisibilityOverrides).forEach((key) => deleteStateProperty(mutation, labelVisibilityOverrides, key));
+    setStateProperty(mutation, labelOverrideBuildWarning, 'value', '');
+  };
+
+  const commitLabelMutation = (reason, mutate, { journalChangesAffectResult = true } = {}) => previewRuntime.commitDomEdit({
     reason,
     invalidateIndexes: ['features'],
-    mutate
+    journalChangesAffectResult,
+    mutate: (target) => mutate(target)
   });
 
   const queueLabelReflow = (reason, force = false) => {
@@ -487,7 +502,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     enableGlobalLabels();
   };
 
-  const applyStoredOverridesToSvg = (svg) => {
+  const applyStoredOverridesToSvg = (svg, mutation = null) => {
     let changed = false;
     const labelElements = svg.querySelectorAll(EDITABLE_LABEL_SELECTOR);
     labelElements.forEach((textEl) => {
@@ -499,17 +514,17 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
         labelTextBulkOverrides[sourceText];
       if (desiredText === undefined) return;
       if (currentText === desiredText) return;
-      setLabelText(textEl, desiredText);
+      setLabelText(textEl, desiredText, { mutation });
       changed = true;
     });
     return changed;
   };
 
-  const applyLabelVisibilityPreview = (textEl, modeRaw) => {
-    return applyLabelVisibility(textEl, modeRaw, { markPreview: true });
+  const applyLabelVisibilityPreview = (textEl, modeRaw, mutation = null) => {
+    return applyLabelVisibility(textEl, modeRaw, { markPreview: true, mutation });
   };
 
-  const applyStoredVisibilityOverridesToSvg = (svg) => {
+  const applyStoredVisibilityOverridesToSvg = (svg, mutation = null) => {
     let changed = false;
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
@@ -518,7 +533,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       const visibilityMode = featureId
         ? labelVisibilityOverrides[featureId]
         : 'default';
-      changed = applyLabelVisibilityPreview(textEl, visibilityMode) || changed;
+      changed = applyLabelVisibilityPreview(textEl, visibilityMode, mutation) || changed;
     });
     return changed;
   };
@@ -586,7 +601,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     if (!svg) return;
 
     const contextKey = buildContextKey(svg, mode.value);
-    if (
+    const shouldClearOverrides = Boolean(
       labelOverrideContextKey.value &&
       labelOverrideContextKey.value !== contextKey &&
       !hasFeatureScopedOverrideInSvg(
@@ -594,40 +609,54 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
         labelTextFeatureOverrides,
         labelVisibilityOverrides
       )
-    ) {
-      clearOverrides();
-      labelTextScopeDialog.show = false;
-      closeGlobalLabelModeDialog();
+    );
+
+    if (options?.contextOnly) {
+      const mutation = createDomMutationJournal();
+      try {
+        if (shouldClearOverrides) clearOverrides(mutation);
+        setStateProperty(mutation, labelOverrideContextKey, 'value', contextKey);
+        mutation.commit();
+      } catch (error) {
+        mutation.rollback();
+        throw error;
+      }
+      if (shouldClearOverrides) {
+        labelTextScopeDialog.show = false;
+        closeGlobalLabelModeDialog();
+      }
+      return;
     }
-    labelOverrideContextKey.value = contextKey;
-    if (options?.contextOnly) return;
 
     const featureGeometry = collectFeatureGeometry(svg);
     const labelElements = collectEditableLabelElements(svg, mode.value);
     const featureAssignments = assignFeatureIdsToLabels(svg, labelElements, featureGeometry, mode.value);
-    labelElements.forEach((textEl, index) => {
-      textEl.style.cursor = 'text';
-      textEl.setAttribute('data-label-editable', 'true');
-      textEl.setAttribute('data-label-key', `label-${index + 1}`);
-      const currentText = getLabelText(textEl);
-      if (!textEl.hasAttribute('data-label-source-text')) {
-        textEl.setAttribute('data-label-source-text', currentText);
-      }
-      const featureId = featureAssignments.get(textEl);
-      if (featureId) {
-        textEl.setAttribute('data-label-feature-id', featureId);
-      } else {
-        textEl.removeAttribute('data-label-feature-id');
-      }
-    });
-
     let textChanged = false;
     let visibilityChanged = false;
-    commitLabelMutation('feature-label-sync', () => {
-      textChanged = applyStoredOverridesToSvg(svg);
-      visibilityChanged = applyStoredVisibilityOverridesToSvg(svg);
+    const committed = commitLabelMutation('feature-label-sync', ({ mutation }) => {
+      setStateProperty(mutation, labelOverrideContextKey, 'value', contextKey);
+      labelElements.forEach((textEl, index) => {
+        setStateProperty(mutation, textEl.style, 'cursor', 'text');
+        mutation.setAttribute(textEl, 'data-label-editable', 'true');
+        mutation.setAttribute(textEl, 'data-label-key', `label-${index + 1}`);
+        const currentText = getLabelText(textEl);
+        if (!textEl.hasAttribute('data-label-source-text')) {
+          mutation.setAttribute(textEl, 'data-label-source-text', currentText);
+        }
+        const featureId = featureAssignments.get(textEl);
+        if (featureId) mutation.setAttribute(textEl, 'data-label-feature-id', featureId);
+        else mutation.removeAttribute(textEl, 'data-label-feature-id');
+      });
+      if (shouldClearOverrides) clearOverrides(mutation);
+      textChanged = applyStoredOverridesToSvg(svg, mutation);
+      visibilityChanged = applyStoredVisibilityOverridesToSvg(svg, mutation);
       return textChanged || visibilityChanged;
-    });
+    }, { journalChangesAffectResult: false });
+    if (committed.resultIndex === null) return;
+    if (shouldClearOverrides) {
+      labelTextScopeDialog.show = false;
+      closeGlobalLabelModeDialog();
+    }
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
   };
@@ -638,10 +667,10 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     let resetChanged = false;
     let overrideChanged = false;
     let visibilityChanged = false;
-    commitLabelMutation('feature-label-reconcile', () => {
-      resetChanged = resetLabelsToSourceText(svg) > 0;
-      overrideChanged = applyStoredOverridesToSvg(svg);
-      visibilityChanged = applyStoredVisibilityOverridesToSvg(svg);
+    commitLabelMutation('feature-label-reconcile', ({ mutation }) => {
+      resetChanged = resetLabelsToSourceText(svg, { mutation }) > 0;
+      overrideChanged = applyStoredOverridesToSvg(svg, mutation);
+      visibilityChanged = applyStoredVisibilityOverridesToSvg(svg, mutation);
       return resetChanged || overrideChanged || visibilityChanged;
     });
     refreshEditableList(svg);
@@ -685,7 +714,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     return true;
   };
 
-  const applyClickedFeatureVisibilityOverride = () => {
+  const applyClickedFeatureVisibilityOverride = (mutation) => {
     if (!clickedFeature.value) return;
     const featureId = String(clickedFeature.value.svg_id || clickedFeature.value.id || '').trim();
     if (!featureId) return false;
@@ -693,16 +722,22 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const previousMode = normalizeVisibilityMode(labelVisibilityOverrides[featureId]);
     if (nextMode === 'default') {
       if (!Object.prototype.hasOwnProperty.call(labelVisibilityOverrides, featureId)) return false;
-      delete labelVisibilityOverrides[featureId];
-      clickedFeature.value.labelVisibility = 'default';
+      deleteStateProperty(mutation, labelVisibilityOverrides, featureId);
+      setStateProperty(mutation, clickedFeature.value, 'labelVisibility', 'default');
       return previousMode !== 'default';
     }
-    labelVisibilityOverrides[featureId] = nextMode;
-    clickedFeature.value.labelVisibility = nextMode;
+    setStateProperty(mutation, labelVisibilityOverrides, featureId, nextMode);
+    setStateProperty(mutation, clickedFeature.value, 'labelVisibility', nextMode);
     return previousMode !== nextMode;
   };
 
-  const applyDirectFeatureLabelOverride = (featureId, labelTextRaw, sourceTextRaw, baselineTextRaw) => {
+  const applyDirectFeatureLabelOverride = (
+    featureId,
+    labelTextRaw,
+    sourceTextRaw,
+    baselineTextRaw,
+    mutation
+  ) => {
     const featureIdKey = String(featureId || '').trim();
     if (!featureIdKey) return false;
     const nextText = String(labelTextRaw ?? '');
@@ -719,24 +754,24 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     }
 
     if (hasExistingOverride && nextText === baselineText) {
-      delete labelTextFeatureOverrides[featureIdKey];
-      delete labelTextFeatureOverrideSources[featureIdKey];
+      deleteStateProperty(mutation, labelTextFeatureOverrides, featureIdKey);
+      deleteStateProperty(mutation, labelTextFeatureOverrideSources, featureIdKey);
       return true;
     }
 
     if (prevText !== nextText || !hasExistingOverride) {
-      labelTextFeatureOverrides[featureIdKey] = nextText;
+      setStateProperty(mutation, labelTextFeatureOverrides, featureIdKey, nextText);
       changed = true;
     }
     if (sourceText) {
       const prevSource = String(labelTextFeatureOverrideSources[featureIdKey] ?? '');
       if (prevSource !== sourceText) changed = true;
-      labelTextFeatureOverrideSources[featureIdKey] = sourceText;
+      setStateProperty(mutation, labelTextFeatureOverrideSources, featureIdKey, sourceText);
     }
     return changed;
   };
 
-  const applyDirectTextToCurrentSvg = (featureId, nextText) => {
+  const applyDirectTextToCurrentSvg = (featureId, nextText, mutation) => {
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
@@ -744,23 +779,17 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     if (!entry?.key) return false;
     const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
     if (!targetEl) return false;
-    const committed = commitLabelMutation('feature-label-text', () => setLabelText(targetEl, nextText));
-    if (!committed.changed) return false;
-    syncLabelEditor();
-    return true;
+    return setLabelText(targetEl, nextText, { mutation });
   };
 
-  const applyDirectVisibilityToCurrentSvg = (featureId, visibilityMode) => {
+  const applyDirectVisibilityToCurrentSvg = (featureId, visibilityMode, mutation) => {
     if (!svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const entry = getEditableLabelByFeatureId(featureId);
     if (!entry?.key) return false;
     const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
-    return commitLabelMutation(
-      'feature-label-visibility',
-      () => applyLabelVisibilityPreview(targetEl, visibilityMode)
-    ).changed;
+    return applyLabelVisibilityPreview(targetEl, visibilityMode, mutation);
   };
 
   const updateClickedFeatureLabelText = async () => {
@@ -775,24 +804,36 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const directOutcome = await previewRuntime.runDomEdit({
       reason: 'feature-label-action',
       action: () => {
-        const visibilityChanged = applyClickedFeatureVisibilityOverride();
-        const textChanged = applyDirectFeatureLabelOverride(
-          featureId,
-          nextText,
-          sourceText,
-          baselineText
-        );
-        const hasEditableLabel = Boolean(clickedFeature.value?.hasEditableLabel);
-        if (hasEditableLabel) applyDirectTextToCurrentSvg(featureId, nextText);
-        const visibilityAppliedDirectly = visibilityChanged
-          ? applyDirectVisibilityToCurrentSvg(featureId, clickedFeature.value?.labelVisibility)
-          : false;
-        return {
-          hasEditableLabel,
-          textChanged,
-          visibilityAppliedDirectly,
-          visibilityChanged
+        const outcome = {
+          hasEditableLabel: Boolean(clickedFeature.value?.hasEditableLabel),
+          textChanged: false,
+          textAppliedDirectly: false,
+          visibilityAppliedDirectly: false,
+          visibilityChanged: false
         };
+        const committed = commitLabelMutation('feature-label-action', ({ mutation }) => {
+          outcome.visibilityChanged = applyClickedFeatureVisibilityOverride(mutation);
+          outcome.textChanged = applyDirectFeatureLabelOverride(
+            featureId,
+            nextText,
+            sourceText,
+            baselineText,
+            mutation
+          );
+          if (outcome.hasEditableLabel) {
+            outcome.textAppliedDirectly = applyDirectTextToCurrentSvg(featureId, nextText, mutation);
+          }
+          if (outcome.visibilityChanged) {
+            outcome.visibilityAppliedDirectly = applyDirectVisibilityToCurrentSvg(
+              featureId,
+              clickedFeature.value?.labelVisibility,
+              mutation
+            );
+          }
+          return mutation.changed;
+        });
+        if (committed.resultIndex !== null && outcome.textAppliedDirectly) syncLabelEditor();
+        return outcome;
       }
     });
 
@@ -840,7 +881,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       closeLabelTextScopeDialog();
       return;
     }
-    commitLabelMutation('feature-label-text-scope', () => {
+    commitLabelMutation('feature-label-text-scope', ({ mutation }) => {
       let domChanged = false;
       if (choice === 'all') {
         let matchedCount = 0;
@@ -851,27 +892,32 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
           matchedCount += 1;
           const candidateFeatureId = textEl.getAttribute('data-label-feature-id');
           if (candidateFeatureId) {
-            labelTextFeatureOverrides[candidateFeatureId] = newText;
-            labelTextFeatureOverrideSources[candidateFeatureId] = candidateSource;
+            setStateProperty(mutation, labelTextFeatureOverrides, candidateFeatureId, newText);
+            setStateProperty(
+              mutation,
+              labelTextFeatureOverrideSources,
+              candidateFeatureId,
+              candidateSource
+            );
           } else {
             hasUntrackableMatch = true;
           }
-          domChanged = setLabelText(textEl, newText) || domChanged;
+          domChanged = setLabelText(textEl, newText, { mutation }) || domChanged;
         });
         if (hasUntrackableMatch || matchedCount === 0) {
-          labelTextBulkOverrides[sourceText] = newText;
+          setStateProperty(mutation, labelTextBulkOverrides, sourceText, newText);
         } else if (Object.prototype.hasOwnProperty.call(labelTextBulkOverrides, sourceText)) {
-          delete labelTextBulkOverrides[sourceText];
+          deleteStateProperty(mutation, labelTextBulkOverrides, sourceText);
         }
       } else {
         const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
-        domChanged = setLabelText(targetEl, newText) || domChanged;
+        domChanged = setLabelText(targetEl, newText, { mutation }) || domChanged;
         if (featureId) {
-          labelTextFeatureOverrides[featureId] = newText;
-          labelTextFeatureOverrideSources[featureId] = sourceText;
+          setStateProperty(mutation, labelTextFeatureOverrides, featureId, newText);
+          setStateProperty(mutation, labelTextFeatureOverrideSources, featureId, sourceText);
         }
       }
-      return domChanged;
+      return domChanged || mutation.changed;
     });
     closeLabelTextScopeDialog();
     syncLabelEditor();
@@ -879,8 +925,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   };
 
   const resetAllLabelTextOverrides = () => {
-    clearOverrides();
     if (!svgContainer.value) {
+      clearOverrides();
       labelOverrideContextKey.value = '';
       editableLabels.value = [];
       closeLabelTextScopeDialog();
@@ -888,10 +934,15 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       return;
     }
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-    commitLabelMutation('feature-label-reset', () => (
-      resetLabelsToSourceText(svg) + Number(applyStoredVisibilityOverridesToSvg(svg))
-    ));
+    if (!svg) {
+      clearOverrides();
+      return;
+    }
+    commitLabelMutation('feature-label-reset', ({ mutation }) => {
+      clearOverrides(mutation);
+      return resetLabelsToSourceText(svg, { mutation })
+        + Number(applyStoredVisibilityOverridesToSvg(svg, mutation));
+    });
 
     closeLabelTextScopeDialog();
     closeGlobalLabelModeDialog();
@@ -986,18 +1037,18 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
         });
       });
 
-      clearOverrides();
       let appliedCount = 0;
       let skippedNonTrackableCount = 0;
       const nextFeatureOverrides = {};
       const nextBulkOverrides = {};
-      commitLabelMutation('feature-label-table-load', () => {
-        let changedCount = resetLabelsToSourceText(svg);
+      commitLabelMutation('feature-label-table-load', ({ mutation }) => {
+        clearOverrides(mutation);
+        let changedCount = resetLabelsToSourceText(svg, { mutation });
         operations.forEach((operation) => {
           if (!operation.key) return;
           const target = svg.querySelector(`text[data-label-key="${CSS.escape(operation.key)}"]`);
           if (!target) return;
-          if (setLabelText(target, operation.nextText)) changedCount += 1;
+          if (setLabelText(target, operation.nextText, { mutation })) changedCount += 1;
           appliedCount += 1;
 
           if (operation.isGlobalLabelRule) {
@@ -1012,19 +1063,23 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
             skippedNonTrackableCount += 1;
           }
         });
-        return changedCount;
-      });
-
-      Object.entries(nextFeatureOverrides).forEach(([featureId, labelText]) => {
-        labelTextFeatureOverrides[featureId] = labelText;
-      });
-      operations.forEach((operation) => {
-        if (!operation.featureId || !operation.sourceText) return;
-        labelTextFeatureOverrideSources[operation.featureId] = operation.sourceText;
-      });
-      Object.entries(nextBulkOverrides).forEach(([sourceText, labelText]) => {
-        if (!sourceText) return;
-        labelTextBulkOverrides[sourceText] = labelText;
+        Object.entries(nextFeatureOverrides).forEach(([featureId, labelText]) => {
+          setStateProperty(mutation, labelTextFeatureOverrides, featureId, labelText);
+        });
+        operations.forEach((operation) => {
+          if (!operation.featureId || !operation.sourceText) return;
+          setStateProperty(
+            mutation,
+            labelTextFeatureOverrideSources,
+            operation.featureId,
+            operation.sourceText
+          );
+        });
+        Object.entries(nextBulkOverrides).forEach(([sourceText, labelText]) => {
+          if (!sourceText) return;
+          setStateProperty(mutation, labelTextBulkOverrides, sourceText, labelText);
+        });
+        return changedCount || mutation.changed;
       });
 
       closeLabelTextScopeDialog();

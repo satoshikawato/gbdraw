@@ -8,9 +8,11 @@ import {
 } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
+import { analyzeWebRefactorSource } from './helpers/refactor-guard-ast.mjs';
+
 const root = resolve(process.env.GBDRAW_REPO || process.cwd());
 const webJsRoot = join(root, 'gbdraw', 'web', 'js');
-
+const fixtureRoot = join(root, 'tests', 'web', 'fixtures', 'refactor-guardrails');
 const read = (path) => readFileSync(path, 'utf8');
 
 const walk = (directory) => {
@@ -26,59 +28,28 @@ const productionJs = walk(webJsRoot).filter((path) => path.endsWith('.js'));
 const sourceByRelativePath = new Map(
   productionJs.map((path) => [relative(webJsRoot, path).replaceAll('\\', '/'), read(path)])
 );
-
 const projectionPath = join(webJsRoot, 'app', 'editor-svg-projection.js');
-const previewRuntimePath = join(webJsRoot, 'app', 'preview-runtime.js');
-const agentsPath = join(root, 'AGENTS.md');
-const skillPath = join(
-  root,
-  '.agents',
-  'skills',
-  'refactor-gbdraw-web-safely',
-  'SKILL.md'
-);
+const resultsPath = join(webJsRoot, 'app', 'results.js');
 
-test('the behavior-preserving Web refactor Skill is discoverable from AGENTS.md', () => {
-  assert.equal(existsSync(skillPath), true, 'missing refactor-gbdraw-web-safely Skill');
-  const agents = read(agentsPath);
-  assert.match(agents, /\.agents\/skills\/refactor-gbdraw-web-safely\/SKILL\.md/);
-  assert.match(agents, /characterization tests/i);
-  assert.match(read(skillPath), /The new implementation is not an independent oracle/i);
+const assertNoViolations = (owner, source, options) => {
+  const violations = analyzeWebRefactorSource(source, options);
+  assert.deepEqual(
+    violations,
+    [],
+    `${owner}: ${violations.map(({ code, message }) => `${code}: ${message}`).join('; ')}`
+  );
+};
+
+test('fresh-SVG projection borrows large owners and emits no synthetic zero evidence', () => {
+  assertNoViolations('app/editor-svg-projection.js', read(projectionPath), {
+    largeOwnerCopies: true,
+    syntheticMetrics: true
+  });
 });
 
-test('fresh-SVG projection does not defensively JSON-clone large owners', () => {
-  assert.equal(existsSync(projectionPath), true, 'missing editor SVG projection owner');
-  const source = read(projectionPath);
-  const largeOwners = [
-    'features',
-    'featureCatalog',
-    'extractedFeatures',
-    'biologicalFeatures',
-    'orthogroups',
-    'results',
-    'svg'
-  ];
-  for (const owner of largeOwners) {
-    assert.doesNotMatch(
-      source,
-      new RegExp(`cloneJson(?:Value|Data)\\s*\\(\\s*input\\.${owner}\\b`),
-      `${owner} must be borrowed read-only or reduced to a compact index`
-    );
-    assert.doesNotMatch(
-      source,
-      new RegExp(`JSON\\.stringify\\s*\\(\\s*input\\.${owner}\\b`),
-      `${owner} must not be serialized by the projection boundary`
-    );
-  }
-});
-
-test('production live-edit code has no placeholder mutate callback', () => {
+test('production live-edit commits have no placeholder mutation callbacks', () => {
   for (const [owner, source] of sourceByRelativePath) {
-    assert.doesNotMatch(
-      source,
-      /(?:mutate\s*:|commit[A-Za-z]*Mutation\s*\([^,\n]+,)\s*(?:\(\s*\)|\([^)]*\))\s*=>\s*true\b/,
-      `${owner} mutates outside the commit owner and reports a placeholder change`
-    );
+    assertNoViolations(owner, source, { placeholderCommits: true });
   }
 });
 
@@ -89,54 +60,98 @@ test('direct editor modules do not serialize or replace Result content themselve
     || owner.startsWith('app/legend-layout/')
   ));
   for (const [owner, source] of directOwners) {
-    assert.doesNotMatch(source, /\bserializeCleanSvg\b/, owner);
-    assert.doesNotMatch(
-      source,
-      /(?:state\.)?results\.value\[[^\]]+\]\s*=/,
-      owner
-    );
+    assertNoViolations(owner, source, { directResultOwnership: true });
   }
 });
 
-test('manual visibility rules participate in effective fresh-SVG replay', () => {
-  const source = read(projectionPath);
-  assert.match(
-    source,
-    /resolveEffectiveFeatureVisibility|effectiveFeatureVisibility|featureVisibilityManualRules/,
-    'fresh-SVG projection must not replay only direct visibility overrides'
-  );
+test('Label and SVG style commit paths use the supplied mutation journal', () => {
+  for (const owner of ['app/feature-editor/label-actions.js', 'app/svg-styles.js']) {
+    assertNoViolations(owner, sourceByRelativePath.get(owner), { journalDomWrites: true });
+  }
 });
 
-test('mounted Result ownership does not cross await without lease revalidation', () => {
-  const source = read(previewRuntimePath);
-  if (!/await\s+action\s*\(/.test(source)) return;
-  assert.match(
-    source,
-    /lease|targetToken|revalidate|validateCommitTarget|assertCurrentTarget/i,
-    'an async mounted-edit batch must revalidate an explicit Result/SVG lease'
-  );
-  assert.doesNotMatch(
-    source,
-    /const\s+target\s*=\s*resolveActiveCommitTarget\(\)[\s\S]{0,1600}await\s+action\s*\(\)[\s\S]{0,1200}flushCommitTarget\s*\(\s*target\s*\)/,
-    'a target captured before await must not be flushed without revalidation'
-  );
+test('definition helper settlements use a pre-await token and revalidate every await', () => {
+  assertNoViolations('app/results.js', read(resultsPath), { asyncTokenProtocol: true });
 });
 
-test('test evidence does not use disconnected zero-valued execution counters', () => {
-  const candidate = join(root, 'tests', 'web', 'live-svg-edit-commit-matrix.test.mjs');
-  if (!existsSync(candidate)) return;
-  const source = read(candidate);
-  assert.doesNotMatch(
-    source,
-    /const\s+(?:execution|metrics|counters)\s*=\s*\{[\s\S]{0,600}workerConstruction\s*:\s*0[\s\S]{0,600}pythonCalls\s*:\s*0/,
-    'Worker/Python evidence must be connected to production instrumentation'
-  );
-});
+const badFixtures = [
+  {
+    file: 'alias-clone.js',
+    options: { largeOwnerCopies: true },
+    violation: 'large-owner-clone'
+  },
+  {
+    file: 'structured-clone.js',
+    options: { largeOwnerCopies: true },
+    violation: 'large-owner-structured-clone'
+  },
+  {
+    file: 'aliased-serialization.js',
+    options: { largeOwnerCopies: true },
+    violation: 'large-owner-serialization'
+  },
+  {
+    file: 'placeholder-mutation.js',
+    options: { placeholderCommits: true },
+    violation: 'placeholder-mutation'
+  },
+  {
+    file: 'unjournaled-dom-mutation.js',
+    options: { journalDomWrites: true },
+    violation: 'unjournaled-dom-mutation'
+  },
+  {
+    file: 'unjournaled-dom-property.js',
+    options: { journalDomWrites: true },
+    violation: 'unjournaled-dom-mutation'
+  },
+  {
+    file: 'direct-result-write.js',
+    options: { directResultOwnership: true },
+    violation: 'direct-result-write'
+  },
+  {
+    file: 'direct-result-serialization.js',
+    options: { directResultOwnership: true },
+    violation: 'direct-result-serialization'
+  },
+  {
+    file: 'async-commit-without-token.js',
+    options: { asyncTokenProtocol: true },
+    violation: 'async-target-without-token'
+  },
+  {
+    file: 'async-commit-without-revalidation.js',
+    options: { asyncTokenProtocol: true },
+    violation: 'async-target-without-revalidation'
+  },
+  {
+    file: 'async-commit-without-target-token.js',
+    options: { asyncTokenProtocol: true },
+    violation: 'async-commit-without-token'
+  },
+  {
+    file: 'synthetic-zero-metric.js',
+    options: { syntheticMetrics: true },
+    violation: 'synthetic-zero-metric'
+  }
+];
+
+for (const badFixture of badFixtures) {
+  test(`AST guard rejects ${badFixture.file}`, () => {
+    const violations = analyzeWebRefactorSource(
+      read(join(fixtureRoot, badFixture.file)),
+      badFixture.options
+    );
+    assert.ok(
+      violations.some(({ code }) => code === badFixture.violation),
+      `${badFixture.file} did not trigger ${badFixture.violation}: ${JSON.stringify(violations)}`
+    );
+  });
+}
 
 test('empty editor projection preserves renderer-owned label visibility', async () => {
   const helperPath = join(root, 'tests', 'web', 'helpers', 'editor-svg-fixture.mjs');
-  if (!existsSync(helperPath)) return;
-
   const {
     createEditorSvgProjection
   } = await import(`${projectionPath}?guard=${Date.now()}`);

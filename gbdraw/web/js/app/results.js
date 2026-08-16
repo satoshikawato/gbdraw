@@ -56,7 +56,11 @@ export const createResultsManager = ({
   rerenderLinearDefinitions = null,
   previewRuntime
 }) => {
-  if (typeof previewRuntime?.commitDomEdit !== 'function') {
+  if (
+    typeof previewRuntime?.commitDomEdit !== 'function'
+    || typeof previewRuntime?.captureDomEditToken !== 'function'
+    || typeof previewRuntime?.isDomEditTokenCurrent !== 'function'
+  ) {
     throw new Error('createResultsManager requires the preview runtime edit protocol.');
   }
   const {
@@ -224,6 +228,10 @@ export const createResultsManager = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
+    const targetToken = previewRuntime.captureDomEditToken();
+    if (!targetToken || targetToken.svg !== svg) return;
+    const targetIsCurrent = () => previewRuntime.isDomEditTokenCurrent(targetToken);
+    if (!targetIsCurrent()) return;
 
     if (mode.value === 'circular') {
       const isMultiRecordCanvasOnSvg = isMultiRecordCanvasSvg(svg);
@@ -258,12 +266,14 @@ export const createResultsManager = ({
             : null;
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
 
+        const sourceBytes = await cloneFileBytesForTransfer(files.c_gb);
+        if (!targetIsCurrent()) return;
         const response = await runDiagramHelperOperation(
           DIAGRAM_HELPER_OPERATIONS.REGENERATE_DEFINITION_SVGS,
           {
             files: [{
               role: 'source',
-              bytes: await cloneFileBytesForTransfer(files.c_gb)
+              bytes: sourceBytes
             }],
             species: normalizedSpecies,
             strain: normalizedStrain,
@@ -275,6 +285,7 @@ export const createResultsManager = ({
             keepFullDefinitionWithPlotTitle
           }
         );
+        if (!targetIsCurrent()) return;
         const result = response.result;
 
         if (result.error) {
@@ -295,6 +306,7 @@ export const createResultsManager = ({
         const committed = previewRuntime.commitDomEdit({
           reason: 'definition-text',
           invalidateIndexes: ['legend'],
+          targetToken,
           mutate: ({ svg: targetSvg, mutation }) => {
             if (targetSvg !== svg) return false;
             let updated = false;
@@ -347,6 +359,7 @@ export const createResultsManager = ({
     if (mode.value === 'linear') {
       if (typeof rerenderLinearDefinitions === 'function') {
         await rerenderLinearDefinitions('definition-edit');
+        if (!targetIsCurrent()) return;
         return;
       }
 
@@ -376,6 +389,7 @@ export const createResultsManager = ({
       const committed = previewRuntime.commitDomEdit({
         reason: 'definition-text',
         invalidateIndexes: ['legend'],
+        targetToken,
         mutate: ({ svg: targetSvg, mutation }) => {
           if (targetSvg !== svg) return false;
           const plotTitleGroup = targetSvg.getElementById('plot_title');

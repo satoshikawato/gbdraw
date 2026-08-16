@@ -230,19 +230,63 @@ assert.equal(replacementCount, 4);
 featureBBlock.setAttribute = featureBSetAttribute;
 
 failSerialization = true;
+runtime.getActiveRuntime().indexes.legend = { retained: true };
+const retainedLegendIndex = runtime.getActiveRuntime().indexes.legend;
+const canonicalOverrides = {};
+let inheritedStateValue = 'before';
+const inheritedState = Object.create(Object.defineProperty({}, 'value', {
+  get: () => inheritedStateValue,
+  set: (value) => {
+    inheritedStateValue = value;
+  }
+}));
+const resultBeforeFailedCommit = state.results.value[0];
+state.skipCaptureBaseConfig.value = false;
 assert.throws(() => runtime.commitDomEdit({
   reason: 'serialization-failure',
-  mutate: () => {
-    featureA.setAttribute('data-retry-edit', 'true');
+  invalidateIndexes: ['legend'],
+  mutate: ({ mutation }) => {
+    mutation.setAttribute(featureA, 'data-retry-edit', 'true');
+    mutation.setProperty(canonicalOverrides, 'feature-a', '#abcdef');
+    mutation.setProperty(inheritedState, 'value', 'after');
     return true;
   }
 }), /serialization failed/);
-assert.equal(runtime.getActiveRuntime().dirty, true);
+assert.equal(featureA.getAttribute('data-retry-edit'), null);
+assert.equal(Object.hasOwn(canonicalOverrides, 'feature-a'), false);
+assert.equal(inheritedStateValue, 'before');
+assert.equal(state.results.value[0], resultBeforeFailedCommit);
+assert.equal(runtime.getActiveRuntime().dirty, false);
+assert.deepEqual([...runtime.getActiveRuntime().dirtyReasons], []);
+assert.equal(runtime.getActiveRuntime().indexes.legend, retainedLegendIndex);
+assert.equal(state.skipCaptureBaseConfig.value, false);
 assert.equal(replacementCount, 4);
+const editorMetadata = {};
+await assert.rejects(runtime.runDomEdit({
+  reason: 'batched-serialization-failure',
+  action: () => {
+    runtime.commitDomEdit({
+      reason: 'editor-metadata',
+      journalChangesAffectResult: false,
+      mutate: ({ mutation }) => {
+        mutation.setProperty(editorMetadata, 'labelKey', 'label-1');
+        return false;
+      }
+    });
+    runtime.commitDomEdit({
+      reason: 'persistent-label-edit',
+      mutate: ({ mutation }) => mutation.setAttribute(featureA, 'data-label-edit', 'true')
+    });
+  }
+}), /serialization failed/);
+assert.deepEqual(editorMetadata, {});
+assert.equal(featureA.getAttribute('data-label-edit'), null);
+assert.equal(runtime.getActiveRuntime().dirty, false);
+assert.equal(runtime.getActiveRuntime().indexes.legend, retainedLegendIndex);
 failSerialization = false;
-assert.equal(runtime.flushActiveResult(), true);
-assert.equal(serializeCount, 5);
-assert.equal(replacementCount, 5);
+assert.equal(runtime.flushActiveResult(), false);
+assert.equal(serializeCount, 4);
+assert.equal(replacementCount, 4);
 
 assert.throws(() => runtime.commitDomEdit({
   reason: 'async-mutation',
@@ -251,7 +295,7 @@ assert.throws(() => runtime.commitDomEdit({
 
 state.skipCaptureBaseConfig.value = false;
 runtime.selectResult(1);
-assert.equal(serializeCount, 5);
+assert.equal(serializeCount, 4);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 assert.equal(state.selectedResultIndex.value, 1);
 
@@ -275,8 +319,8 @@ runtime.mountResultSvg(1, legacySvg);
 runtime.applyFeatureFillChanges([{ featureId: 'feature-c', color: '#fedcba' }]);
 assert.equal(legacyBlock.getAttribute('fill'), '#fedcba');
 assert.equal(legacyConnector.getAttribute('fill'), 'none');
-assert.equal(serializeCount, 6);
-assert.equal(replacementCount, 6);
+assert.equal(serializeCount, 5);
+assert.equal(replacementCount, 5);
 
 const deferred = () => {
   let resolve;
@@ -367,6 +411,14 @@ const raceCases = [
       raceRuntime.mountResultSvg(0, nextSvg);
       return retainedResult;
     }
+  },
+  {
+    name: 'same SVG element with a new document admission',
+    replace: ({ oldSvg, runtime: raceRuntime, state: raceState }) => {
+      const retainedResult = raceState.results.value[0];
+      raceRuntime.mountResultSvg(0, oldSvg);
+      return retainedResult;
+    }
   }
 ];
 
@@ -388,6 +440,36 @@ for (const raceCase of raceCases) {
   assert.equal(await settlement, false, raceCase.name);
   assert.equal(currentOwner.content, currentContent, raceCase.name);
   assert.equal(fixture.oldFeature.getAttribute('fill'), '#111111', raceCase.name);
+}
+
+{
+  const fixture = createLeaseRaceFixture();
+  const active = fixture.runtime.getActiveRuntime();
+  const retainedLegendIndex = { retained: true };
+  active.dirty = true;
+  active.dirtyReasons.add('existing-edit');
+  active.indexes.legend = retainedLegendIndex;
+  const replacement = { name: 'external.svg', content: '<svg data-owner="external"></svg>' };
+  const outcome = fixture.runtime.commitDomEdit({
+    reason: 'ownership-change-during-mutation',
+    invalidateIndexes: ['legend'],
+    mutate: ({ mutation }) => {
+      mutation.setAttribute(fixture.oldFeature, 'fill', '#abcdef');
+      fixture.state.results.value[0] = replacement;
+      return true;
+    }
+  });
+  assert.deepEqual(outcome, {
+    changed: false,
+    flushed: false,
+    resultIndex: 0,
+    reason: 'ownership-change-during-mutation'
+  });
+  assert.equal(fixture.state.results.value[0], replacement);
+  assert.equal(fixture.oldFeature.getAttribute('fill'), '#111111');
+  assert.equal(active.dirty, true);
+  assert.deepEqual([...active.dirtyReasons], ['existing-edit']);
+  assert.equal(active.indexes.legend, retainedLegendIndex);
 }
 
 console.log('preview runtime tests passed');

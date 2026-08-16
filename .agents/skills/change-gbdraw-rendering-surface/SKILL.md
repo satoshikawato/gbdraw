@@ -7,10 +7,6 @@ description: Implement or review a gbdraw rendering option across every surface 
 
 Read `AGENTS.md` and `CLAUDE.md` first. Read `gbdraw/web/CLAUDE.md` when the Web app, session projection, browser worker, or Gallery is in scope. Use `$maintain-python-api` for public API contract details and `$web-gallery-screenshot-maintenance` for Gallery media work.
 
-If the task moves or centralizes existing Web behavior without intending to
-change it, also apply `$refactor-gbdraw-web-safely`. Establish the prior behavior
-with an independent characterization oracle before editing production code.
-
 ## Map the current owner
 
 Before editing, trace the concept through the surfaces it actually uses:

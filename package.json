@@ -8,10 +8,11 @@
     "test:web:functional-smoke": "playwright test --config=playwright.functional.config.js",
     "test:web:perf-smoke": "playwright test --config=playwright.perf.config.js",
     "test:web:vibrio-generate": "playwright test --config=playwright.vibrio.config.js",
-    "test:web:refactor-guards": "node --test tests/web/refactor-guardrails.test.mjs tests/web/architecture-contracts.test.mjs tests/web/editor-svg-projection.test.mjs tests/web/preview-runtime.test.mjs"
+    "test:web:refactor-guards": "node --test tests/web/refactor-guardrails.test.mjs tests/web/architecture-contracts.test.mjs tests/web/editor-svg-projection.test.mjs tests/web/preview-runtime.test.mjs tests/web/results-definition-token.test.mjs tests/web/label-mutation-rollback.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "@types/node": "^26.1.0"
+    "@types/node": "^26.1.0",
+    "acorn": "^8.15.0"
   }
 }

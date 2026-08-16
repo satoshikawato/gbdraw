@@ -162,11 +162,11 @@ export const applyLabelVisibility = (textElement, modeRaw, {
   return changed;
 };
 
-export const resetLabelsToSourceText = (svg) => {
+export const resetLabelsToSourceText = (svg, { mutation = null } = {}) => {
   let changedCount = 0;
   svg?.querySelectorAll?.(EDITABLE_LABEL_SELECTOR)?.forEach((textElement) => {
     const sourceText = textElement.getAttribute('data-label-source-text');
-    if (sourceText !== null && setLabelText(textElement, sourceText)) changedCount += 1;
+    if (sourceText !== null && setLabelText(textElement, sourceText, { mutation })) changedCount += 1;
   });
   return changedCount;
 };
@@ -583,7 +583,6 @@ const removePairwiseIdentityLegend = (svg, mutation = null) => {
  * @param {EditorSvgProjectionInput} input
  */
 export const createEditorSvgProjection = (input = {}) => {
-  let applicationCount = 0;
   const state = {
     // Validated Feature metadata is a large borrowed owner. The projection
     // never mutates, clones, or serializes this graph.
@@ -609,19 +608,10 @@ export const createEditorSvgProjection = (input = {}) => {
     featureVisibilityManualRules: cloneJsonValue(input.featureVisibilityManualRules, []),
     suppressPairwiseIdentityLegend: Boolean(input.suppressPairwiseIdentityLegend)
   };
-  const structuralMetrics = Object.freeze({
-    editorProjectionFullFeatureCloneCount: 0,
-    editorProjectionFullFeatureSerializationCount: 0,
-    get editorProjectionUnusedBuildCount() {
-      return applicationCount === 0 ? 1 : 0;
-    }
-  });
   recordStructuralMetric('editorProjectionBuildCount');
   recordStructuralMetric('editorProjectionBorrowedFeatureOwnerCount', 1, {
     featureOwner: state.features
   });
-  recordStructuralMetric('editorProjectionFullFeatureCloneCount', 0);
-  recordStructuralMetric('editorProjectionFullFeatureSerializationCount', 0);
   replaceRuleDerivedFillOverrides(
     state.featureColorOverrides,
     state.features,
@@ -632,14 +622,17 @@ export const createEditorSvgProjection = (input = {}) => {
     item = null,
     requireFeatureBindings = false,
     resetFeatureVisibility = false,
-    resetLabelState = false
+    resetLabelState = false,
+    mutation: suppliedMutation = null
   } = {}) => {
     if (!svg) throw new Error('Editor SVG projection requires an SVG root.');
-    applicationCount += 1;
     recordStructuralMetric('editorProjectionApplicationCount');
-    recordStructuralMetric('editorProjectionUnusedBuildCount', 0);
     const elementsById = getFeatureElementIndex(svg);
     const bindings = featureBindings(state.features, item);
+    recordStructuralMetric('editorProjectionFeatureBindingAccessCount', bindings.length, {
+      featureOwner: state.features,
+      itemOwner: item
+    });
     bindings.forEach(({ feature, overrideKey, renderedId }) => {
       if (requireFeatureBindings && (elementsById.get(renderedId) || []).length === 0) {
         throw new Error('Sanitized SVG content is missing a rendered feature binding.');
@@ -677,7 +670,8 @@ export const createEditorSvgProjection = (input = {}) => {
       }
     });
 
-    const mutation = createDomMutationJournal();
+    const mutation = suppliedMutation || createDomMutationJournal();
+    const ownsMutation = !suppliedMutation;
     let featureFillCount = 0;
     let featureStrokeCount = 0;
     let featureVisibilityCount = 0;
@@ -780,10 +774,10 @@ export const createEditorSvgProjection = (input = {}) => {
         suppressionCount,
         unresolvedLabelFeatureIds: labelResult.unresolvedLabelFeatureIds
       };
-      mutation.commit();
+      if (ownsMutation) mutation.commit();
       return result;
     } catch (error) {
-      mutation.rollback();
+      if (ownsMutation) mutation.rollback();
       throw error;
     }
   };
@@ -791,7 +785,6 @@ export const createEditorSvgProjection = (input = {}) => {
   return {
     featureColorOverrides: state.featureColorOverrides,
     featureStrokeOverrides: state.featureStrokeOverrides,
-    structuralMetrics,
     project
   };
 };

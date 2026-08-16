@@ -24,11 +24,11 @@ export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
 const normalizeComparableColor = (value) => String(value || '').trim().toLowerCase();
 
-const setColorAttributeIfChanged = (element, attribute, value) => {
+const setColorAttributeIfChanged = (element, attribute, value, mutation) => {
   if (normalizeComparableColor(element.getAttribute(attribute)) === normalizeComparableColor(value)) {
     return false;
   }
-  element.setAttribute(attribute, value);
+  mutation.setAttribute(element, attribute, value);
   return true;
 };
 
@@ -72,7 +72,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }).changed
   );
 
-  const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
+  const updatePairwiseLegendGradientStops = (pairwiseLegend, colors, mutation) => {
     let updated = false;
     pairwiseLegend.querySelectorAll('linearGradient').forEach((gradient) => {
       const legendKey = gradient.closest('g[data-legend-key]')?.getAttribute('data-legend-key') || '';
@@ -82,8 +82,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       if (!minColor || !maxColor) return;
       const stops = gradient.querySelectorAll('stop');
       if (stops.length >= 2) {
-        updated = setColorAttributeIfChanged(stops[0], 'stop-color', minColor) || updated;
-        updated = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor) || updated;
+        updated = setColorAttributeIfChanged(stops[0], 'stop-color', minColor, mutation) || updated;
+        updated = setColorAttributeIfChanged(stops[1], 'stop-color', maxColor, mutation) || updated;
       }
     });
     return updated;
@@ -95,7 +95,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
   } = {}) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
-    return commitSvgMutation('palette-style', (svg) => {
+    return commitSvgMutation('palette-style', (svg, mutation) => {
     const colors = appliedPaletteColors.value;
     const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
     const featureLookup = featuresBySvgId?.value || new Map();
@@ -115,7 +115,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       if (!hasSpecificRule && !getFeatureOverride(featureColorOverrides, feat)) {
         const currentFill = path.getAttribute('fill');
         if (currentFill !== paletteColor) {
-          path.setAttribute('fill', paletteColor);
+          mutation.setAttribute(path, 'fill', paletteColor);
           updatedCount++;
         }
       }
@@ -130,7 +130,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       gcContentGroups.forEach((gcContentGroup) => {
         const gcPaths = gcContentGroup.querySelectorAll('path');
         gcPaths.forEach((path) => {
-          if (setColorAttributeIfChanged(path, 'fill', colors.gc_content)) updatedCount++;
+          if (setColorAttributeIfChanged(path, 'fill', colors.gc_content, mutation)) updatedCount++;
         });
       });
     }
@@ -148,9 +148,9 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
           const fill = path.getAttribute('fill');
           if (fill && fill !== 'white' && fill !== 'none') {
             if (pathIndex === 0 && colors.skew_high) {
-              if (setColorAttributeIfChanged(path, 'fill', colors.skew_high)) updatedCount++;
+              if (setColorAttributeIfChanged(path, 'fill', colors.skew_high, mutation)) updatedCount++;
             } else if (pathIndex === 1 && colors.skew_low) {
-              if (setColorAttributeIfChanged(path, 'fill', colors.skew_low)) updatedCount++;
+              if (setColorAttributeIfChanged(path, 'fill', colors.skew_low, mutation)) updatedCount++;
             }
             pathIndex++;
           }
@@ -185,7 +185,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
             if (collinearColor) {
               if (
                 recolorCollinear
-                && setColorAttributeIfChanged(path, 'fill', collinearColor)
+                && setColorAttributeIfChanged(path, 'fill', collinearColor, mutation)
               ) {
                 updatedCount++;
               }
@@ -197,17 +197,17 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
             let factor;
             if (Number.isFinite(metadataFactor)) {
               factor = metadataFactor;
-              pairwiseMatchFactors.value[pathKey] = factor;
+              mutation.setProperty(pairwiseMatchFactors.value, pathKey, factor);
             } else if (pairwiseMatchFactors.value[pathKey] !== undefined) {
               factor = pairwiseMatchFactors.value[pathKey];
             } else {
               const origMin = window._origPairwiseMin || '#FFE7E7';
               const origMax = window._origPairwiseMax || '#FF7272';
               factor = estimateColorFactor(currentFill, origMin, origMax);
-              pairwiseMatchFactors.value[pathKey] = factor;
+              mutation.setProperty(pairwiseMatchFactors.value, pathKey, factor);
             }
             const newColor = interpolateColor(colors.pairwise_match_min, colors.pairwise_match_max, factor);
-            if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
+            if (setColorAttributeIfChanged(path, 'fill', newColor, mutation)) updatedCount++;
           }
         });
         compIdx++;
@@ -266,7 +266,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
           for (const path of paths) {
             const fill = path.getAttribute('fill');
             if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-              if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
+              if (setColorAttributeIfChanged(path, 'fill', newColor, mutation)) updatedCount++;
               break;
             }
           }
@@ -302,7 +302,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
             }
           }
           if (bestPath) {
-            if (setColorAttributeIfChanged(bestPath, 'fill', newColor)) updatedCount++;
+            if (setColorAttributeIfChanged(bestPath, 'fill', newColor, mutation)) updatedCount++;
           }
         });
       }
@@ -311,7 +311,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     if (colors.pairwise_match_min && colors.pairwise_match_max) {
       const allPairwiseLegends = svg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR);
       allPairwiseLegends.forEach((pairwiseLegend) => {
-        if (updatePairwiseLegendGradientStops(pairwiseLegend, colors)) updatedCount++;
+        if (updatePairwiseLegendGradientStops(pairwiseLegend, colors, mutation)) updatedCount++;
       });
     }
 
@@ -323,7 +323,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!manualSpecificRules.length) return;
     if (!svgContainer.value) return;
-    return commitSvgMutation('specific-rule-style', (svg) => {
+    return commitSvgMutation('specific-rule-style', (svg, mutation) => {
     const featureElementIndex = getFeatureElementIndex(svg);
     let updatedCount = 0;
 
@@ -355,7 +355,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
         const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
         elements.forEach((el) => {
           if (el.getAttribute('fill') !== newColor) {
-            el.setAttribute('fill', newColor);
+            mutation.setAttribute(el, 'fill', newColor);
             updatedCount++;
           }
         });
@@ -372,19 +372,17 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
   const applyStylesToSvg = () => {
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
-    return commitSvgMutation('diagram-style', (svg) => {
+    return commitSvgMutation('diagram-style', (svg, mutation) => {
     let updatedCount = 0;
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
       const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).filter(isFeatureFillTarget);
       featurePaths.forEach((path) => {
         if (adv.block_stroke_color) {
-          path.setAttribute('stroke', adv.block_stroke_color);
-          updatedCount++;
+          if (mutation.setAttribute(path, 'stroke', adv.block_stroke_color)) updatedCount++;
         }
         if (adv.block_stroke_width !== null) {
-          path.setAttribute('stroke-width', adv.block_stroke_width);
-          updatedCount++;
+          if (mutation.setAttribute(path, 'stroke-width', adv.block_stroke_width)) updatedCount++;
         }
       });
     }
@@ -394,12 +392,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       const axisElements = axisGroup.querySelectorAll('path, line, circle');
       axisElements.forEach((el) => {
         if (adv.axis_stroke_color) {
-          el.setAttribute('stroke', adv.axis_stroke_color);
-          updatedCount++;
+          if (mutation.setAttribute(el, 'stroke', adv.axis_stroke_color)) updatedCount++;
         }
         if (adv.axis_stroke_width !== null) {
-          el.setAttribute('stroke-width', adv.axis_stroke_width);
-          updatedCount++;
+          if (mutation.setAttribute(el, 'stroke-width', adv.axis_stroke_width)) updatedCount++;
         }
       });
     });
@@ -409,12 +405,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       const tickElements = tickGroup.querySelectorAll('path, line');
       tickElements.forEach((el) => {
         if (adv.axis_stroke_color) {
-          el.setAttribute('stroke', adv.axis_stroke_color);
-          updatedCount++;
+          if (mutation.setAttribute(el, 'stroke', adv.axis_stroke_color)) updatedCount++;
         }
         if (adv.axis_stroke_width !== null) {
-          el.setAttribute('stroke-width', adv.axis_stroke_width);
-          updatedCount++;
+          if (mutation.setAttribute(el, 'stroke-width', adv.axis_stroke_width)) updatedCount++;
         }
       });
     });
@@ -425,12 +419,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       );
       connectorPaths.forEach((path) => {
         if (adv.line_stroke_color) {
-          path.setAttribute('stroke', adv.line_stroke_color);
-          updatedCount++;
+          if (mutation.setAttribute(path, 'stroke', adv.line_stroke_color)) updatedCount++;
         }
         if (adv.line_stroke_width !== null) {
-          path.setAttribute('stroke-width', adv.line_stroke_width);
-          updatedCount++;
+          if (mutation.setAttribute(path, 'stroke-width', adv.line_stroke_width)) updatedCount++;
         }
       });
     }
@@ -440,12 +432,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       const scaleElements = lengthBarGroup.querySelectorAll('line, path');
       scaleElements.forEach((el) => {
         if (adv.scale_stroke_color) {
-          el.setAttribute('stroke', adv.scale_stroke_color);
-          updatedCount++;
+          if (mutation.setAttribute(el, 'stroke', adv.scale_stroke_color)) updatedCount++;
         }
         if (adv.scale_stroke_width !== null) {
-          el.setAttribute('stroke-width', adv.scale_stroke_width);
-          updatedCount++;
+          if (mutation.setAttribute(el, 'stroke-width', adv.scale_stroke_width)) updatedCount++;
         }
       });
     }
@@ -486,12 +476,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
             d.split(' ').length < 20
           ) {
             if (adv.block_stroke_color) {
-              path.setAttribute('stroke', adv.block_stroke_color);
-              updatedCount++;
+              if (mutation.setAttribute(path, 'stroke', adv.block_stroke_color)) updatedCount++;
             }
             if (adv.block_stroke_width !== null) {
-              path.setAttribute('stroke-width', adv.block_stroke_width);
-              updatedCount++;
+              if (mutation.setAttribute(path, 'stroke-width', adv.block_stroke_width)) updatedCount++;
             }
           }
         });
@@ -508,7 +496,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
   const applyTrackVisibility = () => {
     if (!svgContent.value) return;
     if (!svgContainer.value) return;
-    return commitSvgMutation('track-visibility', (svg) => {
+    return commitSvgMutation('track-visibility', (svg, mutation) => {
     let updated = false;
 
     const gcContentGroups = getGroupsByBaseIds(
@@ -521,10 +509,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       gcContentGroups.forEach((gcContentGroup) => {
         const currentDisplay = gcContentGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
-          gcContentGroup.setAttribute('display', 'none');
+          mutation.setAttribute(gcContentGroup, 'display', 'none');
           updated = true;
         } else if (!shouldHide && currentDisplay === 'none') {
-          gcContentGroup.removeAttribute('display');
+          mutation.removeAttribute(gcContentGroup, 'display');
           updated = true;
         }
       });
@@ -540,10 +528,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       skewGroups.forEach((skewGroup) => {
         const currentDisplay = skewGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
-          skewGroup.setAttribute('display', 'none');
+          mutation.setAttribute(skewGroup, 'display', 'none');
           updated = true;
         } else if (!shouldHide && currentDisplay === 'none') {
-          skewGroup.removeAttribute('display');
+          mutation.removeAttribute(skewGroup, 'display');
           updated = true;
         }
       });
@@ -555,10 +543,10 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       depthGroups.forEach((depthGroup) => {
         const currentDisplay = depthGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
-          depthGroup.setAttribute('display', 'none');
+          mutation.setAttribute(depthGroup, 'display', 'none');
           updated = true;
         } else if (!shouldHide && currentDisplay === 'none') {
-          depthGroup.removeAttribute('display');
+          mutation.removeAttribute(depthGroup, 'display');
           updated = true;
         }
       });

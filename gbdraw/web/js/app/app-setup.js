@@ -2103,9 +2103,10 @@ export const createAppSetup = () => {
           previewRuntime.commitDomEdit({
             reason: 'history-editor-svg-projection',
             invalidateIndexes: ['features', 'legend'],
-            mutate: ({ svg }) => projection.project(svg, {
+            mutate: ({ svg, mutation }) => projection.project(svg, {
               resetFeatureVisibility: true,
-              resetLabelState: true
+              resetLabelState: true,
+              mutation
             }).changed
           });
           syncLabelEditor();
