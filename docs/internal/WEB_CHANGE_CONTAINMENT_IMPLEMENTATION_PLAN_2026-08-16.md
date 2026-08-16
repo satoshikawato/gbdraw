@@ -1,9 +1,7 @@
 # Web change containment implementation plan
 
-Status: in progress; safe allowlist contraction is committed on the current
-branch but not merged; finite profiles are implemented and verified in the
-working tree; historical acceptance is complete; ordered merges and remote
-protection remain pending
+Status: implementation complete and verified at `915c2226`; pull request #339
+is open and merge remains pending
 
 Date: 2026-08-16
 
@@ -23,8 +21,7 @@ The first durable implementation is intentionally narrow. It must:
 - prevent the checker or its source parser from changing together with the
   policy data or policy workflows;
 - preserve base-authoritative privileged owner/importer expansion checks;
-- allow only safe, later allowlist contraction; and
-- require pull requests and the existing named checks on `main`.
+- allow only safe, later allowlist contraction.
 
 This plan does not attempt to infer architecture quality from module size,
 importer count, export count, naming, or reactive syntax. Those signals may be
@@ -54,8 +51,7 @@ The following decisions are binding:
    state-domain gates or scanners are not added.
 4. No PR-body parser is added. A workflow records the actual base and head SHAs;
    contributors do not copy changing GitHub event SHAs into the PR body.
-5. Initial branch protection does not require a different-person approval or
-   Code Owner review. The repository owner retains an emergency bypass.
+5. Branch protection is outside this implementation's completion boundary.
 6. Reconsider additional hard gates only after reviewing 10-15 representative
    Web pull requests. Add one only when the observations show a concrete failure
    that the rule detects with acceptably low false positives.
@@ -207,9 +203,9 @@ surface was larger than needed for the containment objective, so this revision
 removes those unimplemented mechanisms. The completed one-off contraction task
 prompt is removed rather than retained as a second execution authority.
 
-### Phase 1 / Pull Request A: safe allowlist contraction
+### Phase 1: safe allowlist contraction
 
-Status: implementation complete on the branch; final PR merge pending
+Status: implementation complete and verified
 
 Owned behavior files:
 
@@ -236,46 +232,33 @@ Recorded local evidence at `f91770cb694e72c830c46ca3cfe3b0945c73a80f`:
 - the range contained no Web runtime, workflow, dependency, or real policy-data
   change.
 
-The current immutable branch head
-`665777bda24ab8a9f8634f079f7c01225227c199` also passes the checker against
-base `43c14ddec49835458f6bac88aa134a7d755c89b1`. `git diff --check` passes for
-that range, which contains this plan and the three Phase 1 owner files but no
-Web runtime, workflow, dependency, policy JSON, generated-artifact, or
-reference-output change. Rerun the range if the pull-request base or head
-changes before merge.
+The Phase 1 head `665777bda24ab8a9f8634f079f7c01225227c199`
+passes the checker against base
+`43c14ddec49835458f6bac88aa134a7d755c89b1`. The current combined pull-request
+range through `915c2226e645033487b5eb90c890d425e5fb6278` also passes and contains
+only this plan and the three behavior-owner files. It contains no Web runtime,
+workflow, dependency, policy JSON, generated-artifact, or reference-output
+change. Rerun the range if the pull-request base or head changes before merge.
 
 ### External Gate A: protect `main`
 
-Status: pending; explicit external authorization required
+Status: out of scope by repository-owner direction on 2026-08-16
 
-Configure `main` to:
+Branch protection is not required for this implementation or its completion.
+Any future settings change remains a separate external action requiring explicit
+authorization.
 
-- require a pull request;
-- require `Web change budget`, `Web base policy (trusted base)`, and the
-  repository's other selected test checks;
-- require an up-to-date head or equivalent merge-queue behavior; and
-- block force pushes and branch deletion.
+### Phase 2: enforce the minimal finite profiles
 
-Do not require Code Owner review, a different-person latest-push approval, or an
-empty bypass set for initial completion. Restrict emergency bypass to the
-repository owner or another explicitly named maintainer. If used, record the
-reason and perform a follow-up audit before ordinary development resumes.
+Status: implementation complete and verified at
+`915c2226e645033487b5eb90c890d425e5fb6278`; merge remains pending in pull
+request #339
 
-Verify settings through authenticated configuration output or a settings
-capture. Do not test protection with a direct or force push.
+Dependencies: Phase 1 behavior is present.
 
-### Phase 2 / Pull Request B: enforce the minimal finite profiles
-
-Status: local implementation complete and verified in the working tree; Pull
-Request B remains pending
-
-Dependencies: Pull Request A merged. External Gate A should be active before
-Pull Request B merges, but lack of settings authorization does not block local
-implementation and verification.
-
-The local implementation is currently stacked as uncommitted work above the
-Phase 1 branch. It must become a separate Pull Request B after Pull Request A
-merges; it must not be folded into Pull Request A.
+The implementation is committed above the Phase 1 changes and is included in
+pull request #339. Per the repository owner's direction on 2026-08-16, separate
+pull requests and an A-then-B merge order are not completion requirements.
 
 Owned behavior files:
 
@@ -336,20 +319,20 @@ Recorded local evidence:
 - `node --check tools/check-web-change-budget.mjs`: passed;
 - `node --test tests/web/architecture-contracts.test.mjs`: 30/30 passed;
 - `node --test tests/web/*.test.mjs`: 229/229 passed;
-- ordinary and architecture working-tree checker runs both passed with zero
-  production files and zero production churn;
+- ordinary and architecture exact-range checker runs from `43c14dde` through
+  `915c2226` both passed with zero production files and zero production churn;
 - exact boundary fixtures cover both profiles for file count, gross churn, and
   net additions, including exact-limit and limit-plus-one cases; and
-- `git diff --check HEAD` passed. The behavior diff contains only the three
-  Phase 2 owner files; this plan is the only additional working-tree file.
+- `git diff --check 43c14dde...915c2226` passed. The range contains only the
+  three behavior-owner files and this plan.
 
-No exact Pull Request B base/head evidence exists because Pull Request A has not
-merged and the Phase 2 work has not been committed. This is the remaining local
-range-verification dependency.
+Exact pull-request evidence now exists for pull request #339 at base
+`43c14ddec49835458f6bac88aa134a7d755c89b1` and head
+`915c2226e645033487b5eb90c890d425e5fb6278`.
 
 ### Phase 3: historical acceptance
 
-Status: complete locally; final Pull Request B range remains pending
+Status: complete
 
 Use read-only `git diff --numstat` measurements rather than adding a historical
 policy-injection framework. Reconfirm:
@@ -374,7 +357,8 @@ final head: 476fb10abfa1f588c20415cf5c1fd58ef57ae9f0
 
 Both ranges exceed the architecture limits of 12 production files and 1,500
 lines of gross churn. The historical tip is not an ancestor of the current
-`HEAD`; no #337 commit or file content was applied to the working tree.
+`HEAD`; no #337 commit or file content was applied to the working tree. The
+current pull-request range is also verified.
 
 ### Follow-up observation
 
@@ -397,26 +381,24 @@ Update a row only after its named evidence exists.
 
 | Phase | Status | Evidence | Remaining risk |
 | --- | --- | --- | --- |
-| Plan reduction | complete | Replaced the 850-line plan with the reduced contract, removed the completed 458-line task prompt, passed `git diff --check`, and confirmed the prospective PR diff contains only the plan plus the three Phase 1 owner files | Pull Request A base or head changes require another range check |
+| Plan reduction | complete | Replaced the 850-line plan with the reduced contract, removed the completed 458-line task prompt, passed `git diff --check`, and confirmed the delivery diff contains only the plan plus the three behavior-owner files | Delivery base or head changes require another range check |
 | Phase 0 | complete | Base `43c14dde`; current implementation commit `f91770cb`; no Web runtime change | Base may advance before merge |
-| Phase 1 / PR A | implementation complete; merge pending | Exact checker PASS from base `43c14dde` to current head `665777bd`; range `git diff --check` passed and contains no Web runtime, workflow, dependency, or policy JSON change | Rerun if the PR base or head changes; merge remains external |
-| External Gate A | pending | No authenticated protection evidence recorded | Required checks are not yet proven unavoidable |
-| Phase 2 / PR B | local implementation complete; PR pending | Checker syntax PASS; focused 30/30; Web Node 229/229; both working-tree profiles PASS; exact and plus-one fixtures cover all three finite limits | Pull Request A must merge first; Phase 2 needs a separate immutable base/head range |
-| Phase 3 | complete locally | Recomputed #337: first commit 21 files / gross 2,446; final diff 35 files / gross 7,639 | Historical evidence is complete; Pull Request B range is still pending |
+| Phase 1 | implementation complete; merge pending | Exact checker PASS from base `43c14dde` to Phase 1 head `665777bd`; the combined PR #339 range also passes and contains no Web runtime, workflow, dependency, or policy JSON change | Rerun if the PR base or head changes; merge remains external |
+| External Gate A | out of scope | Repository owner removed branch protection from this plan's completion boundary on 2026-08-16 | Any future settings change requires separate authorization |
+| Phase 2 | implementation complete; merge pending | Checker syntax PASS; focused 30/30; Web Node 229/229; ordinary and architecture exact-range checks PASS for `43c14dde...915c2226`; exact and plus-one fixtures cover all three finite limits | Pull request #339 remains external and unmerged |
+| Phase 3 | complete | Recomputed #337: first commit 21 files / gross 2,446; final diff 35 files / gross 7,639 | Historical evidence is complete |
 
 ## 6. Completion rule
 
 Mark this plan complete only when:
 
-- Pull Request A and Pull Request B have merged in order;
-- exact base/head evidence exists for both ranges;
+- the implementation has merged;
+- exact base/head evidence exists for the delivered range;
 - the focused acceptance matrix passes;
-- `main` requires pull requests and the selected named checks;
 - the historical #337 measurements exceed the enforced architecture profile;
 - no plan-owned Web runtime, dependency, generated-artifact, or reference-output
   change exists; and
 - no required ledger row remains pending.
 
 The optional 10-15 pull-request observation period does not block initial
-completion. Missing external authorization leaves External Gate A pending; it
-does not turn local evidence into remote enforcement.
+completion. Branch protection is outside this plan's completion boundary.
