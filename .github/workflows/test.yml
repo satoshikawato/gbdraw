@@ -8,6 +8,7 @@ on:
     branches: ["main", "refactoring", "develop"]
   pull_request:
     branches: ["main"]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -15,8 +16,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  web-change-budget:
+    name: Web change budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check Web change budget
+        env:
+          WEB_CHANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          WEB_CHANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+          WEB_ARCHITECTURE_CHANGE: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
+        run: node tools/check-web-change-budget.mjs
+
+      - name: Check Web architecture contracts
+        run: node --test tests/web/architecture-contracts.test.mjs
+
   core:
     name: Core (Python ${{ matrix.python-version }})
+    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -50,6 +77,7 @@ jobs:
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
+    needs: web-change-budget
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -74,6 +102,7 @@ jobs:
 
   gallery:
     name: Gallery (Python 3.11)
+    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -98,6 +127,7 @@ jobs:
 
   browser:
     name: Browser (Python 3.11)
+    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -147,6 +177,7 @@ jobs:
 
   playwright-functional:
     name: Playwright functional
+    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -189,6 +220,7 @@ jobs:
 
   playwright-performance:
     name: Playwright performance
+    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -231,6 +263,7 @@ jobs:
 
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
+    needs: web-change-budget
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -275,6 +308,7 @@ jobs:
 
   slow-main:
     name: Slow (Python ${{ matrix.python-version }})
+    needs: web-change-budget
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -312,6 +346,7 @@ jobs:
 
   lint:
     name: Lint
+    needs: web-change-budget
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -332,6 +367,7 @@ jobs:
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
+    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

@@ -1,0 +1,166 @@
+{
+  "allowedPrivilegedImporters": {
+    "app/feature-editor.js": [
+      "app/app-setup.js"
+    ],
+    "app/legend.js": [
+      "app/app-setup.js"
+    ],
+    "app/preview-runtime.js": [
+      "app/app-setup.js"
+    ],
+    "app/python-helpers.js": [
+      "workers/diagram-generation-worker.js"
+    ],
+    "app/right-drawer.js": [
+      "app/app-setup.js",
+      "services/config.js"
+    ],
+    "services/config.js": [
+      "app/app-setup.js"
+    ],
+    "services/diagram-generation.js": [
+      "app/app-setup.js",
+      "app/feature-metadata-extraction.js",
+      "app/legend/entry-actions.js",
+      "app/record-discovery.js",
+      "app/results.js",
+      "app/run-analysis.js"
+    ],
+    "services/diagram-resource-staging.js": [
+      "services/diagram-generation.js"
+    ],
+    "services/diagram-worker-protocol.js": [
+      "services/diagram-generation.js",
+      "workers/diagram-generation-worker.js"
+    ],
+    "services/gallery-session-migration.js": [
+      "services/config.js"
+    ],
+    "services/history-snapshot.js": [
+      "app/app-setup.js"
+    ],
+    "services/history.js": [
+      "app/app-setup.js"
+    ],
+    "services/resource-payload-owner.js": [
+      "services/config.js",
+      "services/diagram-resource-staging.js",
+      "services/session-request.js"
+    ],
+    "services/session-authority.js": [
+      "services/config.js",
+      "services/session-resources.js"
+    ],
+    "services/session-file.js": [
+      "services/config.js"
+    ],
+    "services/session-request.js": [
+      "app/run-analysis.js",
+      "services/config.js",
+      "services/gallery-session-migration.js"
+    ],
+    "services/svg-result-ingestion.js": [
+      "app/candidate-render.js",
+      "app/preview-runtime.js",
+      "app/session-feature-metadata.js",
+      "app/watchers.js",
+      "services/config.js",
+      "state.js"
+    ],
+    "services/svg-sanitization.js": [
+      "services/svg-result-ingestion.js"
+    ],
+    "services/svg-serialization.js": [
+      "app/app-setup.js",
+      "app/feature-editor/label-actions.js",
+      "app/feature-editor/svg-actions.js",
+      "app/feature-search/preview-svg.js",
+      "app/feature-selection.js",
+      "app/legend-layout/canvas-actions.js",
+      "app/legend-layout/diagram-drag.js",
+      "app/legend-layout/reposition-actions.js",
+      "app/legend/drag-actions.js",
+      "app/legend/entry-actions.js",
+      "app/legend/sort-actions.js",
+      "app/legend/stroke-actions.js",
+      "app/results.js",
+      "app/svg-styles.js",
+      "services/config.js",
+      "services/export.js",
+      "services/history-snapshot.js",
+      "services/standalone-interactivity.js",
+      "services/svg-result-ingestion.js"
+    ],
+    "workers/diagram-generation-worker.js": []
+  },
+  "allowedPrivilegedOwners": {
+    "Canonical editor state": [
+      "app/app-setup.js",
+      "app/feature-editor.js",
+      "app/legend.js",
+      "app/preview-runtime.js",
+      "app/right-drawer.js"
+    ],
+    "Diagram Worker": [
+      "app/run-analysis.js",
+      "services/diagram-generation.js",
+      "services/losat.js",
+      "workers/diagram-generation-worker.js",
+      "workers/losat-threaded-worker.js"
+    ],
+    "History": [
+      "app/app-setup.js",
+      "services/history-snapshot.js",
+      "services/history.js"
+    ],
+    "Mounted SVG/Result replacement": [
+      "app/app-setup.js",
+      "app/feature-editor/color-actions.js",
+      "app/feature-editor/label-actions.js",
+      "app/feature-editor/svg-actions.js",
+      "app/feature-editor/visibility-actions.js",
+      "app/legend-layout/canvas-actions.js",
+      "app/legend-layout/diagram-drag.js",
+      "app/legend-layout/reposition-actions.js",
+      "app/legend/drag-actions.js",
+      "app/legend/entry-actions.js",
+      "app/legend/sort-actions.js",
+      "app/legend/stroke-actions.js",
+      "app/preview-runtime.js",
+      "app/results.js",
+      "app/run-analysis.js",
+      "app/svg-styles.js",
+      "services/config.js",
+      "services/history-snapshot.js",
+      "services/svg-result-ingestion.js"
+    ],
+    "Python helper": [
+      "app/python-helpers.js",
+      "workers/diagram-generation-worker.js"
+    ],
+    "Render request": [
+      "app/run-analysis.js",
+      "services/config.js",
+      "services/gallery-session-migration.js"
+    ],
+    "Resource staging": [
+      "services/config.js",
+      "services/diagram-generation.js",
+      "services/diagram-resource-staging.js",
+      "services/resource-payload-owner.js",
+      "services/session-request.js",
+      "workers/diagram-generation-worker.js"
+    ],
+    "SVG/Result admission": [
+      "services/svg-result-ingestion.js",
+      "services/svg-sanitization.js"
+    ],
+    "Session": [
+      "app/app-setup.js",
+      "services/config.js",
+      "services/gallery-session-migration.js",
+      "services/session-file.js"
+    ]
+  }
+}
