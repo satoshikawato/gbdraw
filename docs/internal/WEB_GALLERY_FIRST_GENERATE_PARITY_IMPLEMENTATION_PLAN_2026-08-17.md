@@ -15,8 +15,12 @@
 Revision note: this version makes the baseline audit executable, separates
 characterization from the behavior-neutral validator extraction, defines the
 scientific-baseline and semantic-SVG contracts, and splits static refresh
-validation from authoritative real-browser replay. All implementation phases
-remain pending.
+validation from authoritative real-browser replay. It also incorporates the
+architecture audit: one current-writer publication normalizer runs once after
+CLI replay/merge; Node is limited to browser-neutral projection, validation,
+and serialization; Chromium owns semantic SVG resolution; the Gallery manifest
+drives one reproduction spec and CI matrix; and historical promotion remains a
+separate reader concern. All implementation phases remain pending.
 
 ## 1. Objective and completion boundary
 
@@ -48,10 +52,11 @@ Completion requires all of the following:
 4. Every resource needed by the committed render and the active Web draft is
    embedded and resolvable.
 5. Gallery refresh rejects a session that violates the shared current-writer
-   structural contract, canonical request projection, complete active-resource
+   structural contract, canonical request projection, shared session-resource
    closure, or publication fixed-point contract. The post-refresh real-browser
-   replay separately proves compatibility with the complete Web importer; do
-   not claim that the static refresh validator is equivalent to the importer.
+   replay separately proves compatibility with the complete Web importer; Node
+   and Python must not reproduce that importer or claim that static validation
+   is equivalent to it.
 6. The same real-browser replay workflow runs and succeeds for pull requests to
    both integration branches and blocks deployment. Repository rules must also
    mark its jobs required before claiming that it blocks pull-request merges.
@@ -144,27 +149,46 @@ pending draft.
 
 ### D2. Gallery active state must be produced through the Web projection boundary
 
-Use `projectCanonicalSessionRequest()`, `buildCanonicalRenderRequest()`,
-`migrateLegacyLinearComparisonDraft()`, and the existing comparison resolver.
-Do not create a Python copy of Web `config` rules, a second argv-shaped Web
-contract, or a hand-maintained list of every active field.
+Keep `gbdraw/web/js/services/session-request.js` as the committed-request-to-Web-
+draft owner. Extract a serialization-safe pure core there, for example
+`projectCanonicalPublicationDraft()`, returning active config plus persisted
+Web binding/resource-reference DTOs without constructing File-like values. The
+existing `projectCanonicalSessionRequest()` browser adapter must delegate to
+that core before it materializes runtime files. If the core cannot express a
+current committed comparison or another render-affecting value, extend it once
+so the browser importer and publication tool consume the same DTO. Do not call
+`buildCanonicalRenderRequest()` with a fabricated Vue-state facade, create
+native/lazy File lookalikes, copy Web `config` rules into Python, add a second
+argv-shaped Web contract, or maintain a second list of active fields.
 
-Add one explicitly named Gallery-publication normalization entry point in
-`gbdraw/web/js/services/gallery-session-migration.js`, invoked by a small Node
-tool from the refresh pipeline. Its contract is:
+Add one explicitly named Gallery-publication normalization entry point in a
+focused pure module such as
+`gbdraw/web/js/services/gallery-publication-normalizer.js`, invoked by a small
+Node tool from the refresh pipeline. Keep it outside the historical Gallery
+migration module so importing the publication path cannot pull in or reuse the
+compatibility/state-facade path. Its contract is:
 
-1. promote a supported Gallery session to the current format;
-2. project the committed request and resources without allowing stale stored
-   render-affecting config to overwrite the projection;
-3. create an explicit Web comparison draft for a Gallery example, including
-   CLI-authored examples, through the existing comparison-plan machinery;
-4. rebuild the current Web request/resources from that state;
+1. require the current Gallery session version and canonical request schema;
+2. project the committed request and resources through that serialization-safe
+   core without allowing stale stored render-affecting config to overwrite the
+   projection;
+3. obtain explicit Web comparison intent, including for CLI-authored examples,
+   from that shared canonical projection rather than a reconstructed runtime
+   state;
+4. write the projected active config and persisted Web bindings without
+   changing the committed request;
 5. retain non-rendering document metadata and any applied editor/semantic
    override already represented in the committed Result, feature state, or
    interactive metadata, while dropping genuinely pending render changes;
-6. retain required resource payloads;
+6. retain required resource payloads through the shared session-resource
+   reference owner;
 7. validate the resulting current-writer config; and
 8. be idempotent.
+
+The Node entry point may import only browser-neutral session/request/resource
+modules. It must not import `state.js`, mount Vue, install DOM/File shims, call
+the browser session importer, or reproduce gzip/lazy-resource restoration. A
+real-browser upload remains the only acceptance test for those behaviors.
 
 In particular, audit `config.webEdits` and `features` separately from ordinary
 form state. BGC currently stores the applied orthogroup-name override
@@ -180,16 +204,24 @@ through runtime code.
 
 ### D3. Replace partial synchronization with one owner
 
+CLI replay and `_merge_refreshed_gallery_artifacts()` own the refreshed
+committed `renderRequest`, Result, catalog, and render metadata. The publication
+normalizer alone owns the final Gallery active config and persisted Web
+bindings. Apply it exactly once in the production refresh path, after replay
+and merge. A second invocation is allowed only on an in-memory copy in an
+idempotence assertion; it is not another repair stage.
+
 After the Gallery publication normalizer proves the existing behaviors, remove
-or reduce the superseded partial owners in `tools/refresh_gallery_sessions.py`:
+the superseded partial owners in `tools/refresh_gallery_sessions.py`:
 
 - `_sync_legacy_legend_control_with_render_request()`;
 - `_sync_circular_track_draft_with_render_request()`; and
 - any palette repair whose only purpose is covered by canonical Web projection.
 
-Retain a helper only if a focused test proves it owns a distinct input that the
-canonical projection cannot represent. Do not keep both a general normalizer
-and several silent per-field fixups.
+Retain a helper only if a focused test proves it owns a distinct non-draft input
+that the canonical projection cannot represent. Do not keep both a general
+normalizer and silent per-field fixups, and do not normalize once before replay
+and again after merge to compensate for competing writers.
 
 ### D4. One reader owns File-like compatibility
 
@@ -299,19 +331,25 @@ allow `exact || canonical || semantic || raster` as the pass condition; semantic
 equivalence and scientific invariants are mandatory. Raster output remains a
 diagnostic attachment and manual-review aid.
 
-Implement the oracle as a versioned `SemanticSvgSnapshot` contract owned by
-`tests/web/helpers/gallery-reproduction.cjs`, not as an ad hoc list of hashes.
-Version 1 must define all of the following before it is used as a required gate:
+Implement the oracle as a versioned `SemanticSvgSnapshot` captured from the
+mounted SVG inside Chromium.
+`tests/web/helpers/gallery-semantic-snapshot.js` owns browser-side DOM/CSS/SVG
+normalization; `tests/web/helpers/gallery-reproduction.cjs` only orchestrates
+capture, compares the returned JSON, and formats a diff. Do not implement an
+XML parser, CSS cascade/inheritance resolver, transform engine, path geometry
+engine, or visibility engine in Node. Version 1 must define all of the
+following before it is used as a required gate:
 
 - match elements by stable `id` / `data-gbdraw-*` identity; reject missing or
   duplicate required identities, and use an explicit structural path only for
   elements that are documented as identity-free;
 - preserve child order where it affects paint order, grouping, record order, or
   track order; do not globally sort SVG elements;
-- parse path and point data into commands and numeric operands, and normalize
-  transforms to a documented matrix representation;
-- compare resolved visible style, including inline attributes, `style`, CSS,
-  and inheritance, for the enumerated drawing properties;
+- tokenize path and point attributes only into command/number tokens needed for
+  exact operand comparison; do not reimplement SVG path geometry;
+- obtain transform matrices, resolved visible style, inheritance, and
+  visibility from the mounted browser DOM (`SVGTransformList`, `getCTM()` where
+  appropriate, and `getComputedStyle()`), then serialize those resolved values;
 - normalize numeric spelling, units, exponent form, and negative zero without
   silently accepting a changed value. Start with numeric equality after
   parsing; add an attribute-specific tolerance only after cross-platform
@@ -323,12 +361,13 @@ Version 1 must define all of the following before it is used as a required gate:
 - emit the first differing semantic owner/path plus compact added/removed ID
   sets instead of only whole-document digests.
 
-Add oracle contract tests that make one mutation at a time to a representative
-SVG: remove/reorder a track, annotation, feature, label, legend, comparison, or
-record; change geometry, transform, text, color, visibility, or font size; and
-introduce a duplicate semantic ID. Every mutation must fail. Separate positive
-fixtures must prove that color spelling and numeric serialization differences
-allowed by the contract pass. The required pass condition is:
+Add browser oracle contract tests that mount a representative SVG and make one
+mutation at a time: remove/reorder a track, annotation, feature, label, legend,
+comparison, or record; change geometry, transform, text, color, visibility, or
+font size; and introduce a duplicate semantic ID. Every mutation must fail.
+Separate positive fixtures must prove that color spelling and numeric
+serialization differences allowed by the contract pass through Chromium's
+resolved DOM. The required pass condition is:
 
 ```text
 SemanticSvgSnapshot equality
@@ -342,8 +381,12 @@ Exact, canonical, and raster comparisons remain diagnostics only.
 All 11 current examples and every future example must participate
 automatically. Add a required `regeneration_tier` to
 `GallerySessionExample` and emit `regenerationTier` in `examples.json`.
-Reject a missing or unknown tier. Do not infer test coverage from a mutable file
-size threshold and do not maintain an unrelated test allowlist.
+`GallerySessionExample` is the source owner and `examples.json` is its generated
+runtime projection; reject a missing or unknown tier. One manifest-driven
+reproduction spec must enumerate every entry and optionally filter one exact ID.
+Do not copy tier membership into separate standard/heavy/Vibrio specs, a
+Playwright `testMatch` map, an npm-script allowlist, or a hand-maintained
+workflow matrix.
 
 Initial tiers:
 
@@ -384,35 +427,46 @@ upload.
 
 ### D12. The post-merge session must be a request/config fixed point
 
-Normalizing before CLI replay is insufficient because the CLI-produced session
-can replace `renderRequest` during `_merge_refreshed_gallery_artifacts()`. After
-the merge, run publication normalization again in memory and require a fixed
-point:
+The CLI-produced session may replace `renderRequest` during
+`_merge_refreshed_gallery_artifacts()`, so a pre-replay normalization would have
+the wrong authority and would require a repair pass. Replay and merge first,
+then run the current-writer publication normalizer exactly once on the final
+staged document and require a fixed point:
 
-1. the stored committed request and the request rebuilt from the stored active
-   draft have equal semantic request signatures;
-2. a second publication-normalization pass does not change config, request,
-   resource bindings, or referenced resource payload hashes; and
-3. the browser first-Generate semantic SVG remains equivalent.
+1. publication normalization does not change the merged committed request;
+2. re-projecting that committed request produces the stored active config and
+   persisted Web bindings;
+3. applying publication normalization to an in-memory copy a second time does
+   not change config, request, resource bindings, or referenced resource
+   payload hashes; and
+4. the real browser's first Generate produces a semantically equivalent SVG.
 
-The request signature must cover mode/grouping, record source identity and
-presentation, effective diagram options, tracks, annotations, comparison
-descriptors/settings, layout, and referenced resource content hashes. Exclude
-only enumerated, evidence-backed non-drawing fields such as an output filename
-or equivalent resource ID/representation. Do not ignore a whole
-`diagramOptions`, `comparisons`, `config`, or interactive-metadata subtree.
+The static comparison is between the stored publication draft and the DTO
+returned by the shared canonical projection; it must not rebuild an
+active-next request from a fake browser state. Its signature covers
+mode/grouping, record source identity and presentation, effective diagram
+options, tracks, annotations, comparison intent/settings, layout, and
+referenced resource content hashes. Exclude only enumerated, evidence-backed
+non-drawing fields such as an output filename or equivalent resource
+ID/representation. Do not ignore a whole `diagramOptions`, `comparisons`,
+`config`, or interactive-metadata subtree.
 
 ### D13. Static refresh validation and browser replay are separate gates
 
-Do not reproduce the complete browser importer in Node or Python. The static
-refresh gate owns only contracts that already have browser-neutral owners:
+Do not reproduce any browser-import step in Node or Python. The static refresh
+gate owns only contracts that already have browser-neutral owners:
 
 1. session and request schema validation;
 2. the shared current-writer active-config structure;
 3. canonical request projection;
-4. complete committed and active resource closure;
-5. post-merge request/config/resource fixed-point equality; and
+4. committed and active resource closure reported by the shared session writer/
+   reader resource-reference owner;
+5. post-merge publication-projection fixed-point equality; and
 6. publication-normalizer idempotence.
+
+The static gate must not construct Vue state, File or lazy-resource views,
+restore browser files, rebuild the next Generate request, classify `webFiles`
+through a Gallery-only schema, sanitize/admit a Result, or run LOSAT preflight.
 
 The real-browser gate remains authoritative for session upload/import, gzip and
 lazy-resource restoration, Result admission and SVG sanitization, feature
@@ -474,23 +528,24 @@ decode, CLI/Python parity where applicable, documentation, and tests under the
 | Lazy resource backing | `gbdraw/web/js/services/session-resource-backing.js` | Remain unchanged unless a failing test proves a backing bug. Frozen lazy views remain method-free. |
 | File content compatibility | `gbdraw/web/js/services/file-content-cache.js` | Remain the single native/lazy File reader. |
 | Generate/LOSAT orchestration | `gbdraw/web/js/app/run-analysis.js` | Remove invalid capability guards; preserve shared error/fallback semantics. |
-| Pure current-writer contract | new `gbdraw/web/js/services/current-writer-active-config.js` and, if needed, new `gbdraw/web/js/state-defaults.js` | Own browser-neutral field inventories and structural validation used by browser config and Node publication tooling. |
+| Pure current-writer contract | new `gbdraw/web/js/services/current-writer-active-config.js` and, if needed, new `gbdraw/web/js/state-defaults.js` | Own browser-neutral field inventories and structural validation used by browser config and Node publication tooling. Browser state imports these defaults; Node does not import browser state. |
 | Active config import/save | `gbdraw/web/js/services/config.js` | Keep v40 draft authority, import the pure validator, and preserve its public re-export if callers rely on it. |
-| Canonical Web projection | `gbdraw/web/js/services/session-request.js` | Remain the only UI-state/request projection boundary. |
+| Canonical Web projection | `gbdraw/web/js/services/session-request.js` | Own a serialization-safe committed-request-to-publication-draft core. The existing browser projection delegates to it before runtime File materialization; extend this owner, rather than a Gallery state facade, when a committed current value cannot be projected. |
 | Linear comparison intent | `gbdraw/web/js/app/linear-comparisons.js` | Derive Gallery publication plans through existing normalization/resolution. |
-| Gallery promotion | `gbdraw/web/js/services/gallery-session-migration.js` | Add one current publication normalizer; do not change ordinary session import semantics. |
-| Node promotion bridge | `tools/promote_gallery_session.mjs` or a focused companion | Normalize/validate current Gallery sessions, handle JSON/gzip deterministically, and report the example name on failure. |
-| Gallery refresh | `tools/refresh_gallery_sessions.py` | Invoke publication normalization for every Gallery entry, validate complete resource closure, retain transaction rollback, then regenerate artifacts. |
+| Historical Gallery/session promotion | existing `gbdraw/web/js/services/gallery-session-migration.js::promoteGallerySessionToCurrent()` | Remain a separate evidence-backed reader compatibility path. The publication refresh does not call or expand it. |
+| Gallery publication normalization | new focused `gbdraw/web/js/services/gallery-publication-normalizer.js` | Own one current-version committed-request-to-active-draft transform. It must not import historical Gallery migration or construct Vue state/browser File/resource views. |
+| Session resource references | existing browser-neutral resource-reference owner, extended only if both session import/save and Gallery validation consume the extension | Own canonical and persisted `webFiles` reference traversal. No Gallery-only field classifier. |
+| Node publication bridge | new focused `tools/normalize_gallery_publication.mjs` | Parse/serialize current JSON/gzip deterministically and call only the pure publication normalizer/validators; no historical promotion, state facade, DOM/File shim, or browser import. Delete the old promotion tool if no separate consumer remains. |
+| Gallery refresh | `tools/refresh_gallery_sessions.py` | Replay and merge committed artifacts, invoke publication normalization once on the final staged document, validate through shared contracts, retain transaction rollback, then regenerate artifacts. |
 | Gallery manifest/assets | `tools/prepare_interactive_gallery_assets.py` | Own required replay tier and all generated siblings. |
 | Declared Gallery downloads | `tools/prepare_interactive_gallery_assets.py` plus source-to-target metadata | Copy the repaired Majanivirus specific-color TSV from one declared source and validate byte equality. |
 | WSSV provenance | `tools/restore_wssv_gallery_fastas.py` | Keep the existing 20-source identity/hash contract. |
 | Known-bad browser audit | new `playwright.gallery-audit.config.js` and `tests/web/contracts/gallery-first-generate-audit.serial.spec.js` | Reproduce the five baseline symptoms with real uploads and retain structured evidence without becoming a normal passing regression contract. |
 | Python session validation | `gbdraw/session_io.py` | Keep typed/session validation. Do not duplicate Web field allowlists unless a shared generated contract replaces both owners. |
-| Browser equivalence helper | new `tests/web/helpers/gallery-reproduction.cjs` | Own the versioned `SemanticSvgSnapshot`, reusable capture, structured diff, scientific-ID extraction, and attachments. |
+| Browser semantic snapshot | new `tests/web/helpers/gallery-semantic-snapshot.js` plus `tests/web/helpers/gallery-reproduction.cjs` | Chromium owns resolved DOM/CSS/SVG semantics; the CJS helper owns orchestration, JSON comparison, structured diff, scientific-ID extraction, and attachments only. |
 | Scientific baselines | new `tests/web/fixtures/gallery-scientific-baselines.json` | Own manually reviewed settings and ID sets independently of generator-owned Gallery outputs; never regenerate it as an artifact side effect. |
-| Standard browser cases | `tests/web/gallery-session-regeneration.playwright.spec.js` | Cover all `standard` manifest entries. |
-| Heavy browser cases | new `tests/web/contracts/gallery-heavy-regeneration.serial.spec.js` | Cover each `heavy` manifest entry using the same helper. |
-| Vibrio browser case | `tests/web/contracts/vibrio-full-generation.serial.spec.js` | Preserve existing memory/Worker/determinism coverage while reversing the divergent-draft expectation. |
+| Gallery reproduction inventory | `tests/web/gallery-session-regeneration.playwright.spec.js` | One manifest-driven spec covers every tier and filters at most one exact selected ID. |
+| Vibrio lifecycle case | `tests/web/contracts/vibrio-full-generation.serial.spec.js` | Preserve distinct memory/Worker/determinism/recoverable-error coverage; it is not an inventory or parity owner. |
 | Static publication contract | new `tests/web/gallery-publication-contract.test.mjs` | Validate all manifest sessions, post-merge request/draft fixed points, and resource closure without rendering or retaining all expanded sessions at once. |
 | CI/deploy | `.github/workflows/test.yml`, `.github/workflows/deploy_web.yml`, `package.json`, Playwright configs | Run the same publication contract before merge and before upload. |
 
@@ -623,17 +678,21 @@ Move the reusable parts of the Phase 0 audit, `capturePageEvidence()`,
 The helper must:
 
 - serialize the clean committed SVG;
-- implement and version the D7 `SemanticSvgSnapshot` contract;
+- invoke and version the D7 browser-side `SemanticSvgSnapshot` capture without
+  parsing CSS, transforms, visibility, or SVG geometry in Node;
 - capture normalized semantic structure and explicit scientific ID sets;
 - capture active comparison intent and a canonical-request summary;
 - compare loaded versus generated output;
 - produce a compact structural diff, not only two hashes;
 - attach loaded/generated SVG, PNG, diff JSON, errors, and trace on failure.
 
-Add focused helper tests for every required D7 positive normalization and
-negative mutation in `tests/web/gallery-reproduction.test.mjs` before relying
-on the oracle for Gallery acceptance. A mutation that removes or changes one
-required semantic category must make the helper test fail for that category.
+Add focused Chromium tests for every required D7 positive normalization and
+negative mutation in
+`tests/web/contracts/gallery-semantic-snapshot.playwright.spec.js` before
+relying on the oracle for Gallery acceptance. A mutation that removes or
+changes one required semantic category must make the helper fail for that
+category. A small Node unit test may cover the JSON diff formatter, but it must
+not become a second semantic implementation.
 
 Keep the existing divergent-user-draft tests using the helper or equivalent
 coverage. Strengthen the existing no-draft fixture test so it asserts the
@@ -671,7 +730,7 @@ the generated manifest. Process one session at a time and release references
 before the next, especially for Vibrio.
 
 The pure current-writer contract from 1.2 must already exist before this test
-imports Gallery migration. Assert that the runtime form/advanced field
+imports the publication normalizer. Assert that the runtime form/advanced field
 inventory equals the pure inventory.
 
 For each session assert:
@@ -683,16 +742,19 @@ For each session assert:
   generated Gallery tooling cannot rewrite that fixture;
 - current session version and request schema are correct;
 - `validateCurrentWriterActiveConfig()` accepts the stored config;
-- `projectCanonicalSessionRequest()` succeeds;
-- projected active inputs have backing resources;
-- all `renderRequest` and `webFiles` resource references resolve to non-empty
-  resources;
+- the serialization-safe projection core and its
+  `projectCanonicalSessionRequest()` browser adapter succeed;
+- for representative Circular, Linear-comparison, and WSSV inputs, the browser
+  adapter's active config/resource identities equal the pure core before runtime
+  File materialization;
+- the stored publication config/Web bindings equal the DTO produced by
+  re-projecting the committed request;
+- the shared session-resource reference owner reports that all committed and
+  active references resolve to non-empty resources;
 - retired current-writer fields are absent;
 - a Linear Gallery figure with committed comparisons does not publish an
   inactive `none` plan unless the committed figure genuinely has no comparison;
-- the stored post-merge committed request and active-next request have equal
-  semantic request signatures under a small enumerated non-drawing exclusion
-  list; and
+- publication normalization does not change the committed request; and
 - publication normalization is a request/config/resource fixed point.
 
 At this phase, missing or `pending` scientific approvals and the known stale
@@ -700,16 +762,19 @@ publication state are expected contract failures, not harness/setup failures.
 Phase 4 owns review and approval of those entries; Phase 1 must not bless them
 to make the static suite green.
 
-Use the actual JS validator. Do not transcribe its allowlists into the test.
-Make request-signature failures report the first changed owner/path and resource
-hash rather than only a whole-object digest.
+Use the actual JS validator and shared session-resource collector. Do not
+transcribe either field inventory into the test. Make projection/signature
+failures report the first changed owner/path and resource hash rather than only
+a whole-object digest.
 
-#### 1.4 Add standard and heavy browser corpus definitions
+#### 1.4 Add one manifest-driven browser corpus definition
 
 Expand `tests/web/gallery-session-regeneration.playwright.spec.js` over every
-`standard` manifest item. Add
-`tests/web/contracts/gallery-heavy-regeneration.serial.spec.js` for `heavy`
-items. Keep Vibrio in its purpose-built serial spec.
+manifest item in one spec. An optional `GBDRAW_GALLERY_EXAMPLE_ID` filters the
+definition to exactly one known manifest entry; no selector defines all 11
+tests. Tier controls CI scheduling only and does not select another spec. Keep
+the existing Vibrio serial spec solely for its additional Worker reuse, memory,
+timeout, lifecycle, repeated-run, and recoverable-error contract.
 
 Every example must execute:
 
@@ -769,7 +834,7 @@ gbdraw/web/js/app/run-analysis.js
 tests/web/run-analysis-simple-path.test.mjs
 tests/web/wssv-gallery-fastas.test.mjs
 tests/web/session-resource-backing.test.mjs          # only if coverage belongs here
-tests/web/contracts/gallery-heavy-regeneration.serial.spec.js
+tests/web/gallery-session-regeneration.playwright.spec.js
 ```
 
 Phase gate:
@@ -786,42 +851,51 @@ Status: pending
 
 #### 3.1 Add Gallery publication normalization
 
-Add a distinct exported publication function to
-`gbdraw/web/js/services/gallery-session-migration.js`. Do not overload ordinary
-import or `restoreCurrentWriterActiveConfig()`. The browser-neutral validator
-from Phase 1.2 is a dependency of this phase and must not be extracted or
-redefined again here.
+Add the exported publication function to the focused pure
+`gbdraw/web/js/services/gallery-publication-normalizer.js` module. Do not add it
+to historical Gallery migration, ordinary import, or
+`restoreCurrentWriterActiveConfig()`. The browser-neutral validator from Phase
+1.2 is a dependency of this phase and must not be extracted or redefined again
+here.
 
 Implementation requirements:
 
-- accept current and supported historical Gallery sessions;
+- accept only the current session version and canonical request schema; reject
+  stale generator-owned Gallery input rather than adding another publication
+  compatibility path;
 - ignore stale render-affecting stored config when projecting the committed
   render into a new publication draft;
 - preserve non-rendering provenance such as the supported CLI invocation;
 - preserve committed feature/editor overrides and `webEdits` only when their
   application is proven by the saved Result/catalog/interactive metadata;
-- use `forceWebDraft: true` only in the Gallery-publication path so a
-  CLI-authored comparison figure gains explicit reproducible Web intent;
-- derive comparison edges/settings with existing comparison functions;
-- separate comparison-resource retention from comparison-descriptor authority;
-  do not let `preserveComparisonResources()` overwrite the newly resolved
-  descriptor list merely because old descriptors exist;
+- obtain explicit reproducible comparison intent for CLI-authored figures from
+  the serialization-safe core in `session-request.js`; if that projection is
+  incomplete, fix the shared core rather than adding `forceWebDraft`,
+  `buildStateFacade`, or another Gallery-only reconstruction branch;
+- leave the merged committed request unchanged and derive the active draft from
+  it, so comparison descriptors have one authority;
 - retain only resources referenced by the committed/publication request,
-  active `webFiles`, caches required for first Generate, and documented
-  downloads;
+  active persisted Web bindings, caches required for first Generate, and
+  documented downloads, using the shared session-resource reference owner;
 - preserve exact WSSV FASTA provenance and deterministic gzip (`mtime=0`);
 - validate and return a current, idempotent session.
 
-Update `tools/promote_gallery_session.mjs` or add one focused companion CLI so
-Python can invoke this function for a staged file. The tool must support JSON
-and gzip, process one session at a time, and include the session path in errors.
+Add `tools/normalize_gallery_publication.mjs` so Python can invoke this function
+for a staged current file. The tool must support JSON and gzip, process one
+session at a time, and include the session path in errors. Its module graph must
+prove that it does not import `state.js`, `config.js`, DOM/Vue shims,
+lazy-resource backing, or the historical promoter. Delete
+`tools/promote_gallery_session.mjs` if no evidence-backed non-publication
+consumer remains; do not turn it into a compatibility alias.
 
 #### 3.2 Integrate it transactionally
 
-Change `tools/refresh_gallery_sessions.py` so every Gallery session passes
-through publication normalization before CLI rendering. Test-input sessions
-outside the Gallery inventory retain their existing semantics unless they are
-explicitly declared publication artifacts.
+Change `tools/refresh_gallery_sessions.py` so it requires a current Gallery
+source, replays its committed canonical request through the CLI, merges the
+fresh committed artifacts, and then passes the final staged document through
+publication normalization exactly once. Do not normalize before CLI rendering.
+Test-input sessions outside the Gallery inventory retain their existing
+semantics unless they are explicitly declared publication artifacts.
 
 Keep `_gallery_file_transaction()` and the stage-all-before-replace behavior.
 If any normalization, render, validation, or asset step fails, restore every
@@ -829,37 +903,35 @@ target and publish no partial Gallery.
 
 #### 3.3 Validate the Web contract and full resource closure
 
-This subsection implements only the D13 static refresh gate. After
-normalization and again after artifact merge:
+This subsection implements only the D13 static refresh gate. After artifact
+merge and the single final publication-normalization call:
 
 - call the shared JS current-writer validator;
-- project active files through the real session-request code;
-- check resources referenced from `renderRequest`, `webFiles.bindings`,
-  `conservationLosatFastaSources`, `conservationSequenceSources`, and other
-  current active bindings;
+- project the committed request through the real browser-neutral
+  session-request code and compare its DTO with the stored active config/Web
+  bindings;
+- collect committed and active resource references through the shared
+  session-writer/reader resource-reference owner;
 - require present, non-empty payloads with valid encoding/declared size;
 - preserve existing Python geometry, catalog, cache-schema, protein identity,
   and Vibrio size-limit validations.
 
-Own persisted active-resource traversal in one Gallery publication helper.
-Classify every property emitted by the current writer's representative
-`webFiles` output as either a resource reference/container or an explicitly
-non-resource field, and fail a contract test when a newly emitted field is
-unclassified. Do not scatter separate lists of WSSV, comparison, annotation,
-and input bindings across Python and Node. This helper may remain
-Gallery-specific; it does not make the static validator equivalent to browser
-import.
+If persisted `webFiles` traversal is not yet browser-neutral, extract it once
+from the existing session writer/importer into a pure resource-reference module
+and make both the browser session path and Gallery validator consume it. Do not
+add a Gallery-only property classifier or lists of WSSV, comparison,
+annotation, and input bindings in Python or Node.
 
-Then compute the D12 fixed point for every staged Gallery session. Rebuild the
-active-next request from the merged session, compare its semantic request
-signature with the stored committed request, and run publication normalization
-a second time in memory. Fail before replacement if either signature or the
-second normalized config/request/resource binding changes. This check applies
-to all 11 examples, not only AT skew.
+Then compute the D12 fixed point for every staged Gallery session. Assert that
+the normalizer left the merged committed request unchanged, that re-projection
+matches the stored publication draft, and that normalization of an in-memory
+copy changes no config/request/resource binding. Do not rebuild the
+active-next request in Node. This check applies to all 11 examples, not only AT
+skew.
 
-Do not broaden `collectCanonicalResourceIds()` to Web-only fields unless that
-shared abstraction has at least two real consumers. A Gallery validation helper
-is preferable to changing canonical-request ownership.
+Extend the browser-neutral resource-reference abstraction only with evidence of
+the two real consumers above. The current session writer/importer remains the
+schema owner; Gallery validation is a consumer, not a second owner.
 
 The real-browser corpus in Phases 4, 6, and 7 must still upload and import the
 post-refresh files. Static validator success is not evidence for Result
@@ -869,17 +941,21 @@ Web importer acceptance.
 #### 3.4 Remove superseded partial repairs
 
 Once the full normalizer passes equivalent tests, remove the per-field legend,
-track-slot, and palette synchronization paths it replaces. Add an idempotence
-test proving a second refresh does not change semantic config/request/resources
-apart from allowed timestamps or compression representation.
+track-slot, and palette synchronization paths it replaces. Remove the Node
+refresh dependency on historical promotion and on any fabricated browser-state
+facade. Add an idempotence test proving normalization of an already published
+copy does not change semantic config/request/resources apart from allowed
+compression representation.
 
 Likely files:
 
 ```text
-gbdraw/web/js/services/gallery-session-migration.js
-tools/promote_gallery_session.mjs                    # or one focused companion
+gbdraw/web/js/services/gallery-publication-normalizer.js
+gbdraw/web/js/services/*resource-references*.js      # only the shared writer/importer owner
+tools/normalize_gallery_publication.mjs
+tools/promote_gallery_session.mjs                    # delete if no non-publication consumer remains
 tools/refresh_gallery_sessions.py
-tests/web/gallery-session-migration.test.mjs
+tests/web/gallery-publication-normalizer.test.mjs
 tests/web/gallery-publication-contract.test.mjs
 tests/test_refresh_gallery_sessions.py
 ```
@@ -892,9 +968,13 @@ Phase gate:
 
 - chloroplast's two retired fields are rejected in a negative fixture and absent
   from generated output;
+- stale session or request versions are rejected at the publication boundary;
 - every staged Gallery config passes the actual JS validator;
 - removing a WSSV active FASTA resource fails refresh before files are replaced;
-- a second normalizer/refresh pass is semantically idempotent;
+- production refresh invokes the final publication normalizer once after merge;
+- an in-memory second normalization proves semantic idempotence;
+- the Node publication module graph contains no browser importer, fabricated
+  state/File resource path, or Gallery-only `webFiles` classifier;
 - ordinary imported current sessions still preserve intentional drafts.
 
 ### Phase 4: converge each reported example
@@ -1108,7 +1188,7 @@ Add `playwright.gallery-regeneration.config.js` with:
 - at most one CI retry for non-Vibrio cases;
 - `trace: 'retain-on-failure'`;
 - the existing local HTTP server/base URL;
-- standard, heavy, and Vibrio reproduction specs.
+- the single manifest-driven Gallery reproduction spec.
 
 Add one exact single-example selector, for example
 `GBDRAW_GALLERY_EXAMPLE_ID`. Resolve it once in
@@ -1118,29 +1198,29 @@ files:
 - no selector means run the full set allowed by the selected config/spec;
 - a selector must name exactly one manifest entry, otherwise configuration
   fails;
-- use that entry's `regenerationTier` to set `testMatch` to only the owning
-  standard, heavy, or Vibrio spec;
-- the selected spec must then define exactly one test for that exact ID;
-- a valid selected ID is not an error merely because non-owning specs exist;
-  those specs are not loaded by the selected config;
-- the static publication test proves that the union of tier IDs equals the
-  manifest inventory.
+- the single spec must define exactly one test for that exact ID;
+- the config must not map tiers to spec filenames or maintain an ID list; and
+- the static publication test proves that the manifest has valid tiers and that
+  the unfiltered spec defines its exact inventory.
 
-This selector, rather than a broad `--grep @gallery-heavy`, is the CI matrix
-boundary that guarantees one heavy example per job.
+This selector is the only test-selection boundary. CI obtains its matrix from
+the generated manifest and runs one exact example per job; it does not use
+`--grep`, copied tier arrays, or spec ownership rules.
 
 Add scripts such as:
 
 ```json
 {
   "test:web:gallery-regeneration": "playwright test --config=playwright.gallery-regeneration.config.js",
-  "test:web:gallery-regeneration:heavy": "playwright test --config=playwright.gallery-regeneration.config.js --grep @gallery-heavy",
   "test:web:gallery-regeneration:one": "playwright test --config=playwright.gallery-regeneration.config.js"
 }
 ```
 
-Keep `test:web:vibrio-generate` as a supported focused command, even if it
-delegates to the new config/tag.
+Keep `test:web:vibrio-generate` only for the existing distinct lifecycle,
+memory, Worker-reuse, repeated-run, and recoverable-error contract. It is not a
+Gallery inventory or parity selector. If repository search proves that focused
+contract has been subsumed completely, remove the alias and its config in the
+same change rather than retaining a compatibility path without a consumer.
 
 #### 6.2 Pull-request CI
 
@@ -1150,9 +1230,12 @@ In `.github/workflows/test.yml`:
   pull requests to `main` only even though agent work integrates through
   `dev`;
 - let the existing Node job run the static publication contract;
-- keep standard five-entry replay in the ordinary functional Playwright job;
-- add a required heavy matrix for V. nigripulchritudo, both
-  Hepatoplasmataceae examples, Majanivirus, WSSV, and Vibrio;
+- add a setup job that reads the checked-in `examples.json`, validates each
+  `regenerationTier`, and emits the exact `{example, tier}` matrix for all
+  manifest entries;
+- run the single reproduction spec once for every emitted matrix entry;
+- retain one separate `vibrio-full-generation` job only for the existing
+  lifecycle/memory/Worker/repeated-run contract;
 - use `max-parallel: 2`, one example per job, and a per-job timeout of at least
   45 minutes;
 - prepare the browser wheel in each browser job;
@@ -1161,11 +1244,11 @@ In `.github/workflows/test.yml`:
 
 Set `fail-fast: false` for the diagnostic matrix. Add a stable, non-matrix
 `gallery-regeneration-required` job with `if: ${{ always() }}` and `needs` on
-the static publication job, standard replay job, and the complete
-heavy/special matrix job. Its only responsibility is to fail unless every
-dependency result is `success`. This stable aggregate status is the branch-rule
-contract; individual matrix children remain diagnostic and may change as the
-manifest grows.
+the static publication job, manifest-matrix setup job, functional browser job,
+and complete manifest-derived Gallery matrix job. Its only responsibility is to
+fail unless every dependency result is `success`. This stable aggregate status
+is the branch-rule contract; individual matrix children remain diagnostic and
+may change as the manifest grows.
 
 Using the current workflow job IDs, the dependency shape should be equivalent
 to the following (rename only if the underlying job IDs are deliberately
@@ -1179,7 +1262,9 @@ gallery-regeneration-required:
     - gallery
     - browser
     - playwright-functional
-    - gallery-regeneration-heavy
+    - gallery-regeneration-manifest
+    - gallery-regeneration-matrix
+    - vibrio-full-generation
   runs-on: ubuntu-latest
   steps:
     - name: Require every Gallery dependency
@@ -1187,20 +1272,22 @@ gallery-regeneration-required:
         test "${{ needs.gallery.result }}" = "success"
         test "${{ needs.browser.result }}" = "success"
         test "${{ needs.playwright-functional.result }}" = "success"
-        test "${{ needs.gallery-regeneration-heavy.result }}" = "success"
+        test "${{ needs.gallery-regeneration-manifest.result }}" = "success"
+        test "${{ needs.gallery-regeneration-matrix.result }}" = "success"
+        test "${{ needs.vibrio-full-generation.result }}" = "success"
 ```
 
-Here `gallery-regeneration-heavy` is the new matrix job ID and includes all
-five `heavy` entries plus the `vibrio-special` entry. GitHub exposes the matrix
-job's aggregate result to `needs`, so any failed or cancelled child makes the
-stable aggregator fail. Retain the existing Python `gallery` and Node/browser
-static owners in the dependency list instead of silently narrowing the gate to
-Playwright alone.
+Here `gallery-regeneration-matrix` includes every manifest entry. GitHub exposes
+the matrix job's aggregate result to `needs`, so any failed or cancelled child
+makes the stable aggregator fail. Retain the existing Python `gallery` and
+Node/browser static owners and the distinct Vibrio lifecycle owner in the
+dependency list instead of silently narrowing the gate to parity replay alone.
 
-The matrix must be derived from or statically checked against the required
-manifest tiers so a new example cannot be silently untested.
+The matrix must be emitted directly from the checked-in generated manifest. A
+second hard-coded matrix that is merely checked against the manifest is not
+acceptable.
 
-Each heavy matrix job must set exactly one ID:
+Each matrix job must set exactly one ID:
 
 ```yaml
 env:
@@ -1208,7 +1295,7 @@ env:
 ```
 
 and run `npm run test:web:gallery-regeneration:one`. Do not invoke the whole
-heavy corpus once per matrix row.
+corpus once per matrix row.
 
 #### 6.3 Deployment
 
@@ -1254,9 +1341,9 @@ inside `deploy_web.yml` because replay is part of the build job before upload.
 
 Phase gate:
 
-- standard and every heavy matrix entry run in PR CI;
+- every manifest-derived matrix entry runs in PR CI;
 - pull requests to both `dev` and `main` trigger the workflow;
-- the exact selector loads only its owning spec and defines exactly one test;
+- the exact selector makes the single reproduction spec define exactly one test;
 - the former standalone Vibrio case participates in the aggregate check;
 - `gallery-regeneration-required` fails for any failed, cancelled, or skipped
   dependency and becomes merge-required when External Gate A is authorized;
@@ -1276,12 +1363,13 @@ Focused static/unit checks:
 
 ```bash
 node --test \
-  tests/web/gallery-reproduction.test.mjs \
+  tests/web/session-request.test.mjs \
   tests/web/file-content-cache.test.mjs \
   tests/web/session-resource-backing.test.mjs \
   tests/web/run-analysis-simple-path.test.mjs \
   tests/web/wssv-gallery-fastas.test.mjs \
   tests/web/gallery-session-migration.test.mjs \
+  tests/web/gallery-publication-normalizer.test.mjs \
   tests/web/gallery-publication-contract.test.mjs
 
 python -m pytest \
@@ -1295,7 +1383,10 @@ Browser checks:
 ```bash
 python tools/prepare_browser_wheel.py
 npm run test:web:functional-smoke
-npm run test:web:gallery-regeneration:heavy
+npx playwright test \
+  --config=playwright.gallery-regeneration.config.js \
+  tests/web/contracts/gallery-semantic-snapshot.playwright.spec.js
+npm run test:web:gallery-regeneration
 npm run test:web:vibrio-generate
 npx playwright test \
   --config=playwright.functional.config.js \
@@ -1374,20 +1465,22 @@ The implementation is incomplete unless the gates reject all of these cases:
 12. a refresh failure that leaves a subset of Gallery artifacts replaced;
 13. a deployment that reaches `public/` assembly before post-refresh replay
     succeeds;
-14. a session that is normalized before CLI replay but diverges again after
-    `_merge_refreshed_gallery_artifacts()`;
+14. a refresh path that normalizes before CLI replay, skips the single final
+    post-merge normalization, or mutates the active publication draft after
+    final normalization;
 15. a mismatch between the pure current-writer field inventory and the live
     runtime `state.form` / `state.adv` properties;
-16. an unknown, out-of-tier, or broad-match value passed through
+16. an unknown or broad-match value passed through
     `GBDRAW_GALLERY_EXAMPLE_ID`;
 17. a CI matrix whose exact selected-ID union differs from the manifest
     inventory;
 18. a Majanivirus public download whose bytes differ from its declared source
     TSV, including after a forced transactional refresh failure;
-19. a selected valid heavy ID that also loads a non-owning standard or Vibrio
-    spec, or defines zero/multiple tests; and
-20. a stable aggregate CI job that passes when any static, standard, heavy, or
-    special dependency failed, was cancelled, or was skipped;
+19. a selected valid ID that defines zero/multiple reproduction tests or causes
+    another manifest example to run; and
+20. a stable aggregate CI job that passes when any static, functional,
+    manifest-matrix, or distinct Vibrio lifecycle dependency failed, was
+    cancelled, or was skipped;
 21. a semantic-oracle mutation to identity, order, geometry, transform, text,
     resolved style, or visibility that passes because a canonical or raster
     fallback happened to match;
@@ -1395,7 +1488,12 @@ The implementation is incomplete unless the gates reject all of these cases:
     scientific-baseline fixture; and
 23. a post-refresh session that passes the static contract but fails real
     browser upload/import or first Generate, followed by `public/` assembly or
-    upload anyway.
+    upload anyway;
+24. a Node publication entry point that imports browser state/import code,
+    constructs a Vue/File/lazy-resource facade, or owns a Gallery-only
+    `webFiles` field classifier; and
+25. a stale session/request version accepted by the current-only publication
+    normalizer instead of failing before refresh.
 
 ## 10. Risks and controls
 
@@ -1405,20 +1503,21 @@ The implementation is incomplete unless the gates reject all of these cases:
 | CLI-only values are silently lost | Compare old/new semantic output per example; expose a real Web setting or stop for approval instead of storing a hidden field. |
 | Comparison algorithms produce a different scientific figure | Review settings and ID sets; require explicit baseline approval for Majanivirus/Vibrio before artifact refresh. |
 | A regenerated artifact silently becomes its own scientific expectation | Keep reviewed settings and sorted ID sets in a non-generated fixture, record source hashes/review reference, and fail if refresh modifies it. |
-| The semantic SVG helper flakes or hides a meaningful difference | Version the snapshot contract, match stable identities, preserve meaningful order, start with parsed numeric equality, and mutation-test every required category. |
+| The semantic SVG helper flakes, hides a meaningful difference, or becomes a second SVG engine | Capture resolved semantics in Chromium, keep Node limited to JSON comparison/diff, match stable identities, preserve meaningful order, and mutation-test every required category. |
 | Heavy sessions exhaust CI memory | One context and one worker per example; matrix jobs; retain gzip upload path; release Worker/context after each test. |
 | Tests pass on a mocked resource shape but production fails | Use actual session files, frozen lazy views, `setInputFiles()`, Pyodide, and Worker staging. |
 | Static active-config validation drifts from the browser's same structural contract | Extract one browser-neutral JS contract, make browser import and Node publication use it, and assert its field inventory matches live runtime state. |
+| Node/Python static tooling becomes a shadow browser importer | Restrict it to current-schema pure projection/validation/serialization, prohibit state/File/DOM/lazy-resource facades and Gallery-only resource classifiers, and require real upload/import/Generate against the same post-refresh bytes. |
 | Static validation is mistaken for complete importer acceptance | Limit its claim to schema/config/projection/resource/fixed-point contracts and require real upload/import/Generate against the same post-refresh bytes before publication. |
 | Refresh publishes partial output | Preserve the existing all-staged transaction and add failure-path tests around normalization and browser gates. |
-| CLI merge recreates a stale draft after an earlier normalization pass | Normalize and validate the final merged document, then require request/config/resource fixed-point equality for all 11 sessions. |
-| A matrix row accidentally runs the full heavy corpus or silently skips its target | Select one exact manifest ID through `GBDRAW_GALLERY_EXAMPLE_ID`; reject unknown/out-of-tier IDs and statically prove matrix-union coverage. |
-| A valid selected ID is rejected by another tier's loaded spec | Resolve the manifest tier in the Playwright config, set `testMatch` to the single owning spec, and require exactly one defined test. |
+| CLI merge recreates a stale draft | Make merge output an intermediate committed document, normalize the final staged document exactly once afterward, and prohibit later active-draft writers. |
+| Historical compatibility leaks into publication normalization | Require the current session/request versions at the publication boundary; keep evidence-backed historical promotion in its existing reader path only. |
+| A matrix row accidentally runs the full corpus or silently skips its target | Select one exact manifest ID through `GBDRAW_GALLERY_EXAMPLE_ID`, derive the matrix directly from `examples.json`, and require exactly one defined test. |
 | The downloadable Majanivirus TSV drifts from the session recipe | Declare one source-to-public target mapping, copy it inside the Gallery transaction, and test byte equality and rollback. |
 | Screenshot/tutorial evidence becomes stale | Audit exact session-backed operations, update the operation register, and recapture only changed truthful states. |
 | Byte-level noise causes false failures | Compare normalized semantic structure and explicit scientific IDs, with raw/raster evidence only for diagnosis. |
-| A new Gallery entry escapes coverage | Require manifest tier metadata and assert the union of standard/heavy/special browser definitions equals the manifest inventory. |
-| Dynamic matrix child names drift outside branch protection | Collapse all static/standard/matrix outcomes into one stable aggregate status and require only that status. |
+| A new Gallery entry escapes coverage | Require manifest tier metadata, define reproduction tests from the manifest in one spec, and derive the CI matrix directly from the same generated manifest. |
+| Dynamic matrix child names drift outside branch protection | Collapse all static/functional/matrix outcomes into one stable aggregate status and require only that status. |
 | CI runs but is not actually required for merge | Trigger both `dev` and `main`; separately obtain authorization to require the stable aggregate status, or report that external gate as pending without claiming merge protection. |
 
 ## 11. Definition of done
@@ -1447,13 +1546,19 @@ Mark this plan complete only when all boxes are supported by recorded evidence:
 - [ ] General user-session divergent drafts remain supported.
 - [ ] Browser import and Node publication use the same pure current-writer
       validator, and its field inventory equals live runtime state.
+- [ ] The current-only Node publication entry point imports no browser state,
+      DOM/File/lazy-resource restoration, historical promotion, or Gallery-only
+      `webFiles` classifier.
 - [ ] Static refresh evidence is reported only for schema/config/projection/
       resource/fixed-point contracts; complete importer acceptance is supported
       by real upload/import/Generate evidence for the exact post-refresh bytes.
-- [ ] Every final, post-merge Gallery document has equal committed-request and
-      active-next-request semantic signatures, including resource hashes.
-- [ ] A second publication-normalization pass changes neither config, request,
-      resource bindings, nor referenced resource payloads.
+- [ ] Production refresh applies publication normalization exactly once after
+      CLI replay/artifact merge and has no later active-draft writer.
+- [ ] Every final, post-merge Gallery document leaves its committed request
+      unchanged and stores the active config/Web bindings produced by the
+      shared canonical projection, including resource hashes.
+- [ ] Normalizing an in-memory copy of an already published document changes
+      neither config, request, resource bindings, nor referenced payloads.
 - [ ] Publication normalization, declared download synchronization, and
       complete resource validation are transactional.
 - [ ] The declared Majanivirus source and public download TSV are byte-equal.
@@ -1461,13 +1566,14 @@ Mark this plan complete only when all boxes are supported by recorded evidence:
       mutually consistent.
 - [ ] Changed public figures are visually inspected at readable desktop and
       mobile sizes.
-- [ ] Pull requests to both `dev` and `main` trigger standard and every exact
-      heavy/special replay case.
-- [ ] The exact selector rejects invalid IDs, and the standard/heavy/special
-      union equals all manifest entries.
-- [ ] A selected ID loads only its owning spec and defines exactly one test.
+- [ ] Pull requests to both `dev` and `main` run every exact
+      manifest-derived replay case.
+- [ ] The exact selector rejects invalid IDs, and the CI matrix is emitted
+      directly from all manifest entries without a copied allowlist.
+- [ ] A selected ID makes the single reproduction spec define exactly one test.
 - [ ] The stable `gallery-regeneration-required` job fails unless every static,
-      standard, heavy, and special dependency succeeds.
+      functional, manifest-matrix, and distinct required lifecycle dependency
+      succeeds.
 - [ ] Repository rules make that aggregate Gallery status merge-required, or the
       handoff truthfully records External Gate A as pending authorization and
       does not claim merge protection.
@@ -1499,7 +1605,9 @@ Gallery publication evidence:
 - static all-11 contract:
 - static validation scope (no complete-importer claim):
 - pure validator/runtime inventory parity:
-- post-merge request/config/resource fixed point:
+- Node publication module-boundary audit:
+- single post-merge normalization evidence:
+- post-merge projection/config/resource fixed point:
 - browser all-11 contract:
 - scientific-baseline fixture review reference and refresh-immutability proof:
 - Majanivirus approved baseline:
@@ -1518,7 +1626,7 @@ Generated artifact review:
 CI/deploy evidence:
 - dev/main PR triggers:
 - exact-ID matrix inventory coverage:
-- selected-ID owning-spec/exactly-one-test evidence:
+- selected-ID single-spec/exactly-one-test evidence:
 - `gallery-regeneration-required` dependency/result evidence:
 - External Gate A repository-rule status/authorization:
 - post-refresh hash inventory/browser replay/public copy equality:
