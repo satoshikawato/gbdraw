@@ -7,6 +7,19 @@ Guidance for automated agents working in this repository.
 - See `CLAUDE.md` for project-wide guidance.
 - If working on the web UI, also read `gbdraw/web/CLAUDE.md`.
 
+## Agent Branching
+
+- Before starting work that may create a branch or commit, fetch `origin` and
+  create a fresh work branch from the latest `origin/dev`:
+  `git switch --no-track -c <branch-name> origin/dev`.
+- All agent-authored commits must be made on a work branch derived from
+  `origin/dev`. Do not base agent work on `main` or `master`.
+- Do not configure a work branch to track `main` or `dev`. Before committing or
+  pushing, verify the current branch and its upstream; publish only to the
+  same-named remote work branch.
+- Never commit directly to, or push directly to, `main` or `dev` unless the user
+  explicitly authorizes that exact direct target in the current request.
+
 ## Project Summary
 
 - `gbdraw` is a Python 3.10+ bioinformatics tool for publication-quality genome diagrams.
