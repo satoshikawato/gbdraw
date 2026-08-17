@@ -1,9 +1,9 @@
 # gbdraw architecture fitness-function ratchet implementation plan
 
-Status: revised proposal, revision 3
+Status: revised proposal, revision 4
 Created: 2026-08-17
-Revised: 2026-08-17
-Supersedes: revision 2 of this plan and `GBDRAW_ARCHITECTURE_MATURITY_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md` revision 1
+Revised: 2026-08-18
+Supersedes: revision 3 of this plan and `GBDRAW_ARCHITECTURE_MATURITY_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md` revision 1
 Work-branch base: latest merged `origin/dev`
 Pull-request target and integration branch: `dev`
 Release branch: `main`, promoted from `dev` under the repository's promotion checks
@@ -19,7 +19,7 @@ Implement a repository-local **architecture fitness-function ratchet** that make
 The implementation must establish six layers:
 
 1. one normative architecture fitness-function document;
-2. one executable detector catalog that derives registered source facts but contains no owner, threshold, enforcement, or exception authority;
+2. trusted executable mechanics split into a detector catalog that derives registered source facts and a pure evaluator that classifies those facts; neither contains owner, threshold, enforcement, or exception authority;
 3. one inert, machine-readable intended-architecture rule registry for the critical Web capabilities already enforced by repository policy;
 4. an optional, version-controlled store of exact accepted deterministic violations, used only when a valuable rule cannot initially pass on the existing base;
 5. deterministic CI checks for the portions that can be measured reliably;
@@ -58,7 +58,8 @@ Source architecture model
   + exact compatibility evidence
 
 Reflexion result
-  = conforming
+  = pure evaluation of intended authority and source facts
+  + conforming
   + divergent
   + absent
   + accepted existing violation
@@ -174,7 +175,7 @@ A contraction therefore receives less visible evidence than an expansion.
 
 The checker and `tests/web/architecture-contracts.test.mjs` contain overlapping descriptions of privileged capabilities, import targets, and detection patterns.
 
-Those definitions can drift. Executable detection needs one implementation owner, intended semantic-owner and canonical-path constraints need a separate inert authority owner, and the allowlist of permitted privileged paths must remain in `tools/web-change-policy.json`. A single module must not combine regexes or scan functions with allowed evidence paths, target counts, enforcement modes, or baseline eligibility.
+Those definitions can drift. Executable detection needs one implementation owner, intended semantic-owner and canonical-path constraints need a separate inert authority owner, and the allowlist of permitted privileged paths must remain in `tools/web-change-policy.json`. A single module must not combine regexes or scan functions with kind-specific intended paths, edges, counts, enforcement modes, or baseline eligibility.
 
 ### 4.4 Semantic maturity cannot be inferred safely from names alone
 
@@ -321,6 +322,14 @@ It is not:
 
 Every accepted violation requires a rule key, stable subject identity, rationale, tracking issue or equivalent evidence, and removal condition when known.
 
+### 5.14 Active detector evidence contract
+
+A versioned detector ID referenced by any active rule. The ID fixes the detector's subject category, match scope, positive and negative classification semantics, and canonical subject grammar. A semantically different detector is a new contract and therefore requires a new ID.
+
+### 5.15 Pure evaluator
+
+Authority-free executable mechanics that receive normalized source facts and already-loaded inert authority as data, then return deterministic validation, set, graph, and decision results. The evaluator neither discovers source facts nor reads, writes, or owns repository authority.
+
 ## 6. Normative maturity model
 
 ### 6.1 Semantic owner excess
@@ -426,7 +435,7 @@ AND every superseded owner or path is removed in the same change
 AND the declared changed-capability scope is complete
 ```
 
-The automated agent or pull-request author may prepare the evidence but cannot treat its own declaration as architecture approval. In this repository, approval means an explicit recorded decision by the maintainer who owns the repository architecture; it does not imply that an independent second maintainer must exist.
+The automated agent or pull-request author may prepare the evidence but cannot treat the author declaration as architecture approval. Approval means the structured PR comment defined in PR A, posted manually by the maintainer who owns the repository architecture and bound to the exact reviewed head SHA. An automated agent must not post it. If the sole architecture maintainer is also the PR author, the separate explicit architecture-owner comment remains required, but an independent second maintainer is not required.
 
 For a real new capability, one new semantic owner may be added without increasing owner excess. The new capability must begin with one owner and one canonical path.
 
@@ -453,7 +462,33 @@ Fixed accepted violations are:
 F_r = A_r(base) \setminus V_r(head)
 \]
 
-The merge gate requires \(N_r = \varnothing\), and every entry in \(F_r\) is stale authority that must be removed through the safe-contraction path.
+For the proposed head authority, classify fixed entries as:
+
+\[
+C_r = F_r \setminus A_r(head)
+\]
+
+\[
+R_r = F_r \cap A_r(head)
+\]
+
+where \(C_r\) is contracted fixed authority and \(R_r\) is retained stale authority. Removing an accepted entry while its violation still exists is invalid:
+
+\[
+U_r = (A_r(base) \cap V_r(head)) \setminus A_r(head)
+\]
+
+The merge gate requires \(N_r = \varnothing\). A normal implementation PR that changes the store passes only when all of the following are true:
+
+```text
+A_r(head) = A_r(base) \ F_r
+C_r = F_r
+R_r = empty
+U_r = empty
+A_r(head) \ A_r(base) = empty
+```
+
+This is the exact same-PR safe-contraction path: every accepted subject fixed by the head is removed, no still-active subject is removed, and no authority is added. A fixed entry that remains in the head store is stale authority and fails. When the final entry is contracted, the store file is deleted rather than committed as an empty object.
 
 For a `report-only` rule, the checker reports `V_r(head)` as signals and does not compare it with the accepted-violation store:
 
@@ -464,7 +499,7 @@ decision = PASS when signals is empty, otherwise REPORT
 
 A `hard` rule is never baseline-eligible and never consults the accepted-violation store.
 
-An implementation PR may not add entries to \(A_r\). A later guard-only preauthorization PR may expand \(A_r\) only with explicit evidence. A safe contraction may remove entries in \(F_r\), subject to the same trusted-base and guard-separation protections used by the privileged-path policy.
+An implementation PR may not add entries to \(A_r\). A later authority-only recording PR may expand \(A_r\) only for exact untouched-base signals from an already-merged eligible report-only rule, as specified in PR G1. The evaluator reports the authority-delta classification separately from source observation so a source fix and its exact store contraction can pass atomically without allowing an unrelated authority edit.
 
 ### 6.7 Frozen accepted-violation protocol
 
@@ -502,7 +537,7 @@ Requirements:
 - wildcard, catch-all, and regex subjects are invalid;
 - CI must never create or update the file automatically;
 - a normal implementation PR cannot expand the accepted set;
-- an accepted-set expansion is a separate guard-only authority decision;
+- an accepted-set expansion is a separate authority-only recording decision under PR G1;
 - fixed entries are reported as stale and must be removed by a safe contraction PR;
 - privileged path permissions remain in `tools/web-change-policy.json` and are never copied into this store;
 - persisted-format compatibility contracts remain governed by their own evidence rules and are never converted into generic ignored violations.
@@ -527,14 +562,15 @@ Authority changes have these directions:
 | --- | --- |
 | add a rule after its detector exists | authority expansion/activation |
 | remove a rule | relaxation, not contraction |
-| change a rule's detector ID, kind, or subject encoding | reinterpretation; replace through a separately staged detector/rule sequence |
-| add an allowed evidence path | expansion or preauthorization |
-| increase a target count | relaxation |
+| change a rule's detector ID | reinterpretation; migrate to an already-merged versioned detector ID in a separate authority-only PR |
+| change a rule's kind or subject encoding | reinterpretation; introduce a versioned detector, then reconcile the rule and any affected store identities in a dedicated authority-only migration |
+| add an allowed definition path | expansion or preauthorization |
+| remove a required canonical edge | relaxation |
 | `hard` to `frozen` or `report-only` | relaxation |
 | `frozen` to `report-only` | relaxation |
 | `baselineEligible: false` to `true` | relaxation |
-| remove an allowed evidence path | contraction, only when head source no longer requires it |
-| reduce a target count | tightening, only when head source conforms |
+| remove an allowed definition path | contraction, only when head source no longer requires it |
+| add a required canonical edge | tightening, only when head source conforms |
 | `report-only` to `frozen` or `hard` | tightening, only when the destination-mode gate passes |
 | `frozen` to `hard` | tightening, only when no accepted violation remains |
 | `baselineEligible: true` to `false` | tightening, only when no accepted violation remains |
@@ -546,6 +582,21 @@ Every new rule follows a detector-first path:
 3. activate only the mode justified by untouched-base evidence.
 
 The rules JSON references a stable detector ID. It must not contain regular expressions, JavaScript source, executable expressions, symbol patterns, or other data that can narrow detection. Rule-specific matching code remains in the trusted detector module.
+
+An active detector ID is an immutable evidence contract. Its subject category, matching semantics, source scope, and canonical subject encoding must not change while any base rule references it. Detector IDs are versioned from their first introduction, for example:
+
+```text
+semantic-owner.render-request.v1
+canonical-path.render-request.v1
+```
+
+A same-ID edit is allowed only for a behavior-preserving refactor, performance improvement, or error-reporting improvement that produces identical normalized facts and subjects for both the fixed detector fixture corpus and the current untouched `origin/dev` source. An intentional semantic change uses a new ID and this sequence:
+
+1. add `*.v2` beside `*.v1` in a checker-only PR and characterize both outputs;
+2. migrate the inert rule from `*.v1` to `*.v2` in a later authority-only PR after untouched-base validation;
+3. remove unreferenced `*.v1` in a later checker-only cleanup PR.
+
+The new ID must not silently reuse the old subject grammar. If the subject grammar changes, step 2 is a dedicated authority-only migration that changes the rule reference and every affected accepted-violation identity atomically, with an exact old-to-new subject mapping validated against untouched base source. It must not add or drop debt. Editing an active detector's semantics under the same ID is self-reinterpretation and fails closed.
 
 #### Clean-base rule
 
@@ -652,7 +703,7 @@ These metrics can identify investigation targets but do not independently prove 
 
 ### 7.5 Reflexion report format
 
-Do not encode observation, enforcement mode, baseline relation, and decision in one expanding enum. For each registered deterministic rule and relevant subject, the checker emits four orthogonal fields:
+Do not encode source state, enforcement mode, baseline relation, authority-delta handling, and decision in one expanding enum. For each registered deterministic rule and relevant subject, the checker emits five report fields:
 
 ```text
 observation:
@@ -671,35 +722,44 @@ baselineRelation:
   NEW
   FIXED
 
+authorityResolution:
+  NOT_APPLICABLE
+  RETAINED
+  EXACT_CONTRACTION
+  INVALID_CHANGE
+
 decision:
   PASS
   REPORT
   FAIL
 ```
 
-`decision` is derived from the other fields by one pure function; it is not independently assigned or stored. A fixed accepted subject is represented by `baselineRelation: FIXED` and `decision: FAIL`; `FIXED` is not a source observation.
+The first four fields are independent inputs. `decision` is derived from them by one pure function; it is not independently assigned or stored. `baselineRelation: FIXED` means the accepted subject is no longer a source violation. For a frozen subject, `authorityResolution` states what the head accepted-violation store did with the relevant base entry; it is not a source observation or the general rule-authority delta classifier. This allows an exact same-PR contraction to pass while retained stale authority still fails.
 
 The required decision table is:
 
-| Mode and observation | Baseline relation | Decision |
-| --- | --- | --- |
-| `HARD` + `CONFORMING` | `NOT_APPLICABLE` | `PASS` |
-| `HARD` + `DIVERGENT` or `ABSENT_REQUIRED` | `NOT_APPLICABLE` | `FAIL` |
-| `REPORT_ONLY` + `CONFORMING` | `NOT_APPLICABLE` | `PASS` |
-| `REPORT_ONLY` + `DIVERGENT` or `ABSENT_REQUIRED` | `NOT_APPLICABLE` | `REPORT` |
-| `FROZEN` + `CONFORMING`, with no fixed accepted subject | `NOT_APPLICABLE` | `PASS` |
-| `FROZEN` + `DIVERGENT` or `ABSENT_REQUIRED` | `ACCEPTED` | `PASS` |
-| `FROZEN` + `DIVERGENT` or `ABSENT_REQUIRED` | `NEW` | `FAIL` |
-| `FROZEN`, accepted subject no longer present | `FIXED` | `FAIL` until contracted |
+| Mode and observation | Baseline relation | Authority resolution | Decision |
+| --- | --- | --- | --- |
+| `HARD` + `CONFORMING` | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `PASS` |
+| `HARD` + `DIVERGENT` or `ABSENT_REQUIRED` | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `FAIL` |
+| `REPORT_ONLY` + `CONFORMING` | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `PASS` |
+| `REPORT_ONLY` + `DIVERGENT` or `ABSENT_REQUIRED` | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `REPORT` |
+| `FROZEN` + `CONFORMING`, with no fixed accepted subject | `NOT_APPLICABLE` | `NOT_APPLICABLE` | `PASS` |
+| `FROZEN` + `DIVERGENT` or `ABSENT_REQUIRED` | `ACCEPTED` | `RETAINED` | `PASS` |
+| `FROZEN` + `DIVERGENT` or `ABSENT_REQUIRED` after its accepted entry was removed | `ACCEPTED` | `INVALID_CHANGE` | `FAIL` |
+| `FROZEN` + `DIVERGENT` or `ABSENT_REQUIRED` | `NEW` | `NOT_APPLICABLE` | `FAIL` |
+| `FROZEN` + `CONFORMING` for a formerly accepted subject | `FIXED` | `RETAINED` | `FAIL` |
+| `FROZEN` + `CONFORMING` for a formerly accepted subject | `FIXED` | `EXACT_CONTRACTION` | `PASS` |
+| `FROZEN`, with an invalid accepted-store expansion, removal, or mismatch | As derived | `INVALID_CHANGE` | `FAIL` |
 
-Any combination outside this table is an internal checker error and fails closed. In particular, hard and report-only rules must not consult the accepted-violation store.
+Any combination outside this table is an internal checker error and fails closed. `EXACT_CONTRACTION` is valid only when the whole proposed store delta satisfies the set equality in Section 6.6. Hard and report-only rules must not consult the accepted-violation store and therefore always use `authorityResolution: NOT_APPLICABLE`. Rule-registry expansions, relaxations, tightenings, and reinterpretations remain separate candidate-authority decisions under Section 6.8.
 
 The output must identify:
 
 - rule key and stable subject when applicable;
 - intended owner/path/relation from the base rule authority;
 - observed source evidence derived by the base detector;
-- the four fields above;
+- the five fields above;
 - accepted violation identity, if applicable.
 
 CI will continue to report, but not automatically reject solely on the basis of:
@@ -721,11 +781,13 @@ The pull-request declaration supplies the evidence for unregistered semantic own
 | Repository-wide architecture and cross-surface convergence | `CLAUDE.md` |
 | Current Web runtime path and module ownership | `gbdraw/web/CLAUDE.md` |
 | Executable source-evidence detection only | `tools/web-architecture-detectors.mjs` |
+| Pure schema, set-algebra, graph, and result evaluation | `tools/web-architecture-evaluation.mjs` |
 | Intended semantic-owner/canonical-path rules and enforcement modes | `tools/web-architecture-rules.json` |
 | Exact accepted deterministic violations, only when needed | `tools/web-architecture-violations.json` |
 | Permitted privileged operator and importer paths | `tools/web-change-policy.json` |
-| Web change inventory, delta report, and deterministic gates | `tools/check-web-change-budget.mjs` |
-| Executable architecture invariants and checker fixtures | `tests/web/architecture-contracts.test.mjs` |
+| Sole Web change CLI/CI entry point, Git/file I/O, orchestration, and reporting | `tools/check-web-change-budget.mjs` |
+| Cross-cutting architecture and workflow contracts | `tests/web/architecture-contracts.test.mjs` |
+| Fixture-heavy ratchet schema, algebra, graph, and decision tests | `tests/web/architecture-ratchet-fixtures.test.mjs` |
 | Policy workflow and guard-separation explanation | `docs/internal/WEB_CHANGE_POLICY.md` |
 | Human change declaration and evidence | `.github/pull_request_template.md` |
 | Human architecture approval | Explicit recorded maintainer review |
@@ -745,8 +807,12 @@ This initiative must not:
 - infer semantic ownership from identifier names alone;
 - reject every module, export, watcher, or reactive declaration;
 - create a second Web checker;
-- combine executable detector logic with intended owner paths, target counts, enforcement modes, baseline eligibility, or accepted violations;
+- equate one CLI/CI entry point with one monolithic implementation module;
+- combine executable detector logic with intended owner paths, edges, counts, enforcement modes, baseline eligibility, or accepted violations;
+- put filesystem, Git, environment, reporting, or intended-authority ownership in the pure evaluator;
 - put regular expressions, JavaScript source, executable expressions, or detector-narrowing symbol patterns in the inert rule registry;
+- turn the initial registry into a generic architecture-rule DSL or register more than three initial rules;
+- change an active detector's evidence semantics without introducing a new versioned detector ID;
 - execute a proposed head detector module from the trusted-base workflow;
 - add an npm or Python dependency;
 - introduce a build step;
@@ -834,14 +900,17 @@ Add the following future paths to `guardPaths`:
 ```text
 docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
 tools/web-architecture-detectors.mjs
+tools/web-architecture-evaluation.mjs
 tools/web-architecture-rules.json
 tools/web-architecture-violations.json
+tests/web/architecture-ratchet-fixtures.test.mjs
 ```
 
 Add only executable implementation paths to `checkerImplementationPaths`:
 
 ```text
 tools/web-architecture-detectors.mjs
+tools/web-architecture-evaluation.mjs
 ```
 
 Add only inert authority paths to `authorityPaths`:
@@ -852,7 +921,7 @@ tools/web-architecture-rules.json
 tools/web-architecture-violations.json
 ```
 
-Do not classify `tools/web-architecture-rules.json` as checker implementation and do not classify `tools/web-architecture-detectors.mjs` as authority.
+Do not classify `tools/web-architecture-rules.json` as checker implementation. Do not classify either executable mechanics module as authority. The future fixture test is a guard path but is neither checker implementation nor intended authority.
 
 ##### `tests/web/architecture-contracts.test.mjs`
 
@@ -862,6 +931,7 @@ Add fixture coverage proving:
 - checker implementation cannot co-change with any future authority path;
 - the future files need not exist for the checker to pass;
 - adding an unrelated unregistered path does not acquire authority accidentally.
+- the evaluator is classified with checker implementation, while its fixture test is guard-only and the classifications remain disjoint.
 
 #### Verification
 
@@ -876,7 +946,7 @@ Run the checker against explicit base/head refs before handoff.
 
 #### Acceptance criteria
 
-- every future authority path is protected before it exists;
+- every future detector, evaluator, fixture-test, and authority path is protected before it exists;
 - no future file is added yet;
 - checker implementation and authority classifications are disjoint;
 - no workflow, runtime, policy allowlist, or dependency changes.
@@ -924,7 +994,9 @@ Establish an evidence-backed baseline after PR 0A and PR 0B have merged and befo
    - current first-party import-cycle count, including self-edge inspection;
    - current report-only inventory totals;
    - proposed rule keys, detector IDs, source evidence, and intended constraints;
+   - the proposed discriminated rule kind and detector output subject category for each rule;
    - whether each proposed rule is clean-base, existing-debt, or not deterministically enforceable;
+   - the fixed detector fixture corpus used to prove same-ID output invariance;
    - exact test commands and results.
 6. Reconcile definitions duplicated between the checker and architecture tests before extraction.
 7. For each human-reviewed changed capability example, record concrete before/after owner, canonical-path, and compatibility-path sets rather than totals alone.
@@ -937,10 +1009,11 @@ Phase 0 passes only when:
 
 - current checker and architecture contracts pass on the recorded base;
 - the duplicated detection definitions are fully inventoried;
-- every proposed detector has a stable ID and produces deterministic source evidence;
+- every proposed detector has a versioned stable ID and produces deterministic source evidence with a fixed subject category and encoder;
 - every proposed rule is classified as clean-base, report-only existing-debt, or not deterministically enforceable;
+- the initial candidate inventory contains no more than three rules, normally one semantic-owner rule and one canonical-path rule, with any third rule justified by Phase 0 evidence;
 - proposed detector code contains no intended paths, counts, modes, eligibility, or exceptions;
-- proposed rules contain no executable expressions or detector-narrowing patterns;
+- proposed rules use only the required kind-specific schema, contain no executable expressions or detector-narrowing patterns, and do not require a generic DSL;
 - `dev` PR CI coverage is observed, and missing branch-protection authority remains explicitly unresolved rather than claimed complete.
 
 ### PR A — Establish the human authority and PR declaration
@@ -958,10 +1031,13 @@ The normative document must contain:
 - concrete before/after set evidence requirements and scope-completeness rationale;
 - semantic owner versus privileged operator;
 - detector implementation versus inert rule authority versus accepted exceptions;
+- sole CLI orchestration versus pure detector and evaluation mechanics;
 - trusted-base evaluation order and prohibition on executing head detectors;
-- hard, frozen, and report-only modes with the orthogonal result fields;
+- immutable versioned detector IDs and the detector-add/rule-migrate/detector-remove sequence;
+- the two initial discriminated rule kinds and the maximum-three-rule rollout scope;
+- hard, frozen, and report-only modes with the five report fields and pure decision table;
 - accepted-violation protocol and prohibition on CI refreezing;
-- examples listed in revision 2, updated to use explicit sets rather than unsupported totals;
+- ownership, canonical-path, compatibility, and safe-contraction examples using explicit sets rather than unsupported totals;
 - the detector-first rule-onboarding and authority-direction procedures.
 
 Do not duplicate the current module ownership table from `gbdraw/web/CLAUDE.md`.
@@ -997,7 +1073,7 @@ For an architecture-bearing change:
 - Persisted-compatibility evidence and removal condition:
 - Performance/scientific-output evidence, when material:
 - Deterministic checker evidence:
-- Maintainer architecture decision link, required before merge:
+- Maintainer architecture decision comment permalink, required before merge:
 
 - [ ] No second parser, normalizer, state mirror, lifecycle owner, or canonical pipeline was added.
 - [ ] Every superseded implementation was removed in this change.
@@ -1005,6 +1081,24 @@ For an architecture-bearing change:
 ```
 
 Do not ask for unsupported repository-wide `OE`, `PE`, or `CB` numbers. A completed author declaration is evidence, not architecture approval.
+
+The architecture owner must review the exact proposed head and post a structured pull-request comment in this form:
+
+```markdown
+Architecture decision: APPROVED
+Reviewed head SHA: <full commit SHA>
+Reviewed capability scope:
+- <capability and stable before/after set references>
+Decision:
+- delta(OE) <= 0
+- delta(PE) <= 0
+- delta(CB) <= 0, or: <persisted-compatibility exception and evidence>
+- superseded owners and paths removed: yes
+Limitations:
+- <none, or explicit non-authorizing limitation>
+```
+
+The pull-request template stores the permalink to that comment. The decision is valid only while `Reviewed head SHA` exactly equals the PR head SHA; any later commit invalidates it and requires a new owner comment. An automated agent must not post the approval, and the author declaration cannot substitute for it. A sole architecture maintainer who is also the PR author may post the separate owner comment after reviewing the final head.
 
 #### Modify with short references only
 
@@ -1025,7 +1119,7 @@ python -m pytest tests/ -k documentation -m "not slow"
 
 - one normative definition owner exists;
 - all entry points link rather than copy the model;
-- the template collects concrete sets and separates author evidence from maintainer approval;
+- the template collects concrete sets and separates author evidence from an exact-head, structured maintainer approval;
 - the base checker treats the new normative document as authority;
 - no runtime, checker implementation, policy allowlist, or generated artifact changes.
 
@@ -1043,15 +1137,15 @@ Create one dependency-free ES module containing executable detection only. It ma
 
 ```javascript
 export const WEB_ARCHITECTURE_DETECTORS = Object.freeze({
-  'semantic-owner.render-request': detectRenderRequestAuthority,
-  'canonical-path.session-request': detectCanonicalSessionRequestPath
+  'semantic-owner.render-request.v1': detectRenderRequestAuthority,
+  'canonical-path.render-request.v1': detectCanonicalRenderRequestPath
 });
 ```
 
-It may contain masked-source regexes and import-graph logic. It must not contain:
+It may contain masked-source regexes and normalized import-edge extraction. Cycle classification belongs to the pure evaluator when PR F adds it. The detector module must not contain:
 
-- allowed evidence paths;
-- target counts;
+- intended definition paths or required edges;
+- exact or maximum counts;
 - enforcement modes;
 - baseline eligibility;
 - accepted violations;
@@ -1065,6 +1159,8 @@ Avoid stateful global `.test()` behavior. Use Node built-ins only, preferably no
 - Make the checker and architecture tests consume the same detector implementation.
 - Keep existing inline intended constraints active temporarily; do not add the new rules JSON yet.
 - Characterize exact current capability keys, import targets, operator matches, and source masking before removing duplicated detector code.
+- Treat each exported detector ID as the immutable evidence contract from Section 6.8. Add a fixed fixture corpus covering normalized facts, subject category, and canonical subject encoding.
+- Require same-ID changes to produce identical normalized output for the fixed corpus and untouched current source. Any intentional matching, scope, category, or subject-grammar change must introduce a new versioned ID.
 - Retain independent expected-result assertions in tests; sharing detector implementation must not turn every test into a tautology.
 - Remove only superseded detector implementations in this PR.
 
@@ -1080,7 +1176,7 @@ git diff --check
 ```
 
 - detection has one executable owner;
-- detector IDs are stable and rule-specific;
+- detector IDs are versioned, stable, rule-specific, and protected from same-ID semantic change by output-equivalence fixtures;
 - current source matches and policy coverage are byte-for-byte or set-for-set equivalent to the base characterization;
 - no intended paths, thresholds, modes, or exceptions moved into detector code;
 - no runtime, inert authority, policy allowlist, workflow, or dependency changes.
@@ -1093,7 +1189,21 @@ refactor: centralize Web architecture detectors
 
 ### PR C — Add inert rule-schema and trusted candidate validation
 
-Extend the existing checker; do not add a second checker and do not add the rules file yet.
+Extend the existing checker through a pure evaluation module; do not add a second CLI/CI entry point and do not add the rules file yet.
+
+#### Add `tools/web-architecture-evaluation.mjs`
+
+Create a dependency-free pure module for:
+
+- strict rule and accepted-violation schema validation;
+- detector-output/rule-kind compatibility checks;
+- authority-delta classification;
+- accepted-set algebra and the five-field decision table;
+- sorted set operations and, when added in PR F, strongly connected component evaluation.
+
+The module receives already-loaded plain data and normalized source facts and returns plain deterministic results. It must not read files, run Git, inspect the environment, write output, own intended paths or thresholds, or import the rule and violation JSON files directly. `tools/check-web-change-budget.mjs` remains the sole CLI/CI entry point and owns Git/file I/O, trusted-base orchestration, error presentation, and summary reporting. `tools/web-architecture-detectors.mjs` remains the only owner of registered source-fact extraction.
+
+PR C implements only the schema, detector-kind compatibility, stable collection, and authority-delta primitives needed for candidate validation. PR E adds the normalized decision table, and PR F adds accepted-set and SCC mechanics. This assigns one final owner without pulling later enforcement into PR C.
 
 #### Rule schema support
 
@@ -1103,21 +1213,41 @@ Support an optional strict JSON file at:
 tools/web-architecture-rules.json
 ```
 
-Absence means no new registry rules during the staged rollout. Schema version 1 must define a `rules` array stored in ascending rule-key order. Kind-specific path arrays must also use canonical sorted order. Each rule includes only inert intended-architecture data such as:
+Absence means no new registry rules during the staged rollout. Schema version 1 must define a `rules` array stored in ascending rule-key order. Kind-specific path and edge arrays must also use canonical sorted order. Version 1 supports only a discriminated union of the kinds needed for the initial rollout:
 
 ```json
 {
-  "key": "semantic-owner.render-request",
-  "kind": "semantic-authority",
-  "detector": "semantic-owner.render-request",
-  "allowedEvidencePaths": ["services/session-request.js"],
-  "targetLocationCount": 1,
-  "enforcement": "hard",
-  "baselineEligible": false
+  "schemaVersion": 1,
+  "rules": [
+    {
+      "key": "semantic-owner.render-request",
+      "kind": "single-semantic-owner",
+      "detector": "semantic-owner.render-request.v1",
+      "allowedDefinitionPaths": ["services/session-request.js"],
+      "exactDefinitionCount": 1,
+      "enforcement": "hard",
+      "baselineEligible": false
+    },
+    {
+      "key": "canonical-path.render-request",
+      "kind": "required-canonical-edge",
+      "detector": "canonical-path.render-request.v1",
+      "requiredEdges": [
+        {
+          "from": "app/run-analysis.js",
+          "to": "services/session-request.js"
+        }
+      ],
+      "enforcement": "hard",
+      "baselineEligible": false
+    }
+  ]
 }
 ```
 
-The exact kind-specific schema may differ, but it must:
+`single-semantic-owner` accepts only its common fields plus `allowedDefinitionPaths` and `exactDefinitionCount`, whose only valid version 1 value is `1`. This permits preauthorizing a location move without permitting two simultaneous owners. `required-canonical-edge` accepts only its common fields plus `requiredEdges`. A detector declares its normalized output subject category, and the evaluator rejects a detector/rule pairing whose category does not match the rule kind. Version 1 must not provide a generic `allowedEvidencePaths`, `operation`, pattern, predicate, or catch-all kind.
+
+The strict schema must:
 
 - reject duplicate rule keys and duplicate paths;
 - reject unknown detector IDs and unsupported kinds or modes;
@@ -1125,7 +1255,10 @@ The exact kind-specific schema may differ, but it must:
 - reject paths outside the normalized `gbdraw/web/js/` source scope;
 - reject unknown fields;
 - reject regex source, JavaScript source, executable expressions, wildcard paths, and detector-narrowing symbol patterns;
-- require every referenced detector to provide a stable subject encoder for its violation-producing rule kind.
+- require every referenced detector to provide the matching subject category and a stable subject encoder for its violation-producing rule kind;
+- reject a registry containing more than three rules during the initial rollout.
+
+The three-rule cap is part of schema version 1. Raising the cap or adding a kind requires a later evidence-backed plan and schema-version migration; it is not an ordinary rule-authority edit.
 
 #### Trusted-base evaluation order
 
@@ -1145,8 +1278,10 @@ An authority contraction or tightening must still conform on head source under t
 
 #### Tests and documentation
 
-- Add fixture tests for malformed and executable-looking JSON, unknown detectors, direction classification, and self-authorization attempts.
+- Add `tests/web/architecture-ratchet-fixtures.test.mjs` for fixture-heavy schema, authority-delta, pure-evaluation, and malicious-input cases. Keep cross-cutting workflow and current-architecture contracts in `tests/web/architecture-contracts.test.mjs`.
+- Add fixture tests for malformed and executable-looking JSON, wrong kind-specific fields, detector subject-category mismatch, unknown detectors, more than three rules, direction classification, and self-authorization attempts.
 - Prove the trusted checker ignores a malicious head detector.
+- Prove the pure evaluator produces no file, Git, environment, or output side effects and that the checker delegates evaluation without creating a second entry point.
 - Update `docs/internal/WEB_CHANGE_POLICY.md` to explain detector/rule/policy separation and candidate inert-data handling.
 
 #### Verification and acceptance
@@ -1159,6 +1294,8 @@ git diff --check
 ```
 
 - candidate rules can be validated without executing head code;
+- rule kinds are closed and kind-specific rather than a generic evidence-path schema;
+- pure evaluation is isolated from I/O, authority ownership, and source-fact extraction;
 - missing rules file remains valid during rollout;
 - no rule authority file is added;
 - no runtime, policy allowlist, workflow, or dependency changes.
@@ -1175,6 +1312,9 @@ Add `tools/web-architecture-rules.json` in an authority-only PR.
 
 Use Phase 0 evidence to register only critical rules with deterministic detectors already merged in PR B:
 
+- register no more than three rules; normally register one `single-semantic-owner` rule and one `required-canonical-edge` rule;
+- use a third rule only when Phase 0 demonstrates material value and deterministic evidence; it must be another instance of one of those two kinds rather than a reason to widen the schema;
+- keep the dependency-cycle hard gate separate; it does not consume a registry slot;
 - use `hard` for a clean-base invariant;
 - use `report-only` for a valuable rule with exact existing debt;
 - omit a rule that is not deterministically enforceable;
@@ -1195,7 +1335,8 @@ git diff --check
 ```
 
 - every rule references an already-merged detector;
-- every allowed evidence path and target count matches recorded intended architecture;
+- the registry has at most three rules, uses only the two version 1 kinds, and explains any third rule in Phase 0 evidence;
+- every kind-specific definition path, required edge, and exact count matches recorded intended architecture;
 - every hard rule passes on untouched `origin/dev`;
 - every report-only rule exposes exact stable subjects without failing;
 - the PR contains inert authority data only.
@@ -1208,14 +1349,14 @@ chore: declare initial Web architecture rules
 
 ### PR E — Activate the base rule authority and normalized result model
 
-After PR D merges, update the checker and tests without changing the rules JSON.
+After PR D merges, update the checker, pure evaluator, and tests without changing the rules JSON.
 
 #### Checker behavior
 
 - Consume the unchanged base `tools/web-architecture-rules.json` as intended architecture.
 - Remove the superseded inline intended constraints in the same PR.
 - Keep `tools/web-change-policy.json` as the sole privileged path-permission owner.
-- Implement the four orthogonal result fields and one pure decision function from Section 7.5.
+- Implement the five report fields and the pure four-input decision function from Section 7.5 in `tools/web-architecture-evaluation.mjs`.
 - Fail closed on impossible field combinations.
 - Report rule and subject rows in stable rule-key/subject order.
 - Count file-level registered authority locations without calling them complete `OE`.
@@ -1223,12 +1364,13 @@ After PR D merges, update the checker and tests without changing the rules JSON.
 
 #### Tests
 
-Use table-driven tests for every allowed result combination and representative forbidden combinations. Prove:
+Put the table-driven decision and malformed-combination cases in `tests/web/architecture-ratchet-fixtures.test.mjs`; keep only end-to-end activation and cross-owner contracts in `tests/web/architecture-contracts.test.mjs`. Cover every allowed result combination and representative forbidden combinations. Prove:
 
 - hard conforming passes and hard divergent/absent fails;
 - report-only conforming passes and report-only divergent/absent reports without failing;
 - accepted-store state is not consulted by hard or report-only modes;
-- source observation, mode, baseline relation, and decision cannot contradict one another;
+- source observation, mode, baseline relation, authority resolution, and decision cannot contradict one another;
+- exact contraction is the only fixed-subject combination that passes, while retained or invalid authority fails;
 - removing the old inline authority does not change current policy coverage or rule results.
 
 #### Verification and acceptance
@@ -1242,6 +1384,7 @@ git diff --check
 
 - the rules JSON is the only active owner of registered intended paths, counts, and modes;
 - the detector module is the only active owner of executable source matching;
+- the evaluator contains only pure mechanics and derives every decision from the other four fields;
 - no temporary dual active authority remains;
 - no runtime, rules authority, policy allowlist, workflow, or dependency changes.
 
@@ -1253,7 +1396,7 @@ ci: enforce declared Web architecture rules
 
 ### PR F — Add deltas, frozen violations, and cycle enforcement
 
-Extend the existing checker without changing runtime, rules authority, privileged policy, or workflows.
+Extend the existing checker and pure evaluator without changing runtime, rules authority, privileged policy, or workflows. Keep Git/file I/O and reporting in the checker; keep accepted-set algebra, stable sorting, SCC evaluation, and decision classification in the evaluator.
 
 #### Differential reports
 
@@ -1280,10 +1423,10 @@ Support optional `tools/web-architecture-violations.json` with the strict schema
 - rule keys and subjects must match the base rules and stable rule-specific encoders;
 - wildcard, duplicate, invented, line-number, malformed, or unknown-rule entries fail;
 - new frozen violations fail;
-- fixed accepted entries use `baselineRelation: FIXED` and fail until contracted;
+- fixed accepted entries use `baselineRelation: FIXED`; `RETAINED` fails and `EXACT_CONTRACTION` passes;
 - deleting the final entry requires deleting the file;
 - store expansion is permitted only in a separate authority-only PR for exact untouched-base signals from an already-merged report-only baseline-eligible rule;
-- same-PR runtime plus store contraction is permitted only when removed entries exactly equal fixed head subjects and no authority expands or other guard changes;
+- same-PR runtime plus store contraction is permitted only when removed entries exactly equal all fixed head subjects, the Section 6.6 set equality holds, and no authority expands or other guard changes;
 - the store never authorizes privileged paths, compatibility contracts, cycles, dependencies, or trusted-base integrity violations.
 
 #### Dependency-cycle gate
@@ -1322,11 +1465,11 @@ Prove at least:
 10. ordinary and architecture budgets retain exact-limit behavior;
 11. guard/authority separation rejects self-authorization;
 12. absent store behaves as empty;
-13. frozen accepted/new/fixed subjects produce the specified field combinations and decisions;
+13. frozen accepted/new/fixed subjects produce all specified five-field combinations and decisions;
 14. hard and report-only rules never use the store;
 15. invalid store entries fail;
-16. pure store contraction requires exact fixed subjects;
-17. guard-only expansion accepts only exact untouched-base report-only signals;
+16. exact store contraction passes, retained fixed authority fails, removal of a still-active accepted subject fails, and a mixed contraction/expansion fails;
+17. authority-only store recording accepts only exact untouched-base report-only signals;
 18. a proposed head detector or rule cannot authorize head runtime.
 
 Execute the trusted-base checker binary from the base fixture revision when testing self-authorization. Do not accidentally import detector modules from the outer repository instead of the fixture revision.
@@ -1344,8 +1487,8 @@ node tools/check-web-change-budget.mjs \
 ```
 
 - deterministic inventories display both directions;
-- every registered rule emits the normalized result fields;
-- new/fixed frozen violations fail correctly;
+- every registered rule emits the five normalized report fields;
+- new frozen violations fail, retained fixed authority fails, and exact contraction passes;
 - self-loops and multi-node cycles fail;
 - report-only signals remain non-blocking;
 - no accepted store is created unless the later conditional authority phase needs it;
@@ -1406,7 +1549,8 @@ For the first architecture-bearing runtime PR after PR F or G2:
 - inspect the terminal and GitHub summaries manually;
 - confirm no false hard failure and no silent report-only failure;
 - confirm the author enumerates concrete before/after sets and scope completeness;
-- record the maintainer architecture decision;
+- record the structured maintainer architecture decision comment and its permalink;
+- verify the comment's full reviewed head SHA exactly matches the merge candidate; invalidate and repeat the decision after any new commit;
 - confirm neither head rules nor head detectors authorize the same runtime.
 
 ### Phase 8 — Deferred trend metrics after sufficient history
@@ -1424,6 +1568,8 @@ These remain lagging diagnostics. Use Git and existing GitHub metadata, add no p
 | `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md` | A | Normative rule |
 | `.github/pull_request_template.md` | A | Human architecture declaration |
 | `tools/web-architecture-detectors.mjs` | B | Executable source-evidence detection only |
+| `tools/web-architecture-evaluation.mjs` | C | Pure schema, authority-delta, set, graph, and decision mechanics |
+| `tests/web/architecture-ratchet-fixtures.test.mjs` | C | Fixture-heavy ratchet behavior and adversarial cases |
 | `tools/web-architecture-rules.json` | D | Inert intended-architecture and enforcement authority |
 | `tools/web-architecture-violations.json` | G1, conditional | Exact accepted deterministic violations; omit when empty |
 
@@ -1437,8 +1583,10 @@ These remain lagging diagnostics. Use Git and existing GitHub metadata, add no p
 | `CONTRIBUTING.md` | 0A, A | Branch model, PR declaration, and maintainer-decision requirement |
 | `.github/workflows/test.yml` | 0A | Run normal PR checks for `dev` and `main` |
 | `.github/workflows/web-base-policy.yml` | 0A | Run trusted-base PR checks for `dev` and `main` |
-| `tools/check-web-change-budget.mjs` | 0B, B, C, E, F | Path protection, detector use, inert authority validation, rule enforcement, results, deltas, violations, and cycles |
-| `tests/web/architecture-contracts.test.mjs` | 0A, 0B, B, C, E, F | Branch coverage, separation, characterization, schema, result, violation, and cycle fixtures |
+| `tools/check-web-change-budget.mjs` | 0B, B, C, E, F | Path protection, detector use, trusted orchestration, rule enforcement, I/O, and reports |
+| `tools/web-architecture-evaluation.mjs` | E, F after creation in C | Pure result decisions, accepted-set algebra, deltas, and SCC evaluation |
+| `tests/web/architecture-contracts.test.mjs` | 0A, 0B, B, C, E, F | Branch coverage, guard separation, detector characterization, and cross-cutting integration contracts |
+| `tests/web/architecture-ratchet-fixtures.test.mjs` | E, F after creation in C | Decision-table, authority-delta, violation-store, schema, and graph fixtures |
 | `docs/internal/WEB_CHANGE_POLICY.md` | C | Detector/rule/policy terminology and trusted candidate handling |
 
 ### Files that must remain unchanged unless a separate plan is approved
@@ -1472,8 +1620,11 @@ Reviewers must reject an architecture-bearing PR when:
 - a fixed accepted violation is retained instead of being contracted;
 - the CI report shows a registered authority expansion;
 - a deterministic check is bypassed or weakened in the same PR;
+- an active detector ID changes matching, scope, subject category, or subject encoding instead of using a versioned detector migration;
+- the initial registry exceeds three rules or introduces a generic/catch-all rule kind;
 - a head detector, rule, or accepted-violation change attempts to authorize the same head runtime;
-- no explicit maintainer architecture decision is recorded before merge.
+- no explicit maintainer architecture decision is recorded before merge;
+- the decision comment is unstructured, lacks a permalink, or names a reviewed head SHA different from the merge candidate.
 
 Reviewers must not reject a PR merely because:
 
@@ -1497,17 +1648,18 @@ Each phase handoff must include:
 - pass/fail results;
 - known limitations;
 - proposed commit title and summary;
-- confirmation that no unrelated files were modified.
+- confirmation that no unrelated files were modified;
+- for every architecture-bearing PR, the structured approval-comment permalink and proof that its reviewed head SHA equals the final merge candidate.
 
 Additional evidence by phase:
 
 - PR 0A: observed `dev` and `main` workflow triggers, unchanged trusted-base checkout model, and branch-protection state;
-- PR 0B: future path classification matrix and self-authorization fixture results;
-- PR B: detector before/after characterization, policy-key coverage, and confirmation that detector code contains no authority;
-- PR C: inert schema fixtures, authority-direction classification, and proof that head detector code is not executed;
-- PR D: exact rule inventory and untouched-base result for every hard or report-only rule;
-- PR E: normalized result decision-table evidence and removal of superseded inline authority;
-- PR F: before/add/remove/after/delta report, accepted/new/fixed subjects, self-loop and multi-node cycle results, and fixture-local trusted execution evidence;
+- PR 0B: future path classification matrix, including evaluator and fixture-test paths, and self-authorization fixture results;
+- PR B: detector before/after characterization, fixed-corpus/current-base output equivalence, versioned-ID inventory, policy-key coverage, and confirmation that detector code contains no authority;
+- PR C: discriminated-schema fixtures, detector-kind compatibility, evaluator-purity evidence, authority-direction classification, and proof that head detector code is not executed;
+- PR D: exact rule inventory, proof that the initial count is at most three, justification for any third rule, and untouched-base result for every hard or report-only rule;
+- PR E: five-field decision-table evidence, exact-contraction/retained-fixed results, and removal of superseded inline authority;
+- PR F: before/add/remove/after/delta report, accepted/new/fixed and authority-resolution subjects, self-loop and multi-node cycle results, and fixture-local trusted execution evidence;
 - PR G1/G2 when used: exact report-only observation, accepted subjects, and the later authority-only mode transition;
 - every guard phase: confirmation that no privileged policy allowlist entry changed.
 
@@ -1539,6 +1691,9 @@ Stop implementation and report the conflict when any of the following occurs:
 13. a rules JSON design requires regexes, JavaScript, symbol patterns, or other detector-narrowing executable semantics in authority data;
 14. the `dev` pull-request workflows do not run the normal and trusted-base checks after PR 0A;
 15. the trusted-base checker cannot evaluate head runtime exclusively with base detectors, base rules, and base policy.
+16. a required detector semantic change cannot be staged under a new versioned ID and would reinterpret an active ID;
+17. the pure evaluator would need filesystem, Git, environment, reporting, source-detection, or intended-authority ownership;
+18. the initial useful registry would require more than three rules, a third rule kind, or a generic rule DSL.
 
 Do not solve a stop condition by adding a fallback, compatibility branch, duplicate parser, or temporary alternate checker.
 
@@ -1548,17 +1703,20 @@ This implementation is complete only when all of the following are true:
 
 - the normative fitness-function ratchet document is merged and referenced by agent, repository, Web, contributor, and PR entry points;
 - the document identifies the intended/source/reflexion model and the adopted external precedents without making an external tool authoritative;
-- the PR template collects concrete changed-scope sets, a scope-completeness rationale, and a maintainer-decision link without requiring repository-wide manual metrics;
+- the PR template collects concrete changed-scope sets, a scope-completeness rationale, and a structured maintainer-decision permalink without requiring repository-wide manual metrics;
+- every final architecture approval names the exact merge-candidate head SHA, and a later commit invalidates the approval;
 - critical capability detection has one executable owner containing no intended paths, counts, modes, eligibility, or exceptions;
-- intended registered architecture has one inert JSON authority containing no executable or detector-narrowing semantics;
-- the checker and architecture contracts consume the same detector implementation while retaining independent expected-result assertions;
-- the normative document, detector, rules, and optional violation store were protected in the base checker before creation;
+- every active detector ID is versioned and semantically immutable, with intentional change staged through detector-add, authority-migrate, and detector-remove PRs;
+- pure evaluation has one I/O-free mechanics owner containing no source detection or intended authority;
+- intended registered architecture has one inert JSON authority with at most three initial rules, only the two approved kind-specific schemas, and no executable or detector-narrowing semantics;
+- the checker, architecture contracts, and ratchet fixture tests consume the shared mechanics while retaining independent expected-result assertions;
+- the normative document, detector, evaluator, fixture test, rules, and optional violation store were protected in the base checker before creation;
 - the trusted-base checker never executes a proposed head detector and never uses head rules to authorize the same head runtime;
 - the checker reports before/add/remove/after/delta for deterministic inventories;
 - registered semantic-authority expansion fails CI;
-- registered rules emit orthogonal observation, mode, baseline relation, and derived decision fields;
+- registered rules emit observation, mode, baseline relation, authority resolution, and derived decision fields;
 - report-only divergent/absent results report without failing, and hard/report-only rules never consult accepted violations;
-- new deterministic violations fail and fixed accepted violations are exposed as failing stale authority until contracted;
+- new deterministic violations fail, retained fixed authority fails, and a same-PR exact contraction passes only under the Section 6.6 set equality;
 - existing-debt rules require separate detector, report-only authority, accepted-violation authority, and frozen-authority PRs;
 - first-party Web dependency cycles, including self-imports, fail CI;
 - heuristic signals remain clearly report-only;
@@ -1597,13 +1755,25 @@ Source-derived model
         |
         +--> tools/web-architecture-detectors.mjs
                trusted executable detection only
+               versioned immutable evidence contracts
                imports, markers, canonical evidence
 
-Reflexion and enforcement
+Pure reflexion mechanics
+  tools/web-architecture-evaluation.mjs
+        |
+        +--> receives normalized source facts and inert authority
+        +--> schema / authority delta / accepted-set algebra / SCC
+        +--> observation / mode / baselineRelation
+        |    / authorityResolution / decision
+        +--> decision is derived by one pure table from four inputs
+        |
+        +--> tests/web/architecture-ratchet-fixtures.test.mjs
+
+Reflexion orchestration and enforcement
   tools/check-web-change-budget.mjs
         |
-        +--> observation / mode / baselineRelation / decision
-        +--> decision is derived by one pure table
+        +--> sole CLI/CI entry; Git and file I/O; stable reporting
+        +--> trusted detectors + pure evaluator + base authority
         |
         +--> tests/web/architecture-contracts.test.mjs
 
