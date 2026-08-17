@@ -424,6 +424,64 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
   );
 });
 
+test('normal CI uses dev as the staging push branch', () => {
+  assert.match(
+    TEST_WORKFLOW,
+    /push:\n    branches: \["main", "refactoring", "dev"\]/
+  );
+  assert.doesNotMatch(TEST_WORKFLOW, /branches: \[[^\]]*"develop"/);
+  assert.match(TEST_WORKFLOW, /\n  workflow_dispatch:\n/);
+  assert.equal([...TEST_WORKFLOW.matchAll(/^    if:/gm)].length, 2);
+});
+
+test('dev staging runs check the complete promotion range explicitly', () => {
+  const step = TEST_WORKFLOW.match(
+    /      - name: Check Web change budget\n[\s\S]*?(?=\n      - name: Check Web architecture contracts)/
+  )?.[0];
+  assert.ok(step, 'Web change-budget step must exist');
+
+  assert.match(
+    step,
+    /DEV_PROMOTION_RANGE: \$\{\{ github\.ref == 'refs\/heads\/dev' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\) \}\}/
+  );
+  assert.match(step, /git fetch origin main/);
+  assert.match(step, /BASE_SHA="\$\(git merge-base origin\/main HEAD\)"/);
+  assert.match(step, /HEAD_SHA="\$\(git rev-parse HEAD\)"/);
+  assert.match(
+    step,
+    /node tools\/check-web-change-budget\.mjs --base "\$BASE_SHA" --head "\$HEAD_SHA"/
+  );
+  assert.match(
+    step,
+    /WEB_CHANGE_BASE: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha \|\| '' \}\}/
+  );
+  assert.match(
+    step,
+    /WEB_CHANGE_HEAD: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.sha \|\| '' \}\}/
+  );
+  assert.match(
+    step,
+    /else\n            node tools\/check-web-change-budget\.mjs\n          fi/
+  );
+});
+
+test('supported-version and slow matrices cover dev staging runs', () => {
+  const stagingCondition = [
+    "    if: >-",
+    "      (github.event_name == 'push' &&",
+    "      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||",
+    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')"
+  ].join('\n');
+
+  for (const jobName of ['acceptance-supported-main', 'slow-main']) {
+    const job = TEST_WORKFLOW.match(
+      new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+    )?.[0];
+    assert.ok(job, `${jobName} job must exist`);
+    assert.ok(job.includes(stagingCondition), `${jobName} must use the staging condition`);
+  }
+});
+
 const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {

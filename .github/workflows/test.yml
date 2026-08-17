@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: ["main", "refactoring", "develop"]
+    branches: ["main", "refactoring", "dev"]
   pull_request:
     branches: ["main"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -33,10 +33,19 @@ jobs:
 
       - name: Check Web change budget
         env:
+          DEV_PROMOTION_RANGE: ${{ github.ref == 'refs/heads/dev' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
           WEB_CHANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           WEB_CHANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
           WEB_ARCHITECTURE_CHANGE: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
-        run: node tools/check-web-change-budget.mjs
+        run: |
+          if [[ "$DEV_PROMOTION_RANGE" == "true" ]]; then
+            git fetch origin main
+            BASE_SHA="$(git merge-base origin/main HEAD)"
+            HEAD_SHA="$(git rev-parse HEAD)"
+            node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            node tools/check-web-change-budget.mjs
+          fi
 
       - name: Check Web architecture contracts
         run: node --test tests/web/architecture-contracts.test.mjs
@@ -264,7 +273,10 @@ jobs:
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
     needs: web-change-budget
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -309,7 +321,10 @@ jobs:
   slow-main:
     name: Slow (Python ${{ matrix.python-version }})
     needs: web-change-budget
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
