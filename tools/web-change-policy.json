@@ -119,7 +119,6 @@
       "app/feature-editor/color-actions.js",
       "app/feature-editor/label-actions.js",
       "app/feature-editor/svg-actions.js",
-      "app/feature-editor/visibility-actions.js",
       "app/legend-layout/canvas-actions.js",
       "app/legend-layout/diagram-drag.js",
       "app/legend-layout/reposition-actions.js",

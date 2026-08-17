@@ -70,11 +70,18 @@ const featureBConnector = new FakeFeatureElement('feature-b__line1', {
   fill: 'none'
 });
 const svg = makeSvg([featureA, featureBConnector, featureBBlock]);
+let resultReplacementCount = 0;
+const trackedResults = new Proxy([
+  { name: 'one.svg', content: '<svg id="old-one"></svg>' },
+  { name: 'two.svg', content: '<svg id="old-two"></svg>' }
+], {
+  set(target, property, value) {
+    if (/^\d+$/.test(String(property))) resultReplacementCount += 1;
+    return Reflect.set(target, property, value);
+  }
+});
 const state = {
-  results: ref([
-    { name: 'one.svg', content: '<svg id="old-one"></svg>' },
-    { name: 'two.svg', content: '<svg id="old-two"></svg>' }
-  ]),
+  results: ref(trackedResults),
   selectedResultIndex: ref(0),
   skipCaptureBaseConfig: ref(false),
   svgContainer: ref({
@@ -93,17 +100,40 @@ const runtime = createPreviewRuntime({
 runtime.mountResultSvg(0, svg);
 assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), true);
 assert.equal(featureA.getAttribute('display'), 'none');
-assert.equal(state.results.value[0].content, '<svg id="old-one"></svg>');
-assert.equal(serializeCount, 0);
-assert.equal(state.skipCaptureBaseConfig.value, false);
-
-assert.equal(runtime.flushActiveResult(), true);
 assert.equal(serializeCount, 1);
+assert.equal(resultReplacementCount, 1);
 assert.equal(state.results.value[0].content, '<svg data-count="1" data-elements="3"></svg>');
 assert.equal(state.skipCaptureBaseConfig.value, true);
 
 state.skipCaptureBaseConfig.value = false;
+const resultAfterSingleEdit = state.results.value[0];
 assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), false);
+assert.equal(serializeCount, 1);
+assert.equal(resultReplacementCount, 1);
+assert.equal(state.results.value[0], resultAfterSingleEdit);
+assert.equal(state.skipCaptureBaseConfig.value, false);
+
+assert.equal(runtime.applyFeatureVisibilityChanges([
+  { featureId: 'feature-a', mode: 'on' },
+  { featureId: 'feature-b', mode: 'off' }
+]), true);
+assert.equal(featureA.getAttribute('display'), null);
+assert.equal(featureBBlock.getAttribute('display'), 'none');
+assert.equal(featureBConnector.getAttribute('display'), 'none');
+assert.equal(serializeCount, 2);
+assert.equal(resultReplacementCount, 2);
+
+state.skipCaptureBaseConfig.value = false;
+const resultAfterBulkEdit = state.results.value[0];
+assert.equal(runtime.applyFeatureVisibilityChanges([
+  { featureId: 'feature-a', mode: 'on' },
+  { featureId: 'feature-b', mode: 'off' }
+]), false);
+assert.equal(serializeCount, 2);
+assert.equal(resultReplacementCount, 2);
+assert.equal(state.results.value[0], resultAfterBulkEdit);
+assert.equal(state.skipCaptureBaseConfig.value, false);
+
 assert.equal(runtime.applyFeatureFillChanges([{ featureId: 'feature-b', color: '#111111' }]), false);
 featureBBlock.setAttribute('stroke', '#222222');
 featureBBlock.setAttribute('stroke-width', '3');
@@ -116,23 +146,21 @@ assert.equal(runtime.applyFeatureStrokeChanges([{
 }]), false);
 assert.equal(runtime.getActiveRuntime().dirty, false);
 assert.equal(runtime.flushActiveResult(), false);
-assert.equal(serializeCount, 1);
+assert.equal(serializeCount, 2);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 state.skipCaptureBaseConfig.value = false;
 assert.equal(runtime.flushActiveResult(), false);
-assert.equal(serializeCount, 1);
+assert.equal(serializeCount, 2);
 
 runtime.applyFeatureFillChanges([{ featureId: 'feature-b', color: '#abcdef' }]);
 assert.equal(featureBBlock.getAttribute('fill'), '#abcdef');
 assert.equal(featureBConnector.getAttribute('fill'), 'none');
-runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-b', mode: 'off' }]);
-assert.equal(featureBBlock.getAttribute('display'), 'none');
-assert.equal(featureBConnector.getAttribute('display'), 'none');
 runtime.selectResult(1);
-assert.equal(serializeCount, 2);
+assert.equal(serializeCount, 3);
+assert.equal(resultReplacementCount, 3);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 assert.equal(state.selectedResultIndex.value, 1);
-assert.equal(state.results.value[0].content, '<svg data-count="2" data-elements="3"></svg>');
+assert.equal(state.results.value[0].content, '<svg data-count="3" data-elements="3"></svg>');
 
 const legacyConnector = new FakeFeatureElement('feature-c__line1', {
   featureId: '',
