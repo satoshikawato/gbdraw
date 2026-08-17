@@ -402,11 +402,24 @@ test('privileged capability owners and importers stay within their allowlists', 
 
 test('PR workflows separate normal tests from trusted base-policy execution', () => {
   const activityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
+  const triggerBranches = (workflow, trigger) => {
+    const match = workflow.match(new RegExp(
+      `\\n  ${trigger}:\\n    branches: (\\[[^\\n]+\\])`
+    ));
+    assert.ok(match, `${trigger} branch filter must exist`);
+    return JSON.parse(match[1]);
+  };
+
   assert.match(TEST_WORKFLOW, /\n  pull_request:\n/);
+  assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'pull_request'), ['dev', 'main']);
   assert.match(TEST_WORKFLOW, activityTypes);
   assert.match(TEST_WORKFLOW, /name: Run core tests/);
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
+  assert.deepEqual(
+    triggerBranches(BASE_POLICY_WORKFLOW, 'pull_request_target'),
+    ['dev', 'main']
+  );
   assert.match(BASE_POLICY_WORKFLOW, activityTypes);
   assert.match(BASE_POLICY_WORKFLOW, /permissions:\n  contents: read/);
   assert.match(BASE_POLICY_WORKFLOW, /name: Web base policy \(trusted base\)/);
