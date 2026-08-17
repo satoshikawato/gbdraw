@@ -564,6 +564,27 @@ const BUDGET_FIXTURE = Object.freeze({
   ),
   'gbdraw/web/vendor/library.js': 'globalThis.vendorLibrary = true;\n'
 });
+const FUTURE_GUARD_PATHS = Object.freeze([
+  'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  '.github/pull_request_template.md',
+  'tools/web-architecture-detectors.mjs',
+  'tools/web-architecture-evaluation.mjs',
+  'tools/web-architecture-rules.json',
+  'tools/web-architecture-violations.json',
+  'tests/web/architecture-ratchet-fixtures.test.mjs'
+]);
+const FUTURE_CHECKER_IMPLEMENTATION_PATHS = Object.freeze([
+  'tools/web-architecture-detectors.mjs',
+  'tools/web-architecture-evaluation.mjs'
+]);
+const FUTURE_AUTHORITY_PATHS = Object.freeze([
+  'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  'tools/web-architecture-rules.json',
+  'tools/web-architecture-violations.json'
+]);
+const reservedPathContent = (path) => path.endsWith('.json')
+  ? '{}\n'
+  : `// reserved fixture for ${path}\n`;
 
 const writeFixtureFile = (root, path, content) => {
   const target = join(root, path);
@@ -860,6 +881,28 @@ test('dependency, vendor, binary, and runtime/guard rules are non-waivable', () 
   });
 });
 
+test('reserved future guard paths need not exist before their rollout', () => {
+  assert.deepEqual(
+    FUTURE_GUARD_PATHS.filter((path) => Object.hasOwn(BUDGET_FIXTURE, path)),
+    []
+  );
+  const result = runChangeBudgetCase(() => {});
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Result: \*\*PASS\*\*/);
+});
+
+test('runtime cannot co-change with any reserved future guard path', () => {
+  FUTURE_GUARD_PATHS.forEach((guardPath) => {
+    assertNonWaivableWorkingTreeFailure((write) => {
+      write(
+        'gbdraw/web/js/services/session-file.js',
+        'export const readSession = () => ({ version: 2 });\n'
+      );
+      write(guardPath, reservedPathContent(guardPath));
+    }, [/production runtime files and Web guard\/CI files changed together/], guardPath);
+  });
+});
+
 test('checker implementation and authority files cannot change together', () => {
   const implementationPaths = [
     'tools/check-web-change-budget.mjs',
@@ -884,6 +927,101 @@ test('checker implementation and authority files cannot change together', () => 
       }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
     });
   });
+});
+
+test('all checker implementations are separated from reserved future authority', () => {
+  const implementationPaths = [
+    'tools/check-web-change-budget.mjs',
+    'tools/web-change-source.mjs',
+    ...FUTURE_CHECKER_IMPLEMENTATION_PATHS
+  ];
+
+  implementationPaths.forEach((implementationPath) => {
+    FUTURE_AUTHORITY_PATHS.forEach((authorityPath) => {
+      assertNonWaivableWorkingTreeFailure((write) => {
+        write(
+          implementationPath,
+          BUDGET_FIXTURE[implementationPath]
+            ? `${BUDGET_FIXTURE[implementationPath]}\n// changed\n`
+            : reservedPathContent(implementationPath)
+        );
+        write(authorityPath, reservedPathContent(authorityPath));
+      }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
+    });
+  });
+});
+
+test('the evaluator implementation and ratchet fixture classifications stay disjoint', () => {
+  const evaluatorAndFixture = runChangeBudgetCase((write) => {
+    write(
+      'tools/web-architecture-evaluation.mjs',
+      reservedPathContent('tools/web-architecture-evaluation.mjs')
+    );
+    write(
+      'tests/web/architecture-ratchet-fixtures.test.mjs',
+      reservedPathContent('tests/web/architecture-ratchet-fixtures.test.mjs')
+    );
+  });
+  assert.equal(evaluatorAndFixture.status, 0, evaluatorAndFixture.output);
+
+  const fixtureAndAuthority = runChangeBudgetCase((write) => {
+    write(
+      'tests/web/architecture-ratchet-fixtures.test.mjs',
+      reservedPathContent('tests/web/architecture-ratchet-fixtures.test.mjs')
+    );
+    write(
+      'tools/web-architecture-rules.json',
+      reservedPathContent('tools/web-architecture-rules.json')
+    );
+  });
+  assert.equal(fixtureAndAuthority.status, 0, fixtureAndAuthority.output);
+});
+
+test('the reserved PR template is guard-only', () => {
+  const templateAndChecker = runChangeBudgetCase((write) => {
+    write(
+      '.github/pull_request_template.md',
+      reservedPathContent('.github/pull_request_template.md')
+    );
+    write(
+      'tools/web-architecture-evaluation.mjs',
+      reservedPathContent('tools/web-architecture-evaluation.mjs')
+    );
+  });
+  assert.equal(templateAndChecker.status, 0, templateAndChecker.output);
+
+  const templateAndAuthority = runChangeBudgetCase((write) => {
+    write(
+      '.github/pull_request_template.md',
+      reservedPathContent('.github/pull_request_template.md')
+    );
+    write(
+      'tools/web-architecture-rules.json',
+      reservedPathContent('tools/web-architecture-rules.json')
+    );
+  });
+  assert.equal(templateAndAuthority.status, 0, templateAndAuthority.output);
+});
+
+test('an unregistered path acquires no guard or authority classification', () => {
+  const unregisteredPath = 'docs/internal/UNREGISTERED_ARCHITECTURE_NOTE.md';
+  const runtimeChange = runChangeBudgetCase((write) => {
+    write(
+      'gbdraw/web/js/services/session-file.js',
+      'export const readSession = () => ({ version: 2 });\n'
+    );
+    write(unregisteredPath, '# Unregistered fixture\n');
+  });
+  assert.equal(runtimeChange.status, 0, runtimeChange.output);
+
+  const checkerChange = runChangeBudgetCase((write) => {
+    write(
+      'tools/web-architecture-evaluation.mjs',
+      reservedPathContent('tools/web-architecture-evaluation.mjs')
+    );
+    write(unregisteredPath, '# Unregistered fixture\n');
+  });
+  assert.equal(checkerChange.status, 0, checkerChange.output);
 });
 
 test('the Web change-budget checker allows an owner-internal edit', () => {

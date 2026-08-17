@@ -116,20 +116,32 @@ const addedBinaryRuntimePaths = productionPaths.filter((path) => {
 const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbdraw/web/vendor/'));
 const policyPath = 'tools/web-change-policy.json';
 const guardPaths = new Set([
+  'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
+  'tools/web-architecture-detectors.mjs',
+  'tools/web-architecture-evaluation.mjs',
+  'tools/web-architecture-rules.json',
+  'tools/web-architecture-violations.json',
   'tools/web-change-source.mjs',
   policyPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   'tests/web/architecture-contracts.test.mjs',
+  'tests/web/architecture-ratchet-fixtures.test.mjs',
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
 const changedGuards = [...changed.keys()].filter((path) => guardPaths.has(path)).sort();
 const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
+  'tools/web-architecture-detectors.mjs',
+  'tools/web-architecture-evaluation.mjs',
   'tools/web-change-source.mjs'
 ]);
 const authorityPaths = new Set([
+  'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  'tools/web-architecture-rules.json',
+  'tools/web-architecture-violations.json',
   policyPath,
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
