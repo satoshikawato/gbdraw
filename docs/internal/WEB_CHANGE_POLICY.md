@@ -24,11 +24,18 @@ Except for the pure policy contraction described below, Web runtime files cannot
 change in the same pull request as these guard files:
 
 ```text
+docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
+.github/pull_request_template.md
 tools/check-web-change-budget.mjs
+tools/web-architecture-detectors.mjs
+tools/web-architecture-evaluation.mjs
+tools/web-architecture-rules.json
+tools/web-architecture-violations.json
 tools/web-change-source.mjs
 tools/web-change-policy.json
 docs/internal/WEB_CHANGE_POLICY.md
 tests/web/architecture-contracts.test.mjs
+tests/web/architecture-ratchet-fixtures.test.mjs
 .github/workflows/test.yml
 .github/workflows/web-base-policy.yml
 ```
@@ -88,6 +95,32 @@ The ordinary or architecture production budget and the dependency, vendor,
 binary, and other integrity checks still apply in full. Any other runtime/guard
 combination remains prohibited.
 
+## Architecture evidence and authority
+
+The architecture guard separates source detection, pure evaluation, and intended
+authority:
+
+| Concern | Owner |
+| --- | --- |
+| Versioned executable source-fact detection | `tools/web-architecture-detectors.mjs` |
+| I/O-free schema, observation, and authority-delta mechanics | `tools/web-architecture-evaluation.mjs` |
+| Intended semantic-owner and canonical-path rules | `tools/web-architecture-rules.json` |
+| Permitted privileged operator and importer paths | `tools/web-change-policy.json` |
+| Git and file I/O, trusted-base orchestration, reporting, and the CLI entry point | `tools/check-web-change-budget.mjs` |
+
+Detectors emit normalized facts and stable subjects. They do not contain allowed
+paths, counts, enforcement modes, baseline eligibility, or exceptions. The
+evaluator receives already-loaded plain data and normalized facts. It does not
+read files, run Git, inspect the environment, emit reports, detect source facts,
+or define intended paths and thresholds.
+
+The optional rule registry is inert authority data. Its absence is valid during
+the staged rollout. A proposed registry is parsed strictly and checked with the
+detectors already present on the trusted base. Candidate rules are compared with
+untouched base source before admission and cannot authorize the same head runtime.
+Until rule activation in a later phase, the checker's existing inline constraints
+remain the only active runtime authority.
+
 ## Trusted base check
 
 The pull request workflow runs the normal tests from the pull request checkout.
@@ -96,7 +129,8 @@ The separate `pull_request_target` workflow provides the required
 pull request head only as Git data, and runs the checker from the base checkout.
 It does not check out or execute pull request code. A proposed head policy is read
 only as inert JSON data; neither a head policy nor a head checker can authorize
-itself.
+itself. Proposed head detector code is never imported or executed by this
+workflow.
 
 The checker reports uncertain naming signals without failing the check. These
 signals include cache, token, handle, journal, protocol, manager, compatibility,

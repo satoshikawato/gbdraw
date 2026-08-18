@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
-import { join, posix, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
+import {
+  detectPrivilegedWebCapabilities,
+  detectReportOnlySourceFacts,
+  isWebSessionSourcePath,
+  WEB_ARCHITECTURE_DETECTORS,
+  WEB_PRIVILEGED_CAPABILITY_KEYS,
+  WEB_PRIVILEGED_IMPORT_TARGETS
+} from './web-architecture-detectors.mjs';
+import {
+  classifyArchitectureAuthorityDelta,
+  classifyArchitectureRuleObservation,
+  validateArchitectureRuleRegistry
+} from './web-architecture-evaluation.mjs';
 
 const runGit = (root, args, options = {}) => execFileSync(
   'git',
@@ -115,13 +127,14 @@ const addedBinaryRuntimePaths = productionPaths.filter((path) => {
 });
 const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbdraw/web/vendor/'));
 const policyPath = 'tools/web-change-policy.json';
+const architectureRulesPath = 'tools/web-architecture-rules.json';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
-  'tools/web-architecture-rules.json',
+  architectureRulesPath,
   'tools/web-architecture-violations.json',
   'tools/web-change-source.mjs',
   policyPath,
@@ -140,7 +153,7 @@ const checkerImplementationPaths = new Set([
 ]);
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
-  'tools/web-architecture-rules.json',
+  architectureRulesPath,
   'tools/web-architecture-violations.json',
   policyPath,
   '.github/workflows/test.yml',
@@ -149,130 +162,6 @@ const authorityPaths = new Set([
 const changedCheckerImplementations = [...changed.keys()]
   .filter((path) => checkerImplementationPaths.has(path));
 const changedAuthorities = [...changed.keys()].filter((path) => authorityPaths.has(path));
-
-const exportedNames = (source = '') => {
-  const code = maskJavaScript(source);
-  const names = new Set();
-  const declaration = /^\s*export\s+(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
-  for (const match of code.matchAll(declaration)) names.add(match[1]);
-  for (const match of code.matchAll(/^\s*export\s*\{([\s\S]*?)\}/gm)) {
-    match[1].split(',').forEach((entry) => {
-      const cleaned = entry.replace(/\/\*[\s\S]*?\*\//g, '').trim();
-      if (!cleaned) return;
-      const parts = cleaned.split(/\s+as\s+/);
-      names.add((parts[1] || parts[0]).trim());
-    });
-  }
-  if (/^\s*export\s+default\b/m.test(code)) names.add('default');
-  for (const match of code.matchAll(/^\s*export\s+\*\s+as\s+([A-Za-z_$][\w$]*)/gm)) {
-    names.add(match[1]);
-  }
-  return names;
-};
-
-const declaredNames = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)]
-    .map((match) => match[1])
-);
-
-const reactiveDeclarations = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:[A-Za-z_$][\w$]*\.)?(ref|shallowRef|reactive|computed)\s*\(/g)]
-    .map((match) => `${match[1]} (${match[2]})`)
-);
-
-const countWatchers = (source = '') => [
-  ...maskJavaScript(source).matchAll(/\bwatch(?:Effect)?\s*\(/g)
-].length;
-const importSpecifiers = literalImportSpecifiers;
-
-const resolvedProductionImport = (owner, specifier) => {
-  if (!specifier.startsWith('.')) return null;
-  const relativeOwner = owner.slice('gbdraw/web/js/'.length);
-  return posix.normalize(posix.join(posix.dirname(relativeOwner), specifier));
-};
-
-const capabilitySpecs = [
-  {
-    name: 'Render request',
-    imports: ['services/session-request.js'],
-    owner: /\bbuildCanonicalRenderRequest\s*\(/
-  },
-  {
-    name: 'Diagram Worker',
-    imports: [
-      'services/diagram-generation.js',
-      'services/diagram-worker-protocol.js',
-      'workers/diagram-generation-worker.js'
-    ],
-    owner: /\b(?:new\s+Worker|runDiagramGeneration|loadPyodide)\s*\(/
-  },
-  {
-    name: 'Python helper',
-    imports: ['app/python-helpers.js'],
-    owner: /\b(?:runPythonAsync|runPython|PYTHON_HELPERS|globals\.get)\b/
-  },
-  {
-    name: 'Resource staging',
-    imports: ['services/diagram-resource-staging.js', 'services/resource-payload-owner.js'],
-    owner: /\b(?:createDiagramResourceTransport|stageRenderResources|setResourcePayloadOwner)\b/
-  },
-  {
-    name: 'SVG/Result admission',
-    imports: ['services/svg-sanitization.js', 'services/svg-result-ingestion.js'],
-    owner: /\b(?:sanitizeSvgContent|ingestSvgResult|markCommitted)\b/
-  },
-  {
-    name: 'Mounted SVG/Result replacement',
-    imports: ['services/svg-serialization.js', 'app/preview-runtime.js'],
-    owner: /\b(?:serializeCleanSvg|flushActiveResult)\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/
-  },
-  {
-    name: 'History',
-    imports: ['services/history.js', 'services/history-snapshot.js'],
-    owner: /\b(?:createHistoryManager|beginCheckpoint|commitCheckpoint|buildArtifactCheckpoint)\b/
-  },
-  {
-    name: 'Session',
-    imports: [
-      'services/config.js',
-      'services/gallery-session-migration.js',
-      'services/session-authority.js',
-      'services/session-file.js'
-    ],
-    owner: /\b(?:exportSession|compressSessionData|migrateSessionDataToCurrent|migratePersistedGalleryConfig)\b/
-  },
-  {
-    name: 'Canonical editor state',
-    imports: [
-      'app/feature-editor.js',
-      'app/legend.js',
-      'app/right-drawer.js',
-      'app/preview-runtime.js'
-    ],
-    owner: /\b(?:createFeatureEditor|createLegendManager|createRightDrawerController|createPreviewRuntime)\b/
-  }
-];
-
-const sessionOwnerPaths = new Set([
-  'gbdraw/web/js/services/config.js',
-  'gbdraw/web/js/services/gallery-session-migration.js',
-  'gbdraw/web/js/services/session-authority.js',
-  'gbdraw/web/js/services/session-file.js',
-  'gbdraw/web/js/services/session-request.js'
-]);
-const objectKeys = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/(?:^|[,{]\s*)([A-Za-z_$][\w$]*)\s*:/gm)]
-    .map((match) => match[1])
-);
-const compatibilityNames = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b(?:[A-Za-z_$][\w$]*(?:Migration|Migrator|Legacy|Fallback)[\w$]*|(?:migrate|promoteLegacy|normalizeLegacy|readLegacy)[A-Za-z0-9_$]*)\b/g)]
-    .map((match) => match[0])
-);
-const namedResourceNames = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b[A-Za-z_$][\w$]*\b/g)]
-    .map((match) => match[0])
-    .filter((name) => /(?:cache|token|handle|journal|protocol|manager)/i.test(name))
-);
 
 const addedEntries = (before, after, prefix = '') => [...after]
   .filter((entry) => !before.has(entry))
@@ -290,30 +179,44 @@ const newBareImports = [];
 productionJavaScriptPaths.forEach((path) => {
   const before = readRevisionFile(base, path) || '';
   const after = readHeadFile(path) || '';
-  newExports.push(...addedEntries(exportedNames(before), exportedNames(after), `${path}: `));
+  const beforeFacts = detectReportOnlySourceFacts(before);
+  const afterFacts = detectReportOnlySourceFacts(after);
+  newExports.push(...addedEntries(
+    new Set(beforeFacts.exportedNames), new Set(afterFacts.exportedNames), `${path}: `
+  ));
   newCreateOwners.push(...addedEntries(
-    new Set([...declaredNames(before)].filter((name) => /^create[A-Z]/.test(name))),
-    new Set([...declaredNames(after)].filter((name) => /^create[A-Z]/.test(name))),
+    new Set(beforeFacts.declaredNames.filter((name) => /^create[A-Z]/.test(name))),
+    new Set(afterFacts.declaredNames.filter((name) => /^create[A-Z]/.test(name))),
     `${path}: `
   ));
   newReactiveState.push(...addedEntries(
-    reactiveDeclarations(before), reactiveDeclarations(after), `${path}: `
+    new Set(beforeFacts.reactiveDeclarations),
+    new Set(afterFacts.reactiveDeclarations),
+    `${path}: `
   ));
-  const watcherIncrease = countWatchers(after) - countWatchers(before);
+  const watcherIncrease = afterFacts.watcherCount - beforeFacts.watcherCount;
   if (watcherIncrease > 0) newWatchers.push(`${path}: +${watcherIncrease} watcher call(s)`);
   newNamedResources.push(...addedEntries(
-    namedResourceNames(before),
-    namedResourceNames(after),
+    new Set(beforeFacts.namedResourceNames),
+    new Set(afterFacts.namedResourceNames),
     `${path}: `
   ));
   newCompatibilityPaths.push(...addedEntries(
-    compatibilityNames(before), compatibilityNames(after), `${path}: `
+    new Set(beforeFacts.compatibilityNames),
+    new Set(afterFacts.compatibilityNames),
+    `${path}: `
   ));
-  if (sessionOwnerPaths.has(path)) {
-    newSessionFields.push(...addedEntries(objectKeys(before), objectKeys(after), `${path}: `));
+  if (isWebSessionSourcePath(path)) {
+    newSessionFields.push(...addedEntries(
+      new Set(beforeFacts.objectKeys), new Set(afterFacts.objectKeys), `${path}: `
+    ));
   }
-  const bareBefore = new Set(importSpecifiers(before).filter((specifier) => !specifier.startsWith('.')));
-  const bareAfter = new Set(importSpecifiers(after).filter((specifier) => !specifier.startsWith('.')));
+  const bareBefore = new Set(
+    beforeFacts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
+  );
+  const bareAfter = new Set(
+    afterFacts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
+  );
   newBareImports.push(...addedEntries(bareBefore, bareAfter, `${path}: `));
 });
 
@@ -388,34 +291,175 @@ if (basePolicySource !== null && changed.has(policyPath)) {
 }
 const allProductionJavaScriptPaths = listProductionJavaScriptPaths();
 const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => [
-  path,
+  path.slice('gbdraw/web/js/'.length),
   readHeadFile(path) || ''
 ]));
 
-const importerTargets = new Set(capabilitySpecs.flatMap((capability) => capability.imports));
+const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
+const candidateArchitectureErrors = [];
+const candidateArchitectureObservations = [];
+let architectureAuthorityDelta = Object.freeze({
+  classification: 'UNCHANGED',
+  directions: Object.freeze([]),
+  changes: Object.freeze([])
+});
+
+const parseArchitectureRuleRegistry = (source, revision) => {
+  if (source === null) return { registry: emptyRuleRegistry(), error: null };
+  try {
+    return { registry: JSON.parse(source), error: null };
+  } catch (error) {
+    return {
+      registry: null,
+      error: `Cannot parse ${architectureRulesPath} at ${revision}: ${error.message}`
+    };
+  }
+};
+
+const architectureRuleValidationOptions = Object.freeze({
+  availableEnforcements: Object.freeze(['hard', 'report-only'])
+});
+const formatRuleValidationErrors = (label, validation) => validation.errors.map((error) => (
+  `${label} ${error.path} [${error.code}]: ${error.message}`
+));
+const listRevisionProductionJavaScriptPaths = (revision) => runGit(repositoryRoot, [
+  'ls-tree', '-r', '--name-only', revision, '--', 'gbdraw/web/js'
+]).split('\n').filter((path) => /\.[cm]?js$/.test(path));
+const productionSourcesAtRevision = (revision) => new Map(
+  listRevisionProductionJavaScriptPaths(revision).map((path) => [
+    path.slice('gbdraw/web/js/'.length),
+    readRevisionFile(revision, path) || ''
+  ])
+);
+
+const baseArchitectureRulesSource = readRevisionFile(base, architectureRulesPath);
+const proposedArchitectureRulesSource = readHeadFile(architectureRulesPath);
+if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== null) {
+  const parsedBase = parseArchitectureRuleRegistry(baseArchitectureRulesSource, base);
+  const parsedCandidate = parseArchitectureRuleRegistry(
+    proposedArchitectureRulesSource,
+    head || 'working tree'
+  );
+  if (parsedBase.error) candidateArchitectureErrors.push(parsedBase.error);
+  if (parsedCandidate.error) candidateArchitectureErrors.push(parsedCandidate.error);
+
+  if (parsedBase.registry && parsedCandidate.registry) {
+    const baseValidation = validateArchitectureRuleRegistry(
+      parsedBase.registry,
+      WEB_ARCHITECTURE_DETECTORS,
+      architectureRuleValidationOptions
+    );
+    const candidateValidation = validateArchitectureRuleRegistry(
+      parsedCandidate.registry,
+      WEB_ARCHITECTURE_DETECTORS,
+      architectureRuleValidationOptions
+    );
+    candidateArchitectureErrors.push(
+      ...formatRuleValidationErrors('base registry', baseValidation),
+      ...formatRuleValidationErrors('candidate registry', candidateValidation)
+    );
+
+    if (baseValidation.valid && candidateValidation.valid) {
+      architectureAuthorityDelta = classifyArchitectureAuthorityDelta(
+        parsedBase.registry,
+        parsedCandidate.registry
+      );
+      if (architectureAuthorityDelta.changes.length) {
+        const companionPaths = [...changed.keys()]
+          .filter((path) => path !== architectureRulesPath)
+          .sort();
+        if (companionPaths.length) {
+          candidateArchitectureErrors.push(
+            'architecture rule authority changes must be isolated from other changed paths: '
+            + companionPaths.join(', ')
+          );
+        }
+
+        const baseSources = productionSourcesAtRevision(base);
+        const candidateRules = new Map(parsedCandidate.registry.rules.map((rule) => [rule.key, rule]));
+        const changedRuleKeys = [...new Set(
+          architectureAuthorityDelta.changes.map(({ rule }) => rule)
+        )].sort();
+        changedRuleKeys.forEach((ruleKey) => {
+          const rule = candidateRules.get(ruleKey);
+          if (!rule) return;
+          const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+          let baseObservation;
+          try {
+            baseObservation = classifyArchitectureRuleObservation(
+              rule,
+              detector.detect(baseSources)
+            );
+          } catch (error) {
+            candidateArchitectureErrors.push(
+              `${rule.key} trusted-base detection failed: ${error.message}`
+            );
+            return;
+          }
+          candidateArchitectureObservations.push(
+            `${rule.key} against untouched base: ${baseObservation.observation} `
+            + `(${baseObservation.observedCount}/${baseObservation.requiredCount})`
+          );
+          if (
+            (rule.enforcement === 'hard' || rule.baselineEligible === false)
+            && baseObservation.observation !== 'CONFORMING'
+          ) {
+            candidateArchitectureErrors.push(
+              `${rule.key} claims a clean base but is ${baseObservation.observation}`
+            );
+          }
+
+          const directions = new Set(architectureAuthorityDelta.changes
+            .filter((change) => change.rule === ruleKey)
+            .map(({ direction }) => direction));
+          if (![...directions].some((direction) => (
+            direction === 'CONTRACTION' || direction === 'TIGHTENING'
+          ))) return;
+          let headObservation;
+          try {
+            headObservation = classifyArchitectureRuleObservation(
+              rule,
+              detector.detect(allProductionSources)
+            );
+          } catch (error) {
+            candidateArchitectureErrors.push(
+              `${rule.key} trusted-head-data detection failed: ${error.message}`
+            );
+            return;
+          }
+          candidateArchitectureObservations.push(
+            `${rule.key} against head source data: ${headObservation.observation} `
+            + `(${headObservation.observedCount}/${headObservation.requiredCount})`
+          );
+          if (headObservation.observation !== 'CONFORMING') {
+            candidateArchitectureErrors.push(
+              `${rule.key} authority contraction or tightening is ${headObservation.observation} `
+              + 'on head source data'
+            );
+          }
+        });
+      }
+    }
+  }
+}
+
+const detectedCapabilities = detectPrivilegedWebCapabilities(allProductionSources);
 const capabilityCoverageViolations = (candidatePolicy) => {
   const violations = [];
-  importerTargets.forEach((target) => {
+  WEB_PRIVILEGED_IMPORT_TARGETS.forEach((target) => {
     const allowed = new Set(candidatePolicy.allowedPrivilegedImporters[target] || []);
-    allProductionSources.forEach((source, path) => {
-      const imports = importSpecifiers(source)
-        .map((specifier) => resolvedProductionImport(path, specifier));
-      if (imports.includes(target)) {
-        const relativePath = path.slice('gbdraw/web/js/'.length);
-        if (!allowed.has(relativePath)) {
-          violations.push(`${target}: importer ${relativePath}`);
-        }
+    detectedCapabilities.importersByTarget[target].forEach((path) => {
+      if (!allowed.has(path)) {
+        violations.push(`${target}: importer ${path}`);
       }
     });
   });
 
-  capabilitySpecs.forEach((capability) => {
-    const allowed = new Set(candidatePolicy.allowedPrivilegedOwners[capability.name] || []);
-    allProductionSources.forEach((source, path) => {
-      if (!capability.owner.test(maskJavaScript(source))) return;
-      const relativePath = path.slice('gbdraw/web/js/'.length);
-      if (!allowed.has(relativePath)) {
-        violations.push(`${capability.name}: owner ${relativePath}`);
+  WEB_PRIVILEGED_CAPABILITY_KEYS.forEach((capability) => {
+    const allowed = new Set(candidatePolicy.allowedPrivilegedOwners[capability] || []);
+    detectedCapabilities.operatorMatchesByCapability[capability].forEach(({ path }) => {
+      if (!allowed.has(path)) {
+        violations.push(`${capability}: owner ${path}`);
       }
     });
   });
@@ -537,6 +581,9 @@ if (proposedPolicyExclusions.length) {
 if (missingPolicyKeys.length) {
   integrityViolations.push('proposed privileged capability policy is missing base allowlist keys');
 }
+integrityViolations.push(...candidateArchitectureErrors.map((error) => (
+  `candidate architecture rules: ${error}`
+)));
 const enforcedViolations = [
   ...integrityViolations,
   ...budgetViolations
@@ -550,6 +597,8 @@ const report = [
   `- Base: \`${base}\``,
   `- Head: \`${head || 'working tree'}\``,
   `- Privileged allowlist revision: \`${policyRevision}\``,
+  `- Architecture rule base: ${baseArchitectureRulesSource === null ? 'absent' : `\`${base}\``}`,
+  `- Architecture rule candidate: ${proposedArchitectureRulesSource === null ? 'absent' : `\`${head || 'working tree'}\``}`,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
   `- Selected profile: ${selectedProfileName}`,
   `- Production file limit: ${selectedProfile.productionFiles}`,
@@ -605,6 +654,21 @@ const report = [
   '## Added privileged allowlist keys',
   '',
   ...list(addedPolicyKeys),
+  '',
+  '## Candidate architecture authority delta',
+  '',
+  `- Classification: ${architectureAuthorityDelta.classification}`,
+  ...list(architectureAuthorityDelta.changes.map(({ rule, field, direction }) => (
+    `${direction} ${rule} (${field})`
+  ))),
+  '',
+  '## Candidate architecture admission observations',
+  '',
+  ...list(candidateArchitectureObservations),
+  '',
+  '## Candidate architecture rule errors',
+  '',
+  ...list(candidateArchitectureErrors),
   '',
   '## Report-only cache/token/handle/journal/protocol/manager names',
   '',

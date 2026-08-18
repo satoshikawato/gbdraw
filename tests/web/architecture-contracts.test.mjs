@@ -21,6 +21,13 @@ import {
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  detectPrivilegedWebCapabilities,
+  detectReportOnlySourceFacts,
+  WEB_ARCHITECTURE_DETECTORS,
+  WEB_PRIVILEGED_CAPABILITY_KEYS,
+  WEB_PRIVILEGED_IMPORT_TARGETS
+} from '../../tools/web-architecture-detectors.mjs';
+import {
   literalImportSpecifiers,
   maskJavaScript
 } from '../../tools/web-change-source.mjs';
@@ -46,6 +53,14 @@ const BASE_POLICY_WORKFLOW = readFileSync(
 );
 const PULL_REQUEST_TEMPLATE = readFileSync(
   join(REPOSITORY_ROOT, '.github/pull_request_template.md'),
+  'utf8'
+);
+const WEB_ARCHITECTURE_EVALUATION_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-architecture-evaluation.mjs'),
+  'utf8'
+);
+const WEB_CHANGE_BUDGET_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs'),
   'utf8'
 );
 
@@ -120,12 +135,6 @@ const reachableModules = (entryPath, importGraph = directImports) => {
 const occurrenceOwners = (pattern) => new Map(
   [...productionSources]
     .map(([owner, source]) => [owner, [...source.matchAll(pattern)].length])
-    .filter(([, count]) => count > 0)
-);
-
-const executableOccurrenceOwners = (pattern) => new Map(
-  [...productionSources]
-    .map(([owner, source]) => [owner, [...maskJavaScript(source).matchAll(pattern)].length])
     .filter(([, count]) => count > 0)
 );
 
@@ -357,50 +366,287 @@ test('right drawer availability and transitions have one production owner', () =
 });
 
 test('privileged capability owners and importers stay within their allowlists', () => {
-  const ownerPatterns = new Map([
-    ['Render request', /\bbuildCanonicalRenderRequest\s*\(/g],
-    ['Diagram Worker', /\b(?:new\s+Worker|runDiagramGeneration|loadPyodide)\s*\(/g],
-    ['Python helper', /\b(?:runPythonAsync|runPython|PYTHON_HELPERS|globals\.get)\b/g],
-    [
-      'Resource staging',
-      /\b(?:createDiagramResourceTransport|stageRenderResources|setResourcePayloadOwner)\b/g
-    ],
-    [
-      'SVG/Result admission',
-      /\b(?:sanitizeSvgContent|ingestSvgResult|markCommitted)\b/g
-    ],
-    [
-      'Mounted SVG/Result replacement',
-      /\b(?:serializeCleanSvg|flushActiveResult)\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/g
-    ],
-    [
-      'History',
-      /\b(?:createHistoryManager|beginCheckpoint|commitCheckpoint|buildArtifactCheckpoint)\b/g
-    ],
-    [
-      'Session',
-      /\b(?:exportSession|compressSessionData|migrateSessionDataToCurrent|migratePersistedGalleryConfig)\b/g
-    ],
-    [
-      'Canonical editor state',
-      /\b(?:createFeatureEditor|createLegendManager|createRightDrawerController|createPreviewRuntime)\b/g
-    ]
-  ]);
+  const detected = detectPrivilegedWebCapabilities(productionSources);
   const assertSubset = (actual, allowed, label) => {
     const allowedSet = new Set(allowed);
     assert.deepEqual(actual.filter((path) => !allowedSet.has(path)), [], label);
   };
 
   Object.entries(WEB_CHANGE_POLICY.allowedPrivilegedImporters).forEach(([target, allowed]) => {
-    assertSubset(importersOf(target), allowed, `${target} importers`);
+    assertSubset(detected.importersByTarget[target], allowed, `${target} importers`);
   });
   assert.deepEqual(
     Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedOwners).sort(),
-    [...ownerPatterns.keys()].sort()
+    WEB_PRIVILEGED_CAPABILITY_KEYS
   );
-  ownerPatterns.forEach((pattern, capability) => {
-    const actual = [...executableOccurrenceOwners(pattern).keys()].sort();
+  assert.deepEqual(
+    Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters).sort(),
+    WEB_PRIVILEGED_IMPORT_TARGETS
+  );
+  Object.entries(detected.operatorMatchesByCapability).forEach(([capability, matches_]) => {
+    const actual = matches_.map(({ path }) => path);
     assertSubset(actual, WEB_CHANGE_POLICY.allowedPrivilegedOwners[capability], capability);
+  });
+});
+
+test('shared privileged detectors preserve the characterized current-source facts', () => {
+  assert.deepEqual(WEB_PRIVILEGED_CAPABILITY_KEYS, [
+    'Canonical editor state',
+    'Diagram Worker',
+    'History',
+    'Mounted SVG/Result replacement',
+    'Python helper',
+    'Render request',
+    'Resource staging',
+    'SVG/Result admission',
+    'Session'
+  ]);
+  assert.deepEqual(WEB_PRIVILEGED_IMPORT_TARGETS, [
+    'app/feature-editor.js',
+    'app/legend.js',
+    'app/preview-runtime.js',
+    'app/python-helpers.js',
+    'app/right-drawer.js',
+    'services/config.js',
+    'services/diagram-generation.js',
+    'services/diagram-resource-staging.js',
+    'services/diagram-worker-protocol.js',
+    'services/gallery-session-migration.js',
+    'services/history-snapshot.js',
+    'services/history.js',
+    'services/resource-payload-owner.js',
+    'services/session-authority.js',
+    'services/session-file.js',
+    'services/session-request.js',
+    'services/svg-result-ingestion.js',
+    'services/svg-sanitization.js',
+    'services/svg-serialization.js',
+    'workers/diagram-generation-worker.js'
+  ]);
+
+  const detected = detectPrivilegedWebCapabilities(productionSources);
+  assert.deepEqual(
+    detected.importersByTarget,
+    Object.fromEntries(
+      WEB_PRIVILEGED_IMPORT_TARGETS.map((target) => [target, importersOf(target)])
+    )
+  );
+  assert.deepEqual(detected.operatorMatchesByCapability, {
+    'Canonical editor state': [
+      { path: 'app/app-setup.js', count: 8 },
+      { path: 'app/feature-editor.js', count: 1 },
+      { path: 'app/legend.js', count: 1 },
+      { path: 'app/preview-runtime.js', count: 1 },
+      { path: 'app/right-drawer.js', count: 1 }
+    ],
+    'Diagram Worker': [
+      { path: 'app/run-analysis.js', count: 1 },
+      { path: 'services/diagram-generation.js', count: 1 },
+      { path: 'services/losat.js', count: 2 },
+      { path: 'workers/diagram-generation-worker.js', count: 1 },
+      { path: 'workers/losat-threaded-worker.js', count: 2 }
+    ],
+    History: [
+      { path: 'app/app-setup.js', count: 3 },
+      { path: 'services/history-snapshot.js', count: 2 },
+      { path: 'services/history.js', count: 7 }
+    ],
+    'Mounted SVG/Result replacement': [
+      { path: 'app/app-setup.js', count: 1 },
+      { path: 'app/feature-editor/color-actions.js', count: 1 },
+      { path: 'app/feature-editor/label-actions.js', count: 2 },
+      { path: 'app/feature-editor/svg-actions.js', count: 4 },
+      { path: 'app/legend-layout/canvas-actions.js', count: 2 },
+      { path: 'app/legend-layout/diagram-drag.js', count: 2 },
+      { path: 'app/legend-layout/reposition-actions.js', count: 2 },
+      { path: 'app/legend/drag-actions.js', count: 4 },
+      { path: 'app/legend/entry-actions.js', count: 5 },
+      { path: 'app/legend/sort-actions.js', count: 2 },
+      { path: 'app/legend/stroke-actions.js', count: 2 },
+      { path: 'app/preview-runtime.js', count: 4 },
+      { path: 'app/results.js', count: 4 },
+      { path: 'app/run-analysis.js', count: 2 },
+      { path: 'app/svg-styles.js', count: 2 },
+      { path: 'services/config.js', count: 5 },
+      { path: 'services/history-snapshot.js', count: 1 },
+      { path: 'services/svg-result-ingestion.js', count: 1 }
+    ],
+    'Python helper': [
+      { path: 'app/python-helpers.js', count: 1 },
+      { path: 'workers/diagram-generation-worker.js', count: 6 }
+    ],
+    'Render request': [
+      { path: 'app/run-analysis.js', count: 1 },
+      { path: 'services/config.js', count: 1 },
+      { path: 'services/gallery-session-migration.js', count: 1 }
+    ],
+    'Resource staging': [
+      { path: 'services/config.js', count: 3 },
+      { path: 'services/diagram-generation.js', count: 2 },
+      { path: 'services/diagram-resource-staging.js', count: 1 },
+      { path: 'services/resource-payload-owner.js', count: 1 },
+      { path: 'services/session-request.js', count: 2 },
+      { path: 'workers/diagram-generation-worker.js', count: 2 }
+    ],
+    'SVG/Result admission': [
+      { path: 'services/svg-result-ingestion.js', count: 7 },
+      { path: 'services/svg-sanitization.js', count: 1 }
+    ],
+    Session: [
+      { path: 'app/app-setup.js', count: 2 },
+      { path: 'services/config.js', count: 5 },
+      { path: 'services/gallery-session-migration.js', count: 3 },
+      { path: 'services/session-file.js', count: 1 }
+    ]
+  });
+});
+
+test('versioned architecture detectors expose stable normalized subjects', () => {
+  const fixture = new Map([
+    [
+      'services/session-request.js',
+      'export const buildCanonicalRenderRequest = () => ({});\n'
+        + '// export const buildCanonicalRenderRequest = () => fake();\n'
+    ],
+    [
+      'app/run-analysis.js',
+      "import { buildCanonicalRenderRequest } from '../services/session-request.js';\n"
+        + 'const note = "buildCanonicalRenderRequest(); runDiagramGeneration();";\n'
+        + 'export const generate = () => {\n'
+        + '  const canonical = buildCanonicalRenderRequest();\n'
+        + '  return runDiagramGeneration(canonical);\n'
+        + '};\n'
+    ],
+    [
+      'services/config.js',
+      "import { buildCanonicalRenderRequest } from './session-request.js';\n"
+        + 'export const save = () => buildCanonicalRenderRequest();\n'
+    ],
+    [
+      'app/ignored.js',
+      '// buildCanonicalRenderRequest(); runDiagramGeneration();\n'
+        + 'export const note = "buildCanonicalRenderRequest";\n'
+    ]
+  ]);
+  const semantic = WEB_ARCHITECTURE_DETECTORS['semantic-owner.render-request.v1'];
+  const canonical = WEB_ARCHITECTURE_DETECTORS['canonical-path.render-request.v1'];
+
+  assert.deepEqual(Object.keys(WEB_ARCHITECTURE_DETECTORS).sort(), [
+    'canonical-path.render-request.v1',
+    'semantic-owner.render-request.v1'
+  ]);
+  assert.equal(semantic.subjectCategory, 'definition-path');
+  assert.deepEqual(semantic.detect(fixture), {
+    definitionCount: 1,
+    observedDefinitions: [{
+      path: 'services/session-request.js',
+      count: 1,
+      subject: 'services/session-request.js'
+    }],
+    subjects: ['services/session-request.js']
+  });
+  assert.equal(
+    semantic.encodeSubject({ path: 'gbdraw/web/js/services/session-request.js' }),
+    'services/session-request.js'
+  );
+
+  assert.equal(canonical.subjectCategory, 'canonical-entry-edge');
+  assert.deepEqual(canonical.detect(fixture), {
+    observedEdges: [{
+      from: 'app/run-analysis.js',
+      to: 'services/session-request.js',
+      subject: 'app/run-analysis.js -> services/session-request.js'
+    }],
+    subjects: ['app/run-analysis.js -> services/session-request.js']
+  });
+  assert.equal(
+    canonical.encodeSubject({
+      from: 'gbdraw/web/js/app/run-analysis.js',
+      to: 'gbdraw/web/js/services/session-request.js'
+    }),
+    'app/run-analysis.js -> services/session-request.js'
+  );
+});
+
+test('versioned architecture detectors characterize the untouched source tree', () => {
+  assert.deepEqual(
+    WEB_ARCHITECTURE_DETECTORS['semantic-owner.render-request.v1']
+      .detect(productionSources),
+    {
+      definitionCount: 1,
+      observedDefinitions: [{
+        path: 'services/session-request.js',
+        count: 1,
+        subject: 'services/session-request.js'
+      }],
+      subjects: ['services/session-request.js']
+    }
+  );
+  assert.deepEqual(
+    WEB_ARCHITECTURE_DETECTORS['canonical-path.render-request.v1']
+      .detect(productionSources),
+    {
+      observedEdges: [{
+        from: 'app/run-analysis.js',
+        to: 'services/session-request.js',
+        subject: 'app/run-analysis.js -> services/session-request.js'
+      }],
+      subjects: ['app/run-analysis.js -> services/session-request.js']
+    }
+  );
+});
+
+test('pure architecture evaluation owns no I/O, source detection, or authority data', () => {
+  assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^\s*import\s/m);
+  assert.doesNotMatch(
+    WEB_ARCHITECTURE_EVALUATION_SOURCE,
+    /node:(?:fs|path|child_process|process)|process\.|console\.|(?:read|write|append)File|execFile|spawn/
+  );
+  assert.doesNotMatch(
+    WEB_ARCHITECTURE_EVALUATION_SOURCE,
+    /web-architecture-(?:detectors|rules|violations)|web-change-policy/
+  );
+  assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^#!|process\.argv/);
+});
+
+test('the Web checker remains the sole evaluator orchestrator and CLI entry point', () => {
+  assert.match(
+    WEB_CHANGE_BUDGET_SOURCE,
+    /from '\.\/web-architecture-evaluation\.mjs'/
+  );
+  [
+    'validateArchitectureRuleRegistry',
+    'classifyArchitectureAuthorityDelta',
+    'classifyArchitectureRuleObservation'
+  ].forEach((name) => {
+    assert.match(WEB_CHANGE_BUDGET_SOURCE, new RegExp(`\\b${name}\\s*\\(`));
+  });
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /^#!\/usr\/bin\/env node/);
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /WEB_ARCHITECTURE_DETECTORS\[rule\.detector\]/);
+  assert.doesNotMatch(WEB_CHANGE_BUDGET_SOURCE, /import\s*\(.*web-architecture-detectors/);
+});
+
+test('report-only source facts preserve the characterized masking behavior', () => {
+  const facts = detectReportOnlySourceFacts(
+    "import helper from './helper.js';\n"
+      + '// export const createCommentManager = () => watch(commentCache);\n'
+      + 'const note = "migrateLegacyString watch(stringCache)";\n'
+      + 'export const createFixtureManager = () => {\n'
+      + '  const activeCache = ref(0);\n'
+      + '  watch(activeCache, () => migrateLegacyFixture());\n'
+      + '  return { activeCache: activeCache };\n'
+      + '};\n'
+  );
+
+  assert.deepEqual(facts, {
+    exportedNames: ['createFixtureManager'],
+    declaredNames: ['note', 'createFixtureManager', 'activeCache'],
+    reactiveDeclarations: ['activeCache (ref)'],
+    watcherCount: 1,
+    objectKeys: ['activeCache'],
+    compatibilityNames: ['migrateLegacyFixture'],
+    namedResourceNames: ['createFixtureManager', 'activeCache'],
+    importSpecifiers: ['./helper.js']
   });
 });
 
@@ -515,6 +761,18 @@ test('supported-version and slow matrices cover dev staging runs', () => {
 });
 
 const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');
+const WEB_ARCHITECTURE_DETECTOR_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-architecture-detectors.mjs'
+);
+const WEB_ARCHITECTURE_EVALUATION_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-architecture-evaluation.mjs'
+);
+const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
+  REPOSITORY_ROOT,
+  'tests/web/architecture-ratchet-fixtures.test.mjs'
+);
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
     'services/diagram-generation.js': ['app/editor.js'],
@@ -562,11 +820,23 @@ const BUDGET_FIXTURE = Object.freeze({
   'package.json': '{"private":true}\n',
   'tests/web/architecture-contracts.test.mjs': '// baseline contract\n',
   'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
+  'tools/web-architecture-detectors.mjs': readFileSync(
+    WEB_ARCHITECTURE_DETECTOR_MODULE,
+    'utf8'
+  ),
+  'tools/web-architecture-evaluation.mjs': readFileSync(
+    WEB_ARCHITECTURE_EVALUATION_MODULE,
+    'utf8'
+  ),
   'tools/web-change-source.mjs': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
     'utf8'
   ),
   'tools/web-change-policy.json': `${JSON.stringify(BUDGET_POLICY, null, 2)}\n`,
+  'tests/web/architecture-ratchet-fixtures.test.mjs': readFileSync(
+    WEB_ARCHITECTURE_RATCHET_FIXTURES,
+    'utf8'
+  ),
   'gbdraw/web/index.html': '<main>baseline</main>\n',
   'gbdraw/web/js/app/editor.js': (
     "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
@@ -586,24 +856,20 @@ const BUDGET_FIXTURE = Object.freeze({
 const FUTURE_GUARD_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
-  'tools/web-architecture-detectors.mjs',
-  'tools/web-architecture-evaluation.mjs',
   'tools/web-architecture-rules.json',
-  'tools/web-architecture-violations.json',
-  'tests/web/architecture-ratchet-fixtures.test.mjs'
-]);
-const FUTURE_CHECKER_IMPLEMENTATION_PATHS = Object.freeze([
-  'tools/web-architecture-detectors.mjs',
-  'tools/web-architecture-evaluation.mjs'
+  'tools/web-architecture-violations.json'
 ]);
 const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   'tools/web-architecture-rules.json',
   'tools/web-architecture-violations.json'
 ]);
-const reservedPathContent = (path) => path.endsWith('.json')
-  ? '{}\n'
-  : `// reserved fixture for ${path}\n`;
+const reservedPathContent = (path) => {
+  if (path === 'tools/web-architecture-rules.json') {
+    return '{"schemaVersion":1,"rules":[]}\n';
+  }
+  return path.endsWith('.json') ? '{}\n' : `// reserved fixture for ${path}\n`;
+};
 
 const writeFixtureFile = (root, path, content) => {
   const target = join(root, path);
@@ -892,6 +1158,17 @@ test('dependency, vendor, binary, and runtime/guard rules are non-waivable', () 
         write('.github/workflows/test.yml', 'name: changed guard\n');
       },
       expected: /production runtime files and Web guard\/CI files changed together/
+    },
+    {
+      name: 'production and detector co-change',
+      mutate: (write) => {
+        write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+        write(
+          'tools/web-architecture-detectors.mjs',
+          `${BUDGET_FIXTURE['tools/web-architecture-detectors.mjs']}\n// changed\n`
+        );
+      },
+      expected: /production runtime files and Web guard\/CI files changed together/
     }
   ];
 
@@ -925,7 +1202,9 @@ test('runtime cannot co-change with any reserved future guard path', () => {
 test('checker implementation and authority files cannot change together', () => {
   const implementationPaths = [
     'tools/check-web-change-budget.mjs',
-    'tools/web-change-source.mjs'
+    'tools/web-change-source.mjs',
+    'tools/web-architecture-detectors.mjs',
+    'tools/web-architecture-evaluation.mjs'
   ];
   const authorityPaths = [
     'tools/web-change-policy.json',
@@ -952,7 +1231,8 @@ test('all checker implementations are separated from reserved future authority',
   const implementationPaths = [
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
-    ...FUTURE_CHECKER_IMPLEMENTATION_PATHS
+    'tools/web-architecture-detectors.mjs',
+    'tools/web-architecture-evaluation.mjs'
   ];
 
   implementationPaths.forEach((implementationPath) => {
@@ -1280,6 +1560,7 @@ test('runtime plus a semantically unchanged policy remains separated', () => {
 test('runtime plus policy contraction rejects every additional guard change', () => {
   const guardCases = [
     ['checker', 'tools/check-web-change-budget.mjs'],
+    ['architecture detectors', 'tools/web-architecture-detectors.mjs'],
     ['source parser', 'tools/web-change-source.mjs'],
     ['architecture contracts', 'tests/web/architecture-contracts.test.mjs'],
     ['normal workflow', '.github/workflows/test.yml'],
