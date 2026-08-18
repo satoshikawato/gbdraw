@@ -64,6 +64,11 @@ fallback.
 
 ## Module ownership
 
+This table records current ownership. Changes to an owner or canonical path
+must follow the repository
+[architecture fitness-function ratchet](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md),
+including complete before and after sets and removal of superseded paths.
+
 | Area | Owner |
 |---|---|
 | Vue mount and exports | `js/app.js` |

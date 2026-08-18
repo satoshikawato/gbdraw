@@ -128,6 +128,12 @@ Architecture changes should keep these entry points convergent:
 - Avoid repeated I/O or computation in shared layers, and protect material
   performance changes with measurements.
 
+Architecture-bearing changes must follow the
+[architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
+Pull requests record complete before and after owner, canonical-path, and
+compatibility-path sets. A separate maintainer decision approves the exact
+reviewed head.
+
 ### Persisted-format compatibility
 
 - Compatibility readers and migrators require evidence that the old contract

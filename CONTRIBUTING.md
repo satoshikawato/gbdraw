@@ -159,7 +159,14 @@ directly.
 3. Run `ruff check gbdraw/` and `pytest tests/ -v -m "not slow"` locally.
 4. Open a pull request against `dev` describing what changed and why.
    Link the issue it resolves, if any.
-5. Wait for all required CI checks to pass before merge.
+5. Complete exactly one declaration under `Architecture impact` in the pull
+   request template. Architecture-bearing changes must include the concrete
+   before and after sets required by the
+   [architecture fitness-function ratchet](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
+6. Before merge, record the permalink to the architecture owner's structured
+   decision for the exact final head SHA. The author declaration is evidence,
+   not approval; a later commit requires a new owner decision.
+7. Wait for all required CI checks to pass before merge.
 
 By contributing, you agree that your contribution is licensed under the
 project's [MIT License](./LICENSE.txt).
