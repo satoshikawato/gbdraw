@@ -16,7 +16,7 @@ Execution status at revision 6:
 - Prerequisite PR 0A implementation commit `9378f20e` was merged to `dev` by merge commit `0ab874f3` (PR #344).
 - Prerequisite PR 0B implementation commit `a0026bce` was merged to `dev` by merge commit `6689b137` (PR #345).
 - The prerequisite code changes are present, but this status record does not retroactively claim their complete acceptance gates. The Phase 0 update below records later historical check evidence and the unresolved external branch-protection state.
-- Phase 0 and PR A onward remain incomplete. No later phase is complete merely because this plan is now tracked on the integration branch.
+- No later phase is complete merely because this plan is now tracked on the integration branch. The current Phase 0 status is recorded in the update below.
 
 Phase 0 execution update on 2026-08-18:
 
@@ -27,7 +27,12 @@ Phase 0 execution update on 2026-08-18:
 - Conditional PR F2 is `skipped`. PR G1 and PR G2 are also skipped; accepted-store mechanics and `tools/web-architecture-violations.json` must remain absent.
 - PR #349, targeting `dev`, received successful `Web change budget` and `Web base policy (trusted base)` checks in runs `32117181300` and `32117181143`. PR #345 also received both checks after PR 0A.
 - The external repository-setting gate is unresolved. GitHub reports both `dev` and `main` as unprotected, with no classic branch protection, effective branch rules, or repository rulesets. Required checks are therefore not enforced on either branch.
-- Phase 0 remains incomplete because branch protection is absent. PR A must not start until the required `dev` and `main` protections are configured and verified.
+- The Phase 0 technical baseline is complete on the recorded `origin/dev` base.
+- The checker, architecture-contract tests, full Web JavaScript tests, static-import cycle inspection, detector/policy inventory, initial-rule classification, and F2 required/skipped decision have been completed and recorded.
+- Both named checks have been observed successfully on a `dev` pull request.
+- GitHub branch protection and repository rulesets remain absent for `dev` and `main`. This is an explicitly unresolved external gate; it does not invalidate the Phase 0 technical baseline.
+- PR A may proceed from the latest merged `origin/dev` under explicit manual merge discipline: do not push directly to `dev` or `main`, do not merge before the applicable normal and trusted-base checks pass, and do not claim that the unresolved repository-setting gate has been completed.
+- Phase 7 and the overall architecture-ratchet implementation remain incomplete until the required branch protection or equivalent repository rulesets are configured and verified.
 
 ## 1. Objective
 
