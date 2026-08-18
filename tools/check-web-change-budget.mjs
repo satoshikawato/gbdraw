@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
-import { join, posix, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
+import {
+  detectPrivilegedWebCapabilities,
+  detectReportOnlySourceFacts,
+  isWebSessionSourcePath,
+  WEB_PRIVILEGED_CAPABILITY_KEYS,
+  WEB_PRIVILEGED_IMPORT_TARGETS
+} from './web-architecture-detectors.mjs';
 
 const runGit = (root, args, options = {}) => execFileSync(
   'git',
@@ -150,130 +156,6 @@ const changedCheckerImplementations = [...changed.keys()]
   .filter((path) => checkerImplementationPaths.has(path));
 const changedAuthorities = [...changed.keys()].filter((path) => authorityPaths.has(path));
 
-const exportedNames = (source = '') => {
-  const code = maskJavaScript(source);
-  const names = new Set();
-  const declaration = /^\s*export\s+(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
-  for (const match of code.matchAll(declaration)) names.add(match[1]);
-  for (const match of code.matchAll(/^\s*export\s*\{([\s\S]*?)\}/gm)) {
-    match[1].split(',').forEach((entry) => {
-      const cleaned = entry.replace(/\/\*[\s\S]*?\*\//g, '').trim();
-      if (!cleaned) return;
-      const parts = cleaned.split(/\s+as\s+/);
-      names.add((parts[1] || parts[0]).trim());
-    });
-  }
-  if (/^\s*export\s+default\b/m.test(code)) names.add('default');
-  for (const match of code.matchAll(/^\s*export\s+\*\s+as\s+([A-Za-z_$][\w$]*)/gm)) {
-    names.add(match[1]);
-  }
-  return names;
-};
-
-const declaredNames = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)]
-    .map((match) => match[1])
-);
-
-const reactiveDeclarations = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:[A-Za-z_$][\w$]*\.)?(ref|shallowRef|reactive|computed)\s*\(/g)]
-    .map((match) => `${match[1]} (${match[2]})`)
-);
-
-const countWatchers = (source = '') => [
-  ...maskJavaScript(source).matchAll(/\bwatch(?:Effect)?\s*\(/g)
-].length;
-const importSpecifiers = literalImportSpecifiers;
-
-const resolvedProductionImport = (owner, specifier) => {
-  if (!specifier.startsWith('.')) return null;
-  const relativeOwner = owner.slice('gbdraw/web/js/'.length);
-  return posix.normalize(posix.join(posix.dirname(relativeOwner), specifier));
-};
-
-const capabilitySpecs = [
-  {
-    name: 'Render request',
-    imports: ['services/session-request.js'],
-    owner: /\bbuildCanonicalRenderRequest\s*\(/
-  },
-  {
-    name: 'Diagram Worker',
-    imports: [
-      'services/diagram-generation.js',
-      'services/diagram-worker-protocol.js',
-      'workers/diagram-generation-worker.js'
-    ],
-    owner: /\b(?:new\s+Worker|runDiagramGeneration|loadPyodide)\s*\(/
-  },
-  {
-    name: 'Python helper',
-    imports: ['app/python-helpers.js'],
-    owner: /\b(?:runPythonAsync|runPython|PYTHON_HELPERS|globals\.get)\b/
-  },
-  {
-    name: 'Resource staging',
-    imports: ['services/diagram-resource-staging.js', 'services/resource-payload-owner.js'],
-    owner: /\b(?:createDiagramResourceTransport|stageRenderResources|setResourcePayloadOwner)\b/
-  },
-  {
-    name: 'SVG/Result admission',
-    imports: ['services/svg-sanitization.js', 'services/svg-result-ingestion.js'],
-    owner: /\b(?:sanitizeSvgContent|ingestSvgResult|markCommitted)\b/
-  },
-  {
-    name: 'Mounted SVG/Result replacement',
-    imports: ['services/svg-serialization.js', 'app/preview-runtime.js'],
-    owner: /\b(?:serializeCleanSvg|flushActiveResult)\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/
-  },
-  {
-    name: 'History',
-    imports: ['services/history.js', 'services/history-snapshot.js'],
-    owner: /\b(?:createHistoryManager|beginCheckpoint|commitCheckpoint|buildArtifactCheckpoint)\b/
-  },
-  {
-    name: 'Session',
-    imports: [
-      'services/config.js',
-      'services/gallery-session-migration.js',
-      'services/session-authority.js',
-      'services/session-file.js'
-    ],
-    owner: /\b(?:exportSession|compressSessionData|migrateSessionDataToCurrent|migratePersistedGalleryConfig)\b/
-  },
-  {
-    name: 'Canonical editor state',
-    imports: [
-      'app/feature-editor.js',
-      'app/legend.js',
-      'app/right-drawer.js',
-      'app/preview-runtime.js'
-    ],
-    owner: /\b(?:createFeatureEditor|createLegendManager|createRightDrawerController|createPreviewRuntime)\b/
-  }
-];
-
-const sessionOwnerPaths = new Set([
-  'gbdraw/web/js/services/config.js',
-  'gbdraw/web/js/services/gallery-session-migration.js',
-  'gbdraw/web/js/services/session-authority.js',
-  'gbdraw/web/js/services/session-file.js',
-  'gbdraw/web/js/services/session-request.js'
-]);
-const objectKeys = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/(?:^|[,{]\s*)([A-Za-z_$][\w$]*)\s*:/gm)]
-    .map((match) => match[1])
-);
-const compatibilityNames = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b(?:[A-Za-z_$][\w$]*(?:Migration|Migrator|Legacy|Fallback)[\w$]*|(?:migrate|promoteLegacy|normalizeLegacy|readLegacy)[A-Za-z0-9_$]*)\b/g)]
-    .map((match) => match[0])
-);
-const namedResourceNames = (source = '') => new Set(
-  [...maskJavaScript(source).matchAll(/\b[A-Za-z_$][\w$]*\b/g)]
-    .map((match) => match[0])
-    .filter((name) => /(?:cache|token|handle|journal|protocol|manager)/i.test(name))
-);
-
 const addedEntries = (before, after, prefix = '') => [...after]
   .filter((entry) => !before.has(entry))
   .map((entry) => `${prefix}${entry}`);
@@ -290,30 +172,44 @@ const newBareImports = [];
 productionJavaScriptPaths.forEach((path) => {
   const before = readRevisionFile(base, path) || '';
   const after = readHeadFile(path) || '';
-  newExports.push(...addedEntries(exportedNames(before), exportedNames(after), `${path}: `));
+  const beforeFacts = detectReportOnlySourceFacts(before);
+  const afterFacts = detectReportOnlySourceFacts(after);
+  newExports.push(...addedEntries(
+    new Set(beforeFacts.exportedNames), new Set(afterFacts.exportedNames), `${path}: `
+  ));
   newCreateOwners.push(...addedEntries(
-    new Set([...declaredNames(before)].filter((name) => /^create[A-Z]/.test(name))),
-    new Set([...declaredNames(after)].filter((name) => /^create[A-Z]/.test(name))),
+    new Set(beforeFacts.declaredNames.filter((name) => /^create[A-Z]/.test(name))),
+    new Set(afterFacts.declaredNames.filter((name) => /^create[A-Z]/.test(name))),
     `${path}: `
   ));
   newReactiveState.push(...addedEntries(
-    reactiveDeclarations(before), reactiveDeclarations(after), `${path}: `
+    new Set(beforeFacts.reactiveDeclarations),
+    new Set(afterFacts.reactiveDeclarations),
+    `${path}: `
   ));
-  const watcherIncrease = countWatchers(after) - countWatchers(before);
+  const watcherIncrease = afterFacts.watcherCount - beforeFacts.watcherCount;
   if (watcherIncrease > 0) newWatchers.push(`${path}: +${watcherIncrease} watcher call(s)`);
   newNamedResources.push(...addedEntries(
-    namedResourceNames(before),
-    namedResourceNames(after),
+    new Set(beforeFacts.namedResourceNames),
+    new Set(afterFacts.namedResourceNames),
     `${path}: `
   ));
   newCompatibilityPaths.push(...addedEntries(
-    compatibilityNames(before), compatibilityNames(after), `${path}: `
+    new Set(beforeFacts.compatibilityNames),
+    new Set(afterFacts.compatibilityNames),
+    `${path}: `
   ));
-  if (sessionOwnerPaths.has(path)) {
-    newSessionFields.push(...addedEntries(objectKeys(before), objectKeys(after), `${path}: `));
+  if (isWebSessionSourcePath(path)) {
+    newSessionFields.push(...addedEntries(
+      new Set(beforeFacts.objectKeys), new Set(afterFacts.objectKeys), `${path}: `
+    ));
   }
-  const bareBefore = new Set(importSpecifiers(before).filter((specifier) => !specifier.startsWith('.')));
-  const bareAfter = new Set(importSpecifiers(after).filter((specifier) => !specifier.startsWith('.')));
+  const bareBefore = new Set(
+    beforeFacts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
+  );
+  const bareAfter = new Set(
+    afterFacts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
+  );
   newBareImports.push(...addedEntries(bareBefore, bareAfter, `${path}: `));
 });
 
@@ -388,34 +284,27 @@ if (basePolicySource !== null && changed.has(policyPath)) {
 }
 const allProductionJavaScriptPaths = listProductionJavaScriptPaths();
 const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => [
-  path,
+  path.slice('gbdraw/web/js/'.length),
   readHeadFile(path) || ''
 ]));
 
-const importerTargets = new Set(capabilitySpecs.flatMap((capability) => capability.imports));
+const detectedCapabilities = detectPrivilegedWebCapabilities(allProductionSources);
 const capabilityCoverageViolations = (candidatePolicy) => {
   const violations = [];
-  importerTargets.forEach((target) => {
+  WEB_PRIVILEGED_IMPORT_TARGETS.forEach((target) => {
     const allowed = new Set(candidatePolicy.allowedPrivilegedImporters[target] || []);
-    allProductionSources.forEach((source, path) => {
-      const imports = importSpecifiers(source)
-        .map((specifier) => resolvedProductionImport(path, specifier));
-      if (imports.includes(target)) {
-        const relativePath = path.slice('gbdraw/web/js/'.length);
-        if (!allowed.has(relativePath)) {
-          violations.push(`${target}: importer ${relativePath}`);
-        }
+    detectedCapabilities.importersByTarget[target].forEach((path) => {
+      if (!allowed.has(path)) {
+        violations.push(`${target}: importer ${path}`);
       }
     });
   });
 
-  capabilitySpecs.forEach((capability) => {
-    const allowed = new Set(candidatePolicy.allowedPrivilegedOwners[capability.name] || []);
-    allProductionSources.forEach((source, path) => {
-      if (!capability.owner.test(maskJavaScript(source))) return;
-      const relativePath = path.slice('gbdraw/web/js/'.length);
-      if (!allowed.has(relativePath)) {
-        violations.push(`${capability.name}: owner ${relativePath}`);
+  WEB_PRIVILEGED_CAPABILITY_KEYS.forEach((capability) => {
+    const allowed = new Set(candidatePolicy.allowedPrivilegedOwners[capability] || []);
+    detectedCapabilities.operatorMatchesByCapability[capability].forEach(({ path }) => {
+      if (!allowed.has(path)) {
+        violations.push(`${capability}: owner ${path}`);
       }
     });
   });
