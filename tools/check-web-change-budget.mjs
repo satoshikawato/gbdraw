@@ -7,9 +7,15 @@ import {
   detectPrivilegedWebCapabilities,
   detectReportOnlySourceFacts,
   isWebSessionSourcePath,
+  WEB_ARCHITECTURE_DETECTORS,
   WEB_PRIVILEGED_CAPABILITY_KEYS,
   WEB_PRIVILEGED_IMPORT_TARGETS
 } from './web-architecture-detectors.mjs';
+import {
+  classifyArchitectureAuthorityDelta,
+  classifyArchitectureRuleObservation,
+  validateArchitectureRuleRegistry
+} from './web-architecture-evaluation.mjs';
 
 const runGit = (root, args, options = {}) => execFileSync(
   'git',
@@ -121,13 +127,14 @@ const addedBinaryRuntimePaths = productionPaths.filter((path) => {
 });
 const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbdraw/web/vendor/'));
 const policyPath = 'tools/web-change-policy.json';
+const architectureRulesPath = 'tools/web-architecture-rules.json';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
-  'tools/web-architecture-rules.json',
+  architectureRulesPath,
   'tools/web-architecture-violations.json',
   'tools/web-change-source.mjs',
   policyPath,
@@ -146,7 +153,7 @@ const checkerImplementationPaths = new Set([
 ]);
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
-  'tools/web-architecture-rules.json',
+  architectureRulesPath,
   'tools/web-architecture-violations.json',
   policyPath,
   '.github/workflows/test.yml',
@@ -288,6 +295,154 @@ const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => 
   readHeadFile(path) || ''
 ]));
 
+const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
+const candidateArchitectureErrors = [];
+const candidateArchitectureObservations = [];
+let architectureAuthorityDelta = Object.freeze({
+  classification: 'UNCHANGED',
+  directions: Object.freeze([]),
+  changes: Object.freeze([])
+});
+
+const parseArchitectureRuleRegistry = (source, revision) => {
+  if (source === null) return { registry: emptyRuleRegistry(), error: null };
+  try {
+    return { registry: JSON.parse(source), error: null };
+  } catch (error) {
+    return {
+      registry: null,
+      error: `Cannot parse ${architectureRulesPath} at ${revision}: ${error.message}`
+    };
+  }
+};
+
+const architectureRuleValidationOptions = Object.freeze({
+  availableEnforcements: Object.freeze(['hard', 'report-only'])
+});
+const formatRuleValidationErrors = (label, validation) => validation.errors.map((error) => (
+  `${label} ${error.path} [${error.code}]: ${error.message}`
+));
+const listRevisionProductionJavaScriptPaths = (revision) => runGit(repositoryRoot, [
+  'ls-tree', '-r', '--name-only', revision, '--', 'gbdraw/web/js'
+]).split('\n').filter((path) => /\.[cm]?js$/.test(path));
+const productionSourcesAtRevision = (revision) => new Map(
+  listRevisionProductionJavaScriptPaths(revision).map((path) => [
+    path.slice('gbdraw/web/js/'.length),
+    readRevisionFile(revision, path) || ''
+  ])
+);
+
+const baseArchitectureRulesSource = readRevisionFile(base, architectureRulesPath);
+const proposedArchitectureRulesSource = readHeadFile(architectureRulesPath);
+if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== null) {
+  const parsedBase = parseArchitectureRuleRegistry(baseArchitectureRulesSource, base);
+  const parsedCandidate = parseArchitectureRuleRegistry(
+    proposedArchitectureRulesSource,
+    head || 'working tree'
+  );
+  if (parsedBase.error) candidateArchitectureErrors.push(parsedBase.error);
+  if (parsedCandidate.error) candidateArchitectureErrors.push(parsedCandidate.error);
+
+  if (parsedBase.registry && parsedCandidate.registry) {
+    const baseValidation = validateArchitectureRuleRegistry(
+      parsedBase.registry,
+      WEB_ARCHITECTURE_DETECTORS,
+      architectureRuleValidationOptions
+    );
+    const candidateValidation = validateArchitectureRuleRegistry(
+      parsedCandidate.registry,
+      WEB_ARCHITECTURE_DETECTORS,
+      architectureRuleValidationOptions
+    );
+    candidateArchitectureErrors.push(
+      ...formatRuleValidationErrors('base registry', baseValidation),
+      ...formatRuleValidationErrors('candidate registry', candidateValidation)
+    );
+
+    if (baseValidation.valid && candidateValidation.valid) {
+      architectureAuthorityDelta = classifyArchitectureAuthorityDelta(
+        parsedBase.registry,
+        parsedCandidate.registry
+      );
+      if (architectureAuthorityDelta.changes.length) {
+        const companionPaths = [...changed.keys()]
+          .filter((path) => path !== architectureRulesPath)
+          .sort();
+        if (companionPaths.length) {
+          candidateArchitectureErrors.push(
+            'architecture rule authority changes must be isolated from other changed paths: '
+            + companionPaths.join(', ')
+          );
+        }
+
+        const baseSources = productionSourcesAtRevision(base);
+        const candidateRules = new Map(parsedCandidate.registry.rules.map((rule) => [rule.key, rule]));
+        const changedRuleKeys = [...new Set(
+          architectureAuthorityDelta.changes.map(({ rule }) => rule)
+        )].sort();
+        changedRuleKeys.forEach((ruleKey) => {
+          const rule = candidateRules.get(ruleKey);
+          if (!rule) return;
+          const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+          let baseObservation;
+          try {
+            baseObservation = classifyArchitectureRuleObservation(
+              rule,
+              detector.detect(baseSources)
+            );
+          } catch (error) {
+            candidateArchitectureErrors.push(
+              `${rule.key} trusted-base detection failed: ${error.message}`
+            );
+            return;
+          }
+          candidateArchitectureObservations.push(
+            `${rule.key} against untouched base: ${baseObservation.observation} `
+            + `(${baseObservation.observedCount}/${baseObservation.requiredCount})`
+          );
+          if (
+            (rule.enforcement === 'hard' || rule.baselineEligible === false)
+            && baseObservation.observation !== 'CONFORMING'
+          ) {
+            candidateArchitectureErrors.push(
+              `${rule.key} claims a clean base but is ${baseObservation.observation}`
+            );
+          }
+
+          const directions = new Set(architectureAuthorityDelta.changes
+            .filter((change) => change.rule === ruleKey)
+            .map(({ direction }) => direction));
+          if (![...directions].some((direction) => (
+            direction === 'CONTRACTION' || direction === 'TIGHTENING'
+          ))) return;
+          let headObservation;
+          try {
+            headObservation = classifyArchitectureRuleObservation(
+              rule,
+              detector.detect(allProductionSources)
+            );
+          } catch (error) {
+            candidateArchitectureErrors.push(
+              `${rule.key} trusted-head-data detection failed: ${error.message}`
+            );
+            return;
+          }
+          candidateArchitectureObservations.push(
+            `${rule.key} against head source data: ${headObservation.observation} `
+            + `(${headObservation.observedCount}/${headObservation.requiredCount})`
+          );
+          if (headObservation.observation !== 'CONFORMING') {
+            candidateArchitectureErrors.push(
+              `${rule.key} authority contraction or tightening is ${headObservation.observation} `
+              + 'on head source data'
+            );
+          }
+        });
+      }
+    }
+  }
+}
+
 const detectedCapabilities = detectPrivilegedWebCapabilities(allProductionSources);
 const capabilityCoverageViolations = (candidatePolicy) => {
   const violations = [];
@@ -426,6 +581,9 @@ if (proposedPolicyExclusions.length) {
 if (missingPolicyKeys.length) {
   integrityViolations.push('proposed privileged capability policy is missing base allowlist keys');
 }
+integrityViolations.push(...candidateArchitectureErrors.map((error) => (
+  `candidate architecture rules: ${error}`
+)));
 const enforcedViolations = [
   ...integrityViolations,
   ...budgetViolations
@@ -439,6 +597,8 @@ const report = [
   `- Base: \`${base}\``,
   `- Head: \`${head || 'working tree'}\``,
   `- Privileged allowlist revision: \`${policyRevision}\``,
+  `- Architecture rule base: ${baseArchitectureRulesSource === null ? 'absent' : `\`${base}\``}`,
+  `- Architecture rule candidate: ${proposedArchitectureRulesSource === null ? 'absent' : `\`${head || 'working tree'}\``}`,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
   `- Selected profile: ${selectedProfileName}`,
   `- Production file limit: ${selectedProfile.productionFiles}`,
@@ -494,6 +654,21 @@ const report = [
   '## Added privileged allowlist keys',
   '',
   ...list(addedPolicyKeys),
+  '',
+  '## Candidate architecture authority delta',
+  '',
+  `- Classification: ${architectureAuthorityDelta.classification}`,
+  ...list(architectureAuthorityDelta.changes.map(({ rule, field, direction }) => (
+    `${direction} ${rule} (${field})`
+  ))),
+  '',
+  '## Candidate architecture admission observations',
+  '',
+  ...list(candidateArchitectureObservations),
+  '',
+  '## Candidate architecture rule errors',
+  '',
+  ...list(candidateArchitectureErrors),
   '',
   '## Report-only cache/token/handle/journal/protocol/manager names',
   '',
