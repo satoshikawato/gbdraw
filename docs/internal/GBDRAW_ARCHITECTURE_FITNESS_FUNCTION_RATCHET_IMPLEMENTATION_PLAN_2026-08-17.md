@@ -15,8 +15,19 @@ Execution status at revision 6:
 - This revision imports the plan into `dev` history after its implementation had already started on separate work branches. It changes integration provenance and status only; it does not change the revision 5 architecture or implementation requirements.
 - Prerequisite PR 0A implementation commit `9378f20e` was merged to `dev` by merge commit `0ab874f3` (PR #344).
 - Prerequisite PR 0B implementation commit `a0026bce` was merged to `dev` by merge commit `6689b137` (PR #345).
-- The prerequisite code changes are present, but this status record does not retroactively claim their complete acceptance gates. Historical check runs and the required external branch-protection state still need evidence under Phase 0.
+- The prerequisite code changes are present, but this status record does not retroactively claim their complete acceptance gates. The Phase 0 update below records later historical check evidence and the unresolved external branch-protection state.
 - Phase 0 and PR A onward remain incomplete. No later phase is complete merely because this plan is now tracked on the integration branch.
+
+Phase 0 execution update on 2026-08-18:
+
+- The recorded `origin/dev` base is `f06976c54176fa92de8127ac3a1a1b3c5b5aa45b`, the merge commit for PR #349. PR 0A commits `9378f20e` and `0ab874f3`, and PR 0B commits `a0026bce` and `6689b137`, are all ancestors of that base.
+- The checker passed on the recorded base. `node --test tests/web/architecture-contracts.test.mjs` passed 54 tests, and `node --test tests/web/*.test.mjs` passed 253 tests.
+- The untouched first-party Web static import graph contains 138 modules and 415 edges, with zero self-imports and zero cyclic strongly connected components.
+- The initial candidate inventory contains two clean-base rules: `semantic-owner.render-request` with detector `semantic-owner.render-request.v1`, and `canonical-path.render-request` with detector `canonical-path.render-request.v1`. No existing-debt rule was selected. Compatibility-like names remain report-only because the current heuristic cannot deterministically identify semantic compatibility paths.
+- Conditional PR F2 is `skipped`. PR G1 and PR G2 are also skipped; accepted-store mechanics and `tools/web-architecture-violations.json` must remain absent.
+- PR #349, targeting `dev`, received successful `Web change budget` and `Web base policy (trusted base)` checks in runs `32117181300` and `32117181143`. PR #345 also received both checks after PR 0A.
+- The external repository-setting gate is unresolved. GitHub reports both `dev` and `main` as unprotected, with no classic branch protection, effective branch rules, or repository rulesets. Required checks are therefore not enforced on either branch.
+- Phase 0 remains incomplete because branch protection is absent. PR A must not start until the required `dev` and `main` protections are configured and verified.
 
 ## 1. Objective
 
