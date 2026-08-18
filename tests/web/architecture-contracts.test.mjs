@@ -55,6 +55,14 @@ const PULL_REQUEST_TEMPLATE = readFileSync(
   join(REPOSITORY_ROOT, '.github/pull_request_template.md'),
   'utf8'
 );
+const WEB_ARCHITECTURE_EVALUATION_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-architecture-evaluation.mjs'),
+  'utf8'
+);
+const WEB_CHANGE_BUDGET_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs'),
+  'utf8'
+);
 
 const normalizePath = (path) => path.split(sep).join('/');
 const relativeModulePath = (path) => normalizePath(relative(JAVASCRIPT_ROOT, path));
@@ -588,6 +596,36 @@ test('versioned architecture detectors characterize the untouched source tree', 
   );
 });
 
+test('pure architecture evaluation owns no I/O, source detection, or authority data', () => {
+  assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^\s*import\s/m);
+  assert.doesNotMatch(
+    WEB_ARCHITECTURE_EVALUATION_SOURCE,
+    /node:(?:fs|path|child_process|process)|process\.|console\.|(?:read|write|append)File|execFile|spawn/
+  );
+  assert.doesNotMatch(
+    WEB_ARCHITECTURE_EVALUATION_SOURCE,
+    /web-architecture-(?:detectors|rules|violations)|web-change-policy/
+  );
+  assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^#!|process\.argv/);
+});
+
+test('the Web checker remains the sole evaluator orchestrator and CLI entry point', () => {
+  assert.match(
+    WEB_CHANGE_BUDGET_SOURCE,
+    /from '\.\/web-architecture-evaluation\.mjs'/
+  );
+  [
+    'validateArchitectureRuleRegistry',
+    'classifyArchitectureAuthorityDelta',
+    'classifyArchitectureRuleObservation'
+  ].forEach((name) => {
+    assert.match(WEB_CHANGE_BUDGET_SOURCE, new RegExp(`\\b${name}\\s*\\(`));
+  });
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /^#!\/usr\/bin\/env node/);
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /WEB_ARCHITECTURE_DETECTORS\[rule\.detector\]/);
+  assert.doesNotMatch(WEB_CHANGE_BUDGET_SOURCE, /import\s*\(.*web-architecture-detectors/);
+});
+
 test('report-only source facts preserve the characterized masking behavior', () => {
   const facts = detectReportOnlySourceFacts(
     "import helper from './helper.js';\n"
@@ -727,6 +765,14 @@ const WEB_ARCHITECTURE_DETECTOR_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-architecture-detectors.mjs'
 );
+const WEB_ARCHITECTURE_EVALUATION_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-architecture-evaluation.mjs'
+);
+const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
+  REPOSITORY_ROOT,
+  'tests/web/architecture-ratchet-fixtures.test.mjs'
+);
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
     'services/diagram-generation.js': ['app/editor.js'],
@@ -778,11 +824,19 @@ const BUDGET_FIXTURE = Object.freeze({
     WEB_ARCHITECTURE_DETECTOR_MODULE,
     'utf8'
   ),
+  'tools/web-architecture-evaluation.mjs': readFileSync(
+    WEB_ARCHITECTURE_EVALUATION_MODULE,
+    'utf8'
+  ),
   'tools/web-change-source.mjs': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
     'utf8'
   ),
   'tools/web-change-policy.json': `${JSON.stringify(BUDGET_POLICY, null, 2)}\n`,
+  'tests/web/architecture-ratchet-fixtures.test.mjs': readFileSync(
+    WEB_ARCHITECTURE_RATCHET_FIXTURES,
+    'utf8'
+  ),
   'gbdraw/web/index.html': '<main>baseline</main>\n',
   'gbdraw/web/js/app/editor.js': (
     "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
@@ -802,22 +856,20 @@ const BUDGET_FIXTURE = Object.freeze({
 const FUTURE_GUARD_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
-  'tools/web-architecture-evaluation.mjs',
   'tools/web-architecture-rules.json',
-  'tools/web-architecture-violations.json',
-  'tests/web/architecture-ratchet-fixtures.test.mjs'
-]);
-const FUTURE_CHECKER_IMPLEMENTATION_PATHS = Object.freeze([
-  'tools/web-architecture-evaluation.mjs'
+  'tools/web-architecture-violations.json'
 ]);
 const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   'tools/web-architecture-rules.json',
   'tools/web-architecture-violations.json'
 ]);
-const reservedPathContent = (path) => path.endsWith('.json')
-  ? '{}\n'
-  : `// reserved fixture for ${path}\n`;
+const reservedPathContent = (path) => {
+  if (path === 'tools/web-architecture-rules.json') {
+    return '{"schemaVersion":1,"rules":[]}\n';
+  }
+  return path.endsWith('.json') ? '{}\n' : `// reserved fixture for ${path}\n`;
+};
 
 const writeFixtureFile = (root, path, content) => {
   const target = join(root, path);
@@ -1151,7 +1203,8 @@ test('checker implementation and authority files cannot change together', () => 
   const implementationPaths = [
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
-    'tools/web-architecture-detectors.mjs'
+    'tools/web-architecture-detectors.mjs',
+    'tools/web-architecture-evaluation.mjs'
   ];
   const authorityPaths = [
     'tools/web-change-policy.json',
@@ -1179,7 +1232,7 @@ test('all checker implementations are separated from reserved future authority',
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
-    ...FUTURE_CHECKER_IMPLEMENTATION_PATHS
+    'tools/web-architecture-evaluation.mjs'
   ];
 
   implementationPaths.forEach((implementationPath) => {
