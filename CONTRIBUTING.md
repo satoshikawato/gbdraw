@@ -133,16 +133,33 @@ not alongside user-facing pages.
 - Don't add speculative options, fallbacks, or abstractions for
   hypothetical future use; keep changes scoped to the problem at hand.
 
+## Branch roles
+
+- Work-branch base: the latest merged `origin/dev`.
+- Pull-request target: `dev`.
+- Integration branch: `dev`.
+- Release branch: `main`.
+
+Agent-authored work branches must start from `origin/dev` without tracking
+`dev` or `main`. Maintainers promote `dev` to `main` through a pull request
+after the integration checks pass. Feature work must not target `main`
+directly.
+
 ## Submitting a pull request
 
-1. Create a branch from `main`.
+1. Fetch `origin` and create a non-tracking work branch from `origin/dev`:
+
+   ```bash
+   git fetch origin
+   git switch --no-track -c <branch-name> origin/dev
+   ```
+
 2. Make your change with tests that cover it (a bug fix without a
    regression test is unlikely to be merged).
 3. Run `ruff check gbdraw/` and `pytest tests/ -v -m "not slow"` locally.
-4. Open a pull request against `main` describing what changed and why.
+4. Open a pull request against `dev` describing what changed and why.
    Link the issue it resolves, if any.
-5. CI runs the fast test suite on Python 3.10–3.12, a CairoSVG-specific job,
-   and a lint job; all three must pass before merge.
+5. Wait for all required CI checks to pass before merge.
 
 By contributing, you agree that your contribution is licensed under the
 project's [MIT License](./LICENSE.txt).
