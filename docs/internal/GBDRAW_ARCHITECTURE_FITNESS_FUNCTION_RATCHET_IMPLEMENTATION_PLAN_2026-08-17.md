@@ -1,18 +1,19 @@
 # gbdraw architecture fitness-function ratchet implementation plan
 
-Status: active implementation plan, revision 6
+Status: active implementation plan, revision 7
 Created: 2026-08-17
 Revised: 2026-08-18
-Supersedes: revision 4 of this plan and `GBDRAW_ARCHITECTURE_MATURITY_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md` revision 1
+Supersedes: revision 6 of this plan and `GBDRAW_ARCHITECTURE_MATURITY_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md` revision 1
 Work-branch base: latest merged `origin/dev`
 Pull-request target and integration branch: `dev`
 Release branch: `main`, promoted from `dev` under the repository's promotion checks
 Target repository path for this plan: `docs/internal/GBDRAW_ARCHITECTURE_FITNESS_FUNCTION_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md`
 Intended permanent authority after implementation: `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`
 
-Execution status at revision 6:
+Execution status at revision 7:
 
-- This revision imports the plan into `dev` history after its implementation had already started on separate work branches. It changes integration provenance and status only; it does not change the revision 5 architecture or implementation requirements.
+- Revision 7 makes PR A's publication and exact-base acceptance requirements explicit. It does not change the architecture or the later implementation phases.
+- Revision 6 imported the plan into `dev` history after implementation had started on separate work branches. It changed integration provenance and status only; it did not change the revision 5 architecture or implementation requirements.
 - Prerequisite PR 0A implementation commit `9378f20e` was merged to `dev` by merge commit `0ab874f3` (PR #344).
 - Prerequisite PR 0B implementation commit `a0026bce` was merged to `dev` by merge commit `6689b137` (PR #345).
 - The prerequisite code changes are present, but this status record does not retroactively claim their complete acceptance gates. The Phase 0 update below records later historical check evidence and the unresolved external branch-protection state.
@@ -1064,6 +1065,17 @@ If any first-party static import cycle exists, do not baseline or freeze it. Sto
 
 Create a fresh branch from updated `origin/dev` and target `dev`.
 
+#### Publish and verify PR A
+
+PR A is itself architecture-bearing. Before requesting merge:
+
+1. Confirm through the pull-request metadata that the target branch is `dev`. A work branch created from `origin/dev` does not establish the pull-request target.
+2. Replace the pull-request body with the structure in `.github/pull_request_template.md`. Because PR A creates the template, do not assume that GitHub populated the body automatically.
+3. Select `This is architecture-bearing; the evidence below is complete.` Fill every applicable before/after owner, canonical-path, and compatibility-path set, the scope-completeness rationale, and the verification results. Do not use unsupported repository-wide totals in place of the concrete sets.
+4. Apply the `architecture-change` label after the target is `dev`. The label is mandatory for PR A and triggers workflows that subscribe to label changes; it is not architecture approval.
+5. Require successful `Web change budget` and `Web base policy (trusted base)` runs for the current PR head and current `dev` base. A trusted-base result produced for an earlier target branch or base SHA is stale and must not be accepted. Record the check names, run URLs or IDs, head SHA, and base SHA in the PR evidence.
+6. After the final commit and successful CI, the architecture owner reviews the exact head and posts the manual structured decision defined below. Record its permalink in the PR body. Any later commit invalidates the decision and requires CI and owner review for the new head.
+
 #### Add `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`
 
 The normative document must contain:
@@ -1183,6 +1195,10 @@ python -m pytest tests/ -k documentation -m "not slow"
 ```
 
 - one normative definition owner exists;
+- the PR targets `dev`, and the recorded pull-request metadata confirms that target;
+- the PR body follows `.github/pull_request_template.md`, selects `architecture-bearing`, and includes complete concrete before/after sets and verification results;
+- the PR has the `architecture-change` label;
+- `Web change budget` passes for the final head, and `Web base policy (trusted base)` passes against the current `dev` base rather than a stale target or base SHA;
 - all entry points link rather than copy the model;
 - the template collects concrete sets and separates author evidence from an exact-head, structured maintainer approval;
 - the template is a protected guard path and its minimum process anchors are executable contracts;
@@ -1713,6 +1729,7 @@ These remain lagging diagnostics. Use Git and existing GitHub metadata, add no p
 | `CLAUDE.md` | A | Short repository architecture reference |
 | `gbdraw/web/CLAUDE.md` | A | Link current ownership table to ratchet |
 | `CONTRIBUTING.md` | 0A, A | Branch model, PR declaration, and maintainer-decision requirement |
+| `docs/internal/GBDRAW_ARCHITECTURE_FITNESS_FUNCTION_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md` | A | Clarify PR A publication and exact-base acceptance requirements |
 | `.github/workflows/test.yml` | 0A | Run normal PR checks for `dev` and `main` |
 | `.github/workflows/web-base-policy.yml` | 0A | Run trusted-base PR checks for `dev` and `main` |
 | `tools/check-web-change-budget.mjs` | 0B, B, C, E, F1, F2 conditional | Path protection, detector use, trusted orchestration, rule enforcement, I/O, and reports |
@@ -1741,6 +1758,7 @@ The PR template is evidence, not the source of truth.
 
 Reviewers must reject an architecture-bearing PR when:
 
+- PR A does not target `dev`, does not use the repository pull-request template, does not select `architecture-bearing`, lacks the `architecture-change` label, or cites a trusted-base result for a stale target or base SHA;
 - the author marks it as non-architecture-bearing despite changing an owner, path, lifecycle, parser, persisted schema, or privileged surface;
 - the declared changed-capability scope has no completeness rationale;
 - concrete before/after owner, canonical-path, or compatibility-path sets are missing;
@@ -1791,7 +1809,7 @@ Additional evidence by phase:
 - PR 0A: observed `dev` and `main` workflow triggers, unchanged trusted-base checkout model, and branch-protection state;
 - PR 0B: future path classification matrix, including PR-template, evaluator, and fixture-test paths, and self-authorization fixture results;
 - Phase 0: exact `origin/dev` SHA, zero-cycle evidence including self-imports, selected rule classifications, and the explicit required/skipped decision for conditional PR F2;
-- PR A: normative trust-boundary text, PR-template anchor results, and the documented manual limitation of maintainer-comment enforcement;
+- PR A: target-branch metadata, template-compliant body, concrete before/after sets and verification results, `architecture-change` label, normal and trusted-base check evidence for the final head and current `dev` base, normative trust-boundary text, PR-template anchor results, and the documented manual limitation of maintainer-comment enforcement;
 - PR B: detector before/after characterization, fixed-corpus/current-base output equivalence labeled as evidence rather than proof, versioned-ID inventory, policy-key coverage, and confirmation that detector code contains no authority;
 - PR C: discriminated-schema fixtures, exact single-canonical-entry semantics, unavailable-frozen rejection, detector-kind compatibility, evaluator-purity evidence, authority-direction classification, and proof that head detector code is not executed;
 - PR D: exact rule inventory, proof that the initial count is at most three, justification for any third rule, untouched-base result for every hard or report-only rule, and consistency with the F2 trigger;

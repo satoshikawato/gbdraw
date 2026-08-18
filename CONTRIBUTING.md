@@ -163,9 +163,10 @@ directly.
    request template. Architecture-bearing changes must include the concrete
    before and after sets required by the
    [architecture fitness-function ratchet](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
-6. Before merge, record the permalink to the architecture owner's structured
-   decision for the exact final head SHA. The author declaration is evidence,
-   not approval; a later commit requires a new owner decision.
+6. For an architecture-bearing change, before merge, record the permalink to
+   the architecture owner's structured decision for the exact final head SHA.
+   The author declaration is evidence, not approval; a later commit requires a
+   new owner decision.
 7. Wait for all required CI checks to pass before merge.
 
 By contributing, you agree that your contribution is licensed under the
