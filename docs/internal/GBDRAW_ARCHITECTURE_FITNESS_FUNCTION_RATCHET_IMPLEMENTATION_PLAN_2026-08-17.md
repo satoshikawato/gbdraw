@@ -1074,7 +1074,7 @@ PR A is itself architecture-bearing. Before requesting merge:
 3. Select `This is architecture-bearing; the evidence below is complete.` Fill every applicable before/after owner, canonical-path, and compatibility-path set, the scope-completeness rationale, and the verification results. Do not use unsupported repository-wide totals in place of the concrete sets.
 4. Apply the `architecture-change` label after the target is `dev`. The label is mandatory for PR A and triggers workflows that subscribe to label changes; it is not architecture approval.
 5. Require successful `Web change budget` and `Web base policy (trusted base)` runs for the current PR head and current `dev` base. A trusted-base result produced for an earlier target branch or base SHA is stale and must not be accepted. Record the check names, run URLs or IDs, head SHA, and base SHA in the PR evidence.
-6. After the final commit and successful CI, the architecture owner reviews the exact head and posts the manual structured decision defined below. Record its permalink in the PR body. Any later commit invalidates the decision and requires CI and owner review for the new head.
+6. After the final commit and successful CI, the author or automated agent prepares the complete maintainer review packet defined below. The architecture owner reviews the packet and exact head, then manually posts, edits, or rejects the structured decision. Record the posted decision's permalink in the PR body. Any later commit invalidates the decision and requires CI, a new packet, and owner review for the new head.
 
 #### Add `docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md`
 
@@ -1085,6 +1085,7 @@ The normative document must contain:
 - the two-layer `MERGEABLE` rule;
 - the prohibition on claiming complete machine-calculated `OE`, `PE`, or `CB`;
 - concrete before/after set evidence requirements and scope-completeness rationale;
+- the required maintainer review packet: exact head SHA, complete before/after evidence, completed CI results, known limitations, and a ready-to-post structured comment that the maintainer may post, edit, or reject;
 - semantic owner versus privileged operator;
 - detector implementation versus inert rule authority versus accepted exceptions;
 - sole CLI orchestration versus pure detector and evaluation mechanics;

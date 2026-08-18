@@ -642,6 +642,14 @@ bootstrap exception.
 
 ## Manual architecture review
 
+Before requesting approval, the author or automated agent must prepare a
+maintainer review packet. It contains the exact head SHA, concrete before and
+after evidence, completed CI results, known limitations, and a fully populated,
+ready-to-post version of the structured comment below. The maintainer reviews
+the packet and then posts, edits, or rejects the comment manually as their own
+decision. Preparing the packet is not approval, and an automated agent must not
+post the comment.
+
 The pull-request template contains one author declaration. For an
 architecture-bearing change, the architecture owner reviews the final proposed
 head and posts this structured comment manually:
