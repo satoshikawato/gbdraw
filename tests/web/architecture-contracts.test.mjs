@@ -44,6 +44,10 @@ const BASE_POLICY_WORKFLOW = readFileSync(
   join(REPOSITORY_ROOT, '.github/workflows/web-base-policy.yml'),
   'utf8'
 );
+const PULL_REQUEST_TEMPLATE = readFileSync(
+  join(REPOSITORY_ROOT, '.github/pull_request_template.md'),
+  'utf8'
+);
 
 const normalizePath = (path) => path.split(sep).join('/');
 const relativeModulePath = (path) => normalizePath(relative(JAVASCRIPT_ROOT, path));
@@ -435,6 +439,21 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
     BASE_POLICY_WORKFLOW,
     /(?:checkout|run):[^\n]*pull_request\.head|ref:.*pull_request\.head|git (?:checkout|switch) /
   );
+});
+
+test('the PR template retains architecture evidence anchors', () => {
+  [
+    'Architecture impact',
+    'This is not architecture-bearing',
+    'This is architecture-bearing',
+    'Semantic owners before',
+    'Semantic owners after',
+    'Canonical production paths before',
+    'Canonical production paths after',
+    'Maintainer architecture decision comment permalink'
+  ].forEach((anchor) => {
+    assert.ok(PULL_REQUEST_TEMPLATE.includes(anchor), `Missing PR template anchor: ${anchor}`);
+  });
 });
 
 test('normal CI uses dev as the staging push branch', () => {
