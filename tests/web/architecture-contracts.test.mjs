@@ -28,6 +28,11 @@ import {
   WEB_PRIVILEGED_IMPORT_TARGETS
 } from '../../tools/web-architecture-detectors.mjs';
 import {
+  classifyArchitectureRuleObservation,
+  evaluateArchitectureRuleResult,
+  validateArchitectureRuleRegistry
+} from '../../tools/web-architecture-evaluation.mjs';
+import {
   literalImportSpecifiers,
   maskJavaScript
 } from '../../tools/web-change-source.mjs';
@@ -59,6 +64,15 @@ const WEB_ARCHITECTURE_EVALUATION_SOURCE = readFileSync(
   join(REPOSITORY_ROOT, 'tools/web-architecture-evaluation.mjs'),
   'utf8'
 );
+const WEB_ARCHITECTURE_DETECTOR_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-architecture-detectors.mjs'),
+  'utf8'
+);
+const WEB_ARCHITECTURE_RULES_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-architecture-rules.json'),
+  'utf8'
+);
+const WEB_ARCHITECTURE_RULES = JSON.parse(WEB_ARCHITECTURE_RULES_SOURCE);
 const WEB_CHANGE_BUDGET_SOURCE = readFileSync(
   join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs'),
   'utf8'
@@ -254,15 +268,6 @@ test('production rendering crosses the canonical request and Worker boundary', (
     occurrenceOwners(/\brunDiagramGeneration\s*\(/g),
     new Map([['app/run-analysis.js', 1]])
   );
-  assert.deepEqual(
-    occurrenceOwners(/\bbuildCanonicalRenderRequest\s*\(/g),
-    new Map([
-      ['app/run-analysis.js', 1],
-      ['services/config.js', 1],
-      ['services/gallery-session-migration.js', 1]
-    ])
-  );
-  assert.deepEqual(directImports.get('app/run-analysis.js')?.has('services/session-request.js'), true);
   assert.deepEqual(directImports.get('app/run-analysis.js')?.has('services/diagram-generation.js'), true);
   assert.match(
     productionSources.get('app/run-analysis.js'),
@@ -568,32 +573,30 @@ test('versioned architecture detectors expose stable normalized subjects', () =>
   );
 });
 
-test('versioned architecture detectors characterize the untouched source tree', () => {
-  assert.deepEqual(
-    WEB_ARCHITECTURE_DETECTORS['semantic-owner.render-request.v1']
-      .detect(productionSources),
-    {
-      definitionCount: 1,
-      observedDefinitions: [{
-        path: 'services/session-request.js',
-        count: 1,
-        subject: 'services/session-request.js'
-      }],
-      subjects: ['services/session-request.js']
-    }
-  );
-  assert.deepEqual(
-    WEB_ARCHITECTURE_DETECTORS['canonical-path.render-request.v1']
-      .detect(productionSources),
-    {
-      observedEdges: [{
-        from: 'app/run-analysis.js',
-        to: 'services/session-request.js',
-        subject: 'app/run-analysis.js -> services/session-request.js'
-      }],
-      subjects: ['app/run-analysis.js -> services/session-request.js']
-    }
-  );
+test('declared architecture rules actively govern the current source tree', () => {
+  assert.deepEqual(validateArchitectureRuleRegistry(
+    WEB_ARCHITECTURE_RULES,
+    WEB_ARCHITECTURE_DETECTORS,
+    { availableEnforcements: ['hard', 'report-only'] }
+  ), { valid: true, errors: [] });
+
+  const results = WEB_ARCHITECTURE_RULES.rules.map((rule) => {
+    const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+    const observed = classifyArchitectureRuleObservation(rule, detector.detect(productionSources));
+    return {
+      key: rule.key,
+      ...evaluateArchitectureRuleResult({
+        observation: observed.observation,
+        mode: rule.enforcement.replace('-', '_').toUpperCase(),
+        baselineRelation: 'NOT_APPLICABLE',
+        authorityResolution: 'NOT_APPLICABLE'
+      })
+    };
+  });
+  assert.deepEqual(results.map(({ key, decision }) => ({ key, decision })), [
+    { key: 'canonical-path.render-request', decision: 'PASS' },
+    { key: 'semantic-owner.render-request', decision: 'PASS' }
+  ]);
 });
 
 test('pure architecture evaluation owns no I/O, source detection, or authority data', () => {
@@ -609,6 +612,24 @@ test('pure architecture evaluation owns no I/O, source detection, or authority d
   assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^#!|process\.argv/);
 });
 
+test('registered architecture authority and executable matching have separate owners', () => {
+  assert.deepEqual(Object.keys(WEB_ARCHITECTURE_RULES), ['schemaVersion', 'rules']);
+  assert.doesNotMatch(
+    WEB_CHANGE_BUDGET_SOURCE,
+    /app\/run-analysis\.js|services\/session-request\.js/
+  );
+  assert.doesNotMatch(
+    WEB_ARCHITECTURE_EVALUATION_SOURCE,
+    /app\/run-analysis\.js|services\/session-request\.js/
+  );
+  assert.doesNotMatch(
+    WEB_ARCHITECTURE_DETECTOR_SOURCE,
+    /\ballowedEdges\b|\ballowedDefinitionPaths\b|\bexactActiveEdgeCount\b|\bexactDefinitionCount\b|\bbaselineEligible\b/
+  );
+  assert.match(WEB_ARCHITECTURE_DETECTOR_SOURCE, /RENDER_REQUEST_DEFINITION_PATTERN/);
+  assert.match(WEB_ARCHITECTURE_DETECTOR_SOURCE, /RENDER_REQUEST_CALL_PATTERN/);
+});
+
 test('the Web checker remains the sole evaluator orchestrator and CLI entry point', () => {
   assert.match(
     WEB_CHANGE_BUDGET_SOURCE,
@@ -617,7 +638,8 @@ test('the Web checker remains the sole evaluator orchestrator and CLI entry poin
   [
     'validateArchitectureRuleRegistry',
     'classifyArchitectureAuthorityDelta',
-    'classifyArchitectureRuleObservation'
+    'classifyArchitectureRuleObservation',
+    'evaluateArchitectureRuleResult'
   ].forEach((name) => {
     assert.match(WEB_CHANGE_BUDGET_SOURCE, new RegExp(`\\b${name}\\s*\\(`));
   });
@@ -775,15 +797,18 @@ const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
 );
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
-    'services/diagram-generation.js': ['app/editor.js'],
+    'services/diagram-generation.js': ['app/editor.js', 'app/run-analysis.js'],
+    'services/session-request.js': ['app/run-analysis.js'],
     'workers/diagram-generation-worker.js': []
   },
   allowedPrivilegedOwners: {
     'Diagram Worker': [
       'app/editor.js',
       'app/future-owner.js',
+      'app/run-analysis.js',
       'services/diagram-generation.js'
-    ]
+    ],
+    'Render request': ['app/run-analysis.js']
   }
 });
 const BUDGET_PROFILES = Object.freeze([
@@ -828,6 +853,7 @@ const BUDGET_FIXTURE = Object.freeze({
     WEB_ARCHITECTURE_EVALUATION_MODULE,
     'utf8'
   ),
+  'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
   'tools/web-change-source.mjs': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
     'utf8'
@@ -843,6 +869,14 @@ const BUDGET_FIXTURE = Object.freeze({
     + 'export const editExistingOwner = () => runDiagramGeneration();\n'
   ),
   'gbdraw/web/js/app/future-owner.js': 'export const futureOwnerPlaceholder = () => 1;\n',
+  'gbdraw/web/js/app/run-analysis.js': (
+    "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+    + "import { buildCanonicalRenderRequest } from '../services/session-request.js';\n"
+    + 'export const run = () => {\n'
+    + '  const request = buildCanonicalRenderRequest();\n'
+    + '  return runDiagramGeneration(request);\n'
+    + '};\n'
+  ),
   'gbdraw/web/js/app/secondary.js': 'export const editSecondaryOwner = () => 1;\n',
   'gbdraw/web/js/app/budget-lines.js': budgetLineSource(),
   'gbdraw/web/js/services/diagram-generation.js': (
@@ -851,13 +885,19 @@ const BUDGET_FIXTURE = Object.freeze({
   'gbdraw/web/js/services/session-file.js': (
     'export const readSession = () => ({ version: 1 });\n'
   ),
+  'gbdraw/web/js/services/session-request.js': (
+    'export const buildCanonicalRenderRequest = () => ({});\n'
+  ),
   'gbdraw/web/vendor/library.js': 'globalThis.vendorLibrary = true;\n'
 });
 const FUTURE_GUARD_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
-  'tools/web-architecture-rules.json',
   'tools/web-architecture-violations.json'
+]);
+const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
+  ...FUTURE_GUARD_PATHS,
+  'tools/web-architecture-rules.json'
 ]);
 const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
@@ -1004,6 +1044,300 @@ const assertRevisionChangeBudgetFailure = (mutate, expectedPatterns) => {
     assertNonWaivableRevisionFailure(execute, base, head, expectedPatterns);
   });
 };
+
+const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
+  'package.json': '{"private":true}\n',
+  'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
+  'tools/web-architecture-detectors.mjs': readFileSync(
+    WEB_ARCHITECTURE_DETECTOR_MODULE,
+    'utf8'
+  ),
+  'tools/web-architecture-evaluation.mjs': readFileSync(
+    WEB_ARCHITECTURE_EVALUATION_MODULE,
+    'utf8'
+  ),
+  'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
+  'tools/web-change-policy.json': readFileSync(
+    join(REPOSITORY_ROOT, 'tools/web-change-policy.json'),
+    'utf8'
+  ),
+  'tools/web-change-source.mjs': readFileSync(
+    join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
+    'utf8'
+  ),
+  'gbdraw/web/js/app/run-analysis.js': (
+    "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+    + "import { buildCanonicalRenderRequest } from '../services/session-request.js';\n"
+    + 'export const run = () => {\n'
+    + '  const request = buildCanonicalRenderRequest();\n'
+    + '  return runDiagramGeneration(request);\n'
+    + '};\n'
+  ),
+  'gbdraw/web/js/services/diagram-generation.js': (
+    'export const runDiagramGeneration = () => 1;\n'
+  ),
+  'gbdraw/web/js/services/session-request.js': (
+    'export const buildCanonicalRenderRequest = () => ({});\n'
+  )
+});
+
+const canonicalCallerSource = (
+  "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+  + "import { buildCanonicalRenderRequest } from '../services/session-request.js';\n"
+  + 'export const run = () => {\n'
+  + '  const request = buildCanonicalRenderRequest();\n'
+  + '  return runDiagramGeneration(request);\n'
+  + '};\n'
+);
+const rulesSource = (mutate) => {
+  const rules = JSON.parse(WEB_ARCHITECTURE_RULES_SOURCE);
+  mutate(rules);
+  return `${JSON.stringify(rules, null, 2)}\n`;
+};
+const canonicalRule = (rules) => rules.rules.find(
+  ({ key }) => key === 'canonical-path.render-request'
+);
+const preauthorizedCanonicalRulesSource = rulesSource((rules) => {
+  canonicalRule(rules).allowedEdges = [
+    { from: 'app/alternate.js', to: 'services/session-request.js' },
+    { from: 'app/run-analysis.js', to: 'services/session-request.js' }
+  ];
+});
+const reportOnlyCanonicalRulesSource = rulesSource((rules) => {
+  canonicalRule(rules).enforcement = 'report-only';
+});
+
+const withTrustedArchitectureRepository = (mutateHead, runCase, baseFiles = {}) => {
+  const root = mkdtempSync(join(tmpdir(), 'gbdraw-architecture-ratchet-'));
+  try {
+    Object.entries({ ...TRUSTED_ARCHITECTURE_FIXTURE_FILES, ...baseFiles })
+      .forEach(([path, content]) => writeFixtureFile(root, path, content));
+    const git = (args) => spawnSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    assert.equal(git(['init', '--quiet']).status, 0);
+    assert.equal(git(['config', 'user.email', 'ratchet@example.invalid']).status, 0);
+    assert.equal(git(['config', 'user.name', 'Ratchet Fixture']).status, 0);
+    assert.equal(git(['add', '.']).status, 0);
+    assert.equal(git(['commit', '--quiet', '-m', 'trusted base']).status, 0);
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    mutateHead((path, content) => writeFixtureFile(root, path, content));
+    assert.equal(git(['add', '-A']).status, 0);
+    assert.equal(git(['commit', '--quiet', '-m', 'candidate head']).status, 0);
+    const head = git(['rev-parse', 'HEAD']).stdout.trim();
+    assert.equal(git(['checkout', '--quiet', '--detach', base]).status, 0);
+    const result = spawnSync(process.execPath, [
+      'tools/check-web-change-budget.mjs',
+      '--base', base,
+      '--head', head
+    ], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    runCase({
+      base,
+      head,
+      status: result.status,
+      output: `${result.stdout || ''}${result.stderr || ''}`
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
+
+test('active base rules accept one canonical entry edge', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('fixture-note.txt', 'unchanged architecture\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(
+        output,
+        /canonical-path\.render-request .* observation=CONFORMING .* decision=PASS/
+      );
+      assert.match(
+        output,
+        /semantic-owner\.render-request .* registeredDefinitionLocations=1/
+      );
+    }
+  );
+});
+
+test('active hard rule fails when the canonical entry edge is absent', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/run-analysis.js',
+      'export const run = () => 1;\n'
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(
+        output,
+        /canonical-path\.render-request .* observation=ABSENT_REQUIRED .* decision=FAIL/
+      );
+    }
+  );
+});
+
+test('active hard rule rejects an unapproved canonical entry edge', () => {
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+      write('gbdraw/web/js/app/alternate.js', canonicalCallerSource);
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(
+        output,
+        /canonical-path\.render-request \| subject=app\/alternate\.js -> services\/session-request\.js \| observation=DIVERGENT .* decision=FAIL/
+      );
+    }
+  );
+});
+
+test('two simultaneously active preauthorized edges fail in stable subject order', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('gbdraw/web/js/app/alternate.js', canonicalCallerSource),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      const alternate = output.indexOf(
+        'canonical-path.render-request | subject=app/alternate.js -> services/session-request.js'
+      );
+      const current = output.indexOf(
+        'canonical-path.render-request | subject=app/run-analysis.js -> services/session-request.js'
+      );
+      const semantic = output.indexOf('semantic-owner.render-request | subject=');
+      assert.ok(alternate >= 0 && alternate < current && current < semantic, output);
+      assert.match(output.slice(alternate, semantic), /observation=DIVERGENT[\s\S]+decision=FAIL/);
+    },
+    { 'tools/web-architecture-rules.json': preauthorizedCanonicalRulesSource }
+  );
+});
+
+test('an inactive preauthorized edge does not fail', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('fixture-note.txt', 'preauthorization remains inactive\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(
+        output,
+        /canonical-path\.render-request .* observation=CONFORMING .* decision=PASS/
+      );
+    },
+    { 'tools/web-architecture-rules.json': preauthorizedCanonicalRulesSource }
+  );
+});
+
+test('report-only rules report absence without consulting an accepted store or failing', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/run-analysis.js',
+      'export const run = () => 1;\n'
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(
+        output,
+        /canonical-path\.render-request .* observation=ABSENT_REQUIRED .* mode=REPORT_ONLY .* decision=REPORT/
+      );
+      assert.match(output, /Result: \*\*PASS\*\*/);
+    },
+    {
+      'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-architecture-violations.json': 'not valid JSON and must not be loaded\n'
+    }
+  );
+});
+
+test('hard rules do not consult an accepted-violation store', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('fixture-note.txt', 'hard rule remains conforming\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.doesNotMatch(output, /Cannot parse tools\/web-architecture-violations\.json/);
+      assert.match(output, /Result: \*\*PASS\*\*/);
+    },
+    { 'tools/web-architecture-violations.json': 'not valid JSON and must not be loaded\n' }
+  );
+});
+
+test('trusted checker rejects malformed proposed rule JSON as inert data', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('tools/web-architecture-rules.json', '{"schemaVersion":1,"rules":['),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Cannot parse tools\/web-architecture-rules\.json/);
+      assert.match(output, /Result: \*\*FAIL\*\*/);
+    }
+  );
+});
+
+test('a proposed detector that throws is never loaded or executed', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'tools/web-architecture-detectors.mjs',
+      'throw new Error("MALICIOUS HEAD DETECTOR EXECUTED");\n'
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.doesNotMatch(output, /MALICIOUS HEAD DETECTOR EXECUTED/);
+      assert.match(output, /canonical-path\.render-request .* decision=PASS/);
+    }
+  );
+});
+
+test('proposed detector ID and implementation cannot alter trusted source observation', () => {
+  const proposedRules = rulesSource((rules) => {
+    canonicalRule(rules).detector = 'canonical-path.render-request.v999';
+  });
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+      write('gbdraw/web/js/app/alternate.js', canonicalCallerSource);
+      write('tools/web-architecture-rules.json', proposedRules);
+      write(
+        'tools/web-architecture-detectors.mjs',
+        'throw new Error("MALICIOUS HEAD DETECTOR EXECUTED");\n'
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.doesNotMatch(output, /MALICIOUS HEAD DETECTOR EXECUTED/);
+      assert.match(output, /unknown-detector/);
+      assert.match(
+        output,
+        /canonical-path\.render-request .* observation=DIVERGENT .* decision=FAIL/
+      );
+    }
+  );
+});
+
+test('mutually conforming proposed rules and source cannot replace base authority', () => {
+  const proposedRules = rulesSource((rules) => {
+    canonicalRule(rules).allowedEdges = [{
+      from: 'app/alternate.js',
+      to: 'services/session-request.js'
+    }];
+  });
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+      write('gbdraw/web/js/app/alternate.js', canonicalCallerSource);
+      write('tools/web-architecture-rules.json', proposedRules);
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(
+        output,
+        /canonical-path\.render-request \| subject=app\/alternate\.js -> services\/session-request\.js \| observation=DIVERGENT .* decision=FAIL/
+      );
+      assert.match(output, /architecture rule authority changes must be isolated/);
+      assert.match(output, /Result: \*\*FAIL\*\*/);
+    }
+  );
+});
 
 test('fixed profiles enforce exact production-file boundaries', () => {
   BUDGET_PROFILES.forEach((profile) => {
@@ -1187,8 +1521,8 @@ test('reserved future guard paths need not exist before their rollout', () => {
   assert.match(result.output, /Result: \*\*PASS\*\*/);
 });
 
-test('runtime cannot co-change with any reserved future guard path', () => {
-  FUTURE_GUARD_PATHS.forEach((guardPath) => {
+test('runtime cannot co-change with any protected architecture guard path', () => {
+  PROTECTED_ARCHITECTURE_GUARD_PATHS.forEach((guardPath) => {
     assertNonWaivableWorkingTreeFailure((write) => {
       write(
         'gbdraw/web/js/services/session-file.js',
@@ -1250,7 +1584,7 @@ test('all checker implementations are separated from reserved future authority',
   });
 });
 
-test('the evaluator implementation and ratchet fixture classifications stay disjoint', () => {
+test('evaluator fixtures stay implementation-only while active rule authority stays isolated', () => {
   const evaluatorAndFixture = runChangeBudgetCase((write) => {
     write(
       'tools/web-architecture-evaluation.mjs',
@@ -1273,7 +1607,11 @@ test('the evaluator implementation and ratchet fixture classifications stay disj
       reservedPathContent('tools/web-architecture-rules.json')
     );
   });
-  assert.equal(fixtureAndAuthority.status, 0, fixtureAndAuthority.output);
+  assert.equal(fixtureAndAuthority.status, 1, fixtureAndAuthority.output);
+  assert.match(
+    fixtureAndAuthority.output,
+    /architecture rule authority changes must be isolated/
+  );
 });
 
 test('the reserved PR template is guard-only', () => {
@@ -1299,7 +1637,11 @@ test('the reserved PR template is guard-only', () => {
       reservedPathContent('tools/web-architecture-rules.json')
     );
   });
-  assert.equal(templateAndAuthority.status, 0, templateAndAuthority.output);
+  assert.equal(templateAndAuthority.status, 1, templateAndAuthority.output);
+  assert.match(
+    templateAndAuthority.output,
+    /architecture rule authority changes must be isolated/
+  );
 });
 
 test('an unregistered path acquires no guard or authority classification', () => {
