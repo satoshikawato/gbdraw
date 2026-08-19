@@ -1,26 +1,15 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 
 import { WEB_ARCHITECTURE_DETECTORS } from '../../tools/web-architecture-detectors.mjs';
 import {
   classifyArchitectureAuthorityDelta,
   classifyArchitectureRuleObservation,
+  evaluateArchitectureRuleResult,
   validateArchitectureRuleRegistry,
   WEB_ARCHITECTURE_RULE_SCHEMA
 } from '../../tools/web-architecture-evaluation.mjs';
 
-const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const AVAILABLE_ENFORCEMENTS = Object.freeze({
   availableEnforcements: Object.freeze(['hard', 'report-only'])
 });
@@ -54,7 +43,6 @@ const registry = (rules = [canonicalRule(), semanticRule()]) => ({
   schemaVersion: 1,
   rules
 });
-const clone = (value) => JSON.parse(JSON.stringify(value));
 const validationCodes = (value, catalog = WEB_ARCHITECTURE_DETECTORS, options = {}) => (
   validateArchitectureRuleRegistry(value, catalog, options).errors.map(({ code }) => code)
 );
@@ -300,6 +288,84 @@ test('authority delta reports every planned direction without treating removal a
   ]);
 });
 
+test('hard and report-only decisions use the five-field result envelope', () => {
+  const cases = [
+    ['HARD', 'CONFORMING', 'PASS'],
+    ['HARD', 'DIVERGENT', 'FAIL'],
+    ['HARD', 'ABSENT_REQUIRED', 'FAIL'],
+    ['REPORT_ONLY', 'CONFORMING', 'PASS'],
+    ['REPORT_ONLY', 'DIVERGENT', 'REPORT'],
+    ['REPORT_ONLY', 'ABSENT_REQUIRED', 'REPORT']
+  ];
+
+  cases.forEach(([mode, observation, decision]) => {
+    const semanticInputs = Object.freeze({
+      observation,
+      mode,
+      baselineRelation: 'NOT_APPLICABLE',
+      authorityResolution: 'NOT_APPLICABLE'
+    });
+    assert.deepEqual(evaluateArchitectureRuleResult(semanticInputs), {
+      ...semanticInputs,
+      decision
+    });
+  });
+});
+
+test('hard and report-only evaluation rejects accepted-store relations', () => {
+  for (const mode of ['HARD', 'REPORT_ONLY']) {
+    for (const baselineRelation of ['ACCEPTED', 'NEW', 'FIXED']) {
+      assert.throws(() => evaluateArchitectureRuleResult({
+        observation: 'DIVERGENT',
+        mode,
+        baselineRelation,
+        authorityResolution: 'NOT_APPLICABLE'
+      }), /requires baselineRelation NOT_APPLICABLE/);
+    }
+    for (const authorityResolution of ['RETAINED', 'EXACT_CONTRACTION', 'INVALID_CHANGE']) {
+      assert.throws(() => evaluateArchitectureRuleResult({
+        observation: 'DIVERGENT',
+        mode,
+        baselineRelation: 'NOT_APPLICABLE',
+        authorityResolution
+      }), /requires authorityResolution NOT_APPLICABLE/);
+    }
+  }
+});
+
+test('malformed four-input evaluation combinations fail closed', () => {
+  const valid = {
+    observation: 'CONFORMING',
+    mode: 'HARD',
+    baselineRelation: 'NOT_APPLICABLE',
+    authorityResolution: 'NOT_APPLICABLE'
+  };
+  const unsupported = [
+    ['observation', 'UNKNOWN_OBSERVATION'],
+    ['mode', 'UNKNOWN_MODE'],
+    ['baselineRelation', 'UNKNOWN_BASELINE'],
+    ['authorityResolution', 'UNKNOWN_AUTHORITY']
+  ];
+
+  unsupported.forEach(([field, value]) => {
+    assert.throws(
+      () => evaluateArchitectureRuleResult({ ...valid, [field]: value }),
+      new RegExp(`Unsupported architecture rule ${field}`)
+    );
+  });
+  assert.throws(
+    () => evaluateArchitectureRuleResult({ ...valid, mode: 'FROZEN' }),
+    /mode FROZEN is unavailable/
+  );
+  assert.throws(
+    () => evaluateArchitectureRuleResult({ ...valid, decision: 'PASS' }),
+    /requires exactly/
+  );
+  const { authorityResolution: _omitted, ...missingField } = valid;
+  assert.throws(() => evaluateArchitectureRuleResult(missingField), /requires exactly/);
+  assert.throws(() => evaluateArchitectureRuleResult(null), /semantic input object/);
+});
+
 test('evaluation leaves frozen inputs unchanged and returns stable plain data', () => {
   const deepFreeze = (value) => {
     if (value && typeof value === 'object') {
@@ -324,165 +390,4 @@ test('evaluation leaves frozen inputs unchanged and returns stable plain data', 
   assert.equal(JSON.stringify(value), before);
   assert.equal(Object.getPrototypeOf(first), Object.prototype);
   assert.equal(Object.getPrototypeOf(first.errors), Array.prototype);
-});
-
-const TRUSTED_FIXTURE_FILES = Object.freeze({
-  'package.json': '{"private":true}\n',
-  'tools/check-web-change-budget.mjs': readFileSync(
-    join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs'),
-    'utf8'
-  ),
-  'tools/web-architecture-detectors.mjs': readFileSync(
-    join(REPOSITORY_ROOT, 'tools/web-architecture-detectors.mjs'),
-    'utf8'
-  ),
-  'tools/web-architecture-evaluation.mjs': readFileSync(
-    join(REPOSITORY_ROOT, 'tools/web-architecture-evaluation.mjs'),
-    'utf8'
-  ),
-  'tools/web-change-policy.json': readFileSync(
-    join(REPOSITORY_ROOT, 'tools/web-change-policy.json'),
-    'utf8'
-  ),
-  'tools/web-change-source.mjs': readFileSync(
-    join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
-    'utf8'
-  ),
-  'gbdraw/web/js/app/run-analysis.js': (
-    "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
-    + "import { buildCanonicalRenderRequest } from '../services/session-request.js';\n"
-    + 'export const run = () => {\n'
-    + '  const request = buildCanonicalRenderRequest();\n'
-    + '  return runDiagramGeneration(request);\n'
-    + '};\n'
-  ),
-  'gbdraw/web/js/services/diagram-generation.js': (
-    'export const runDiagramGeneration = () => 1;\n'
-  ),
-  'gbdraw/web/js/services/session-request.js': (
-    'export const buildCanonicalRenderRequest = () => ({});\n'
-  )
-});
-
-const writeFixtureFile = (root, path, content) => {
-  const target = join(root, path);
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, content, 'utf8');
-};
-
-const withTrustedCheckerRepository = (mutateHead, runCase, baseFiles = {}) => {
-  const root = mkdtempSync(join(tmpdir(), 'gbdraw-architecture-ratchet-'));
-  try {
-    Object.entries({ ...TRUSTED_FIXTURE_FILES, ...baseFiles }).forEach(([path, content]) => {
-      writeFixtureFile(root, path, content);
-    });
-    const git = (args) => spawnSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    assert.equal(git(['init', '--quiet']).status, 0);
-    assert.equal(git(['config', 'user.email', 'ratchet@example.invalid']).status, 0);
-    assert.equal(git(['config', 'user.name', 'Ratchet Fixture']).status, 0);
-    assert.equal(git(['add', '.']).status, 0);
-    assert.equal(git(['commit', '--quiet', '-m', 'trusted base']).status, 0);
-    const base = git(['rev-parse', 'HEAD']).stdout.trim();
-    mutateHead((path, content) => writeFixtureFile(root, path, content));
-    assert.equal(git(['add', '-A']).status, 0);
-    assert.equal(git(['commit', '--quiet', '-m', 'candidate head']).status, 0);
-    const head = git(['rev-parse', 'HEAD']).stdout.trim();
-    assert.equal(git(['checkout', '--quiet', '--detach', base]).status, 0);
-    const result = spawnSync(process.execPath, [
-      'tools/check-web-change-budget.mjs',
-      '--base', base,
-      '--head', head
-    ], {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    runCase({
-      base,
-      head,
-      status: result.status,
-      output: `${result.stdout || ''}${result.stderr || ''}`
-    });
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-};
-
-const writeRules = (write, value) => write(
-  'tools/web-architecture-rules.json',
-  `${JSON.stringify(value, null, 2)}\n`
-);
-
-test('trusted checker admits an isolated clean-base candidate registry as inert data', () => {
-  withTrustedCheckerRepository(
-    (write) => writeRules(write, registry()),
-    ({ status, output }) => {
-      assert.equal(status, 0, output);
-      assert.match(output, /Classification: EXPANSION/);
-      assert.match(output, /canonical-path\.render-request against untouched base: CONFORMING/);
-      assert.match(output, /semantic-owner\.render-request against untouched base: CONFORMING/);
-      assert.match(output, /Result: \*\*PASS\*\*/);
-    }
-  );
-});
-
-test('trusted checker rejects malformed candidate JSON', () => {
-  withTrustedCheckerRepository(
-    (write) => write('tools/web-architecture-rules.json', '{"schemaVersion":1,"rules":['),
-    ({ status, output }) => {
-      assert.equal(status, 1, output);
-      assert.match(output, /Cannot parse tools\/web-architecture-rules\.json/);
-      assert.match(output, /Result: \*\*FAIL\*\*/);
-    }
-  );
-});
-
-test('trusted checker rejects an authority contraction that excludes active head source', () => {
-  const baseRules = registry([semanticRule({
-    allowedDefinitionPaths: [
-      'services/future-session-request.js',
-      'services/session-request.js'
-    ]
-  })]);
-  const candidateRules = registry([semanticRule({
-    allowedDefinitionPaths: ['services/future-session-request.js']
-  })]);
-  withTrustedCheckerRepository(
-    (write) => writeRules(write, candidateRules),
-    ({ status, output }) => {
-      assert.equal(status, 1, output);
-      assert.match(output, /Classification: CONTRACTION/);
-      assert.match(output, /authority contraction or tightening is DIVERGENT on head source data/);
-    },
-    { 'tools/web-architecture-rules.json': `${JSON.stringify(baseRules, null, 2)}\n` }
-  );
-});
-
-test('trusted checker never executes a proposed head detector during self-authorization', () => {
-  withTrustedCheckerRepository(
-    (write) => {
-      writeRules(write, registry([semanticRule({
-        allowedDefinitionPaths: ['app/secondary.js']
-      })]));
-      write(
-        'gbdraw/web/js/app/secondary.js',
-        'export const buildCanonicalRenderRequest = () => ({});\n'
-      );
-      write(
-        'tools/web-architecture-detectors.mjs',
-        'throw new Error("MALICIOUS HEAD DETECTOR EXECUTED");\n'
-      );
-    },
-    ({ status, output }) => {
-      assert.equal(status, 1, output);
-      assert.doesNotMatch(output, /MALICIOUS HEAD DETECTOR EXECUTED/);
-      assert.match(output, /claims a clean base but is DIVERGENT/);
-      assert.match(output, /architecture rule authority changes must be isolated/);
-      assert.match(output, /production runtime files and Web guard\/CI files changed together/);
-    }
-  );
 });

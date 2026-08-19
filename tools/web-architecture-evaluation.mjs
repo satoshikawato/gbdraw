@@ -36,6 +36,30 @@ const DIRECTION_ORDER = Object.freeze([
   'CONTRACTION',
   'TIGHTENING'
 ]);
+const RESULT_FIELDS = Object.freeze([
+  'authorityResolution',
+  'baselineRelation',
+  'mode',
+  'observation'
+]);
+const RESULT_OBSERVATIONS = Object.freeze([
+  'ABSENT_REQUIRED',
+  'CONFORMING',
+  'DIVERGENT'
+]);
+const RESULT_MODES = Object.freeze(['FROZEN', 'HARD', 'REPORT_ONLY']);
+const BASELINE_RELATIONS = Object.freeze([
+  'ACCEPTED',
+  'FIXED',
+  'NEW',
+  'NOT_APPLICABLE'
+]);
+const AUTHORITY_RESOLUTIONS = Object.freeze([
+  'EXACT_CONTRACTION',
+  'INVALID_CHANGE',
+  'NOT_APPLICABLE',
+  'RETAINED'
+]);
 
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 const isRecord = (value) => value !== null
@@ -387,6 +411,60 @@ export const classifyArchitectureRuleObservation = (rule, detectorOutput) => {
   }
 
   throw new Error(`Unsupported rule kind ${rule.kind}`);
+};
+
+export const evaluateArchitectureRuleResult = (semanticInputs) => {
+  if (!isRecord(semanticInputs)) {
+    throw new Error('Architecture rule evaluation requires one semantic input object');
+  }
+  const actualFields = Object.keys(semanticInputs).sort(compareText);
+  if (
+    actualFields.length !== RESULT_FIELDS.length
+    || actualFields.some((field, index) => field !== RESULT_FIELDS[index])
+  ) {
+    throw new Error(
+      `Architecture rule evaluation requires exactly: ${RESULT_FIELDS.join(', ')}`
+    );
+  }
+
+  const {
+    observation,
+    mode,
+    baselineRelation,
+    authorityResolution
+  } = semanticInputs;
+  const supportedValues = [
+    ['observation', observation, RESULT_OBSERVATIONS],
+    ['mode', mode, RESULT_MODES],
+    ['baselineRelation', baselineRelation, BASELINE_RELATIONS],
+    ['authorityResolution', authorityResolution, AUTHORITY_RESOLUTIONS]
+  ];
+  supportedValues.forEach(([field, value, allowed]) => {
+    if (!allowed.includes(value)) {
+      throw new Error(`Unsupported architecture rule ${field}: ${value}`);
+    }
+  });
+
+  if (mode === 'FROZEN') {
+    throw new Error('Architecture rule mode FROZEN is unavailable');
+  }
+  if (baselineRelation !== 'NOT_APPLICABLE') {
+    throw new Error(`${mode} requires baselineRelation NOT_APPLICABLE`);
+  }
+  if (authorityResolution !== 'NOT_APPLICABLE') {
+    throw new Error(`${mode} requires authorityResolution NOT_APPLICABLE`);
+  }
+
+  const decision = observation === 'CONFORMING'
+    ? 'PASS'
+    : mode === 'HARD' ? 'FAIL' : 'REPORT';
+  return Object.freeze({
+    observation,
+    mode,
+    baselineRelation,
+    authorityResolution,
+    decision
+  });
 };
 
 const enforcementDirection = (before, after) => {
