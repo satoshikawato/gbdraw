@@ -6,6 +6,8 @@ import {
   classifyArchitectureAuthorityDelta,
   classifyArchitectureRuleObservation,
   evaluateArchitectureRuleResult,
+  findDirectedGraphCycles,
+  summarizeArchitectureInventory,
   validateArchitectureRuleRegistry,
   WEB_ARCHITECTURE_RULE_SCHEMA
 } from '../../tools/web-architecture-evaluation.mjs';
@@ -46,6 +48,85 @@ const registry = (rules = [canonicalRule(), semanticRule()]) => ({
 const validationCodes = (value, catalog = WEB_ARCHITECTURE_DETECTORS, options = {}) => (
   validateArchitectureRuleRegistry(value, catalog, options).errors.map(({ code }) => code)
 );
+
+test('stable inventory deltas expose additions, removals, totals, and signed change', () => {
+  assert.deepEqual(
+    summarizeArchitectureInventory(['beta', 'alpha', 'alpha'], ['gamma', 'beta']),
+    {
+      before: ['alpha', 'beta'],
+      added: ['gamma'],
+      removed: ['alpha'],
+      after: ['beta', 'gamma'],
+      delta: 0
+    }
+  );
+  assert.throws(
+    () => summarizeArchitectureInventory(['valid'], [1]),
+    /after must be an array of strings/
+  );
+});
+
+test('directed graph cycles include self-loops and stable multi-node SCC evidence', () => {
+  const result = findDirectedGraphCycles({
+    nodes: ['three-c.js', 'two-b.js', 'self.js', 'three-a.js', 'acyclic.js', 'two-a.js', 'three-b.js'],
+    edges: [
+      { from: 'three-c.js', to: 'three-a.js' },
+      { from: 'two-b.js', to: 'two-a.js' },
+      { from: 'self.js', to: 'self.js' },
+      { from: 'three-a.js', to: 'three-b.js' },
+      { from: 'two-a.js', to: 'two-b.js' },
+      { from: 'three-b.js', to: 'three-c.js' }
+    ]
+  });
+
+  assert.deepEqual(result, {
+    nodeCount: 7,
+    edgeCount: 6,
+    cycles: [
+      {
+        subject: 'nodes=[self.js]; edges=[self.js -> self.js]',
+        nodes: ['self.js'],
+        internalEdges: [{ from: 'self.js', to: 'self.js' }]
+      },
+      {
+        subject: 'nodes=[three-a.js, three-b.js, three-c.js]; edges=[three-a.js -> three-b.js, three-b.js -> three-c.js, three-c.js -> three-a.js]',
+        nodes: ['three-a.js', 'three-b.js', 'three-c.js'],
+        internalEdges: [
+          { from: 'three-a.js', to: 'three-b.js' },
+          { from: 'three-b.js', to: 'three-c.js' },
+          { from: 'three-c.js', to: 'three-a.js' }
+        ]
+      },
+      {
+        subject: 'nodes=[two-a.js, two-b.js]; edges=[two-a.js -> two-b.js, two-b.js -> two-a.js]',
+        nodes: ['two-a.js', 'two-b.js'],
+        internalEdges: [
+          { from: 'two-a.js', to: 'two-b.js' },
+          { from: 'two-b.js', to: 'two-a.js' }
+        ]
+      }
+    ]
+  });
+});
+
+test('acyclic graph evaluation passes with duplicate edges normalized away', () => {
+  assert.deepEqual(findDirectedGraphCycles({
+    nodes: ['c.js', 'a.js', 'b.js'],
+    edges: [
+      { from: 'a.js', to: 'b.js' },
+      { from: 'a.js', to: 'b.js' },
+      { from: 'b.js', to: 'c.js' }
+    ]
+  }), {
+    nodeCount: 3,
+    edgeCount: 2,
+    cycles: []
+  });
+  assert.throws(
+    () => findDirectedGraphCycles({ nodes: ['a.js'], edges: [{ from: 'a.js', to: 'b.js' }] }),
+    /references an unknown node/
+  );
+});
 
 test('schema version 1 accepts only the two discriminated initial rule kinds', () => {
   assert.deepEqual(WEB_ARCHITECTURE_RULE_SCHEMA, {
