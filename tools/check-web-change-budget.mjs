@@ -14,6 +14,7 @@ import {
 import {
   classifyArchitectureAuthorityDelta,
   classifyArchitectureRuleObservation,
+  evaluateArchitectureRuleResult,
   validateArchitectureRuleRegistry
 } from './web-architecture-evaluation.mjs';
 
@@ -298,6 +299,9 @@ const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => 
 const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
 const candidateArchitectureErrors = [];
 const candidateArchitectureObservations = [];
+const activeArchitectureErrors = [];
+const activeArchitectureFailures = [];
+const activeArchitectureRows = [];
 let architectureAuthorityDelta = Object.freeze({
   classification: 'UNCHANGED',
   directions: Object.freeze([]),
@@ -331,6 +335,18 @@ const productionSourcesAtRevision = (revision) => new Map(
     readRevisionFile(revision, path) || ''
   ])
 );
+const intendedRuleSubjects = (rule, detector) => (
+  rule.kind === 'single-semantic-owner'
+    ? rule.allowedDefinitionPaths.map((path) => detector.encodeSubject({ path }))
+    : rule.allowedEdges.map((edge) => detector.encodeSubject(edge))
+).sort();
+const registeredLocationSummary = (rule, detectorOutput, observation) => (
+  rule.kind === 'single-semantic-owner'
+    ? `registeredDefinitionLocations=${new Set(
+      (detectorOutput.observedDefinitions || []).map(({ path }) => path)
+    ).size}; observedDefinitions=${observation.observedCount}/${observation.requiredCount}`
+    : `observedCanonicalEntryEdges=${observation.observedCount}/${observation.requiredCount}`
+);
 
 const baseArchitectureRulesSource = readRevisionFile(base, architectureRulesPath);
 const proposedArchitectureRulesSource = readHeadFile(architectureRulesPath);
@@ -340,105 +356,154 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
     proposedArchitectureRulesSource,
     head || 'working tree'
   );
-  if (parsedBase.error) candidateArchitectureErrors.push(parsedBase.error);
+  if (parsedBase.error) activeArchitectureErrors.push(parsedBase.error);
   if (parsedCandidate.error) candidateArchitectureErrors.push(parsedCandidate.error);
 
-  if (parsedBase.registry && parsedCandidate.registry) {
-    const baseValidation = validateArchitectureRuleRegistry(
+  const baseValidation = parsedBase.registry
+    ? validateArchitectureRuleRegistry(
       parsedBase.registry,
       WEB_ARCHITECTURE_DETECTORS,
       architectureRuleValidationOptions
-    );
-    const candidateValidation = validateArchitectureRuleRegistry(
+    )
+    : null;
+  const candidateValidation = parsedCandidate.registry
+    ? validateArchitectureRuleRegistry(
       parsedCandidate.registry,
       WEB_ARCHITECTURE_DETECTORS,
       architectureRuleValidationOptions
+    )
+    : null;
+  if (baseValidation) {
+    activeArchitectureErrors.push(
+      ...formatRuleValidationErrors('base registry', baseValidation)
     );
+  }
+  if (candidateValidation) {
     candidateArchitectureErrors.push(
-      ...formatRuleValidationErrors('base registry', baseValidation),
       ...formatRuleValidationErrors('candidate registry', candidateValidation)
     );
+  }
 
-    if (baseValidation.valid && candidateValidation.valid) {
-      architectureAuthorityDelta = classifyArchitectureAuthorityDelta(
-        parsedBase.registry,
-        parsedCandidate.registry
-      );
-      if (architectureAuthorityDelta.changes.length) {
-        const companionPaths = [...changed.keys()]
-          .filter((path) => path !== architectureRulesPath)
-          .sort();
-        if (companionPaths.length) {
+  if (baseValidation?.valid) {
+    [...parsedBase.registry.rules]
+      .sort((left, right) => left.key.localeCompare(right.key))
+      .forEach((rule) => {
+        const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+        try {
+          const detectorOutput = detector.detect(allProductionSources);
+          const observation = classifyArchitectureRuleObservation(rule, detectorOutput);
+          const result = evaluateArchitectureRuleResult({
+            observation: observation.observation,
+            mode: rule.enforcement.replace('-', '_').toUpperCase(),
+            baselineRelation: 'NOT_APPLICABLE',
+            authorityResolution: 'NOT_APPLICABLE'
+          });
+          const subjects = observation.subjects.length
+            ? [...observation.subjects].sort()
+            : intendedRuleSubjects(rule, detector);
+          const locationSummary = registeredLocationSummary(
+            rule,
+            detectorOutput,
+            observation
+          );
+          (subjects.length ? subjects : ['<none>']).forEach((subject) => {
+            activeArchitectureRows.push(
+              `${rule.key} | subject=${subject} | observation=${result.observation} `
+              + `| mode=${result.mode} | baselineRelation=${result.baselineRelation} `
+              + `| authorityResolution=${result.authorityResolution} `
+              + `| decision=${result.decision} | ${locationSummary}`
+            );
+          });
+          if (result.decision === 'FAIL') {
+            activeArchitectureFailures.push(
+              `${rule.key} is ${result.observation} under ${result.mode}`
+            );
+          }
+        } catch (error) {
+          activeArchitectureErrors.push(`${rule.key}: ${error.message}`);
+        }
+      });
+  }
+
+  if (baseValidation?.valid && candidateValidation?.valid) {
+    architectureAuthorityDelta = classifyArchitectureAuthorityDelta(
+      parsedBase.registry,
+      parsedCandidate.registry
+    );
+    if (architectureAuthorityDelta.changes.length) {
+      const companionPaths = [...changed.keys()]
+        .filter((path) => path !== architectureRulesPath)
+        .sort();
+      if (companionPaths.length) {
+        candidateArchitectureErrors.push(
+          'architecture rule authority changes must be isolated from other changed paths: '
+          + companionPaths.join(', ')
+        );
+      }
+
+      const baseSources = productionSourcesAtRevision(base);
+      const candidateRules = new Map(parsedCandidate.registry.rules.map((rule) => [rule.key, rule]));
+      const changedRuleKeys = [...new Set(
+        architectureAuthorityDelta.changes.map(({ rule }) => rule)
+      )].sort();
+      changedRuleKeys.forEach((ruleKey) => {
+        const rule = candidateRules.get(ruleKey);
+        if (!rule) return;
+        const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+        let baseObservation;
+        try {
+          baseObservation = classifyArchitectureRuleObservation(
+            rule,
+            detector.detect(baseSources)
+          );
+        } catch (error) {
           candidateArchitectureErrors.push(
-            'architecture rule authority changes must be isolated from other changed paths: '
-            + companionPaths.join(', ')
+            `${rule.key} trusted-base detection failed: ${error.message}`
+          );
+          return;
+        }
+        candidateArchitectureObservations.push(
+          `${rule.key} against untouched base: ${baseObservation.observation} `
+          + `(${baseObservation.observedCount}/${baseObservation.requiredCount})`
+        );
+        if (
+          (rule.enforcement === 'hard' || rule.baselineEligible === false)
+          && baseObservation.observation !== 'CONFORMING'
+        ) {
+          candidateArchitectureErrors.push(
+            `${rule.key} claims a clean base but is ${baseObservation.observation}`
           );
         }
 
-        const baseSources = productionSourcesAtRevision(base);
-        const candidateRules = new Map(parsedCandidate.registry.rules.map((rule) => [rule.key, rule]));
-        const changedRuleKeys = [...new Set(
-          architectureAuthorityDelta.changes.map(({ rule }) => rule)
-        )].sort();
-        changedRuleKeys.forEach((ruleKey) => {
-          const rule = candidateRules.get(ruleKey);
-          if (!rule) return;
-          const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
-          let baseObservation;
-          try {
-            baseObservation = classifyArchitectureRuleObservation(
-              rule,
-              detector.detect(baseSources)
-            );
-          } catch (error) {
-            candidateArchitectureErrors.push(
-              `${rule.key} trusted-base detection failed: ${error.message}`
-            );
-            return;
-          }
-          candidateArchitectureObservations.push(
-            `${rule.key} against untouched base: ${baseObservation.observation} `
-            + `(${baseObservation.observedCount}/${baseObservation.requiredCount})`
+        const directions = new Set(architectureAuthorityDelta.changes
+          .filter((change) => change.rule === ruleKey)
+          .map(({ direction }) => direction));
+        if (![...directions].some((direction) => (
+          direction === 'CONTRACTION' || direction === 'TIGHTENING'
+        ))) return;
+        let headObservation;
+        try {
+          headObservation = classifyArchitectureRuleObservation(
+            rule,
+            detector.detect(allProductionSources)
           );
-          if (
-            (rule.enforcement === 'hard' || rule.baselineEligible === false)
-            && baseObservation.observation !== 'CONFORMING'
-          ) {
-            candidateArchitectureErrors.push(
-              `${rule.key} claims a clean base but is ${baseObservation.observation}`
-            );
-          }
-
-          const directions = new Set(architectureAuthorityDelta.changes
-            .filter((change) => change.rule === ruleKey)
-            .map(({ direction }) => direction));
-          if (![...directions].some((direction) => (
-            direction === 'CONTRACTION' || direction === 'TIGHTENING'
-          ))) return;
-          let headObservation;
-          try {
-            headObservation = classifyArchitectureRuleObservation(
-              rule,
-              detector.detect(allProductionSources)
-            );
-          } catch (error) {
-            candidateArchitectureErrors.push(
-              `${rule.key} trusted-head-data detection failed: ${error.message}`
-            );
-            return;
-          }
-          candidateArchitectureObservations.push(
-            `${rule.key} against head source data: ${headObservation.observation} `
-            + `(${headObservation.observedCount}/${headObservation.requiredCount})`
+        } catch (error) {
+          candidateArchitectureErrors.push(
+            `${rule.key} trusted-head-data detection failed: ${error.message}`
           );
-          if (headObservation.observation !== 'CONFORMING') {
-            candidateArchitectureErrors.push(
-              `${rule.key} authority contraction or tightening is ${headObservation.observation} `
-              + 'on head source data'
-            );
-          }
-        });
-      }
+          return;
+        }
+        candidateArchitectureObservations.push(
+          `${rule.key} against head source data: ${headObservation.observation} `
+          + `(${headObservation.observedCount}/${headObservation.requiredCount})`
+        );
+        if (headObservation.observation !== 'CONFORMING') {
+          candidateArchitectureErrors.push(
+            `${rule.key} authority contraction or tightening is ${headObservation.observation} `
+            + 'on head source data'
+          );
+        }
+      });
     }
   }
 }
@@ -584,6 +649,12 @@ if (missingPolicyKeys.length) {
 integrityViolations.push(...candidateArchitectureErrors.map((error) => (
   `candidate architecture rules: ${error}`
 )));
+integrityViolations.push(...activeArchitectureErrors.map((error) => (
+  `active architecture rules: ${error}`
+)));
+integrityViolations.push(...activeArchitectureFailures.map((error) => (
+  `active architecture rules: ${error}`
+)));
 const enforcedViolations = [
   ...integrityViolations,
   ...budgetViolations
@@ -669,6 +740,14 @@ const report = [
   '## Candidate architecture rule errors',
   '',
   ...list(candidateArchitectureErrors),
+  '',
+  '## Active architecture rule results',
+  '',
+  ...list(activeArchitectureRows),
+  '',
+  '## Active architecture rule errors',
+  '',
+  ...list(activeArchitectureErrors),
   '',
   '## Report-only cache/token/handle/journal/protocol/manager names',
   '',
