@@ -1,8 +1,8 @@
 # gbdraw architecture fitness-function ratchet implementation plan
 
-Status: active implementation plan, revision 7
+Status: Phase 7 repository-setting gate complete; first eligible runtime-PR rollout observation pending; Phase 8 deferred
 Created: 2026-08-17
-Revised: 2026-08-18
+Revised: 2026-08-21
 Supersedes: revision 6 of this plan and `GBDRAW_ARCHITECTURE_MATURITY_RATCHET_IMPLEMENTATION_PLAN_2026-08-17.md` revision 1
 Work-branch base: latest merged `origin/dev`
 Pull-request target and integration branch: `dev`
@@ -34,6 +34,19 @@ Phase 0 execution update on 2026-08-18:
 - GitHub branch protection and repository rulesets remain absent for `dev` and `main`. This is an explicitly unresolved external gate; it does not invalidate the Phase 0 technical baseline.
 - PR A may proceed from the latest merged `origin/dev` under explicit manual merge discipline: do not push directly to `dev` or `main`, do not merge before the applicable normal and trusted-base checks pass, and do not claim that the unresolved repository-setting gate has been completed.
 - Phase 7 and the overall architecture-ratchet implementation remain incomplete until the required branch protection or equivalent repository rulesets are configured and verified.
+
+Phase 7 repository-setting execution update on 2026-08-21:
+
+- The execution base is the latest merged `origin/dev` commit `75dc1b9f1fcb62cdf20ad772a85957ab7008ece4`, the merge commit for required PR F1, PR #361. The current `origin/main` commit is `be9410c92e61e67fbcaf359280ed45a91a42eee0`, the merge commit for promotion PR #360.
+- Before the settings change, `GET /repos/satoshikawato/gbdraw/branches/{branch}` returned `protected: false` for both `dev` and `main`; each classic branch-protection endpoint returned `404 Branch not protected`; `GET /repos/satoshikawato/gbdraw/rulesets` and both effective-rules endpoints returned empty arrays.
+- Phase 7 uses classic branch protection rather than repository rulesets. Both branches require pull requests with zero general approving reviews, apply protection to administrators, reject force pushes, and reject branch deletion. The manual structured architecture-owner comment remains a separate process gate and is not represented as a general approving-review count.
+- `dev` requires strict up-to-date status checks and these 12 contexts: `Web change budget`; `Web base policy (trusted base)`; `Core (Python 3.10)`; `Core (Python 3.11)`; `Core (Python 3.12)`; `Recipes standard (Python 3.11)`; `Gallery (Python 3.11)`; `Browser (Python 3.11)`; `Playwright functional`; `Playwright performance`; `Lint`; and `LOSAT cache browser acceptance`.
+- `main` requires the same 12 contexts plus `CodeQL`, the six `recipe`/`gallery`/`browser` acceptance contexts for Python 3.10 and 3.12, and `Slow (Python 3.10)`, `Slow (Python 3.11)`, and `Slow (Python 3.12)`, for 22 required contexts in total. Its strict up-to-date toggle remains off so a tested `dev` head can be promoted without merging the `main` promotion merge commit back into `dev`; the current-main trusted-base check and pull-request requirement remain mandatory.
+- Independent post-change API reads returned `protected: true` and `enforcement_level: everyone` for both branches. Exact-set verification passed for all 12 `dev` contexts against successful check runs on PR #361 head `1909ada8e831a96585056c727d628aaa54babb72`, and for all 22 `main` contexts against successful normal, promotion, and CodeQL check runs on PR #360 head `cff01407858e902c5ea43455bf075f7a159375b5`.
+- Verification commands: `node /tmp/verify_gbdraw_phase7.js` passed the independent API and successful-check-set assertions; `node tools/check-web-change-budget.mjs` returned `PASS` with zero production changes and zero first-party cycles; `node --test tests/web/architecture-contracts.test.mjs` passed 83 tests; and `git diff --check` passed.
+- `GET /repos/satoshikawato/gbdraw/rulesets` remains empty by design because classic branch protection is the selected enforcement mechanism. The classic protection endpoints are the setting authority for this rollout.
+- The repository-setting gate is complete. No architecture-bearing runtime pull request exists after PR #361 yet, so the first-runtime-PR manual rollout observations below have not been triggered. They remain an explicit operational requirement for the first eligible PR and are not claimed as completed evidence.
+- Conditional PR F2, PR G1, PR G2, and Phase 8 remain skipped or deferred exactly as recorded. `tools/web-architecture-violations.json` remains absent.
 
 ## 1. Objective
 
@@ -1685,6 +1698,15 @@ chore: activate frozen Web architecture rules
 ```
 
 ### Phase 7 — Repository-setting verification and rollout
+
+Execution status on 2026-08-21: the repository-setting gate is complete on
+`dev` at `75dc1b9f1fcb62cdf20ad772a85957ab7008ece4` and `main` at
+`be9410c92e61e67fbcaf359280ed45a91a42eee0`. Independent API reads verified
+classic branch protection, the exact required-check sets, pull-request-only
+updates, administrator enforcement, and force-push and deletion prevention.
+The first eligible architecture-bearing runtime pull request after PR #361 does
+not exist yet, so its manual rollout observation remains pending until that
+event occurs.
 
 Confirm that both protected branches use the expected checks:
 
