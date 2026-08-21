@@ -78,6 +78,133 @@ const stableDifference = (left, right, key = (value) => value) => {
   return left.filter((value) => !rightKeys.has(key(value)));
 };
 
+const stableTextSet = (values, label) => {
+  if (!Array.isArray(values) || values.some((value) => typeof value !== 'string')) {
+    throw new Error(`${label} must be an array of strings`);
+  }
+  return Object.freeze(stableUnique(values));
+};
+
+export const summarizeArchitectureInventory = (beforeValues, afterValues) => {
+  const before = stableTextSet(beforeValues, 'Architecture inventory before');
+  const after = stableTextSet(afterValues, 'Architecture inventory after');
+  const added = Object.freeze(stableDifference(after, before));
+  const removed = Object.freeze(stableDifference(before, after));
+  return Object.freeze({
+    before,
+    added,
+    removed,
+    after,
+    delta: after.length - before.length
+  });
+};
+
+const validateGraphFields = (graph) => {
+  const fields = Object.keys(graph).sort(compareText);
+  if (fields.length !== 2 || fields[0] !== 'edges' || fields[1] !== 'nodes') {
+    throw new Error('Directed graph requires exactly: edges, nodes');
+  }
+};
+
+const normalizeDirectedGraph = (graph) => {
+  if (!isRecord(graph)) throw new Error('Directed graph must be an object');
+  validateGraphFields(graph);
+  const nodes = stableTextSet(graph.nodes, 'Directed graph nodes');
+  const nodeSet = new Set(nodes);
+  if (!Array.isArray(graph.edges)) throw new Error('Directed graph edges must be an array');
+  const edgesByKey = new Map();
+  graph.edges.forEach((edge, index) => {
+    if (!isRecord(edge) || typeof edge.from !== 'string' || typeof edge.to !== 'string') {
+      throw new Error(`Directed graph edge ${index} must define string from and to fields`);
+    }
+    if (Object.keys(edge).some((field) => !['from', 'to'].includes(field))) {
+      throw new Error(`Directed graph edge ${index} contains an unknown field`);
+    }
+    if (!nodeSet.has(edge.from) || !nodeSet.has(edge.to)) {
+      throw new Error(`Directed graph edge ${displayEdge(edge)} references an unknown node`);
+    }
+    edgesByKey.set(edgeKey(edge), Object.freeze({ from: edge.from, to: edge.to }));
+  });
+  return Object.freeze({
+    nodes,
+    edges: Object.freeze([...edgesByKey.values()].sort(compareEdges))
+  });
+};
+
+export const findDirectedGraphCycles = (graph) => {
+  const normalized = normalizeDirectedGraph(graph);
+  const adjacency = new Map(normalized.nodes.map((node) => [node, []]));
+  normalized.edges.forEach(({ from, to }) => adjacency.get(from).push(to));
+  adjacency.forEach((targets) => targets.sort(compareText));
+
+  let nextIndex = 0;
+  const indexByNode = new Map();
+  const lowLinkByNode = new Map();
+  const stack = [];
+  const stacked = new Set();
+  const components = [];
+
+  const visit = (node) => {
+    indexByNode.set(node, nextIndex);
+    lowLinkByNode.set(node, nextIndex);
+    nextIndex += 1;
+    stack.push(node);
+    stacked.add(node);
+
+    adjacency.get(node).forEach((target) => {
+      if (!indexByNode.has(target)) {
+        visit(target);
+        lowLinkByNode.set(
+          node,
+          Math.min(lowLinkByNode.get(node), lowLinkByNode.get(target))
+        );
+      } else if (stacked.has(target)) {
+        lowLinkByNode.set(
+          node,
+          Math.min(lowLinkByNode.get(node), indexByNode.get(target))
+        );
+      }
+    });
+
+    if (lowLinkByNode.get(node) !== indexByNode.get(node)) return;
+    const component = [];
+    let member;
+    do {
+      member = stack.pop();
+      stacked.delete(member);
+      component.push(member);
+    } while (member !== node);
+    components.push(component.sort(compareText));
+  };
+
+  normalized.nodes.forEach((node) => {
+    if (!indexByNode.has(node)) visit(node);
+  });
+
+  const cycles = components.flatMap((nodes) => {
+    const members = new Set(nodes);
+    const internalEdges = normalized.edges.filter(({ from, to }) => (
+      members.has(from) && members.has(to)
+    ));
+    const cyclic = nodes.length > 1
+      || internalEdges.some(({ from, to }) => from === to);
+    if (!cyclic) return [];
+    const edgeSubjects = internalEdges.map(displayEdge);
+    const subject = `nodes=[${nodes.join(', ')}]; edges=[${edgeSubjects.join(', ')}]`;
+    return [Object.freeze({
+      subject,
+      nodes: Object.freeze([...nodes]),
+      internalEdges: Object.freeze([...internalEdges])
+    })];
+  }).sort((left, right) => compareText(left.subject, right.subject));
+
+  return Object.freeze({
+    nodeCount: normalized.nodes.length,
+    edgeCount: normalized.edges.length,
+    cycles: Object.freeze(cycles)
+  });
+};
+
 const addError = (errors, code, path, message) => {
   errors.push(Object.freeze({ code, path, message }));
 };

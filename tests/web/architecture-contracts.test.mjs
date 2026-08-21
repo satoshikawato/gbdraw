@@ -1161,6 +1161,174 @@ test('active base rules accept one canonical entry edge', () => {
         output,
         /semantic-owner\.render-request .* registeredDefinitionLocations=1/
       );
+      assert.match(
+        output,
+        /First-party static import graph[\s\S]*Before: 3 modules, 2 edges, 0 cycles[\s\S]*After: 3 modules, 2 edges, 0 cycles/
+      );
+      assert.match(
+        output,
+        /Registered Authority Location Count \| 1 \| 0 \| 0 \| 1 \| 0 \| registered rule/
+      );
+    }
+  );
+});
+
+test('an extra registered authority location fails and remains visible in the delta', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/extra-authority.js',
+      'export const buildCanonicalRenderRequest = () => ({});\n'
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(
+        output,
+        /semantic-owner\.render-request .* observation=DIVERGENT .* decision=FAIL/
+      );
+      assert.match(
+        output,
+        /Registered Authority Location Count \| 1 \| 1 \| 0 \| 2 \| \+1 \| registered rule/
+      );
+      assert.match(output, /semantic-owner\.render-request: app\/extra-authority\.js/);
+    }
+  );
+});
+
+test('an unpreauthorized registered authority move fails', () => {
+  withTrustedArchitectureRepository(
+    (write) => {
+      write(
+        'gbdraw/web/js/services/session-request.js',
+        'export const retiredRequestHelper = () => ({});\n'
+      );
+      write(
+        'gbdraw/web/js/app/moved-authority.js',
+        'export const buildCanonicalRenderRequest = () => ({});\n'
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(
+        output,
+        /semantic-owner\.render-request \| subject=app\/moved-authority\.js .* observation=DIVERGENT .* decision=FAIL/
+      );
+      assert.match(output, /Removed \(1\):[\s\S]*services\/session-request\.js/);
+    }
+  );
+});
+
+test('a first-party static self-import fails as a one-node cycle', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/self-cycle.js',
+      "import './self-cycle.js';\nexport const selfCycle = true;\n"
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /first-party static import cycles are not allowed/);
+      assert.match(
+        output,
+        /nodes=\[app\/self-cycle\.js\]; edges=\[app\/self-cycle\.js -> app\/self-cycle\.js\]/
+      );
+    }
+  );
+});
+
+test('two-node and three-node first-party static cycles fail', () => {
+  const cases = [
+    {
+      name: 'two-node',
+      files: {
+        'gbdraw/web/js/app/two-a.js': "import './two-b.js';\n",
+        'gbdraw/web/js/app/two-b.js': "import './two-a.js';\n"
+      },
+      expected: /nodes=\[app\/two-a\.js, app\/two-b\.js\]; edges=\[app\/two-a\.js -> app\/two-b\.js, app\/two-b\.js -> app\/two-a\.js\]/
+    },
+    {
+      name: 'three-node',
+      files: {
+        'gbdraw/web/js/app/three-a.js': "import './three-b.js';\n",
+        'gbdraw/web/js/app/three-b.js': "import './three-c.js';\n",
+        'gbdraw/web/js/app/three-c.js': "import './three-a.js';\n"
+      },
+      expected: /nodes=\[app\/three-a\.js, app\/three-b\.js, app\/three-c\.js\]; edges=\[app\/three-a\.js -> app\/three-b\.js, app\/three-b\.js -> app\/three-c\.js, app\/three-c\.js -> app\/three-a\.js\]/
+    }
+  ];
+
+  cases.forEach(({ name, files, expected }) => {
+    withTrustedArchitectureRepository(
+      (write) => Object.entries(files).forEach(([path, source]) => write(path, source)),
+      ({ status, output }) => {
+        assert.equal(status, 1, `${name}\n${output}`);
+        assert.match(output, expected);
+      }
+    );
+  });
+});
+
+test('an acyclic graph resolves extensionless modules and directory indexes', () => {
+  withTrustedArchitectureRepository(
+    (write) => {
+      write(
+        'gbdraw/web/js/app/acyclic-root.js',
+        "import './acyclic-leaf';\nimport './acyclic-directory';\n"
+      );
+      write('gbdraw/web/js/app/acyclic-leaf.js', 'export const leaf = true;\n');
+      write('gbdraw/web/js/app/acyclic-directory/index.js', 'export const index = true;\n');
+    },
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /After: 6 modules, 4 edges, 0 cycles/);
+      assert.doesNotMatch(output, /first-party static import graph is incomplete/);
+    }
+  );
+});
+
+test('multiple cycles report stable sorted nodes and internal edges', () => {
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/zeta-a.js', "import './zeta-b.js';\n");
+      write('gbdraw/web/js/app/zeta-b.js', "import './zeta-a.js';\n");
+      write('gbdraw/web/js/app/alpha-a.js', "import './alpha-b.js';\n");
+      write('gbdraw/web/js/app/alpha-b.js', "import './alpha-a.js';\n");
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      const alpha = output.indexOf(
+        'nodes=[app/alpha-a.js, app/alpha-b.js]; edges=[app/alpha-a.js -> app/alpha-b.js, app/alpha-b.js -> app/alpha-a.js]'
+      );
+      const zeta = output.indexOf(
+        'nodes=[app/zeta-a.js, app/zeta-b.js]; edges=[app/zeta-a.js -> app/zeta-b.js, app/zeta-b.js -> app/zeta-a.js]'
+      );
+      assert.ok(alpha >= 0 && alpha < zeta, output);
+      assert.match(
+        output,
+        /First-party static import cycles \| 0 \| 2 \| 0 \| 2 \| \+2 \| hard/
+      );
+    }
+  );
+});
+
+test('compatibility-like names report and a private helper adds no authority', () => {
+  withTrustedArchitectureRepository(
+    (write) => {
+      write(
+        'gbdraw/web/js/app/private-helper.js',
+        'const migrateLegacyFixture = () => 1;\nexport const usePrivateHelper = () => migrateLegacyFixture();\n'
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(
+        output,
+        /Compatibility-like names \| 0 \| 1 \| 0 \| 1 \| \+1 \| report-only/
+      );
+      assert.match(output, /gbdraw\/web\/js\/app\/private-helper\.js: migrateLegacyFixture/);
+      assert.match(
+        output,
+        /Registered Authority Location Count \| 1 \| 0 \| 0 \| 1 \| 0 \| registered rule/
+      );
+      assert.match(output, /Result: \*\*PASS\*\*/);
     }
   );
 });
@@ -1284,6 +1452,23 @@ test('a proposed detector that throws is never loaded or executed', () => {
       assert.equal(status, 0, output);
       assert.doesNotMatch(output, /MALICIOUS HEAD DETECTOR EXECUTED/);
       assert.match(output, /canonical-path\.render-request .* decision=PASS/);
+    }
+  );
+});
+
+test('trusted fixture execution imports detector and evaluator modules from its base revision', () => {
+  const localDetector = `${WEB_ARCHITECTURE_DETECTOR_SOURCE}\nprocess.stderr.write('FIXTURE_LOCAL_DETECTOR\\n');\n`;
+  const localEvaluator = `${WEB_ARCHITECTURE_EVALUATION_SOURCE}\nprocess.stderr.write('FIXTURE_LOCAL_EVALUATOR\\n');\n`;
+  withTrustedArchitectureRepository(
+    (write) => write('fixture-note.txt', 'exercise fixture-local modules\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /FIXTURE_LOCAL_DETECTOR/);
+      assert.match(output, /FIXTURE_LOCAL_EVALUATOR/);
+    },
+    {
+      'tools/web-architecture-detectors.mjs': localDetector,
+      'tools/web-architecture-evaluation.mjs': localEvaluator
     }
   );
 });
@@ -1451,6 +1636,50 @@ test('new module, export, create, reactive, and watcher signals are report-only'
     assert.match(result.output, /createBudgetOwner/);
     assert.match(result.output, /budgetState \(ref\)/);
     assert.match(result.output, /\+1 watcher call/);
+  });
+});
+
+test('report-only inventory contractions display removals without failing', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/report-base.js',
+      'export const plainReportValue = 1;\n'
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(
+        output,
+        /create\* declarations \| 1 \| 0 \| 1 \| 0 \| -1 \| report-only/
+      );
+      assert.match(output, /Watcher calls \| 1 \| 0 \| 1 \| 0 \| -1 \| report-only/);
+      assert.match(
+        output,
+        /Compatibility-like names \| 1 \| 0 \| 1 \| 0 \| -1 \| report-only/
+      );
+      assert.match(output, /Removed \(1\):[\s\S]*createCacheManager/);
+    },
+    {
+      'gbdraw/web/js/app/report-base.js': (
+        'export const createCacheManager = () => 1;\n'
+        + 'const reactiveReport = ref(0);\n'
+        + 'watch(reactiveReport, () => migrateLegacyReport());\n'
+      )
+    }
+  );
+});
+
+test('the compact differential table is written to GITHUB_STEP_SUMMARY', () => {
+  withChangeBudgetRepository(({ execute, root }) => {
+    const summaryPath = join(root, 'step-summary.md');
+    const result = execute({ environment: { GITHUB_STEP_SUMMARY: summaryPath } });
+    assert.equal(result.status, 0, result.output);
+    const summary = readFileSync(summaryPath, 'utf8');
+    assert.match(summary, /## Architecture differential summary/);
+    assert.match(
+      summary,
+      /\| Inventory \| Before \| Added \| Removed \| After \| Delta \| Classification \|/
+    );
+    assert.match(summary, /## First-party static import graph/);
   });
 });
 
@@ -2114,7 +2343,8 @@ test('comments, strings, and local session object keys are not hard failures', (
       'export const readSession = () => {\n'
         + '  // export const createCacheManager = () => watch(runDiagramGeneration);\n'
         + '  const note = "import runPython from \'./app/python-helpers.js\'";\n'
-        + '  return { version: 1, journalToken: note };\n'
+        + '  const template = `\nimport \'./session-file.js\';\n`;\n'
+        + '  return { version: 1, journalToken: note + template };\n'
         + '};\n'
     );
   });
