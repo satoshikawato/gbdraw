@@ -1,22 +1,35 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 
 import { buildRestoredMatchSequenceSources } from '../../gbdraw/web/js/app/match-sequences.js';
+import { readFileText } from '../../gbdraw/web/js/services/file-content-cache.js';
+import {
+  adoptCurrentSessionResources,
+  sessionResourceSource
+} from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { projectCanonicalSessionRequest } from '../../gbdraw/web/js/services/session-request.js';
-
 
 const sessionPath = new URL(
   '../../gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json',
   import.meta.url
 );
 const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+const resourceMetrics = [];
+globalThis.__GBDRAW_TEST_HOOKS__ = {
+  onStructuralMetric(metric) {
+    resourceMetrics.push({ ...metric });
+  }
+};
+const sessionResourceTable = adoptCurrentSessionResources(session.resources);
 const projection = projectCanonicalSessionRequest({
   renderRequest: session.renderRequest,
   resources: session.resources,
   webFiles: session.webFiles,
   legacyFiles: session.files,
   storedConfig: session.config,
-  fileBindings: session.cliInvocation?.fileBindings
+  fileBindings: session.cliInvocation?.fileBindings,
+  sessionResourceTable
 });
 
 const expectedComparisons = [
@@ -72,18 +85,19 @@ assert.deepEqual(
   ]
 );
 
-const withText = (file) => ({
-  ...file,
-  text: async () => Buffer.from(file.data, 'base64').toString('utf8')
-});
+const lazyViews = [projection.files.c_gb, ...projection.files.c_conservation_fastas];
+for (const file of lazyViews) {
+  assert.equal(Object.isFrozen(file), true);
+  for (const field of ['text', 'arrayBuffer', 'data', 'resourceId']) {
+    assert.equal(Object.hasOwn(file, field), false, `${file.name} exposed ${field}`);
+  }
+}
+assert.equal(resourceMetrics.length, 0, 'resource projection must remain metadata-only');
+
 const restoredSources = await buildRestoredMatchSequenceSources({
   mode: projection.mode,
   cInputType: projection.inputType,
-  files: {
-    ...projection.files,
-    c_gb: withText(projection.files.c_gb),
-    c_conservation_fastas: projection.files.c_conservation_fastas.map(withText)
-  },
+  files: projection.files,
   circularConservation: session.config.circularConservation
 });
 const comparisons = restoredSources.filter(
@@ -101,4 +115,40 @@ assert.deepEqual(
 assert.deepEqual(
   comparisons.map((source) => source.sourceIndex),
   Array.from({ length: 20 }, (_, index) => index)
+);
+
+const expectedResourceIds = session.webFiles.conservationLosatFastaSources;
+assert.deepEqual(
+  projection.files.c_conservation_fastas.map((file) => (
+    sessionResourceSource(file)?.resourceId
+  )),
+  expectedResourceIds
+);
+assert.equal(
+  sessionResourceSource(projection.files.c_gb)?.resourceId,
+  session.renderRequest.records[0].source.resourceId
+);
+assert.deepEqual(
+  projection.files.c_conservation_fastas.map((file) => sessionResourceSource(file)?.descriptor),
+  expectedResourceIds.map((resourceId) => session.resources[resourceId])
+);
+
+const fastaTexts = await Promise.all(
+  projection.files.c_conservation_fastas.map((file) => readFileText(file))
+);
+const displayedCacheEntries = session.losatCache.entries.filter((entry) => (
+  entry.flow === 'circular-conservation' && entry.display === true
+));
+assert.equal(displayedCacheEntries.length, 20);
+assert.deepEqual(
+  fastaTexts.map((text) => createHash('sha256').update(text).digest('hex')),
+  displayedCacheEntries.map((entry) => entry.queryCanonicalHash)
+);
+assert.equal(
+  resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount').length,
+  21
+);
+assert.equal(
+  resourceMetrics.filter(({ name }) => name === 'base64DecodeCount').length,
+  21
 );

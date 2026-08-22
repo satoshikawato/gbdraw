@@ -638,9 +638,6 @@ const logPostGbdrawTimings = (entries) => {
   console.groupEnd();
 };
 const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
-  if (typeof text !== 'string' && !file?.text) {
-    throw new Error('Input file is not available for browser FASTA extraction.');
-  }
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   const selected = selectParsedRecord(records, recordSelector);
@@ -652,9 +649,6 @@ const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelect
   };
 };
 const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
-  if (typeof text !== 'string' && !file?.text) {
-    throw new Error('Input file is not available for browser FASTA extraction.');
-  }
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   if (!records.length) throw new Error('No records found for circular conservation reference.');

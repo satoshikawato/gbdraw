@@ -171,6 +171,10 @@ const { createHistorySnapshotService } = await import(
   '../../gbdraw/web/js/services/history-snapshot.js'
 );
 const {
+  adoptCurrentSessionResources,
+  createSessionResourceFileView
+} = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { normalizeLinearSeqList, state } = await import('../../gbdraw/web/js/state.js');
@@ -291,6 +295,27 @@ const committedFeatureState = () => structuredClone({
   resultGenerationKey: state.resultGenerationKey.value,
   lastRunInfo: state.lastRunInfo.value
 });
+
+const encodedResource = (kind, name, text) => {
+  const bytes = new TextEncoder().encode(text);
+  return {
+    kind,
+    name,
+    type: 'text/plain',
+    size: bytes.byteLength,
+    lastModified: 0,
+    encoding: 'base64',
+    data: Buffer.from(bytes).toString('base64')
+  };
+};
+
+const sha256Text = async (text) => {
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(text)
+  ));
+  return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
+};
 
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
@@ -657,6 +682,321 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.adv.multi_record_positions, discoveryStateBeforeRollback.positions);
   assert.deepEqual(state.circularRecordDiscovery, discoveryStateBeforeRollback.discovery);
   state.semanticFileWatchersSuppressed.value = false;
+});
+
+test('FASTA extraction delegates lazy resources to the shared reader', async () => {
+  const resourceMetrics = [];
+  const previousTestHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      resourceMetrics.push({ ...metric });
+    }
+  };
+  const referenceText = [
+    'LOCUS       REF 8 bp DNA',
+    'ORIGIN',
+    '        1 acgtacgt',
+    '//',
+    ''
+  ].join('\n');
+  const referenceFasta = '>REF\nACGTACGT\n';
+  const comparisonText = '>CMP\nTTTTAAAA\n';
+  const resourceTable = adoptCurrentSessionResources({
+    reference: encodedResource('genbank', 'reference.gb', referenceText),
+    comparison: encodedResource('conservation-fasta-file', 'comparison.fa', comparisonText)
+  });
+  const referenceView = createSessionResourceFileView(resourceTable, 'reference');
+  const comparisonView = createSessionResourceFileView(resourceTable, 'comparison');
+  const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
+  for (const file of [referenceView, comparisonView]) {
+    assert.equal(Object.isFrozen(file), true);
+    lazyFields.forEach((field) => assert.equal(Object.hasOwn(file, field), false));
+  }
+
+  state.mode.value = 'circular';
+  state.cInputType.value = 'gb';
+  state.form.prefix = 'lazy-circular';
+  state.form.show_depth = false;
+  state.form.multi_record_canvas = false;
+  state.adv.circular_track_slots_enabled = false;
+  state.adv.circular_track_slots = [];
+  Object.assign(state.adv, {
+    min_bitscore: 0,
+    evalue: '1e-2',
+    identity: 0,
+    alignment_length: 0
+  });
+  Object.assign(state.circularConservation, {
+    enabled: true,
+    source: 'losat',
+    losat_program: 'blastn',
+    subject_gencode: 1,
+    reference: 'auto',
+    labels: '',
+    ring_width: 5,
+    ring_gap: 2
+  });
+  state.circularConservation.series.splice(0, state.circularConservation.series.length, {
+    sourceKey: `${comparisonView.name}|${comparisonView.size}|0|0`,
+    fileName: comparisonView.name,
+    sourceIndex: 0,
+    label: 'Lazy comparison',
+    color: '#123456',
+    losat_gencode: 1
+  });
+  state.files.c_gb = referenceView;
+  state.files.c_gff = null;
+  state.files.c_fasta = null;
+  state.files.c_depth = null;
+  state.files.c_conservation_blasts = [];
+  state.files.c_conservation_fastas = [comparisonView];
+  state.files.c_conservation_sequence_sources = [];
+  state.annotationSets.splice(0);
+  state.circularRecordList.value = [];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+  });
+
+  const queryCanonicalHash = await sha256Text(comparisonText);
+  const subjectCanonicalHash = await sha256Text(referenceFasta);
+  const cachePayload = {
+    cacheSchema: 2,
+    identityKind: 'nucleotide',
+    program: 'blastn',
+    outfmt: '6',
+    args: ['--task', 'megablast'],
+    queryCanonicalHash,
+    subjectCanonicalHash,
+    flow: 'circular-conservation'
+  };
+  const cacheKey = await sha256Text(JSON.stringify(cachePayload));
+  state.losatCache.value = new Map([[cacheKey, {
+    schema: 2,
+    kind: 'raw-losat',
+    identityKind: 'nucleotide',
+    text: 'CMP\tREF\t100\t8\t0\t0\t1\t8\t1\t8\t1e-20\t40\n',
+    program: 'blastn',
+    flow: 'circular-conservation',
+    outfmt: '6',
+    args: ['--task', 'megablast'],
+    queryCanonicalHash,
+    subjectCanonicalHash
+  }]]);
+  state.losatDerivedCache.value = new Map();
+
+  const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
+    ...generatedArtifactHandleOptions,
+    state,
+    serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
+    canonicalSessionVersion: SESSION_VERSION,
+    adoptCanonicalRenderArtifacts: () => {},
+    prepareLinearRecordCatalog: async () => ({
+      catalog: { mode: 'linear', status: 'ready', records: [] },
+      error: ''
+    }),
+    prepareCandidateCommit: ({
+      results,
+      catalog,
+      featureColorOverrides,
+      featureStrokeOverrides
+    }) => ({
+      results: structuredClone(results),
+      featureState: featureStateFromCatalog(catalog),
+      featureColorOverrides: structuredClone(featureColorOverrides),
+      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+    }),
+    resetPreviewViewport: () => {}
+  }));
+
+  let losatCalls = 0;
+  let capturedSequences = [];
+  const previousLosatExecutor = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+    losatCalls += 1;
+    capturedSequences = Array.from(options.sequences.values());
+    return jobs.map((job) => ({
+      cacheKey: job.cacheKey,
+      text: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+    }));
+  };
+
+  try {
+    const circularResult = result('lazy-circular.svg', 'lazy-circular');
+    workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
+    assert.deepEqual(
+      resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount')
+        .map(({ resourceId }) => resourceId),
+      ['reference', 'comparison']
+    );
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'run').at(-1)
+        .payload.request.diagramOptions.conservationLabels[0],
+      'Lazy comparison'
+    );
+
+    const invalidFile = Object.freeze({
+      name: 'missing.gb', type: 'text/plain', size: 0, lastModified: 0
+    });
+    state.files.c_gb = invalidFile;
+    state.circularRecordList.value = [
+      { selector: '#1', record_id: 'missing', record_length: 1 }
+    ];
+    Object.assign(state.circularRecordDiscovery, {
+      status: 'ready',
+      error: '',
+      inputType: 'gb',
+      primaryFile: invalidFile,
+      pairedFile: null
+    });
+    assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+    assert.match(
+      state.errorLog.value?.summary || '',
+      /A File-like object with arrayBuffer\(\) or text\(\) is required/
+    );
+
+    resourceMetrics.splice(0);
+    const linearTable = adoptCurrentSessionResources({
+      multi: encodedResource('genbank', 'multi.gb', [
+        'LOCUS       FIRST 8 bp DNA',
+        'ORIGIN',
+        '        1 aaaaaaaa',
+        '//',
+        'LOCUS       SECOND 8 bp DNA',
+        'ORIGIN',
+        '        1 aaccggtt',
+        '//',
+        ''
+      ].join('\n')),
+      third: encodedResource('genbank', 'third.gb', [
+        'LOCUS       THIRD 8 bp DNA',
+        'ORIGIN',
+        '        1 ttttaaaa',
+        '//',
+        ''
+      ].join('\n'))
+    });
+    const multiView = createSessionResourceFileView(linearTable, 'multi');
+    const thirdView = createSessionResourceFileView(linearTable, 'third');
+    state.mode.value = 'linear';
+    state.lInputType.value = 'gb';
+    state.form.prefix = 'lazy-linear';
+    state.form.show_depth = false;
+    state.form.linear_track_layout = 'middle';
+    state.adv.linear_track_slots_enabled = false;
+    state.adv.linear_track_slots = [];
+    state.adv.comparison_height = null;
+    state.linearRecordLayoutEnabled.value = false;
+    state.linearRecordRows.splice(0);
+    state.linearSeqs.splice(0, state.linearSeqs.length, {
+      uid: 'multi',
+      gb: multiView,
+      gff: null,
+      fasta: null,
+      depth: null,
+      blast: null,
+      losat_gencode: 1,
+      losat_filename: '',
+      definition: '',
+      record_subtitle: '',
+      region_record_id: 'SECOND',
+      region_start: 2,
+      region_end: 5,
+      region_reverse: true
+    }, {
+      uid: 'third',
+      gb: thirdView,
+      gff: null,
+      fasta: null,
+      depth: null,
+      blast: null,
+      losat_gencode: 1,
+      losat_filename: '',
+      definition: '',
+      record_subtitle: '',
+      region_record_id: 'THIRD',
+      region_start: null,
+      region_end: null,
+      region_reverse: false
+    });
+    Object.assign(state.linearComparisonPlan, {
+      mode: 'selected',
+      defaultSource: 'losat'
+    });
+    state.linearComparisonPlan.edges.splice(0, state.linearComparisonPlan.edges.length, {
+      id: 'lazy-linear-edge',
+      queryUid: 'multi',
+      subjectUid: 'third',
+      included: true,
+      source: 'losat',
+      file: null,
+      fileActive: false,
+      losatFilename: '',
+      losatFilenameActive: false
+    });
+    state.files.linearCanonicalComparisons = [];
+    state.losatProgram.value = 'blastn';
+    state.losat.blastn.task = 'megablast';
+    state.losat.executionMode = 'serial';
+    state.losatCache.value = new Map();
+
+    const comparisonPlanSnapshot = resolveLinearComparisonPlan({
+      plan: state.linearComparisonPlan,
+      sequences: state.linearSeqs,
+      layout: [],
+      losatProgram: state.losatProgram.value,
+      blastpMode: state.losat.blastp.mode
+    });
+    const linearResult = result('lazy-linear.svg', 'lazy-linear');
+    workerHelperResponses.push({
+      ok: true,
+      result: {
+        tsv: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+      }
+    });
+    workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(comparisonPlanSnapshot),
+      { status: 'ok' },
+      JSON.stringify({ error: state.errorLog.value, lastWorker: workerMessages.at(-1) })
+    );
+    assert.equal(losatCalls, 1);
+    assert.ok(capturedSequences.includes('>SECOND\nACCG\n'));
+    assert.ok(capturedSequences.includes('>THIRD\nTTTTAAAA\n'));
+    const conversionRequest = workerMessages.findLast((message) => (
+      message.type === 'helper' &&
+      message.operation === 'convertLosatNucleotideToDisplayTsv'
+    ));
+    assert.deepEqual(conversionRequest?.payload.queryViewTransform, {
+      length: 4,
+      reverse: true
+    });
+    assert.equal(
+      resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
+      2
+    );
+    assert.equal(
+      resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount').length,
+      0,
+      'the explicit staged text fast path must not materialize file text again'
+    );
+  } finally {
+    if (previousTestHooks === undefined) {
+      delete globalThis.__GBDRAW_TEST_HOOKS__;
+    } else {
+      globalThis.__GBDRAW_TEST_HOOKS__ = previousTestHooks;
+    }
+    if (previousLosatExecutor === undefined) {
+      delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+    } else {
+      globalThis.__GBDRAW_LOSAT_EXECUTOR__ = previousLosatExecutor;
+    }
+  }
 });
 
 test('Linear mode none ignores dormant comparison state while active depth and annotations render', async () => {
