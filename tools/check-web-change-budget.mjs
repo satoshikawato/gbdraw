@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   detectPrivilegedWebCapabilities,
@@ -15,8 +15,11 @@ import {
   classifyArchitectureAuthorityDelta,
   classifyArchitectureRuleObservation,
   evaluateArchitectureRuleResult,
+  findDirectedGraphCycles,
+  summarizeArchitectureInventory,
   validateArchitectureRuleRegistry
 } from './web-architecture-evaluation.mjs';
+import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
 
 const runGit = (root, args, options = {}) => execFileSync(
   'git',
@@ -77,6 +80,29 @@ const readRevisionFile = (revision, path) => {
   }
 };
 
+const readRevisionFiles = (revision, paths) => {
+  if (!paths.length) return new Map();
+  const input = `${paths.map((path) => `${revision}:${path}`).join('\n')}\n`;
+  const output = execFileSync(
+    'git',
+    ['-C', repositoryRoot, 'cat-file', '--batch'],
+    { input, maxBuffer: 32 * 1024 * 1024 }
+  );
+  const sources = new Map();
+  let offset = 0;
+  paths.forEach((path) => {
+    const headerEnd = output.indexOf(10, offset);
+    const header = output.subarray(offset, headerEnd).toString('utf8');
+    const size = Number(header.split(' ').at(-1));
+    if (!Number.isInteger(size)) throw new Error(`Cannot read ${path} at ${revision}: ${header}`);
+    const contentStart = headerEnd + 1;
+    const contentEnd = contentStart + size;
+    sources.set(path, output.subarray(contentStart, contentEnd).toString('utf8'));
+    offset = contentEnd + 1;
+  });
+  return sources;
+};
+
 const readHeadFile = (path) => {
   if (head) return readRevisionFile(head, path);
   const absolutePath = join(repositoryRoot, path);
@@ -121,7 +147,6 @@ const productionTotals = productionPaths.reduce((totals, path) => {
 const productionGrossChurn = productionTotals.additions + productionTotals.deletions;
 const productionNetAdditions = productionTotals.additions - productionTotals.deletions;
 
-const newModules = productionJavaScriptPaths.filter((path) => changed.get(path) === 'A');
 const addedBinaryRuntimePaths = productionPaths.filter((path) => {
   const counts = numstat.get(path);
   return changed.get(path) === 'A' && counts?.additions === '-' && counts?.deletions === '-';
@@ -164,63 +189,6 @@ const changedCheckerImplementations = [...changed.keys()]
   .filter((path) => checkerImplementationPaths.has(path));
 const changedAuthorities = [...changed.keys()].filter((path) => authorityPaths.has(path));
 
-const addedEntries = (before, after, prefix = '') => [...after]
-  .filter((entry) => !before.has(entry))
-  .map((entry) => `${prefix}${entry}`);
-
-const newExports = [];
-const newCreateOwners = [];
-const newReactiveState = [];
-const newWatchers = [];
-const newNamedResources = [];
-const newCompatibilityPaths = [];
-const newSessionFields = [];
-const newBareImports = [];
-
-productionJavaScriptPaths.forEach((path) => {
-  const before = readRevisionFile(base, path) || '';
-  const after = readHeadFile(path) || '';
-  const beforeFacts = detectReportOnlySourceFacts(before);
-  const afterFacts = detectReportOnlySourceFacts(after);
-  newExports.push(...addedEntries(
-    new Set(beforeFacts.exportedNames), new Set(afterFacts.exportedNames), `${path}: `
-  ));
-  newCreateOwners.push(...addedEntries(
-    new Set(beforeFacts.declaredNames.filter((name) => /^create[A-Z]/.test(name))),
-    new Set(afterFacts.declaredNames.filter((name) => /^create[A-Z]/.test(name))),
-    `${path}: `
-  ));
-  newReactiveState.push(...addedEntries(
-    new Set(beforeFacts.reactiveDeclarations),
-    new Set(afterFacts.reactiveDeclarations),
-    `${path}: `
-  ));
-  const watcherIncrease = afterFacts.watcherCount - beforeFacts.watcherCount;
-  if (watcherIncrease > 0) newWatchers.push(`${path}: +${watcherIncrease} watcher call(s)`);
-  newNamedResources.push(...addedEntries(
-    new Set(beforeFacts.namedResourceNames),
-    new Set(afterFacts.namedResourceNames),
-    `${path}: `
-  ));
-  newCompatibilityPaths.push(...addedEntries(
-    new Set(beforeFacts.compatibilityNames),
-    new Set(afterFacts.compatibilityNames),
-    `${path}: `
-  ));
-  if (isWebSessionSourcePath(path)) {
-    newSessionFields.push(...addedEntries(
-      new Set(beforeFacts.objectKeys), new Set(afterFacts.objectKeys), `${path}: `
-    ));
-  }
-  const bareBefore = new Set(
-    beforeFacts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
-  );
-  const bareAfter = new Set(
-    afterFacts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
-  );
-  newBareImports.push(...addedEntries(bareBefore, bareAfter, `${path}: `));
-});
-
 const listProductionJavaScriptPaths = () => {
   if (head) {
     return runGit(repositoryRoot, [
@@ -234,6 +202,183 @@ const listProductionJavaScriptPaths = () => {
     .filter((path) => /\.[cm]?js$/.test(path) && existsSync(join(repositoryRoot, path)))
     .sort();
 };
+
+const listRevisionProductionJavaScriptPaths = (revision) => runGit(repositoryRoot, [
+  'ls-tree', '-r', '--name-only', revision, '--', 'gbdraw/web/js'
+]).split('\n').filter((path) => /\.[cm]?js$/.test(path));
+const allProductionJavaScriptPaths = listProductionJavaScriptPaths();
+const headRevisionSources = head
+  ? readRevisionFiles(head, allProductionJavaScriptPaths)
+  : null;
+const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => [
+  path.slice('gbdraw/web/js/'.length),
+  headRevisionSources?.get(path) ?? readHeadFile(path) ?? ''
+]));
+const baseProductionJavaScriptPaths = listRevisionProductionJavaScriptPaths(base);
+const changedBaseSources = readRevisionFiles(
+  base,
+  baseProductionJavaScriptPaths.filter((path) => (
+    changed.has(path) || !allProductionSources.has(path.slice('gbdraw/web/js/'.length))
+  ))
+);
+const baseProductionSources = new Map(
+  baseProductionJavaScriptPaths.map((path) => [
+    path.slice('gbdraw/web/js/'.length),
+    changed.has(path)
+      ? changedBaseSources.get(path) || ''
+      : allProductionSources.get(path.slice('gbdraw/web/js/'.length))
+        ?? changedBaseSources.get(path)
+        ?? ''
+  ])
+);
+
+const sourceInventory = (sources) => {
+  const inventory = {
+    modules: [],
+    exports: [],
+    createDeclarations: [],
+    reactiveDeclarations: [],
+    watcherCalls: [],
+    compatibilityNames: [],
+    resourceNames: [],
+    sessionObjectKeys: [],
+    bareImports: []
+  };
+  [...sources].sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([path, source]) => {
+      const displayPath = `gbdraw/web/js/${path}`;
+      const facts = detectReportOnlySourceFacts(source);
+      inventory.modules.push(displayPath);
+      facts.exportedNames.forEach((name) => inventory.exports.push(`${displayPath}: ${name}`));
+      facts.declaredNames.filter((name) => /^create[A-Z]/.test(name))
+        .forEach((name) => inventory.createDeclarations.push(`${displayPath}: ${name}`));
+      facts.reactiveDeclarations.forEach((name) => {
+        inventory.reactiveDeclarations.push(`${displayPath}: ${name}`);
+      });
+      for (let index = 1; index <= facts.watcherCount; index += 1) {
+        inventory.watcherCalls.push(`${displayPath}: watcher call ${index}`);
+      }
+      facts.compatibilityNames.forEach((name) => {
+        inventory.compatibilityNames.push(`${displayPath}: ${name}`);
+      });
+      facts.namedResourceNames.forEach((name) => {
+        inventory.resourceNames.push(`${displayPath}: ${name}`);
+      });
+      if (isWebSessionSourcePath(path)) {
+        facts.objectKeys.forEach((name) => {
+          inventory.sessionObjectKeys.push(`${displayPath}: ${name}`);
+        });
+      }
+      facts.importSpecifiers.filter((specifier) => !specifier.startsWith('.'))
+        .forEach((specifier) => inventory.bareImports.push(`${displayPath}: ${specifier}`));
+    });
+  return inventory;
+};
+
+const baseSourceInventory = sourceInventory(baseProductionSources);
+const headSourceInventory = sourceInventory(allProductionSources);
+const sourceInventoryDeltas = Object.fromEntries(
+  Object.keys(baseSourceInventory).map((name) => [
+    name,
+    summarizeArchitectureInventory(baseSourceInventory[name], headSourceInventory[name])
+  ])
+);
+const newModules = sourceInventoryDeltas.modules.added;
+const newExports = sourceInventoryDeltas.exports.added;
+const newCreateOwners = sourceInventoryDeltas.createDeclarations.added;
+const newReactiveState = sourceInventoryDeltas.reactiveDeclarations.added;
+const newWatcherCountsByPath = new Map();
+sourceInventoryDeltas.watcherCalls.added.forEach((entry) => {
+  const path = entry.slice(0, entry.lastIndexOf(': watcher call '));
+  newWatcherCountsByPath.set(path, (newWatcherCountsByPath.get(path) || 0) + 1);
+});
+const newWatchers = [...newWatcherCountsByPath]
+  .sort(([left], [right]) => left.localeCompare(right))
+  .map(([path, count]) => `${path}: +${count} watcher call(s)`);
+const newNamedResources = sourceInventoryDeltas.resourceNames.added;
+const newCompatibilityPaths = sourceInventoryDeltas.compatibilityNames.added;
+const newSessionFields = sourceInventoryDeltas.sessionObjectKeys.added;
+const newBareImports = sourceInventoryDeltas.bareImports.added;
+
+const listRevisionProductionPaths = (revision) => runGit(repositoryRoot, [
+  'ls-tree', '-r', '--name-only', revision, '--',
+  'gbdraw/web/index.html', 'gbdraw/web/js', 'gbdraw/web/vendor'
+]).split('\n').filter((path) => path && isRuntimePath(path));
+const listHeadProductionPaths = () => {
+  if (head) return listRevisionProductionPaths(head);
+  return runGit(repositoryRoot, [
+    'ls-files', '--cached', '--modified', '--others', '--exclude-standard', '--',
+    'gbdraw/web/index.html', 'gbdraw/web/js', 'gbdraw/web/vendor'
+  ]).split('\n').filter((path) => (
+    path && isRuntimePath(path) && existsSync(join(repositoryRoot, path))
+  ));
+};
+const productionFileDelta = summarizeArchitectureInventory(
+  listRevisionProductionPaths(base),
+  listHeadProductionPaths()
+);
+
+const staticImportSpecifiers = (source) => {
+  const candidates = new Set(literalImportSpecifiers(source, { dynamic: false }));
+  const commentsMasked = maskJavaScript(source, { strings: false });
+  const code = maskJavaScript(source);
+  const specifiers = [];
+  const patterns = [
+    /(?:^|\n)\s*import\s+(?:[^;]*?\s+from\s+)?(['"])([^'"]+)\1\s*;?/g,
+    /(?:^|\n)\s*export\s+(?:\*|\{)[^;]*?\s+from\s+(['"])([^'"]+)\1\s*;?/g
+  ];
+  patterns.forEach((pattern) => {
+    for (const match of commentsMasked.matchAll(pattern)) {
+      const keywordOffset = match[0].search(/\b(?:import|export)\b/);
+      const keywordIndex = match.index + keywordOffset;
+      if (
+        candidates.has(match[2])
+        && /^(?:import|export)\b/.test(code.slice(keywordIndex))
+      ) specifiers.push(match[2]);
+    }
+  });
+  return [...new Set(specifiers)];
+};
+
+const buildFirstPartyStaticImportGraph = (sources) => {
+  const nodes = [...sources.keys()].filter((path) => path.endsWith('.js')).sort();
+  const nodeSet = new Set(nodes);
+  const edgesBySubject = new Map();
+  const errors = [];
+  nodes.forEach((owner) => {
+    staticImportSpecifiers(sources.get(owner))
+      .filter((specifier) => specifier.startsWith('.'))
+      .forEach((specifier) => {
+        const unresolved = posix.normalize(posix.join(posix.dirname(owner), specifier));
+        if (unresolved === '..' || unresolved.startsWith('../') || posix.isAbsolute(unresolved)) {
+          errors.push(`${owner}: static import ${specifier} escapes gbdraw/web/js/`);
+          return;
+        }
+        const candidates = posix.extname(unresolved)
+          ? [unresolved]
+          : [`${unresolved}.js`, posix.join(unresolved, 'index.js')];
+        const target = candidates.find((candidate) => nodeSet.has(candidate));
+        if (!target) {
+          errors.push(`${owner}: cannot resolve first-party static import ${specifier}`);
+          return;
+        }
+        edgesBySubject.set(`${owner}\u0000${target}`, Object.freeze({ from: owner, to: target }));
+      });
+  });
+  return Object.freeze({
+    graph: Object.freeze({ nodes, edges: [...edgesBySubject.values()] }),
+    errors: Object.freeze([...new Set(errors)].sort())
+  });
+};
+
+const baseImportGraph = buildFirstPartyStaticImportGraph(baseProductionSources);
+const headImportGraph = buildFirstPartyStaticImportGraph(allProductionSources);
+const baseCycleResult = findDirectedGraphCycles(baseImportGraph.graph);
+const headCycleResult = findDirectedGraphCycles(headImportGraph.graph);
+const cycleDelta = summarizeArchitectureInventory(
+  baseCycleResult.cycles.map(({ subject }) => subject),
+  headCycleResult.cycles.map(({ subject }) => subject)
+);
 
 const parsePolicy = (source, revision) => {
   if (source === null) throw new Error(`Missing ${policyPath} at ${revision}`);
@@ -290,18 +435,27 @@ if (basePolicySource !== null && changed.has(policyPath)) {
     });
   }
 }
-const allProductionJavaScriptPaths = listProductionJavaScriptPaths();
-const allProductionSources = new Map(allProductionJavaScriptPaths.map((path) => [
-  path.slice('gbdraw/web/js/'.length),
-  readHeadFile(path) || ''
-]));
-
+const proposedOrBasePolicy = proposedPolicy || policy;
+const permissionEntries = (candidatePolicy, section) => Object.entries(candidatePolicy[section])
+  .flatMap(([name, paths]) => paths.map((path) => `${name}: ${path}`));
+const privilegedOperatorPermissionDelta = summarizeArchitectureInventory(
+  permissionEntries(policy, 'allowedPrivilegedOwners'),
+  permissionEntries(proposedOrBasePolicy, 'allowedPrivilegedOwners')
+);
+const privilegedImporterPermissionDelta = summarizeArchitectureInventory(
+  permissionEntries(policy, 'allowedPrivilegedImporters'),
+  permissionEntries(proposedOrBasePolicy, 'allowedPrivilegedImporters')
+);
 const emptyRuleRegistry = () => ({ schemaVersion: 1, rules: [] });
 const candidateArchitectureErrors = [];
 const candidateArchitectureObservations = [];
 const activeArchitectureErrors = [];
 const activeArchitectureFailures = [];
 const activeArchitectureRows = [];
+const trustedBaseArchitectureErrors = [];
+const trustedBaseArchitectureFailures = [];
+let registeredAuthorityLocationDelta = summarizeArchitectureInventory([], []);
+let registeredCanonicalContractDelta = summarizeArchitectureInventory([], []);
 let architectureAuthorityDelta = Object.freeze({
   classification: 'UNCHANGED',
   directions: Object.freeze([]),
@@ -326,15 +480,6 @@ const architectureRuleValidationOptions = Object.freeze({
 const formatRuleValidationErrors = (label, validation) => validation.errors.map((error) => (
   `${label} ${error.path} [${error.code}]: ${error.message}`
 ));
-const listRevisionProductionJavaScriptPaths = (revision) => runGit(repositoryRoot, [
-  'ls-tree', '-r', '--name-only', revision, '--', 'gbdraw/web/js'
-]).split('\n').filter((path) => /\.[cm]?js$/.test(path));
-const productionSourcesAtRevision = (revision) => new Map(
-  listRevisionProductionJavaScriptPaths(revision).map((path) => [
-    path.slice('gbdraw/web/js/'.length),
-    readRevisionFile(revision, path) || ''
-  ])
-);
 const intendedRuleSubjects = (rule, detector) => (
   rule.kind === 'single-semantic-owner'
     ? rule.allowedDefinitionPaths.map((path) => detector.encodeSubject({ path }))
@@ -347,6 +492,57 @@ const registeredLocationSummary = (rule, detectorOutput, observation) => (
     ).size}; observedDefinitions=${observation.observedCount}/${observation.requiredCount}`
     : `observedCanonicalEntryEdges=${observation.observedCount}/${observation.requiredCount}`
 );
+
+const evaluateArchitectureSource = (registry, sources) => {
+  const errors = [];
+  const failures = [];
+  const rows = [];
+  const authorityLocations = [];
+  const canonicalContracts = [];
+  [...registry.rules]
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .forEach((rule) => {
+      const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+      try {
+        const detectorOutput = detector.detect(sources);
+        const observation = classifyArchitectureRuleObservation(rule, detectorOutput);
+        const result = evaluateArchitectureRuleResult({
+          observation: observation.observation,
+          mode: rule.enforcement.replace('-', '_').toUpperCase(),
+          baselineRelation: 'NOT_APPLICABLE',
+          authorityResolution: 'NOT_APPLICABLE'
+        });
+        const subjects = observation.subjects.length
+          ? [...observation.subjects].sort()
+          : intendedRuleSubjects(rule, detector);
+        const locationSummary = registeredLocationSummary(rule, detectorOutput, observation);
+        (subjects.length ? subjects : ['<none>']).forEach((subject) => {
+          rows.push(
+            `${rule.key} | subject=${subject} | observation=${result.observation} `
+            + `| mode=${result.mode} | baselineRelation=${result.baselineRelation} `
+            + `| authorityResolution=${result.authorityResolution} `
+            + `| decision=${result.decision} | ${locationSummary}`
+          );
+          if (rule.kind === 'single-canonical-entry-edge') {
+            canonicalContracts.push(
+              `${rule.key} | subject=${subject} | observation=${result.observation} `
+              + `| decision=${result.decision}`
+            );
+          }
+        });
+        if (rule.kind === 'single-semantic-owner') {
+          new Set((detectorOutput.observedDefinitions || []).map(({ path }) => path))
+            .forEach((path) => authorityLocations.push(`${rule.key}: ${path}`));
+        }
+        if (result.decision === 'FAIL') {
+          failures.push(`${rule.key} is ${result.observation} under ${result.mode}`);
+        }
+      } catch (error) {
+        errors.push(`${rule.key}: ${error.message}`);
+      }
+    });
+  return { errors, failures, rows, authorityLocations, canonicalContracts };
+};
 
 const baseArchitectureRulesSource = readRevisionFile(base, architectureRulesPath);
 const proposedArchitectureRulesSource = readHeadFile(architectureRulesPath);
@@ -385,44 +581,27 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
   }
 
   if (baseValidation?.valid) {
-    [...parsedBase.registry.rules]
-      .sort((left, right) => left.key.localeCompare(right.key))
-      .forEach((rule) => {
-        const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
-        try {
-          const detectorOutput = detector.detect(allProductionSources);
-          const observation = classifyArchitectureRuleObservation(rule, detectorOutput);
-          const result = evaluateArchitectureRuleResult({
-            observation: observation.observation,
-            mode: rule.enforcement.replace('-', '_').toUpperCase(),
-            baselineRelation: 'NOT_APPLICABLE',
-            authorityResolution: 'NOT_APPLICABLE'
-          });
-          const subjects = observation.subjects.length
-            ? [...observation.subjects].sort()
-            : intendedRuleSubjects(rule, detector);
-          const locationSummary = registeredLocationSummary(
-            rule,
-            detectorOutput,
-            observation
-          );
-          (subjects.length ? subjects : ['<none>']).forEach((subject) => {
-            activeArchitectureRows.push(
-              `${rule.key} | subject=${subject} | observation=${result.observation} `
-              + `| mode=${result.mode} | baselineRelation=${result.baselineRelation} `
-              + `| authorityResolution=${result.authorityResolution} `
-              + `| decision=${result.decision} | ${locationSummary}`
-            );
-          });
-          if (result.decision === 'FAIL') {
-            activeArchitectureFailures.push(
-              `${rule.key} is ${result.observation} under ${result.mode}`
-            );
-          }
-        } catch (error) {
-          activeArchitectureErrors.push(`${rule.key}: ${error.message}`);
-        }
-      });
+    const beforeArchitecture = evaluateArchitectureSource(
+      parsedBase.registry,
+      baseProductionSources
+    );
+    const afterArchitecture = evaluateArchitectureSource(
+      parsedBase.registry,
+      allProductionSources
+    );
+    trustedBaseArchitectureErrors.push(...beforeArchitecture.errors);
+    trustedBaseArchitectureFailures.push(...beforeArchitecture.failures);
+    activeArchitectureErrors.push(...afterArchitecture.errors);
+    activeArchitectureFailures.push(...afterArchitecture.failures);
+    activeArchitectureRows.push(...afterArchitecture.rows);
+    registeredAuthorityLocationDelta = summarizeArchitectureInventory(
+      beforeArchitecture.authorityLocations,
+      afterArchitecture.authorityLocations
+    );
+    registeredCanonicalContractDelta = summarizeArchitectureInventory(
+      beforeArchitecture.canonicalContracts,
+      afterArchitecture.canonicalContracts
+    );
   }
 
   if (baseValidation?.valid && candidateValidation?.valid) {
@@ -441,7 +620,6 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
         );
       }
 
-      const baseSources = productionSourcesAtRevision(base);
       const candidateRules = new Map(parsedCandidate.registry.rules.map((rule) => [rule.key, rule]));
       const changedRuleKeys = [...new Set(
         architectureAuthorityDelta.changes.map(({ rule }) => rule)
@@ -454,7 +632,7 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
         try {
           baseObservation = classifyArchitectureRuleObservation(
             rule,
-            detector.detect(baseSources)
+            detector.detect(baseProductionSources)
           );
         } catch (error) {
           candidateArchitectureErrors.push(
@@ -508,7 +686,29 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
   }
 }
 
+const baseDetectedCapabilities = detectPrivilegedWebCapabilities(baseProductionSources);
 const detectedCapabilities = detectPrivilegedWebCapabilities(allProductionSources);
+const privilegedImportEdges = (capabilities) => WEB_PRIVILEGED_IMPORT_TARGETS.flatMap((target) => (
+  capabilities.importersByTarget[target].map((path) => `${path} -> ${target}`)
+));
+const privilegedImportFanOutDelta = summarizeArchitectureInventory(
+  privilegedImportEdges(baseDetectedCapabilities),
+  privilegedImportEdges(detectedCapabilities)
+);
+const privilegedFanOutCounts = (capabilities) => {
+  const targetsByPath = new Map();
+  WEB_PRIVILEGED_IMPORT_TARGETS.forEach((target) => {
+    capabilities.importersByTarget[target].forEach((path) => {
+      if (!targetsByPath.has(path)) targetsByPath.set(path, new Set());
+      targetsByPath.get(path).add(target);
+    });
+  });
+  return new Map([...targetsByPath]
+    .map(([path, targets]) => [path, targets.size])
+    .sort(([left], [right]) => left.localeCompare(right)));
+};
+const basePrivilegedFanOutCounts = privilegedFanOutCounts(baseDetectedCapabilities);
+const headPrivilegedFanOutCounts = privilegedFanOutCounts(detectedCapabilities);
 const capabilityCoverageViolations = (candidatePolicy) => {
   const violations = [];
   WEB_PRIVILEGED_IMPORT_TARGETS.forEach((target) => {
@@ -646,8 +846,26 @@ if (proposedPolicyExclusions.length) {
 if (missingPolicyKeys.length) {
   integrityViolations.push('proposed privileged capability policy is missing base allowlist keys');
 }
+if (baseImportGraph.errors.length) {
+  integrityViolations.push('trusted base first-party static import graph is incomplete');
+}
+if (headImportGraph.errors.length) {
+  integrityViolations.push('head first-party static import graph is incomplete');
+}
+if (baseCycleResult.cycles.length) {
+  integrityViolations.push('trusted base contains first-party static import cycles');
+}
+if (headCycleResult.cycles.length) {
+  integrityViolations.push('first-party static import cycles are not allowed');
+}
 integrityViolations.push(...candidateArchitectureErrors.map((error) => (
   `candidate architecture rules: ${error}`
+)));
+integrityViolations.push(...trustedBaseArchitectureErrors.map((error) => (
+  `trusted base architecture rules: ${error}`
+)));
+integrityViolations.push(...trustedBaseArchitectureFailures.map((error) => (
+  `trusted base architecture rules: ${error}`
 )));
 integrityViolations.push(...activeArchitectureErrors.map((error) => (
   `active architecture rules: ${error}`
@@ -661,6 +879,112 @@ const enforcedViolations = [
 ];
 
 const list = (values) => values.length ? values.map((value) => `- ${value}`) : ['- None'];
+const signed = (value) => value > 0 ? `+${value}` : String(value);
+const differentialInventories = [
+  {
+    name: 'Registered Authority Location Count',
+    delta: registeredAuthorityLocationDelta,
+    classification: 'registered rule'
+  },
+  {
+    name: 'Registered canonical-contract results',
+    delta: registeredCanonicalContractDelta,
+    classification: 'registered rule'
+  },
+  {
+    name: 'Privileged operator permission entries',
+    delta: privilegedOperatorPermissionDelta,
+    classification: 'hard authority'
+  },
+  {
+    name: 'Privileged importer permission entries',
+    delta: privilegedImporterPermissionDelta,
+    classification: 'hard authority'
+  },
+  {
+    name: 'Production files',
+    delta: productionFileDelta,
+    classification: 'budgeted'
+  },
+  {
+    name: 'Production modules',
+    delta: sourceInventoryDeltas.modules,
+    classification: 'report-only'
+  },
+  {
+    name: 'Exports',
+    delta: sourceInventoryDeltas.exports,
+    classification: 'report-only'
+  },
+  {
+    name: 'create* declarations',
+    delta: sourceInventoryDeltas.createDeclarations,
+    classification: 'report-only'
+  },
+  {
+    name: 'Reactive declarations',
+    delta: sourceInventoryDeltas.reactiveDeclarations,
+    classification: 'report-only'
+  },
+  {
+    name: 'Watcher calls',
+    delta: sourceInventoryDeltas.watcherCalls,
+    classification: 'report-only'
+  },
+  {
+    name: 'Compatibility-like names',
+    delta: sourceInventoryDeltas.compatibilityNames,
+    classification: 'report-only'
+  },
+  {
+    name: 'Resource-like names',
+    delta: sourceInventoryDeltas.resourceNames,
+    classification: 'report-only'
+  },
+  {
+    name: 'Session object keys',
+    delta: sourceInventoryDeltas.sessionObjectKeys,
+    classification: 'report-only'
+  },
+  {
+    name: 'Privileged import-target fan-out',
+    delta: privilegedImportFanOutDelta,
+    classification: 'report-only'
+  },
+  {
+    name: 'First-party static import cycles',
+    delta: cycleDelta,
+    classification: 'hard'
+  }
+];
+const differentialSummaryRows = differentialInventories.map(({ name, delta, classification }) => (
+  `| ${name} | ${delta.before.length} | ${delta.added.length} | ${delta.removed.length} `
+  + `| ${delta.after.length} | ${signed(delta.delta)} | ${classification} |`
+));
+const differentialChangeDetails = differentialInventories.flatMap(({ name, delta }) => {
+  if (!delta.added.length && !delta.removed.length) return [];
+  return [
+    `### ${name}`,
+    '',
+    `Added (${delta.added.length}):`,
+    '',
+    ...list(delta.added),
+    '',
+    `Removed (${delta.removed.length}):`,
+    '',
+    ...list(delta.removed),
+    ''
+  ];
+});
+const fanOutPaths = [...new Set([
+  ...basePrivilegedFanOutCounts.keys(),
+  ...headPrivilegedFanOutCounts.keys()
+])].sort();
+const fanOutRows = fanOutPaths.map((path) => {
+  const beforeCount = basePrivilegedFanOutCounts.get(path) || 0;
+  const afterCount = headPrivilegedFanOutCounts.get(path) || 0;
+  return `| ${path} | ${beforeCount} | ${afterCount} | ${signed(afterCount - beforeCount)} |`;
+});
 const statusRows = productionPaths.map((path) => `${changed.get(path)} ${path}`);
 const report = [
   '# Web change budget',
@@ -677,6 +1001,41 @@ const report = [
   `- Net-addition limit: ${selectedProfile.netAdditions}`,
   `- \`architecture-change\` label: ${architectureChange ? 'present' : 'absent'}`,
   `- Result: **${enforcedViolations.length ? 'FAIL' : 'PASS'}**`,
+  '',
+  '## Architecture differential summary',
+  '',
+  '| Inventory | Before | Added | Removed | After | Delta | Classification |',
+  '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
+  ...differentialSummaryRows,
+  '',
+  'Production line change:',
+  '',
+  `- Additions: ${productionTotals.additions}`,
+  `- Deletions: ${productionTotals.deletions}`,
+  `- Gross churn: ${productionGrossChurn}`,
+  `- Net additions: ${productionNetAdditions}`,
+  '',
+  '## Differential inventory changes',
+  '',
+  ...(differentialChangeDetails.length ? differentialChangeDetails : ['- None', '']),
+  '## First-party static import graph',
+  '',
+  `- Before: ${baseCycleResult.nodeCount} modules, ${baseCycleResult.edgeCount} edges, ${baseCycleResult.cycles.length} cycles`,
+  `- After: ${headCycleResult.nodeCount} modules, ${headCycleResult.edgeCount} edges, ${headCycleResult.cycles.length} cycles`,
+  `- Delta: ${signed(headCycleResult.cycles.length - baseCycleResult.cycles.length)} cycles`,
+  '- Cycle definition: SCC size > 1, or a one-node SCC with a self-edge.',
+  '- Head cycles (sorted nodes and internal edges):',
+  ...list(headCycleResult.cycles.map(({ subject }) => subject)),
+  '- Base graph resolution errors:',
+  ...list(baseImportGraph.errors),
+  '- Head graph resolution errors:',
+  ...list(headImportGraph.errors),
+  '',
+  '## Report-only privileged import-target fan-out',
+  '',
+  '| Production module | Before | After | Delta |',
+  '| --- | ---: | ---: | ---: |',
+  ...(fanOutRows.length ? fanOutRows : ['| None | 0 | 0 | 0 |']),
   '',
   '## Production files touched',
   '',
