@@ -57,6 +57,23 @@ assert.deepEqual(adjacentRowPairs(sequences, sparseRows), [['a', 'b'], ['b', 'c'
 assert.deepEqual(adjacentRowPairs(sequences, sparseRows, true), [
   ['a', 'b'], ['b', 'c'], ['b', 'd']
 ]);
+const twoRowCollinear = resolveLinearComparisonPlan({
+  plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+  sequences,
+  layout: twoRows,
+  losatProgram: 'blastp',
+  blastpMode: 'collinear'
+});
+assert.deepEqual(twoRowCollinear.edges.map(({ edgeKey }) => edgeKey), [
+  'a->c', 'a->d', 'b->c', 'b->d'
+]);
+assert.deepEqual(resolveLinearComparisonPlan({
+  plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+  sequences,
+  layout: twoRows,
+  losatProgram: 'blastp',
+  blastpMode: 'pairwise'
+}).edges.map(({ edgeKey }) => edgeKey), ['a->c', 'b->d']);
 
 const retained = file('retained.tsv');
 const normalized = normalizeLinearComparisonPlan({

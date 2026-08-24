@@ -12,6 +12,6 @@ module.exports = defineConfig({
   timeout: 1_200_000,
   use: {
     ...baseConfig.use,
-    trace: 'retain-on-failure'
+    trace: 'off'
   }
 });

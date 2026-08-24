@@ -145,34 +145,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     });
     const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
     const text = await response.text();
-    const legacySession = JSON.parse(text);
-    legacySession.version = 39;
-    legacySession.renderRequest.schema = 2;
-    legacySession.renderRequest.records.forEach((record) => {
-      record.presentation = {
-        label: null,
-        subtitle: null,
-        reverseComplement: false,
-        gridRow: null,
-        gridColumn: null
-      };
-    });
-    const legacyOptions = legacySession.renderRequest.diagramOptions;
-    legacyOptions.output.outputPrefix = legacySession.renderRequest.output.prefix;
-    legacyOptions.colors = {
-      colorTable: null,
-      colorTableFile: {
-        resourceId: 'colors-color-table-file',
-        representation: 'file'
-      },
-      defaultColors: null,
-      defaultColorsPalette: 'default',
-      defaultColorsFile: {
-        resourceId: 'colors-default-colors-file',
-        representation: 'file'
-      }
-    };
-    const file = new File([JSON.stringify(legacySession)], 'BGC0000708-BGC0000713.gbdraw-session.json', {
+    const file = new File([text], 'BGC0000708-BGC0000713.gbdraw-session.json', {
       type: 'application/json'
     });
     const result = await window.__GBDRAW_APP__.importSession({
@@ -189,7 +162,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     window.__GBDRAW_APP__,
     'pyodideReady'
   ))).toBe(false);
-  expect(imported.settings.cdsColor).toBe('#dddddd');
+  expect(imported.settings.cdsColor).toBe('#d3d3d3');
   expect(imported.settings.labels).toBe('first');
   expect(imported.settings.recordLabels[0]).toContain('Streptomyces lividus');
   expect(imported.settings.rules).toHaveLength(4);

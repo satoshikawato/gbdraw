@@ -1015,7 +1015,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     };
   });
   expect(access.first).toMatch(
-    /record-1-genbank \(record-1\.gbk\) contains invalid encoded data/
+    /record-1-genbank \(record-1-genbank-HmmtDNA\.gbk\) contains invalid encoded data/
   );
   expect(access.second).toBe(access.first);
   expect(access.sameContent).toBe(true);

@@ -1,4 +1,4 @@
-import { buildDefaultColorOverrideTsv } from '../app/color-utils.js';
+import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
 import {
   parseColorTable,
   parsePriorityRules,
@@ -90,6 +90,7 @@ import {
   base64ToBytes,
   bytesToBase64,
   bytesToText,
+  getSessionResourceSource,
   textToBase64,
   textToBytes
 } from './file-content-cache.js';
@@ -98,10 +99,12 @@ import {
   createCombinedSessionResourceFileView,
   createSessionResourceFileView
 } from './session-resource-backing.js';
+import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
+import { sha256Hex } from './byte-utils.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 5;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -147,7 +150,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   circularAxisStrokeColor: 'objects.axis.circular.stroke_color',
   linearAxisStrokeColor: 'objects.axis.linear.stroke_color',
   lineStrokeColor: 'objects.features.line_stroke_color',
-  circularDefinitionFontSize: 'objects.definition.circular.font_size',
+  circularDefinitionFontSize: 'objects.definition.circular.font_size', circularDefinitionInterval: 'objects.definition.circular.interval',
   plotTitleFontSize: 'objects.definition.circular.plot_title_font_size',
   showGc: 'canvas.show_gc',
   showSkew: 'canvas.show_skew',
@@ -280,7 +283,7 @@ const renderOutputPayload = (prefix) => ({
   prefix,
   formats: ['svg'],
   overwrite: false,
-  interactiveMetadataPolicy: 'omit'
+  interactiveMetadataPolicy: 'auto'
 });
 
 const optionalNumber = (value) => {
@@ -348,27 +351,30 @@ const createResourceBuilder = () => {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
     }
     if (resources[resourceId]) return resourceId;
-    const kindResourceIds = fileResourceIds.get(kind) || new WeakMap();
+    const adoptedSource = getSessionResourceSource(entry);
+    const encodedEntry = adoptedSource?.descriptor || entry;
+    const effectiveKind = String(encodedEntry.kind || kind);
+    const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
     const existingResourceId = kindResourceIds.get(entry);
     if (existingResourceId) return existingResourceId;
     const descriptor = {
-      kind,
+      kind: effectiveKind,
       name: normalizeResourceName(resourceId, entry.name),
       type: String(entry.type || 'application/octet-stream'),
       size: Number(entry.size) || 0,
       lastModified: Number(entry.lastModified) || 0,
-      encoding: entry.encoding || 'base64',
-      data: entry.data
+      encoding: encodedEntry.encoding || 'base64',
+      data: encodedEntry.data
     };
-    if (typeof entry.checksum === 'string' && entry.checksum.trim()) {
-      descriptor.checksum = entry.checksum;
+    if (typeof encodedEntry.checksum === 'string' && encodedEntry.checksum.trim()) {
+      descriptor.checksum = encodedEntry.checksum;
     }
     resources[resourceId] = setResourcePayloadOwner(
       descriptor,
       getResourcePayloadOwner(entry)
     );
     kindResourceIds.set(entry, resourceId);
-    fileResourceIds.set(kind, kindResourceIds);
+    fileResourceIds.set(effectiveKind, kindResourceIds);
     const originalName = normalizeOriginalResourceName(entry.name);
     if (originalName) resourceOriginalNames[resourceId] = originalName;
     return resourceId;
@@ -472,6 +478,14 @@ const createResourceBuilder = () => {
 };
 
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
+const publicationFileRef = (resources, files, key, fallbackId) => {
+  if (!files[key]) return null;
+  const source = getSessionResourceSource(files[key]);
+  return {
+    resourceId: resources.addFile(source?.resourceId || fallbackId, fallbackId, files[key]),
+    representation: source?.descriptor?.kind === 'canonical-tsv' ? 'canonicalTsv' : 'file'
+  };
+};
 
 const selectorPayload = (rawValue) => {
   const raw = String(rawValue || '').trim();
@@ -534,6 +548,23 @@ const buildRecords = ({ state, filesData, resources }) => {
     });
   }
 
+  if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
+    return filesData.circularRecords.map((record, index) => {
+      const source = record.sourceKind === 'gffFasta'
+        ? { kind: 'gffFasta',
+            gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', record.gff),
+            fastaResourceId: resources.addFile(`record-${index + 1}-fasta`, 'fasta', record.fasta) }
+        : { kind: 'genbank', resourceId: resources.addFile(
+            `record-${index + 1}-genbank`, 'genbank', record.gb) };
+      return {
+        recordKey: String(record.recordKey || `record-${index + 1}`),
+        source,
+        selector: record.selector || null,
+        region: record.region || null,
+        presentation: publicationClone(record.presentation) || presentationPayload()
+      };
+    });
+  }
   const source = state.cInputType.value === 'gff'
     ? {
         kind: 'gffFasta',
@@ -639,21 +670,17 @@ const buildConfigOverrides = (
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
     [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
     [CONFIG_OVERRIDE_PATHS.scaleInterval]: optionalNumber(adv.scale_interval),
-    ...(state.filterMode.value === 'Blacklist'
-      ? {
-          [CONFIG_OVERRIDE_PATHS.labelBlacklist]:
-            String(state.manualBlacklist.value || '')
-              .split(/[,\n]/)
-              .map((keyword) => keyword.trim())
-              .filter(Boolean)
-        }
-      : {}),
+    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: state.filterMode.value === 'Blacklist'
+      ? String(state.manualBlacklist.value || '').split(/[,\n]/)
+        .map((keyword) => keyword.trim()).filter(Boolean)
+      : [],
     ...(circular
       ? {
           [CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor]:
             adv.axis_stroke_color || null,
           [CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize]:
             optionalNumber(adv.def_font_size),
+          [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: optionalNumber(adv.circular_definition_interval),
           [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
             optionalNumber(adv.plot_title_font_size),
           [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
@@ -760,32 +787,34 @@ const buildConfigOverrides = (
 
 const addGeneratedTableResources = (state, resources, diagramOptions) => {
   const paletteName = String(state.selectedPalette.value || 'default');
-  const paletteColors = state.normalizePaletteColors(
-    state.paletteDefinitions.value?.[paletteName] || state.paletteDefinitions.value?.default || {}
-  );
+  const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
+    : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
+      || state.paletteDefinitions.value?.default || {});
   const defaultColors = buildDefaultColorOverrideTsv({
     colors: state.currentColors.value,
     paletteColors
   });
   const specificColors = serializeSpecificRules(state.manualSpecificRules);
-  let defaultColorsFile = null;
-  let colorTableFile = null;
-  if (defaultColors.trim()) {
-    defaultColorsFile = fileRef(resources.addText(
-      'colors-default-colors-file', 'colors-default-colors-file', 'default-colors.tsv', `${defaultColors}\n`
-    ));
-  }
-  if (specificColors.trim()) {
-    colorTableFile = fileRef(resources.addText(
-      'colors-color-table-file', 'colors-color-table-file', 'specific-colors.tsv', specificColors
-    ));
-  }
+  const publicationFiles = state.canonicalPublicationFiles || {};
+  const defaultColorsFile = publicationFileRef(
+    resources, publicationFiles, 'd_color', 'colors-default-colors-file'
+  ) || (defaultColors.trim() ? fileRef(resources.addText(
+        'colors-default-colors-file', 'colors-default-colors-file',
+        'default-colors.tsv', `${defaultColors}\n`
+      )) : null);
+  const colorTableFile = publicationFileRef(
+    resources, publicationFiles, 't_color', 'colors-color-table-file'
+  ) || (specificColors.trim() ? fileRef(resources.addText(
+        'colors-color-table-file', 'colors-color-table-file',
+        'specific-colors.tsv', specificColors
+      )) : null);
   diagramOptions.colors = {
-    colorTable: null,
-    colorTableFile,
-    defaultColors: null,
+    colorTable: colorTableFile?.representation === 'canonicalTsv' ? colorTableFile : null,
+    colorTableFile: colorTableFile?.representation === 'canonicalTsv' ? null : colorTableFile,
+    defaultColors: defaultColorsFile?.representation === 'canonicalTsv' ? defaultColorsFile : null,
     defaultColorsPalette: paletteName,
-    defaultColorsFile
+    defaultColorsFile:
+      defaultColorsFile?.representation === 'canonicalTsv' ? null : defaultColorsFile
   };
 
   const visibility = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
@@ -794,7 +823,12 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       'feature-visibility-table-file', 'feature-visibility-table-file', 'feature-visibility.tsv', visibility
     ));
   }
-  if (state.filterMode.value === 'Whitelist' && state.manualWhitelist.length > 0) {
+  const preservedWhitelist = publicationFileRef(
+    resources, publicationFiles, 'whitelist', 'label-whitelist-file'
+  );
+  if (preservedWhitelist) {
+    diagramOptions.labelWhitelistFile = preservedWhitelist;
+  } else if (state.filterMode.value === 'Whitelist' && state.manualWhitelist.length > 0) {
     const whitelist = state.manualWhitelist
       .filter((rule) => rule?.feat && rule?.qual)
       .map((rule) => `${rule.feat}\t${rule.qual}\t${rule.key || ''}`)
@@ -809,7 +843,15 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
     .filter((rule) => rule?.feat && rule?.order)
     .map((rule) => `${rule.feat}\t${rule.order}`)
     .join('\n');
-  if (priority) {
+  const priorityRef = publicationFileRef(
+    resources, publicationFiles, 'qualifier_priority', 'qualifier-priority-file'
+  );
+  if (priorityRef) {
+    diagramOptions[
+      priorityRef.representation === 'canonicalTsv'
+        ? 'qualifierPriorityTable' : 'qualifierPriorityFile'
+    ] = priorityRef;
+  } else if (priority) {
     diagramOptions.qualifierPriorityFile = fileRef(resources.addText(
       'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
     ));
@@ -1329,6 +1371,7 @@ const buildComparisons = ({
   if (snapshot.mode === 'none' || edges.length === 0) return [];
 
   const comparisons = [];
+  const metadataComparisons = [];
   const uploadFilesByEdgeId = new Map(
     (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
       .filter((binding) => binding?.file)
@@ -1391,10 +1434,10 @@ const buildComparisons = ({
   ].forEach((comparison, index) => {
     if (!comparison.file) return;
     if (comparison.kind === 'orthogroupResult') {
-      comparisons.push({
+      metadataComparisons.push({
         kind: 'orthogroupResult',
         resourceId: resources.addFile(
-          `comparison-canonical-orthogroups-${index + 1}`,
+          'comparison-canonical-orthogroups-1',
           canonicalComparisonResourceKind(comparison),
           comparison.file
         ),
@@ -1404,10 +1447,10 @@ const buildComparisons = ({
       return;
     }
     if (comparison.kind === 'collinearityResult') {
-      comparisons.push({
+      metadataComparisons.push({
         kind: 'collinearityResult',
         resourceId: resources.addFile(
-          `comparison-canonical-collinearity-${index + 1}`,
+          'comparison-canonical-collinearity-1',
           canonicalComparisonResourceKind(comparison),
           comparison.file
         ),
@@ -1426,7 +1469,7 @@ const buildComparisons = ({
       !filesData.linearSeqs?.[queryRecordIndex] ||
       !filesData.linearSeqs?.[subjectRecordIndex]
     ) return;
-    comparisons.push(addCanonicalInputProteinComparisonResource({
+    metadataComparisons.push(addCanonicalInputProteinComparisonResource({
       comparison,
       index,
       resources
@@ -1435,9 +1478,9 @@ const buildComparisons = ({
   resolvedAnalysisArtifacts.forEach((typedResource, kind) => {
     const collinearity = kind === 'collinearityResult';
     const resourceId = collinearity
-      ? 'comparison-resolved-collinearity'
-      : 'comparison-resolved-orthogroups';
-    comparisons.push({
+      ? 'comparison-canonical-collinearity-1'
+      : 'comparison-canonical-orthogroups-1';
+    metadataComparisons.push({
       kind,
       resourceId: resources.addJson(
         resourceId,
@@ -1551,6 +1594,7 @@ const buildComparisons = ({
     activeLosatEdges.length > 0 &&
     !hasPrecomputedProteinComparisons
   );
+  comparisons.push(...metadataComparisons);
   if (shouldEmitResolvedProteinMarker || shouldGenerateSelectedProteinPairs || shouldGenerateAdjacentProteinPipeline) {
     const mode = shouldEmitResolvedProteinMarker
       ? 'none'
@@ -1628,6 +1672,59 @@ const buildLayout = (state, filesData) => {
   };
 };
 
+const publicationClone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+const publicationRef = (value) => ({ value });
+const canonicalRecordSelector = (record) => {
+  const selector = record?.region?.selector || record?.selector;
+  if (selector?.kind === 'recordId') return String(selector.value || '');
+  if (selector?.kind === 'recordIndex') return `#${Number(selector.index) + 1}`;
+  return null;
+};
+export const buildCanonicalRequestState = ({ session, projection, config,
+  filesData = projection.files }) => {
+  const canonicalPublicationFiles = { ...filesData };
+  const pythonColors = (colors) => Object.fromEntries(Object.entries(colors || {}).filter(
+    ([key]) => !key.startsWith('collinear_block_')).sort(([left], [right]) => left.localeCompare(right)));
+  const activeColors = pythonColors(config?.colors);
+  const colorOverridesChanged = config?.colorsAreOverrides === true
+    && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
+  if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
+  const features = session?.features || {}, layout = config?.linearRecordLayout || {};
+  const palette = String(config?.palette || 'default');
+  const records = session?.renderRequest?.records || [];
+  const circularRecordList = records.length === 1 && !records[0]?.selector
+    && !records[0]?.region?.selector ? []
+    : records.map((record) => ({ selector: canonicalRecordSelector(record) }));
+  const conservation = publicationClone(config?.circularConservation || {
+    enabled: false, reference: 'auto', labels: '', series: []
+  });
+  if (!String(conservation.labels || '').trim() && conservation.series?.length)
+    conservation.labels = conservation.series.map(({ label }) => String(label || '').trim()).join(',');
+  const refs = {
+    mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
+    lInputType: session?.ui?.lInputType || projection.inputType,
+    circularRecordList,
+    paletteDefinitions: { [palette]: {} }, currentColors: colorOverridesChanged ? activeColors : config.colors || {},
+    selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules
+      || projection.semanticFeatureState?.featureVisibilityManualRules || []),
+    filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
+    canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []), editableLabels: [],
+    extractedFeatures: features.extractedFeatures || [],
+    losatProgram: config.losatProgram || 'blastn',
+    selectedOrthogroupAlignmentFeature: session?.orthogroupState?.selectedOrthogroupAlignmentFeature || '',
+    linearRecordLayoutEnabled: Boolean(layout.enabled), linearRecordGap: layout.recordGap ?? 24
+  };
+  return {
+    ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
+    form: config.form || {}, adv: config.adv || {}, normalizePaletteColors,
+    manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
+    labelTextFeatureOverrides: publicationClone(features.labelTextFeatureOverrides || {}), labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
+    labelTextFeatureOverrideSources: publicationClone(features.labelTextFeatureOverrideSources || {}), labelVisibilityOverrides: publicationClone(features.labelVisibilityOverrides || {}),
+    circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
+    linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan || { mode: 'none', defaultSource: 'losat', edges: [] }),
+    annotationSets: publicationClone(config.annotationSets || []), canonicalPublicationFiles
+  };
+};
 export const buildCanonicalRenderRequest = ({
   state,
   filesData,
@@ -2584,10 +2681,33 @@ const projectCanonicalCircularSlot = (slot) => ({
   ...slot,
   width: projectCanonicalCircularMeasure(slot?.width),
   radius: projectCanonicalCircularMeasure(slot?.radius),
-  inner_gap_px: projectCanonicalCircularMeasure(slot?.innerGapPx ?? slot?.inner_gap_px),
-  outer_gap_px: projectCanonicalCircularMeasure(slot?.outerGapPx ?? slot?.outer_gap_px)
+  inner_gap_px: projectCanonicalCircularMeasure(
+    slot?.innerGapPx ?? slot?.inner_gap_px
+  )?.replace?.(/px$/i, ''),
+  outer_gap_px: projectCanonicalCircularMeasure(
+    slot?.outerGapPx ?? slot?.outer_gap_px
+  )?.replace?.(/px$/i, '')
 });
 
+const projectCurrentCanonicalCircularSlot = (slot) => {
+  if (
+    !slot || typeof slot !== 'object' || Array.isArray(slot) ||
+    ['spacing', 'inner_gap_px', 'outer_gap_px', 'strict'].some((field) => (
+      Object.prototype.hasOwnProperty.call(slot, field)
+    ))
+  ) throw new Error('Current canonical circular track slot uses an obsolete shape.');
+  const projected = projectCanonicalCircularSlot(slot);
+  return {
+    id: String(projected.id || ''),
+    renderer: String(projected.renderer || ''),
+    enabled: projected.enabled !== false,
+    width: projected.width ?? null, radius: projected.radius ?? null,
+    inner_gap_px: projected.inner_gap_px ?? null,
+    outer_gap_px: projected.outer_gap_px ?? null,
+    side: projected.side ?? null, z: Number(projected.z) || 0,
+    params: cloneCanonicalJsonValue(projected.params || {})
+  };
+};
 const projectLegacyCanonicalCircularSlot = (slot) => {
   const projected = projectCanonicalCircularSlot(slot);
   if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
@@ -2863,6 +2983,22 @@ export const projectCanonicalSessionRequest = ({
   ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
+    files.circularRecords = records.map((record) => {
+      const source = record.source || {};
+      const resourceFile = (id) => resolveResourceFile
+        ? resolveResourceFile(id)
+        : resourceAsLegacyFile(resources, id);
+      return {
+        recordKey: String(record.recordKey || ''),
+        sourceKind: source.kind,
+        gb: source.kind === 'genbank' ? resourceFile(source.resourceId) : null,
+        gff: source.kind === 'gffFasta' ? resourceFile(source.gffResourceId) : null,
+        fasta: source.kind === 'gffFasta' ? resourceFile(source.fastaResourceId) : null,
+        selector: cloneCanonicalJsonValue(record.selector),
+        region: cloneCanonicalJsonValue(record.region),
+        presentation: cloneCanonicalJsonValue(record.presentation)
+      };
+    });
     const source = records[0]?.source || {};
     if (source.kind === 'genbank') {
       files.c_gb = combineCircularGenbankResources(
@@ -3242,14 +3378,16 @@ export const projectCanonicalSessionRequest = ({
   const projectedCircularTrackSlots = renderRequest.mode === 'circular'
     ? (Array.isArray(tracks.circularTrackSlots)
         ? tracks.circularTrackSlots.map((slot, index) => (
-            slot && typeof slot === 'object' && !Array.isArray(slot)
-              ? normalizeCircularTrackSlot(
+          slot && typeof slot === 'object' && !Array.isArray(slot)
+              ? (
                   renderRequest.schema <= 2
-                    ? projectLegacyCanonicalCircularSlot(slot)
-                    : projectCanonicalCircularSlot(slot),
-                  index,
-                  options.dinucleotide || 'GC',
-                  overrides.track_type || 'tuckin'
+                    ? normalizeCircularTrackSlot(
+                        projectLegacyCanonicalCircularSlot(slot),
+                        index,
+                        options.dinucleotide || 'GC',
+                        overrides.track_type || 'tuckin'
+                      )
+                    : projectCurrentCanonicalCircularSlot(slot)
                 )
               : parseCircularTrackSlotSpecs(
                   [
@@ -3419,6 +3557,7 @@ export const projectCanonicalSessionRequest = ({
     def_font_size: renderRequest.mode === 'circular'
       ? (overrides.circular_definition_font_size ?? null)
       : (overrides.linear_definition_font_size ?? null),
+    circular_definition_interval: renderRequest.mode === 'circular' ? (overrides.circular_definition_interval ?? null) : null,
     label_font_size: overrides.label_font_size ?? null,
     label_rotation: renderRequest.mode === 'linear' ? (overrides.label_rotation ?? null) : null,
     block_stroke_width: overrides.block_stroke_width ?? null,
@@ -3528,8 +3667,7 @@ export const projectCanonicalSessionRequest = ({
             uid: files.linearSeqs[index]?.uid || '',
             row: Number(String(token).slice(split + 1)) || index + 1
           };
-        }),
-        comparisons: (files.linearComparisons || []).map(({ file: _file, ...comparison }) => comparison)
+        })
       }
     : undefined;
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
@@ -3573,4 +3711,112 @@ export const projectCanonicalSessionRequest = ({
         }
       : null
   };
+};
+const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite', 'artifactFilename']);
+const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
+const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true };
+const publicationBytes = async (resource, id) => {
+  if (!resource || typeof resource !== 'object' || Array.isArray(resource)) throw new Error(`Canonical request resource '${id}' is missing.`);
+  if (typeof resource.readBytes === 'function') return resource.readBytes();
+  if (resource.data instanceof Uint8Array) return resource.data;
+  if (resource.encoding === 'base64') { const binary = atob(String(resource.data || '')), bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return bytes; }
+  if (typeof resource.data === 'string') return textToBytes(resource.data);
+  throw new Error(`Canonical request resource '${id}' has no decodable payload.`);
+};
+const TSV_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+const normalizedPublicationBytes = async (resource, id, normalize, path) => {
+  const bytes = await publicationBytes(resource, id);
+  if (path.includes('.diagramOptions.colors.defaultColors')) {
+    const rows = bytesToText(bytes).split(/\r?\n/).map((row) => row.trim()).filter(
+      (row) => row && row !== 'feature_type\tcolor').sort();
+    return textToBytes(`${rows.join('\n')}\n`);
+  }
+  if (!normalize) return bytes;
+  if (!path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') return bytes;
+  const rows = bytesToText(bytes).trimEnd().split(/\r?\n/).map((row, index) => index === 0
+    ? row : row.split('\t').map((cell) => {
+      const number = Number(cell);
+      return TSV_NUMBER.test(cell) && Number.isFinite(number)
+        ? String(Number(number.toPrecision(15))) : cell;
+    }).join('\t'));
+  return textToBytes(`${rows.join('\n')}\n`);
+};
+const publicationResourceIdentity = async (resources, id, normalize, path, cache) => {
+  const resourceId = String(id || '').trim();
+  if (!resourceId) throw new Error('Canonical request contains an empty resourceId.');
+  const resource = resources?.[resourceId], key = resource?.encoding === 'base64' && !path.includes('.diagramOptions.colors.defaultColors') && (!normalize || !path.startsWith('$.comparisons') || resource.kind !== 'canonical-tsv') ? resource.data : null;
+  const kind = path.includes('.diagramOptions.colors.defaultColors') ? 'default-colors'
+    : (path.includes('.diagramOptions.colors.colorTable') ? 'color-table' : String(resource.kind || ''));
+  let digest = key ? cache.get(key) : null;
+  if (!digest) { digest = normalizedPublicationBytes(resource, resourceId, normalize, path).then((bytes) => sha256Hex(bytes)); if (key) cache.set(key, digest); }
+  return { kind, decodedPayloadSha256: await digest };
+};
+const canonicalizePublicationValue = async (value, resources, context, path = '$') => {
+  if (Array.isArray(value)) return Promise.all(value.map((entry, index) =>
+    canonicalizePublicationValue(entry, resources, context, `${path}[${index}]`)));
+  if (!value || typeof value !== 'object') return value;
+  const output = {};
+  const resourceReference = Object.hasOwn(value, 'resourceId');
+  for (const key of Object.keys(value).sort()) {
+    if (value[key] === null || Object.is(value[key], PUBLICATION_OPTION_DEFAULTS[key]) || key === 'plotTitleFontSize'
+      || (path === '$.diagramOptions.configOverrides' && key === 'labels.filtering.blacklist_keywords'
+        && Array.isArray(value[key]) && value[key].length === 0)
+      || (context.ignoreComparisonFilters && path === '$.diagramOptions' && PUBLICATION_COMPARISON_FILTER_FIELDS.has(key))
+      || (path === '$.output' && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;
+    if (resourceReference && ['encoding', 'representation'].includes(key)) continue;
+    const childPath = `${path}.${key}`;
+    if (key === 'resourceId') {
+      const identity = await publicationResourceIdentity(resources, value[key], context.normalize, childPath, context.resourceIdentities);
+      context.bindings.push({ path: childPath, ...identity });
+      output[key] = identity;
+    } else output[key] = await canonicalizePublicationValue(value[key], resources, context, childPath);
+  }
+  return output;
+};
+const firstPublicationDiff = (expected, actual, path = '$') => {
+  if (Object.is(expected, actual)) return null;
+  if (!expected || !actual || typeof expected !== 'object' || typeof actual !== 'object'
+      || Array.isArray(expected) !== Array.isArray(actual)) return { path, expected, actual };
+  for (const key of new Set([...Object.keys(expected), ...Object.keys(actual)])) {
+    const childPath = Array.isArray(expected) ? `${path}[${key}]` : `${path}.${key}`;
+    if (!Object.hasOwn(expected, key) || !Object.hasOwn(actual, key)) return {
+      path: childPath, expected: expected[key], actual: actual[key] };
+    const difference = firstPublicationDiff(expected[key], actual[key], childPath);
+    if (difference) return difference;
+  }
+  return null;
+};
+const normalizePublicationRequestAliases = (request) => {
+  const normalized = cloneCanonicalJsonValue(request);
+  const colors = normalized.diagramOptions?.colors;
+  if (colors) {
+    colors.defaultColors = colors.defaultColors || colors.defaultColorsFile || null;
+    colors.colorTable = colors.colorTable || colors.colorTableFile || null;
+    delete colors.defaultColorsFile;
+    delete colors.colorTableFile;
+  }
+  return normalized;
+};
+const publicationRequestIdentity = async (request, resources, normalize, resourceIdentities) => {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Canonical request equivalence requires a renderRequest object.');
+  const normalizedRequest = normalizePublicationRequestAliases(request);
+  const conservation = normalizedRequest.diagramOptions?.conservationBlastFiles;
+  const context = { bindings: [], normalize, resourceIdentities,
+    ignoreComparisonFilters: !(normalizedRequest.comparisons?.length || (Array.isArray(conservation) ? conservation.length : conservation)) };
+  const canonical = await canonicalizePublicationValue(normalizedRequest, resources, context);
+  return { canonical, digest: await sha256Hex(textToBytes(JSON.stringify(canonical))),
+    resourceBindings: context.bindings };
+};
+export const compareCanonicalRenderRequests = async (input) => {
+  const normalize = input.normalizeReplayGeneratedResources === true;
+  const resourceIdentities = new Map(), [expected, actual] = await Promise.all([publicationRequestIdentity(input.expectedRequest, input.expectedResources, normalize, resourceIdentities), publicationRequestIdentity(input.actualRequest, input.actualResources, normalize, resourceIdentities)]);
+  const difference = firstPublicationDiff(expected.canonical, actual.canonical);
+  return { equivalent: expected.digest === actual.digest, expected, actual, differences: difference ? [difference] : [] };
+};
+export const assertCanonicalRenderRequestsEquivalent = async (input) => {
+  const comparison = await compareCanonicalRenderRequests(input);
+  if (comparison.equivalent) return comparison;
+  const error = new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`);
+  error.comparison = comparison;
+  throw error;
 };

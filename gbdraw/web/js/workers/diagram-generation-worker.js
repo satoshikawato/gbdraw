@@ -271,6 +271,7 @@ const HELPER_FILE_NAMES = Object.freeze({
   source: 'source.bin',
   gff: 'source.gff',
   fasta: 'source.fasta',
+  pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv'
 });
 
@@ -594,7 +595,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
   },
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD]: {
     keys: [
-      'pairs',
+      'files',
       'mode',
       'maxHits',
       'bitscore',
@@ -613,12 +614,12 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'orthogroupMembershipMode',
       'orthogroupMemberMaxHits'
     ],
-    fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
+    fileRoles: ['pairs'],
+    run: (pyodide, payload, paths, operation) => callJsonHelper(
       pyodide,
       'convert_losatp_blastp_pairs_to_genomic_payload',
       [
-        jsonArgument(payload.pairs, {}),
+        requireHelperFile(paths, 'pairs', operation),
         payload.mode ?? 'pairwise',
         payload.maxHits ?? 5,
         payload.bitscore ?? 50,

@@ -353,7 +353,7 @@ const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
   ) return null;
   cacheMap.delete(key);
   cacheMap.set(key, entry);
-  return cloneJsonData(entry.payload);
+  return entry.payload;
 };
 
 export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
@@ -375,6 +375,12 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
     && typeof resource.value.fields === 'object'
     && !Array.isArray(resource.value.fields)
   );
+};
+
+export const resolveProteinBlastpCandidateLimit = (mode, candidateLimit, maxHits = 5) => {
+  const source = ['orthogroup', 'collinear'].includes(normalizeBlastpMode(mode)) ? candidateLimit : maxHits;
+  if (source === null || source === undefined || source === '') return null;
+  return normalizePositiveInteger(source, null);
 };
 
 const stripRuntimeCacheStats = (payload) => {
@@ -441,7 +447,9 @@ const rewriteMappedProteinReferences = (value, idMap) => {
 };
 
 const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) => {
-  if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
   const entry = {
     schema: LOSAT_DERIVED_CACHE_SCHEMA,
     kind: 'derived-losatp-payload',
@@ -454,10 +462,11 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
     !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
     !validateDerivedProteinReferences(entry, manifest) ||
     !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
-  ) return;
+  ) return null;
   if (cacheMap.has(key)) cacheMap.delete(key);
   cacheMap.set(key, entry);
   pruneLosatDerivedCache(cacheMap);
+  return entry.payload;
 };
 
 const makeSafeFilename = (name) => {
@@ -2530,9 +2539,15 @@ export const createRunAnalysis = ({
         }
         const comparisonResolution = activeComparisonPlanSnapshot;
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
-        const useLosat = comparisonResolution.hasLosatIntent === true;
+        const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
+        const useProteinBlastp = hasLosatIntent && losatProgram.value === 'blastp';
+        const reuseResolvedProteinArtifacts = useProteinBlastp
+          && !legacyProteinRawCandidates.value?.entries?.length
+          && files.linearCanonicalComparisons?.some((comparison) => (
+            comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+          ));
+        const useLosat = hasLosatIntent && !reuseResolvedProteinArtifacts;
         if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
-        const useProteinBlastp = useLosat && losatProgram.value === 'blastp';
         const blastpMode = useProteinBlastp
           ? normalizeBlastpMode(losat.blastp?.mode)
           : String(losat.blastp?.mode ?? '');
@@ -2560,6 +2575,13 @@ export const createRunAnalysis = ({
         const blastpMaxHits = usePairwiseBlastp
           ? Math.max(1, normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true }))
           : 5;
+        const blastpCandidateLimit = useProteinBlastp
+          ? resolveProteinBlastpCandidateLimit(
+              blastpMode,
+              losat.blastp?.candidateLimit,
+              blastpMaxHits
+            )
+          : null;
         const orthogroupMembershipMode = useOrthogroupBlastp
           ? normalizeOrthogroupMembershipMode(losat.blastp?.orthogroupMembershipMode)
           : 'anchor_core_v1';
@@ -2633,9 +2655,11 @@ export const createRunAnalysis = ({
           losat.blastp.maxHits = blastpMaxHits;
           losat.blastp.candidateLimit = null;
         } else if (useOrthogroupBlastp) {
+          losat.blastp.candidateLimit = blastpCandidateLimit;
           losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
           losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
         } else if (useCollinearBlastp) {
+          losat.blastp.candidateLimit = blastpCandidateLimit;
           losat.blastp.collinearMinAnchors = collinearMinAnchors;
           losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
           losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
@@ -2730,11 +2754,13 @@ export const createRunAnalysis = ({
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
         const linearFileTextCache = new WeakMap();
-        collinearGroups.value = [];
-        if (useOrthogroupBlastp) {
-          clearOrthogroupMetadata();
-        } else {
-          clearOrthogroupMetadata({ clearSelection: true });
+        if (!reuseResolvedProteinArtifacts) {
+          collinearGroups.value = [];
+          if (useOrthogroupBlastp) {
+            clearOrthogroupMetadata();
+          } else {
+            clearOrthogroupMetadata({ clearSelection: true });
+          }
         }
         let cacheInfo = [];
         const cacheMap = losatCache.value || new Map();
@@ -2781,7 +2807,7 @@ export const createRunAnalysis = ({
             })
           : null;
 
-        if (!useLosat) {
+        if (!hasLosatIntent) {
           losatCacheInfo.value = [];
         }
 
@@ -3168,8 +3194,7 @@ export const createRunAnalysis = ({
 
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
-          if (useOrthogroupBlastp || useCollinearBlastp) return null;
-          return blastpMaxHits;
+          return blastpCandidateLimit;
         };
 
         const buildLosatArgs = (queryIdx, subjectIdx) => {
@@ -3222,7 +3247,7 @@ export const createRunAnalysis = ({
         }
 
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
-        if (useProteinBlastp) {
+        if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
           const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
             ? linearSeqs.map((_, index) => index)
@@ -3337,12 +3362,18 @@ export const createRunAnalysis = ({
             for (let i = 0; i < linearSeqs.length; i++) {
               pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
             }
-            for (let i = 0; i < linearSeqs.length - 1; i++) {
-              const subjectEnd = collinearSearchScope === 'all' ? linearSeqs.length : i + 2;
-              for (let j = i + 1; j < subjectEnd; j++) {
-                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+            if (collinearSearchScope === 'all') {
+              for (let i = 0; i < linearSeqs.length - 1; i++) {
+                for (let j = i + 1; j < linearSeqs.length; j++) {
+                  pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+                  pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+                }
               }
+            } else {
+              resolvedLosatEdges.forEach((edge) => {
+                pushExpandedJobSpec(edge.queryIndex, edge.subjectIndex, edge.ordinal);
+                pushExpandedJobSpec(edge.subjectIndex, edge.queryIndex, edge.ordinal);
+              });
             }
           } else {
             jobSpecs.push(...buildPairwiseLosatJobSpecs({
@@ -3552,6 +3583,7 @@ export const createRunAnalysis = ({
                 edgeKey: pair.edgeKey,
                 queryIndex: pair.queryIndex,
                 subjectIndex: pair.subjectIndex,
+                displayPair: pair.displayPair,
                 cacheKey: pair.cacheKey,
                 blastText: losatText
               });
@@ -3594,9 +3626,12 @@ export const createRunAnalysis = ({
                 proteinIdentityManifest.value
               );
               if (convertedPayload) {
-                convertedPayload.cache = {
-                  ...(convertedPayload.cache || {}),
-                  derivedPayloadHit: true
+                convertedPayload = {
+                  ...convertedPayload,
+                  cache: {
+                    ...(convertedPayload.cache || {}),
+                    derivedPayloadHit: true
+                  }
                 };
                 losatTiming.proteinDerivedPayloadCacheHits += 1;
               } else {
@@ -3607,7 +3642,7 @@ export const createRunAnalysis = ({
               const response = await runDiagramHelperOperation(
                 DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD,
                 {
-                  pairs: cloneJsonData({ records: recordPayloads, pairs: pairPayloads }),
+                  files: [{ role: 'pairs', bytes: textEncoder.encode(JSON.stringify({ records: recordPayloads, pairs: pairPayloads })).buffer }],
                   mode: blastpMode,
                   maxHits: blastpMaxHits,
                   bitscore: adv.min_bitscore,
@@ -3629,11 +3664,11 @@ export const createRunAnalysis = ({
               );
               convertedPayload = response.result;
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
-                setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
+                convertedPayload = setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
                   mode: blastpMode,
                   payload: convertedPayload,
                   manifest: proteinIdentityManifest.value
-                });
+                }) || convertedPayload;
               }
             }
             losatDerivedCache.value = derivedCacheMap;
@@ -4155,7 +4190,7 @@ export const createRunAnalysis = ({
       }
       commitProteinMigration?.();
       if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical);
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
       }
       if (!isReflow && typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {

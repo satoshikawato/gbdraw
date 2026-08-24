@@ -113,7 +113,10 @@ const installCanonicalRequestCapture = (page) => page.evaluate(() => {
   Worker.prototype.postMessage = function captureCanonicalRequest(message, transfer) {
     if (message?.type === 'run' && message.payload?.request) {
       window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__.push(
-        JSON.stringify(message.payload.request)
+        {
+          request: structuredClone(message.payload.request),
+          resourceManifest: structuredClone(message.payload.resourceManifest || [])
+        }
       );
     }
     if (transfer === undefined) return previousPostMessage.call(this, message);
@@ -122,24 +125,51 @@ const installCanonicalRequestCapture = (page) => page.evaluate(() => {
 });
 
 const canonicalRequestEvidence = async (page) => {
-  const serializedRequests = await page.evaluate(() => (
-    [...(window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ || [])]
-  ));
-  return serializedRequests.map((serialized) => {
-    const request = JSON.parse(serialized);
+  const capture = await page.evaluate(() => {
+    const requests = [...(window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ || [])];
     return {
-      sha256: createHash('sha256').update(serialized).digest('hex'),
-      schema: Number(request.schema || 0),
-      mode: String(request.mode || ''),
-      recordCount: Array.isArray(request.records) ? request.records.length : 0,
-      comparisonCount: Array.isArray(request.comparisons) ? request.comparisons.length : 0,
-      comparisonKinds: Array.isArray(request.comparisons)
-        ? request.comparisons.map(({ kind }) => String(kind || ''))
-        : [],
-      layout: request.layout || null,
-      colors: request.diagramOptions?.colors || null
+      requests: requests.map(({ request }) => JSON.stringify(request)),
+      resourceManifests: requests.map(
+        ({ resourceManifest }) => JSON.stringify(resourceManifest)
+      )
     };
   });
+  const requestDigests = capture.requests.map(
+    (serialized) => createHash('sha256').update(serialized).digest('hex')
+  );
+  const resourceManifestDigests = capture.resourceManifests.map(
+    (serialized) => createHash('sha256').update(serialized).digest('hex')
+  );
+  return {
+    requests: capture.requests.map((serialized, index) => {
+      const request = JSON.parse(serialized);
+      const resourceManifest = JSON.parse(capture.resourceManifests[index]);
+      return {
+        sha256: requestDigests[index],
+        schema: Number(request.schema || 0),
+        mode: String(request.mode || ''),
+        recordCount: Array.isArray(request.records) ? request.records.length : 0,
+        comparisonCount: Array.isArray(request.comparisons) ? request.comparisons.length : 0,
+        comparisonKinds: Array.isArray(request.comparisons)
+          ? request.comparisons.map(({ kind }) => String(kind || ''))
+          : [],
+        layout: request.layout || null,
+        colors: request.diagramOptions?.colors || null,
+        resourceManifestSha256: resourceManifestDigests[index],
+        referencedResourceCount: resourceManifest.length,
+        referencedResourceBytes: resourceManifest.reduce(
+          (total, { size }) => total + Number(size || 0),
+          0
+        )
+      };
+    }),
+    repeatComparison: capture.requests.length === 2
+      ? {
+          equivalent: requestDigests[0] === requestDigests[1]
+            && resourceManifestDigests[0] === resourceManifestDigests[1]
+        }
+      : null
+  };
 };
 
 const activeIntentSummary = (page) => page.evaluate(async () => {
@@ -274,6 +304,9 @@ const generationPhaseAttribution = (outcome, probe) => {
   const resourceLinking = events.find(
     ({ name }) => name === 'worker-resource-linking-end'
   ) || {};
+  const losatCache = events.find(
+    ({ name }) => name === 'losat-cache-preparation-end'
+  ) || {};
   const resultTransportDecodeMs = (
     durationOrZero(events, 'result-binary-decode-start', 'result-binary-decode-end')
     + durationOrZero(
@@ -316,6 +349,8 @@ const generationPhaseAttribution = (outcome, probe) => {
       'losat-cache-preparation-start',
       'losat-cache-preparation-end'
     ),
+    losatCacheHits: Number(losatCache.cacheHits || 0),
+    losatCacheMisses: Number(losatCache.cacheMisses || 0),
     canonicalFileSerializationMs,
     canonicalRequestMs: durationOrZero(
       events,
@@ -363,6 +398,15 @@ const generationPhaseAttribution = (outcome, probe) => {
     pythonGeometryMetadataMs: Number(pythonTimings.geometryMetadata || 0),
     pythonArtifactMetrics: { ...pythonMetrics },
     preparedInputCacheStructural: {
+      decodedResourceCacheHitCount: Number(
+        pythonMetrics.decodedResourceCacheHitCount || 0
+      ),
+      decodedResourceCacheMissCount: Number(
+        pythonMetrics.decodedResourceCacheMissCount || 0
+      ),
+      decodedResourceBuildCount: Number(
+        pythonMetrics.decodedResourceBuildCount || 0
+      ),
       parsedSourceCacheHitCount: Number(
         pythonMetrics.parsedSourceCacheHitCount || 0
       ),
@@ -773,7 +817,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   expect(loadProbe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
   expect(await featureCatalogSummary(page)).toEqual({ schema: 3, itemCount: 1 });
   expect(preFirstGenerateActiveIntent.linearComparisonPlan).toEqual({
-    mode: 'none',
+    mode: 'adjacent',
     defaultSource: 'losat',
     edges: []
   });
@@ -818,14 +862,15 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
-  const capturedCanonicalRequests = await canonicalRequestEvidence(page);
+  const canonicalRequestCapture = await canonicalRequestEvidence(page);
+  const capturedCanonicalRequests = canonicalRequestCapture.requests;
   expect(capturedCanonicalRequests).toHaveLength(2);
   expect(capturedCanonicalRequests[0]).toMatchObject({
     schema: 5,
     mode: 'linear',
     recordCount: 11,
-    comparisonCount: 0,
-    comparisonKinds: [],
+    comparisonCount: 2,
+    comparisonKinds: ['collinearityResult', 'generatedProteinComparison'],
     layout: {
       recordGapPx: 48,
       multiRecordPositions: [
@@ -834,20 +879,17 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       ]
     }
   });
-  expect(capturedCanonicalRequests[1]).toEqual(capturedCanonicalRequests[0]);
+  expect(canonicalRequestCapture.repeatComparison).toMatchObject({ equivalent: true });
   const loadedComparisonSummary = svgComparisonSummary(loaded.originalPreview);
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
-  expect(loadedComparisonSummary.comparisonGroups).toBeGreaterThan(0);
-  expect(loadedComparisonSummary.pairwiseMatches).toBeGreaterThan(0);
-  expect(loadedComparisonSummary.comparisonLegends).toBeGreaterThan(0);
-  expect(firstComparisonSummary).toEqual({
-    comparisonGroups: 0,
-    pairwiseMatches: 0,
-    comparisonLegends: 0
+  expect(loadedComparisonSummary).toEqual({
+    comparisonGroups: 16,
+    pairwiseMatches: 633,
+    comparisonLegends: 2
   });
+  expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
   expect(secondComparisonSummary).toEqual(firstComparisonSummary);
-  expect(loaded.originalPreview).not.toBe(firstGeneratedSvg);
   const generatedFeatureCatalogDigest = await featureCatalogDigest(page);
 
   const activity = second.worker;
@@ -992,7 +1034,13 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   expect(secondPhaseAttribution).toMatchObject({
     workerInitializationMs: 0,
     workerInitializationReused: true,
-    newlyStagedResourceBytes: 0
+    newlyStagedResourceBytes: 0,
+    losatCacheHits: 0,
+    losatCacheMisses: 0
+  });
+  expect(firstPhaseAttribution).toMatchObject({
+    losatCacheHits: 47,
+    losatCacheMisses: 0
   });
   expect(second.outcome.historyStructural).toEqual(expectedWarmGenerateHistory);
   expect(secondPhaseAttribution.historyStructural).toMatchObject(
@@ -1014,6 +1062,9 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   });
   expect(secondPhaseAttribution.pythonInvocationMs).toBeGreaterThan(0);
   expect(firstPhaseAttribution.preparedInputCacheStructural).toMatchObject({
+    decodedResourceCacheHitCount: 0,
+    decodedResourceCacheMissCount: 1,
+    decodedResourceBuildCount: 1,
     parsedSourceCacheHitCount: 0,
     resolvedRecordCacheHitCount: 0,
     resolvedRecordCacheMissCount: 1,
@@ -1034,6 +1085,9 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   expect(firstPhaseAttribution.preparedInputCacheStructural
     .preparedInputCacheRetainedBytes).toBeGreaterThan(0);
   expect(secondPhaseAttribution.preparedInputCacheStructural).toMatchObject({
+    decodedResourceCacheHitCount: 1,
+    decodedResourceCacheMissCount: 0,
+    decodedResourceBuildCount: 0,
     parsedSourceCacheMissCount: 0,
     parsedSourceParseCount: 0,
     resolvedRecordCacheHitCount: 1,
@@ -1133,14 +1187,23 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     'print("\\n".join(result.differences))',
     'raise SystemExit(0 if result.equal else 1)'
   ].join(';');
-  const semanticComparison = spawnSync(
+  const loadedToFirstComparison = spawnSync(
+    process.env.GBDRAW_PYTHON || 'python',
+    ['-c', svgComparisonCommand, loadedSvgPath, firstSvgPath],
+    { cwd: repoRoot, encoding: 'utf8' }
+  );
+  expect(
+    loadedToFirstComparison.status,
+    `${loadedToFirstComparison.stdout}\n${loadedToFirstComparison.stderr}`
+  ).toBe(0);
+  const repeatComparison = spawnSync(
     process.env.GBDRAW_PYTHON || 'python',
     ['-c', svgComparisonCommand, firstSvgPath, secondSvgPath],
     { cwd: repoRoot, encoding: 'utf8' }
   );
   expect(
-    semanticComparison.status,
-    `${semanticComparison.stdout}\n${semanticComparison.stderr}`
+    repeatComparison.status,
+    `${repeatComparison.stdout}\n${repeatComparison.stderr}`
   ).toBe(0);
 
   const outputsExactlyEqual = firstGeneratedSvg === secondGeneratedSvg;
@@ -1233,7 +1296,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     },
     deterministicOutput: {
       comparison: 'tests.utils.svg_compare.compare_svgs',
-      loadedToFirstRelationship: 'divergent-active-draft',
+      loadedToFirstRelationship: 'publication-parity',
       loadedToFirstExactBytesEqual: loaded.originalPreview === firstGeneratedSvg,
       loadedPreviewIdentity,
       firstGeneratedIdentity,
@@ -1241,7 +1304,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       firstComparisonSummary,
       secondComparisonSummary,
       capturedCanonicalRequests,
-      semanticallyEquivalent: semanticComparison.status === 0,
+      loadedToFirstSemanticallyEquivalent: loadedToFirstComparison.status === 0,
+      repeatedGenerateSemanticallyEquivalent: repeatComparison.status === 0,
       exactBytesEqual: firstGeneratedSvg === secondGeneratedSvg,
       firstCharacters: firstGeneratedSvg.length,
       secondCharacters: secondGeneratedSvg.length,

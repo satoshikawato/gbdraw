@@ -75,7 +75,10 @@ including complete before and after sets and removal of superseded paths.
 | Composition and dependency wiring | `js/app/app-setup.js` |
 | Reactive state and computed values | `js/state.js` |
 | Generate-button orchestration | `js/app/run-analysis.js` |
-| Canonical request/session projection | `js/services/session-request.js` |
+| Canonical request/session projection and equivalence | `js/services/session-request.js` |
+| Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
+| Historical Gallery session migration | `js/services/gallery-session-migration.js` |
+| Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | Render-worker client and lifecycle | `js/services/diagram-generation.js` |
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
@@ -88,6 +91,8 @@ including complete before and after sets and removal of superseded paths.
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
+| Public Gallery inventory and asset generation | `tools/prepare_interactive_gallery_assets.py::EXAMPLES` |
+| Gallery refresh process, staging, and replacement | `tools/refresh_gallery_sessions.py` |
 | Gallery data, media, and tutorials | `gallery/` |
 
 During an artifact History transaction, the captured `before` checkpoint is the
@@ -145,6 +150,7 @@ update canonical state only.
 state and the persisted/rendered model. It owns:
 
 - canonical request schema and resource descriptors;
+- canonical publication form, resource identity, and request equivalence;
 - Circular `single`, `grid`, and `batch` grouping;
 - Linear record/group topology;
 - output-prefix and per-batch output projection;
@@ -155,6 +161,13 @@ state and the persisted/rendered model. It owns:
 grow a parallel model of render fields. Compatibility migrations are reader
 concerns: normalize supported old data once, then use the current model. Do not
 write retired fields into new sessions.
+
+`services/session-active-config-contract.js` is the DOM-free current writer
+contract used by normal restore and Gallery publication. Historical Gallery
+migration stays in `services/gallery-session-migration.js`; it does not clean up
+current sessions. `services/gallery-session-publication.js` may align an admitted
+Gallery draft with its committed render intent, but ordinary import keeps its
+saved Result and active draft separate.
 
 Explicit track slots are authoritative when enabled. Legacy flat controls are
 compatibility inputs, not a second source of truth. Preserve empty positions in
@@ -213,8 +226,14 @@ request boundary instead of duplicating it in configuration and session modules.
 
 ## Gallery ownership
 
-`gbdraw/web/gallery/index.html` is generated from
-`gbdraw/web/gallery/examples.json`. Tutorial instructions live under
+`tools/prepare_interactive_gallery_assets.py::EXAMPLES` is the public 11-example
+inventory. `gbdraw/web/gallery/examples.json`, session artifacts, source/example
+SVGs, thumbnails, and `artifact-manifest.json` are generated projections.
+`tools/refresh_gallery_sessions.py` is the supported unfiltered owner command;
+hosted builders verify these checked-in bytes and do not regenerate them.
+
+`gbdraw/web/gallery/index.html` reads `gbdraw/web/gallery/examples.json`.
+Tutorial instructions live under
 `gbdraw/web/gallery/tutorials/`; screenshots and thumbnails live under
 `gbdraw/web/gallery/media/` and `thumbnails/`.
 

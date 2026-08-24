@@ -1604,7 +1604,10 @@ def assemble_linear_diagram_from_records(
     normalized_collinearity_color_mode = normalize_collinearity_color_mode(str(collinearity_color_mode))
     normalized_orthogroup_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     collinearity_comparison_pairs: tuple[tuple[int, int], ...] | None = None
-    if normalized_protein_blastp_mode == "collinear" and layout is not None:
+    if (
+        (normalized_protein_blastp_mode == "collinear" or collinearity_blocks is not None)
+        and layout is not None
+    ):
         _ordered_indices, collinearity_rows = resolve_record_row_positions(
             records,
             layout.multi_record_positions,
@@ -1746,6 +1749,31 @@ def assemble_linear_diagram_from_records(
     resolved_orthogroups: OrthogroupResult | None = orthogroups
     resolved_collinearity_result: CollinearityResult | None = None
     losat_cache_filenames = _linear_losat_cache_filenames(records)
+
+    def project_collinearity_comparisons(
+        result: CollinearityResult,
+    ) -> list[DataFrame] | None:
+        if collinearity_comparison_pairs is None:
+            return convert_collinearity_blocks_to_comparisons(
+                result,
+                records=records,
+                color_mode=normalized_collinearity_color_mode,
+                search_scope=normalized_collinearity_search_scope,
+            )
+        pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
+            result,
+            records=records,
+            color_mode=normalized_collinearity_color_mode,
+            search_scope=normalized_collinearity_search_scope,
+        )
+        allowed_pairs = set(collinearity_comparison_pairs)
+        resolved_linear_comparisons.extend(
+            LinearComparison(query_index, subject_index, matches)
+            for (query_index, subject_index), matches in pair_comparisons.items()
+            if (query_index, subject_index) in allowed_pairs
+        )
+        return None
+
     if protein_comparisons is not None:
         resolved_protein_comparisons = list(protein_comparisons)
     elif collinearity_blocks is not None:
@@ -1756,11 +1784,8 @@ def assemble_linear_diagram_from_records(
         resolved_collinearity_result = collinearity_result
         if collinearity_result.orthogroups is not None:
             resolved_orthogroups = collinearity_result.orthogroups
-        resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
-            collinearity_result,
-            records=records,
-            color_mode=normalized_collinearity_color_mode,
-            search_scope=normalized_collinearity_search_scope,
+        resolved_protein_comparisons = project_collinearity_comparisons(
+            collinearity_result
         )
     elif normalized_protein_blastp_mode == "pairwise":
         pair_inputs = normalized_protein_pairs
@@ -1867,24 +1892,9 @@ def assemble_linear_diagram_from_records(
         )
         resolved_collinearity_result = collinearity_result
         resolved_orthogroups = collinearity_result.orthogroups
-        if collinearity_comparison_pairs is not None:
-            pair_comparisons = convert_collinearity_blocks_to_pair_comparisons(
-                collinearity_result,
-                records=records,
-                color_mode=normalized_collinearity_color_mode,
-                search_scope=normalized_collinearity_search_scope,
-            )
-            resolved_linear_comparisons.extend(
-                LinearComparison(query_index, subject_index, matches)
-                for (query_index, subject_index), matches in pair_comparisons.items()
-            )
-        else:
-            resolved_protein_comparisons = convert_collinearity_blocks_to_comparisons(
-                collinearity_result,
-                records=records,
-                color_mode=normalized_collinearity_color_mode,
-                search_scope=normalized_collinearity_search_scope,
-            )
+        resolved_protein_comparisons = project_collinearity_comparisons(
+            collinearity_result
+        )
     normalized_plot_title = str(plot_title or "").strip()
     normalized_plot_title_position = _resolve_linear_plot_title_position(
         str(plot_title_position)

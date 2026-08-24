@@ -985,6 +985,33 @@ test('FASTA extraction delegates lazy resources to the shared reader', async () 
       0,
       'the explicit staged text fast path must not materialize file text again'
     );
+
+    const warmCacheInfo = [{
+      key: 'warm-cache', edgeKey: 'multi->third', queryUid: 'multi', subjectUid: 'third',
+      queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
+    }];
+    state.losatCacheInfo.value = structuredClone(warmCacheInfo);
+    state.losatProgram.value = 'blastp';
+    state.losat.blastp.mode = 'pairwise';
+    state.files.linearCanonicalComparisons = [{
+      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: {}
+    }];
+    const warmComparisonPlan = resolveLinearComparisonPlan({
+      plan: state.linearComparisonPlan,
+      sequences: state.linearSeqs,
+      layout: [],
+      losatProgram: state.losatProgram.value,
+      blastpMode: state.losat.blastp.mode
+    });
+    const warmResult = result('lazy-linear-warm.svg', 'lazy-linear-warm');
+    workerResponses.push(response(warmResult, validCatalog(warmResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(warmComparisonPlan),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 1, 'resolved protein artifacts must bypass LOSAT execution');
+    assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
   } finally {
     if (previousTestHooks === undefined) {
       delete globalThis.__GBDRAW_TEST_HOOKS__;
@@ -1115,6 +1142,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const dormantDerivedCache = new AuditCacheMap([['dormant-derived', { stale: true }]]);
   state.losatCache.value = dormantRawCache;
   state.losatDerivedCache.value = dormantDerivedCache;
+  state.losatCacheInfo.value = [{ key: 'dormant-display-cache' }];
   state.files.linearCanonicalComparisons = [{
     kind: 'precomputed',
     edgeKey: 'linear-none-first->linear-none-second',
@@ -1237,6 +1265,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.equal(losatCalls, 0);
   assert.equal(dormantRawCache.probes, 0);
   assert.equal(dormantDerivedCache.probes, 0);
+  assert.deepEqual(state.losatCacheInfo.value, []);
   assert.equal(annotationValidationCalls, 1);
   assert.equal(activePrimaryReads, primaryReadsBefore + 3);
   assert.equal(inactiveFileReads, inactiveReadsBefore);

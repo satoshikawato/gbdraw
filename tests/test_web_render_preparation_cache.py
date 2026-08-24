@@ -29,6 +29,7 @@ from gbdraw.api import (
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
+    get_or_build_decoded_resource,
     get_or_build_parsed_source,
 )
 from gbdraw.annotations import (
@@ -169,6 +170,45 @@ def _metrics(diagnostics: dict[str, object]) -> dict[str, int]:
     metrics = diagnostics["metrics"]
     assert isinstance(metrics, dict)
     return {str(key): int(value) for key, value in metrics.items()}
+
+
+def test_decoded_resource_cache_reuses_only_the_same_worker_identity(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "typed.json"
+    path.write_text('{"schema":1}', encoding="utf-8")
+    cache = PreparedBiologicalInputCache()
+    identity = PreparedResourceIdentity("typed", "render-resource-1", path.stat().st_size)
+    value = {"decoded": True}
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        assert get_or_build_decoded_resource(
+            path,
+            ("canonical-typed-json", "result"),
+            lambda: value,
+        ) is value
+
+    warm_diagnostics: dict[str, object] = {"metrics": {}}
+    with cache.transaction(resource_paths={path: identity}, diagnostics=warm_diagnostics):
+        assert get_or_build_decoded_resource(
+            path,
+            ("canonical-typed-json", "result"),
+            lambda: pytest.fail("the unchanged typed resource was decoded twice"),
+        ) is value
+    assert _metrics(warm_diagnostics)["decodedResourceCacheHitCount"] == 1
+
+    changed = PreparedResourceIdentity("typed", "render-resource-2", path.stat().st_size)
+    replacement = {"decoded": "replacement"}
+    changed_diagnostics: dict[str, object] = {"metrics": {}}
+    with cache.transaction(resource_paths={path: changed}, diagnostics=changed_diagnostics):
+        assert get_or_build_decoded_resource(
+            path,
+            ("canonical-typed-json", "result"),
+            lambda: replacement,
+        ) is replacement
+    changed_metrics = _metrics(changed_diagnostics)
+    assert changed_metrics["decodedResourceCacheMissCount"] == 1
+    assert changed_metrics["decodedResourceBuildCount"] == 1
+    assert changed_metrics["preparedInputCacheEvictionCount"] == 1
 
 
 def test_warm_and_render_only_generates_reuse_biological_preparation(

@@ -3035,7 +3035,6 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
             raise ParseError(
                 "LOSATP blastp output contains non-numeric outfmt 6 fields."
             )
-
     try:
         df = pd.read_csv(
             StringIO("\n".join(data_lines)),

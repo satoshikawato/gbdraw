@@ -87,11 +87,12 @@ export const createDiagramResourceTransport = () => {
     for (const resourceId of referencedIds) {
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
-      const payloadIdentity = owner === descriptor ? descriptor.data : owner;
+      const payloadIdentity = typeof descriptor.data === 'string'
+        ? descriptor.data
+        : owner;
       const previous = cachedResources.get(resourceId);
       const cacheHit = Boolean(
         previous
-        && previous.owner === owner
         && previous.payloadIdentity === payloadIdentity
         && previous.size === descriptor.size
       );
@@ -110,7 +111,6 @@ export const createDiagramResourceTransport = () => {
       });
       nextCachedResources.set(resourceId, {
         cacheToken,
-        owner,
         payloadIdentity,
         size: descriptor.size
       });

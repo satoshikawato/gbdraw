@@ -3,8 +3,14 @@ import { createHash } from 'node:crypto';
 
 import {
   buildLosatDerivedPayloadCachePayload,
-  hasRequiredCanonicalAnalysisResource
+  hasRequiredCanonicalAnalysisResource,
+  resolveProteinBlastpCandidateLimit
 } from '../../gbdraw/web/js/app/run-analysis.js';
+
+assert.equal(resolveProteinBlastpCandidateLimit('collinear', 5), 5);
+assert.equal(resolveProteinBlastpCandidateLimit('orthogroup', '7'), 7);
+assert.equal(resolveProteinBlastpCandidateLimit('pairwise', null, 3), 3);
+assert.equal(resolveProteinBlastpCandidateLimit('collinear', null), null);
 
 const baselineInput = {
   mode: 'collinear',

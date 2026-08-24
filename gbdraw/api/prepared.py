@@ -55,6 +55,7 @@ class _PreparedCacheTransaction:
     diagnostics: MutableMapping[str, Any] | None
     pending: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = field(
         default_factory=lambda: {
+            "decoded": OrderedDict(),
             "parsed": OrderedDict(),
             "resolved": OrderedDict(),
             "interactive": OrderedDict(),
@@ -62,6 +63,7 @@ class _PreparedCacheTransaction:
     )
     used: dict[str, set[Hashable]] = field(
         default_factory=lambda: {
+            "decoded": set(),
             "parsed": set(),
             "resolved": set(),
             "interactive": set(),
@@ -69,6 +71,7 @@ class _PreparedCacheTransaction:
     )
     accessed: dict[str, dict[Hashable, Any]] = field(
         default_factory=lambda: {
+            "decoded": {},
             "parsed": {},
             "resolved": {},
             "interactive": {},
@@ -87,6 +90,9 @@ _ACTIVE_PREPARED_TRANSACTION: ContextVar[_PreparedCacheTransaction | None] = (
 )
 
 _CACHE_METRICS = (
+    "decodedResourceCacheHitCount",
+    "decodedResourceCacheMissCount",
+    "decodedResourceBuildCount",
     "parsedSourceCacheHitCount",
     "parsedSourceCacheMissCount",
     "parsedSourceParseCount",
@@ -104,6 +110,11 @@ _CACHE_METRICS = (
 )
 
 _LAYER_METRICS = {
+    "decoded": (
+        "decodedResourceCacheHitCount",
+        "decodedResourceCacheMissCount",
+        "decodedResourceBuildCount",
+    ),
     "parsed": (
         "parsedSourceCacheHitCount",
         "parsedSourceCacheMissCount",
@@ -473,6 +484,7 @@ class PreparedBiologicalInputCache:
 
     def __init__(self) -> None:
         self._layers: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {
+            "decoded": OrderedDict(),
             "parsed": OrderedDict(),
             "resolved": OrderedDict(),
             "interactive": OrderedDict(),
@@ -675,6 +687,26 @@ def get_or_build_parsed_source(
         builder,
         publish=publish,
     )
+
+
+def get_or_build_decoded_resource(
+    source: str | Path,
+    key: Hashable,
+    builder: Callable[[], Any],
+) -> Any:
+    """Reuse one decoded immutable value while its Worker resource is unchanged."""
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    identity = prepared_resource_identity(source)
+    if transaction is None or identity is None:
+        return builder()
+    value = transaction.cache.get_or_build(
+        "decoded",
+        (identity, key),
+        frozenset({identity}),
+        builder,
+    )
+    return register_prepared_resource_value(value, source)
 
 
 def get_or_build_resolved_records(

@@ -18,8 +18,15 @@ installFakeSvgDom();
 let restoredPrimaryTextReads = 0;
 let restoredPrimaryArrayBufferReads = 0;
 const restoredTextReadsByName = new Map();
+const resourceReencodesByName = new Map();
 globalThis.__GBDRAW_TEST_HOOKS__ = {
   onStructuralMetric({ name, resourceName }) {
+    if (name === 'resourceReencodeCount') {
+      resourceReencodesByName.set(
+        resourceName,
+        (resourceReencodesByName.get(resourceName) || 0) + 1
+      );
+    }
     if (name !== 'resourceTextReadCount') return;
     restoredPrimaryTextReads += 1;
     restoredTextReadsByName.set(
@@ -519,6 +526,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
 
   state.files.linearCanonicalComparisons = [];
   adoptCanonicalRenderArtifacts({ renderRequest, resources });
+  const collinearityReencodesBefore = resourceReencodesByName.get('collinearity.json') || 0;
   assert.deepEqual(
     state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
     [
@@ -538,6 +546,10 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(
     serialized.linearCanonicalComparisons[2].file.data,
     btoa(collinearityJson)
+  );
+  assert.equal(
+    resourceReencodesByName.get('collinearity.json') || 0,
+    collinearityReencodesBefore
   );
   assert.equal(serialized.linearCanonicalComparisons[2].valueKind, 'blocks');
   assert.deepEqual(

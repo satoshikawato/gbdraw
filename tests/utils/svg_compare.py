@@ -9,12 +9,33 @@ handling common sources of non-significant differences such as:
 - XML declaration differences
 """
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
 import math
+
+
+BASIC_CSS_COLORS = {
+    "aqua": "#00ffff",
+    "black": "#000000",
+    "blue": "#0000ff",
+    "fuchsia": "#ff00ff",
+    "gray": "#808080",
+    "green": "#008000",
+    "lime": "#00ff00",
+    "maroon": "#800000",
+    "navy": "#000080",
+    "olive": "#808000",
+    "purple": "#800080",
+    "red": "#ff0000",
+    "silver": "#c0c0c0",
+    "teal": "#008080",
+    "white": "#ffffff",
+    "yellow": "#ffff00",
+}
 
 
 @dataclass
@@ -146,6 +167,30 @@ def normalize_style(style: str) -> str:
     return ';'.join(f"{k}:{v}" for k, v in sorted(props.items()))
 
 
+def normalize_json_numbers(value):
+    """Apply the SVG numeric tolerance recursively inside metadata JSON."""
+    if isinstance(value, float):
+        normalized = normalize_number(str(value))
+        return float(normalized) if "." in normalized else int(normalized)
+    if isinstance(value, list):
+        return [normalize_json_numbers(item) for item in value]
+    if isinstance(value, dict):
+        return {key: normalize_json_numbers(item) for key, item in value.items()}
+    return value
+
+
+def normalize_color(value: str) -> str:
+    """Normalize the basic CSS color keywords and hexadecimal spelling."""
+    stripped = value.strip()
+    lowered = stripped.lower()
+    if lowered in BASIC_CSS_COLORS:
+        return BASIC_CSS_COLORS[lowered]
+    short_hex = re.fullmatch(r"#([0-9a-f]{3})", lowered)
+    if short_hex:
+        return "#" + "".join(character * 2 for character in short_hex.group(1))
+    return lowered if re.fullmatch(r"#[0-9a-f]{6}", lowered) else stripped
+
+
 def normalize_attribute_value(name: str, value: str, id_map: dict = None) -> str:
     """
     Normalize an SVG attribute value based on attribute type.
@@ -174,6 +219,18 @@ def normalize_attribute_value(name: str, value: str, id_map: dict = None) -> str
         # Polygon/polyline points
         nums = re.findall(r'-?[\d.]+(?:[eE][+-]?\d+)?', value)
         return ' '.join(normalize_number(n) for n in nums)
+    elif name_lower == 'data-gbdraw-composition':
+        try:
+            return json.dumps(
+                normalize_json_numbers(json.loads(value)),
+                sort_keys=True,
+                separators=(',', ':'),
+            )
+        except (TypeError, ValueError):
+            return value.strip()
+    elif name_lower in ('color', 'fill', 'flood-color', 'lighting-color',
+                         'stop-color', 'stroke'):
+        return normalize_color(value)
     elif name_lower == 'id' and id_map is not None:
         # Normalize dynamic IDs to sequential IDs
         if value not in id_map:

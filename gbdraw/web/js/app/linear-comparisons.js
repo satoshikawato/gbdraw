@@ -261,12 +261,22 @@ export const resolveLinearComparisonPlan = ({
     const edgeKey = linearComparisonEdgeKey(edge.queryUid, edge.subjectUid);
     if (!draftByEdgeKey.has(edgeKey)) draftByEdgeKey.set(edgeKey, edge);
   });
+  const normalizedProgram = VALID_LOSAT_PROGRAMS.has(String(losatProgram || '').trim().toLowerCase())
+    ? String(losatProgram).trim().toLowerCase()
+    : 'blastn';
+  const normalizedBlastpMode = String(blastpMode || 'orthogroup').trim().toLowerCase();
 
   let activeDrafts = [];
   if (normalized.mode === LINEAR_COMPARISON_MODES.SELECTED) {
     activeDrafts = normalized.edges.filter((edge) => edge.included === true);
   } else if (normalized.mode === LINEAR_COMPARISON_MODES.ADJACENT) {
-    activeDrafts = adjacentRowPairs(sequenceList, layout).map(([queryUid, subjectUid]) => {
+    const useAllAdjacentRowPairs = normalizedProgram === 'blastp'
+      && normalizedBlastpMode !== 'pairwise';
+    activeDrafts = adjacentRowPairs(
+      sequenceList,
+      layout,
+      useAllAdjacentRowPairs
+    ).map(([queryUid, subjectUid]) => {
       const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
       const draft = draftByEdgeKey.get(edgeKey);
       return {
@@ -291,10 +301,6 @@ export const resolveLinearComparisonPlan = ({
   const issues = normalized.mode === LINEAR_COMPARISON_MODES.SELECTED
     ? validateLinearComparisonEdges({ edges: activeDrafts, sequences: sequenceList, layout })
     : [];
-  const normalizedProgram = VALID_LOSAT_PROGRAMS.has(String(losatProgram || '').trim().toLowerCase())
-    ? String(losatProgram).trim().toLowerCase()
-    : 'blastn';
-  const normalizedBlastpMode = String(blastpMode || 'orthogroup').trim().toLowerCase();
   const selectedHasLosat = normalized.mode === LINEAR_COMPARISON_MODES.SELECTED &&
     activeDrafts.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
   if (selectedHasLosat && normalizedProgram === 'blastp' && normalizedBlastpMode !== 'pairwise') {

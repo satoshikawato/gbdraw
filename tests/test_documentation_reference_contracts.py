@@ -150,15 +150,20 @@ def test_web_reference_defaults_match_the_browser_profile() -> None:
     profile = (REPO_ROOT / "gbdraw" / "web" / "js" / "web-ux-profile.js").read_text(
         encoding="utf-8"
     )
-    state = (REPO_ROOT / "gbdraw" / "web" / "js" / "state.js").read_text(
-        encoding="utf-8"
-    )
+    active_contract = (
+        REPO_ROOT
+        / "gbdraw"
+        / "web"
+        / "js"
+        / "services"
+        / "session-active-config-contract.js"
+    ).read_text(encoding="utf-8")
 
     assert "separateStrands: true" in profile
     assert "legend: 'left'" in profile
     assert "legend: 'bottom'" in profile
-    assert "track_type: 'tuckin'" in state
-    assert "linear_track_layout: 'middle'" in state
+    assert "track_type: 'tuckin'" in active_contract
+    assert "linear_track_layout: 'middle'" in active_contract
     assert "| Separate strands | On | On |" in reference
     assert "| Legend | Left | Bottom |" in reference
     assert "| Feature placement | Tuckin preset | Features on axis |" in reference

@@ -58,12 +58,15 @@ def _load_build_support_module():
     return _load_repo_module(REPO_ROOT / "gbdraw" / "_build_support.py", "gbdraw_build_support")
 
 
-def _load_refresh_gallery_sessions_module():
-    return _load_repo_module(REPO_ROOT / "tools" / "refresh_gallery_sessions.py", "refresh_gallery_sessions")
-
-
 def _load_stamp_web_build_module():
     return _load_repo_module(REPO_ROOT / "tools" / "stamp_web_build.py", "stamp_web_build")
+
+
+def _load_gallery_artifact_manifest_module():
+    return _load_repo_module(
+        REPO_ROOT / "tools" / "gallery_artifact_manifest.py",
+        "gallery_artifact_manifest",
+    )
 
 
 def _replace_once(source: str, old: str, new: str) -> str:
@@ -137,6 +140,11 @@ def build_cloudflare_pages_bundle(
     gallery_remote_base: str | None = None,
     commit_sha: str | None = None,
 ) -> Path:
+    verify_gallery_artifacts = (
+        _load_gallery_artifact_manifest_module().verify_gallery_artifacts
+    )
+
+    verify_gallery_artifacts()
     if output_root.exists():
         shutil.rmtree(output_root)
     shutil.copytree(WEB_ROOT, output_root)
@@ -177,20 +185,19 @@ def build_cloudflare_pages_bundle(
         remote_base=gallery_remote_base
         or _default_gallery_remote_base(commit_sha=resolved_commit_sha),
     )
+    verify_gallery_artifacts(
+        package_root=output_root,
+        commit_sha=resolved_commit_sha.lower(),
+    )
     return output_root
 
 
 def prepare_cloudflare_pages(
     *,
     refresh_cache_bust: bool = False,
-    refresh_gallery_sessions: bool = False,
     google_analytics_measurement_id: str | None = None,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
 ) -> Path:
-    if refresh_gallery_sessions:
-        refresh_gallery_sessions_module = _load_refresh_gallery_sessions_module()
-        refresh_gallery_sessions_module.refresh_gallery_sessions()
-        refresh_gallery_sessions_module.prepare_gallery_assets()
     prepare_browser_wheel_module = _load_prepare_browser_wheel_module()
     prepare_browser_wheel_module.prepare_browser_wheel(refresh_cache_bust=refresh_cache_bust)
     build_support = _load_build_support_module()
@@ -225,18 +232,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{GOOGLE_ANALYTICS_MEASUREMENT_ID_ENV} or the repository default."
         ),
     )
-    parser.add_argument(
-        "--refresh-gallery",
-        action="store_true",
-        help=(
-            "Refresh web gallery session JSON/SVG assets before copying the web bundle. "
-            "This requires the optional gallery asset dependencies."
-        ),
-    )
     args = parser.parse_args(argv)
     output_root = prepare_cloudflare_pages(
         refresh_cache_bust=args.refresh_cache_bust,
-        refresh_gallery_sessions=args.refresh_gallery,
         google_analytics_measurement_id=args.google_analytics_id,
     )
     print(f"Prepared Cloudflare Pages bundle: {output_root.relative_to(REPO_ROOT)}")
