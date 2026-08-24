@@ -456,6 +456,20 @@ class TestSVGComparison:
         result = compare_svgs(svg1, svg2)
         assert result.equal
 
+    def test_composition_metadata_float_tolerance(self):
+        """Treat runtime-scale float noise in composition metadata like SVG coordinates."""
+        svg1 = '<svg data-gbdraw-composition="{&quot;x&quot;:67.00496309450932}"/>'
+        svg2 = '<svg data-gbdraw-composition="{&quot;x&quot;:67.00496309451}"/>'
+
+        assert compare_svgs(svg1, svg2).equal
+
+    def test_basic_css_color_keyword_tolerance(self):
+        """Treat basic CSS color names and their hexadecimal forms as equivalent."""
+        named = '<svg><path fill="yellow" stroke="red"/></svg>'
+        hexadecimal = '<svg><path fill="#FFFF00" stroke="#ff0000"/></svg>'
+
+        assert compare_svgs(named, hexadecimal).equal
+
     def test_attribute_order_tolerance(self):
         """Test that attribute order differences are ignored."""
         svg1 = """<svg xmlns="http://www.w3.org/2000/svg">

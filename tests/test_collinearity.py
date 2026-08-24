@@ -1956,7 +1956,7 @@ def test_linear_cli_rejects_nonpositive_collinear_min_anchors() -> None:
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
+def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path) -> None:
     class JsNull:
         def __str__(self) -> str:
             return "null"
@@ -2029,8 +2029,10 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
         ],
     }
 
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "collinear",
         5,
         50,
@@ -2079,7 +2081,9 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows() -> None:
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> None:
+def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
+    tmp_path: Path,
+) -> None:
     class JsNull:
         def __str__(self) -> str:
             return "null"
@@ -2152,8 +2156,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> No
         ],
     }
 
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "collinear",
         5,
         50,
@@ -2180,7 +2186,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> No
     assert rows[0]["subject_protein_id"] == "sb0"
 
     raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "collinear",
         5,
         50,
@@ -2203,7 +2209,9 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode() -> No
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> None:
+def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
+    tmp_path: Path,
+) -> None:
     helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
     namespace: dict[str, object] = {}
@@ -2296,9 +2304,12 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
         ],
     }
 
-    def convert(scope: str) -> dict[str, object]:
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def convert(scope: str, input_payload: Path = pairs_path) -> dict[str, object]:
         raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-            json.dumps(payload),
+            str(input_payload),
             "collinear",
             5,
             50,
@@ -2320,9 +2331,18 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
 
     adjacent = convert("adjacent")
     all_records = convert("all")
+    multi_row_payload = json.loads(json.dumps(payload))
+    for pair in multi_row_payload["pairs"]:
+        pair["displayPair"] = (
+            pair["queryIndex"] == 0 and pair["subjectIndex"] == 2
+        )
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(multi_row_payload), encoding="utf-8")
+    multi_row_adjacent = convert("adjacent", pairs_path)
 
     assert "error" not in adjacent
     assert "error" not in all_records
+    assert "error" not in multi_row_adjacent
     def member_sets(result: dict[str, object]) -> list[set[str]]:
         groups = result["collinearityResult"]["value"]["fields"][
             "orthogroups"
@@ -2338,6 +2358,13 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope() -> No
     assert set(all_records) == {"pairs", "collinearityResult", "cache"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
+    assert {
+        (
+            block["fields"]["queryRecordIndex"],
+            block["fields"]["subjectRecordIndex"],
+        )
+        for block in multi_row_adjacent["collinearityResult"]["value"]["fields"]["blocks"]
+    } == {(0, 2)}
     assert all(
         block["fields"]["subjectRecordIndex"]
         == block["fields"]["queryRecordIndex"] + 1

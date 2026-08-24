@@ -10,7 +10,6 @@ import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import {
   applyCircularTrackOrderPlacements,
-  CIRCULAR_TRACK_RENDERERS,
   clampCircularTrackAxisIndex,
   inferLegacyAxisIndexFromFeature,
   migrateLegacyCircularTrackSlot,
@@ -22,7 +21,6 @@ import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
   LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-  LINEAR_TRACK_RENDERERS,
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema,
   normalizeLinearTrackSlots,
@@ -38,7 +36,6 @@ import {
   representativeDepthFiles,
   syncDepthSlotLabels
 } from '../app/depth-track-state.js';
-import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry
@@ -181,6 +178,14 @@ import {
   requireCurrentLinearTrackLayout,
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
+import {
+  CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
+  CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
+  LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
+  validateCurrentWriterActiveConfig,
+  validateImportedCircularTrackSlots,
+  validateImportedLinearTrackSlots
+} from './session-active-config-contract.js';
 
 const { nextTick } = window.Vue;
 
@@ -195,33 +200,6 @@ const SESSION_FEATURE_CATALOG_SAVE_ERROR =
   'Generate again before using Save Session. The current results are missing compatible feature metadata.';
 const SESSION_ACTIVE_CONFIG_SAVE_ERROR =
   'Save Session could not validate the active configuration.';
-const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4;
-const LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
-const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = [
-  'gapAfter',
-  'gap_after',
-  'innerRadius',
-  'inner_radius',
-  'outerRadius',
-  'outer_radius',
-  'placement',
-  'spacing',
-  'strict',
-  'compress',
-  'reserve'
-];
-const OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS = [
-  'side',
-  'radius',
-  'width',
-  'spacing',
-  'inner_gap_px',
-  'outer_gap_px',
-  'strict',
-  'compress',
-  'reserve'
-];
-
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -470,58 +448,6 @@ const normalizePositiveNumberOrNull = (value) => {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
-const findObsoleteCircularTrackSlotShape = (slots) => {
-  if (!Array.isArray(slots)) return null;
-
-  for (let index = 0; index < slots.length; index += 1) {
-    const slot = slots[index];
-    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) continue;
-
-    for (const key of OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(slot, key)) {
-        return `circular_track_slots[${index}].${key}`;
-      }
-    }
-
-    const params = slot.params;
-    if (!params || typeof params !== 'object' || Array.isArray(params)) continue;
-    for (const key of OBSOLETE_CIRCULAR_TRACK_SLOT_PARAM_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(params, key)) {
-        return `circular_track_slots[${index}].params.${key}`;
-      }
-    }
-  }
-
-  return null;
-};
-
-const validateImportedCircularTrackSlots = (configData = {}, { depthTrackCount = null } = {}) => {
-  const adv = configData && typeof configData === 'object' ? configData.adv : null;
-  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
-  if (!Object.prototype.hasOwnProperty.call(adv, 'circular_track_slots')) return;
-
-  if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION) {
-    throw new Error(
-      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`
-    );
-  }
-
-  const obsoletePath = findObsoleteCircularTrackSlotShape(adv.circular_track_slots);
-  if (obsoletePath) {
-    throw new Error(
-      `Custom Track Slots use obsolete field '${obsoletePath}'. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.`
-    );
-  }
-  validateTrackSlotBindingInvariants(adv.circular_track_slots, {
-    modeLabel: 'Circular',
-    layoutKind: 'circular',
-    supportedRenderers: CIRCULAR_TRACK_RENDERERS,
-    supportedSides: ['inside', 'outside', 'overlay'],
-    anchorlessRenderers: ['ticks', 'spacer'],
-    depthTrackCount
-  });
-};
-
 const migrateImportedCircularTrackSlots = (configData = {}) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
@@ -581,29 +507,6 @@ const migratePersistedWebOptionValues = (configData = {}) => {
     ...(form === undefined ? {} : { form }),
     ...(adv === undefined ? {} : { adv })
   };
-};
-
-const validateImportedLinearTrackSlots = (configData = {}, { depthTrackCount = null } = {}) => {
-  const adv = configData && typeof configData === 'object' ? configData.adv : null;
-  if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return;
-  if (!Object.prototype.hasOwnProperty.call(adv, 'linear_track_slots')) return;
-
-  if (adv.linear_track_slots_schema_version !== LINEAR_TRACK_SLOT_SCHEMA_VERSION) {
-    throw new Error(
-      `Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${LINEAR_TRACK_SLOT_SCHEMA_VERSION}.`
-    );
-  }
-  if (!Array.isArray(adv.linear_track_slots)) {
-    throw new Error('Custom Track Slots must be an array.');
-  }
-  validateTrackSlotBindingInvariants(adv.linear_track_slots, {
-    modeLabel: 'Linear',
-    layoutKind: 'linear',
-    supportedRenderers: LINEAR_TRACK_RENDERERS,
-    supportedSides: ['above', 'below', 'overlay'],
-    anchorlessRenderers: ['spacer'],
-    depthTrackCount
-  });
 };
 
 const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion = null) => {
@@ -1431,240 +1334,6 @@ const restoreStoredNonCanonicalConfig = (
   return restored;
 };
 
-export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
-  'form',
-  'adv',
-  'losat',
-  'cliOptions',
-  'colors',
-  'palette',
-  'paletteInstantPreviewEnabled',
-  'rules',
-  'qualifierPriorityRules',
-  'filterMode',
-  'whitelist',
-  'blacklistText',
-  'losatProgram',
-  'circularConservation',
-  'annotationSets',
-  'modeProfiles',
-  'linearRecordLayout',
-  'linearComparisonPlan',
-  'webEdits'
-]);
-
-const CURRENT_WRITER_ACTIVE_CONFIG_DOMAIN_SET = new Set(
-  CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
-);
-const CURRENT_WRITER_COMPAT_CONFIG_FIELDS = new Set(['colorsAreOverrides']);
-const CURRENT_WRITER_ADV_COMPAT_FIELDS = new Set(['losatProgram']);
-const CURRENT_WRITER_OBJECT_CONFIG_DOMAINS = new Set([
-  'form',
-  'adv',
-  'losat',
-  'cliOptions',
-  'colors',
-  'circularConservation',
-  'modeProfiles',
-  'linearRecordLayout',
-  'linearComparisonPlan',
-  'webEdits'
-]);
-const CURRENT_WRITER_ARRAY_CONFIG_DOMAINS = new Set([
-  'rules',
-  'qualifierPriorityRules',
-  'whitelist',
-  'annotationSets'
-]);
-const CURRENT_WRITER_STRING_CONFIG_DOMAINS = new Set([
-  'palette',
-  'filterMode',
-  'blacklistText',
-  'losatProgram'
-]);
-const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
-const assertNoPrototypeConfigKeys = (value, path = 'config') => {
-  if (!value || typeof value !== 'object') return;
-  Object.keys(value).forEach((key) => {
-    if (PROTOTYPE_KEYS.has(key)) {
-      throw new Error(`Current session active configuration contains unsafe key ${path}.${key}.`);
-    }
-    assertNoPrototypeConfigKeys(value[key], `${path}.${key}`);
-  });
-};
-
-const assertKnownObjectFields = (value, allowedFields, path) => {
-  const unknown = Object.keys(value).filter((field) => !allowedFields.has(field));
-  if (unknown.length > 0) {
-    throw new Error(
-      `Current session active configuration contains unknown ${path} field(s): ${unknown.join(', ')}.`
-    );
-  }
-};
-
-const assertPlainArrayEntries = (entries, allowedFields, path) => {
-  entries.forEach((entry, index) => {
-    if (!isPlainObject(entry)) {
-      throw new Error(`Current session active configuration ${path}[${index}] must be an object.`);
-    }
-    assertKnownObjectFields(entry, allowedFields, `${path}[${index}]`);
-  });
-};
-
-const validateCurrentWriterDomainShapes = (storedConfig) => {
-  for (const domain of CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS) {
-    if (!Object.prototype.hasOwnProperty.call(storedConfig, domain)) continue;
-    const value = storedConfig[domain];
-    if (value === undefined && ['cliOptions', 'modeProfiles'].includes(domain)) continue;
-    if (CURRENT_WRITER_OBJECT_CONFIG_DOMAINS.has(domain) && !isPlainObject(value)) {
-      throw new Error(`Current session active configuration config.${domain} must be an object.`);
-    }
-    if (CURRENT_WRITER_ARRAY_CONFIG_DOMAINS.has(domain) && !Array.isArray(value)) {
-      throw new Error(`Current session active configuration config.${domain} must be an array.`);
-    }
-    if (CURRENT_WRITER_STRING_CONFIG_DOMAINS.has(domain) && typeof value !== 'string') {
-      throw new Error(`Current session active configuration config.${domain} must be a string.`);
-    }
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(storedConfig, 'paletteInstantPreviewEnabled') &&
-    typeof storedConfig.paletteInstantPreviewEnabled !== 'boolean'
-  ) {
-    throw new Error(
-      'Current session active configuration config.paletteInstantPreviewEnabled must be a boolean.'
-    );
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(storedConfig, 'colorsAreOverrides') &&
-    typeof storedConfig.colorsAreOverrides !== 'boolean'
-  ) {
-    throw new Error(
-      'Current session compatibility field config.colorsAreOverrides must be a boolean.'
-    );
-  }
-};
-
-const validateCurrentWriterCollectionShapes = (storedConfig) => {
-  if (Array.isArray(storedConfig.rules)) {
-    assertPlainArrayEntries(
-      storedConfig.rules,
-      new Set(['feat', 'qual', 'val', 'color', 'cap', 'fromFile']),
-      'config.rules'
-    );
-  }
-  if (Array.isArray(storedConfig.qualifierPriorityRules)) {
-    assertPlainArrayEntries(
-      storedConfig.qualifierPriorityRules,
-      new Set(['feat', 'order']),
-      'config.qualifierPriorityRules'
-    );
-  }
-  if (Array.isArray(storedConfig.whitelist)) {
-    assertPlainArrayEntries(
-      storedConfig.whitelist,
-      new Set(['feat', 'qual', 'key']),
-      'config.whitelist'
-    );
-  }
-  if (Array.isArray(storedConfig.annotationSets)) {
-    assertPlainArrayEntries(
-      storedConfig.annotationSets,
-      new Set(['id', 'annotations', 'defaultStyle', 'legendLabel']),
-      'config.annotationSets'
-    );
-    storedConfig.annotationSets.forEach((set, setIndex) => {
-      if (!Array.isArray(set.annotations)) {
-        throw new Error(
-          `Current session active configuration config.annotationSets[${setIndex}].annotations must be an array.`
-        );
-      }
-      assertPlainArrayEntries(
-        set.annotations,
-        new Set(['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata']),
-        `config.annotationSets[${setIndex}].annotations`
-      );
-    });
-  }
-};
-
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig }) => {
-  if (!['circular', 'linear'].includes(mode)) {
-    throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
-  }
-  if (!isPlainObject(storedConfig)) {
-    throw new Error('Current session is missing its active Web configuration.');
-  }
-  assertNoPrototypeConfigKeys(storedConfig);
-  const unknownDomains = Object.keys(storedConfig).filter(
-    (domain) => (
-      !CURRENT_WRITER_ACTIVE_CONFIG_DOMAIN_SET.has(domain) &&
-      !CURRENT_WRITER_COMPAT_CONFIG_FIELDS.has(domain)
-    )
-  );
-  if (unknownDomains.length > 0) {
-    throw new Error(
-      `Current session active configuration contains unknown domain(s): ${unknownDomains.join(', ')}.`
-    );
-  }
-  if (!isPlainObject(storedConfig.form) || !isPlainObject(storedConfig.adv)) {
-    throw new Error('Current session is missing its active form or advanced settings.');
-  }
-  validateCurrentWriterDomainShapes(storedConfig);
-  validateCurrentWriterCollectionShapes(storedConfig);
-  requireCurrentWebStateFieldNames(storedConfig);
-  assertKnownObjectFields(
-    storedConfig.form,
-    new Set(Object.getOwnPropertyNames(state.form)),
-    'config.form'
-  );
-  assertKnownObjectFields(
-    storedConfig.adv,
-    new Set([
-      ...Object.getOwnPropertyNames(state.adv),
-      ...CURRENT_WRITER_ADV_COMPAT_FIELDS
-    ]),
-    'config.adv'
-  );
-  if (
-    Object.prototype.hasOwnProperty.call(storedConfig.adv, 'losatProgram') &&
-    !['blastn', 'tblastx', 'blastp'].includes(storedConfig.adv.losatProgram)
-  ) {
-    throw new Error(
-      'Current session compatibility field config.adv.losatProgram is invalid.'
-    );
-  }
-  if (Object.prototype.hasOwnProperty.call(storedConfig.form, 'linear_track_layout')) {
-    requireCurrentLinearTrackLayout(storedConfig.form.linear_track_layout);
-  }
-  if (Object.prototype.hasOwnProperty.call(storedConfig.adv, 'label_placement')) {
-    requireCurrentLinearLabelPlacement(storedConfig.adv.label_placement);
-  }
-  if (Object.prototype.hasOwnProperty.call(storedConfig.adv, 'multi_record_size_mode')) {
-    requireCurrentCircularMultiRecordSizeMode(storedConfig.adv.multi_record_size_mode);
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(storedConfig, 'filterMode') &&
-    !['None', 'Whitelist', 'Blacklist'].includes(storedConfig.filterMode)
-  ) {
-    throw new Error('Current session active configuration config.filterMode is invalid.');
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(storedConfig, 'losatProgram') &&
-    !['blastn', 'tblastx', 'blastp'].includes(storedConfig.losatProgram)
-  ) {
-    throw new Error('Current session active configuration config.losatProgram is invalid.');
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(storedConfig, 'palette') &&
-    !storedConfig.palette.trim()
-  ) {
-    throw new Error('Current session active configuration config.palette cannot be empty.');
-  }
-  validateImportedCircularTrackSlots(storedConfig);
-  validateImportedLinearTrackSlots(storedConfig);
-};
-
 // Version-40 config owns the active controls and the next Generate. The
 // canonical projection owns the committed artifact and only fills fields the
 // current writer deliberately omitted.
@@ -2245,7 +1914,10 @@ export const applyConfigData = (data) => {
       : 'safe';
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
-    state.losat.blastp.candidateLimit = null;
+    state.losat.blastp.candidateLimit = normalizePositiveInteger(
+      state.losat.blastp?.candidateLimit,
+      null
+    );
     if (
       (state.losat.blastp.orthogroupMemberMaxHits === null ||
         state.losat.blastp.orthogroupMemberMaxHits === undefined) &&
@@ -2427,6 +2099,11 @@ const restorePaletteStateFromSession = (ui = {}) => {
 };
 
 const serializedFileDescriptors = new WeakMap();
+const cacheSerializedFileDescriptor = (file, descriptor) => {
+  setResourcePayloadOwner(descriptor, file);
+  serializedFileDescriptors.set(file, descriptor);
+  return descriptor;
+};
 
 const serializeFile = async (file) => {
   if (!file) return null;
@@ -2455,9 +2132,7 @@ const serializeFile = async (file) => {
     encoding: 'base64',
     data: bytesToBase64(bytes)
   };
-  setResourcePayloadOwner(descriptor, file);
-  serializedFileDescriptors.set(file, descriptor);
-  return descriptor;
+  return cacheSerializedFileDescriptor(file, descriptor);
 };
 
 const serializeFileValue = async (value) => (
@@ -2490,10 +2165,12 @@ const deserializeFile = (entry) => {
   recordStructuralMetric('base64DecodeCount');
   recordStructuralMetric('decodedByteCount', bytes.byteLength);
   recordStructuralMetric('fileConstructionCount');
-  return new File([bytes], entry.name || 'file', {
+  const file = new File([bytes], entry.name || 'file', {
     type: entry.type || 'application/octet-stream',
     lastModified: entry.lastModified ?? Date.now()
   });
+  cacheSerializedFileDescriptor(file, entry);
+  return file;
 };
 
 let activePreviewRuntime = null;
@@ -2999,20 +2676,26 @@ const deserializeCanonicalComparisons = (
     : []
 );
 
-export const adoptCanonicalRenderArtifacts = (canonical) => {
-  const preserveAdoptedResources = isAdoptedCanonicalSession(canonical);
+export const adoptCanonicalRenderArtifacts = (
+  canonical,
+  { adoptOwnedRequest = false } = {}
+) => {
+  const ownedCanonical = adoptOwnedRequest
+    ? adoptRuntimeCanonicalSession(canonical)
+    : canonical;
+  const preserveAdoptedResources = isAdoptedCanonicalSession(ownedCanonical);
   const sessionResourceTable = preserveAdoptedResources
-    ? adoptCurrentSessionResources(canonical?.resources)
+    ? adoptCurrentSessionResources(ownedCanonical?.resources)
     : null;
   const projection = projectCanonicalSessionRequest({
-    ...canonical,
+    ...ownedCanonical,
     sessionResourceTable,
     deferResourceContent: preserveAdoptedResources,
     adoptCanonicalPayloads: preserveAdoptedResources
   });
   const nextCommittedCanonicalSession = preserveAdoptedResources
-    ? adoptRuntimeCanonicalSession(canonical)
-    : cloneCanonicalSession(canonical);
+    ? adoptRuntimeCanonicalSession(ownedCanonical)
+    : cloneCanonicalSession(ownedCanonical);
   activeSessionResourceTable = sessionResourceTable;
   if (projection.mode === 'linear') {
     const nextComparisons = deserializeCanonicalComparisons(

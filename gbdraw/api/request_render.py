@@ -2129,6 +2129,17 @@ def _interactive_context_cache_spec(
         return None
     orthogroups = _prepared_orthogroups(prepared)
     orthogroup_key = _resource_backed_context_key(orthogroups)
+    if (
+        orthogroups is not None
+        and orthogroup_key is None
+        and prepared.linear_metadata is not None
+        and prepared.linear_metadata.collinearity_result is not None
+    ):
+        collinearity_key = _resource_backed_context_key(
+            prepared.linear_metadata.collinearity_result
+        )
+        if collinearity_key is not None:
+            orthogroup_key = ("collinearity", collinearity_key)
     derived_keys = tuple(
         (
             str(entry.get("kind") or ""),

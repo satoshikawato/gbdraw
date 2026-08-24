@@ -392,14 +392,14 @@ def test_first_raw_result_has_an_exact_advanced_capture_contract() -> None:
     ]
 
 
-def test_vibrio_capture_activates_losat_without_changing_the_cli_only_session() -> None:
+def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
     sample = load_ready_examples("vibrio-harveyi-group-collinear")[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
     with gzip.open(session_path, "rt", encoding="utf-8") as handle:
         session = json.load(handle)
     assert session["config"]["linearComparisonPlan"] == {
-        "mode": "none",
+        "mode": "adjacent",
         "defaultSource": "losat",
         "edges": [],
     }

@@ -125,6 +125,9 @@ def run_canonical_request_wrapper(
             ):
                 diagnostics["timingsMs"].setdefault(name, 0.0)
             for name in (
+                "decodedResourceCacheHitCount",
+                "decodedResourceCacheMissCount",
+                "decodedResourceBuildCount",
                 "parsedSourceCacheHitCount",
                 "parsedSourceCacheMissCount",
                 "parsedSourceParseCount",
@@ -951,7 +954,7 @@ def _dataframe_json_rows(df):
     return rows
 
 def convert_losatp_blastp_pairs_to_genomic_payload(
-    pairs_json,
+    pairs_path,
     mode="pairwise",
     max_hits=5,
     bitscore=50,
@@ -978,6 +981,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             LosslessCollinearityParameters,
             build_orthogroup_collinearity_blocks_from_hits,
             convert_collinearity_blocks_to_comparisons,
+            convert_collinearity_blocks_to_pair_comparisons,
         )
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
@@ -989,7 +993,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         )
         from gbdraw.io.comparisons import COMPARISON_COLUMNS
 
-        raw_payload = json.loads(str(pairs_json or "{}"))
+        with open(str(pairs_path), "r", encoding="utf-8") as pairs_handle:
+            raw_payload = json.load(pairs_handle)
         if not isinstance(raw_payload, dict):
             raise ValueError("LOSATP blastp conversion payload must be an object with 'records' and 'pairs' lists.")
         raw_records = raw_payload.get("records")
@@ -1058,6 +1063,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "pair_index": pair_index,
                     "query_index": query_index,
                     "subject_index": subject_index,
+                    "display_pair": item.get("displayPair") is True,
                     "cache_key": cache_key,
                     "blast_text": str(item.get("blastText") or ""),
                 }
@@ -1091,7 +1097,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 for item in sorted(record_payloads, key=lambda current: current["record_index"])
             ),
             tuple(
-                (item["pair_index"], item["query_index"], item["subject_index"], item["cache_key"])
+                (
+                    item["pair_index"],
+                    item["query_index"],
+                    item["subject_index"],
+                    item["display_pair"],
+                    item["cache_key"],
+                )
                 for item in pair_payloads
             ),
         )
@@ -1200,6 +1212,15 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 query_index = int(item["query_index"])
                 subject_index = int(item["subject_index"])
                 directional_tables[(query_index, subject_index)] = item["hits"]
+            display_pairs = tuple(sorted({
+                tuple(sorted((
+                    int(item["query_index"]),
+                    int(item["subject_index"]),
+                )))
+                for item in pair_payloads
+                if item["display_pair"]
+                and int(item["query_index"]) != int(item["subject_index"])
+            }))
             params = LosslessCollinearityParameters(
                 min_anchors=_collinear_int(collinear_min_anchors, 1),
                 max_unit_gap=_collinear_int(collinear_max_unit_gap, 0),
@@ -1216,15 +1237,42 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 orthogroup_membership_mode=normalized_membership_mode,
                 orthogroup_member_max_hits=normalized_member_max_hits,
                 max_paralog_links_per_orthogroup=max_paralog_links,
+                comparison_pairs=(
+                    display_pairs
+                    if search_scope == "adjacent" and display_pairs
+                    else None
+                ),
             )
-            converted_frames = convert_collinearity_blocks_to_comparisons(
-                collinearity_result,
-                record_ids=record_ids,
-                color_mode=_collinear_text(collinear_color_mode, "orientation"),
-                search_scope=search_scope,
-            )
+            color_mode = _collinear_text(collinear_color_mode, "orientation")
+            if search_scope == "adjacent" and display_pairs:
+                display_pair_indices = {
+                    tuple(sorted((
+                        int(item["query_index"]),
+                        int(item["subject_index"]),
+                    ))): int(item["pair_index"])
+                    for item in pair_payloads
+                    if item["display_pair"]
+                }
+                converted_by_pair = convert_collinearity_blocks_to_pair_comparisons(
+                    collinearity_result,
+                    record_ids=record_ids,
+                    color_mode=color_mode,
+                    search_scope=search_scope,
+                )
+                converted_frames = [
+                    (display_pair_indices[pair], converted_by_pair[pair])
+                    for pair in display_pairs
+                    if pair in converted_by_pair
+                ]
+            else:
+                converted_frames = enumerate(convert_collinearity_blocks_to_comparisons(
+                    collinearity_result,
+                    record_ids=record_ids,
+                    color_mode=color_mode,
+                    search_scope=search_scope,
+                ))
             converted_pairs = []
-            for pair_index, converted in enumerate(converted_frames):
+            for pair_index, converted in converted_frames:
                 handle = StringIO()
                 converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
                     handle,

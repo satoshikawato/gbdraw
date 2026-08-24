@@ -149,7 +149,9 @@ def test_reverse_complement_protein_extraction_uses_biological_hash_parts() -> N
     assert (protein.start, protein.end, protein.strand) == (23735, 24758, -1)
 
 
-def test_web_losatp_typed_result_separates_stable_view_and_dom_ids() -> None:
+def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
+    tmp_path: Path,
+) -> None:
     helpers_js = (
         Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
     ).read_text(encoding="utf-8")
@@ -239,10 +241,12 @@ def test_web_losatp_typed_result_separates_stable_view_and_dom_ids() -> None:
             },
         ],
     }
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
     result = json.loads(
         str(
             namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-                json.dumps(payload),
+                str(pairs_path),
                 "orthogroup",
                 5,
                 50,

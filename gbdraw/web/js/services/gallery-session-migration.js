@@ -1,4 +1,3 @@
-import { normalizePaletteColors } from '../app/color-utils.js';
 import {
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
@@ -13,6 +12,7 @@ import {
 import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
+  buildCanonicalRequestState,
   projectCanonicalSessionRequest
 } from './session-request.js';
 import {
@@ -27,7 +27,6 @@ const isPlainObject = (value) => (
 );
 
 const cloneJson = (value) => JSON.parse(JSON.stringify(value));
-const ref = (value) => ({ value });
 
 const optionValues = (args, names) => {
   const aliases = new Set(names);
@@ -112,13 +111,6 @@ const hydrateLinearFilePresentations = (filesData, args) => {
   });
 };
 
-const selectorToken = (record, index) => {
-  const selector = record?.region?.selector || record?.selector;
-  if (selector?.kind === 'recordId') return String(selector.value || '');
-  if (selector?.kind === 'recordIndex') return `#${Number(selector.index) + 1}`;
-  return `#${index + 1}`;
-};
-
 const cachedLosatFile = (entry, fallbackName) => {
   const text = String(entry?.text || '');
   const bytes = textToBytes(text);
@@ -190,7 +182,7 @@ const restoreConservationFiles = (session, filesData, circularConservation) => {
 };
 
 const mergedGuiConfig = (session, projection) => {
-  const saved = migratePersistedWebStateFieldNames(
+  const saved = migratePersistedGalleryConfig(
     isPlainObject(session.config) ? session.config : {}
   );
   const projected = isPlainObject(projection.config) ? projection.config : {};
@@ -511,71 +503,6 @@ export const migrateLegacyLinearComparisonDraft = ({
   return { config, filesData };
 };
 
-const circularConservationState = (config) => {
-  const conservation = cloneJson(
-    isPlainObject(config.circularConservation)
-      ? config.circularConservation
-      : { enabled: false, reference: 'auto', labels: '', series: [] }
-  );
-  const series = Array.isArray(conservation.series) ? conservation.series : [];
-  if (!String(conservation.labels || '').trim() && series.length > 0) {
-    conservation.labels = series.map((entry) => String(entry?.label || '').trim()).join(',');
-  }
-  return conservation;
-};
-
-const buildStateFacade = (session, projection, config) => {
-  const features = isPlainObject(session.features) ? session.features : {};
-  const layout = isPlainObject(config.linearRecordLayout) ? config.linearRecordLayout : {};
-  const palette = String(config.palette || 'default');
-  return {
-    mode: ref(projection.mode),
-    cInputType: ref(session?.ui?.cInputType || projection.inputType),
-    lInputType: ref(session?.ui?.lInputType || projection.inputType),
-    circularRecordList: ref(
-      (session.renderRequest.records || []).map((record, index) => ({
-        selector: selectorToken(record, index)
-      }))
-    ),
-    form: config.form || {},
-    adv: config.adv || {},
-    normalizePaletteColors,
-    paletteDefinitions: ref({ [palette]: {} }),
-    currentColors: ref(config.colors || {}),
-    selectedPalette: ref(palette),
-    manualSpecificRules: cloneJson(config.rules || []),
-    featureVisibilityRules: ref(cloneJson(
-      features.featureVisibilityManualRules ||
-      projection.semanticFeatureState?.featureVisibilityManualRules ||
-      []
-    )),
-    filterMode: ref(config.filterMode || 'None'),
-    manualBlacklist: ref(String(config.blacklistText || '')),
-    manualWhitelist: cloneJson(config.whitelist || []),
-    manualPriorityRules: cloneJson(config.qualifierPriorityRules || []),
-    labelTextFeatureOverrides: cloneJson(features.labelTextFeatureOverrides || {}),
-    labelTextBulkOverrides: cloneJson(features.labelTextBulkOverrides || {}),
-    labelTextFeatureOverrideSources: cloneJson(features.labelTextFeatureOverrideSources || {}),
-    labelVisibilityOverrides: cloneJson(features.labelVisibilityOverrides || {}),
-    canonicalLabelOverrideRows: ref(cloneJson(features.labelOverrideRows || [])),
-    editableLabels: ref([]),
-    extractedFeatures: ref(features.extractedFeatures || []),
-    circularConservation: circularConservationState(config),
-    losatProgram: ref(config.losatProgram || 'blastn'),
-    losat: cloneJson(config.losat || { blastp: {} }),
-    selectedOrthogroupAlignmentFeature: ref(
-      session?.orthogroupState?.selectedOrthogroupAlignmentFeature || ''
-    ),
-    linearRecordLayoutEnabled: ref(Boolean(layout.enabled)),
-    linearRecordGap: ref(layout.recordGap ?? 24),
-    linearRecordRows: cloneJson(layout.rows || []),
-    linearComparisonPlan: normalizeLinearComparisonPlan(
-      config.linearComparisonPlan || { mode: 'none', defaultSource: 'losat', edges: [] }
-    ),
-    annotationSets: cloneJson(config.annotationSets || [])
-  };
-};
-
 const preserveComparisonResources = (session, promoted) => {
   const comparisons = Array.isArray(session?.renderRequest?.comparisons)
     ? cloneJson(session.renderRequest.comparisons)
@@ -641,7 +568,7 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const config = migratedDraft.config;
   const filesData = migratedDraft.filesData;
   hydrateLinearFilePresentations(filesData, args);
-  const state = buildStateFacade(session, projection, config);
+  const state = buildCanonicalRequestState({ session, projection, config, filesData });
   restoreConservationFiles(session, filesData, state.circularConservation);
   const comparisonPlanSnapshot = projection.mode === 'linear'
     ? resolveLinearComparisonPlan({
@@ -659,6 +586,8 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   });
   const promoted = {
     ...session,
+    format: 'gbdraw-session',
+    version: 40,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
@@ -679,24 +608,31 @@ export const promoteGallerySessionToCurrent = (session) => {
   if (!isPlainObject(session.resources)) {
     throw new Error('Gallery session must contain canonical resources.');
   }
+  const version = Number(session.version);
+  if (![31, 32, 33, 39].includes(version)) {
+    throw new Error(
+      `Gallery historical migration supports session versions 31-33 and 39; received ${String(session.version)}.`
+    );
+  }
   const schema = Number(session.renderRequest.schema);
   if (schema === CANONICAL_REQUEST_SCHEMA) {
-    if (Number(session.version) < 40) {
-      const args = sessionArgs(session);
-      const cliAuthored = isPlainObject(session?.config?.cliOptions)
-        && !isPlainObject(session?.config?.linearRecordLayout);
-      return cliAuthored
-        ? promoteCliAuthoredSession(session, args)
-        : promoteGuiAuthoredSession(session, args);
+    if (version !== 39) {
+      throw new Error(
+        `Gallery session version ${version} does not support canonical renderRequest schema ${schema}.`
+      );
     }
-    const promoted = cloneJson(session);
-    if (isPlainObject(promoted.config)) {
-      promoted.config = migratePersistedGalleryConfig(promoted.config);
-    }
-    return promoted;
+    const args = sessionArgs(session);
+    const cliAuthored = isPlainObject(session?.config?.cliOptions)
+      && !isPlainObject(session?.config?.linearRecordLayout);
+    return cliAuthored
+      ? promoteCliAuthoredSession(session, args)
+      : promoteGuiAuthoredSession(session, args);
   }
   if (![1, 2].includes(schema)) {
     throw new Error(`Unsupported canonical renderRequest schema: ${schema}.`);
+  }
+  if (version === 39) {
+    throw new Error('Gallery session version 39 requires canonical renderRequest schema 5.');
   }
   const args = sessionArgs(session);
   const cliAuthored = isPlainObject(session?.config?.cliOptions)

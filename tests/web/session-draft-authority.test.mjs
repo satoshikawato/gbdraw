@@ -24,7 +24,6 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
 const {
-  CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   buildConfigData,
   buildEditorStateData,
   buildFeatureStateData,
@@ -33,9 +32,12 @@ const {
   buildUiStateData,
   importSession,
   restoreCurrentWriterActiveConfig,
-  serializeActiveRenderFiles,
-  validateCurrentWriterActiveConfig
+  serializeActiveRenderFiles
 } = await import('../../gbdraw/web/js/services/config.js');
+const {
+  CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
+  validateCurrentWriterActiveConfig
+} = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const {
   buildCanonicalRenderRequest,
@@ -333,6 +335,7 @@ Object.assign(divergentSession.config.adv, {
 Object.assign(divergentSession.config.losat.blastp, {
   mode: 'collinear',
   maxHits: 17,
+  candidateLimit: 11,
   collinearMinAnchors: 4,
   collinearMaxUnitGap: 9,
   collinearSearchScope: 'adjacent',
@@ -351,6 +354,7 @@ const dormantComparisonDraft = structuredClone({
   blastp: {
     mode: divergentSession.config.losat.blastp.mode,
     maxHits: divergentSession.config.losat.blastp.maxHits,
+    candidateLimit: divergentSession.config.losat.blastp.candidateLimit,
     collinearMinAnchors:
       divergentSession.config.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap:
@@ -401,6 +405,7 @@ assert.deepEqual({
   blastp: {
     mode: state.losat.blastp.mode,
     maxHits: state.losat.blastp.maxHits,
+    candidateLimit: state.losat.blastp.candidateLimit,
     collinearMinAnchors: state.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap: state.losat.blastp.collinearMaxUnitGap,
     collinearSearchScope: state.losat.blastp.collinearSearchScope,

@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import copy
 import gc
 import gzip
 import hashlib
@@ -32,14 +30,11 @@ from gbdraw.session_io import (  # noqa: E402
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     classify_raw_losat_cache_entry,
     load_session,
-    normalize_current_session_artifacts,
     session_mode,
     validate_session,
     write_session_json,
 )
-from gbdraw.exceptions import ValidationError  # noqa: E402
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
-from gbdraw.render.formats import INTERACTIVE_SVG_FORMAT  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
     CircularTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -51,7 +46,7 @@ from gbdraw.tracks.scalars import ScalarSpec  # noqa: E402
 GALLERY_ROOT = REPO_ROOT / "gbdraw" / "web" / "gallery"
 SESSION_ROOT = GALLERY_ROOT / "sessions"
 TEST_INPUT_SESSION_ROOT = REPO_ROOT / "tests" / "test_inputs"
-SESSION_PROMOTER = REPO_ROOT / "tools" / "promote_gallery_session.mjs"
+SESSION_PUBLICATION_BRIDGE = REPO_ROOT / "tools" / "publish_gallery_session.mjs"
 VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
 VIBRIO_RAW_ENTRY_COUNT = 59
 VIBRIO_GZIP_HARD_LIMIT = 90_000_000
@@ -61,29 +56,6 @@ VIBRIO_EXPANDED_REGRESSION_CEILING = 420_000_000
 GEOMETRY_TOLERANCE_PX = 1e-6
 LINEAR_SHARED_SPACING_RENDERERS = frozenset(
     {"features", "dinucleotide_content", "dinucleotide_skew"}
-)
-REFRESHED_GALLERY_ARTIFACT_KEYS = (
-    "version",
-    "createdAt",
-    "results",
-    "features",
-    "editorState",
-    "orthogroupState",
-    "runMetadata",
-    "losatCache",
-    "losatDerivedCache",
-    "proteinIdentityManifest",
-    "legacyArtifacts",
-)
-SESSION_ENVELOPE_KEYS = (
-    "format",
-    "version",
-    "createdAt",
-    "renderRequest",
-    "resources",
-)
-PALETTE_LEGEND_FEATURE_TYPES = frozenset(
-    {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "repeat_region", "misc_feature"}
 )
 
 
@@ -127,23 +99,16 @@ VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
     }
 )
 
-GALLERY_SESSION_FILES = (
-    "BGC0000708-BGC0000713.gbdraw-session.json",
-    "HmmtDNA_basic_circular.gbdraw-session.json",
-    "HmmtDNA_ATskew.gbdraw-session.json",
-    "tobacco-chloroplast.gbdraw-session.json",
-    "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
-    "WSSV_genome_comparison.gbdraw-session.json",
-    "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
-    "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-    "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
-    "majanivirus_orthogroup.gbdraw-session.json.gz",
-    "lambda_basic_linear.gbdraw-session.json",
-)
 TEST_INPUT_SESSION_FILES = (
     "AP027280_comparison.gbdraw-session.json",
     "BGC0000708-BGC0000713.gbdraw-session.json",
 )
+
+
+def _public_gallery_session_files() -> tuple[str, ...]:
+    from tools.prepare_interactive_gallery_assets import EXAMPLES
+
+    return tuple(example.session_path.name for example in EXAMPLES)
 
 
 def _validate_gallery_session_inventory() -> None:
@@ -151,9 +116,10 @@ def _validate_gallery_session_inventory() -> None:
 
     from tools.prepare_interactive_gallery_assets import EXAMPLES
 
-    configured = set(GALLERY_SESSION_FILES)
-    if len(configured) != len(GALLERY_SESSION_FILES):
-        raise ValueError("GALLERY_SESSION_FILES contains duplicate session names")
+    public_files = _public_gallery_session_files()
+    configured = set(public_files)
+    if len(configured) != len(public_files):
+        raise ValueError("EXAMPLES contains duplicate session names")
     physical = {
         path.name
         for pattern in ("*.gbdraw-session.json", "*.gbdraw-session.json.gz")
@@ -195,6 +161,7 @@ def _gallery_mutation_targets(
                 }
             )
         targets.add(ASSET_GALLERY_ROOT / "examples.json")
+        targets.add(ASSET_GALLERY_ROOT / "artifact-manifest.json")
         for root, pattern in (
             (EXAMPLE_ROOT, "*.svg"),
             (SOURCE_ROOT, "*.svg"),
@@ -246,433 +213,32 @@ def _refresh_session_paths(session_names: tuple[str, ...] | None) -> tuple[Path,
     if session_names is not None:
         return tuple(_session_path(name) for name in session_names)
     return (
-        *(SESSION_ROOT / name for name in GALLERY_SESSION_FILES),
+        *(SESSION_ROOT / name for name in _public_gallery_session_files()),
         *(TEST_INPUT_SESSION_ROOT / name for name in TEST_INPUT_SESSION_FILES),
     )
 
 
-def _session_cli_invocation(session: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    cli = session.get("cliInvocation")
-    if isinstance(cli, Mapping) and isinstance(cli.get("args"), list):
-        return cli
-    config = session.get("config")
-    if isinstance(config, Mapping):
-        cli = config.get("cliInvocation")
-        if isinstance(cli, Mapping) and isinstance(cli.get("args"), list):
-            return cli
-    return None
-
-
-def _sync_legacy_legend_control_with_render_request(
-    session: dict[str, Any],
-) -> bool:
-    """Keep the restored Web control aligned with the canonical Gallery result."""
-
-    render_request = session.get("renderRequest")
-    diagram_options = (
-        render_request.get("diagramOptions")
-        if isinstance(render_request, Mapping)
-        else None
-    )
-    output = (
-        diagram_options.get("output")
-        if isinstance(diagram_options, Mapping)
-        else None
-    )
-    legend = output.get("legend") if isinstance(output, Mapping) else None
-    config = session.get("config")
-    form = config.get("form") if isinstance(config, Mapping) else None
-    if not isinstance(legend, str) or not legend or not isinstance(form, dict):
-        return False
-    if form.get("legend") == legend:
-        return False
-    form["legend"] = legend
-    return True
-
-
-def _sync_circular_track_draft_with_render_request(
-    session: dict[str, Any],
-) -> bool:
-    """Keep a restored Circular track draft aligned with its committed request."""
-
-    render_request = session.get("renderRequest")
-    if not isinstance(render_request, Mapping) or render_request.get("mode") != "circular":
-        return False
-    diagram_options = render_request.get("diagramOptions")
-    tracks = (
-        diagram_options.get("tracks")
-        if isinstance(diagram_options, Mapping)
-        else None
-    )
-    slots = tracks.get("circularTrackSlots") if isinstance(tracks, Mapping) else None
-    config = session.get("config")
-    adv = config.get("adv") if isinstance(config, Mapping) else None
-    if not isinstance(slots, list) or not isinstance(adv, dict):
-        return False
-
-    expected = {
-        "circular_track_slots_enabled": True,
-        "circular_track_slots_schema_version": 4,
-        "circular_track_slots_axis_index": tracks.get("circularTrackAxisIndex"),
-        "circular_track_slots": copy.deepcopy(slots),
-    }
-    if all(adv.get(key) == value for key, value in expected.items()):
-        return False
-    adv.update(expected)
-    return True
-
-
-def _with_interactive_svg_format(args: list[Any]) -> list[str]:
-    updated: list[str] = []
-    index = 0
-    found_format = False
-    while index < len(args):
-        token = str(args[index])
-        if token in {"-f", "--format"}:
-            updated.append(token)
-            updated.append("interactive_svg")
-            index += 2 if index + 1 < len(args) else 1
-            found_format = True
-            continue
-        if token.startswith("--format="):
-            updated.append("--format=interactive_svg")
-            index += 1
-            found_format = True
-            continue
-        updated.append(token)
-        index += 1
-    if not found_format:
-        updated.extend(["-f", "interactive_svg"])
-    return updated
-
-
-def _enable_gallery_interactive_metadata(session: dict[str, Any]) -> bool:
-    """Keep a Gallery render's metadata policy aligned with its forced format."""
-
-    render_request = session.get("renderRequest")
-    output = (
-        render_request.get("output")
-        if isinstance(render_request, Mapping)
-        else None
-    )
-    if not isinstance(output, dict) or output.get("interactiveMetadataPolicy") != "omit":
-        return False
-    output["interactiveMetadataPolicy"] = "auto"
-    return True
-
-
-def _preserve_gallery_cli_invocation(
-    source_session: Mapping[str, Any],
-    refreshed_session: dict[str, Any],
-    *,
-    mode: str,
-) -> bool:
-    source_cli = _session_cli_invocation(source_session)
-    if source_cli is None:
-        return False
-
-    preserved_cli = copy.deepcopy(dict(source_cli))
-    preserved_cli["schema"] = 1
-    preserved_cli["mode"] = mode
-    preserved_cli["args"] = _with_interactive_svg_format(list(source_cli["args"]))
-    preserved_cli["renderFormats"] = [INTERACTIVE_SVG_FORMAT]
-    preserved_cli.setdefault("fileBindings", [])
-    preserved_cli.setdefault("generatedBy", "gbdraw")
-    refreshed_session["cliInvocation"] = preserved_cli
-    return True
-
-
-def _promote_gallery_session(
-    source_path: Path,
-    output_path: Path,
-    *,
+def _run_publication_bridge(
+    command: str,
+    *paths: Path,
     env: Mapping[str, str],
 ) -> None:
-    if source_path.is_file():
-        source_session = load_session(source_path)
-        if (
-            source_session.get("version") == CURRENT_SESSION_VERSION
-            and source_session.get("renderRequest", {}).get("schema")
-            == CANONICAL_REQUEST_SCHEMA
-        ):
-            write_session_json(output_path, source_session)
-            return
     node = shutil.which("node")
     if node is None:
         raise RuntimeError(
-            "Gallery session promotion requires Node.js because the browser and "
-            "refresh command share the canonical session projection code."
+            "Gallery publication requires Node.js for the shared Web request contract."
         )
-    if not SESSION_PROMOTER.is_file():
+    if not SESSION_PUBLICATION_BRIDGE.is_file():
         raise FileNotFoundError(
-            f"Missing gallery session promoter: {SESSION_PROMOTER.relative_to(REPO_ROOT)}"
+            "Missing Gallery publication bridge: "
+            f"{SESSION_PUBLICATION_BRIDGE.relative_to(REPO_ROOT)}"
         )
     subprocess.run(
-        [
-            node,
-            str(SESSION_PROMOTER),
-            str(source_path),
-            str(output_path),
-        ],
+        [node, str(SESSION_PUBLICATION_BRIDGE), command, *(str(path) for path in paths)],
         cwd=REPO_ROOT,
         env=dict(env),
         check=True,
     )
-    load_session(output_path)
-
-
-def _load_gallery_refresh_source(session_path: Path) -> dict[str, Any]:
-    """Load a Gallery source after discarding an invalid derived result catalog."""
-
-    try:
-        return load_session(session_path)
-    except ValidationError as original_error:
-        with session_path.open("rb") as session_file:
-            is_gzip = session_file.read(2) == b"\x1f\x8b"
-        opener = gzip.open if is_gzip else Path.open
-        try:
-            with opener(session_path, mode="rt", encoding="utf-8") as session_file:
-                payload = json.load(session_file)
-        except (OSError, json.JSONDecodeError, TypeError) as exc:
-            raise original_error from exc
-
-        render_request = payload.get("renderRequest") if isinstance(payload, dict) else None
-        editor_state = payload.get("editorState") if isinstance(payload, dict) else None
-        if (
-            not isinstance(payload, dict)
-            or payload.get("version") != CURRENT_SESSION_VERSION
-            or not isinstance(render_request, Mapping)
-            or render_request.get("schema") != CANONICAL_REQUEST_SCHEMA
-            or not isinstance(editor_state, dict)
-        ):
-            raise original_error
-
-        payload["results"] = []
-        editor_state["featureCatalog"] = {"schema": 3, "items": []}
-        payload.pop("runMetadata", None)
-        try:
-            validate_session(payload)
-        except ValidationError as exc:
-            raise original_error from exc
-        return payload
-
-
-def _referenced_resource_ids(
-    value: object,
-    known_resource_ids: frozenset[str] = frozenset(),
-):
-    if isinstance(value, Mapping):
-        resource_id = value.get("resourceId")
-        if isinstance(resource_id, str) and resource_id:
-            yield resource_id
-        for nested in value.values():
-            yield from _referenced_resource_ids(nested, known_resource_ids)
-    elif isinstance(value, list):
-        for nested in value:
-            yield from _referenced_resource_ids(nested, known_resource_ids)
-    elif isinstance(value, str) and value in known_resource_ids:
-        yield value
-
-
-def _resource_color_rows(resource: object) -> dict[str, str]:
-    if not isinstance(resource, Mapping) or resource.get("encoding") != "base64":
-        return {}
-    data = resource.get("data")
-    if not isinstance(data, str) or not data:
-        return {}
-    try:
-        text = base64.b64decode(data, validate=True).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return {}
-    rows: dict[str, str] = {}
-    for line in text.splitlines():
-        columns = line.split("\t")
-        if len(columns) < 2:
-            continue
-        feature_type = columns[0].strip()
-        color = columns[1].strip().lower()
-        if feature_type and feature_type != "feature_type" and re.fullmatch(
-            r"#[0-9a-f]{6}", color
-        ):
-            rows[feature_type] = color
-    return rows
-
-
-def _restore_rendered_palette_file_binding(session: dict[str, Any]) -> bool:
-    """Restore a retained Web palette file when old artifacts prove it was rendered."""
-
-    request = session.get("renderRequest")
-    options = request.get("diagramOptions") if isinstance(request, Mapping) else None
-    colors = options.get("colors") if isinstance(options, Mapping) else None
-    config = session.get("config")
-    resources = session.get("resources")
-    editor_state = session.get("editorState")
-    legend = editor_state.get("legend") if isinstance(editor_state, Mapping) else None
-    original_colors = (
-        legend.get("originalColors") if isinstance(legend, Mapping) else None
-    )
-    if not all(
-        isinstance(value, Mapping)
-        for value in (colors, config, resources, original_colors)
-    ):
-        return False
-    if colors.get("defaultColorsFile") is not None:
-        return False
-    palette = config.get("palette")
-    config_colors = config.get("colors")
-    if (
-        not isinstance(palette, str)
-        or palette != colors.get("defaultColorsPalette")
-        or not isinstance(config_colors, Mapping)
-    ):
-        return False
-
-    canonical_ref = colors.get("defaultColors")
-    canonical_id = (
-        canonical_ref.get("resourceId") if isinstance(canonical_ref, Mapping) else None
-    )
-    canonical_rows = _resource_color_rows(resources.get(canonical_id))
-    candidates: list[tuple[str, dict[str, str]]] = []
-    for resource_id, resource in resources.items():
-        if not isinstance(resource, Mapping):
-            continue
-        if resource.get("kind") != "colors-default-colors-file":
-            continue
-        rows = _resource_color_rows(resource)
-        if not rows or any(
-            str(config_colors.get(feature_type, "")).lower() != color
-            for feature_type, color in rows.items()
-        ):
-            continue
-        rendered_types = PALETTE_LEGEND_FEATURE_TYPES.intersection(
-            original_colors, rows
-        )
-        if not rendered_types or any(
-            str(original_colors[feature_type]).lower() != rows[feature_type]
-            for feature_type in rendered_types
-        ):
-            continue
-        candidates.append((str(resource_id), rows))
-
-    if len(candidates) != 1:
-        return False
-    resource_id, retained_rows = candidates[0]
-    if retained_rows.items() <= canonical_rows.items():
-        return False
-    colors["defaultColors"] = None
-    colors["defaultColorsFile"] = {
-        "resourceId": resource_id,
-        "representation": "file",
-    }
-    return True
-
-
-def _drop_unreferenced_duplicate_resources(session: dict[str, Any]) -> None:
-    """Drop stale merge copies only when one exact payload remains referenced."""
-
-    resources = session.get("resources")
-    if not isinstance(resources, dict):
-        return
-    referenced = set(
-        _referenced_resource_ids(
-            {key: value for key, value in session.items() if key != "resources"},
-            frozenset(str(resource_id) for resource_id in resources),
-        )
-    )
-    duplicates: dict[tuple[object, ...], list[str]] = {}
-    for resource_id, resource in resources.items():
-        if not isinstance(resource, Mapping):
-            continue
-        data = resource.get("data")
-        if not isinstance(data, str) or not data:
-            continue
-        encoding = str(resource.get("encoding") or "text")
-        hasher = hashlib.sha256()
-        hasher.update(encoding.encode("utf-8"))
-        hasher.update(b"\0")
-        for offset in range(0, len(data), 1024 * 1024):
-            hasher.update(data[offset : offset + 1024 * 1024].encode("utf-8"))
-        signature = (hasher.hexdigest(),)
-        duplicates.setdefault(signature, []).append(str(resource_id))
-
-    removed: set[str] = set()
-    for resource_ids in duplicates.values():
-        referenced_ids = [
-            resource_id for resource_id in resource_ids if resource_id in referenced
-        ]
-        if len(referenced_ids) != 1:
-            continue
-        keeper = referenced_ids[0]
-        for resource_id in resource_ids:
-            if resource_id != keeper:
-                resources.pop(resource_id, None)
-                removed.add(resource_id)
-
-    original_names = session.get("webFiles", {}).get("resourceOriginalNames")
-    if isinstance(original_names, dict):
-        for resource_id in removed:
-            original_names.pop(resource_id, None)
-
-
-def _merge_refreshed_gallery_artifacts(
-    promoted_session: Mapping[str, Any],
-    refreshed_session: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Merge fresh canonical output and artifacts with promoted gallery metadata."""
-
-    merged = dict(promoted_session)
-    refreshed_request = refreshed_session.get("renderRequest")
-    refreshes_render_request = (
-        refreshed_session.get("version") == CURRENT_SESSION_VERSION
-        and isinstance(refreshed_request, Mapping)
-        and refreshed_request.get("schema") == CANONICAL_REQUEST_SCHEMA
-    )
-    if refreshes_render_request:
-        merged["renderRequest"] = refreshed_request
-    for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
-        if key in refreshed_session:
-            merged[key] = refreshed_session[key]
-        elif key in {
-            "editorState",
-            "runMetadata",
-            "losatCache",
-            "losatDerivedCache",
-            "proteinIdentityManifest",
-            "legacyArtifacts",
-        }:
-            merged.pop(key, None)
-
-    refreshed_resources = refreshed_session.get("resources")
-    promoted_resources = promoted_session.get("resources")
-    promoted_resource_map = (
-        dict(promoted_resources) if isinstance(promoted_resources, Mapping) else {}
-    )
-    refreshed_resource_map = (
-        dict(refreshed_resources) if isinstance(refreshed_resources, Mapping) else {}
-    )
-    merged["resources"] = (
-        {**promoted_resource_map, **refreshed_resource_map}
-        if refreshes_render_request
-        else {**refreshed_resource_map, **promoted_resource_map}
-    )
-    envelope = {
-        key: merged.pop(key)
-        for key in SESSION_ENVELOPE_KEYS
-        if key in merged
-    }
-    envelope.update(merged)
-    _drop_unreferenced_duplicate_resources(envelope)
-    return envelope
-
-
-def _omit_regenerable_gallery_derived_cache(
-    session_path: Path,
-    session: dict[str, Any],
-) -> None:
-    """Keep the oversized Vibrio artifact reconstructible from its raw hits."""
-
-    if session_path.name == VIBRIO_SESSION_NAME:
-        session["losatDerivedCache"] = {"entries": []}
 
 
 def _geometry_number(value: object) -> float:
@@ -1117,6 +683,20 @@ def _validate_current_session_catalog_structure(
             )
 
 
+def _referenced_resource_ids(value: object):
+    """Yield explicit resource references from a canonical request."""
+
+    if isinstance(value, Mapping):
+        resource_id = value.get("resourceId")
+        if isinstance(resource_id, str) and resource_id:
+            yield resource_id
+        for nested in value.values():
+            yield from _referenced_resource_ids(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _referenced_resource_ids(nested)
+
+
 def _validate_staged_gallery_session(
     session_path: Path,
     session: dict[str, Any],
@@ -1352,54 +932,30 @@ def _refresh_one_session(
     *,
     destination_path: Path | None = None,
 ) -> None:
-    session = _load_gallery_refresh_source(session_path)
-    if session.get("version") == CURRENT_SESSION_VERSION:
-        normalize_current_session_artifacts(session)
-    _sync_legacy_legend_control_with_render_request(session)
-    _sync_circular_track_draft_with_render_request(session)
-    _restore_rendered_palette_file_binding(session)
+    session = load_session(session_path)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
+    del session
+    gc.collect()
+
     env = os.environ.copy()
     env["PYTHONPATH"] = (
         str(REPO_ROOT)
         if not env.get("PYTHONPATH")
         else f"{REPO_ROOT}{os.pathsep}{env['PYTHONPATH']}"
     )
-    source_cli = _session_cli_invocation(session)
-    cli_source_session = (
-        {"cliInvocation": copy.deepcopy(dict(source_cli))}
-        if source_cli is not None
-        else {}
-    )
-    render_request = session.get("renderRequest")
-    is_canonical = (
-        session.get("version") == CURRENT_SESSION_VERSION
-        and isinstance(render_request, Mapping)
-        and render_request.get("schema") == CANONICAL_REQUEST_SCHEMA
-    )
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        source_session = tmpdir_path / f"source-{session_path.name}"
-        write_session_json(source_session, session)
-        if is_canonical:
-            render_session = source_session
-            promoted_payload = session
-        else:
-            render_session = tmpdir_path / "promoted.gbdraw-session.json"
-            del session
-            gc.collect()
-            _promote_gallery_session(source_session, render_session, env=env)
-            promoted_payload = load_session(render_session)
-        if _enable_gallery_interactive_metadata(promoted_payload):
-            write_session_json(render_session, promoted_payload)
-        for key in REFRESHED_GALLERY_ARTIFACT_KEYS:
-            promoted_payload.pop(key, None)
-        if is_canonical:
-            del session
-        gc.collect()
-        refreshed_session = tmpdir_path / session_path.name
+        staging_root = Path(tmpdir)
+        prepared_path = staging_root / f"prepared-{session_path.name}"
+        replayed_path = staging_root / f"replayed-{session_path.name}"
+        finalized_path = staging_root / session_path.name
+        _run_publication_bridge(
+            "prepare",
+            session_path,
+            prepared_path,
+            env=env,
+        )
         subprocess.run(
             [
                 sys.executable,
@@ -1407,40 +963,30 @@ def _refresh_one_session(
                 "gbdraw.cli",
                 mode,
                 "--session",
-                str(render_session),
+                str(prepared_path),
                 "-f",
                 "interactive_svg",
                 "-o",
                 "out",
                 "--session_output",
-                str(refreshed_session),
+                str(replayed_path),
             ],
-            cwd=tmpdir_path,
+            cwd=staging_root,
             env=env,
             check=True,
         )
-        rendered_payload = load_session(refreshed_session)
-        refreshed_payload = _merge_refreshed_gallery_artifacts(
-            promoted_payload,
-            rendered_payload,
+        _run_publication_bridge(
+            "finalize",
+            prepared_path,
+            replayed_path,
+            finalized_path,
+            env=env,
         )
-        _omit_regenerable_gallery_derived_cache(
-            session_path,
-            refreshed_payload,
-        )
-        del promoted_payload, rendered_payload
+        finalized = load_session(finalized_path)
+        validate_session(finalized)
+        del finalized
         gc.collect()
-        _preserve_gallery_cli_invocation(
-            cli_source_session,
-            refreshed_payload,
-            mode=mode,
-        )
-        write_session_json(refreshed_session, refreshed_payload)
-        del refreshed_payload
-        gc.collect()
-        shutil.move(str(refreshed_session), destination_path or session_path)
-
-
+        shutil.move(str(finalized_path), destination_path or session_path)
 def refresh_gallery_sessions(
     session_names: tuple[str, ...] | None = None,
 ) -> None:
@@ -1486,6 +1032,9 @@ def prepare_gallery_assets() -> None:
     )
 
     prepare_assets(refresh_sources=True)
+    from tools.gallery_artifact_manifest import write_gallery_artifact_manifest
+
+    write_gallery_artifact_manifest()
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -443,7 +443,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
         assert set(expected_labels) <= texts, location
         assert set(expected_subtitles) <= texts, location
         assert rule_captions <= texts, location
-        assert {"#54bcf8", *rule_colors} <= fills, location
+        assert {"#d3d3d3", *rule_colors} <= fills, location
         assert "livZ" in texts, location
         assert len(definitions) == 5, location
         for definition in definitions:
@@ -658,13 +658,11 @@ def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
     request = _request(session)
     options = request["diagramOptions"]
     assert isinstance(options, dict)
-    config = options["config"]
-    assert isinstance(config, dict)
-    canvas = config["canvas"]
-    assert isinstance(canvas, dict)
-    linear = canvas["linear"]
-    assert isinstance(linear, dict)
-    declared_spacing = float(linear.get("track_spacing", 0.0))
+    config_overrides = options["configOverrides"]
+    assert isinstance(config_overrides, dict)
+    declared_spacing = float(
+        config_overrides.get("canvas.linear.track_spacing", 0.0)
+    )
     assert declared_spacing == pytest.approx(0.0)
 
     geometry = _materialized_track_geometry(example_id)

@@ -1055,7 +1055,30 @@ def test_cloudflare_gallery_remote_base_uses_resolved_commit(
     )
 
 
-def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
+def test_cloudflare_gallery_manifest_loader_is_script_safe() -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    manifest_module = cloudflare_module._load_gallery_artifact_manifest_module()
+
+    assert callable(manifest_module.verify_gallery_artifacts)
+    assert "from tools.gallery_artifact_manifest" not in Path(
+        cloudflare_module.__file__
+    ).read_text(encoding="utf-8")
+
+
+def test_cloudflare_gallery_verification_does_not_require_cairosvg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    monkeypatch.delitem(
+        sys.modules, "tools.prepare_interactive_gallery_assets", raising=False
+    )
+    monkeypatch.setitem(sys.modules, "cairosvg", None)
+
+    manifest_module = cloudflare_module._load_gallery_artifact_manifest_module()
+    manifest_module.verify_gallery_artifacts()
+
+
+def test_cloudflare_prepare_treats_gallery_as_read_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1081,11 +1104,6 @@ def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
     )
     monkeypatch.setattr(
         cloudflare_module,
-        "_load_refresh_gallery_sessions_module",
-        lambda: pytest.fail("Gallery refresh should be opt-in for Cloudflare Pages."),
-    )
-    monkeypatch.setattr(
-        cloudflare_module,
         "build_cloudflare_pages_bundle",
         lambda *, output_root=cloudflare_module.DEFAULT_OUTPUT_ROOT, google_analytics_measurement_id=cloudflare_module.DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID, gallery_remote_base=None: (
             calls.append(("bundle", output_root)) or output_root
@@ -1097,33 +1115,6 @@ def test_cloudflare_prepare_refreshes_gallery_only_when_requested(
         == output_root
     )
     assert calls == [("wheel", False), ("notices", None), ("bundle", output_root)]
-
-    calls.clear()
-    gallery_module = SimpleNamespace(
-        refresh_gallery_sessions=lambda: calls.append(("gallery", "sessions")),
-        prepare_gallery_assets=lambda: calls.append(("gallery", "assets")),
-    )
-    monkeypatch.setattr(
-        cloudflare_module,
-        "_load_refresh_gallery_sessions_module",
-        lambda: gallery_module,
-    )
-
-    assert (
-        cloudflare_module.prepare_cloudflare_pages(
-            refresh_cache_bust=True,
-            refresh_gallery_sessions=True,
-            output_root=output_root,
-        )
-        == output_root
-    )
-    assert calls == [
-        ("gallery", "sessions"),
-        ("gallery", "assets"),
-        ("wheel", True),
-        ("notices", None),
-        ("bundle", output_root),
-    ]
 
 
 def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
@@ -1202,7 +1193,7 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
-def test_hosted_web_build_refreshes_gallery_sessions_before_copy() -> None:
+def test_hosted_web_build_verifies_gallery_without_refreshing() -> None:
     deploy_yml = (REPO_ROOT / ".github" / "workflows" / "deploy_web.yml").read_text(
         encoding="utf-8"
     )
@@ -1211,21 +1202,17 @@ def test_hosted_web_build_refreshes_gallery_sessions_before_copy() -> None:
     )
 
     assert 'python -m pip install -e ".[dev]"' in deploy_yml
-    refresh_index = deploy_yml.index("python tools/refresh_gallery_sessions.py")
+    checkout_verify_index = deploy_yml.index("python tools/gallery_artifact_manifest.py")
     copy_index = deploy_yml.index("cp -r gbdraw/web/* public/")
+    package_verify_index = deploy_yml.index(
+        "python tools/gallery_artifact_manifest.py --package-root public"
+    )
     stamp_index = deploy_yml.index("python tools/stamp_web_build.py public")
-    assert refresh_index < copy_index
-    assert copy_index < stamp_index
-    assert "refresh_gallery_sessions: bool = False" in cloudflare_source
-    assert '"--refresh-gallery"' in cloudflare_source
-    assert "refresh_gallery_sessions=args.refresh_gallery" in cloudflare_source
-    assert (
-        "refresh_gallery_sessions_module.refresh_gallery_sessions()"
-        in cloudflare_source
-    )
-    assert (
-        "refresh_gallery_sessions_module.prepare_gallery_assets()" in cloudflare_source
-    )
+    assert checkout_verify_index < copy_index < package_verify_index < stamp_index
+    assert "refresh_gallery_sessions" not in cloudflare_source
+    assert '"--refresh-gallery"' not in cloudflare_source
+    assert "verify_gallery_artifacts()" in cloudflare_source
+    assert "package_root=output_root" in cloudflare_source
 
 
 def test_conda_recipe_does_not_copy_entire_web_tree() -> None:

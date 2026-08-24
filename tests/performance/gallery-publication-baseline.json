@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "baseSha": "574b33b83962949397839e2aaa862a8b96667625",
+  "environment": "WSL2 Linux x86_64; Python 3.13.3; Node 18.19.1",
+  "operations": {
+    "refresh": {
+      "command": "python tools/refresh_gallery_sessions.py --no-assets",
+      "wallSeconds": [856.95, 875.28, 860.90],
+      "peakRssKiB": [2383328, 2383520, 2383848],
+      "wallMedianSeconds": 860.90,
+      "peakRssMaxKiB": 2383848
+    },
+    "projection": {
+      "command": "node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+      "wallSeconds": [1.59, 1.47, 1.39],
+      "peakRssKiB": [1245536, 1263216, 1260764],
+      "wallMedianSeconds": 1.47,
+      "peakRssMaxKiB": 1263216
+    }
+  },
+  "maximumRegressionRatio": 1.25
+}

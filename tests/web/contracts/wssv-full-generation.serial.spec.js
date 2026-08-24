@@ -1,4 +1,7 @@
 const { test, expect } = require('@playwright/test');
+const { spawnSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
+const { resolve } = require('node:path');
 const {
   getDiagramWorkerActivity,
   openApp
@@ -71,6 +74,7 @@ const EXPECTED_COLORS = [
   '#ae8e7c',
   '#c6bebb'
 ];
+const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
 const installWssvProbe = (page) => page.addInitScript(() => {
   const metrics = [];
@@ -128,8 +132,12 @@ test('bundled WSSV session regenerates 20 conservation rings from lazy FASTAs', 
       });
       const { state } = await import('/gbdraw/web/js/state.js');
       const sources = state.files.c_conservation_fastas;
+      const selected = window.__GBDRAW_APP__.results[
+        window.__GBDRAW_APP__.selectedResultIndex
+      ];
       return {
         result,
+        content: String(selected?.content || ''),
         previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
         resultCount: window.__GBDRAW_APP__.results.length,
         selectedResultIndex: window.__GBDRAW_APP__.selectedResultIndex,
@@ -206,6 +214,7 @@ test('bundled WSSV session regenerates 20 conservation rings from lazy FASTAs', 
         oldMissingFileMessage: content.includes(
           'Input file is not available for browser FASTA extraction.'
         ),
+        content,
         probe: window.__GBDRAW_WSSV_PROBE__.snapshot()
       };
     });
@@ -230,6 +239,28 @@ test('bundled WSSV session regenerates 20 conservation rings from lazy FASTAs', 
     expect(generated.oldMissingFileMessage).toBe(false);
     expect(generated.probe.losatCalls).toBe(0);
     expect(externalRequests).toEqual([]);
+
+    const initialPath = testInfo.outputPath('wssv-initial.svg');
+    const generatedPath = testInfo.outputPath('wssv-first-generate.svg');
+    writeFileSync(initialPath, imported.content, 'utf8');
+    writeFileSync(generatedPath, generated.content, 'utf8');
+    const comparisonCommand = [
+      'import sys',
+      'from tests.utils.svg_compare import compare_svgs',
+      'result = compare_svgs(sys.argv[1], sys.argv[2])',
+      'print(result.message)',
+      'print("\\n".join(result.differences))',
+      'raise SystemExit(0 if result.equal else 1)'
+    ].join(';');
+    const semanticComparison = spawnSync(
+      process.env.GBDRAW_PYTHON || 'python',
+      ['-c', comparisonCommand, initialPath, generatedPath],
+      { cwd: repoRoot, encoding: 'utf8' }
+    );
+    expect(
+      semanticComparison.status,
+      `${semanticComparison.stdout}\n${semanticComparison.stderr}`
+    ).toBe(0);
 
     const fastaTextReads = generated.probe.metrics.filter(({ name, resourceId }) => (
       name === 'resourceTextReadCount'

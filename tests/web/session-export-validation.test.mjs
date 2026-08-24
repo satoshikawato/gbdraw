@@ -100,7 +100,7 @@ const committed = buildCanonicalRenderRequest({
     }
   }
 });
-adoptCanonicalRenderArtifacts(committed);
+adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true });
 state.adv.circular_track_slots[0].width = '16px';
 
 const retainedCircularFiles = {

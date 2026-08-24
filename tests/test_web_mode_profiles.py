@@ -27,6 +27,9 @@ def test_generated_web_mode_profiles_match_python_source() -> None:
 
 def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     state_source = (WEB_ROOT / "js" / "state.js").read_text(encoding="utf-8")
+    contract_source = (
+        WEB_ROOT / "js" / "services" / "session-active-config-contract.js"
+    ).read_text(encoding="utf-8")
     reset_source = (WEB_ROOT / "js" / "services" / "reset.js").read_text(
         encoding="utf-8"
     )
@@ -46,12 +49,12 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
         WEB_ROOT / "js" / "services" / "svg-sanitization.js"
     ).read_text(encoding="utf-8")
 
-    assert "createDefaultAdv = (profileMode = 'circular')" in state_source
-    assert "...comparisonStateForMode(profileMode)" in state_source
-    assert "features: [...MODE_DEFAULT_FEATURE_TYPES]" in state_source
-    assert "trackDefaultsForMode('circular')" in state_source
-    assert "trackDefaultsForMode('linear')" in state_source
-    assert "managedAdvStateForMode(profileMode).axis_stroke_color" in state_source
+    assert "createDefaultAdv = (mode = 'circular')" in contract_source
+    assert "...comparisonStateForMode(mode)" in contract_source
+    assert "features: [...MODE_DEFAULT_FEATURE_TYPES]" in contract_source
+    assert "trackDefaultsForMode('circular')" in contract_source
+    assert "trackDefaultsForMode('linear')" in contract_source
+    assert "managedAdvStateForMode(mode).axis_stroke_color" in contract_source
     assert "'data-gbdraw-role'" in sanitization_source
     assert "'data-gbdraw-orientation'" in sanitization_source
     assert "createDefaultAdv(state.mode.value)" in reset_source

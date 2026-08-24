@@ -7,6 +7,7 @@
     "test:playwright": "playwright test",
     "test:web:functional-smoke": "playwright test --config=playwright.functional.config.js",
     "test:web:perf-smoke": "playwright test --config=playwright.perf.config.js",
+    "test:web:gallery-publication": "playwright test --config=playwright.gallery-publication.config.js",
     "test:web:vibrio-generate": "playwright test --config=playwright.vibrio.config.js",
     "test:web:wssv-generate": "playwright test --config=playwright.wssv.config.js"
   },

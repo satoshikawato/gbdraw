@@ -15,7 +15,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gallery-publication-browser:
+    name: Gallery publication browser (exact deploy SHA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact deploy SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Gallery browser dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          npx playwright install --with-deps chromium
+          python tools/prepare_browser_wheel.py
+      - name: Run all public Gallery parity owners
+        run: |
+          npm run test:web:gallery-publication
+          npm run test:web:wssv-generate
+          npm run test:web:vibrio-generate
+
   build:
+    needs: gallery-publication-browser
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,13 +67,11 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel build
           python -m pip install -e ".[dev]"
 
-      - name: Refresh gallery sessions
-        run: python tools/refresh_gallery_sessions.py
-
-      - name: Verify refreshed gallery semantics
+      - name: Verify reviewed Gallery artifacts
         run: |
-          node tests/web/gallery-session-migration.test.mjs
+          node --test tests/web/gallery-session-publication.test.mjs
           python -m pytest tests/test_gallery_session_semantics.py tests/test_refresh_gallery_sessions.py -q
+          python tools/gallery_artifact_manifest.py
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py --refresh-cache-bust
@@ -55,6 +84,8 @@ jobs:
           mkdir public
           # Copy the web app assets
           cp -r gbdraw/web/* public/
+          # Verify that the packaged Gallery bytes match the reviewed checkout
+          python tools/gallery_artifact_manifest.py --package-root public
           # Remove any prebundled wheels from the repo copy
           rm -f public/*.whl
           # Copy the built package wheel to the site root
