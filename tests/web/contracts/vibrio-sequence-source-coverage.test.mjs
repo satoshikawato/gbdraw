@@ -15,9 +15,6 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 const { analyzeCatalogSequenceSourceCoverage } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'match-sequences.js'))
 );
-const { promoteGallerySessionToCurrent } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-migration.js'))
-);
 const { projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
 );
@@ -75,9 +72,8 @@ test('real Vibrio session still projects its embedded records and presentation s
   assert.equal(projectedSession.config.filterMode, 'None');
 });
 
-test('real Vibrio Gallery promotion retains its collinearity unit gap', () => {
-  const promoted = promoteGallerySessionToCurrent(fixture);
-  const comparison = promoted.renderRequest.comparisons.find(
+test('real current Vibrio Gallery session retains its collinearity unit gap', () => {
+  const comparison = fixture.renderRequest.comparisons.find(
     (candidate) => candidate.kind === 'generatedProteinComparison'
   );
 
