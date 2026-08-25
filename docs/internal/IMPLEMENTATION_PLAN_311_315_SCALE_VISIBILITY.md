@@ -360,8 +360,7 @@ Also audit without presumptive recapture:
 
 - `HmmtDNA_ATskew.json`, whose custom `Ticks` screenshot demonstrates explicit
   authority but does not show the Axis card;
-- `vibrio-harveyi-group-collinear.json` and
-  `WSSV_genome_comparison.json`, whose settings tables mention scale controls
+- `vibrio-harveyi-group-collinear.json`, whose settings table mentions scale controls
   although their captures do not show the card.
 
 ## Compatibility

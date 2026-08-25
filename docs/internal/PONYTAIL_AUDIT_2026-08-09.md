@@ -17,13 +17,12 @@ released session の reader/migration、orthogroup mode の公開 normalizer/typ
 | 対象 | 結果 |
 | --- | --- |
 | Python | `ruff check gbdraw/`、sdist/wheel build、reference output 16件、example 再現 14件が通過した。 |
-| Web | 既知の WSSV rehydration 1件を除く直接 Node 61件、対象 Playwright、offline asset 検査が通過した。WSSV の `0 !== 20` は HEAD archive でも再現した。 |
+| Web | 既知の Gallery rehydration 1件を除く直接 Node 61件、対象 Playwright、offline asset 検査が通過した。`0 !== 20` は HEAD archive でも再現した。 |
 | Documentation | CLI と Python の全 recipe が `--all --check` を通過した。T-GUI-01 の6画像とSVG、T-PY-08 の4 artifact も clean capture と一致した。 |
 | 全体 | `pytest tests/ -m "not slow" --timeout=1800 -q` は 2,925 passed、17 skipped、6 deselected、5 failed だった。 |
 
-全体 gate の5件は、本監査の差分外または HEAD でも再現する既知不整合である。2件は `GETTING_TUTORIAL_DATA.md` へ導線を移した後に残った旧 manifest-link assertion、1件は既存 worktree の Linear CLI contract hash、1件は record-scoped feature identity を持たない orthogroup test fixture、1件は上記 WSSV rehydration である。監査差分で発生した stale internal caller、cancellation rollback、feature-catalog scope の回帰は focused test と最終 gate の両方で解消を確認した。
+全体 gate の5件は、本監査の差分外または HEAD でも再現する既知不整合である。2件は `GETTING_TUTORIAL_DATA.md` へ導線を移した後に残った旧 manifest-link assertion、1件は既存 worktree の Linear CLI contract hash、1件は record-scoped feature identity を持たない orthogroup test fixture、1件は上記 Gallery rehydration である。監査差分で発生した stale internal caller、cancellation rollback、feature-catalog scope の回帰は focused test と最終 gate の両方で解消を確認した。
 
-次回修正用の owner、再現コマンド、受け入れ条件は [TEST_FAILURE_HANDOFF_2026-08-09.md](./TEST_FAILURE_HANDOFF_2026-08-09.md) に記録した。
 
 ## 監査時点の結論
 

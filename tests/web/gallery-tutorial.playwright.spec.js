@@ -464,59 +464,6 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   expect(pageErrors).toEqual([]);
 });
 
-test('Gallery renders the WSSV nucleotide-similarity tutorial and media', async ({ page }) => {
-  const pageErrors = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
-
-  await page.goto(`${baseUrl}/gallery/#WSSV_genome_comparison`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { name: /White spot syndrome virus nucleotide-similarity rings/i })).toBeVisible();
-
-  await page.getByRole('tab', { name: 'Tutorial' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Session-based WSSV comparison case study' })
-  ).toBeVisible();
-  const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  await expect(tutorialPanel.getByText('Load the bundled session first', { exact: true })).toBeVisible();
-  await expect(tutorialPanel.getByText(/prepared BLAST\/LOSAT comparison rings/)).toBeVisible();
-  await expect(
-    tutorialPanel.getByRole('row', {
-      name: 'Ring Width 5'
-    })
-  ).toBeVisible();
-  await expect(
-    tutorialPanel.getByRole('row', {
-      name: '20 Angostura2013.fa Angostura2013 #c6bebb'
-    })
-  ).toBeVisible();
-  await expect(tutorialPanel.getByRole('cell', { name: 'MG18PR-0187-N40S.fa' })).toBeVisible();
-  const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(11);
-  await expect(tutorialPanel.locator('img[src$="manual-04-02-comparison-fasta-series.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-04-02-upload-fasta-comparisons.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-09-01-conservation-rings.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-10-01-files-tab.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-11-01-feature-popup.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="manual-10-01-zoom-controls.webp"]')).toHaveCount(1);
-  await expect(tutorialPanel.locator('img[src$="post-01-01-zoom-controls.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-08-01-browser-losat-run.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-05-01-ring-labels.webp"]')).toHaveCount(0);
-  await expect(tutorialPanel.locator('img[src$="manual-06-01-ring-colors.webp"]')).toHaveCount(0);
-  for (let idx = 0; idx < await mediaImages.count(); idx += 1) {
-    const image = mediaImages.nth(idx);
-    await image.scrollIntoViewIfNeeded();
-    await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
-  }
-
-  await page.getByRole('tab', { name: 'Files' }).click();
-  const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
-  await expect(filesPanel.getByText('AP027280.gb')).toBeVisible();
-  await expect(filesPanel.getByText('CN01.fasta')).toBeVisible();
-  await expect(filesPanel.getByText('Angostura2013.fa', { exact: true })).toBeVisible();
-  await expect(filesPanel.getByRole('link', { name: 'Session JSON' })).toBeVisible();
-
-  expect(pageErrors).toEqual([]);
-});
-
 test('Gallery restores the tobacco chloroplast region-annotation example', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -903,11 +850,11 @@ test('Gallery copy link button copies the selected sample URL', async ({ page })
   );
 });
 
-test('Gallery uses workflow tags and distinguishes runnable commands', async ({ page }) => {
+test('Gallery uses workflow tags and runnable commands', async ({ page }) => {
   await page.goto(`${baseUrl}/gallery/`, { waitUntil: 'domcontentloaded' });
 
   const cards = page.locator('.sample-card');
-  await expect(cards).toHaveCount(11);
+  await expect(cards).toHaveCount(10);
   await expect(cards.nth(0)).not.toContainText('Beginner');
   await expect(cards.nth(0)).not.toContainText('Under 5 min');
   await expect(cards.nth(0).locator('.tag')).toHaveText(['Circular', 'Interactive SVG']);
@@ -917,18 +864,18 @@ test('Gallery uses workflow tags and distinguishes runnable commands', async ({ 
   const tagFilters = page.getByRole('group', { name: 'Filter by tag' });
   await tagFilters.getByRole('button', { name: 'Linear', exact: true }).click();
   await expect(cards).toHaveCount(6);
-  await expect(page.locator('#sample-count')).toHaveText('6 of 11 examples');
+  await expect(page.locator('#sample-count')).toHaveText('6 of 10 examples');
   await tagFilters.getByRole('button', { name: 'LOSAT', exact: true }).click();
   await expect(cards).toHaveCount(5);
-  await expect(page.locator('#sample-count')).toHaveText('5 of 11 examples');
+  await expect(page.locator('#sample-count')).toHaveText('5 of 10 examples');
   await expect(cards.locator('.tag-row')).toContainText(['LOSAT', 'LOSAT', 'LOSAT', 'LOSAT', 'LOSAT']);
   await tagFilters.getByRole('button', { name: 'Circular', exact: true }).click();
   await expect(cards).toHaveCount(0);
   await expect(page.locator('#no-tag-matches')).toBeVisible();
-  await expect(page.locator('#sample-count')).toHaveText('0 of 11 examples');
+  await expect(page.locator('#sample-count')).toHaveText('0 of 10 examples');
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
-  await expect(cards).toHaveCount(11);
-  await expect(page.locator('#sample-count')).toHaveText('11 examples');
+  await expect(cards).toHaveCount(10);
+  await expect(page.locator('#sample-count')).toHaveText('10 examples');
 
   const harveyiCard = page.locator('[data-sample-id="vibrio-harveyi-group-collinear"]');
   await expect(harveyiCard.locator('.tag')).toHaveText([
@@ -953,10 +900,6 @@ test('Gallery uses workflow tags and distinguishes runnable commands', async ({ 
   await expect(page.getByRole('button', { name: 'Copy command' })).toBeEnabled();
   await expect(page.locator('#command-block')).toContainText('-f interactive_svg');
 
-  await page.locator('[data-sample-id="WSSV_genome_comparison"]').click();
-  await expect(page.getByText('Provenance', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Provenance only' })).toBeDisabled();
-  await expect(page.locator('#command-note')).toContainText('not directly runnable');
 });
 
 test('Gallery tab controls support keyboard navigation', async ({ page }) => {

@@ -32,7 +32,6 @@ from gbdraw.session_io import (  # noqa: E402
     load_session,
     session_mode,
     validate_session,
-    write_session_json,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
@@ -100,7 +99,6 @@ VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
 )
 
 TEST_INPUT_SESSION_FILES = (
-    "AP027280_comparison.gbdraw-session.json",
     "BGC0000708-BGC0000713.gbdraw-session.json",
 )
 

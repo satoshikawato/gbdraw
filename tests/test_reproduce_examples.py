@@ -108,7 +108,7 @@ def test_manifest_counts_and_unique_paths() -> None:
     palette_circular = [figure_id for figure_id in figures if figure_id.startswith("palette_circular_")]
     palette_linear = [figure_id for figure_id in figures if figure_id.startswith("palette_linear_")]
 
-    assert len(docs_and_readme) == 53
+    assert len(docs_and_readme) == 51
     assert palette_circular == [
         "palette_circular_default",
         "palette_circular_ajisai",
@@ -119,7 +119,7 @@ def test_manifest_counts_and_unique_paths() -> None:
         "palette_linear_ajisai",
         "palette_linear_soft_pastels",
     ]
-    assert len(figures) == 53 + 6
+    assert len(figures) == 51 + 6
     assert "gbdraw_social_preview" not in figures
 
     output_paths = [spec.output_path for spec in figures.values()]

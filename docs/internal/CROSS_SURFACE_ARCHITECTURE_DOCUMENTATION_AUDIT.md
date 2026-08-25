@@ -129,10 +129,8 @@ actions after a round trip.
 Current resolution: the session writer stores the comparison FASTAs as resources and
 references them through `webFiles.conservationLosatFastaSources`. Rendering, saving,
 projection, and popup-registry restoration use the same displayed comparison order.
-The bundled WSSV session embeds all 20 verified comparison inputs, comprising 12
-accession-pinned NCBI records and eight prepared assemblies. Record ID, length, raw
-hash, LOSAT cache identity, BLAST query ID, and maximum query coordinate checks guard
-the repair.
+Neutral synthetic coverage verifies three ordered cached comparison inputs, their
+resource identity, and cache replay without running LOSAT.
 
 The FASTAs remain Web restore metadata for the uploaded or analysis source. Canonical
 Python and CLI replay use the saved comparison tables and do not silently rerun
@@ -160,8 +158,8 @@ validation rejected the promoted sessions.
 
 Current resolution: promotion writes the migrated configuration. Python and Web
 boundaries reject obsolete fields in a current session. Main-backed legacy sessions
-remain valid migration inputs. Browser coverage loads every bundled Gallery session
-before exercising the WSSV round trip.
+remain valid migration inputs. Browser coverage loads every bundled Gallery session,
+and neutral coverage exercises the current conservation round trip.
 
 ### C-01: explicit overwrite permission
 
@@ -534,7 +532,7 @@ Focused implementation checks cover these areas:
   rewriting, exact and compound fail-closed references, and alignment targets;
 - canonical Web request/resource decoding, comparison metadata, workspace cleanup,
   capability negotiation, session projection, and static transport guards;
-- WSSV companion FASTA identity and Gallery session round trips;
+- neutral conservation FASTA identity and current-session round trips;
 - CLI help/reference parity, documentation ownership, Markdown targets, and Gallery
   capture contracts;
 - Python lint, package build, Web asset packaging, browser startup/session replay

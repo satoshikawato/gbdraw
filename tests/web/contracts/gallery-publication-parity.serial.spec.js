@@ -10,7 +10,6 @@ const examples = JSON.parse(readFileSync(
   'utf8'
 ));
 const isolatedExamples = new Set([
-  'WSSV_genome_comparison',
   'vibrio-harveyi-group-collinear'
 ]);
 const commonExamples = examples.filter(({ id }) => !isolatedExamples.has(id));

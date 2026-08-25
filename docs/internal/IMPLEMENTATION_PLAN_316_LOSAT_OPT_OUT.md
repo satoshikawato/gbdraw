@@ -502,7 +502,7 @@ Update tutorial setup and captures:
 - inspect the Vibrio evidence-scope crop, but recapture it only if the changed
   controls are visible.
 
-Do not recapture the Circular WSSV Pairwise panel solely because the Linear
+Do not recapture unrelated Circular Pairwise panels solely because the Linear
 selector changed. Follow
 `.agents/skills/web-gallery-screenshot-maintenance/SKILL.md` for capture
 maintenance and verify declared crop geometry and load checks.

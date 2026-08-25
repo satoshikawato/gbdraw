@@ -30,7 +30,7 @@ from gbdraw.labels.filtering import preprocess_label_filtering
 BASE_COMMIT = "5dd1b69fe066bc0b39cff7e072bec003c6e654ae"
 DEFAULT_INPUTS = (
     "tests/test_inputs/MG1655.gbk",
-    "tests/test_inputs/AP027280.gb",
+    "tests/test_inputs/NC_001879.gbk",
 )
 SELECTED_FEATURES = ["CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA", "repeat_region"]
 VISIBILITY_MATRIX = {

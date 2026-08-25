@@ -4236,11 +4236,6 @@ if (projectSessionIndex >= 0) {
       ]
     );
   }
-  if (sessionPath.includes('WSSV_genome_comparison')) {
-    assert.equal(projectedSession.files.c_conservation_blasts.length, 20);
-    assert.equal(projectedSession.files.c_conservation_blasts_source, 'losat-cache');
-    assert.equal((projectedSession.files.c_conservation_fastas || []).length, 20);
-  }
 }
 
 const roundTripSessionIndex = process.argv.indexOf('--round-trip-session');

@@ -2518,7 +2518,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 390.0,
       "preset": "tuckin",
       "slots": [
@@ -2600,7 +2600,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 390.0,
       "preset": "tuckin",
       "slots": [
@@ -2752,7 +2752,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 390.0,
       "preset": "tuckin",
       "slots": [
@@ -2937,7 +2937,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 390.0,
       "preset": "tuckin",
       "slots": [
@@ -3019,7 +3019,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 390.0,
       "preset": "tuckin",
       "slots": [
@@ -3171,7 +3171,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 390.0,
       "preset": "tuckin",
       "slots": [
@@ -3356,7 +3356,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 410.47499999999997,
       "preset": "middle",
       "slots": [
@@ -3438,7 +3438,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 410.47499999999997,
       "preset": "middle",
       "slots": [
@@ -3590,7 +3590,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 410.47499999999997,
       "preset": "middle",
       "slots": [
@@ -3775,7 +3775,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 399.2625,
       "preset": "middle",
       "slots": [
@@ -3857,7 +3857,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 399.2625,
       "preset": "middle",
       "slots": [
@@ -4009,7 +4009,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 399.2625,
       "preset": "middle",
       "slots": [
@@ -4194,7 +4194,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
@@ -4276,7 +4276,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
@@ -4428,7 +4428,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 434.84999999999997,
       "preset": "spreadout",
       "slots": [
@@ -4613,7 +4613,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
@@ -4695,7 +4695,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [
@@ -4847,7 +4847,7 @@
     },
     {
       "axis_radius_px": 390.0,
-      "input": "tests/test_inputs/AP027280.gb",
+      "input": "tests/test_inputs/NC_001879.gbk",
       "outer_content_radius_px": 412.42499999999995,
       "preset": "spreadout",
       "slots": [

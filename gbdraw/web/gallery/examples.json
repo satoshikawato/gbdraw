@@ -324,35 +324,5 @@
     "displayOrder": 90,
     "tutorial": "./tutorials/majanivirus_orthogroup.json",
     "tutorialStatus": "ready"
-  },
-  {
-    "id": "WSSV_genome_comparison",
-    "title": "White spot syndrome virus nucleotide-similarity rings",
-    "tags": [
-      "Circular",
-      "LOSAT",
-      "Interactive SVG"
-    ],
-    "svg": "./examples/WSSV_genome_comparison.svg",
-    "svgType": "interactive",
-    "session": "./sessions/WSSV_genome_comparison.gbdraw-session.json",
-    "thumbnail": "./thumbnails/WSSV_genome_comparison.webp",
-    "sourceSession": "gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json",
-    "sourceOutput": "gbdraw/web/gallery/examples/WSSV_genome_comparison.svg",
-    "sourceFigure": "gbdraw/web/gallery/sources/WSSV_genome_comparison.svg",
-    "sourceNote": "Session JSON and generated SVG output are stored with the gallery assets.",
-    "featureSources": [
-      "AP027280.gb"
-    ],
-    "fileSizeLabel": "9.5 MB",
-    "command": "gbdraw circular -o WSSV_genome_comparison --separate_strands -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p royal_gala --qualifier_priority WSSV_qualifier_priority.tsv --block_stroke_width 1 --line_stroke_width 2 --legend_box_size 12 --legend_font_size 12 --no-gc --no-skew --track_type spreadout -l left --feature_width 10 --outer_label_x_radius_offset 1 --outer_label_y_radius_offset 1 --conservation_blast CN01.circular_conservation.losatn.tsv WSSV-TW.circular_conservation.losatn.tsv WSSV-CN.circular_conservation.losatn.tsv WSSV-TH.circular_conservation.losatn.tsv JP01A.circular_conservation.losatn.tsv JP01B.circular_conservation.losatn.tsv Pc2020.circular_conservation.losatn.tsv E1.circular_conservation.losatn.tsv 0722-1.circular_conservation.losatn.tsv CN03.circular_conservation.losatn.tsv CN04.circular_conservation.losatn.tsv WSSV-AU.circular_conservation.losatn.tsv EU129.circular_conservation.losatn.tsv GCF7.circular_conservation.losatn.tsv MES-753.circular_conservation.losatn.tsv Shantou2019.circular_conservation.losatn.tsv POMZ1.circular_conservation.losatn.tsv POMZ4.circular_conservation.losatn.tsv MG18PR-0187-N40S.circular_conservation.losatn.tsv Angostura2013.circular_conservation.losatn.tsv --conservation_reference subject --conservation_labels CN01 WSSV-TW WSSV-CN WSSV-TH JP01A JP01B Pc2020 E1 0722-1 CN03 CN04 WSSV-AU EU129 GCF7 MES-753 Shantou2019 POMZ1 POMZ4 MG18PR-0187-N40S Angostura2013 --conservation_colors '#6e91b7' '#f4a251' '#77b26f' '#e67577' '#8fc4c0' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' '#6e91b7' '#f4a251' '#e67577' '#8fc4c0' '#bcb4ca' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb' --conservation_ring_width 5 --conservation_ring_gap 2 --bitscore 100 --evalue 1e-30 --identity 90 --alignment_length 100 --gbk AP027280.gb -f interactive_svg",
-    "commandKind": "provenance",
-    "commandNote": "This records the original prepared-input workflow and is not directly runnable from public downloads. Load the bundled session first; Shantou2019 has no recorded public accession.",
-    "description": "Inspect one viral reference against 20 prepared assemblies as concentric BLAST/LOSAT comparison rings.",
-    "workflow": "Session-based circular comparison case study",
-    "inputSummary": "Bundled session; prepared 20-assembly input set not fully public",
-    "displayOrder": 100,
-    "tutorial": "./tutorials/WSSV_genome_comparison.json",
-    "tutorialStatus": "ready"
   }
 ]

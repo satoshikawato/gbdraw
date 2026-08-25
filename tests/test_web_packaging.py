@@ -69,7 +69,6 @@ GALLERY_SESSION_FILES = [
     "tobacco-chloroplast.gbdraw-session.json",
     "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
     "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-    "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
     "majanivirus_orthogroup.gbdraw-session.json.gz",
@@ -85,11 +84,9 @@ GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES = {
 GALLERY_EDITOR_STATE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
     "HmmtDNA_ATskew.gbdraw-session.json",
-    "WSSV_genome_comparison.gbdraw-session.json",
 }
 GALLERY_LOSAT_CACHE_SESSION_FILES = {
     "BGC0000708-BGC0000713.gbdraw-session.json",
-    "WSSV_genome_comparison.gbdraw-session.json",
     "hepatoplasmataceae_collinear.gbdraw-session.json.gz",
     "hepatoplasmataceae_orthogroup.gbdraw-session.json.gz",
     "majanivirus_orthogroup.gbdraw-session.json.gz",
@@ -425,7 +422,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "hepatoplasmataceae_orthogroup",
         "BGC0000708-BGC0000713",
         "majanivirus_orthogroup",
-        "WSSV_genome_comparison",
     ]
     examples = json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
     expected_tags = {
@@ -465,7 +461,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
             "LOSAT",
             "Interactive SVG",
         ],
-        "WSSV_genome_comparison": ["Circular", "LOSAT", "Interactive SVG"],
     }
 
     assert [entry["id"] for entry in examples] == expected_ids
@@ -483,7 +478,6 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "Hepatoplasmataceae CDS protein-similarity links",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Majanivirus CDS protein-similarity links",
-        "White spot syndrome virus nucleotide-similarity rings",
     ]
     for entry in examples:
         assert entry["title"]
@@ -612,8 +606,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         _assert_white_gallery_thumbnail(thumbnail_path)
 
     provenance = [entry for entry in examples if entry["commandKind"] == "provenance"]
-    assert [entry["id"] for entry in provenance] == ["WSSV_genome_comparison"]
-    assert "not directly runnable" in provenance[0]["commandNote"]
+    assert provenance == []
     collinear = next(
         entry for entry in examples if entry["id"] == "hepatoplasmataceae_collinear"
     )

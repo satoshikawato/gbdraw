@@ -185,36 +185,6 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "-o vibrio-harveyi-group-collinear -f interactive_svg"
 )
 
-WSSV_CONSERVATION_LABELS = (
-    "CN01 WSSV-TW WSSV-CN WSSV-TH JP01A JP01B Pc2020 E1 0722-1 CN03 "
-    "CN04 WSSV-AU EU129 GCF7 MES-753 Shantou2019 POMZ1 POMZ4 "
-    "MG18PR-0187-N40S Angostura2013"
-)
-WSSV_CONSERVATION_BLASTS = " ".join(
-    f"{label}.circular_conservation.losatn.tsv" for label in WSSV_CONSERVATION_LABELS.split()
-)
-WSSV_CONSERVATION_COLORS = (
-    "'#6e91b7' '#f4a251' '#77b26f' '#e67577' '#8fc4c0' '#f0d369' '#be92b2' "
-    "'#ffafb7' '#ae8e7c' '#c6bebb' '#6e91b7' '#f4a251' '#e67577' '#8fc4c0' "
-    "'#bcb4ca' '#f0d369' '#be92b2' '#ffafb7' '#ae8e7c' '#c6bebb'"
-)
-WSSV_COMMAND = (
-    "gbdraw circular -o WSSV_genome_comparison --separate_strands "
-    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p royal_gala "
-    "--qualifier_priority WSSV_qualifier_priority.tsv --block_stroke_width 1 "
-    "--line_stroke_width 2 --legend_box_size 12 --legend_font_size 12 "
-    "--no-gc --no-skew --track_type spreadout -l left --feature_width 10 "
-    "--outer_label_x_radius_offset 1 --outer_label_y_radius_offset 1 "
-    f"--conservation_blast {WSSV_CONSERVATION_BLASTS} "
-    "--conservation_reference subject "
-    f"--conservation_labels {WSSV_CONSERVATION_LABELS} "
-    f"--conservation_colors {WSSV_CONSERVATION_COLORS} "
-    "--conservation_ring_width 5 --conservation_ring_gap 2 --bitscore 100 "
-    "--evalue 1e-30 --identity 90 --alignment_length 100 --gbk AP027280.gb "
-    "-f interactive_svg"
-)
-
-
 EXAMPLES: tuple[GallerySessionExample, ...] = (
     GallerySessionExample(
         id="HmmtDNA_basic_circular",
@@ -352,18 +322,6 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         command_note="Download the nine accession-pinned records and both repository-managed color tables from Files.",
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
-    ),
-    GallerySessionExample(
-        id="WSSV_genome_comparison",
-        title="White spot syndrome virus nucleotide-similarity rings",
-        tags=("Circular", "LOSAT", "Interactive SVG"),
-        description="Inspect one viral reference against 20 prepared assemblies as concentric BLAST/LOSAT comparison rings.",
-        workflow="Session-based circular comparison case study",
-        input_summary="Bundled session; prepared 20-assembly input set not fully public",
-        display_order=100,
-        command_kind="provenance",
-        command_note="This records the original prepared-input workflow and is not directly runnable from public downloads. Load the bundled session first; Shantou2019 has no recorded public accession.",
-        command=WSSV_COMMAND,
     ),
 )
 
