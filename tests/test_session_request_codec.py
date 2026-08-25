@@ -36,6 +36,7 @@ from gbdraw.api.options import (
     ColorOptions,
     DepthTrackInput,
     LinearDiagramOptions,
+    LinearMultiRecordOptions,
     LinearOutputOptions,
     LinearTrackOptions,
 )
@@ -48,6 +49,7 @@ from gbdraw.api.requests import (
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -272,6 +274,35 @@ def test_schema5_round_trips_circular_batch_grouping_and_outputs(
         "same-id",
         "same-id_2",
     ]
+
+
+def test_schema6_round_trips_unresolved_record_cardinality_and_row(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "multi-record.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(
+                RecordInput(
+                    source=GenBankInputSource(source),
+                    cardinality=RecordCardinality.ALL,
+                    record_key="source-card",
+                    presentation=RecordPresentation(grid_row=2),
+                ),
+            ),
+            layout=LinearMultiRecordOptions(),
+        )
+    )
+
+    assert CANONICAL_REQUEST_SCHEMA == 6
+    assert encoded.payload["records"][0]["cardinality"] == "all"
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.records[0].cardinality is RecordCardinality.ALL
+    assert decoded.records[0].presentation.grid_row == 2
 
 
 @pytest.mark.parametrize("schema", (3, 4))

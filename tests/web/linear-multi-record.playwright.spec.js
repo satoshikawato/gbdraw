@@ -6,6 +6,8 @@ const { openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
+test.describe.configure({ retries: 0 });
+
 const makeComparisonGenbank = (recordId, base = 'atg') => {
   const sequence = base.repeat(100);
   const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
@@ -853,6 +855,10 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
   ))).toBe(3);
+  await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
+  await page.getByLabel('Arrange linear records in rows').check();
+  await page.getByLabel('Linear record row for sequence 1').fill('1');
+  await page.getByRole('button', { name: 'Set no comparison' }).click();
 
   await page.evaluate(() => {
     window.__GBDRAW_AUTOMATIC_RUN__ = { done: false, result: null, error: '' };
@@ -878,6 +884,9 @@ test('Automatic Linear renders every record from one GenBank source and survives
       cardCount: app.linearSeqs.length,
       selector: app.linearSeqs[0].region_record_id,
       grouping: request.grouping,
+      schema: request.schema,
+      cardinalities: request.records.map((record) => record.cardinality),
+      rows: request.records.map((record) => record.presentation.gridRow),
       selectors: request.records.map((record) => record.selector),
       sharedResourceCount: new Set(
         request.records.map((record) => record.source.resourceId)
@@ -891,10 +900,10 @@ test('Automatic Linear renders every record from one GenBank source and survives
     cardCount: 1,
     selector: '',
     grouping: 'single',
-    selectors: [
-      { kind: 'recordIndex', index: 0 },
-      { kind: 'recordIndex', index: 1 }
-    ],
+    schema: 6,
+    cardinalities: ['all'],
+    rows: [1],
+    selectors: [null],
     sharedResourceCount: 1
   });
 
@@ -905,10 +914,9 @@ test('Automatic Linear renders every record from one GenBank source and survives
   const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
   expect(session.webFiles.bindings.linearSeqs).toHaveLength(1);
   expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('');
-  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([
-    { kind: 'recordIndex', index: 0 },
-    { kind: 'recordIndex', index: 1 }
-  ]);
+  expect(session.renderRequest.records.map((record) => record.cardinality)).toEqual(['all']);
+  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([null]);
+  expect(session.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1]);
   expect(new Set(
     session.renderRequest.records.map((record) => record.source.resourceId)
   ).size).toBe(1);
@@ -957,6 +965,9 @@ test('Automatic Linear renders every record from one GenBank source and survives
       cardCount: app.linearSeqs.length,
       selector: app.linearSeqs[0].region_record_id,
       optionCount: app.linearRecordOptions(app.linearSeqs[0]).length,
+      layoutEnabled: app.linearRecordLayoutEnabled,
+      layoutRows: app.linearRecordRows.map((entry) => entry.row),
+      cardinalities: request.records.map((record) => record.cardinality),
       selectors: request.records.map((record) => record.selector),
       sharedResource: new Set(
         request.records.map((record) => record.source.resourceId)
@@ -968,10 +979,10 @@ test('Automatic Linear renders every record from one GenBank source and survives
     cardCount: 1,
     selector: '',
     optionCount: 3,
-    selectors: [
-      { kind: 'recordIndex', index: 0 },
-      { kind: 'recordIndex', index: 1 }
-    ],
+    layoutEnabled: true,
+    layoutRows: [1],
+    cardinalities: ['all'],
+    selectors: [null],
     sharedResource: 1
   });
 });

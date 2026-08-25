@@ -1899,9 +1899,20 @@ state.linearRecordRows.splice(0, state.linearRecordRows.length,
   { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
 const arrangedCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.deepEqual(arrangedCanonical.renderRequest.layout, {
-  recordGapPx: 30,
-  multiRecordPositions: ['#1@1', '#2@1', '#3@2']
+  recordGapPx: 30
 });
+assert.deepEqual(
+  arrangedCanonical.renderRequest.records.map((record) => [
+    record.cardinality,
+    record.presentation.gridRow,
+    record.presentation.gridColumn
+  ]),
+  [
+    ['all', 1, null],
+    ['exactly_one', 1, null],
+    ['exactly_one', 2, null]
+  ]
+);
 
 state.losatProgram.value = 'blastp';
 state.losat.blastp.mode = 'pairwise';
