@@ -31,8 +31,6 @@ jobs:
         include:
           - example: common 9
             command: test:web:gallery-publication
-          - example: WSSV
-            command: test:web:wssv-generate
           - example: Vibrio
             command: test:web:vibrio-generate
     steps:

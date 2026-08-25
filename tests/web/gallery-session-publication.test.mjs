@@ -44,8 +44,8 @@ const examples = JSON.parse(
 );
 const sessionNames = examples.map((example) => String(example.session).split('/').pop());
 
-assert.equal(sessionNames.length, 11);
-assert.equal(new Set(sessionNames).size, 11);
+assert.equal(sessionNames.length, 10);
+assert.equal(new Set(sessionNames).size, 10);
 
 const loadSession = async (name) => {
   const bytes = await readFile(`${sessionRoot}/${name}`);
@@ -78,20 +78,6 @@ for (const name of sessionNames) {
     ], name);
   }
 }
-
-const refreshOnlyWssv = JSON.parse(
-  await readFile('tests/test_inputs/AP027280_comparison.gbdraw-session.json', 'utf8')
-);
-const refreshOnlyWssvPrepared = await prepareGallerySessionForPublication(
-  refreshOnlyWssv
-);
-assert.equal(refreshOnlyWssvPrepared.equivalence.equivalent, true);
-assert.equal(
-  refreshOnlyWssvPrepared.session.renderRequest.diagramOptions.colors.defaultColors,
-  null
-);
-assert.deepEqual(refreshOnlyWssvPrepared.session.config.colors, {});
-assert.equal(refreshOnlyWssvPrepared.session.config.colorsAreOverrides, false);
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
 assert.equal(admitGallerySession(lambda), lambda);

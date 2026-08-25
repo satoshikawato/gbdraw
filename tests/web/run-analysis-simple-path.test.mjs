@@ -684,7 +684,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.semanticFileWatchersSuppressed.value = false;
 });
 
-test('FASTA extraction delegates lazy resources to the shared reader', async () => {
+test('neutral conservation replay delegates lazy resources to the shared reader', async () => {
   const resourceMetrics = [];
   const previousTestHooks = globalThis.__GBDRAW_TEST_HOOKS__;
   globalThis.__GBDRAW_TEST_HOOKS__ = {
@@ -693,22 +693,42 @@ test('FASTA extraction delegates lazy resources to the shared reader', async () 
     }
   };
   const referenceText = [
-    'LOCUS       REF 8 bp DNA',
+    'LOCUS       reference-a 8 bp DNA',
     'ORIGIN',
     '        1 acgtacgt',
     '//',
     ''
   ].join('\n');
-  const referenceFasta = '>REF\nACGTACGT\n';
-  const comparisonText = '>CMP\nTTTTAAAA\n';
+  const referenceFasta = '>reference-a\nACGTACGT\n';
+  const comparisonTexts = [
+    '>comparison-b\nTTTTAAAA\n',
+    '>comparison-c\nAAAATTTT\n',
+    '>comparison-d\nCCCCGGGG\n'
+  ];
   const resourceTable = adoptCurrentSessionResources({
-    reference: encodedResource('genbank', 'reference.gb', referenceText),
-    comparison: encodedResource('conservation-fasta-file', 'comparison.fa', comparisonText)
+    'reference-a': encodedResource('genbank', 'reference-a.gb', referenceText),
+    'comparison-b': encodedResource(
+      'conservation-fasta-file',
+      'comparison-b.fasta',
+      comparisonTexts[0]
+    ),
+    'comparison-c': encodedResource(
+      'conservation-fasta-file',
+      'comparison-c.fasta',
+      comparisonTexts[1]
+    ),
+    'comparison-d': encodedResource(
+      'conservation-fasta-file',
+      'comparison-d.fasta',
+      comparisonTexts[2]
+    )
   });
-  const referenceView = createSessionResourceFileView(resourceTable, 'reference');
-  const comparisonView = createSessionResourceFileView(resourceTable, 'comparison');
+  const referenceView = createSessionResourceFileView(resourceTable, 'reference-a');
+  const comparisonViews = ['comparison-b', 'comparison-c', 'comparison-d'].map(
+    (resourceId) => createSessionResourceFileView(resourceTable, resourceId)
+  );
   const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
-  for (const file of [referenceView, comparisonView]) {
+  for (const file of [referenceView, ...comparisonViews]) {
     assert.equal(Object.isFrozen(file), true);
     lazyFields.forEach((field) => assert.equal(Object.hasOwn(file, field), false));
   }
@@ -736,20 +756,24 @@ test('FASTA extraction delegates lazy resources to the shared reader', async () 
     ring_width: 5,
     ring_gap: 2
   });
-  state.circularConservation.series.splice(0, state.circularConservation.series.length, {
-    sourceKey: `${comparisonView.name}|${comparisonView.size}|0|0`,
-    fileName: comparisonView.name,
-    sourceIndex: 0,
-    label: 'Lazy comparison',
-    color: '#123456',
-    losat_gencode: 1
-  });
+  state.circularConservation.series.splice(
+    0,
+    state.circularConservation.series.length,
+    ...comparisonViews.map((file, index) => ({
+      sourceKey: `${file.name}|${file.size}|0|${index}`,
+      fileName: file.name,
+      sourceIndex: index,
+      label: ['comparison-b', 'comparison-c', 'comparison-d'][index],
+      color: ['#4e79a7', '#e15759', '#59a14f'][index],
+      losat_gencode: 1
+    }))
+  );
   state.files.c_gb = referenceView;
   state.files.c_gff = null;
   state.files.c_fasta = null;
   state.files.c_depth = null;
   state.files.c_conservation_blasts = [];
-  state.files.c_conservation_fastas = [comparisonView];
+  state.files.c_conservation_fastas = comparisonViews;
   state.files.c_conservation_sequence_sources = [];
   state.annotationSets.splice(0);
   state.circularRecordList.value = [];
@@ -757,31 +781,40 @@ test('FASTA extraction delegates lazy resources to the shared reader', async () 
     status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
   });
 
-  const queryCanonicalHash = await sha256Text(comparisonText);
   const subjectCanonicalHash = await sha256Text(referenceFasta);
-  const cachePayload = {
-    cacheSchema: 2,
-    identityKind: 'nucleotide',
-    program: 'blastn',
-    outfmt: '6',
-    args: ['--task', 'megablast'],
-    queryCanonicalHash,
-    subjectCanonicalHash,
-    flow: 'circular-conservation'
-  };
-  const cacheKey = await sha256Text(JSON.stringify(cachePayload));
-  state.losatCache.value = new Map([[cacheKey, {
-    schema: 2,
-    kind: 'raw-losat',
-    identityKind: 'nucleotide',
-    text: 'CMP\tREF\t100\t8\t0\t0\t1\t8\t1\t8\t1e-20\t40\n',
-    program: 'blastn',
-    flow: 'circular-conservation',
-    outfmt: '6',
-    args: ['--task', 'megablast'],
-    queryCanonicalHash,
-    subjectCanonicalHash
-  }]]);
+  const cacheRows = [
+    'comparison-b\treference-a\t100\t8\t0\t0\t1\t8\t1\t8\t1e-20\t40\n',
+    'comparison-c\treference-a\t95\t8\t0\t0\t1\t8\t1\t8\t1e-18\t38\n',
+    'comparison-d\treference-a\t90\t8\t0\t0\t1\t8\t1\t8\t1e-16\t36\n'
+  ];
+  const cacheEntries = [];
+  for (let index = 0; index < comparisonTexts.length; index += 1) {
+    const queryCanonicalHash = await sha256Text(comparisonTexts[index]);
+    const cachePayload = {
+      cacheSchema: 2,
+      identityKind: 'nucleotide',
+      program: 'blastn',
+      outfmt: '6',
+      args: ['--task', 'megablast'],
+      queryCanonicalHash,
+      subjectCanonicalHash,
+      flow: 'circular-conservation'
+    };
+    const cacheKey = await sha256Text(JSON.stringify(cachePayload));
+    cacheEntries.push([cacheKey, {
+      schema: 2,
+      kind: 'raw-losat',
+      identityKind: 'nucleotide',
+      text: cacheRows[index],
+      program: 'blastn',
+      flow: 'circular-conservation',
+      outfmt: '6',
+      args: ['--task', 'megablast'],
+      queryCanonicalHash,
+      subjectCanonicalHash
+    }]);
+  }
+  state.losatCache.value = new Map(cacheEntries);
   state.losatDerivedCache.value = new Map();
 
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
@@ -832,12 +865,17 @@ test('FASTA extraction delegates lazy resources to the shared reader', async () 
     assert.deepEqual(
       resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount')
         .map(({ resourceId }) => resourceId),
-      ['reference', 'comparison']
+      ['reference-a', 'comparison-b', 'comparison-c', 'comparison-d']
     );
-    assert.equal(
+    assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'run').at(-1)
-        .payload.request.diagramOptions.conservationLabels[0],
-      'Lazy comparison'
+        .payload.request.diagramOptions.conservationLabels,
+      ['comparison-b', 'comparison-c', 'comparison-d']
+    );
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'run').at(-1)
+        .payload.request.diagramOptions.conservationColors,
+      ['#4e79a7', '#e15759', '#59a14f']
     );
 
     const invalidFile = Object.freeze({

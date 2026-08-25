@@ -9,13 +9,12 @@
     "vibrio-harveyi-group-collinear",
     "hepatoplasmataceae_orthogroup",
     "BGC0000708-BGC0000713",
-    "majanivirus_orthogroup",
-    "WSSV_genome_comparison"
+    "majanivirus_orthogroup"
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 24040,
-      "sha256": "0f2f8e7e82b73e23e57391f676bdebca293b0c2bdbc0d6f92f4a4648de59de19"
+      "bytes": 20758,
+      "sha256": "5b23718a22b35d0b0e500b8fdff9fc25feb1e59b1b17b0150373b764a4b8ecfa"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1090866,
@@ -32,10 +31,6 @@
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 26786267,
       "sha256": "cc6a64869dee6d2a22dcd29afbbf4742abdc4c476ac34db036d058bbaeb86907"
-    },
-    "gallery/examples/WSSV_genome_comparison.svg": {
-      "bytes": 10008688,
-      "sha256": "2e8d9350b02176839966024bbd50b86961e5dac2a9cfe0193e5f3e0461bdb37d"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 15507214,
@@ -77,10 +72,6 @@
       "bytes": 11596643,
       "sha256": "3c5a03f4134e0fef4890de82b512054e01a24d7cd2528a5aa0f32c8547372e57"
     },
-    "gallery/sessions/WSSV_genome_comparison.gbdraw-session.json": {
-      "bytes": 22128344,
-      "sha256": "7b92fe1cce630fd3f4bdf02541709f8398bf3b8b01a72599855370a3c0ea5d71"
-    },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11408412,
       "sha256": "2afba7111520b9dd7b00dffd351a1f4a21d4e0d9bfbaebc25ba7b5a937288577"
@@ -121,10 +112,6 @@
       "bytes": 4152093,
       "sha256": "40fd3a5bb72ab266dececc2787e7c9add6fc7a9639dc764920abbbc8fba59ba4"
     },
-    "gallery/sources/WSSV_genome_comparison.svg": {
-      "bytes": 5521465,
-      "sha256": "94d8b34b01fd5b499f9c57df38051e318df76f98742b079caccfa261eaec0ae5"
-    },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 6251210,
       "sha256": "ccf4a5d4ebe91dae024e717b8a78295f61f9ad6a4da2f80f0ce939ad1386c1fb"
@@ -164,10 +151,6 @@
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
       "bytes": 26122,
       "sha256": "7ffeb8878c0aee4fc66c05c4d53b6a5a07182bcac7b6dd95ddfc4952074aebbc"
-    },
-    "gallery/thumbnails/WSSV_genome_comparison.webp": {
-      "bytes": 31280,
-      "sha256": "da54c72d4a1a985df9ec8153cdd5a5a01dba50c533c356f9ff8a7816388bcdf7"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
       "bytes": 20470,

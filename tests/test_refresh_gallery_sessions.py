@@ -13,7 +13,6 @@ from xml.etree import ElementTree as ET
 import pytest
 import gbdraw.web_support.feature_catalog as feature_catalog_module
 from gbdraw.features.ids import compute_feature_hash_from_parts
-from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -68,9 +67,9 @@ BUNDLED_REQUEST_SCHEMAS = frozenset({5, CANONICAL_REQUEST_SCHEMA})
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 13
-    assert len(_public_gallery_session_files()) == 11
-    assert len(TEST_INPUT_SESSION_FILES) == 2
+    assert len(paths) == 11
+    assert len(_public_gallery_session_files()) == 10
+    assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
 
 
@@ -343,7 +342,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
         )
     )
 
-    assert len(paths) == 13
+    assert len(paths) == 11
     for path in paths:
         session = load_cached_gallery_session(path)
         assert session["version"] == CURRENT_SESSION_VERSION, path

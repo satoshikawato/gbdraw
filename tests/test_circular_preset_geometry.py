@@ -61,7 +61,7 @@ def test_circular_preset_geometry_matches_fixed_oracle() -> None:
     actual = capture_module.capture(
         [
             Path("tests/test_inputs/MG1655.gbk"),
-            Path("tests/test_inputs/AP027280.gb"),
+            Path("tests/test_inputs/NC_001879.gbk"),
         ]
     )
 

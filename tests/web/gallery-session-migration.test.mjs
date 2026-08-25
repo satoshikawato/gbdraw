@@ -633,52 +633,6 @@ assert.deepEqual(
   bgc.renderRequest.comparisons
 );
 
-const wssv = await loadSession('WSSV_genome_comparison.gbdraw-session.json');
-const wssvSchema2 = structuredClone(wssv);
-wssvSchema2.version = 33;
-wssvSchema2.renderRequest.schema = 2;
-delete wssvSchema2.renderRequest.grouping;
-wssvSchema2.renderRequest.output = Array.isArray(wssvSchema2.renderRequest.output)
-  ? wssvSchema2.renderRequest.output[0]
-  : wssvSchema2.renderRequest.output;
-wssvSchema2.renderRequest.diagramOptions.output.outputPrefix =
-  wssvSchema2.renderRequest.output.prefix;
-const wssvWithoutCanonicalConservation = {
-  ...wssvSchema2,
-  renderRequest: {
-    ...wssvSchema2.renderRequest,
-    diagramOptions: {
-      ...wssvSchema2.renderRequest.diagramOptions,
-      conservationBlastFiles: []
-    }
-  }
-};
-const promotedWssv = promoteGallerySessionToCurrent(wssvWithoutCanonicalConservation);
-const wssvOptions = promotedWssv.renderRequest.diagramOptions;
-assert.equal(wssvOptions.conservationBlastFiles.length, 20);
-assert.deepEqual(
-  wssvOptions.conservationLabels,
-  wssv.config.circularConservation.series.map((series) => series.label)
-);
-assert.deepEqual(
-  wssvOptions.conservationColors,
-  wssv.config.circularConservation.series.map((series) => series.color)
-);
-for (const ref of wssvOptions.conservationBlastFiles) {
-  assert.ok(promotedWssv.resources[ref.resourceId]);
-  assert.ok(resourceText(promotedWssv, ref).length > 0);
-}
-const invalidWssvCacheEntries = wssv.losatCache.entries.map((entry, index) => (
-  index === 0 ? { ...entry, flow: 'linear-comparison' } : entry
-));
-assert.throws(
-  () => promoteGallerySessionToCurrent({
-    ...wssvWithoutCanonicalConservation,
-    losatCache: { ...wssv.losatCache, entries: invalidWssvCacheEntries }
-  }),
-  /20 series but 19 reusable LOSAT result/
-);
-
 const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz');
 const promotedMajani = (await prepareGallerySessionForPublication(majani)).session;
 assert.equal(promotedMajani.renderRequest.diagramOptions.output.legend, 'right');
@@ -717,8 +671,7 @@ for (const session of [promotedBgc, promotedMajani]) {
 
 for (const [name, promoted] of [
   ['HmmtDNA_ATskew', promotedHmmt],
-  ['BGC0000708-BGC0000713', promotedBgc],
-  ['WSSV_genome_comparison', promotedWssv]
+  ['BGC0000708-BGC0000713', promotedBgc]
 ]) {
   for (const [resourceId, resource] of Object.entries(promoted.resources)) {
     assert.ok(

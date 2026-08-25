@@ -898,8 +898,31 @@ def test_enrich_svg_v3_deduplicates_translation_sequence() -> None:
 
 
 def test_enrich_svg_v3_metadata_is_at_least_35_percent_smaller_than_v1_fixture() -> None:
-    source = (Path(__file__).parent / "test_inputs" / "AP027280_comparison.interactive.svg").read_text(
-        encoding="utf-8"
+    features = [
+        {
+            "svg_id": f"feature-{index}",
+            "record_id": "synthetic-reference",
+            "record_idx": 0,
+            "type": "CDS",
+            "start": index * 30,
+            "end": index * 30 + 24,
+            "strand": "+",
+            "product": f"synthetic feature {index}",
+            "nucleotide_fasta": f">feature-{index}\n" + "ATG" * 100,
+            "amino_acid_fasta": f">feature-{index}\n" + "MPEPTIDE" * 25,
+        }
+        for index in range(12)
+    ]
+    paths = "".join(
+        f'<path id="feature-{index}" data-gbdraw-feature-id="feature-{index}" '
+        f'fill="#54bcf8" d="M {index} 1 L {index + 1} 2" />'
+        for index in range(12)
+    )
+    legacy_payload = json.dumps({"schema": 1, "features": features, "orthogroups": []})
+    source = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="120px" height="80px">'
+        f'{paths}<metadata id="gbdraw-interactive-feature-metadata">'
+        f"{legacy_payload}</metadata></svg>"
     )
     v1_text = _metadata_text(source)
     v1_payload = json.loads(v1_text)

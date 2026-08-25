@@ -66,13 +66,13 @@ from the authoritative baseline, the cell says so explicitly.
 | I-05 | Primary listener/lookup symptom fixed; index lifecycle partially fixed | `web/js/app/feature-editor/svg-actions.js`, `state.js`, and `app/watchers.js` | Feature selection unit test and real feature-click Playwright coverage | Unit test in Browser; Playwright coverage now runs in the functional lane (dormant at baseline) | One listener set and one DOM-index build per root mount; same-root metadata updates must not rebuild | Node structural plus Playwright functional/performance | Stop forced same-root rebuilds and add listener/query-count spies | P0-3; aligns with P1-2 | None |
 | I-06 | Partially fixed | `web/js/services/diagram-generation.js`, diagram Worker, `app/run-analysis.js`, and LOSAT service | Cancellation, stale-result, rollback, and browser render-cancel tests | Browser Node lane and dedicated LOSAT browser acceptance | Warm Worker reuse after cancellation and a latest-only broker/queue | Node lifecycle plus canonical functional/LOSAT acceptance | Add an explicit single-Worker job state machine and cooperative cancellation | P0-5 owner guard; automatic rerender still depends on P0-1/P0-2 | None |
 | I-07 | Partially fixed | `_build_support.py`, `MANIFEST.in`, `tools/prepare_cloudflare_pages.py`, Cloudflare Worker, and `deploy_web.yml` | Package exclusion, Cloudflare manifest/bundle, immutable-ref, and route tests | Core/Browser, although some packaging coverage is duplicated on main | One canonical deploy owner; expanded-size/max-file budget; remote fetch/range/cache/error contract | Canonical 3.11 packaging plus deploy smoke/monitor | Make the Cloudflare builder the sole deploy path and add remote-path tests/budgets | Canonical deployment-owner decision and immutable retention | Cloudflare bundle manifest/deploy artifact only |
-| I-08 | Fixed by P0-1 | `web/js/services/history.js`, `history-snapshot.js`, and `app/history-inputs.js` | Intent/command/checkpoint, failure-atomicity, file-retention, no-op, composition, legend, and WSSV tests | Browser Node plus Playwright functional/performance | No remaining P0 invariant gap; retain compact-intent and explicit-checkpoint ownership guards | Node structural plus Playwright performance | Implemented here | Stable artifact/session authority and performance instrumentation | None |
+| I-08 | Fixed by P0-1 | `web/js/services/history.js`, `history-snapshot.js`, and `app/history-inputs.js` | Intent/command/checkpoint, failure-atomicity, file-retention, no-op, composition, and legend tests | Browser Node plus Playwright functional/performance | No remaining P0 invariant gap; retain compact-intent and explicit-checkpoint ownership guards | Node structural plus Playwright performance | Implemented here | Stable artifact/session authority and performance instrumentation | None |
 | I-09 | Production fix present; CI guard fixed by Phase A | `web/js/services/standalone-interactivity-assets.js`; `gbdraw/render/interactive_svg.py` | 25,000-feature Playwright test with apply/clear mutation cap, exact two-mutation navigation, and elapsed ceilings | Dedicated retry-free Playwright performance lane; unreachable at baseline | No remaining hot-path invariant gap; retain required-lane inventory | Playwright performance | P0-3 lane activation and ownership inventory | Single-worker/retry-free config | None; fixture SVG is temporary |
 | I-10 | Partially fixed | `session-file.js`, `session-resources.js`, `result-normalization.js`, `session-authority.js`, and Gallery refresh tooling | Compression/dedupe/result normalization and Vibrio size/component gates | Browser Node and Gallery/Core coverage; large Gallery checks still repeat on supported main versions | Reader-cap tests and generalized expanded/component/copy/transfer-byte budgets for every session | Node plus canonical Gallery 3.11; large trend nightly/release | P1-3 schema inspector and size/copy report | Canonical session writer; P0-1 for history-copy accounting | Guard only: none; a schema change must canonically regenerate affected Gallery sessions |
 | I-11 | Fixed with strong guards | `web/js/app/losat-cache.js`, `app/run-analysis.js`, `analysis/protein_colinearity.py`, Gallery refresh validator | Compact-ID grammar, cache validation, Vibrio exact-pair/size gates, migration Playwright spec | Node/Gallery plus dedicated LOSAT browser acceptance | Row-count multiplied by string-width budget for each repeated metadata column | Node/session hard gate, Gallery budget, LOSAT acceptance | Extend P1-3 with per-column and copy budgets | Stable runtime-handle/manifest schema and I-12 | None for guard; schema work regenerates affected Gallery sessions canonically |
 | I-12 | Python path fixed; Web path still partially fixed | `gbdraw/session_io.py`; `web/js/app/losat-cache.js` and `services/config.js` | Python materialization call-count=1; Web validation correctness tests | Python Core and Browser Node lanes | One prepared Web manifest context reused by raw and derived entries, with JS call count=1 | Node hard gate, retaining Python Core test | Prepare manifest validation once in `losat-cache.js` and consume it from config | I-11 manifest schema | None |
-| I-13 | Fixed by P0-2 | `services/svg-result-ingestion.js`, `app/candidate-render.js`, `state.js`, and `services/svg-sanitization.js` | Sanitization security/profile, runtime trust, Worker/reflow/session admission, and WSSV structural tests | Browser Node plus functional/performance | No remaining P0 invariant gap; persisted data cannot forge the module-private admission marker | Node security/structural plus Playwright functional/performance | Implemented here | P0-5 ingress inventory; stable artifact identity/history sequence | None; security profile unchanged |
-| I-14 | Matching-session regression fixed; broader P1-1 remains | `web/js/app/pyodide.js`, session/legend restore in `app-setup.js`, `index.html`, and export service | WSSV restore proves main-thread initialization count zero | Browser Node plus Playwright performance | Lazy export and production Vue/Tailwind asset work remain outside P0 | Node structural, Playwright performance, packaging/offline | Retain the no-op guard; execute remaining P1-1 packages separately | P0-5 allowlist; P0-2/session stability | None for this correction |
+| I-13 | Fixed by P0-2 | `services/svg-result-ingestion.js`, `app/candidate-render.js`, `state.js`, and `services/svg-sanitization.js` | Sanitization security/profile, runtime trust, and Worker/reflow/session admission tests | Browser Node plus functional/performance | No remaining P0 invariant gap; persisted data cannot forge the module-private admission marker | Node security/structural plus Playwright functional/performance | Implemented here | P0-5 ingress inventory; stable artifact identity/history sequence | None; security profile unchanged |
+| I-14 | Matching-session regression fixed; broader P1-1 remains | `web/js/app/pyodide.js`, session/legend restore in `app-setup.js`, `index.html`, and export service | Pyodide startup and no-op guard tests | Browser Node plus Playwright performance | Lazy export and production Vue/Tailwind asset work remain outside P0 | Node structural, Playwright performance, packaging/offline | Retain the no-op guard; execute remaining P1-1 packages separately | P0-5 allowlist; P0-2/session stability | None for this correction |
 | I-15 | P0 duplicate serialization/remount fixed; combined color traversal remains P1 | `web/js/app/svg-styles.js`, `watchers.js`, feature color actions, `feature-dom.js`, and `preview-runtime.js` | One dirty flush, zero edit remount, and one feature-index/handler build per root | Browser Node plus Playwright performance | A single compiled palette/specific traversal remains a later optimization | Node counter test plus Playwright performance | P1-2 may combine palette/specific resolution after profiling | P0-2 commit boundary is complete | None |
 | I-16 | Partially fixed | Python composition planner/render metadata and Circular/Linear assemblers; Web composition actions | Layout/render/assembler contracts, runtime parity, and quick real-assembler benchmark | Core and Browser Node; Playwright composition now functional-lane reachable | No production SVG serialize/reparse for bounds; no second current-schema policy/default owner | Core/Node architecture; standard main/nightly benchmark | Add owner/source contracts and promote benchmark reporting | P2-2; P1-5 lane ownership | Benchmark JSON only; no tracked SVG change expected |
 | I-17 | Partially fixed; expensive browser duplication removed by Phase A | `test.yml`, `tests/test_web_packaging.py`, and `tools/verify_gui_offline.py` | CI selectors plus four independently named offline GUI contracts | Browser behavior once on canonical 3.11; 3.10/3.12 retain non-slow version-sensitive bridge coverage | Repository-wide test cost/contract/marker/runner inventory and feedback-time budget | Canonical 3.11 browser plus version-sensitive Core/bridge matrix | P1-5 owner inventory and duration budget | P0-4 provides the split | None |
@@ -84,8 +84,8 @@ from the authoritative baseline, the cell says so explicitly.
 
 | Recommendation | Status | Current owner | Existing regression test | CI | Missing structural invariant | Target CI lane | Proposed PR-sized work package | Dependencies | Expected generated-artifact impact |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0-1 | Fixed | One History stack with compact intent/command entries and explicit artifact checkpoints | History/input/legend/composition tests plus WSSV structural/timing probe | Browser Node plus Playwright functional/performance | None for P0; full checkpoints remain only at explicit artifact boundaries | Node plus Playwright performance | Implemented here | Stable session/artifact identity preserved | None |
-| P0-2 | Fixed | `services/svg-result-ingestion.js` owns admission; PreviewRuntime owns mounted edits/flush | Ingestion/security/preview tests plus functional and WSSV structural probe | Browser Node plus functional/performance | None for P0; one minimum sanitize/parse/serialize/mount remains | Node security/structural plus functional/performance | Implemented here | P0-5 owner inventory retained | None |
+| P0-1 | Fixed | One History stack with compact intent/command entries and explicit artifact checkpoints | History/input/legend/composition tests | Browser Node plus Playwright functional/performance | None for P0; full checkpoints remain only at explicit artifact boundaries | Node plus Playwright performance | Implemented here | Stable session/artifact identity preserved | None |
+| P0-2 | Fixed | `services/svg-result-ingestion.js` owns admission; PreviewRuntime owns mounted edits/flush | Ingestion/security/preview tests | Browser Node plus functional/performance | None for P0; one minimum sanitize/parse/serialize/mount remains | Node security/structural plus functional/performance | Implemented here | P0-5 owner inventory retained | None |
 | P0-3 | Fixed by Phase A | Functional/performance configs, package scripts, and workflow jobs | 77 functional plus 7 performance tests; 25k structural assertions unchanged | Separate always-reporting jobs | Authenticated branch-protection setting remains externally unverifiable | Playwright functional and performance | Implemented here | Dedicated LOSAT runner retains its two tests | Failure-only trace artifacts |
 | P0-4 | Fixed by Phase A | Four offline GUI contracts and workflow selectors | Four named fresh-context browser tests | Canonical Browser 3.11 only; slow matrix excludes browser | Keep future contracts independently settled and diagnosed | Canonical Browser 3.11 | Implemented here | Prepared browser wheel | None |
 | P0-5 | Fixed by Phase A | Existing diagram-generation service/Worker plus architecture contract | Static import/owner/canonical-dispatch tests and existing runtime behavior tests | Browser Node glob | Allowlist updates must accompany any intentional new owner | Fast Node architecture lane | Implemented here | None; wrapper remains shared but callable only from Worker | None |
@@ -240,7 +240,7 @@ feature color/stroke/visibility edit
   reconciles the existing mounted root and marks it dirty; it does not restore
   or remount a copied SVG.
 
-Structural evidence for ten ordinary edits after WSSV restore:
+Structural evidence for ten ordinary edits after the former large-session restore:
 
 ```text
 artifact checkpoint builds added = 0
@@ -276,7 +276,7 @@ ordinary intent.
   before any main-thread Python helper is requested. The no-op path initializes
   Pyodide zero times.
 
-Observed WSSV admission and ordinary edit counters:
+Observed large-session admission and ordinary edit counters:
 
 ```text
 sanitize / parse / serialize / Result commit = 1 / 1 / 1 / 1
@@ -293,10 +293,10 @@ interactive feature metadata.
 
 ### Browser timing evidence
 
-- Audited before values for the same WSSV fixture/runtime were approximately
+- Audited before values for the same former large-session fixture/runtime were approximately
   7,000 ms restore and 2,890 ms maximum long task; History begin was roughly
   99--103 ms and commit 143--190 ms.
-- Five already-collected controlled post-change WSSV restore samples measured
+- Five already-collected controlled post-change large-session restore samples measured
   1,813, 1,823, 1,834, 1,849, and 1,863 ms (median 1,834 ms), a 73.8% improvement
   from the audited approximately 7,000 ms baseline. The final post-fix probe
   measured a 491 ms maximum long task, an 83.0% improvement from approximately
@@ -331,7 +331,7 @@ interactive feature metadata.
   History/session/editor/export behavior and the real frozen-v39 admission and
   first-authorized-layout-edit regression.
 - `npm run test:web:perf-smoke`: 7/7 passed in 25.5 s with one worker and zero
-  retries. The WSSV probe reported one sanitize, parse, serialization, Result
+  retries. The large-session probe reported one sanitize, parse, serialization, Result
   update, mount, feature-index build, and feature-handler setup; main-thread
   Pyodide initialization was zero. The malicious SVG security case also passed.
 - `npx playwright test tests/web/losat-cache-migration.playwright.spec.js
@@ -373,6 +373,6 @@ interactive feature metadata.
   unchanged. A CI-mode focused run measured 153.9 ms apply and 6.7 ms
   navigation.
 - `CI=1 TMPDIR=/tmp npm run test:web:perf-smoke`: 7/7 passed in 25.5 s with
-  one worker and zero retries. Its WSSV probe reported 1,980 ms restore, 523 ms
+  one worker and zero retries. Its large-session probe reported 1,980 ms restore, 523 ms
   maximum long task, begin p95 2.4 ms, commit p95 6.3 ms, one of each ingestion
   ownership operation, and zero main-thread Pyodide initialization.

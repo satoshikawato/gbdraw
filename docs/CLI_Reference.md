@@ -714,50 +714,6 @@ ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
 
-Gallery WSSV example: the `WSSV_genome_comparison` command has 20 `--conservation_blast`, 20 `--conservation_labels`, and 20 `--conservation_colors` values. The equivalent `wssv_conservation.tsv` is:
-
-```tsv
-blast	label	color
-CN01.circular_conservation.losatn.tsv	CN01	#6e91b7
-WSSV-TW.circular_conservation.losatn.tsv	WSSV-TW	#f4a251
-WSSV-CN.circular_conservation.losatn.tsv	WSSV-CN	#77b26f
-WSSV-TH.circular_conservation.losatn.tsv	WSSV-TH	#e67577
-JP01A.circular_conservation.losatn.tsv	JP01A	#8fc4c0
-JP01B.circular_conservation.losatn.tsv	JP01B	#f0d369
-Pc2020.circular_conservation.losatn.tsv	Pc2020	#be92b2
-E1.circular_conservation.losatn.tsv	E1	#ffafb7
-0722-1.circular_conservation.losatn.tsv	0722-1	#ae8e7c
-CN03.circular_conservation.losatn.tsv	CN03	#c6bebb
-CN04.circular_conservation.losatn.tsv	CN04	#6e91b7
-WSSV-AU.circular_conservation.losatn.tsv	WSSV-AU	#f4a251
-EU129.circular_conservation.losatn.tsv	EU129	#e67577
-GCF7.circular_conservation.losatn.tsv	GCF7	#8fc4c0
-MES-753.circular_conservation.losatn.tsv	MES-753	#bcb4ca
-Shantou2019.circular_conservation.losatn.tsv	Shantou2019	#f0d369
-POMZ1.circular_conservation.losatn.tsv	POMZ1	#be92b2
-POMZ4.circular_conservation.losatn.tsv	POMZ4	#ffafb7
-MG18PR-0187-N40S.circular_conservation.losatn.tsv	MG18PR-0187-N40S	#ae8e7c
-Angostura2013.circular_conservation.losatn.tsv	Angostura2013	#c6bebb
-```
-
-Then use:
-
-```bash
-gbdraw circular \
-  --gbk AP027280.gb \
-  --conservation_table wssv_conservation.tsv \
-  --conservation_reference subject \
-  --bitscore 100 \
-  --evalue 1e-30 \
-  --identity 90 \
-  --alignment_length 100 \
-  --no-gc \
-  --no-skew \
-  --track_type spreadout \
-  -o WSSV_genome_comparison \
-  -f interactive_svg
-```
-
 The single-track geometry options `--feature_width`, `--depth_width`,
 `--gc_content_width`, `--gc_content_radius`, `--gc_skew_width`, and
 `--gc_skew_radius` are supported CLI and Web shortcuts. The CLI converts each

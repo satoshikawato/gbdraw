@@ -75,7 +75,7 @@ Do not:
 
 Use fixed representative fixtures and the same browser/runtime for before/after measurements. Include at least:
 
-1. loading the existing WSSV comparison session;
+1. loading a representative large Gallery session;
 2. one ordinary number/select/text setting edit after loading it;
 3. ten repeated ordinary setting edits;
 4. Generate-to-preview Result commit;
@@ -283,7 +283,7 @@ All malicious SVG security fixtures must remain rejected or sanitized with the s
 
 ## Classify remaining main-thread costs
 
-After P0-1 and P0-2 structural gates pass, profile the same WSSV and ordinary-edit flows.
+After P0-1 and P0-2 structural gates pass, profile the same large-session and ordinary-edit flows.
 
 For each remaining cost, classify it with evidence as:
 
@@ -326,14 +326,14 @@ Structural counters are hard gates. Also report before/after browser measurement
 Targets:
 
 ```text
-ordinary WSSV setting edit:
+ordinary large-session setting edit:
   History begin p95 < 50 ms
   History commit p95 < 50 ms
 
 ten repeated ordinary edits:
   later median <= early median * 1.20
 
-WSSV session restore:
+large-session restore:
   median improves by >= 20%
   maximum main-thread long task improves by >= 40%
 

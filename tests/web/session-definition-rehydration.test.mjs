@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { File } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
+import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 globalThis.window = {
@@ -69,23 +70,22 @@ assert.equal(
   false
 );
 
-const wssvSession = await readFile(
-  'gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json',
-  'utf8'
-);
-const importedWssv = await importSession({
+const conservationSession = gunzipSync(await readFile(
+  'tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz'
+));
+const importedConservation = await importSession({
   target: {
-    files: [new Blob([wssvSession], { type: 'application/json' })],
+    files: [new Blob([conservationSession], { type: 'application/json' })],
     value: 'selected'
   }
 });
-assert.equal(importedWssv.status, 'ok');
+assert.equal(importedConservation.status, 'ok');
 const comparisonSources = state.matchSequenceRegistry.values()
   .filter((source) => source.origin === 'homology-comparison');
-assert.equal(comparisonSources.length, 20);
+assert.equal(comparisonSources.length, 3);
 assert.deepEqual(
   comparisonSources.map((source) => source.sourceIndex),
-  Array.from({ length: 20 }, (_, index) => index)
+  [0, 1, 2]
 );
 assert.ok(comparisonSources.every((source) => source.sequence.length > 0));
 

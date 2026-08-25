@@ -42,7 +42,6 @@ jobs:
       - name: Run all public Gallery parity owners
         run: |
           npm run test:web:gallery-publication
-          npm run test:web:wssv-generate
           npm run test:web:vibrio-generate
 
   build:
