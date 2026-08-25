@@ -35,6 +35,10 @@ import {
   parseLinearTrackSlotSpecs
 } from '../app/linear-track-slots.js';
 import {
+  linearRecordPositionTokens,
+  reconcileLinearRecordLayout
+} from '../app/linear-record-layout.js';
+import {
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
@@ -1619,20 +1623,9 @@ const buildComparisons = ({
   return comparisons;
 };
 
-const resolvedLinearRecordRows = (sequences, layoutRows) => {
-  const rowsByUid = new Map(
-    (Array.isArray(layoutRows) ? layoutRows : [])
-      .map((entry) => [String(entry?.uid || ''), Number(entry?.row)])
-  );
-  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => {
-    const row = rowsByUid.get(String(sequence?.uid || ''));
-    return Number.isInteger(row) && row > 0 ? row : index + 1;
-  });
-};
-
 export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
   const seenRows = new Set();
-  return resolvedLinearRecordRows(sequences, layoutRows).some((row) => {
+  return reconcileLinearRecordLayout(sequences, layoutRows).some(({ row }) => {
     if (seenRows.has(row)) return true;
     seenRows.add(row);
     return false;
@@ -1642,13 +1635,12 @@ export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
 const buildLayout = (state, filesData) => {
   if (state.mode.value === 'linear') {
     if (!state.linearRecordLayoutEnabled?.value) return {};
-    const resolvedRows = resolvedLinearRecordRows(
-      filesData.linearSeqs,
-      state.linearRecordRows
-    );
     return {
       recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
-      multiRecordPositions: resolvedRows.map((row, index) => `#${index + 1}@${row}`)
+      multiRecordPositions: linearRecordPositionTokens(
+        filesData.linearSeqs,
+        state.linearRecordRows
+      )
     };
   }
   if (!state.form.multi_record_canvas) return {};
@@ -2893,6 +2885,137 @@ const projectedOutputPrefix = (
     : '';
 };
 
+const multiRecordPositionParts = (token) => {
+  const value = String(token).trim();
+  const split = value.lastIndexOf('@');
+  return {
+    value,
+    selector: value.slice(0, split).trim(),
+    rowText: value.slice(split + 1).trim()
+  };
+};
+
+const parseMultiRecordPositionToken = (token) => {
+  const { selector, rowText } = multiRecordPositionParts(token);
+  return { selector, row: Number(rowText) };
+};
+
+const parseLinearRecordPositionToken = (token) => {
+  const { value, selector, rowText } = multiRecordPositionParts(token);
+  if (!value || (value.match(/@/g) || []).length !== 1 || !selector) {
+    throw new Error(
+      `Canonical Linear layout entry '${value}' must use '<selector>@<row>'.`
+    );
+  }
+  if (!/^[+-]?\d+$/.test(rowText)) {
+    throw new Error(
+      `Canonical Linear layout entry '${value}' must use a positive integer row.`
+    );
+  }
+  const row = Number(rowText);
+  if (!Number.isInteger(row) || row <= 0) {
+    throw new Error(
+      `Canonical Linear layout entry '${value}' must use a positive integer row.`
+    );
+  }
+  return { selector, row };
+};
+
+const canonicalLinearRecordId = (record) => {
+  const selector = record?.region?.selector || record?.selector;
+  return selector?.kind === 'recordId' ? String(selector.value) : null;
+};
+
+const linearPositionRecordIndex = (selector, records, recordIds) => {
+  const value = String(selector);
+  if (value.startsWith('#')) {
+    const indexText = value.slice(1).trim();
+    if (!/^[+-]?\d+$/.test(indexText)) {
+      throw new Error(`Canonical Linear layout selector '${value}' is invalid.`);
+    }
+    const recordIndex = Number(indexText) - 1;
+    if (recordIndex >= 0 && recordIndex < records.length) return recordIndex;
+    throw new Error(
+      `Canonical Linear layout selector '${value}' is out of range for `
+      + `${records.length} render record(s).`
+    );
+  }
+  const matches = recordIds.flatMap((recordId, index) => (
+    recordId === value ? [index] : []
+  ));
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    throw new Error(
+      `Canonical Linear layout selector '${value}' matches multiple render records.`
+    );
+  }
+  return null;
+};
+
+const completeStoredLinearRecordRows = (sequences, storedRows) => {
+  if (!Array.isArray(storedRows)) return null;
+  const rowsByUid = new Map(storedRows.map((entry) => [
+    String(entry?.uid || ''),
+    Number(entry?.row)
+  ]));
+  if (!sequences.every((sequence) => {
+    const row = rowsByUid.get(String(sequence?.uid || ''));
+    return Number.isInteger(row) && row > 0;
+  })) return null;
+  return sequences.map((sequence) => ({
+    uid: sequence?.uid || '',
+    row: rowsByUid.get(String(sequence?.uid || ''))
+  }));
+};
+
+const projectLinearRecordRows = (tokens, records, sequences, storedRows) => {
+  if (tokens.length === 0) return [];
+  if (tokens.length !== records.length || sequences.length !== records.length) {
+    throw new Error(
+      `Canonical Linear layout must provide exactly ${records.length} entry(ies).`
+    );
+  }
+  const recordIds = records.map(canonicalLinearRecordId);
+  const persistedRows = completeStoredLinearRecordRows(sequences, storedRows);
+  const rowsByRecordIndex = new Map();
+  const unresolvedSelectors = [];
+  const seenSelectors = new Set();
+  for (const token of tokens) {
+    const { selector, row } = parseLinearRecordPositionToken(token);
+    if (seenSelectors.has(selector)) {
+      throw new Error(
+        `Canonical Linear layout selector '${selector}' was specified more than once.`
+      );
+    }
+    seenSelectors.add(selector);
+    const recordIndex = linearPositionRecordIndex(selector, records, recordIds);
+    if (recordIndex === null) {
+      unresolvedSelectors.push(selector);
+      continue;
+    }
+    if (rowsByRecordIndex.has(recordIndex)) {
+      throw new Error(
+        `Canonical Linear layout selector '${selector}' maps to a duplicate render record.`
+      );
+    }
+    rowsByRecordIndex.set(recordIndex, row);
+  }
+  if (unresolvedSelectors.length > 0) {
+    if (persistedRows) return persistedRows;
+    throw new Error(
+      `Canonical Linear layout selector '${unresolvedSelectors[0]}' `
+      + 'cannot be mapped to a render record.'
+    );
+  }
+  if (rowsByRecordIndex.size !== records.length) {
+    throw new Error('Canonical Linear layout must include every render record exactly once.');
+  }
+  return sequences.map((sequence, index) => ({
+    uid: sequence?.uid || '',
+    row: rowsByRecordIndex.get(index)
+  }));
+};
+
 export const projectCanonicalSessionRequest = ({
   renderRequest,
   resources: canonicalResources,
@@ -3652,22 +3775,19 @@ export const projectCanonicalSessionRequest = ({
       ? (tracks.linearTrackAxisIndex ?? null)
       : null,
     linear_track_slots: projectedLinearTrackSlots,
-    multi_record_positions: (renderRequest.layout?.multiRecordPositions || []).map((token) => {
-      const split = String(token).lastIndexOf('@');
-      return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
-    })
+    multi_record_positions: (renderRequest.layout?.multiRecordPositions || [])
+      .map(parseMultiRecordPositionToken)
   };
   const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
     ? {
         enabled: Object.keys(renderRequest.layout || {}).length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? 24,
-        rows: (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
-          const split = String(token).lastIndexOf('@');
-          return {
-            uid: files.linearSeqs[index]?.uid || '',
-            row: Number(String(token).slice(split + 1)) || index + 1
-          };
-        })
+        rows: projectLinearRecordRows(
+          renderRequest.layout?.multiRecordPositions || [],
+          records,
+          files.linearSeqs,
+          storedConfig?.linearRecordLayout?.rows
+        )
       }
     : undefined;
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)

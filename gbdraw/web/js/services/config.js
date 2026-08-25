@@ -3627,6 +3627,7 @@ export const exportSession = async (
       const adoptedCommitted = isAdoptedCanonicalSession(committed);
       const projected = projectCanonicalSessionRequest({
         ...committed,
+        storedConfig,
         sessionResourceTable: adoptedCommitted ? activeSessionResourceTable : null,
         deferResourceContent: adoptedCommitted,
         adoptCanonicalPayloads: adoptedCommitted

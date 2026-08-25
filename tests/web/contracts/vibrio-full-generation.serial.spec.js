@@ -100,11 +100,59 @@ const svgSourceIdentity = (content) => ({
 
 const svgComparisonSummary = (content) => {
   const source = String(content || '');
+  const attribute = (tag, name) => (
+    tag.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? null
+  );
+  const endpointCounts = new Map();
+  const pairwiseTags = source.match(
+    /<path\b[^>]*data-gbdraw-pairwise-match-id="[^"]*"[^>]*>/g
+  ) || [];
+  for (const tag of pairwiseTags) {
+    const queryText = attribute(tag, 'data-query-record-index');
+    const subjectText = attribute(tag, 'data-subject-record-index');
+    if (queryText === null || subjectText === null) continue;
+    const query = Number(queryText);
+    const subject = Number(subjectText);
+    if (!Number.isInteger(query) || !Number.isInteger(subject)) continue;
+    const key = `${query}->${subject}`;
+    endpointCounts.set(key, Number(endpointCounts.get(key) || 0) + 1);
+  }
   return {
     comparisonGroups: (source.match(/<g[^>]*\bid="comparison\d+"/g) || []).length,
     pairwiseMatches: (source.match(/data-gbdraw-pairwise-match-id=/g) || []).length,
-    comparisonLegends: (source.match(/data-gbdraw-role="comparison-legend"/g) || []).length
+    comparisonLegends: (source.match(/data-gbdraw-role="comparison-legend"/g) || []).length,
+    endpointCounts: [...endpointCounts.entries()]
+      .map(([edge, matches]) => ({ edge, matches }))
+      .sort((left, right) => {
+        const [leftQuery, leftSubject] = left.edge.split('->').map(Number);
+        const [rightQuery, rightSubject] = right.edge.split('->').map(Number);
+        return leftQuery - rightQuery || leftSubject - rightSubject;
+      })
   };
+};
+
+const EXPECTED_VIBRIO_COMPARISON_SUMMARY = {
+  comparisonGroups: 16,
+  pairwiseMatches: 633,
+  comparisonLegends: 2,
+  endpointCounts: [
+    { edge: '0->3', matches: 59 },
+    { edge: '0->4', matches: 14 },
+    { edge: '1->3', matches: 16 },
+    { edge: '1->4', matches: 80 },
+    { edge: '3->5', matches: 53 },
+    { edge: '3->6', matches: 15 },
+    { edge: '4->5', matches: 13 },
+    { edge: '4->6', matches: 75 },
+    { edge: '5->7', matches: 72 },
+    { edge: '5->8', matches: 13 },
+    { edge: '6->7', matches: 14 },
+    { edge: '6->8', matches: 79 },
+    { edge: '7->9', matches: 51 },
+    { edge: '7->10', matches: 12 },
+    { edge: '8->9', matches: 9 },
+    { edge: '8->10', matches: 58 }
+  ]
 };
 
 const svgLinearGeometrySummary = (content) => {
@@ -808,6 +856,7 @@ const assertRecoverableErrorState = async (page, diagnostic, originalPreview) =>
 test.describe.configure({ mode: 'serial' });
 
 test('real Vibrio preview regenerates twice through staged binary resources', async ({
+  browser,
   page,
   context
 }, testInfo) => {
@@ -951,11 +1000,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   const loadedComparisonSummary = svgComparisonSummary(loaded.originalPreview);
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
-  expect(loadedComparisonSummary).toEqual({
-    comparisonGroups: 16,
-    pairwiseMatches: 633,
-    comparisonLegends: 2
-  });
+  expect(loadedComparisonSummary).toEqual(EXPECTED_VIBRIO_COMPARISON_SUMMARY);
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
   expect(secondComparisonSummary).toEqual(firstComparisonSummary);
   for (const [stage, svg] of [
@@ -1343,6 +1388,96 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     });
   }
 
+  const preSaveActiveIntent = await activeIntentSummary(page);
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 300_000 });
+  await page.getByRole('button', { name: 'Save Session' }).click();
+  const savedSessionPath = await (await sessionDownloadPromise).path();
+  expect(savedSessionPath).toBeTruthy();
+
+  const restoredContext = await browser.newContext({
+    baseURL: 'http://127.0.0.1:4173'
+  });
+  let savedSessionRoundTrip;
+  try {
+    const restoredPage = await restoredContext.newPage();
+    const restoredPageErrors = [];
+    const restoredConsoleErrors = [];
+    restoredPage.on('pageerror', (error) => {
+      restoredPageErrors.push(String(error?.message || error));
+    });
+    restoredPage.on('console', (message) => {
+      if (message.type() === 'error') restoredConsoleErrors.push(message.text());
+    });
+    await openApp(restoredPage, { waitForPalette: false });
+    const chooserPromise = restoredPage.waitForEvent('filechooser');
+    await restoredPage.getByRole('button', { name: 'Load Session' }).click();
+    const loadDialogPromise = restoredPage.waitForEvent('dialog', { timeout: 300_000 });
+    await (await chooserPromise).setFiles(savedSessionPath);
+    const loadDialog = await loadDialogPromise;
+    expect(loadDialog.message()).toBe('Session loaded successfully!');
+    await loadDialog.accept();
+
+    const restoredActiveIntent = await activeIntentSummary(restoredPage);
+    expect(restoredActiveIntent).toEqual(preSaveActiveIntent);
+    const restoredLoadedSvg = await restoredPage.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      return String(app.results?.[app.selectedResultIndex]?.content || '');
+    });
+    expect(svgComparisonSummary(restoredLoadedSvg))
+      .toEqual(EXPECTED_VIBRIO_COMPARISON_SUMMARY);
+    expect(svgLinearGeometrySummary(restoredLoadedSvg))
+      .toEqual(EXPECTED_VIBRIO_LINEAR_GEOMETRY);
+
+    await restoredPage.evaluate(() => {
+      window.__GBDRAW_VIBRIO_RESTORED_RUN__ = { done: false, result: null, error: '' };
+      window.__GBDRAW_APP__.runAnalysis().then((result) => {
+        Object.assign(window.__GBDRAW_VIBRIO_RESTORED_RUN__, { done: true, result });
+      }).catch((error) => {
+        Object.assign(window.__GBDRAW_VIBRIO_RESTORED_RUN__, {
+          done: true,
+          error: String(error?.message || error)
+        });
+      });
+    });
+    await restoredPage.waitForFunction(
+      () => window.__GBDRAW_VIBRIO_RESTORED_RUN__?.done === true,
+      null,
+      { timeout: 900_000 }
+    );
+    const restoredGeneration = await restoredPage.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      const run = window.__GBDRAW_VIBRIO_RESTORED_RUN__;
+      return {
+        result: run.result,
+        error: run.error,
+        errorSummary: String(app.errorLog?.summary || ''),
+        svg: String(app.results?.[app.selectedResultIndex]?.content || '')
+      };
+    });
+    expect(restoredGeneration).toMatchObject({
+      result: { status: 'ok' },
+      error: '',
+      errorSummary: ''
+    });
+    expect(svgComparisonSummary(restoredGeneration.svg))
+      .toEqual(EXPECTED_VIBRIO_COMPARISON_SUMMARY);
+    expect(svgLinearGeometrySummary(restoredGeneration.svg))
+      .toEqual(EXPECTED_VIBRIO_LINEAR_GEOMETRY);
+    expect(restoredPageErrors).toEqual([]);
+    expect(restoredConsoleErrors).toEqual([]);
+    savedSessionRoundTrip = {
+      activeIntentSha256: restoredActiveIntent.sha256,
+      loadedPreviewIdentity: svgSourceIdentity(restoredLoadedSvg),
+      generatedIdentity: svgSourceIdentity(restoredGeneration.svg),
+      loadedPreviewExactBytesEqual: restoredLoadedSvg === secondGeneratedSvg,
+      generatedExactBytesEqual: restoredGeneration.svg === secondGeneratedSvg,
+      comparisonSummary: svgComparisonSummary(restoredGeneration.svg),
+      linearGeometry: svgLinearGeometrySummary(restoredGeneration.svg)
+    };
+  } finally {
+    await restoredContext.close();
+  }
+
   const report = {
     load: {
       previewMetrics,
@@ -1393,6 +1528,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
         artifactFingerprints[0] === artifactFingerprints[1]
     },
     historyRoundTrip,
+    savedSessionRoundTrip,
     structural,
     worker: afterPing
   };
@@ -1413,6 +1549,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     secondPhaseAttribution: report.generations.secondPhaseAttribution,
     structural: report.structural,
     deterministicOutput: report.deterministicOutput,
-    historyRoundTrip: report.historyRoundTrip
+    historyRoundTrip: report.historyRoundTrip,
+    savedSessionRoundTrip: report.savedSessionRoundTrip
   })}`);
 });

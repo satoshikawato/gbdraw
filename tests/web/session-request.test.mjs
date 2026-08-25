@@ -1933,6 +1933,20 @@ assert.deepEqual(
   ),
   { first: 2, second: 1, third: 1 }
 );
+for (const multiRecordPositions of [null, []]) {
+  const emptyRowsProjection = projectCanonicalSessionRequest({
+    ...reorderedRowsCanonical,
+    renderRequest: {
+      ...reorderedRowsCanonical.renderRequest,
+      layout: {
+        ...reorderedRowsCanonical.renderRequest.layout,
+        multiRecordPositions
+      }
+    }
+  });
+  assert.deepEqual(emptyRowsProjection.config.linearRecordLayout.rows, []);
+  assert.deepEqual(emptyRowsProjection.config.adv.multi_record_positions, []);
+}
 const recordIdRowsCanonical = {
   ...reorderedRowsCanonical,
   renderRequest: {
@@ -1962,6 +1976,146 @@ assert.deepEqual(recordIdRowsProjection.config.adv.multi_record_positions, [
   { selector: 'Record3', row: 1 },
   { selector: 'Record1', row: 2 }
 ]);
+const paddedIndexRowsCanonical = {
+  ...reorderedRowsCanonical,
+  renderRequest: {
+    ...reorderedRowsCanonical.renderRequest,
+    layout: {
+      ...reorderedRowsCanonical.renderRequest.layout,
+      multiRecordPositions: [' #02 @ 1 ', ' #03 @ 1 ', ' #01 @ 2 ']
+    }
+  }
+};
+assert.deepEqual(
+  Object.fromEntries(
+    projectCanonicalSessionRequest(paddedIndexRowsCanonical)
+      .config.linearRecordLayout.rows
+      .map((entry) => [entry.uid, entry.row])
+  ),
+  { first: 2, second: 1, third: 1 }
+);
+const unresolvedRecordIdRowsCanonical = {
+  ...reorderedRowsCanonical,
+  renderRequest: {
+    ...reorderedRowsCanonical.renderRequest,
+    records: reorderedRowsCanonical.renderRequest.records.map((record) => ({
+      ...record,
+      selector: null,
+      region: null
+    })),
+    layout: {
+      ...reorderedRowsCanonical.renderRequest.layout,
+      multiRecordPositions: ['Record2@1', 'Record3@1', 'Record1@2']
+    }
+  }
+};
+const sourceRecordIdRowsCanonical = {
+  ...unresolvedRecordIdRowsCanonical,
+  renderRequest: {
+    ...unresolvedRecordIdRowsCanonical.renderRequest,
+    records: unresolvedRecordIdRowsCanonical.renderRequest.records.map(
+      (record, index) => ({
+        ...record,
+        source: { kind: 'genbank', resourceId: `source-record-${index + 1}` }
+      })
+    )
+  },
+  resources: Object.fromEntries([0, 1, 2].map((index) => {
+    const text = genbankText.replaceAll('WEBTEST', `Record${index + 1}`);
+    return [`source-record-${index + 1}`, {
+      kind: 'genbank',
+      name: `source-record-${index + 1}.gbk`,
+      encoding: 'base64',
+      size: new TextEncoder().encode(text).byteLength,
+      data: btoa(text)
+    }];
+  }))
+};
+assert.throws(
+  () => projectCanonicalSessionRequest(sourceRecordIdRowsCanonical),
+  /selector 'Record2' cannot be mapped to a render record/
+);
+assert.throws(
+  () => projectCanonicalSessionRequest(unresolvedRecordIdRowsCanonical),
+  /selector 'Record2' cannot be mapped to a render record/
+);
+assert.deepEqual(
+  Object.fromEntries(
+    projectCanonicalSessionRequest({
+      ...unresolvedRecordIdRowsCanonical,
+      storedConfig: {
+        linearRecordLayout: {
+          rows: [
+            { uid: 'first', row: 2 },
+            { uid: 'second', row: 1 },
+            { uid: 'third', row: 1 }
+          ]
+        }
+      }
+    }).config.linearRecordLayout.rows.map((entry) => [entry.uid, entry.row])
+  ),
+  { first: 2, second: 1, third: 1 }
+);
+const ambiguousRecordIdRowsCanonical = {
+  ...recordIdRowsCanonical,
+  renderRequest: {
+    ...recordIdRowsCanonical.renderRequest,
+    records: recordIdRowsCanonical.renderRequest.records.map((record, index) => ({
+      ...record,
+      selector: {
+        kind: 'recordId',
+        value: index < 2 ? 'DuplicateRecord' : 'Record3'
+      }
+    })),
+    layout: {
+      ...recordIdRowsCanonical.renderRequest.layout,
+      multiRecordPositions: ['DuplicateRecord@1', 'Record3@1', '#1@2']
+    }
+  }
+};
+assert.throws(
+  () => projectCanonicalSessionRequest(ambiguousRecordIdRowsCanonical),
+  /selector 'DuplicateRecord' matches multiple render records/
+);
+assert.throws(
+  () => projectCanonicalSessionRequest({
+    ...reorderedRowsCanonical,
+    renderRequest: {
+      ...reorderedRowsCanonical.renderRequest,
+      layout: { multiRecordPositions: ['#2@1'] }
+    }
+  }),
+  /must provide exactly 3 entry\(ies\)/
+);
+assert.throws(
+  () => projectCanonicalSessionRequest({
+    ...reorderedRowsCanonical,
+    renderRequest: {
+      ...reorderedRowsCanonical.renderRequest,
+      layout: { multiRecordPositions: ['#1@-2', '#2@1', '#3@1'] }
+    }
+  }),
+  /must use a positive integer row/
+);
+assert.throws(
+  () => projectCanonicalSessionRequest({
+    ...reorderedRowsCanonical,
+    renderRequest: {
+      ...reorderedRowsCanonical.renderRequest,
+      layout: { multiRecordPositions: ['Unknown@1', '#99@1', '#1@2'] }
+    },
+    storedConfig: {
+      linearRecordLayout: {
+        rows: [
+          { uid: 'first', row: 2 },
+          { uid: 'second', row: 1 },
+          { uid: 'third', row: 1 }
+        ]
+      }
+    }
+  }),
+  /selector '#99' is out of range/
+);
 
 state.linearRecordRows.splice(0, state.linearRecordRows.length,
   { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
