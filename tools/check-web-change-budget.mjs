@@ -41,12 +41,12 @@ for (let index = 2; index < process.argv.length; index += 1) {
 const base = argumentsByName.get('--base') || process.env.WEB_CHANGE_BASE || 'HEAD';
 const head = argumentsByName.get('--head') || process.env.WEB_CHANGE_HEAD || '';
 const architectureChange = process.env.WEB_ARCHITECTURE_CHANGE === 'true';
-const budgetProfiles = Object.freeze({
+const sizeReviewProfiles = Object.freeze({
   ordinary: Object.freeze({ productionFiles: 8, grossChurn: 800, netAdditions: 100 }),
   architecture: Object.freeze({ productionFiles: 12, grossChurn: 1500, netAdditions: 400 })
 });
 const selectedProfileName = architectureChange ? 'architecture' : 'ordinary';
-const selectedProfile = budgetProfiles[selectedProfileName];
+const selectedProfile = sizeReviewProfiles[selectedProfileName];
 const diffRefs = head ? [base, head] : [base];
 
 const parseDiffLines = (output) => output.trim()
@@ -799,84 +799,86 @@ newProductionDependencies.push(
 dependencyChanges.push(...newBareImports.map((entry) => `bare production import: ${entry}`));
 dependencyChanges.push(...changedVendorPaths.map((path) => `vendored runtime file changed: ${path}`));
 
-const budgetViolations = [];
+const sizeReviewReasons = [];
 if (productionPaths.length > selectedProfile.productionFiles) {
-  budgetViolations.push(
-    `production files changed exceed ${selectedProfileName} limit `
+  sizeReviewReasons.push(
+    `production files changed exceed ${selectedProfileName} size-review threshold `
     + `(${productionPaths.length} > ${selectedProfile.productionFiles})`
   );
 }
 if (productionGrossChurn > selectedProfile.grossChurn) {
-  budgetViolations.push(
-    `production gross churn exceeds ${selectedProfileName} limit `
+  sizeReviewReasons.push(
+    `production gross churn exceeds ${selectedProfileName} size-review threshold `
     + `(${productionGrossChurn} > ${selectedProfile.grossChurn})`
   );
 }
 if (productionNetAdditions > selectedProfile.netAdditions) {
-  budgetViolations.push(
-    `production net additions exceed ${selectedProfileName} limit `
+  sizeReviewReasons.push(
+    `production net additions exceed ${selectedProfileName} size-review threshold `
     + `(${productionNetAdditions} > ${selectedProfile.netAdditions})`
   );
 }
 
-const integrityViolations = [];
+const blockingViolations = [];
 if (newProductionDependencies.length) {
-  integrityViolations.push('new production dependencies are not allowed');
+  blockingViolations.push('new production dependencies are not allowed');
 }
 if (addedBinaryRuntimePaths.length) {
-  integrityViolations.push('added binary runtime files are not allowed');
+  blockingViolations.push('added binary runtime files are not allowed');
 }
 if (changedVendorPaths.length) {
-  integrityViolations.push('changes under gbdraw/web/vendor/ are not allowed');
+  blockingViolations.push('changes under gbdraw/web/vendor/ are not allowed');
 }
 if (productionPaths.length && changedGuards.length && !pureSafePolicyContraction) {
-  integrityViolations.push('production runtime files and Web guard/CI files changed together');
+  blockingViolations.push('production runtime files and Web guard/CI files changed together');
 }
 if (changedCheckerImplementations.length && changedAuthorities.length) {
-  integrityViolations.push(
+  blockingViolations.push(
     'Web checker/source parser and authority policy/workflow files changed together'
   );
 }
 if (unapprovedCapabilities.length) {
-  integrityViolations.push('privileged capability owners or importers exceed the base allowlist');
+  blockingViolations.push('privileged capability owners or importers exceed the base allowlist');
 }
 if (proposedPolicyExclusions.length) {
-  integrityViolations.push('proposed privileged capability allowlist excludes active owners or importers');
+  blockingViolations.push(
+    'proposed privileged capability allowlist excludes active owners or importers'
+  );
 }
 if (missingPolicyKeys.length) {
-  integrityViolations.push('proposed privileged capability policy is missing base allowlist keys');
+  blockingViolations.push(
+    'proposed privileged capability policy is missing base allowlist keys'
+  );
 }
 if (baseImportGraph.errors.length) {
-  integrityViolations.push('trusted base first-party static import graph is incomplete');
+  blockingViolations.push('trusted base first-party static import graph is incomplete');
 }
 if (headImportGraph.errors.length) {
-  integrityViolations.push('head first-party static import graph is incomplete');
+  blockingViolations.push('head first-party static import graph is incomplete');
 }
 if (baseCycleResult.cycles.length) {
-  integrityViolations.push('trusted base contains first-party static import cycles');
+  blockingViolations.push('trusted base contains first-party static import cycles');
 }
 if (headCycleResult.cycles.length) {
-  integrityViolations.push('first-party static import cycles are not allowed');
+  blockingViolations.push('first-party static import cycles are not allowed');
 }
-integrityViolations.push(...candidateArchitectureErrors.map((error) => (
+blockingViolations.push(...candidateArchitectureErrors.map((error) => (
   `candidate architecture rules: ${error}`
 )));
-integrityViolations.push(...trustedBaseArchitectureErrors.map((error) => (
+blockingViolations.push(...trustedBaseArchitectureErrors.map((error) => (
   `trusted base architecture rules: ${error}`
 )));
-integrityViolations.push(...trustedBaseArchitectureFailures.map((error) => (
+blockingViolations.push(...trustedBaseArchitectureFailures.map((error) => (
   `trusted base architecture rules: ${error}`
 )));
-integrityViolations.push(...activeArchitectureErrors.map((error) => (
+blockingViolations.push(...activeArchitectureErrors.map((error) => (
   `active architecture rules: ${error}`
 )));
-integrityViolations.push(...activeArchitectureFailures.map((error) => (
+blockingViolations.push(...activeArchitectureFailures.map((error) => (
   `active architecture rules: ${error}`
 )));
-const enforcedViolations = [
-  ...integrityViolations,
-  ...budgetViolations
-];
+const result = blockingViolations.length ? 'FAIL' : 'PASS';
+const sizeReview = sizeReviewReasons.length ? 'REQUIRED' : 'CLEAR';
 
 const list = (values) => values.length ? values.map((value) => `- ${value}`) : ['- None'];
 const signed = (value) => value > 0 ? `+${value}` : String(value);
@@ -904,7 +906,7 @@ const differentialInventories = [
   {
     name: 'Production files',
     delta: productionFileDelta,
-    classification: 'budgeted'
+    classification: 'size-review'
   },
   {
     name: 'Production modules',
@@ -996,11 +998,12 @@ const report = [
   `- Architecture rule candidate: ${proposedArchitectureRulesSource === null ? 'absent' : `\`${head || 'working tree'}\``}`,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
   `- Selected profile: ${selectedProfileName}`,
-  `- Production file limit: ${selectedProfile.productionFiles}`,
-  `- Gross churn limit: ${selectedProfile.grossChurn}`,
-  `- Net-addition limit: ${selectedProfile.netAdditions}`,
+  `- Size-review threshold for production files: ${selectedProfile.productionFiles}`,
+  `- Size-review threshold for gross churn: ${selectedProfile.grossChurn}`,
+  `- Size-review threshold for net additions: ${selectedProfile.netAdditions}`,
   `- \`architecture-change\` label: ${architectureChange ? 'present' : 'absent'}`,
-  `- Result: **${enforcedViolations.length ? 'FAIL' : 'PASS'}**`,
+  `- Result: **${result}**`,
+  `- Size review: **${sizeReview}**`,
   '',
   '## Architecture differential summary',
   '',
@@ -1132,9 +1135,13 @@ const report = [
   '',
   ...list(changedGuards),
   '',
-  '## Violations',
+  '## Size review reasons',
   '',
-  ...list(enforcedViolations),
+  ...list(sizeReviewReasons),
+  '',
+  '## Blocking violations',
+  '',
+  ...list(blockingViolations),
   ''
 ].join('\n');
 
@@ -1142,4 +1149,13 @@ process.stdout.write(report);
 if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(resolve(process.env.GITHUB_STEP_SUMMARY), report, 'utf8');
 }
-if (enforcedViolations.length) process.exitCode = 1;
+if (process.env.GITHUB_ACTIONS === 'true' && sizeReviewReasons.length) {
+  process.stdout.write(
+    '::warning title=Web change size review::Web change size review required: '
+    + `profile=${selectedProfileName}; `
+    + `productionFiles=${productionPaths.length}/${selectedProfile.productionFiles}; `
+    + `grossChurn=${productionGrossChurn}/${selectedProfile.grossChurn}; `
+    + `netAdditions=${productionNetAdditions}/${selectedProfile.netAdditions}\n`
+  );
+}
+if (blockingViolations.length) process.exitCode = 1;
