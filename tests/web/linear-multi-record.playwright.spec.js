@@ -987,6 +987,180 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
 });
 
+test('Automatic Linear source-card rows survive fresh Load with contiguous biological columns', async ({ page, browser }) => {
+  test.setTimeout(420000);
+  const browserErrors = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+
+  await page.getByRole('button', { name: 'Linear' }).click();
+  const sources = [
+    {
+      name: 'automatic-card-a.gbk',
+      content: makeComparisonGenbank('CardA1', 'atg') +
+        makeComparisonGenbank('CardA2', 'gct')
+    },
+    {
+      name: 'automatic-card-b.gbk',
+      content: makeComparisonGenbank('CardB1', 'tta') +
+        makeComparisonGenbank('CardB2', 'cga')
+    }
+  ];
+  const chooseSource = async (index) => {
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+      name: sources[index].name,
+      mimeType: 'text/plain',
+      buffer: Buffer.from(sources[index].content)
+    });
+  };
+  await chooseSource(0);
+  await page.getByRole('button', { name: 'Add sequence' }).first().click();
+  await chooseSource(1);
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => (
+      window.__GBDRAW_APP__.linearRecordOptions(sequence).length
+    ))
+  ))).toEqual([3, 3]);
+
+  await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
+  await page.getByLabel('Arrange linear records in rows').check();
+  await page.getByLabel('Linear record row for sequence 1').fill('1');
+  await page.getByLabel('Linear record row for sequence 2').fill('2');
+  await page.getByRole('button', { name: 'Set no comparison' }).click();
+  const rowControls = page.getByRole('spinbutton', {
+    name: /^Linear record row for sequence \d+$/
+  });
+  await expect.poll(() => rowControls.evaluateAll((elements) => (
+    elements.map((element) => element.value)
+  ))).toEqual(['1', '2']);
+
+  await page.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect.poll(() => page.evaluate(() => ({
+    processing: window.__GBDRAW_APP__.processing,
+    resultCount: window.__GBDRAW_APP__.results.length
+  })), { timeout: 300000 }).toEqual({ processing: false, resultCount: 1 });
+
+  const inspectRun = (targetPage) => targetPage.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(
+      app.results[app.selectedResultIndex].content,
+      'image/svg+xml'
+    );
+    const placements = [...svg.querySelectorAll('[data-record-row]')].map((group) => ({
+      key: group.getAttribute('data-record-key'),
+      row: Number(group.getAttribute('data-record-row')),
+      column: Number(group.getAttribute('data-record-column'))
+    }));
+    const recordKeys = request.records.map((record) => record.recordKey);
+    return {
+      error: app.errorLog,
+      processing: app.processing,
+      cardCount: app.linearSeqs.length,
+      selectors: app.linearSeqs.map((sequence) => sequence.region_record_id),
+      layoutRows: app.linearRecordRows.map((entry) => entry.row),
+      requestRecordCount: request.records.length,
+      cardinalities: request.records.map((record) => record.cardinality),
+      requestRows: request.records.map((record) => record.presentation.gridRow),
+      sourceCount: new Set(request.records.map((record) => record.source.resourceId)).size,
+      placements,
+      expectedKeys: recordKeys.flatMap((key) => [`${key}:1`, `${key}:2`])
+    };
+  });
+  const expectedPlacement = (keys) => [
+    { key: keys[0], row: 0, column: 0 },
+    { key: keys[1], row: 0, column: 1 },
+    { key: keys[2], row: 1, column: 0 },
+    { key: keys[3], row: 1, column: 1 }
+  ];
+  const generated = await inspectRun(page);
+  expect(generated).toMatchObject({
+    error: null,
+    processing: false,
+    cardCount: 2,
+    selectors: ['', ''],
+    layoutRows: [1, 2],
+    requestRecordCount: 2,
+    cardinalities: ['all', 'all'],
+    requestRows: [1, 2],
+    sourceCount: 2
+  });
+  expect(generated.placements).toEqual(expectedPlacement(generated.expectedKeys));
+
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+  page.once('dialog', (dialog) => dialog.accept('automatic-source-card-rows'));
+  await page.getByRole('button', { name: 'Save Session' }).click();
+  const sessionPath = await (await sessionDownloadPromise).path();
+
+  const restoredContext = await browser.newContext();
+  const restoredPage = await restoredContext.newPage();
+  const restoredErrors = [];
+  restoredPage.on('console', (message) => {
+    if (message.type() === 'error') restoredErrors.push(message.text());
+  });
+  restoredPage.on('pageerror', (error) => restoredErrors.push(error.message));
+  await installDiagramRequestObserver(restoredPage);
+  const appUrl = new URL('/gbdraw/web/index.html', page.url()).href;
+  await openApp(restoredPage, { path: appUrl });
+  const chooserPromise = restoredPage.waitForEvent('filechooser');
+  await restoredPage.getByRole('button', { name: 'Load Session' }).click();
+  const chooser = await chooserPromise;
+  const dialogPromise = restoredPage.waitForEvent('dialog', { timeout: 120000 });
+  await chooser.setFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+
+  await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(2);
+  await restoredPage.getByRole('button', {
+    name: 'Advanced comparison and layout'
+  }).press('Enter');
+  const restoredRows = restoredPage.getByRole('spinbutton', {
+    name: /^Linear record row for sequence \d+$/
+  });
+  await expect.poll(() => restoredRows.evaluateAll((elements) => (
+    elements.map((element) => element.value)
+  ))).toEqual(['1', '2']);
+  await restoredPage.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect.poll(() => restoredPage.evaluate(() => ({
+    processing: window.__GBDRAW_APP__.processing,
+    resultCount: window.__GBDRAW_APP__.results.length,
+    requestCount: window.__GBDRAW_DIAGRAM_RUNS__.length
+  })), { timeout: 300000 }).toEqual({ processing: false, resultCount: 1, requestCount: 1 });
+
+  const restored = await inspectRun(restoredPage);
+  expect(restored).toMatchObject({
+    error: null,
+    processing: false,
+    cardCount: 2,
+    selectors: ['', ''],
+    layoutRows: [1, 2],
+    requestRecordCount: 2,
+    cardinalities: ['all', 'all'],
+    requestRows: [1, 2],
+    sourceCount: 2
+  });
+  expect(restored.placements).toEqual(expectedPlacement(restored.expectedKeys));
+
+  await restoredPage.getByLabel('Linear record gap').fill('16');
+  await restoredPage.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect.poll(() => restoredPage.evaluate(() => ({
+    processing: window.__GBDRAW_APP__.processing,
+    requestCount: window.__GBDRAW_DIAGRAM_RUNS__.length
+  })), { timeout: 300000 }).toEqual({ processing: false, requestCount: 2 });
+  expect(await restoredPage.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  expect(browserErrors).toEqual([]);
+  expect(restoredErrors).toEqual([]);
+  await restoredContext.close();
+});
+
 test('Sparse upload and mixed selected renders keep snapshots and raw cache identity stable', async ({ page }) => {
   test.setTimeout(420000);
   await installDiagramRequestObserver(page);
