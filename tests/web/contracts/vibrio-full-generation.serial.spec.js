@@ -107,6 +107,74 @@ const svgComparisonSummary = (content) => {
   };
 };
 
+const svgLinearGeometrySummary = (content) => {
+  const groupTags = String(content || '').match(/<g\b[^>]*>/g) || [];
+  const attribute = (tag, name) => (
+    tag.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? null
+  );
+  const placements = groupTags
+    .filter((tag) => (
+      attribute(tag, 'data-record-index') !== null
+      && attribute(tag, 'data-record-row') !== null
+      && attribute(tag, 'data-record-column') !== null
+    ))
+    .map((tag) => ({
+      record: Number(attribute(tag, 'data-record-index')),
+      row: Number(attribute(tag, 'data-record-row')),
+      column: Number(attribute(tag, 'data-record-column'))
+    }))
+    .sort((left, right) => left.record - right.record);
+  const rowNumbers = [...new Set(placements.map(({ row }) => row))]
+    .sort((left, right) => left - right);
+  const recordsByRow = rowNumbers.map((row) => placements
+    .filter((placement) => placement.row === row)
+    .sort((left, right) => left.column - right.column)
+    .map(({ record }) => record));
+  const definitionGroups = groupTags.filter((tag) => (
+    ['record-definition', 'record-definition-row'].includes(
+      attribute(tag, 'data-gbdraw-role')
+    )
+  ));
+  return {
+    biologicalGroups: placements.length,
+    rows: rowNumbers.length,
+    rowSizes: recordsByRow.map((records) => records.length),
+    placements,
+    recordsByRow,
+    definitionPseudoPlacements: definitionGroups.filter((tag) => (
+      attribute(tag, 'data-record-row') !== null
+      || attribute(tag, 'data-record-column') !== null
+    )).length
+  };
+};
+
+const EXPECTED_VIBRIO_LINEAR_GEOMETRY = {
+  biologicalGroups: 11,
+  rows: 5,
+  rowSizes: [3, 2, 2, 2, 2],
+  placements: [
+    { record: 0, row: 0, column: 0 },
+    { record: 1, row: 0, column: 1 },
+    { record: 2, row: 0, column: 2 },
+    { record: 3, row: 1, column: 0 },
+    { record: 4, row: 1, column: 1 },
+    { record: 5, row: 2, column: 0 },
+    { record: 6, row: 2, column: 1 },
+    { record: 7, row: 3, column: 0 },
+    { record: 8, row: 3, column: 1 },
+    { record: 9, row: 4, column: 0 },
+    { record: 10, row: 4, column: 1 }
+  ],
+  recordsByRow: [
+    [0, 1, 2],
+    [3, 4],
+    [5, 6],
+    [7, 8],
+    [9, 10]
+  ],
+  definitionPseudoPlacements: 0
+};
+
 const installCanonicalRequestCapture = (page) => page.evaluate(() => {
   const previousPostMessage = Worker.prototype.postMessage;
   window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ = [];
@@ -890,6 +958,16 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
   expect(secondComparisonSummary).toEqual(firstComparisonSummary);
+  for (const [stage, svg] of [
+    ['loaded preview', loaded.originalPreview],
+    ['first generation', firstGeneratedSvg],
+    ['second generation', secondGeneratedSvg]
+  ]) {
+    expect(
+      svgLinearGeometrySummary(svg),
+      `Unexpected semantic Linear geometry in ${stage}.`
+    ).toEqual(EXPECTED_VIBRIO_LINEAR_GEOMETRY);
+  }
   const generatedFeatureCatalogDigest = await featureCatalogDigest(page);
 
   const activity = second.worker;

@@ -1902,6 +1902,69 @@ assert.deepEqual(arrangedCanonical.renderRequest.layout, {
   recordGapPx: 30,
   multiRecordPositions: ['#1@1', '#2@1', '#3@2']
 });
+assert.equal(arrangedCanonical.renderRequest.records.length, 3);
+assert.equal(new Set(
+  arrangedCanonical.renderRequest.layout.multiRecordPositions.map(
+    (token) => String(token).split('@', 1)[0]
+  )
+).size, 3);
+
+state.linearRecordRows.splice(0, state.linearRecordRows.length,
+  { uid: 'first', row: 2 }, { uid: 'second', row: 1 }, { uid: 'third', row: 1 });
+const reorderedRowsCanonical = buildCanonicalRenderRequest({
+  state,
+  filesData: linearFilesData,
+  comparisonPlanSnapshot: resolveLinearComparisonPlan({
+    plan: createDefaultLinearComparisonPlan(),
+    sequences: linearFilesData.linearSeqs,
+    layout: state.linearRecordRows
+  })
+});
+assert.deepEqual(reorderedRowsCanonical.renderRequest.layout, {
+  recordGapPx: 30,
+  multiRecordPositions: ['#2@1', '#3@1', '#1@2']
+});
+assert.deepEqual(reorderedRowsCanonical.renderRequest.comparisons, []);
+assert.deepEqual(
+  Object.fromEntries(
+    projectCanonicalSessionRequest(reorderedRowsCanonical)
+      .config.linearRecordLayout.rows
+      .map((entry) => [entry.uid, entry.row])
+  ),
+  { first: 2, second: 1, third: 1 }
+);
+const recordIdRowsCanonical = {
+  ...reorderedRowsCanonical,
+  renderRequest: {
+    ...reorderedRowsCanonical.renderRequest,
+    records: reorderedRowsCanonical.renderRequest.records.map((record, index) => ({
+      ...record,
+      selector: { kind: 'recordId', value: `Record${index + 1}` },
+      region: null
+    })),
+    layout: {
+      ...reorderedRowsCanonical.renderRequest.layout,
+      multiRecordPositions: ['Record2@1', 'Record3@1', 'Record1@2']
+    }
+  }
+};
+const recordIdRowsProjection = projectCanonicalSessionRequest(recordIdRowsCanonical);
+assert.deepEqual(
+  Object.fromEntries(
+    recordIdRowsProjection.config.linearRecordLayout.rows.map(
+      (entry) => [entry.uid, entry.row]
+    )
+  ),
+  { first: 2, second: 1, third: 1 }
+);
+assert.deepEqual(recordIdRowsProjection.config.adv.multi_record_positions, [
+  { selector: 'Record2', row: 1 },
+  { selector: 'Record3', row: 1 },
+  { selector: 'Record1', row: 2 }
+]);
+
+state.linearRecordRows.splice(0, state.linearRecordRows.length,
+  { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
 
 state.losatProgram.value = 'blastp';
 state.losat.blastp.mode = 'pairwise';

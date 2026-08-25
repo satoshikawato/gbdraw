@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 
@@ -343,6 +344,139 @@ def test_api_renders_record_local_widths_and_grid_metadata() -> None:
     assert svg.count("data-record-row=") == 4
     assert 'data-record-row="0"' in svg
     assert 'data-record-column="1"' in svg
+
+
+def test_row_definition_gutter_preserves_shared_row_biological_geometry() -> None:
+    lengths = (1000, 800, 600)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    cfg = apply_config_overrides(
+        None,
+        {
+            "labels.linear.scope": "none",
+            "canvas.show_gc": False,
+            "canvas.show_skew": False,
+            "canvas.linear.keep_definition_left_aligned": True,
+        },
+    )
+
+    def render(*, labeled: bool) -> dict[str, object]:
+        records = _records(*lengths)
+        if labeled:
+            records[0].annotations["gbdraw_record_label"] = "Species alpha"
+            records[0].annotations["gbdraw_record_subtitle"] = "strain beta"
+        root = ET.fromstring(
+            assemble_linear_diagram_from_records(
+                records,
+                cfg=cfg,
+                layout=LinearMultiRecordOptions(
+                    record_gap_px=24,
+                    multi_record_positions=("#1@1", "#2@1", "#3@1"),
+                ),
+                legend="none",
+            ).tostring()
+        )
+        biological_groups = sorted(
+            (
+                group
+                for group in root.findall(".//svg:g", namespace)
+                if "data-record-index" in group.attrib
+            ),
+            key=lambda group: int(group.attrib["data-record-index"]),
+        )
+        widths = []
+        for group in biological_groups:
+            axis = next(
+                line
+                for line in group.findall("./svg:line", namespace)
+                if float(line.attrib["y1"]) == float(line.attrib["y2"]) == 0.0
+            )
+            widths.append(float(axis.attrib["x2"]) - float(axis.attrib["x1"]))
+        record_x = tuple(_translate(group)[0] for group in biological_groups)
+        return {
+            "root": root,
+            "placements": tuple(
+                (
+                    int(group.attrib["data-record-row"]),
+                    int(group.attrib["data-record-column"]),
+                )
+                for group in biological_groups
+            ),
+            "sequence_widths": tuple(widths),
+            "px_per_bp": tuple(
+                width / len(record.seq) for width, record in zip(widths, records)
+            ),
+            "record_x": record_x,
+            "view_box": tuple(
+                float(value) for value in root.attrib["viewBox"].split()
+            ),
+        }
+
+    unlabeled = render(labeled=False)
+    labeled = render(labeled=True)
+
+    assert unlabeled["placements"] == labeled["placements"] == (
+        (0, 0),
+        (0, 1),
+        (0, 2),
+    )
+    assert unlabeled["px_per_bp"][0] > 0
+    assert unlabeled["px_per_bp"] == pytest.approx(
+        (unlabeled["px_per_bp"][0],) * 3
+    )
+    assert labeled["px_per_bp"] == pytest.approx(unlabeled["px_per_bp"])
+    assert labeled["sequence_widths"] == pytest.approx(
+        unlabeled["sequence_widths"]
+    )
+    unlabeled_x = unlabeled["record_x"]
+    labeled_x = labeled["record_x"]
+    assert tuple(x - labeled_x[0] for x in labeled_x) == pytest.approx(
+        tuple(x - unlabeled_x[0] for x in unlabeled_x)
+    )
+
+    labeled_root = labeled["root"]
+    definition_groups = tuple(
+        group
+        for group in labeled_root.findall(".//svg:g", namespace)
+        if group.attrib.get("data-gbdraw-role")
+        in {"record-definition", "record-definition-row"}
+    )
+    assert definition_groups
+    assert all(
+        {"data-record-row", "data-record-column"}.isdisjoint(group.attrib)
+        for group in definition_groups
+    )
+    row_definition = next(
+        group
+        for group in definition_groups
+        if group.attrib.get("data-gbdraw-role") == "record-definition-row"
+    )
+    row_text = row_definition.findall("./svg:text", namespace)
+    assert ["".join(text.itertext()) for text in row_text] == [
+        "Species alpha",
+        "strain beta",
+    ]
+    assert all(
+        text.attrib.get("text-anchor") == "start" and float(text.attrib["x"]) == 0.0
+        for text in row_text
+    )
+
+    composition = json.loads(labeled_root.attrib["data-gbdraw-composition"])
+    primary_bounds = composition["primary"]["finalBounds"]
+    edge_padding = composition["spacing"]["edgePaddingPx"]
+    view_box_left, _view_box_top, view_box_width, _view_box_height = labeled[
+        "view_box"
+    ]
+    view_box_right = view_box_left + view_box_width
+    assert primary_bounds["x"] - view_box_left == pytest.approx(edge_padding)
+    assert view_box_right - (
+        primary_bounds["x"] + primary_bounds["width"]
+    ) == pytest.approx(edge_padding)
+    assert _translate(row_definition)[0] == pytest.approx(primary_bounds["x"])
+
+    gutter_growth = view_box_width - unlabeled["view_box"][2]
+    record_shift = labeled_x[0] - unlabeled_x[0]
+    assert gutter_growth > 0
+    assert gutter_growth == pytest.approx(record_shift)
 
 
 def test_bottom_legend_follows_last_resolved_row() -> None:

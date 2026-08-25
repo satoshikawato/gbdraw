@@ -125,6 +125,194 @@ const installDiagramRequestObserver = async (page) => {
   });
 };
 
+const generateFromVisibleControl = async (page) => {
+  const previousRunCount = await page.evaluate(() => (
+    window.__GBDRAW_DIAGRAM_RUNS__?.length || 0
+  ));
+  const generate = page.getByRole('button', { name: 'Generate Diagram' });
+  await expect(generate).toBeEnabled();
+  await generate.click();
+  await expect.poll(() => page.evaluate((runCount) => ({
+    processing: Boolean(window.__GBDRAW_APP__?.processing),
+    runCount: window.__GBDRAW_DIAGRAM_RUNS__?.length || 0,
+    error: window.__GBDRAW_APP__?.errorLog?.summary || ''
+  }), previousRunCount), { timeout: 180000 }).toEqual({
+    processing: false,
+    runCount: previousRunCount + 1,
+    error: ''
+  });
+  await expect(page.getByRole('region', { name: 'Result Preview' })).toBeVisible();
+  await expect(generate).toBeEnabled();
+};
+
+const linearPlacementEvidence = (page) => page.evaluate(() => {
+  const summarize = (svg) => {
+    const placements = [...svg.querySelectorAll(
+      '[data-record-index][data-record-row][data-record-column]'
+    )].map((group) => ({
+      record: Number(group.getAttribute('data-record-index')),
+      row: Number(group.getAttribute('data-record-row')),
+      column: Number(group.getAttribute('data-record-column'))
+    })).sort((left, right) => left.record - right.record);
+    const definitions = [...svg.querySelectorAll(
+      '[data-gbdraw-role="record-definition"], [data-gbdraw-role="record-definition-row"]'
+    )];
+    return {
+      placements,
+      definitionPseudoPlacements: definitions.filter((group) => (
+        group.hasAttribute('data-record-row')
+        || group.hasAttribute('data-record-column')
+      )).length
+    };
+  };
+  const app = window.__GBDRAW_APP__;
+  const selected = app.results[Number(app.selectedResultIndex || 0)];
+  const selectedSvg = new DOMParser().parseFromString(selected.content, 'image/svg+xml')
+    .documentElement;
+  const mountedSvg = document.querySelector(
+    '[role="region"][aria-label="Result Preview"] svg'
+  );
+  if (!mountedSvg) throw new Error('Expected the selected Result Preview SVG to be mounted.');
+  const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+  return {
+    request: {
+      records: request.records.length,
+      comparisons: request.comparisons.length,
+      positions: request.layout.multiRecordPositions
+    },
+    selected: summarize(selectedSvg),
+    mounted: summarize(mountedSvg)
+  };
+});
+
+test.describe('Linear shared-row recovery', () => {
+  test.describe.configure({ retries: 0 });
+
+  test('authors, saves, reloads, and continues a three-record shared row', async ({ browser, page }) => {
+    test.setTimeout(300000);
+    const pageErrors = [];
+    const consoleErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+    await installDiagramRequestObserver(page);
+    await openApp(page, { waitForPalette: false });
+
+    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    const addSequence = page.getByRole('button', { name: 'Add sequence' }).first();
+    await addSequence.click();
+    await addSequence.click();
+    await expect(page.getByRole('group', { name: /^Linear sequence \d+$/ })).toHaveCount(3);
+
+    const sources = [
+      makeComparisonGenbank('SharedRowA', 'atg'),
+      makeComparisonGenbank('SharedRowB', 'gct'),
+      makeComparisonGenbank('SharedRowC', 'tta')
+    ];
+    for (const [index, content] of sources.entries()) {
+      const chooserPromise = page.waitForEvent('filechooser');
+      await page.getByRole('group', { name: `Linear sequence ${index + 1}` })
+        .getByRole('button', { name: 'Choose GenBank File' })
+        .click();
+      await (await chooserPromise).setFiles({
+        name: `shared-row-${index + 1}.gbk`,
+        mimeType: 'text/plain',
+        buffer: Buffer.from(content)
+      });
+    }
+    await page.getByRole('button', { name: 'Record options for sequence 1' }).click();
+    await page.getByRole('textbox', { name: 'Definition for sequence 1' })
+      .fill('<i>Vibrio</i> shared-row label', { timeout: 10000 });
+
+    await openLinearAdvancedComparison(page);
+    await page.getByRole('checkbox', { name: 'Arrange linear records in rows' }).check();
+    const rowInputs = page.getByRole('spinbutton', {
+      name: /^Linear record row for sequence \d+$/
+    });
+    await expect(rowInputs).toHaveCount(3);
+    for (let index = 0; index < 3; index += 1) {
+      await rowInputs.nth(index).fill('1');
+    }
+    expect(await rowInputs.evaluateAll((inputs) => inputs.map((input) => input.value)))
+      .toEqual(['1', '1', '1']);
+    await page.getByRole('button', { name: 'Set no comparison' }).click();
+
+    await generateFromVisibleControl(page);
+    const expectedPlacement = [
+      { record: 0, row: 0, column: 0 },
+      { record: 1, row: 0, column: 1 },
+      { record: 2, row: 0, column: 2 }
+    ];
+    const initial = await linearPlacementEvidence(page);
+    expect(initial.request).toEqual({
+      records: 3,
+      comparisons: 0,
+      positions: ['#1@1', '#2@1', '#3@1']
+    });
+    expect(initial.selected).toEqual({
+      placements: expectedPlacement,
+      definitionPseudoPlacements: 0
+    });
+    expect(initial.mounted).toEqual(initial.selected);
+
+    const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
+    const titleDialogPromise = page.waitForEvent('dialog', { timeout: 10000 });
+    const saveClickPromise = page.getByRole('button', { name: 'Save Session' }).click();
+    const titleDialog = await titleDialogPromise;
+    expect(titleDialog.message()).toBe('Session title');
+    await titleDialog.accept('linear-shared-row-recovery');
+    await saveClickPromise;
+    const sessionPath = await (await sessionDownloadPromise).path();
+    expect(sessionPath).toBeTruthy();
+
+    const restoredContext = await browser.newContext({
+      baseURL: 'http://127.0.0.1:4173'
+    });
+    try {
+      const restoredPage = await restoredContext.newPage();
+      const restoredPageErrors = [];
+      const restoredConsoleErrors = [];
+      restoredPage.on('pageerror', (error) => (
+        restoredPageErrors.push(String(error?.message || error))
+      ));
+      restoredPage.on('console', (message) => {
+        if (message.type() === 'error') restoredConsoleErrors.push(message.text());
+      });
+      await installDiagramRequestObserver(restoredPage);
+      await openApp(restoredPage, { waitForPalette: false });
+      const chooserPromise = restoredPage.waitForEvent('filechooser');
+      await restoredPage.getByRole('button', { name: 'Load Session' }).click();
+      const loadDialogPromise = restoredPage.waitForEvent('dialog', { timeout: 120000 });
+      await (await chooserPromise).setFiles(sessionPath);
+      const loadDialog = await loadDialogPromise;
+      expect(loadDialog.message()).toBe('Session loaded successfully!');
+      await loadDialog.accept();
+
+      await openLinearAdvancedComparison(restoredPage);
+      const restoredRows = restoredPage.getByRole('spinbutton', {
+        name: /^Linear record row for sequence \d+$/
+      });
+      expect(await restoredRows.evaluateAll((inputs) => inputs.map((input) => input.value)))
+        .toEqual(['1', '1', '1']);
+      await generateFromVisibleControl(restoredPage);
+      const restored = await linearPlacementEvidence(restoredPage);
+      expect(restored.request).toEqual(initial.request);
+      expect(restored.selected).toEqual(initial.selected);
+      expect(restored.mounted).toEqual(restored.selected);
+
+      await generateFromVisibleControl(restoredPage);
+      expect(await linearPlacementEvidence(restoredPage)).toEqual(restored);
+      expect(restoredPageErrors).toEqual([]);
+      expect(restoredConsoleErrors).toEqual([]);
+    } finally {
+      await restoredContext.close();
+    }
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+});
+
 test('Similarity-group popup selects every OG match without a focus outline', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
