@@ -724,6 +724,38 @@ test('the PR template retains architecture evidence anchors', () => {
   });
 });
 
+test('the PR template requires exact changed-scope architecture debt arithmetic', () => {
+  [
+    'Owner-excess rows (repeat for every changed capability)',
+    'O before',
+    'T before',
+    'OE before',
+    'O after',
+    'T after',
+    'OE after',
+    'Path-excess rows (repeat for every changed behavior)',
+    'P before',
+    'PE before',
+    'P after',
+    'PE after',
+    'Compatibility-burden rows (repeat for every changed compatibility namespace)',
+    'Compatibility path stable IDs before',
+    'CB before',
+    'Compatibility path stable IDs after',
+    'CB after',
+    'Changed-scope totals',
+    'OE before -> OE after; delta(OE) = <integer>',
+    'PE before -> PE after; delta(PE) = <integer>',
+    'CB before -> CB after; delta(CB) = <integer>',
+    'Superseded semantic owners',
+    'Superseded canonical production paths',
+    'Superseded compatibility paths, with stable IDs',
+    '`<= 0`, `non-positive`, or `yes` alone is insufficient evidence.'
+  ].forEach((anchor) => {
+    assert.ok(PULL_REQUEST_TEMPLATE.includes(anchor), `Missing exact-debt anchor: ${anchor}`);
+  });
+});
+
 test('normal CI uses dev as the staging push branch', () => {
   assert.match(
     TEST_WORKFLOW,
