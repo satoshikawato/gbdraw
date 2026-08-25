@@ -39,10 +39,7 @@ from gbdraw.session import (
     materialize_session,
     session_to_request,
 )
-from gbdraw.session_request_codec import (
-    CanonicalRequestEncodingError,
-    encode_canonical_request,
-)
+from gbdraw.session_request_codec import encode_canonical_request
 
 
 def _record(record_id: str, sequence: str = "AAACCG") -> SeqRecord:
@@ -325,7 +322,7 @@ def test_linear_comparison_reader_does_not_hide_unexpected_errors(
         )
 
 
-def test_schema5_rejects_unresolved_then_round_trips_projection(
+def test_schema6_round_trips_unresolved_then_materializes_session(
     tmp_path: Path,
 ) -> None:
     source_path = tmp_path / "records.gb"
@@ -339,11 +336,9 @@ def test_schema5_rejects_unresolved_then_round_trips_projection(
         ),
     )
 
-    with pytest.raises(
-        CanonicalRequestEncodingError,
-        match="materialized exact-one request",
-    ):
-        encode_canonical_request(unresolved)
+    unresolved_encoded = encode_canonical_request(unresolved)
+    assert unresolved_encoded.payload["schema"] == 6
+    assert unresolved_encoded.payload["records"][0]["cardinality"] == "all"
 
     resolved = resolve_request(unresolved)
     encoded = encode_canonical_request(resolved)
@@ -352,7 +347,7 @@ def test_schema5_rejects_unresolved_then_round_trips_projection(
         record.cardinality is RecordCardinality.EXACTLY_ONE
         for record in resolved.records
     )
-    assert all("cardinality" not in row for row in encoded.payload["records"])
+    assert all(row["cardinality"] == "exactly_one" for row in encoded.payload["records"])
 
     document = build_session_document(unresolved)
     with materialize_session(

@@ -2,12 +2,12 @@
 
 # Session and request compatibility
 
-Current writers emit session version 40 and canonical `renderRequest` schema 5.
+Current writers emit session version 40 and canonical `renderRequest` schema 6.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 40 | 27–33 and 39–40 |
-| Canonical `renderRequest` | 5 | 1, 2, and 5 |
+| Canonical `renderRequest` | 6 | 1, 2, 5, and 6 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -47,9 +47,9 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. The current canonical request is a materialized wire format. Resolve
-a typed request before encoding when it still contains deferred paths,
-collection-level transforms, or unresolved cardinality.
+envelopes. Canonical schema 6 records each input's cardinality, including
+selectorless `all` inputs. Resolve a typed request before encoding when it still
+contains deferred paths or collection-level transforms.
 
 ## Saved comparison results and cache reuse
 

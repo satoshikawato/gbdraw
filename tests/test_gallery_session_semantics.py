@@ -64,7 +64,7 @@ def gallery_sessions(
 def _request(session: dict[str, object]) -> dict[str, object]:
     request = session["renderRequest"]
     assert isinstance(request, dict)
-    assert request["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert request["schema"] in {5, CANONICAL_REQUEST_SCHEMA}
     return request
 
 

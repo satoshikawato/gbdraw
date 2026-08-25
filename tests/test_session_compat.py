@@ -206,10 +206,12 @@ def _released_canonical_session(
     assert isinstance(payload, dict)
     payload["schema"] = request_schema
     payload.pop("grouping", None)
+    records = payload["records"]
+    assert isinstance(records, list)
+    for record in records:
+        assert isinstance(record, dict)
+        record.pop("cardinality", None)
     if request_schema == 1:
-        records = payload["records"]
-        assert isinstance(records, list)
-        assert isinstance(records[0], dict)
         records[0].pop("recordKey", None)
     nested_output = payload["diagramOptions"].get("output")
     if isinstance(nested_output, dict):

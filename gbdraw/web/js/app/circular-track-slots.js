@@ -1211,7 +1211,7 @@ const canonicalCircularParams = (slot) => {
 };
 
 /**
- * Encode one Web draft row as the exact schema-5 CircularTrackSlot object.
+ * Encode one Web draft row as the canonical CircularTrackSlot object.
  *
  * This path is intentionally structured so nested annotation style overrides
  * and mark arrays survive request/session round trips.

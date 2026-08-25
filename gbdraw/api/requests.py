@@ -435,13 +435,12 @@ def _validate_linear_placements(
 ) -> None:
     if any(
         record.cardinality is RecordCardinality.ALL
+        and record.presentation.grid_column is not None
         for record in records
-    ) and any(
-        record.presentation.grid_row is not None for record in records
     ):
         raise ValidationError(
-            "RecordCardinality.ALL cannot use per-input grid placement; "
-            "placement is resolved only after record expansion."
+            "grid_column cannot be set for a Linear RecordCardinality.ALL input; "
+            "expanded records inherit only the source card's grid_row."
         )
     placements = [record.presentation for record in records]
     has_row = any(item.grid_row is not None for item in placements)
@@ -485,7 +484,7 @@ class CircularDiagramRequest:
     diagram is a regular single-record render or a grid.  A grid may contain
     one record; separate-diagram collections use :class:`CircularBatchRequest`.
     Request planning expands cardinality and returns an exact-one materialized
-    projection suitable for canonical schema 5.
+    projection suitable for canonical exact-one rendering.
     """
 
     records: Sequence[RecordInput]

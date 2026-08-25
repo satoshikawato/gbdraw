@@ -10,7 +10,6 @@ import {
   migratePersistedWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
-  CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   projectCanonicalSessionRequest
@@ -615,7 +614,7 @@ export const promoteGallerySessionToCurrent = (session) => {
     );
   }
   const schema = Number(session.renderRequest.schema);
-  if (schema === CANONICAL_REQUEST_SCHEMA) {
+  if (schema === 5) {
     if (version !== 39) {
       throw new Error(
         `Gallery session version ${version} does not support canonical renderRequest schema ${schema}.`

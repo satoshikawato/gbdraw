@@ -147,28 +147,11 @@ const materializedLinear = await serializeActiveRenderFiles(
   }
 );
 assert.equal(multiRecordInput.reads(), 1);
-assert.equal(materializedLinear.linearSeqs.length, 2);
-assert.deepEqual(
-  materializedLinear.linearSeqs.map((sequence) => sequence.region_record_id),
-  ['#1', '#2']
-);
-assert.deepEqual(
-  materializedLinear.linearSeqs.map((sequence) => sequence.uid),
-  ['multi-record-source::record-1', 'multi-record-source::record-2']
-);
-assert.equal(
-  materializedLinear.linearSeqs[0].gb,
-  materializedLinear.linearSeqs[1].gb,
-  'one serialized source must be shared by all materialized records'
-);
-assert.deepEqual(
-  materializedLinear.linearSeqs.map((sequence) => sequence.definition),
-  ['Shared label', '']
-);
-assert.deepEqual(
-  materializedLinear.linearSeqs.map((sequence) => sequence.record_subtitle),
-  ['Shared subtitle', '']
-);
+assert.equal(materializedLinear.linearSeqs.length, 1);
+assert.equal(materializedLinear.linearSeqs[0].region_record_id, '');
+assert.equal(materializedLinear.linearSeqs[0].uid, 'multi-record-source');
+assert.equal(materializedLinear.linearSeqs[0].definition, 'Shared label');
+assert.equal(materializedLinear.linearSeqs[0].record_subtitle, 'Shared subtitle');
 assert.equal(automaticLinearState.linearSeqs.length, 1);
 assert.equal(automaticLinearState.linearSeqs[0].region_record_id, '');
 await assert.rejects(
@@ -180,8 +163,7 @@ await assert.rejects(
   }),
   /did not find any records/
 );
-await assert.rejects(
-  serializeActiveRenderFiles('linear', {
+const arrangedAutomatic = await serializeActiveRenderFiles('linear', {
     ...automaticLinearState,
     linearRecordLayoutEnabled: { value: true }
   }, {
@@ -190,9 +172,9 @@ await assert.rejects(
       mode: 'linear', status: 'ready', issues: [],
       records: [{ sourceIndex: 0, localIndex: 0 }, { sourceIndex: 0, localIndex: 1 }]
     }
-  }),
-  /Arrange in rows requires one selected record/
-);
+  });
+assert.equal(arrangedAutomatic.linearSeqs.length, 1);
+assert.equal(arrangedAutomatic.linearSeqs[0].uid, 'multi-record-source');
 await assert.rejects(
   serializeActiveRenderFiles('linear', {
     ...automaticLinearState,

@@ -1146,7 +1146,7 @@ def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
 def _materialized_record_inputs(
     collection: ResolvedRecordCollection,
 ) -> tuple[RecordInput, ...]:
-    """Project resolved records to schema-5-compatible exact-one inputs."""
+    """Project resolved records to canonical exact-one inputs."""
 
     materialized: list[RecordInput] = []
     for record, provenance in zip(
@@ -1450,7 +1450,7 @@ def plan_request(request: DiagramRequest) -> DiagramRequestPlan:
 
 
 def resolve_request(request: DiagramRequest) -> DiagramRequest:
-    """Resolve an unresolved typed request to its schema-5-safe projection."""
+    """Resolve an unresolved typed request to an exact-one projection."""
 
     return plan_request(request).request
 

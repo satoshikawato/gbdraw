@@ -49,6 +49,7 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",
 )
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, CANONICAL_REQUEST_SCHEMA})
 BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
@@ -684,7 +685,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
 
         assert session.get("version") == CURRENT_SESSION_VERSION, session_name
         assert (
-            session.get("renderRequest", {}).get("schema") == CANONICAL_REQUEST_SCHEMA
+            session.get("renderRequest", {}).get("schema")
+            in BUNDLED_REQUEST_SCHEMAS
         ), session_name
         assert (
             session.get("proteinIdentityManifest", {}).get("schema")

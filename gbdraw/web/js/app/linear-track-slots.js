@@ -509,7 +509,7 @@ const canonicalLinearParams = (slot) => {
 };
 
 /**
- * Encode one Web draft row as the exact schema-5 LinearTrackSlot object.
+ * Encode one Web draft row as the canonical LinearTrackSlot object.
  */
 export const buildLinearTrackSlotPayload = (slot) => {
   const normalized = normalizeLinearTrackSlots([slot])[0];

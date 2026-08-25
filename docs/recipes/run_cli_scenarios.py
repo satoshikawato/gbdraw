@@ -2136,7 +2136,7 @@ def _assert_session_roundtrip(
         if (
             payload.get("format") != "gbdraw-session"
             or payload.get("version") != 40
-            or payload.get("renderRequest", {}).get("schema") != 5
+            or payload.get("renderRequest", {}).get("schema") != 6
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):
             raise RecipeContractError("H-CLI-12 session schema changed.")

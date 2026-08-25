@@ -25,7 +25,7 @@ The canonical generation path is:
 index.html
   -> app.js and app/app-setup.js
   -> reactive state
-  -> services/session-request.js builds one canonical schema-5 render request
+  -> services/session-request.js builds one canonical schema-6 render request
   -> app/run-analysis.js validates and orchestrates optional LOSAT work
   -> services/diagram-generation.js dispatches the request and resources
   -> workers/diagram-generation-worker.js owns Pyodide rendering

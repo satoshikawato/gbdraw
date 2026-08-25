@@ -13,6 +13,20 @@ These notes record what changed in this release. For the currently supported
 persisted versions and migration boundaries, see
 [Session and request compatibility](./SESSION_COMPATIBILITY.md).
 
+## Linear Automatic source-card row layout
+
+- Linear **Arrange in rows** now applies a card's row to every biological record
+  loaded from that source. Record order remains card order followed by source
+  order, and columns are contiguous within each row.
+- A selectorless Linear card uses `RecordCardinality.ALL`; an explicit selector
+  remains `EXACTLY_ONE`. An `ALL` card can set `grid_row` but cannot set
+  `grid_column`, because columns are assigned after record expansion.
+- Canonical `renderRequest` schema 6 persists cardinality and card-level rows.
+  Typed readers retain schema 5 as an `EXACTLY_ONE` compatibility input. The
+  Web promotes a selectorless Linear schema-5 card to explicit `ALL`; legacy
+  multi-record inputs already carry selectors. The session envelope remains
+  version 40.
+
 ## New top-level Python interface
 
 - Import the main drawing workflow from `gbdraw`, not `gbdraw.api`.
@@ -98,10 +112,10 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   `--gc_content_tick_interval` alias for
   `--gc_content_large_tick_interval` are unchanged and are not removals.
 - The private `__gbdraw_legacy_spacing` transport is confined to canonical
-  request schema 1 and 2 readers and is never emitted by the current schema 5
+  request schema 1 and 2 readers and is never emitted by the current schema 6
   writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
   Factor-based spacing can still be replayed, but it cannot be re-saved
-  losslessly by the current schema 5 writer; replace it with explicit
+  losslessly by the current schema 6 writer; replace it with explicit
   `inner_gap_px` and `outer_gap_px` first.
 - `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
   `gbdraw.circular_diagram_components` were thin compatibility modules and have
@@ -142,8 +156,8 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   session sidecars use a same-directory staged commit. Multi-format generation
   remains sequential rather than transactional, so completed formats survive a
   later conversion failure.
-- Canonical `renderRequest` schema 5 persists explicit `single`, `grid`, or
-  `batch` grouping. Schema 5 stores one output
+- Canonical `renderRequest` schemas 5 and 6 persist explicit `single`, `grid`,
+  or `batch` grouping. Both schemas store one output
   object for a single diagram or grid and an output array for Circular batch.
   Record loading is mode-neutral; planners own topology warnings and mode,
   comparison, and cardinality policy.
@@ -151,7 +165,7 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 Active and public runtime collinearity configuration uses
 `LosslessCollinearityParameters`; canonical request schemas 1 and 2 privately
 migrate legacy `standard` parameter payloads while preserving their effective
-fields. Current schema 5 accepts only the lossless form.
+fields. Current schema 6 accepts only the lossless form.
 
 Phase 2 completes the internal state/planner consolidation:
 
@@ -173,7 +187,7 @@ Phase 2 completes the internal state/planner consolidation:
 ## Python/Web session version 40
 
 - gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest`
-  schema 5. Readers accept session versions 27–33 and 39–40; the public typed
+  schema 6. Readers accept session versions 27–33 and 39–40; the public typed
   bridge accepts versions 31–33 and 39–40.
 - Version 40 stores file bytes once under `resources`, with `webFiles` binding
   them to active and inactive inputs. Version 39 sessions with legacy embedded
@@ -190,7 +204,8 @@ Phase 2 completes the internal state/planner consolidation:
 ## Compact LOSATP runtime handles
 
 - Session version 39 introduced compact runtime handles with canonical
-  `renderRequest` schema 5, and version 40 retains them. Public typed
+  `renderRequest` schema 5. Session version 40 and request schema 6 retain them.
+  Public typed
   conversion is available for canonical session versions 31–33 and 39–40;
   versions 27–30 remain CLI replay inputs.
 - Generated protein FASTA, raw LOSATP QUERY/SUBJECT fields, protein maps, and derived comparison references now use deterministic session-global handles with the form `h_[a-z2-7]{26}`. The handles bind a record instance to the complete CDS feature identity without repeating long feature hashes or readable aliases in every hit row. Upload filenames, modification times, session resource names, display aliases, and reopen time do not determine the handle or raw-cache identity.
@@ -207,7 +222,7 @@ Phase 2 completes the internal state/planner consolidation:
 - New configurations render `repeat_region` as an underlay: the interval covers the full feature band behind foreground glyphs and is excluded from overlap lanes and feature labels. Use `repeat_region=rectangle` to restore the previous appearance.
 - Underlays are generic to any feature type and retain resolved colors, feature legends, interactive metadata, search/edit behavior, and protein-comparison eligibility. Rendering assignments do not change feature visibility.
 - Automatic feature underlays are private render-time highlights, not saved region annotations. Custom track stacks require exactly one enabled feature slot when a visible underlay exists.
-- Session version 40 and canonical request schema 5 record the new default.
+- Session version 40 and canonical request schema 6 record the new default.
   Supported older sessions and schema 1/2 requests with no repeat assignment
   migrate to `repeat_region=rectangle` so visual replay remains stable.
 
@@ -261,8 +276,8 @@ reported by record assembly instead of serializing and reparsing intermediate
 SVG. Generated SVGs carry internal composition metadata schema 1. The Web
 editor uses that metadata for legend and title reflow, then applies any saved
 user drag offset. Supported older SVG results without the metadata pass through
-one explicit legacy adapter when loaded. Request schema 5 and session schema 40
-are unchanged.
+one explicit legacy adapter when loaded. That layout change retained request
+schema 5 and session schema 40.
 
 ### Web session restore now follows canonical authority
 
