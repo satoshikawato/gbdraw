@@ -15,7 +15,7 @@ Current writers emit one session and request format:
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
 | gbdraw session | 40 | 27–33 and 39–40 |
-| Canonical `renderRequest` | 5 | 1, 2, and 5 |
+| Canonical `renderRequest` | 6 | 1, 2, 5, and 6 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
@@ -38,10 +38,15 @@ form by default; the CLI writes uncompressed JSON unless the output name ends in
 
 ## Current request ownership
 
-Canonical request schema 5 records Circular grouping explicitly as `single`,
-`grid`, or `batch`. A single diagram or grid has one output object. A Circular
-batch has one resolved output object per record. `renderRequest.output.prefix`
-is the output-prefix owner.
+Canonical request schemas 5 and 6 record Circular grouping explicitly as
+`single`, `grid`, or `batch`. Schema 6 also records each input's cardinality;
+schemas 1, 2, and 5 decode records as `exactly_one`. A single diagram or grid
+has one output object. A Circular batch has one resolved output object per
+record. `renderRequest.output.prefix` is the output-prefix owner.
+
+The Web projects a selectorless Linear schema-5 card to explicit `all` when it
+is saved with schema 6. Legacy multi-record Web inputs already have explicit
+selectors, so this preserves the embedded source records shown by the card.
 
 Current sessions keep mode-specific layout values under
 `ui.layoutPreferences`. Supported older parallel title, legend, and grouping
@@ -100,7 +105,7 @@ active aliases. `--annotation-table` remains an alias for
 `--gc_content_large_tick_interval`.
 
 The private `__gbdraw_legacy_spacing` key is read only from canonical request
-schemas 1–2 and is never written by schema 5. Pixel spacing migrates to
+schemas 1–2 and is never written by schemas 5–6. Pixel spacing migrates to
 `inner_gap_px` and `outer_gap_px`. Factor-based spacing can be replayed but
 cannot be saved losslessly in the current format; replace it with explicit pixel
 gaps before saving a migrated session.

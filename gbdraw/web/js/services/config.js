@@ -73,6 +73,7 @@ import {
 } from '../app/match-sequences.js';
 import {
   buildCanonicalRenderRequest,
+  promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } from './session-request.js';
 import {
@@ -2473,7 +2474,7 @@ const customDepthRequested = (mode, sourceState) => {
 export const materializeLinearRecordFiles = (
   sequences,
   catalog,
-  { layoutEnabled = false } = {}
+  _options = {}
 ) => {
   const sourceSequences = Array.isArray(sequences) ? sequences : [];
   if (catalog == null) return sourceSequences;
@@ -2496,12 +2497,6 @@ export const materializeLinearRecordFiles = (
       throw new Error(`Sequence #${sourceIndex + 1}: no records were found.`);
     }
     if (count <= 1) return;
-    if (layoutEnabled) {
-      throw new Error(
-        'Arrange in rows requires one selected record per input file. ' +
-        'Turn it off or choose a Record for each multi-record file.'
-      );
-    }
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
     );
@@ -2511,30 +2506,7 @@ export const materializeLinearRecordFiles = (
       );
     }
   });
-  const emittedBySource = new Map();
-  return records.map((record) => {
-    const sourceIndex = Number(record?.sourceIndex);
-    const localIndex = Number(record?.localIndex);
-    if (
-      !Number.isInteger(sourceIndex) || sourceIndex < 0 || !sourceSequences[sourceIndex] ||
-      !Number.isInteger(localIndex) || localIndex < 0
-    ) {
-      throw new Error('Linear record discovery returned an invalid source mapping.');
-    }
-    const source = sourceSequences[sourceIndex];
-    const sourceUid = String(source.uid || `linear-${sourceIndex + 1}`);
-    const expanded = recordCountBySource.get(sourceIndex) > 1;
-    const occurrence = emittedBySource.get(sourceIndex) || 0;
-    emittedBySource.set(sourceIndex, occurrence + 1);
-    return {
-      ...source,
-      uid: expanded ? `${sourceUid}::record-${localIndex + 1}` : sourceUid,
-      depth: Array.isArray(source.depth) ? [...source.depth] : source.depth,
-      definition: expanded && occurrence > 0 ? '' : source.definition,
-      record_subtitle: expanded && occurrence > 0 ? '' : source.record_subtitle,
-      region_record_id: `#${localIndex + 1}`
-    };
-  });
+  return sourceSequences;
 };
 
 export const serializeActiveRenderFiles = async (
@@ -3665,6 +3637,15 @@ export const exportSession = async (
       filesData: activeFiles,
       comparisonPlanSnapshot
     });
+  }
+  if (committed.renderRequest.schema === 5) {
+    const promoted = {
+      ...committed,
+      renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest)
+    };
+    committed = isAdoptedCanonicalSession(committed)
+      ? adoptRuntimeCanonicalSession(promoted)
+      : promoted;
   }
   const canonical = await assembleSessionResources(state, committed);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(

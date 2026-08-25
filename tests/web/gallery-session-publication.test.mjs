@@ -60,7 +60,7 @@ for (const name of sessionNames) {
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
   assert.equal(result.session.version, 40, name);
-  assert.equal(result.session.renderRequest.schema, 5, name);
+  assert.equal(result.session.renderRequest.schema, 6, name);
   assert.equal(result.equivalence.equivalent, true, name);
   assert.equal(JSON.stringify(source.renderRequest), committedBefore, name);
   assert.equal(result.session.cliInvocation, source.cliInvocation, name);

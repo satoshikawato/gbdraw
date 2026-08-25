@@ -14,6 +14,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   linearRecordLayoutHasSharedRow,
+  promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
@@ -441,7 +442,7 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 5);
+assert.equal(canonical.renderRequest.schema, 6);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
@@ -1913,6 +1914,29 @@ assert.deepEqual(
     ['exactly_one', 2, null]
   ]
 );
+const schema5Arranged = structuredClone(arrangedCanonical.renderRequest);
+schema5Arranged.schema = 5;
+schema5Arranged.layout.multiRecordPositions = ['#1@1', '#2@1', '#3@2'];
+schema5Arranged.records.forEach((record) => {
+  delete record.cardinality;
+  record.presentation.gridRow = null;
+});
+const promotedArranged = promoteCanonicalRenderRequestToCurrent(schema5Arranged);
+assert.equal(promotedArranged.schema, 6);
+assert.deepEqual(
+  promotedArranged.records.map((record) => [
+    record.cardinality,
+    record.presentation.gridRow,
+    record.presentation.gridColumn
+  ]),
+  [
+    ['all', 1, null],
+    ['exactly_one', 1, null],
+    ['exactly_one', 2, null]
+  ]
+);
+assert.deepEqual(promotedArranged.layout, { recordGapPx: 30 });
+assert.equal(schema5Arranged.schema, 5, 'promotion must not mutate the imported request');
 
 state.losatProgram.value = 'blastp';
 state.losat.blastp.mode = 'pairwise';

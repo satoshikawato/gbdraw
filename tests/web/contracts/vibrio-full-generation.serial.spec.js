@@ -107,6 +107,23 @@ const svgComparisonSummary = (content) => {
   };
 };
 
+const recordPlacementSummary = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const svg = new DOMParser().parseFromString(
+    app.results?.[app.selectedResultIndex]?.content || '',
+    'image/svg+xml'
+  );
+  const placements = [...svg.querySelectorAll('[data-record-row]')].map((group) => ({
+    key: group.getAttribute('data-record-key'),
+    row: Number(group.getAttribute('data-record-row')),
+    column: Number(group.getAttribute('data-record-column'))
+  }));
+  return {
+    placements,
+    uniqueRecordKeys: new Set(placements.map(({ key }) => key)).size
+  };
+});
+
 const installCanonicalRequestCapture = (page) => page.evaluate(() => {
   const previousPostMessage = Worker.prototype.postMessage;
   window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ = [];
@@ -152,6 +169,12 @@ const canonicalRequestEvidence = async (page) => {
         comparisonCount: Array.isArray(request.comparisons) ? request.comparisons.length : 0,
         comparisonKinds: Array.isArray(request.comparisons)
           ? request.comparisons.map(({ kind }) => String(kind || ''))
+          : [],
+        recordCardinalities: Array.isArray(request.records)
+          ? request.records.map(({ cardinality }) => String(cardinality || ''))
+          : [],
+        recordRows: Array.isArray(request.records)
+          ? request.records.map(({ presentation }) => Number(presentation?.gridRow || 0))
           : [],
         layout: request.layout || null,
         colors: request.diagramOptions?.colors || null,
@@ -844,6 +867,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
+  const firstRecordPlacements = await recordPlacementSummary(page);
   const firstGeneratedIdentity = svgSourceIdentity(firstGeneratedSvg);
 
   await page.evaluate(() => window.__GBDRAW_VIBRIO_GENERATE_PROBE__.reset());
@@ -862,24 +886,39 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
+  const secondRecordPlacements = await recordPlacementSummary(page);
+  const postSecondGenerateActiveIntent = await activeIntentSummary(page);
   const canonicalRequestCapture = await canonicalRequestEvidence(page);
   const capturedCanonicalRequests = canonicalRequestCapture.requests;
   expect(capturedCanonicalRequests).toHaveLength(2);
   expect(capturedCanonicalRequests[0]).toMatchObject({
-    schema: 5,
+    schema: 6,
     mode: 'linear',
     recordCount: 11,
     comparisonCount: 2,
     comparisonKinds: ['collinearityResult', 'generatedProteinComparison'],
+    recordCardinalities: Array(11).fill('all'),
+    recordRows: [1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
     layout: {
-      recordGapPx: 48,
-      multiRecordPositions: [
-        '#1@1', '#2@1', '#3@1', '#4@2', '#5@2', '#6@3',
-        '#7@3', '#8@4', '#9@4', '#10@5', '#11@5'
-      ]
+      recordGapPx: 48
     }
   });
+  expect(capturedCanonicalRequests[0].layout).not.toHaveProperty('multiRecordPositions');
   expect(canonicalRequestCapture.repeatComparison).toMatchObject({ equivalent: true });
+  expect(postSecondGenerateActiveIntent.sha256).toBe(preFirstGenerateActiveIntent.sha256);
+  const expectedRecordPlacements = [
+    [0, 0], [0, 1], [0, 2],
+    [1, 0], [1, 1],
+    [2, 0], [2, 1],
+    [3, 0], [3, 1],
+    [4, 0], [4, 1]
+  ];
+  for (const summary of [firstRecordPlacements, secondRecordPlacements]) {
+    expect(summary.uniqueRecordKeys).toBe(11);
+    expect(summary.placements.map(({ row, column }) => [row, column])).toEqual(
+      expectedRecordPlacements
+    );
+  }
   const loadedComparisonSummary = svgComparisonSummary(loaded.originalPreview);
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);

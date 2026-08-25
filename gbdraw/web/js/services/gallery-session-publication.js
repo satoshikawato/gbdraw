@@ -1,6 +1,6 @@
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
-const CURRENT_VERSION = 40, CURRENT_REQUEST_SCHEMA = 5, HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CURRENT_VERSION = 40, CURRENT_REQUEST_SCHEMA = 6, ACCEPTED_REQUEST_SCHEMAS = new Set([5, CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -17,7 +17,7 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
 };
 const validateCurrent = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
-  if (!isObject(session.renderRequest) || Number(session.renderRequest.schema) !== CURRENT_REQUEST_SCHEMA) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
+  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error('Gallery publication requires canonical renderRequest schema 5 or 6.'); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
   return session;
 };
 const publicationConfig = (session, projection) => {

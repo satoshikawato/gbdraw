@@ -204,7 +204,7 @@ const saveCurrentSession = async (page, title) => {
   expect(session).toMatchObject({
     format: 'gbdraw-session',
     version: 40,
-    renderRequest: { schema: 5 }
+    renderRequest: { schema: 6 }
   });
   return { path, session };
 };

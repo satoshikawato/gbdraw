@@ -106,9 +106,9 @@ import {
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 5;
+export const CANONICAL_REQUEST_SCHEMA = 6;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, CANONICAL_REQUEST_SCHEMA
 ]);
 
 // Canonical schemas 1-2 omitted values that matched the former shared API
@@ -498,11 +498,11 @@ const selectorPayload = (rawValue) => {
   return { kind: 'recordId', value: raw };
 };
 
-const presentationPayload = ({ label = null, subtitle = null } = {}) => ({
+const presentationPayload = ({ label = null, subtitle = null, gridRow = null } = {}) => ({
   label: String(label || '').trim() || null,
   subtitle: String(subtitle || '').trim() || null,
   reverseComplement: false,
-  gridRow: null,
+  gridRow,
   gridColumn: null
 });
 
@@ -523,6 +523,9 @@ const linearRegionPayload = (seq) => {
 
 const buildRecords = ({ state, filesData, resources }) => {
   if (state.mode.value === 'linear') {
+    const resolvedRows = state.linearRecordLayoutEnabled?.value
+      ? resolvedLinearRecordRows(filesData.linearSeqs, state.linearRecordRows)
+      : [];
     return (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
@@ -535,13 +538,19 @@ const buildRecords = ({ state, filesData, resources }) => {
             resourceId: resources.addFile(`record-${index + 1}-genbank`, 'genbank', seq.gb)
           };
       const region = linearRegionPayload(seq);
+      const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
         recordKey: String(seq.uid || `record-${index + 1}`),
+        cardinality: selector || region ? 'exactly_one' : 'all',
         source,
-        selector: region ? null : selectorPayload(seq.region_record_id),
+        selector,
         region,
         presentation: {
-          ...presentationPayload({ label: seq.definition, subtitle: seq.record_subtitle }),
+          ...presentationPayload({
+            label: seq.definition,
+            subtitle: seq.record_subtitle,
+            gridRow: resolvedRows[index] ?? null
+          }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
         }
       };
@@ -558,6 +567,7 @@ const buildRecords = ({ state, filesData, resources }) => {
             `record-${index + 1}-genbank`, 'genbank', record.gb) };
       return {
         recordKey: String(record.recordKey || `record-${index + 1}`),
+        cardinality: record.cardinality || 'exactly_one',
         source,
         selector: record.selector || null,
         region: record.region || null,
@@ -587,6 +597,7 @@ const buildRecords = ({ state, filesData, resources }) => {
   );
   return selectedRecords.map((record, index) => ({
     recordKey: `record-${index + 1}`,
+    cardinality: 'exactly_one',
     source,
     selector: selectorPayload(recordSelectors[index]?.value ?? record?.selector),
     region: null,
@@ -1642,13 +1653,8 @@ export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
 const buildLayout = (state, filesData) => {
   if (state.mode.value === 'linear') {
     if (!state.linearRecordLayoutEnabled?.value) return {};
-    const resolvedRows = resolvedLinearRecordRows(
-      filesData.linearSeqs,
-      state.linearRecordRows
-    );
     return {
-      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
-      multiRecordPositions: resolvedRows.map((row, index) => `#${index + 1}@${row}`)
+      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0)
     };
   }
   if (!state.form.multi_record_canvas) return {};
@@ -2990,6 +2996,7 @@ export const projectCanonicalSessionRequest = ({
         : resourceAsLegacyFile(resources, id);
       return {
         recordKey: String(record.recordKey || ''),
+        cardinality: record.cardinality || 'exactly_one',
         sourceKind: source.kind,
         gb: source.kind === 'genbank' ? resourceFile(source.resourceId) : null,
         gff: source.kind === 'gffFasta' ? resourceFile(source.gffResourceId) : null,
@@ -3657,17 +3664,25 @@ export const projectCanonicalSessionRequest = ({
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
+  const linearLayoutRows = renderRequest.schema >= 6
+    ? records.map((record, index) => ({
+        uid: files.linearSeqs[index]?.uid || '',
+        row: Number(record.presentation?.gridRow) || index + 1
+      }))
+    : (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
+        const split = String(token).lastIndexOf('@');
+        return {
+          uid: files.linearSeqs[index]?.uid || '',
+          row: Number(String(token).slice(split + 1)) || index + 1
+        };
+      });
   const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
     ? {
-        enabled: Object.keys(renderRequest.layout || {}).length > 0,
+        enabled: renderRequest.schema >= 6
+          ? records.some((record) => record.presentation?.gridRow != null)
+          : Object.keys(renderRequest.layout || {}).length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? 24,
-        rows: (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
-          const split = String(token).lastIndexOf('@');
-          return {
-            uid: files.linearSeqs[index]?.uid || '',
-            row: Number(String(token).slice(split + 1)) || index + 1
-          };
-        })
+        rows: linearLayoutRows
       }
     : undefined;
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
@@ -3786,8 +3801,35 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   }
   return null;
 };
+export const promoteCanonicalRenderRequestToCurrent = (request) => {
+  const promoted = cloneCanonicalJsonValue(request);
+  if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
+  if (promoted.schema !== 5) {
+    throw new Error('Only canonical renderRequest schema 5 can be promoted to schema 6.');
+  }
+  const linearRows = promoted.mode === 'linear'
+    ? (promoted.layout?.multiRecordPositions || []).map((token) => {
+        const split = String(token).lastIndexOf('@');
+        return Number(String(token).slice(split + 1)) || null;
+      })
+    : [];
+  promoted.schema = CANONICAL_REQUEST_SCHEMA;
+  (promoted.records || []).forEach((record, index) => {
+    record.cardinality = promoted.mode === 'linear' &&
+      !record.selector && !record.region
+      ? 'all'
+      : 'exactly_one';
+    if (linearRows[index]) record.presentation.gridRow = linearRows[index];
+  });
+  if (promoted.mode === 'linear' && promoted.layout) {
+    delete promoted.layout.multiRecordPositions;
+  }
+  return promoted;
+};
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = cloneCanonicalJsonValue(request);
+  const normalized = request?.schema === 5
+    ? promoteCanonicalRenderRequestToCurrent(request)
+    : cloneCanonicalJsonValue(request);
   const colors = normalized.diagramOptions?.colors;
   if (colors) {
     colors.defaultColors = colors.defaultColors || colors.defaultColorsFile || null;

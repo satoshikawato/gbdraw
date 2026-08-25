@@ -96,7 +96,11 @@ Materialized paths expire when the materialization context closes. `session_to_r
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
 
-The canonical request schema is a materialized wire format. It does not encode runtime cardinality, deferred table paths, record-derived output naming, or collection-level transforms. The encoder rejects an unresolved request instead of dropping those fields; call `resolve_request()` first. Session writers perform this resolution automatically.
+Canonical request schema 6 records each input's runtime cardinality. This lets a
+selectorless source retain `RecordCardinality.ALL` until record planning expands
+it. Deferred table paths, record-derived output naming, and collection-level
+transforms still require `resolve_request()` before encoding. Session writers
+perform that resolution automatically.
 
 ## Exported supporting contracts
 
