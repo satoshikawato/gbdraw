@@ -40,6 +40,20 @@ The required status names remain `Web change budget` and
 Actions emits one bounded warning annotation when size review is required; the
 step summary contains the complete measurements and reasons.
 
+## CI diff scope
+
+Pull request checks compare the pull request base SHA with its head SHA. A push
+to `dev` checks only the change integrated by that push, from
+`github.event.before` to `github.sha`. A manual `dev` staging run has no push
+payload, so it checks the current merge commit from its first parent to `HEAD`.
+These ranges determine only the change presented to the Web checker. The full
+staging matrix continues to run from the current `dev` checkout.
+
+This scope prevents independently reviewed changes already on `dev` from being
+reclassified as one combined runtime-and-guard change. It does not add a
+promotion exception or alter any blocking rule, threshold, authority source, or
+checker behavior.
+
 ## Guard separation
 
 Except for the pure policy contraction described below, Web runtime files cannot
