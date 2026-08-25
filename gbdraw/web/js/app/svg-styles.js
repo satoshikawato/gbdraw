@@ -20,6 +20,7 @@ import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
+import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 
 export { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 
@@ -147,15 +148,39 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     );
     if (skewGroups.length > 0) {
       skewGroups.forEach((skewGroup) => {
+        const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim();
+        const customSlotsEnabled = mode.value === 'circular'
+          ? adv.circular_track_slots_enabled
+          : adv.linear_track_slots_enabled;
+        const slots = mode.value === 'circular'
+          ? adv.circular_track_slots
+          : adv.linear_track_slots;
+        const slot = customSlotsEnabled && Array.isArray(slots)
+          ? slots.find((candidate) => (
+              candidate?.enabled !== false &&
+              candidate?.renderer === 'dinucleotide_skew' &&
+              String(candidate?.id || '').trim() === slotId
+            ))
+          : null;
+        const positiveColor = resolveTrackSlotSkewColorValue({
+          slot,
+          key: 'positive_color',
+          currentColors: colors
+        });
+        const negativeColor = resolveTrackSlotSkewColorValue({
+          slot,
+          key: 'negative_color',
+          currentColors: colors
+        });
         const skewPaths = skewGroup.querySelectorAll('path');
         let pathIndex = 0;
         skewPaths.forEach((path) => {
           const fill = path.getAttribute('fill');
           if (fill && fill !== 'white' && fill !== 'none') {
-            if (pathIndex === 0 && colors.skew_high) {
-              if (setColorAttributeIfChanged(path, 'fill', colors.skew_high)) updatedCount++;
-            } else if (pathIndex === 1 && colors.skew_low) {
-              if (setColorAttributeIfChanged(path, 'fill', colors.skew_low)) updatedCount++;
+            if (pathIndex === 0) {
+              if (setColorAttributeIfChanged(path, 'fill', positiveColor)) updatedCount++;
+            } else if (pathIndex === 1) {
+              if (setColorAttributeIfChanged(path, 'fill', negativeColor)) updatedCount++;
             }
             pathIndex++;
           }
