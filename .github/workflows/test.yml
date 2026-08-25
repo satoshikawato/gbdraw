@@ -33,15 +33,21 @@ jobs:
 
       - name: Check Web change budget
         env:
-          DEV_PROMOTION_RANGE: ${{ github.ref == 'refs/heads/dev' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+          DEV_INTEGRATED_CHANGE: ${{ github.ref == 'refs/heads/dev' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+          DEV_PUSH_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+          DEV_PUSH_HEAD: ${{ github.event_name == 'push' && github.sha || '' }}
           WEB_CHANGE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           WEB_CHANGE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
           WEB_ARCHITECTURE_CHANGE: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
         run: |
-          if [[ "$DEV_PROMOTION_RANGE" == "true" ]]; then
-            git fetch origin main
-            BASE_SHA="$(git merge-base origin/main HEAD)"
-            HEAD_SHA="$(git rev-parse HEAD)"
+          if [[ "$DEV_INTEGRATED_CHANGE" == "true" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+              BASE_SHA="$DEV_PUSH_BASE"
+              HEAD_SHA="$DEV_PUSH_HEAD"
+            else
+              BASE_SHA="$(git rev-parse HEAD^1)"
+              HEAD_SHA="$(git rev-parse HEAD)"
+            fi
             node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
           else
             node tools/check-web-change-budget.mjs

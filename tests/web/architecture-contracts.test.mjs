@@ -734,7 +734,7 @@ test('normal CI uses dev as the staging push branch', () => {
   assert.equal([...TEST_WORKFLOW.matchAll(/^    if:/gm)].length, 2);
 });
 
-test('dev staging runs check the complete promotion range explicitly', () => {
+test('dev staging Web checks scope only the newly integrated change', () => {
   const step = TEST_WORKFLOW.match(
     /      - name: Check Web change budget\n[\s\S]*?(?=\n      - name: Check Web architecture contracts)/
   )?.[0];
@@ -742,11 +742,21 @@ test('dev staging runs check the complete promotion range explicitly', () => {
 
   assert.match(
     step,
-    /DEV_PROMOTION_RANGE: \$\{\{ github\.ref == 'refs\/heads\/dev' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\) \}\}/
+    /DEV_INTEGRATED_CHANGE: \$\{\{ github\.ref == 'refs\/heads\/dev' && \(github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'\) \}\}/
   );
-  assert.match(step, /git fetch origin main/);
-  assert.match(step, /BASE_SHA="\$\(git merge-base origin\/main HEAD\)"/);
+  assert.match(
+    step,
+    /DEV_PUSH_BASE: \$\{\{ github\.event_name == 'push' && github\.event\.before \|\| '' \}\}/
+  );
+  assert.match(
+    step,
+    /DEV_PUSH_HEAD: \$\{\{ github\.event_name == 'push' && github\.sha \|\| '' \}\}/
+  );
+  assert.match(step, /BASE_SHA="\$DEV_PUSH_BASE"/);
+  assert.match(step, /HEAD_SHA="\$DEV_PUSH_HEAD"/);
+  assert.match(step, /BASE_SHA="\$\(git rev-parse HEAD\^1\)"/);
   assert.match(step, /HEAD_SHA="\$\(git rev-parse HEAD\)"/);
+  assert.doesNotMatch(step, /git fetch origin main|git merge-base origin\/main HEAD/);
   assert.match(
     step,
     /node tools\/check-web-change-budget\.mjs --base "\$BASE_SHA" --head "\$HEAD_SHA"/
