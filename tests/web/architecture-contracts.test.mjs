@@ -696,9 +696,10 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
   assert.match(BASE_POLICY_WORKFLOW, /permissions:\n  contents: read/);
   assert.match(BASE_POLICY_WORKFLOW, /name: Web base policy \(trusted base\)/);
   assert.match(BASE_POLICY_WORKFLOW, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(BASE_POLICY_WORKFLOW, /fetch-depth: 0/);
   assert.match(BASE_POLICY_WORKFLOW, /persist-credentials: false/);
   assert.equal([...BASE_POLICY_WORKFLOW.matchAll(/uses: actions\/checkout@/g)].length, 1);
-  assert.match(BASE_POLICY_WORKFLOW, /git fetch --no-tags --depth=1 origin "\$HEAD_SHA"/);
+  assert.match(BASE_POLICY_WORKFLOW, /git fetch --no-tags origin "\$HEAD_SHA"/);
   assert.match(
     BASE_POLICY_WORKFLOW,
     /node tools\/check-web-change-budget\.mjs --base "\$BASE_SHA" --head "\$HEAD_SHA"/
