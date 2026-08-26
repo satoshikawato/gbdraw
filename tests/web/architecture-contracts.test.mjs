@@ -1003,6 +1003,14 @@ const WEB_PROMOTION_CONTEXT_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-promotion-context.mjs'
 );
+const PROMOTION_READINESS_HELPER = join(
+  REPOSITORY_ROOT,
+  'tools/check-promotion-readiness.mjs'
+);
+const PROMOTION_READINESS_TEST = join(
+  REPOSITORY_ROOT,
+  'tests/web/promotion-readiness.test.mjs'
+);
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
     'services/diagram-generation.js': ['app/editor.js', 'app/run-analysis.js'],
@@ -1047,11 +1055,21 @@ const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
   )
 ].join('\n') + '\n';
 const BUDGET_FIXTURE = Object.freeze({
+  '.github/workflows/deploy_web.yml': 'name: baseline deploy\n',
+  '.github/workflows/gallery-publication.yml': 'name: baseline gallery\n',
   '.github/workflows/test.yml': 'name: baseline\n',
   '.github/workflows/web-base-policy.yml': 'name: baseline policy\n',
   'docs/internal/WEB_CHANGE_POLICY.md': '# Baseline Web change policy\n',
   'package.json': '{"private":true}\n',
   'tests/web/architecture-contracts.test.mjs': '// baseline contract\n',
+  'tests/web/promotion-readiness.test.mjs': readFileSync(
+    PROMOTION_READINESS_TEST,
+    'utf8'
+  ),
+  'tools/check-promotion-readiness.mjs': readFileSync(
+    PROMOTION_READINESS_HELPER,
+    'utf8'
+  ),
   'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
   'tools/web-architecture-detectors.mjs': readFileSync(
     WEB_ARCHITECTURE_DETECTOR_MODULE,
@@ -2199,10 +2217,13 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
-    'tools/web-promotion-context.mjs'
+    'tools/web-promotion-context.mjs',
+    'tools/check-promotion-readiness.mjs'
   ];
   const authorityPaths = [
     'tools/web-change-policy.json',
+    '.github/workflows/gallery-publication.yml',
+    '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
     '.github/workflows/web-base-policy.yml'
   ];
@@ -2228,7 +2249,8 @@ test('all checker implementations are separated from reserved future authority',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
-    'tools/web-promotion-context.mjs'
+    'tools/web-promotion-context.mjs',
+    'tools/check-promotion-readiness.mjs'
   ];
 
   implementationPaths.forEach((implementationPath) => {
@@ -2244,6 +2266,27 @@ test('all checker implementations are separated from reserved future authority',
       }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
     });
   });
+});
+
+test('promotion helper stays checker-only while evidence workflows stay authority-only', () => {
+  const helperOnly = runChangeBudgetCase((write) => {
+    write(
+      'tools/check-promotion-readiness.mjs',
+      `${BUDGET_FIXTURE['tools/check-promotion-readiness.mjs']}\n// helper changed\n`
+    );
+  });
+  assert.equal(helperOnly.status, 0, helperOnly.output);
+
+  for (const workflowPath of [
+    '.github/workflows/gallery-publication.yml',
+    '.github/workflows/deploy_web.yml'
+  ]) {
+    const workflowOnly = runChangeBudgetCase((write) => {
+      write(workflowPath, `${BUDGET_FIXTURE[workflowPath]}# workflow changed\n`);
+    });
+    assert.equal(workflowOnly.status, 0, workflowOnly.output);
+    assert.match(workflowOnly.output, new RegExp(workflowPath.replaceAll('.', '\\.')));
+  }
 });
 
 test('evaluator fixtures stay implementation-only while active rule authority stays isolated', () => {
@@ -2565,9 +2608,13 @@ test('runtime plus a semantically unchanged policy remains separated', () => {
 test('runtime plus policy contraction rejects every additional guard change', () => {
   const guardCases = [
     ['checker', 'tools/check-web-change-budget.mjs'],
+    ['promotion helper', 'tools/check-promotion-readiness.mjs'],
     ['architecture detectors', 'tools/web-architecture-detectors.mjs'],
     ['source parser', 'tools/web-change-source.mjs'],
     ['architecture contracts', 'tests/web/architecture-contracts.test.mjs'],
+    ['promotion readiness tests', 'tests/web/promotion-readiness.test.mjs'],
+    ['Gallery workflow', '.github/workflows/gallery-publication.yml'],
+    ['deploy workflow', '.github/workflows/deploy_web.yml'],
     ['normal workflow', '.github/workflows/test.yml'],
     ['trusted-base workflow', '.github/workflows/web-base-policy.yml'],
     ['policy documentation', 'docs/internal/WEB_CHANGE_POLICY.md']
