@@ -56,10 +56,22 @@ const BASE_POLICY_WORKFLOW = readFileSync(
   join(REPOSITORY_ROOT, '.github/workflows/web-base-policy.yml'),
   'utf8'
 );
+const GALLERY_PUBLICATION_WORKFLOW = readFileSync(
+  join(REPOSITORY_ROOT, '.github/workflows/gallery-publication.yml'),
+  'utf8'
+);
+const DEPLOY_WORKFLOW = readFileSync(
+  join(REPOSITORY_ROOT, '.github/workflows/deploy_web.yml'),
+  'utf8'
+);
 const PACKAGE_SCRIPTS = JSON.parse(readFileSync(
   join(REPOSITORY_ROOT, 'package.json'),
   'utf8'
 )).scripts;
+const BASE_PLAYWRIGHT_CONFIG = readFileSync(
+  join(REPOSITORY_ROOT, 'playwright.config.js'),
+  'utf8'
+);
 const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
   join(REPOSITORY_ROOT, 'playwright.functional.config.js'),
   'utf8'
@@ -113,8 +125,8 @@ const PLAYWRIGHT_SPEC_SOURCES = walkJavaScriptFiles(
 ).filter((path) => path.endsWith('.playwright.spec.js'))
   .map((path) => readFileSync(path, 'utf8'));
 
-const workflowJob = (jobId) => {
-  const job = TEST_WORKFLOW.match(
+const workflowJob = (jobId, workflow = TEST_WORKFLOW) => {
+  const job = workflow.match(
     new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
   )?.[0];
   assert.ok(job, `${jobId} job must exist`);
@@ -705,11 +717,11 @@ test('report-only source facts preserve the characterized masking behavior', () 
   });
 });
 
-test('PR workflows separate normal tests from trusted base-policy execution', () => {
+test('workflow triggers separate dev admission, dev staging, promotion, and deployment', () => {
   const activityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
   const triggerBranches = (workflow, trigger) => {
     const match = workflow.match(new RegExp(
-      `\\n  ${trigger}:\\n    branches: (\\[[^\\n]+\\])`
+      `\\r?\\n  ${trigger}:\\r?\\n    branches: (\\[[^\\r\\n]+\\])`
     ));
     assert.ok(match, `${trigger} branch filter must exist`);
     return JSON.parse(match[1]);
@@ -717,8 +729,13 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
 
   assert.match(TEST_WORKFLOW, /\n  pull_request:\n/);
   assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'pull_request'), ['dev', 'main']);
+  assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'push'), ['dev']);
   assert.match(TEST_WORKFLOW, activityTypes);
   assert.match(TEST_WORKFLOW, /name: Run core tests/);
+  assert.match(
+    TEST_WORKFLOW,
+    /group: tests-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/
+  );
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
   assert.deepEqual(
@@ -726,22 +743,18 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
     ['dev', 'main']
   );
   assert.match(BASE_POLICY_WORKFLOW, activityTypes);
-  assert.match(BASE_POLICY_WORKFLOW, /permissions:\n  contents: read/);
-  assert.match(BASE_POLICY_WORKFLOW, /name: Web base policy \(trusted base\)/);
-  assert.match(BASE_POLICY_WORKFLOW, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(BASE_POLICY_WORKFLOW, /fetch-depth: 0/);
-  assert.match(BASE_POLICY_WORKFLOW, /persist-credentials: false/);
-  assert.equal([...BASE_POLICY_WORKFLOW.matchAll(/uses: actions\/checkout@/g)].length, 1);
-  assert.match(BASE_POLICY_WORKFLOW, /git fetch --no-tags origin "\$HEAD_SHA"/);
   assert.match(
     BASE_POLICY_WORKFLOW,
-    /node tools\/check-web-change-budget\.mjs --base "\$BASE_SHA" --head "\$HEAD_SHA"/
+    /permissions:\n  contents: read\n  pull-requests: read\n  actions: read/
   );
-  assert.doesNotMatch(
-    BASE_POLICY_WORKFLOW,
-    /(?:checkout|run):[^\n]*pull_request\.head|ref:.*pull_request\.head|git (?:checkout|switch) /
-  );
-  assert.doesNotMatch(BASE_POLICY_WORKFLOW, /Core PR \(Python 3\.11\)|Web PR smoke|PR \/ gate/);
+
+  assert.deepEqual(triggerBranches(GALLERY_PUBLICATION_WORKFLOW, 'push'), ['dev']);
+  assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /\n  pull_request:\n/);
+  assert.match(GALLERY_PUBLICATION_WORKFLOW, /\n  workflow_dispatch:\n/);
+
+  assert.deepEqual(triggerBranches(DEPLOY_WORKFLOW, 'push'), ['main']);
+  assert.doesNotMatch(TEST_WORKFLOW, /branches: \[[^\]]*"main"[^\]]*\]\n  pull_request:/);
+  assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /"main"|"refactoring"/);
 });
 
 test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evidence', () => {
@@ -800,6 +813,30 @@ test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evi
     );
   });
   assert.doesNotMatch(gate, /gh api|curl|check-web-change-budget|pull_request_target/);
+
+  for (const jobId of ['web-change-budget', 'recipes-standard', 'gallery', 'lint']) {
+    assert.match(
+      workflowJob(jobId),
+      /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/,
+      `${jobId} must remain in the fast dev-PR graph`
+    );
+  }
+  for (const jobId of [
+    'core',
+    'browser',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'losat-cache-browser-acceptance'
+  ]) {
+    const job = workflowJob(jobId);
+    assert.doesNotMatch(
+      job,
+      /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/,
+      `${jobId} must not run on a dev pull request`
+    );
+  }
 });
 
 test('PR smoke selection is explicit while the full functional inventory stays wide', () => {
@@ -839,14 +876,144 @@ test('PR smoke selection is explicit while the full functional inventory stays w
   assert.ok(selectedCount >= 6 && selectedCount <= 10, `selected ${selectedCount} smoke tests`);
 });
 
-test('PR 1 preserves legacy check identities and does not add policy owners or mutators', () => {
+test('exact dev staging runs the full inventory with four mandatory Playwright shards', () => {
+  const stagingOnly = [
+    'core',
+    'browser',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'losat-cache-browser-acceptance'
+  ];
+  for (const jobId of stagingOnly) {
+    const job = workflowJob(jobId);
+    assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+    assert.match(
+      job,
+      /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+    );
+  }
+
+  const fullPlaywright = workflowJob('playwright-functional');
+  assert.match(fullPlaywright, /\n    name: Playwright functional \(shard \$\{\{ matrix\.shard \}\}\/4\)\n/);
+  assert.match(fullPlaywright, /shard: \[1, 2, 3, 4\]/);
+  assert.match(
+    fullPlaywright,
+    /npm run test:web:functional-full -- --shard=\$\{\{ matrix\.shard \}\}\/4/
+  );
+  assert.match(fullPlaywright, /playwright-functional-shard-\$\{\{ matrix\.shard \}\}-traces-/);
+  assert.match(BASE_PLAYWRIGHT_CONFIG, /retries: process\.env\.CI \? 2 : 0/);
+  assert.match(BASE_PLAYWRIGHT_CONFIG, /workers: process\.env\.CI \? 1 : undefined/);
+
+  const gate = workflowJob('dev-staging-gate');
+  const dependencies = gate.match(
+    /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
+  )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
+  assert.deepEqual(dependencies, [
+    'web-change-budget',
+    'core',
+    'recipes-standard',
+    'gallery',
+    'browser',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'lint',
+    'losat-cache-browser-acceptance'
+  ]);
+  assert.match(gate, /\n    name: Dev staging \/ gate\n/);
+  assert.match(gate, /always\(\)/);
+  assert.match(gate, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+  assert.match(
+    gate,
+    /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+  );
+  dependencies.forEach((jobId) => {
+    assert.ok(
+      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
+      `${jobId} must fail the staging aggregate unless it succeeds`
+    );
+  });
+  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+});
+
+test('Gallery readiness aggregates common, Vibrio, and projection evidence on dev', () => {
+  const browser = workflowJob('browser', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(browser, /example: common 9\n            command: test:web:gallery-publication/);
+  assert.match(browser, /example: Vibrio\n            command: test:web:vibrio-generate/);
+  assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
+
+  const performance = workflowJob('performance', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(performance, /\n    name: Gallery publication performance \(projection\)\n/);
+  assert.match(performance, /measure_gallery_publication_performance\.py projection/);
+  assert.match(performance, /github\.event_name == 'workflow_dispatch' && inputs\.complete_refresh/);
+  assert.match(performance, /measure_gallery_publication_performance\.py refresh/);
+
+  const gate = workflowJob('readiness-gate', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(gate, /\n    name: Gallery readiness \/ gate\n/);
+  assert.match(gate, /\n    needs:\n      - browser\n      - performance\n/);
+  assert.match(gate, /\n    if: always\(\)\n/);
+  for (const jobId of ['browser', 'performance']) {
+    assert.ok(
+      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
+      `${jobId} must fail the Gallery aggregate unless all matrix jobs succeed`
+    );
+  }
+  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+});
+
+test('trusted promotion uses base code for topology, exact-SHA evidence, and tree proof', () => {
+  const devPolicy = workflowJob('trusted-base-policy', BASE_POLICY_WORKFLOW);
+  assert.match(devPolicy, /\n    name: Web base policy \(trusted base\)\n/);
+  assert.match(devPolicy, /if: github\.event\.pull_request\.base\.ref == 'dev'/);
+
+  const promotion = workflowJob('promotion-gate', BASE_POLICY_WORKFLOW);
+  assert.match(promotion, /\n    name: Promotion \/ gate\n/);
+  assert.match(promotion, /if: github\.event\.pull_request\.base\.ref == 'main'/);
+  assert.equal([...promotion.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  assert.match(promotion, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(promotion, /fetch-depth: 0/);
+  assert.match(promotion, /persist-credentials: false/);
+  assert.match(promotion, /EXPECTED_REPOSITORY: satoshikawato\/gbdraw/);
+  assert.match(promotion, /test "\$BASE_REF" = "main"/);
+  assert.match(promotion, /test "\$HEAD_REF" = "dev"/);
+  assert.match(promotion, /test "\$HEAD_REPOSITORY" = "\$EXPECTED_REPOSITORY"/);
+  assert.match(
+    promotion,
+    /git fetch --no-tags origin "refs\/heads\/dev:refs\/remotes\/origin\/dev"/
+  );
+  assert.match(promotion, /test "\$HEAD_SHA" = "\$REMOTE_DEV_SHA"/);
+  assert.match(
+    promotion,
+    /node tools\/check-web-change-budget\.mjs --base "\$BASE_SHA" --head "\$HEAD_SHA"/
+  );
+  assert.equal([...promotion.matchAll(/workflow-evidence/g)].length, 2);
+  assert.match(
+    promotion,
+    /--workflow-path \.github\/workflows\/test\.yml[\s\S]*--aggregate-name "Dev staging \/ gate"/
+  );
+  assert.match(
+    promotion,
+    /--workflow-path \.github\/workflows\/gallery-publication\.yml[\s\S]*--aggregate-name "Gallery readiness \/ gate"/
+  );
+  assert.match(promotion, /check-promotion-readiness\.mjs merge-tree/);
+  assert.match(promotion, /--base-sha "\$BASE_SHA"[\s\S]*--head-sha "\$HEAD_SHA"/);
+  assert.doesNotMatch(
+    promotion,
+    /ref:.*pull_request\.head|git (?:checkout|switch) |npm ci|pip install|functional-full|perf-smoke|pytest/
+  );
+  assert.doesNotMatch(promotion, /uses: \.\//);
+});
+
+test('foundation promotion keeps substantive producers for legacy main contexts', () => {
   [
     'Web change budget',
     'Core (Python ${{ matrix.python-version }})',
     'Recipes standard (Python 3.11)',
     'Gallery (Python 3.11)',
     'Browser (Python 3.11)',
-    'Playwright functional',
     'Playwright performance',
     'Lint',
     'LOSAT cache browser acceptance'
@@ -854,7 +1021,40 @@ test('PR 1 preserves legacy check identities and does not add policy owners or m
     assert.ok(TEST_WORKFLOW.includes(`name: ${displayName}`), `Missing legacy job: ${displayName}`);
   });
   assert.match(TEST_WORKFLOW, /python-version: \["3\.10", "3\.11", "3\.12"\]/);
-  assert.match(BASE_POLICY_WORKFLOW, /name: Web base policy \(trusted base\)/);
+  const mainFunctional = workflowJob('playwright-functional-main-transition');
+  assert.match(mainFunctional, /\n    name: Playwright functional\n/);
+  assert.match(mainFunctional, /npm run test:web:functional-full/);
+  assert.doesNotMatch(mainFunctional, /--shard=/);
+
+  for (const jobId of [
+    'web-change-budget',
+    'core',
+    'recipes-standard',
+    'gallery',
+    'browser',
+    'playwright-functional-main-transition',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'lint',
+    'losat-cache-browser-acceptance'
+  ]) {
+    const job = workflowJob(jobId);
+    assert.match(job, /github\.base_ref == 'main'|pull_request\.base\.ref == 'main'/);
+    assert.match(job, /github\.head_ref == 'dev'|pull_request\.head\.ref == 'dev'/);
+    assert.match(job, /head\.repo\.full_name == github\.repository/);
+  }
+
+  const mainPolicy = workflowJob(
+    'trusted-base-policy-main-transition',
+    BASE_POLICY_WORKFLOW
+  );
+  assert.match(mainPolicy, /\n    name: Web base policy \(trusted base\)\n/);
+  assert.match(mainPolicy, /node tools\/check-web-change-budget\.mjs/);
+  assert.match(
+    BASE_POLICY_WORKFLOW,
+    /PR 7 removes this legacy producer[\s\S]*trusted-base-policy-main-transition:/
+  );
   assert.doesNotMatch(TEST_WORKFLOW, /needs: web-change-budget/);
   assert.equal(
     existsSync(join(REPOSITORY_ROOT, '.github/workflows/dev-staging.yml')),
@@ -918,12 +1118,11 @@ test('the PR template requires exact changed-scope architecture debt arithmetic'
   });
 });
 
-test('normal CI uses dev as the staging push branch', () => {
+test('normal CI uses only dev as the staging push branch', () => {
   assert.match(
     TEST_WORKFLOW,
-    /push:\n    branches: \["main", "refactoring", "dev"\]/
+    /push:\n    branches: \["dev"\]/
   );
-  assert.doesNotMatch(TEST_WORKFLOW, /branches: \[[^\]]*"develop"/);
   assert.match(TEST_WORKFLOW, /\n  workflow_dispatch:\n/);
 });
 
@@ -968,13 +1167,14 @@ test('dev staging Web checks scope only the newly integrated change', () => {
   );
 });
 
-test('supported-version and slow matrices cover main PRs and dev staging runs', () => {
+test('supported-version and slow matrices cover dev staging and transition promotions', () => {
   const stagingCondition = [
     "    if: >-",
-    "      (github.event_name == 'pull_request' && github.base_ref == 'main') ||",
-    "      (github.event_name == 'push' &&",
-    "      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||",
-    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')"
+    "      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||",
+    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||",
+    "      (github.event_name == 'pull_request' && github.base_ref == 'main' &&",
+    "      github.head_ref == 'dev' &&",
+    "      github.event.pull_request.head.repo.full_name == github.repository)"
   ].join('\n');
 
   for (const jobName of ['acceptance-supported-main', 'slow-main']) {
@@ -982,7 +1182,7 @@ test('supported-version and slow matrices cover main PRs and dev staging runs', 
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
     assert.ok(job, `${jobName} job must exist`);
-    assert.ok(job.includes(stagingCondition), `${jobName} must use the main protection condition`);
+    assert.ok(job.includes(stagingCondition), `${jobName} must use the staging transition condition`);
   }
 });
 
