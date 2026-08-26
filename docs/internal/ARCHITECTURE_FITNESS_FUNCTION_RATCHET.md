@@ -222,23 +222,75 @@ decision within a file, and an unregistered decision may have no deterministic
 marker. Machine reports must name the observation they actually count, such as
 registered definition locations or observed canonical entry edges.
 
+### Exact changed-scope arithmetic
+
+Humans select the changed capabilities, behaviors, compatibility namespaces,
+and complete before and after sets. Static analysis may provide observations
+for that review, but it cannot infer complete repository-wide `OE`, `PE`, or
+`CB` values.
+
+Declare one owner-excess row for every changed capability. Each row has a stable
+row ID, the semantic owner sets before and after, `O before`, `T before`, `O
+after`, and `T after`. The declared sets and inputs must reproduce:
+
+\[
+OE_{before} = \max(0, O_{before} - T_{before})
+\]
+
+\[
+OE_{after} = \max(0, O_{after} - T_{after})
+\]
+
+\[
+\operatorname{delta}(OE) = OE_{after} - OE_{before}
+\]
+
+Declare one path-excess row for every changed behavior. Each row has a stable
+row ID, the canonical production path sets before and after, `P before`, and `P
+after`. The declared sets and inputs must reproduce `PE before`, `PE after`, and
+`delta(PE)` using the path-excess formula above.
+
+Declare one compatibility-burden row for every changed compatibility namespace.
+Each compatibility path has a stable ID. The before and after ID sets must
+reproduce `CB before`, `CB after`, and `delta(CB) = CB after - CB before`.
+
+Sum every declared row for each component to obtain the exact changed-scope
+totals:
+
+```text
+OE before -> OE after; delta(OE) = OE after - OE before
+PE before -> PE after; delta(PE) = PE after - PE before
+CB before -> CB after; delta(CB) = CB after - CB before
+```
+
+Every displayed value and delta is an integer. Multiple changed capabilities,
+behaviors, or compatibility namespaces require multiple rows; sum those rows
+explicitly. If a component has no changed rows, declare `none` and record `0 ->
+0; delta = 0` for that component.
+
 ## Required author evidence
 
-The pull-request author records concrete before and after sets for every changed
-capability. Each declaration must include:
+The pull-request author records the exact changed-scope rows and totals. Each
+declaration must include:
 
 - the capability or behavior and why the selected scope is complete;
-- semantic owners before and after;
-- canonical production paths before and after;
-- compatibility paths before and after, using stable IDs;
-- every superseded owner or path removed in the same change;
+- semantic owner sets, `O`, `T`, `OE`, and `delta(OE)` before and after for each
+  changed capability;
+- canonical production path sets, `P`, `PE`, and `delta(PE)` before and after for
+  each changed behavior;
+- compatibility path stable-ID sets, `CB`, and `delta(CB)` before and after for
+  each changed compatibility namespace;
+- the exact changed-scope totals obtained by summing all declared rows;
+- superseded semantic owners, canonical production paths, and compatibility
+  paths in three separate lists;
 - the classification of each new module;
 - persisted-compatibility, performance, scientific-output, and deterministic
   checker evidence when applicable.
 
 Use `none` for an empty set. Do not replace these sets with unsupported
-repository-wide totals. The completeness rationale matters because a favorable
-delta over an incomplete capability scope can hide a parallel owner or path.
+repository-wide totals. `<= 0`, `non-positive`, or `yes` alone is insufficient
+evidence. The completeness rationale matters because a favorable delta over an
+incomplete capability scope can hide a parallel owner or path and is invalid.
 
 The declaration is evidence, not approval. The architecture owner reviews the
 exact proposed head as described under [Manual architecture review](#manual-architecture-review).
@@ -280,6 +332,11 @@ AND every superseded owner or path is removed in the same change
 AND the declared changed-capability scope is complete
 ```
 
+These inequalities define acceptance, not the evidence format. The author and
+maintainer must record the exact before value, after value, and integer delta
+for all three components. They must also list the superseded sets instead of
+recording only `yes`.
+
 A new capability may begin with one new semantic owner without increasing owner
 excess. It must also begin with one canonical path.
 
@@ -297,12 +354,18 @@ totals.
 Capability: render request construction
 Owners before:
   {services/session-request.js, app/legacy-request.js}
+O before: 2
+T before: 1
+OE before: 1
 Owners after:
   {services/session-request.js}
+O after: 1
+T after: 1
+OE after: 0
 Superseded owner removed:
   app/legacy-request.js
 Review result:
-  delta(OE) = -1 for this capability
+  OE 1 -> 0; delta(OE) = -1
 ```
 
 Moving an owner can preauthorize the destination in inert authority, but the
@@ -314,12 +377,16 @@ runtime change must remove the old owner when it activates the new one.
 Behavior: Generate reaches render-request construction
 Paths before:
   {app/run-analysis.js -> services/session-request.js}
+P before: 1
+PE before: 0
 Paths after:
   {app/generate.js -> services/session-request.js}
+P after: 1
+PE after: 0
 Superseded path removed:
   app/run-analysis.js -> services/session-request.js
 Review result:
-  delta(PE) = 0 for this behavior
+  PE 0 -> 0; delta(PE) = 0
 ```
 
 The authority may list both edges during a staged move. Source must still have
@@ -331,12 +398,14 @@ exactly one active edge.
 Schema namespace: saved-session
 Compatibility paths before:
   {saved-session:v4-to-v5}
+CB before: 1
 Compatibility paths after:
   none
+CB after: 0
 Removed path:
   saved-session:v4-to-v5
 Review result:
-  delta(CB) = -1 for this namespace
+  CB 1 -> 0; delta(CB) = -1
 ```
 
 A new compatibility ID requires the persisted-format evidence named in the
@@ -657,13 +726,24 @@ head and posts this structured comment manually:
 ```markdown
 Architecture decision: APPROVED
 Reviewed head SHA: <full commit SHA>
-Reviewed capability scope:
-- <capability and stable before/after set references>
-Decision:
-- delta(OE) <= 0
-- delta(PE) <= 0
-- delta(CB) <= 0, or: <persisted-compatibility exception and evidence>
-- superseded owners and paths removed: yes
+Reviewed changed-scope rows:
+- OE row <ID>: owners before <set> -> owners after <set>; O before <integer> -> O after <integer>; T before <integer> -> T after <integer>; OE before <integer> -> OE after <integer>; delta(OE) = <integer>
+- PE row <ID>: paths before <set> -> paths after <set>; P before <integer> -> P after <integer>; PE before <integer> -> PE after <integer>; delta(PE) = <integer>
+- CB row <ID>: stable IDs before <set> -> stable IDs after <set>; CB before <integer> -> CB after <integer>; delta(CB) = <integer>
+Changed-scope totals:
+- OE before <integer> -> OE after <integer>; delta(OE) = <integer>
+- PE before <integer> -> PE after <integer>; delta(PE) = <integer>
+- CB before <integer> -> CB after <integer>; delta(CB) = <integer>
+Superseded semantic owners:
+- <none, or exact set>
+Superseded canonical production paths:
+- <none, or exact set>
+Superseded compatibility paths, with stable IDs:
+- <none, or exact stable-ID set>
+Scope completeness decision:
+- <why the declared changed-scope rows and sets are complete>
+Persisted-compatibility exception:
+- <none, or exact exception and evidence>
 Limitations:
 - <none, or explicit non-authorizing limitation>
 ```

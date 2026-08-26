@@ -5,8 +5,8 @@ export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,
   renderProtocol: 2,
   request: Object.freeze({
-    currentSchema: 5,
-    supportedSchemas: Object.freeze([1, 2, 5]),
+    currentSchema: 6,
+    supportedSchemas: Object.freeze([1, 2, 5, 6]),
     unknownFieldPolicy: 'reject'
   }),
   resources: Object.freeze({

@@ -3,9 +3,6 @@ import {
   normalizePaletteColors,
   normalizePaletteDefinitions
 } from './app/color-utils.js';
-import { createDefaultLinearDefinitionLineStyles } from './app/definition-line-style-state.js';
-import { createDefaultCircularTrackSlots } from './app/circular-track-slots.js';
-import { createDefaultLinearTrackSlots } from './app/linear-track-slots.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
 import { deriveFeatureVisibilityRulesForBoundary } from './app/feature-visibility.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
@@ -19,19 +16,16 @@ import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from './app/linear-comparisons.js';
-import {
-  DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
-  createDefaultFeatureRenderings
-} from './utils/feature-rendering.js';
-import {
-  MODE_DEFAULT_FEATURE_TYPES,
-  comparisonStateForMode,
-  createModeProfileStateManager,
-  managedAdvStateForMode,
-  trackDefaultsForMode
-} from './mode-profiles.js';
-import { WEB_UX_PROFILE } from './web-ux-profile.js';
+import { createModeProfileStateManager } from './mode-profiles.js';
+import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
+import {
+  createDefaultAdv,
+  createDefaultCircularConservation,
+  createDefaultForm,
+  createDefaultLosat
+} from './services/session-active-config-contract.js';
+export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
 
 // System State
@@ -160,175 +154,6 @@ const annotationSets = reactive([]);
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
-
-const circularTrackDefaults = trackDefaultsForMode('circular');
-const linearTrackDefaults = trackDefaultsForMode('linear');
-
-export const createDefaultForm = () => ({
-  prefix: '',
-  species: '',
-  strain: '',
-  plot_title: '',
-  track_type: 'tuckin',
-  linear_track_layout: 'middle',
-  show_scale: true,
-  scale_style: 'bar',
-  linear_ruler_on_axis: false,
-  labels_mode: 'none',
-  show_labels_linear: 'none',
-  multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
-  separate_strands: WEB_UX_PROFILE.separateStrands,
-  suppress_gc: !circularTrackDefaults.gc,
-  suppress_skew: !circularTrackDefaults.skew,
-  align_center: false,
-  keep_definition_left_aligned: false,
-  show_gc: linearTrackDefaults.gc,
-  show_skew: linearTrackDefaults.skew,
-  show_depth: false,
-  normalize_length: false
-});
-
-export const createDefaultAdv = (profileMode = 'circular') => ({
-  rich_feature_popup: true,
-  features: [...MODE_DEFAULT_FEATURE_TYPES],
-  feature_shapes: createDefaultFeatureShapes(),
-  arrow_head_length_ratio: null,
-  arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO,
-  window_size: null,
-  step_size: null,
-  nt: 'GC',
-  def_font_size: null,
-  label_font_size: null,
-  circular_label_spacing: null,
-  linear_label_spacing: null,
-  label_rendering: 'auto',
-  circular_label_placement: 'horizontal',
-  label_placement: 'auto',
-  label_rotation: null,
-
-  // Styles
-  block_stroke_width: null,
-  block_stroke_color: null,
-  line_stroke_width: null,
-  line_stroke_color: null,
-  axis_stroke_width: null,
-  axis_stroke_color: managedAdvStateForMode(profileMode).axis_stroke_color,
-
-  // Legend
-  legend_box_size: null,
-  legend_font_size: null,
-
-  // Shared / overlap handling
-  resolve_overlaps: false,
-
-  // Linear Specific
-  feature_height: null,
-  track_axis_gap: null,
-  linear_show_replicon: false,
-  linear_show_accession: true,
-  linear_show_length: true,
-  linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(),
-  gc_height: null,
-  depth_height: null,
-  depth_color: '#4A90E2',
-  depth_tracks: [],
-  depth_window_size: null,
-  depth_step_size: null,
-  depth_share_axis: false,
-  depth_min: null,
-  depth_max: null,
-  depth_normalize: false,
-  depth_show_axis: true,
-  depth_show_ticks: true,
-  depth_large_tick_interval: null,
-  depth_small_tick_interval: null,
-  depth_tick_font_size: null,
-  linear_track_slots_enabled: false,
-  linear_track_slots_schema_version: 2,
-  linear_track_slots_axis_index: null,
-  linear_track_slots: createDefaultLinearTrackSlots(),
-  gc_content_mode: 'deviation',
-  gc_content_min_percent: 0,
-  gc_content_max_percent: 100,
-  gc_content_show_axis: true,
-  gc_content_show_ticks: true,
-  gc_content_tick_interval: 20,
-  gc_content_small_tick_interval: null,
-  gc_content_tick_font_size: null,
-  comparison_height: null,
-  pairwise_match_style: 'ribbon',
-  ...comparisonStateForMode(profileMode),
-  scale_interval: null,
-  scale_font_size: null,
-  scale_stroke_width: null,
-  scale_stroke_color: null,
-  ruler_label_color: null,
-
-  // Circular Specific
-  circular_grouping_intent: 'auto',
-  multi_record_size_mode: 'auto',
-  multi_record_min_radius_ratio: 0.55,
-  multi_record_column_gap_ratio: 0.10,
-  multi_record_row_gap_ratio: 0.05,
-  multi_record_positions: [],
-  tick_label_font_size: null,
-  plot_title_font_size: null,
-  keep_full_definition_with_plot_title: false,
-  center_reserved_radius: null,
-  feature_width_circular: null,
-  depth_width_circular: null,
-  gc_content_width_circular: null,
-  gc_content_radius_circular: null,
-  gc_skew_width_circular: null,
-  gc_skew_radius_circular: null,
-  circular_track_slots_enabled: false,
-  circular_track_slots_schema_version: 4,
-  circular_track_slots_axis_index: null,
-  circular_track_slots: createDefaultCircularTrackSlots(),
-  outer_label_x_offset: null,
-  outer_label_y_offset: null,
-  inner_label_x_offset: null,
-  inner_label_y_offset: null
-});
-
-export const createDefaultLosat = () => ({
-  outfmt: '6',
-  parallelWorkers: undefined,
-  executionMode: 'auto',
-  totalThreadBudget: 'safe',
-  threadsPerJob: 'auto',
-  blastn: {
-    task: 'megablast'
-  },
-  blastp: {
-    mode: 'orthogroup',
-    maxHits: 5,
-    candidateLimit: null,
-    orthogroupMembershipMode: 'anchor_core_v1',
-    orthogroupMemberMaxHits: 5,
-    collinearMinAnchors: 1,
-    collinearMaxUnitGap: 0,
-    collinearMaxDiagonalDrift: 0,
-    collinearMaxConflictsInMergeGap: 1,
-    collinearMaxParalogLinksPerOrthogroup: 2,
-    collinearColorMode: 'orientation',
-    collinearUnitMode: 'auto',
-    collinearAnchorMode: 'rbh',
-    collinearSearchScope: 'all'
-  }
-});
-
-export const createDefaultCircularConservation = () => ({
-  enabled: false,
-  source: 'losat',
-  losat_program: 'blastn',
-  subject_gencode: 1,
-  reference: 'auto',
-  labels: '',
-  series: [],
-  ring_width: null,
-  ring_gap: null
-});
 
 export const createDefaultSpecificRule = () => ({
   feat: 'CDS',

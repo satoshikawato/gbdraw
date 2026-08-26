@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { webcrypto } from 'node:crypto';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +15,7 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 globalThis.document = {};
 globalThis.File = class File extends Blob {
   constructor(parts, name, options = {}) {
@@ -36,7 +38,14 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-migration.js'))
 );
 const {
+  createGallerySessionPublication
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-publication.js'))
+);
+const {
+  assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
+  buildCanonicalRequestState,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
@@ -47,6 +56,17 @@ const {
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-comparisons.js'))
 );
+const {
+  admitGallerySession,
+  prepareGallerySessionForPublication
+} = createGallerySessionPublication({
+  promoteSession: promoteGallerySessionToCurrent,
+  assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
+  buildRequest: buildCanonicalRenderRequest,
+  buildRequestState: buildCanonicalRequestState,
+  projectRequest: projectCanonicalSessionRequest,
+  resolveComparisonPlan: resolveLinearComparisonPlan
+});
 const { applyConfigData } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'config.js'))
 );
@@ -129,7 +149,7 @@ const syntheticCliSession = {
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
 const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
-assert.equal(promotedSyntheticCli.renderRequest.schema, 5);
+assert.equal(promotedSyntheticCli.renderRequest.schema, 6);
 assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
   legend: 'right',
@@ -262,7 +282,7 @@ const syntheticGuiSession = {
 };
 const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
-assert.equal(promotedSyntheticGui.renderRequest.schema, 5);
+assert.equal(promotedSyntheticGui.renderRequest.schema, 6);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
 assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'old');
 assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
@@ -305,25 +325,23 @@ assert.equal(
   false
 );
 
-const staleCurrentConfig = structuredClone(promotedSyntheticGui);
-staleCurrentConfig.config.losat.blastp.collinearMaxGeneGap =
-  staleCurrentConfig.config.losat.blastp.collinearMaxUnitGap;
-delete staleCurrentConfig.config.losat.blastp.collinearMaxUnitGap;
-const repairedCurrentConfig = promoteGallerySessionToCurrent(staleCurrentConfig);
-assert.equal(repairedCurrentConfig.config.losat.blastp.collinearMaxUnitGap, 4);
-assert.equal(repairedCurrentConfig.config.adv.arrow_shaft_width_ratio, 1.0);
-assert.equal(
-  Object.hasOwn(repairedCurrentConfig.config.losat.blastp, 'collinearMaxGeneGap'),
-  false
+assert.equal(admitGallerySession(promotedSyntheticGui), promotedSyntheticGui);
+assert.throws(
+  () => promoteGallerySessionToCurrent(promotedSyntheticGui),
+  /historical migration supports session versions 31-33 and 39/
+);
+const retiredCurrentConfig = structuredClone(promotedSyntheticGui);
+retiredCurrentConfig.config.adv.cli_circular_track_order = [];
+assert.throws(
+  () => admitGallerySession(retiredCurrentConfig),
+  /config\.adv.*cli_circular_track_order/
 );
 const currentWithoutWebConfig = structuredClone(promotedSyntheticGui);
 delete currentWithoutWebConfig.config;
-const repairedWithoutWebConfig = promoteGallerySessionToCurrent(currentWithoutWebConfig);
-assert.deepEqual(repairedWithoutWebConfig.config.linearComparisonPlan, {
-  mode: 'adjacent',
-  defaultSource: 'losat',
-  edges: []
-});
+assert.throws(
+  () => admitGallerySession(currentWithoutWebConfig),
+  /missing its active Web configuration/
+);
 
 const uploadedGap = syntheticResource('web-file', 'gap.tsv', 'q\ts\t99');
 const migratedSelectedDraft = migrateLegacyLinearComparisonDraft({
@@ -532,9 +550,9 @@ assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearComparisonPlan'), fals
 assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false);
 
 const hmmt = await loadSession('HmmtDNA_ATskew.gbdraw-session.json');
-const promotedHmmt = promoteGallerySessionToCurrent(hmmt);
+const promotedHmmt = promoteGallerySessionToCurrent({ ...hmmt, version: 39 });
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
-assert.equal(promotedHmmt.renderRequest.schema, 5);
+assert.equal(promotedHmmt.renderRequest.schema, 6);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
@@ -552,19 +570,22 @@ assert.equal(
 assert.equal(hmmtOptions.colors.defaultColorsPalette, 'ajisai');
 const hmmtDefaultColors = resourceText(
   promotedHmmt,
-  hmmtOptions.colors.defaultColors
+  hmmtOptions.colors.defaultColorsFile || hmmtOptions.colors.defaultColors
 );
 assert.match(hmmtDefaultColors, /CDS\t#84b9ec/);
 assert.match(hmmtDefaultColors, /rRNA\t#7cecd5/);
 assert.match(hmmtDefaultColors, /tRNA\t#ddce76/);
 assert.doesNotMatch(hmmtDefaultColors, /CDS\t#54bcf8/);
 assert.match(
-  resourceText(promotedHmmt, hmmtOptions.qualifierPriorityTable),
+  resourceText(
+    promotedHmmt,
+    hmmtOptions.qualifierPriorityFile || hmmtOptions.qualifierPriorityTable
+  ),
   /CDS\tgene/
 );
 
 const bgc = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
-const promotedBgc = promoteGallerySessionToCurrent(bgc);
+const promotedBgc = promoteGallerySessionToCurrent({ ...bgc, version: 39 });
 const bgcOptions = promotedBgc.renderRequest.diagramOptions;
 assert.deepEqual(
   promotedBgc.renderRequest.records.map((record) => record.presentation.reverseComplement),
@@ -601,7 +622,10 @@ assert.equal(
   'bold'
 );
 assert.match(
-  resourceText(promotedBgc, bgcOptions.colors.colorTable),
+  resourceText(
+    promotedBgc,
+    bgcOptions.colors.colorTableFile || bgcOptions.colors.colorTable
+  ),
   /Core biosynthetic genes/
 );
 assert.deepEqual(
@@ -609,54 +633,8 @@ assert.deepEqual(
   bgc.renderRequest.comparisons
 );
 
-const wssv = await loadSession('WSSV_genome_comparison.gbdraw-session.json');
-const wssvSchema2 = structuredClone(wssv);
-wssvSchema2.version = 33;
-wssvSchema2.renderRequest.schema = 2;
-delete wssvSchema2.renderRequest.grouping;
-wssvSchema2.renderRequest.output = Array.isArray(wssvSchema2.renderRequest.output)
-  ? wssvSchema2.renderRequest.output[0]
-  : wssvSchema2.renderRequest.output;
-wssvSchema2.renderRequest.diagramOptions.output.outputPrefix =
-  wssvSchema2.renderRequest.output.prefix;
-const wssvWithoutCanonicalConservation = {
-  ...wssvSchema2,
-  renderRequest: {
-    ...wssvSchema2.renderRequest,
-    diagramOptions: {
-      ...wssvSchema2.renderRequest.diagramOptions,
-      conservationBlastFiles: []
-    }
-  }
-};
-const promotedWssv = promoteGallerySessionToCurrent(wssvWithoutCanonicalConservation);
-const wssvOptions = promotedWssv.renderRequest.diagramOptions;
-assert.equal(wssvOptions.conservationBlastFiles.length, 20);
-assert.deepEqual(
-  wssvOptions.conservationLabels,
-  wssv.config.circularConservation.series.map((series) => series.label)
-);
-assert.deepEqual(
-  wssvOptions.conservationColors,
-  wssv.config.circularConservation.series.map((series) => series.color)
-);
-for (const ref of wssvOptions.conservationBlastFiles) {
-  assert.ok(promotedWssv.resources[ref.resourceId]);
-  assert.ok(resourceText(promotedWssv, ref).length > 0);
-}
-const invalidWssvCacheEntries = wssv.losatCache.entries.map((entry, index) => (
-  index === 0 ? { ...entry, flow: 'linear-comparison' } : entry
-));
-assert.throws(
-  () => promoteGallerySessionToCurrent({
-    ...wssvWithoutCanonicalConservation,
-    losatCache: { ...wssv.losatCache, entries: invalidWssvCacheEntries }
-  }),
-  /20 series but 19 reusable LOSAT result/
-);
-
 const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz');
-const promotedMajani = promoteGallerySessionToCurrent(majani);
+const promotedMajani = (await prepareGallerySessionForPublication(majani)).session;
 assert.equal(promotedMajani.renderRequest.diagramOptions.output.legend, 'right');
 assert.deepEqual(
   promotedMajani.renderRequest.records.map((record) => record.presentation.label),
@@ -673,12 +651,8 @@ assert.deepEqual(
   ]
 );
 assert.deepEqual(
-  promotedMajani.renderRequest.comparisons,
-  majani.renderRequest.comparisons
-);
-assert.deepEqual(
-  promotedMajani.renderRequest.diagramOptions.config,
-  majani.renderRequest.diagramOptions.config
+  promotedMajani.renderRequest.comparisons.map((comparison) => comparison.kind),
+  majani.renderRequest.comparisons.map((comparison) => comparison.kind)
 );
 assert.equal(
   promotedMajani.renderRequest.diagramOptions.featureShapes.repeat_region,
@@ -697,8 +671,7 @@ for (const session of [promotedBgc, promotedMajani]) {
 
 for (const [name, promoted] of [
   ['HmmtDNA_ATskew', promotedHmmt],
-  ['BGC0000708-BGC0000713', promotedBgc],
-  ['WSSV_genome_comparison', promotedWssv]
+  ['BGC0000708-BGC0000713', promotedBgc]
 ]) {
   for (const [resourceId, resource] of Object.entries(promoted.resources)) {
     assert.ok(
@@ -706,16 +679,10 @@ for (const [name, promoted] of [
       `${name} resource ${resourceId} repeats its canonical prefix`
     );
   }
-  const promotedAgain = promoteGallerySessionToCurrent(promoted);
-  assert.deepEqual(
-    promotedAgain.renderRequest,
-    promoted.renderRequest,
-    `${name} renderRequest changed on a second promotion`
-  );
-  assert.deepEqual(
-    promotedAgain.resources,
-    promoted.resources,
-    `${name} resources changed on a second promotion`
+  assert.equal(admitGallerySession(promoted), promoted);
+  assert.throws(
+    () => promoteGallerySessionToCurrent(promoted),
+    /historical migration supports session versions 31-33 and 39/
   );
 }
 

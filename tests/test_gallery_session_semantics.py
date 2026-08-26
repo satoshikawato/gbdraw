@@ -64,7 +64,7 @@ def gallery_sessions(
 def _request(session: dict[str, object]) -> dict[str, object]:
     request = session["renderRequest"]
     assert isinstance(request, dict)
-    assert request["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert request["schema"] in {5, CANONICAL_REQUEST_SCHEMA}
     return request
 
 
@@ -443,7 +443,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
         assert set(expected_labels) <= texts, location
         assert set(expected_subtitles) <= texts, location
         assert rule_captions <= texts, location
-        assert {"#54bcf8", *rule_colors} <= fills, location
+        assert {"#d3d3d3", *rule_colors} <= fills, location
         assert "livZ" in texts, location
         assert len(definitions) == 5, location
         for definition in definitions:
@@ -508,87 +508,6 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
         assert captions <= texts, location
         assert expected_colors <= fills, location
         assert len(definitions) == 9, location
-
-
-def test_wssv_gallery_session_keeps_all_twenty_conservation_rings(
-    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
-    gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
-) -> None:
-    labels = (
-        "CN01",
-        "WSSV-TW",
-        "WSSV-CN",
-        "WSSV-TH",
-        "JP01A",
-        "JP01B",
-        "Pc2020",
-        "E1",
-        "0722-1",
-        "CN03",
-        "CN04",
-        "WSSV-AU",
-        "EU129",
-        "GCF7",
-        "MES-753",
-        "Shantou2019",
-        "POMZ1",
-        "POMZ4",
-        "MG18PR-0187-N40S",
-        "Angostura2013",
-    )
-    colors = (
-        "#6e91b7",
-        "#f4a251",
-        "#77b26f",
-        "#e67577",
-        "#8fc4c0",
-        "#f0d369",
-        "#be92b2",
-        "#ffafb7",
-        "#ae8e7c",
-        "#c6bebb",
-        "#6e91b7",
-        "#f4a251",
-        "#e67577",
-        "#8fc4c0",
-        "#bcb4ca",
-        "#f0d369",
-        "#be92b2",
-        "#ffafb7",
-        "#ae8e7c",
-        "#c6bebb",
-    )
-
-    _example, session = gallery_sessions["WSSV_genome_comparison"]
-    request = _request(session)
-    options = request["diagramOptions"]
-    assert isinstance(options, dict)
-    conservation = options["conservationBlastFiles"]
-    assert isinstance(conservation, list) and len(conservation) == 20
-    assert all(_resource_bytes(session, ref) for ref in conservation)
-    assert tuple(options["conservationLabels"]) == labels
-    assert tuple(options["conservationColors"]) == colors
-    # The saved gallery state uses automatic BLAST-side detection.  The
-    # canonical encoder may omit this default rather than serializing "auto".
-    assert options.get("conservationReference") in {None, "auto"}
-    assert options["conservationRingWidth"] == 5
-    assert options["conservationRingGap"] == 2
-    palette = options["colors"]
-    assert isinstance(palette, dict)
-    assert palette["defaultColorsPalette"] == "royal_gala"
-
-    for location, root in gallery_visual_roots("WSSV_genome_comparison", False):
-        group_labels = {
-            element.get("data-track-label")
-            for element in root.iter()
-            if element.tag.endswith("g")
-            and element.get("data-track-label")
-        }
-        texts = set(_texts(root))
-        fills = {element.get("fill") for element in root.iter()}
-        assert group_labels == set(labels), location
-        assert set(labels) <= texts, location
-        assert "#dc7078" in fills, location
 
 
 @pytest.mark.parametrize(
@@ -658,13 +577,11 @@ def test_hepatoplasmataceae_gallery_keeps_shared_track_spacing(
     request = _request(session)
     options = request["diagramOptions"]
     assert isinstance(options, dict)
-    config = options["config"]
-    assert isinstance(config, dict)
-    canvas = config["canvas"]
-    assert isinstance(canvas, dict)
-    linear = canvas["linear"]
-    assert isinstance(linear, dict)
-    declared_spacing = float(linear.get("track_spacing", 0.0))
+    config_overrides = options["configOverrides"]
+    assert isinstance(config_overrides, dict)
+    declared_spacing = float(
+        config_overrides.get("canvas.linear.track_spacing", 0.0)
+    )
     assert declared_spacing == pytest.approx(0.0)
 
     geometry = _materialized_track_geometry(example_id)

@@ -85,8 +85,8 @@ from .api.requests import (
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 5
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, CANONICAL_REQUEST_SCHEMA})
+CANONICAL_REQUEST_SCHEMA = 6
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 5, CANONICAL_REQUEST_SCHEMA})
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -572,11 +572,6 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
     ):
         raise CanonicalRequestEncodingError("Unsupported typed diagram request.")
     unresolved_reasons: list[str] = []
-    if any(
-        record.cardinality is not RecordCardinality.EXACTLY_ONE
-        for record in request.records
-    ):
-        unresolved_reasons.append("record cardinality")
     if request.record_options != RecordCollectionOptions():
         unresolved_reasons.append("collection-level record transforms")
     if isinstance(request, CircularBatchRequest) and request.output_policy is not None:
@@ -597,7 +592,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("Linear comparison table")
     if unresolved_reasons:
         raise CanonicalRequestEncodingError(
-            "Canonical schema 5 requires a materialized exact-one request; "
+            "Canonical schema 6 cannot encode unresolved request transforms; "
             "call gbdraw.api.resolve_request() before encoding (unresolved: "
             + ", ".join(unresolved_reasons)
             + ")."
@@ -698,7 +693,7 @@ def _decode_canonical_request(
         path="renderRequest",
         required=set(
             _TOP_LEVEL_FIELDS_V5
-            if schema == CANONICAL_REQUEST_SCHEMA
+            if schema >= 5
             else _TOP_LEVEL_FIELDS
         ),
     )
@@ -740,7 +735,7 @@ def _decode_canonical_request(
     options = options_type(**options_kwargs, **comparison_kwargs)
     _validate_dataclass_contract(options, path="diagramOptions", error="decode")
     grouping = top.get("grouping")
-    if schema == CANONICAL_REQUEST_SCHEMA:
+    if schema >= 5:
         allowed_groupings = (
             {"single", "grid", "batch"}
             if mode == "circular"
@@ -761,7 +756,7 @@ def _decode_canonical_request(
                 )
             linear_layout = None
         else:
-            linear_layout = _decode_linear_layout(top["layout"])
+            linear_layout = _decode_linear_layout(top["layout"], schema=schema)
         return LinearDiagramRequest(
             records=records,
             options=options,
@@ -843,6 +838,7 @@ def _encode_record(
     presentation = record.presentation
     return {
         "recordKey": record.record_key or f"record-{index}",
+        "cardinality": record.cardinality.value,
         "source": source_payload,
         "selector": _encode_selector(record.selector),
         "region": _encode_region(record.region),
@@ -867,6 +863,8 @@ def _decode_record(
     required = {"source", "selector", "region", "presentation"}
     if schema >= 2:
         required.add("recordKey")
+    if schema >= 6:
+        required.add("cardinality")
     item = _object(value, path=path, required=required)
     source_payload = _object(
         item["source"], path=f"{path}.source", required={"kind"}, exact=False
@@ -929,6 +927,11 @@ def _decode_record(
     )
     return RecordInput(
         source=source,
+        cardinality=(
+            RecordCardinality(item["cardinality"])
+            if schema >= 6
+            else RecordCardinality.EXACTLY_ONE
+        ),
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
         region=_decode_region(item["region"], path=f"{path}.region"),
         presentation=presentation,
@@ -1020,14 +1023,12 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     if isinstance(request, LinearDiagramRequest):
         if request.layout is None:
             return {}
-        return {
-            "recordGapPx": request.layout.record_gap_px,
-            "multiRecordPositions": (
-                list(request.layout.multi_record_positions)
-                if request.layout.multi_record_positions is not None
-                else None
-            ),
-        }
+        layout: dict[str, Any] = {"recordGapPx": request.layout.record_gap_px}
+        if request.layout.multi_record_positions is not None:
+            layout["multiRecordPositions"] = list(
+                request.layout.multi_record_positions
+            )
+        return layout
     if not isinstance(request, CircularDiagramRequest) or request.layout is None:
         return {}
     layout = request.layout
@@ -1091,16 +1092,25 @@ def _decode_circular_layout(
     return result
 
 
-def _decode_linear_layout(value: object) -> LinearMultiRecordOptions | None:
+def _decode_linear_layout(
+    value: object,
+    *,
+    schema: int,
+) -> LinearMultiRecordOptions | None:
     layout = _object(value, path="renderRequest.layout")
     if not layout:
         return None
     _require_exact_fields(
         layout,
         path="renderRequest.layout",
-        required={"recordGapPx", "multiRecordPositions"},
+        required=(
+            {"recordGapPx"}
+            if schema >= 6
+            else {"recordGapPx", "multiRecordPositions"}
+        ),
+        optional={"multiRecordPositions"} if schema >= 6 else frozenset(),
     )
-    positions = layout["multiRecordPositions"]
+    positions = layout.get("multiRecordPositions")
     if positions is not None and (
         not isinstance(positions, list)
         or not all(isinstance(item, str) for item in positions)
@@ -3465,29 +3475,36 @@ def _read_typed_json_resource(
     resource_path = _resolve_resource(
         resource_id, path=f"{path}.resourceId", resource_paths=resource_paths
     )
-    try:
-        raw = json.loads(resource_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise CanonicalRequestDecodingError(
-            f"Could not decode canonical JSON resource for {path}."
-        ) from exc
-    payload = _object(
-        raw, path=f"{path} resource", required={"schema", "kind", "value"}
-    )
-    resource_schema = payload["schema"]
-    if resource_schema not in {1, 2} or payload["kind"] != value_kind:
-        raise CanonicalRequestDecodingError(
-            f"Canonical JSON resource metadata does not match {path}."
-        )
-    value = _decode_typed_tree(
-        payload["value"],
-        expected,
-        path=f"{path}.value",
-        resource_schema=resource_schema,
-    )
-    from gbdraw.api.prepared import register_prepared_resource_value
 
-    return register_prepared_resource_value(value, resource_path)
+    def decode() -> Any:
+        try:
+            raw = json.loads(resource_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CanonicalRequestDecodingError(
+                f"Could not decode canonical JSON resource for {path}."
+            ) from exc
+        payload = _object(
+            raw, path=f"{path} resource", required={"schema", "kind", "value"}
+        )
+        resource_schema = payload["schema"]
+        if resource_schema not in {1, 2} or payload["kind"] != value_kind:
+            raise CanonicalRequestDecodingError(
+                f"Canonical JSON resource metadata does not match {path}."
+            )
+        return _decode_typed_tree(
+            payload["value"],
+            expected,
+            path=f"{path}.value",
+            resource_schema=resource_schema,
+        )
+
+    from gbdraw.api.prepared import get_or_build_decoded_resource
+
+    return get_or_build_decoded_resource(
+        resource_path,
+        ("canonical-typed-json", value_kind, repr(expected)),
+        decode,
+    )
 
 
 def _encode_typed_tree(value: object) -> Any:

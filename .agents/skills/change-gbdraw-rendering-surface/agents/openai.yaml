@@ -1,4 +1,4 @@
 interface:
   display_name: "Change gbdraw Rendering Surface"
-  short_description: "Carry gbdraw changes across every public surface"
-  default_prompt: "Use $change-gbdraw-rendering-surface to implement this rendering change across gbdraw APIs, CLI, Web, sessions, and tests."
+  short_description: "Keep shared rendering contracts aligned"
+  default_prompt: "Use $change-gbdraw-rendering-surface to update this shared rendering contract across the owning and persisted surfaces that actually apply."

@@ -175,7 +175,7 @@ def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None
     assert CURRENT_SESSION_VERSION == 40
     for value in (
         "CURRENT_SESSION_VERSION = 40",
-        "CURRENT_RENDER_REQUEST_SCHEMA = 5",
+        "CURRENT_RENDER_REQUEST_SCHEMA = 6",
         'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"',
         'contents[:2] != b"\\x1f\\x8b"',
         'with gzip.open(path, "rt", encoding="utf-8")',

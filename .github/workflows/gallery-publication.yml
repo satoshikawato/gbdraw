@@ -1,0 +1,85 @@
+name: Gallery publication
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["main", "refactoring", "dev"]
+  pull_request:
+    branches: ["dev", "main"]
+  workflow_dispatch:
+    inputs:
+      complete_refresh:
+        description: Run the three-trial baseline/head complete-refresh gate
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: gallery-publication-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Gallery browser (${{ matrix.example }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - example: common 9
+            command: test:web:gallery-publication
+          - example: Vibrio
+            command: test:web:vibrio-generate
+    steps:
+      - name: Checkout exact test SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install browser dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          npx playwright install --with-deps chromium
+          python tools/prepare_browser_wheel.py
+      - name: Verify first-Generate parity
+        run: npm run ${{ matrix.command }}
+
+  performance:
+    name: Gallery publication performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact test SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install performance dependencies
+        run: python -m pip install -e ".[export]" Pillow
+      - name: Enforce three-trial projection gate
+        run: >-
+          python tools/measure_gallery_publication_performance.py projection
+          --baseline-revision 574b33b83962949397839e2aaa862a8b96667625
+          --revision ${{ github.sha }}
+      - name: Enforce three-trial complete-refresh gate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.complete_refresh }}
+        run: >-
+          python tools/measure_gallery_publication_performance.py refresh
+          --baseline-revision 574b33b83962949397839e2aaa862a8b96667625
+          --revision ${{ github.sha }}

@@ -57,6 +57,7 @@
   stroke-opacity: 1;
   stroke-width: 2.5;
   paint-order: stroke fill markers;
+  outline: none;
 }
 .gbdraw-interactive-annotation {
   cursor: pointer;
@@ -1295,7 +1296,7 @@
     return endpoint ? [endpoint] : [];
   }
 
-  function clearCatalogMatchEndpoint(expanded, role) {
+  function clearCatalogMatchEndpoint(expanded, role, preserveRecordIdentity) {
     [
       '_feature_svg_id', 'FeatureSvgId',
       '_rendered_feature_svg_id', 'RenderedFeatureSvgId',
@@ -1307,6 +1308,10 @@
       '_record_id', 'RecordId',
       'FeatureReferences'
     ].forEach(function (suffix) {
+      if (
+        preserveRecordIdentity
+        &amp;&amp; ['_record_index', 'RecordIndex', '_record_id', 'RecordId'].indexOf(suffix) &gt;= 0
+      ) return;
       delete expanded[role + suffix];
     });
   }
@@ -1531,7 +1536,11 @@
         );
         expanded['_gbdraw_' + role + '_endpoint_resolved'] = Boolean(endpoints.length);
         if (!endpoints.length) {
-          clearCatalogMatchEndpoint(expanded, role);
+          clearCatalogMatchEndpoint(
+            expanded,
+            role,
+            String(expanded.match_kind || '') === 'homology'
+          );
           return;
         }
         var endpoint = endpoints[0];
@@ -1944,7 +1953,7 @@
 
   var matchElementsById = new Map();
   var ambiguousMatchElementIds = new Set();
-  var selectedMatchId = '';
+  var selectedMatchElements = [];
   var comparisonElementsByCollinearityBlockId = new Map();
   Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
     var matchId = getElementMatchId(element);
@@ -2072,17 +2081,32 @@
 
   function setSelectedMatch(matchId) {
     var nextId = String(matchId || '').trim();
-    if (selectedMatchId) {
-      (matchElementsById.get(selectedMatchId) || []).forEach(function (element) {
-        setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', false);
-      });
+    selectedMatchElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', false);
+    });
+    selectedMatchElements = matchElementsById.get(nextId) || [];
+    var selectedElement = selectedMatchElements[0];
+    if (selectedElement) {
+      var selectedMatchKind = matchAttr(selectedElement, 'data-match-kind').toLowerCase();
+      var selectedOrthogroupIds = getOrthogroupIds(matchAttr(selectedElement, 'data-orthogroup-id'));
+      var selectedIsOrthogroup = selectedMatchKind === 'orthogroup' || (
+        !selectedMatchKind
+        &amp;&amp; !matchAttr(selectedElement, 'data-collinearity-block-id')
+        &amp;&amp; selectedOrthogroupIds.length === 1
+      );
+      if (selectedIsOrthogroup &amp;&amp; selectedOrthogroupIds.length === 1) {
+        selectedMatchElements = (comparisonElementsByOrthogroupId.get(selectedOrthogroupIds[0]) || [])
+          .filter(function (element) {
+            var elementMatchKind = matchAttr(element, 'data-match-kind').toLowerCase();
+            return element.matches &amp;&amp; element.matches(MATCH_SELECTOR)
+              &amp;&amp; !matchAttr(element, 'data-collinearity-block-id')
+              &amp;&amp; (elementMatchKind === 'orthogroup' || !elementMatchKind);
+          });
+      }
     }
-    selectedMatchId = nextId;
-    if (selectedMatchId) {
-      (matchElementsById.get(selectedMatchId) || []).forEach(function (element) {
-        setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
-      });
-    }
+    selectedMatchElements.forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
+    });
   }
 
   function clearActiveFeatureHover() {
@@ -4895,14 +4919,15 @@
   }
 
   function resolveEmbeddedMatchSource(match, role) {
+    var kind = String(match &amp;&amp; match.match_kind || 'pairwise');
     if (
       match
       &amp;&amp; match._gbdraw_catalog_endpoint_contract === true
+      &amp;&amp; kind !== 'homology'
       &amp;&amp; !resolvedCatalogMatchFeature(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }
-    var kind = String(match &amp;&amp; match.match_kind || 'pairwise');
     var recordIdIdentity = consistentTextIdentity(
       match,
       [role + '_record_id', role + 'RecordId']

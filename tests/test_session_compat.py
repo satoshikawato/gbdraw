@@ -62,13 +62,11 @@ _VERSION_39_SESSION = (
     / "sessions"
     / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
 )
-_WSSV_CURRENT_SESSION = (
-    Path(__file__).parent.parent
-    / "gbdraw"
-    / "web"
-    / "gallery"
+_SYNTHETIC_CONSERVATION_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
     / "sessions"
-    / "WSSV_genome_comparison.gbdraw-session.json"
+    / "synthetic_conservation.gbdraw-session.json.gz"
 )
 
 
@@ -206,10 +204,12 @@ def _released_canonical_session(
     assert isinstance(payload, dict)
     payload["schema"] = request_schema
     payload.pop("grouping", None)
+    records = payload["records"]
+    assert isinstance(records, list)
+    for record in records:
+        assert isinstance(record, dict)
+        record.pop("cardinality", None)
     if request_schema == 1:
-        records = payload["records"]
-        assert isinstance(records, list)
-        assert isinstance(records[0], dict)
         records[0].pop("recordKey", None)
     nested_output = payload["diagramOptions"].get("output")
     if isinstance(nested_output, dict):
@@ -774,10 +774,10 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
     ) == 1
 
 
-def test_current_typed_replay_retains_web_only_losat_fastas(
+def test_current_typed_replay_retains_web_only_conservation_fastas(
     tmp_path: Path,
 ) -> None:
-    source_document = load_session_document(_WSSV_CURRENT_SESSION)
+    source_document = load_session_document(_SYNTHETIC_CONSERVATION_SESSION)
     source_payload = source_document.to_dict()
     source_web_files = source_payload["webFiles"]
     source_resources = source_payload["resources"]

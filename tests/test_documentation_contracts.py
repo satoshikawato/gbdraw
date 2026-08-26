@@ -145,7 +145,7 @@ def test_python_api_describes_its_four_output_forms() -> None:
 def test_web_maintenance_guide_describes_typed_worker_rendering() -> None:
     text = (REPO_ROOT / "gbdraw/web/CLAUDE.md").read_text(encoding="utf-8")
 
-    assert "canonical schema-5 render request" in text
+    assert "canonical schema-6 render request" in text
     assert "workers/diagram-generation-worker.js" in text
     assert "typed request decoding and render_request()" in text
     assert "setup() ~" not in text

@@ -36,6 +36,7 @@ from gbdraw.api.options import (
     ColorOptions,
     DepthTrackInput,
     LinearDiagramOptions,
+    LinearMultiRecordOptions,
     LinearOutputOptions,
     LinearTrackOptions,
 )
@@ -48,6 +49,7 @@ from gbdraw.api.requests import (
     GffFastaInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
+    RecordCardinality,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -188,12 +190,19 @@ def _payload_for_schema(
     payload["schema"] = schema
     if schema < 5:
         payload.pop("grouping", None)
+    _remove_schema6_record_fields(payload, schema)
     if schema == 1:
         payload["records"][0].pop("recordKey", None)
     nested_output = payload["diagramOptions"].get("output")
     if schema in {1, 2} and nested_output is not None:
         nested_output["outputPrefix"] = "ignored-legacy-prefix"
     return payload
+
+
+def _remove_schema6_record_fields(payload: dict[str, Any], schema: int) -> None:
+    if schema < 6:
+        for record in payload["records"]:
+            record.pop("cardinality", None)
 
 
 def _standard_collinearity_payload(
@@ -233,7 +242,7 @@ def _table() -> pd.DataFrame:
     )
 
 
-def test_schema5_round_trips_circular_batch_grouping_and_outputs(
+def test_schema6_round_trips_circular_batch_grouping_and_outputs(
     tmp_path: Path,
 ) -> None:
     sources = (
@@ -253,7 +262,7 @@ def test_schema5_round_trips_circular_batch_grouping_and_outputs(
         )
     )
 
-    assert encoded.payload["schema"] == 5
+    assert encoded.payload["schema"] == 6
     assert encoded.payload["grouping"] == "batch"
     assert [item["prefix"] for item in encoded.payload["output"]] == [
         "same-id",
@@ -272,6 +281,55 @@ def test_schema5_round_trips_circular_batch_grouping_and_outputs(
         "same-id",
         "same-id_2",
     ]
+
+
+def test_schema6_round_trips_unresolved_record_cardinality_and_row(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "multi-record.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(
+                RecordInput(
+                    source=GenBankInputSource(source),
+                    cardinality=RecordCardinality.ALL,
+                    record_key="source-card",
+                    presentation=RecordPresentation(grid_row=2),
+                ),
+            ),
+            layout=LinearMultiRecordOptions(),
+        )
+    )
+
+    assert CANONICAL_REQUEST_SCHEMA == 6
+    assert encoded.payload["records"][0]["cardinality"] == "all"
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.records[0].cardinality is RecordCardinality.ALL
+    assert decoded.records[0].presentation.grid_row == 2
+
+
+def test_schema5_defaults_record_cardinality_to_exactly_one(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path / "record.gbk")
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source)),),
+        )
+    )
+    payload = _payload_for_schema(encoded, 5)
+
+    assert "cardinality" not in payload["records"][0]
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.records[0].cardinality is RecordCardinality.EXACTLY_ONE
 
 
 @pytest.mark.parametrize("schema", (3, 4))
@@ -915,6 +973,7 @@ def test_schema2_nested_output_prefix_is_required_but_ignored(
     )
     legacy_payload = copy.deepcopy(encoded.payload)
     legacy_payload["schema"] = 2
+    _remove_schema6_record_fields(legacy_payload, 2)
     legacy_payload.pop("grouping", None)
     legacy_payload["diagramOptions"]["output"]["outputPrefix"] = "ignored-nested"
 
@@ -991,6 +1050,7 @@ def test_legacy_circular_schemas_migrate_removed_layout_values(
     )
     legacy_payload = copy.deepcopy(encoded.payload)
     legacy_payload["schema"] = schema
+    _remove_schema6_record_fields(legacy_payload, schema)
     legacy_payload.pop("grouping", None)
     if schema == 1:
         legacy_payload["records"][0].pop("recordKey")
@@ -1117,6 +1177,7 @@ def test_legacy_factor_spacing_replays_but_cannot_leak_into_current_schema(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = 2
+    _remove_schema6_record_fields(payload, 2)
     payload.pop("grouping", None)
     payload["diagramOptions"]["tracks"] = {
         "circularTrackSlots": [
@@ -1164,6 +1225,7 @@ def test_schema2_migrates_removed_feature_table_field(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = 2
+    _remove_schema6_record_fields(payload, 2)
     payload.pop("grouping", None)
     diagram_options = payload["diagramOptions"]
     diagram_options["featureTable"] = diagram_options.pop(
@@ -1789,6 +1851,7 @@ def test_sparse_supported_schemas_retain_historical_defaults(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _remove_schema6_record_fields(payload, schema)
     payload.pop("grouping", None)
     if schema == 1:
         payload["records"][0].pop("recordKey")
@@ -1897,6 +1960,7 @@ def test_supported_schemas_preserve_explicit_serialized_defaults(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _remove_schema6_record_fields(payload, schema)
     if schema < 5:
         payload.pop("grouping", None)
     if schema == 1:
@@ -1973,6 +2037,7 @@ def test_supported_schemas_migrate_legacy_flat_label_settings(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _remove_schema6_record_fields(payload, schema)
     if schema < 5:
         payload.pop("grouping", None)
     if schema == 1:
@@ -2019,6 +2084,7 @@ def test_supported_schemas_migrate_legacy_full_config_label_settings(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _remove_schema6_record_fields(payload, schema)
     if schema < 5:
         payload.pop("grouping", None)
     if schema == 1:
@@ -2092,6 +2158,7 @@ def test_legacy_schemas_migrate_retired_config_overrides(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _remove_schema6_record_fields(payload, schema)
     payload.pop("grouping", None)
     if schema == 1:
         payload["records"][0].pop("recordKey")
@@ -2202,6 +2269,7 @@ def test_legacy_canonical_schema_preserves_repeat_rectangle_default(
     )
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    _remove_schema6_record_fields(payload, schema)
     payload.pop("grouping", None)
     if schema == 1:
         for record_payload in payload["records"]:
@@ -2259,7 +2327,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=6), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=7), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),

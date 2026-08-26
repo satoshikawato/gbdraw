@@ -1,7 +1,9 @@
 # Web change policy
 
-The Web change checks limit growth in `gbdraw/web/index.html`, `gbdraw/web/js/`,
-and `gbdraw/web/vendor/`. Every pull request uses one of two finite profiles:
+The Web checker measures production change size separately from blocking
+integrity and architecture violations. Production scope covers
+`gbdraw/web/index.html`, `gbdraw/web/js/`, and `gbdraw/web/vendor/`. Every pull
+request uses one of two review profiles:
 
 | Profile | Production files | Gross churn | Net additions |
 | --- | ---: | ---: | ---: |
@@ -9,14 +11,48 @@ and `gbdraw/web/vendor/`. Every pull request uses one of two finite profiles:
 | Architecture | 12 | 1,500 | 400 |
 
 The ordinary profile is the default. The `architecture-change` label selects
-the architecture profile; it does not waive a failed limit. Exact-limit changes
-pass. Gross churn is the sum of textual additions and deletions in production
-scope. Net additions are additions minus deletions. Binary files are counted
-separately.
+the larger architecture review profile; it does not waive a blocking violation.
+Changes at or below every selected threshold report `Size review: CLEAR`. An
+excess reports `Size review: REQUIRED`, but does not affect `Result` or the exit
+status. A size-only excess reports `Result: PASS` and exits with status `0`.
 
-Both profiles reject new production dependencies, including new bare production
-imports. They also reject every change under `gbdraw/web/vendor/` and every added
-binary file in production scope.
+Gross churn is the sum of textual additions and deletions in production scope.
+Net additions are additions minus deletions. Binary files are counted separately.
+Contributors must not game the measurements by compressing source onto fewer
+lines, omitting tests or documentation, moving logic outside measured paths,
+retaining dead paths, or splitting an incomplete change.
+
+Blocking violations determine `Result` and the exit status. The following checks
+remain blocking:
+
+- new production dependencies and bare production imports;
+- additions of binary runtime files and changes under `gbdraw/web/vendor/`;
+- prohibited combinations of Web runtime and guard or CI changes;
+- checker or source-parser changes combined with authority policy or workflow
+  changes;
+- unauthorized privileged owners or importers, invalid allowlist changes, and
+  incomplete import graphs;
+- first-party static import cycles; and
+- candidate, trusted-base, or active architecture-rule errors and failures.
+
+The required status names remain `Web change budget` and
+`Web base policy (trusted base)` for branch-protection compatibility. GitHub
+Actions emits one bounded warning annotation when size review is required; the
+step summary contains the complete measurements and reasons.
+
+## CI diff scope
+
+Pull request checks compare the pull request base SHA with its head SHA. A push
+to `dev` checks only the change integrated by that push, from
+`github.event.before` to `github.sha`. A manual `dev` staging run has no push
+payload, so it checks the current merge commit from its first parent to `HEAD`.
+These ranges determine only the change presented to the Web checker. The full
+staging matrix continues to run from the current `dev` checkout.
+
+This scope prevents independently reviewed changes already on `dev` from being
+reclassified as one combined runtime-and-guard change. It does not add a
+promotion exception or alter any blocking rule, threshold, authority source, or
+checker behavior.
 
 ## Guard separation
 
@@ -60,7 +96,7 @@ Expansion uses two pull requests in this order:
    implementation pull request against the updated base branch. Change the Web
    runtime without changing the policy, checker, architecture test, or policy
    workflows. Apply the `architecture-change` label when the implementation needs
-   the larger finite profile.
+   the larger review profile.
 
 Contraction may use two pull requests, in the opposite order:
 
@@ -91,9 +127,10 @@ This narrow same-pull-request path is safe because:
   remain unchanged; and
 - trusted-base execution remains authoritative.
 
-The ordinary or architecture production budget and the dependency, vendor,
-binary, and other integrity checks still apply in full. Any other runtime/guard
-combination remains prohibited.
+An allowed contraction remains subject to the selected size-review thresholds.
+A threshold excess requires review but does not fail the check. Dependency,
+vendor, binary, and other integrity checks remain blocking. Any other
+runtime/guard combination remains prohibited.
 
 ## Architecture evidence and authority
 

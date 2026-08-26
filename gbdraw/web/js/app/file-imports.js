@@ -56,7 +56,8 @@ export const parseSpecificRules = (text) => {
       throw new Error(`Invalid specific-color regex at line ${lineNo}: ${error.message}`);
     }
     const color = String(resolveColorToHex(colorRaw) || '').toLowerCase();
-    if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)) {
+    const domFreeNamedColor = !globalThis.document?.createElement && /^[a-z]+$/i.test(color);
+    if (!domFreeNamedColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)) {
       throw new Error(`Invalid specific-color value at line ${lineNo}: ${colorRaw}`);
     }
 

@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
+const { spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { readFileSync } = require('node:fs');
+const { mkdtempSync, readFileSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
@@ -9,6 +11,8 @@ const {
 } = require('../helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
+const svgComparisonRoot = mkdtempSync(join(tmpdir(), 'gbdraw-svg-compare-'));
+let svgComparisonIndex = 0;
 const sourceSessionPath = join(
   repoRoot,
   'gbdraw',
@@ -200,7 +204,7 @@ const saveCurrentSession = async (page, title) => {
   expect(session).toMatchObject({
     format: 'gbdraw-session',
     version: 40,
-    renderRequest: { schema: 5 }
+    renderRequest: { schema: 6 }
   });
   return { path, session };
 };
@@ -964,6 +968,7 @@ const capturePageEvidence = (page) => page.evaluate(async () => {
       }
     },
     svg: {
+      raw: svgContent,
       source: hashText(svgContent),
       canonical: hashText(canonicalSvg),
       semantic: hashText(JSON.stringify(semanticRows)),
@@ -1036,10 +1041,28 @@ const svgEquivalence = (left, right) => ({
 
 const expectSvgEquivalent = (left, right, label) => {
   const comparison = svgEquivalence(left, right);
+  svgComparisonIndex += 1;
+  const leftPath = join(svgComparisonRoot, `${svgComparisonIndex}-left.svg`);
+  const rightPath = join(svgComparisonRoot, `${svgComparisonIndex}-right.svg`);
+  writeFileSync(leftPath, left.raw, 'utf8');
+  writeFileSync(rightPath, right.raw, 'utf8');
+  const command = [
+    'import sys',
+    'from tests.utils.svg_compare import compare_svgs',
+    'result = compare_svgs(sys.argv[1], sys.argv[2])',
+    'print(result.message)',
+    'print("\\n".join(result.differences))',
+    'raise SystemExit(0 if result.equal else 1)'
+  ].join(';');
+  const semanticComparison = spawnSync(
+    process.env.GBDRAW_PYTHON || 'python',
+    ['-c', command, leftPath, rightPath],
+    { cwd: repoRoot, encoding: 'utf8' }
+  );
   expect(
-    comparison.exact || comparison.canonical || comparison.semantic || comparison.visual,
-    `${label}: ${JSON.stringify({ left, right, comparison }, null, 2)}`
-  ).toBe(true);
+    semanticComparison.status,
+    `${label}: ${semanticComparison.stdout}\n${semanticComparison.stderr}`
+  ).toBe(0);
   return comparison;
 };
 

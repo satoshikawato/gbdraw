@@ -1,15 +1,28 @@
 ---
 name: change-gbdraw-rendering-surface
-description: Implement or review a gbdraw rendering option across every surface that owns or persists it. Use when adding, changing, renaming, or removing diagram settings, track behavior, labels, legends, geometry, comparison data, output topology, Python APIs, CLI flags, Web controls, typed render requests, saved sessions, Gallery examples, or reference SVGs.
+description: Implement or review a gbdraw rendering contract that intentionally changes multiple owning or persistence surfaces, such as shared option semantics, Python/CLI/Web request parity, session serialization, or renderer/output topology. Do not invoke for a bug confined to one surface, an internal refactor, a test or documentation-only change, or a Gallery content refresh when the shared contract is unchanged.
 ---
 
 # Change a gbdraw rendering surface
 
 Read `AGENTS.md` and `CLAUDE.md` first. Read `gbdraw/web/CLAUDE.md` when the Web app, session projection, browser worker, or Gallery is in scope. Use `$maintain-python-api` for public API contract details and `$web-gallery-screenshot-maintenance` for Gallery media work.
 
+## Decide whether this Skill applies
+
+Use this Skill when the requested outcome changes a shared or persisted rendering contract. Typical triggers are:
+
+- a typed schema, option, default, or validation rule shared by more than one public surface;
+- the same option semantics crossing Python, CLI, Web request construction, or the renderer;
+- session serialization or compatibility behavior;
+- output topology, geometry, SVG semantics, or export behavior shared by multiple modes.
+
+A local bug can touch several implementation and test files without changing a shared contract. If one surface is merely wired to the wrong existing handler, projects an existing value incorrectly, or fails to replay an already-defined behavior, inspect the adjacent boundary and keep the fix local. Do not add schema versions, migrations, public APIs, Gallery assets, or reference-output changes to complete a surface matrix.
+
+If evidence found during a local fix shows that the shared contract itself is inconsistent, state that evidence and apply the remaining workflow only to the owners that actually participate. A surface audit is not authorization to expand the requested behavior.
+
 ## Map the current owner
 
-Before editing, trace the concept through the surfaces it actually uses:
+After confirming that the Skill applies, trace the concept through the surfaces it actually uses:
 
 | Surface | Inspect |
 |---|---|
@@ -21,7 +34,7 @@ Before editing, trace the concept through the surfaces it actually uses:
 | Rendering | Circular and Linear planners, drawers/groups, SVG semantics, export |
 | Documentation | CLI reference, Python recipes, Gallery tutorial, release notes |
 
-Record the default, non-default value, validation owner, final consumer, and persistence field. Omit a surface only after confirming that the concept does not apply there.
+Record the default, non-default value, validation owner, final consumer, and persistence field. Mark non-applicable surfaces explicitly; do not create an owner merely to fill the matrix.
 
 ## Keep one behavior path
 
@@ -36,15 +49,17 @@ When a setting controls topology, preserve explicit empty positions and record a
 
 ## Implement the lifecycle
 
-1. Add or change the typed model and default.
-2. Normalize and validate once at its owner.
-3. Carry the resolved value through the prepared request.
+Apply only the steps owned by the changed contract:
+
+1. Add or change the typed model and default when the shared model changes.
+2. Normalize and validate once at its existing owner.
+3. Carry the resolved value through the prepared request when rendering consumes it.
 4. Consume it in the real rendering owner for each applicable mode.
-5. Update public API and CLI adapters without duplicating policy.
-6. Bind the Web control and project it into the current render request.
-7. Persist user-owned state in the current session writer and update only evidence-backed readers.
-8. Update help, recipes, and Gallery material that users rely on.
-9. Remove retired fields, branches, documentation, and branch-only migrations.
+5. Update public API and CLI adapters only when they expose the contract.
+6. Bind or update the Web control and request projection only when the Web surface exposes it.
+7. Update the current session writer and evidence-backed readers only when persisted semantics change.
+8. Update help, recipes, Gallery material, or reference outputs only when users would otherwise receive stale evidence.
+9. Remove paths superseded by the complete implementation; do not remove a partially correct path merely to match a planned file set or change-size target.
 
 Defaults must preserve previous behavior unless the request explicitly changes the default.
 
@@ -74,3 +89,5 @@ Render and inspect the final artifact at a readable scale. Check clipping, label
 ## Finish
 
 Audit production code, tests, documentation, and generated output as separate diffs. Report the surface matrix covered, commands run, browser cases checked, reference-output status, and any unsupported surface. Provide the requested commit title and summary.
+
+When changing this Skill's routing or execution rules, verify the lightweight scenarios in [EVALS.md](EVALS.md).

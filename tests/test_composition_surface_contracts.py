@@ -189,7 +189,7 @@ def _normalized_target_transforms(
 
 
 @pytest.mark.parametrize("legend", CIRCULAR_LEGEND_VALUES)
-def test_circular_legend_values_cross_schema_5_and_reach_composition(
+def test_circular_legend_values_cross_schema_6_and_reach_composition(
     legend: str,
     tmp_path: Path,
 ) -> None:
@@ -201,7 +201,7 @@ def test_circular_legend_values_cross_schema_5_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, CircularOutputOptions)
-    assert encoded.payload["schema"] == 5
+    assert encoded.payload["schema"] == 6
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, CircularOutputOptions)
     assert replay.options.output.legend == legend
@@ -211,7 +211,7 @@ def test_circular_legend_values_cross_schema_5_and_reach_composition(
 
 
 @pytest.mark.parametrize("legend", LINEAR_LEGEND_VALUES)
-def test_linear_legend_values_cross_schema_5_and_reach_composition(
+def test_linear_legend_values_cross_schema_6_and_reach_composition(
     legend: str,
     tmp_path: Path,
 ) -> None:
@@ -223,7 +223,7 @@ def test_linear_legend_values_cross_schema_5_and_reach_composition(
     encoded, replay = _round_trip_request(request, tmp_path)
 
     assert isinstance(request.options.output, LinearOutputOptions)
-    assert encoded.payload["schema"] == 5
+    assert encoded.payload["schema"] == 6
     assert encoded.payload["diagramOptions"]["output"]["legend"] == legend
     assert isinstance(replay.options.output, LinearOutputOptions)
     assert replay.options.output.legend == legend
@@ -393,8 +393,8 @@ def test_linear_cli_rejects_circular_corner_legend_before_rendering(
     assert not svg_path.exists()
 
 
-def test_current_request_and_session_schema_versions_remain_unchanged() -> None:
-    assert CANONICAL_REQUEST_SCHEMA == 5
+def test_current_request_schema_and_session_envelope_versions() -> None:
+    assert CANONICAL_REQUEST_SCHEMA == 6
     assert CURRENT_SESSION_VERSION == 40
 
 

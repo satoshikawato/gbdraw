@@ -1607,6 +1607,30 @@ def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
         validate_session(payload)
 
 
+@pytest.mark.parametrize(
+    "field",
+    ("cli_circular_track_order", "cli_circular_track_slots"),
+)
+def test_current_session_rejects_retired_circular_track_draft_paths(
+    field: str,
+) -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 8, 23),
+        canonical_request=_canonical_request("circular"),
+    )
+    payload["config"]["adv"][field] = []
+
+    with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
+        validate_session(payload)
+
+
 def test_current_comparison_authority_validates_file_bindings() -> None:
     payload = build_session_json(
         SessionBuildContext(

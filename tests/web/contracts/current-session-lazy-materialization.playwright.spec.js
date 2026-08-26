@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
@@ -25,6 +26,16 @@ const frozenV39Session = join(
   'sessions',
   'BGC0000708-BGC0000713.v39.gbdraw-session.json.gz'
 );
+const neutralConservationSession = join(
+  repoRoot,
+  'tests',
+  'fixtures',
+  'sessions',
+  'synthetic_conservation.gbdraw-session.json.gz'
+);
+const neutralConservationSessionText = gunzipSync(
+  readFileSync(neutralConservationSession)
+).toString('utf8');
 
 const STRUCTURAL_METRICS = [
   'base64DecodeCount',
@@ -369,6 +380,173 @@ test('synthetic current session restores and exports without materializing resou
     encoding: 'base64',
     data: Buffer.from('unused\n').toString('base64')
   });
+});
+
+test('neutral cached conservation session regenerates three ordered rings offline', async ({
+  browser
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const externalRequests = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (
+      ['http:', 'https:'].includes(url.protocol)
+      && !['127.0.0.1', 'localhost'].includes(url.hostname)
+    ) externalRequests.push(request.url());
+  });
+
+  try {
+    await page.addInitScript(() => {
+      window.__GBDRAW_NEUTRAL_CONSERVATION_PROBE__ = { losatCalls: 0 };
+      window.__GBDRAW_LOSAT_EXECUTOR__ = async () => {
+        window.__GBDRAW_NEUTRAL_CONSERVATION_PROBE__.losatCalls += 1;
+        throw new Error('Neutral cached replay must not execute LOSAT.');
+      };
+    });
+    await openInstrumentedApp(page);
+
+    const imported = await page.evaluate(async (sessionText) => {
+      const file = new File(
+        [sessionText],
+        'synthetic_conservation.gbdraw-session.json',
+        { type: 'application/json', lastModified: 0 }
+      );
+      const probe = window.__GBDRAW_LAZY_SESSION_PROBE__;
+      probe.ignoreFile(file);
+      probe.reset();
+      const result = await window.__GBDRAW_APP__.importSession({
+        target: { files: [file], value: '' }
+      });
+      const { state } = await import('/gbdraw/web/js/state.js');
+      const selected = window.__GBDRAW_APP__.results[
+        window.__GBDRAW_APP__.selectedResultIndex
+      ];
+      const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
+      const resources = [
+        state.files.c_gb,
+        ...state.files.c_conservation_fastas,
+        ...state.files.c_conservation_blasts
+      ];
+      return {
+        status: result?.status,
+        content: String(selected?.content || ''),
+        referenceName: state.files.c_gb?.name,
+        comparisonNames: state.files.c_conservation_fastas.map((fileValue) => fileValue.name),
+        cachedResultNames: state.files.c_conservation_blasts.map((fileValue) => fileValue.name),
+        cachedResultSource: state.files.c_conservation_blasts_source,
+        cacheEntries: state.losatCache.value.size,
+        metadataOnly: resources.map((fileValue) => ({
+          frozen: Object.isFrozen(fileValue),
+          ownFields: lazyFields.filter((field) => Object.hasOwn(fileValue, field))
+        })),
+        metrics: probe.snapshot()
+      };
+    }, neutralConservationSessionText);
+
+    expect(imported.status).toBe('ok');
+    expect(imported.referenceName).toBe('reference-a.gb');
+    expect(imported.comparisonNames).toEqual([
+      'comparison-b.fasta',
+      'comparison-c.fasta',
+      'comparison-d.fasta'
+    ]);
+    expect(imported.cachedResultNames).toEqual([
+      'comparison-b.circular_conservation.losatn.tsv',
+      'comparison-c.circular_conservation.losatn.tsv',
+      'comparison-d.circular_conservation.losatn.tsv'
+    ]);
+    expect(imported.cachedResultSource).toBe('losat-cache');
+    expect(imported.cacheEntries).toBe(3);
+    expect(imported.metadataOnly).toEqual(
+      Array.from({ length: 7 }, () => ({ frozen: true, ownFields: [] }))
+    );
+    expect(imported.metrics.structural).toEqual(ZERO_PREVIEW_METRICS);
+    expect(await getDiagramWorkerActivity(page)).toMatchObject({
+      constructions: 0,
+      initializations: 0,
+      helpers: 0,
+      runs: 0
+    });
+
+    const generated = await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      const result = await app.runAnalysis();
+      const selected = app.results[app.selectedResultIndex];
+      const content = String(selected?.content || '');
+      const documentRoot = new DOMParser().parseFromString(content, 'image/svg+xml');
+      const slots = [...documentRoot.querySelectorAll(
+        '[data-gbdraw-slot-renderer="sequence_conservation"]'
+      )];
+      return {
+        result,
+        errorLog: app.errorLog,
+        content,
+        slots: slots.map((slot) => ({
+          id: slot.getAttribute('data-gbdraw-slot-id'),
+          sourceIndex: Number(slot.getAttribute('data-source-index')),
+          label: slot.getAttribute('data-track-label'),
+          color: slot.getAttribute('data-track-color')
+        })),
+        renderedMatchCount: documentRoot.querySelectorAll('[data-gbdraw-match-id]').length,
+        metrics: window.__GBDRAW_LAZY_SESSION_PROBE__.snapshot(),
+        losatCalls: window.__GBDRAW_NEUTRAL_CONSERVATION_PROBE__.losatCalls
+      };
+    });
+
+    expect(generated.result).toEqual({ status: 'ok' });
+    expect(generated.errorLog).toBeNull();
+    expect(generated.slots).toEqual([
+      { id: 'conservation_1', sourceIndex: 0, label: 'comparison-b', color: '#4e79a7' },
+      { id: 'conservation_2', sourceIndex: 1, label: 'comparison-c', color: '#e15759' },
+      { id: 'conservation_3', sourceIndex: 2, label: 'comparison-d', color: '#59a14f' }
+    ]);
+    expect(generated.renderedMatchCount).toBeGreaterThan(0);
+    expect(generated.losatCalls).toBe(0);
+    expect(externalRequests).toEqual([]);
+    expect(
+      generated.metrics.details
+        .filter(({ name }) => name === 'resourceTextReadCount')
+        .map(({ resourceId }) => resourceId)
+    ).toEqual([
+      'resource-0001',
+      'conservation-losat-fasta-files-1',
+      'conservation-losat-fasta-files-2',
+      'conservation-losat-fasta-files-3'
+    ]);
+
+    const initialPath = testInfo.outputPath('synthetic-conservation-loaded.svg');
+    const generatedPath = testInfo.outputPath('synthetic-conservation-regenerated.svg');
+    writeFileSync(initialPath, imported.content, 'utf8');
+    writeFileSync(generatedPath, generated.content, 'utf8');
+    const comparisonCommand = [
+      'import sys',
+      'from tests.utils.svg_compare import compare_svgs',
+      'result = compare_svgs(sys.argv[1], sys.argv[2])',
+      'print(result.message)',
+      'print("\\n".join(result.differences))',
+      'raise SystemExit(0 if result.equal else 1)'
+    ].join(';');
+    const semanticComparison = spawnSync(
+      process.env.GBDRAW_PYTHON || 'python',
+      ['-c', comparisonCommand, initialPath, generatedPath],
+      { cwd: repoRoot, encoding: 'utf8' }
+    );
+    expect(
+      semanticComparison.status,
+      `${semanticComparison.stdout}\n${semanticComparison.stderr}`
+    ).toBe(0);
+
+    const worker = await getDiagramWorkerActivity(page);
+    expect(worker.constructions).toBe(1);
+    expect(worker.initializations).toBe(1);
+    expect(worker.runs).toBe(1);
+    expect(worker.settledInitializations).toBe(1);
+    expect(worker.settledRuns).toBe(1);
+  } finally {
+    await context.close();
+  }
 });
 
 test('real Vibrio preview is lazy and leaves the Worker idle', async ({ page }, testInfo) => {
@@ -1015,7 +1193,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     };
   });
   expect(access.first).toMatch(
-    /record-1-genbank \(record-1\.gbk\) contains invalid encoded data/
+    /record-1-genbank \(record-1-genbank-HmmtDNA\.gbk\) contains invalid encoded data/
   );
   expect(access.second).toBe(access.first);
   expect(access.sameContent).toBe(true);

@@ -1146,7 +1146,7 @@ def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
 def _materialized_record_inputs(
     collection: ResolvedRecordCollection,
 ) -> tuple[RecordInput, ...]:
-    """Project resolved records to schema-5-compatible exact-one inputs."""
+    """Project resolved records to canonical exact-one inputs."""
 
     materialized: list[RecordInput] = []
     for record, provenance in zip(
@@ -1450,7 +1450,7 @@ def plan_request(request: DiagramRequest) -> DiagramRequestPlan:
 
 
 def resolve_request(request: DiagramRequest) -> DiagramRequest:
-    """Resolve an unresolved typed request to its schema-5-safe projection."""
+    """Resolve an unresolved typed request to an exact-one projection."""
 
     return plan_request(request).request
 
@@ -2129,6 +2129,17 @@ def _interactive_context_cache_spec(
         return None
     orthogroups = _prepared_orthogroups(prepared)
     orthogroup_key = _resource_backed_context_key(orthogroups)
+    if (
+        orthogroups is not None
+        and orthogroup_key is None
+        and prepared.linear_metadata is not None
+        and prepared.linear_metadata.collinearity_result is not None
+    ):
+        collinearity_key = _resource_backed_context_key(
+            prepared.linear_metadata.collinearity_result
+        )
+        if collinearity_key is not None:
+            orthogroup_key = ("collinearity", collinearity_key)
     derived_keys = tuple(
         (
             str(entry.get("kind") or ""),

@@ -5,15 +5,18 @@ import xml.etree.ElementTree as ET
 
 import pandas as pd
 import pytest
+from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api import (
+    GenBankInputSource,
     InMemoryRecordSource,
     LinearComparison,
     LinearDiagramRequest,
     LinearMultiRecordOptions,
+    RecordCardinality,
     RecordInput,
     RecordPresentation,
     build_request_diagram,
@@ -549,3 +552,63 @@ def test_typed_request_preserves_stable_record_keys_in_svg_metadata() -> None:
     svg = build_request_diagram(request).drawing.tostring()
     assert 'data-record-key="stable-1"' in svg
     assert 'data-record-key="stable-2"' in svg
+
+
+def test_linear_all_source_cards_inherit_rows_and_contiguous_columns(
+    tmp_path,
+) -> None:
+    sources = []
+    for source_index, row in enumerate((1, 2), start=1):
+        source = tmp_path / f"source-{source_index}.gbk"
+        records = _records(100, 120)
+        for record_index, record in enumerate(records, start=1):
+            record.id = f"source-{source_index}-record-{record_index}"
+            record.name = record.id
+        SeqIO.write(records, source, "genbank")
+        sources.append(
+            RecordInput(
+                source=GenBankInputSource(source),
+                cardinality=RecordCardinality.ALL,
+                record_key=f"card-{source_index}",
+                presentation=RecordPresentation(grid_row=row),
+            )
+        )
+
+    svg = build_request_diagram(
+        LinearDiagramRequest(
+            records=tuple(sources),
+            layout=LinearMultiRecordOptions(),
+        )
+    ).drawing.tostring()
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    placements = [
+        (
+            group.attrib["data-record-key"],
+            int(group.attrib["data-record-row"]),
+            int(group.attrib["data-record-column"]),
+        )
+        for group in root.findall(".//svg:g", namespace)
+        if "data-record-row" in group.attrib
+    ]
+
+    assert placements == [
+        ("card-1:1", 0, 0),
+        ("card-1:2", 0, 1),
+        ("card-2:1", 1, 0),
+        ("card-2:2", 1, 1),
+    ]
+
+
+def test_linear_all_source_card_rejects_explicit_column() -> None:
+    with pytest.raises(ValidationError, match="grid_column.*RecordCardinality.ALL"):
+        LinearDiagramRequest(
+            records=(
+                RecordInput(
+                    source=InMemoryRecordSource(_records(100)[0]),
+                    cardinality=RecordCardinality.ALL,
+                    presentation=RecordPresentation(grid_row=1, grid_column=1),
+                ),
+            ),
+            layout=LinearMultiRecordOptions(),
+        )

@@ -12,7 +12,7 @@ const FINAL_SKEW_COLOR_FALLBACKS = Object.freeze({
 });
 
 const unwrapRef = (value) => {
-  if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'value')) {
+  if (value && typeof value === 'object' && 'value' in value) {
     return value.value;
   }
   return value;

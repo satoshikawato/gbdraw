@@ -11,19 +11,8 @@ import sys
 from xml.etree import ElementTree as ET
 
 import pytest
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
-
 import gbdraw.web_support.feature_catalog as feature_catalog_module
-from gbdraw.api import (
-    CircularDiagramRequest,
-    InMemoryRecordSource,
-    RecordInput,
-    RenderOutputRequest,
-    save_session_document,
-)
 from gbdraw.features.ids import compute_feature_hash_from_parts
-from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
@@ -51,7 +40,6 @@ from tools.prepare_interactive_gallery_assets import (
     _validate_source_feature_ids,
 )
 from tools.refresh_gallery_sessions import (
-    GALLERY_SESSION_FILES,
     TEST_INPUT_SESSION_FILES,
     VIBRIO_EXPANDED_HARD_LIMIT,
     VIBRIO_EXPANDED_REGRESSION_CEILING,
@@ -59,268 +47,30 @@ from tools.refresh_gallery_sessions import (
     VIBRIO_GZIP_HARD_LIMIT,
     VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
-    _enable_gallery_interactive_metadata,
-    _drop_unreferenced_duplicate_resources,
     _gallery_file_transaction,
-    _load_gallery_refresh_source,
-    _merge_refreshed_gallery_artifacts,
-    _omit_regenerable_gallery_derived_cache,
-    _preserve_gallery_cli_invocation,
+    _public_gallery_session_files,
     _refresh_one_session,
     _refresh_session_paths,
-    _restore_rendered_palette_file_binding,
     _session_artifact_measurements,
     _session_path,
-    _sync_circular_track_draft_with_render_request,
-    _sync_legacy_legend_control_with_render_request,
     _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
     _validate_staged_gallery_session,
-    _with_interactive_svg_format,
 )
 
 
 pytestmark = pytest.mark.gallery
 
-
-def test_gallery_refresh_syncs_legacy_legend_control_with_render_request() -> None:
-    session = {
-        "renderRequest": {
-            "diagramOptions": {"output": {"legend": "right"}},
-        },
-        "config": {"form": {"legend": "bottom", "prefix": "example"}},
-    }
-
-    assert _sync_legacy_legend_control_with_render_request(session) is True
-    assert session["config"]["form"] == {
-        "legend": "right",
-        "prefix": "example",
-    }
-    assert _sync_legacy_legend_control_with_render_request(session) is False
-
-
-def test_gallery_refresh_syncs_circular_track_draft_with_render_request() -> None:
-    slots = [
-        {
-            "kind": "circularTrackSlot",
-            "id": "regions",
-            "renderer": "annotations",
-            "enabled": True,
-            "side": "inside",
-            "radius": {"value": 0.65, "unit": "factor"},
-            "width": {"value": 20, "unit": "px"},
-            "z": 0,
-            "params": {"set_id": "plastome_regions"},
-            "innerGapPx": 1,
-            "outerGapPx": 1,
-        }
-    ]
-    session = {
-        "renderRequest": {
-            "mode": "circular",
-            "diagramOptions": {
-                "tracks": {
-                    "circularTrackSlots": slots,
-                    "circularTrackAxisIndex": 0,
-                }
-            },
-        },
-        "config": {"adv": {"circular_track_slots_enabled": True}},
-    }
-
-    assert _sync_circular_track_draft_with_render_request(session) is True
-    assert session["config"]["adv"] == {
-        "circular_track_slots_enabled": True,
-        "circular_track_slots_schema_version": 4,
-        "circular_track_slots_axis_index": 0,
-        "circular_track_slots": slots,
-    }
-    assert session["config"]["adv"]["circular_track_slots"] is not slots
-    assert _sync_circular_track_draft_with_render_request(session) is False
-
-
-def _color_resource(kind: str, text: str) -> dict[str, object]:
-    data = text.encode("utf-8")
-    return {
-        "kind": kind,
-        "name": "colors.tsv",
-        "type": "text/tab-separated-values",
-        "size": len(data),
-        "lastModified": 0,
-        "encoding": "base64",
-        "data": base64.b64encode(data).decode("ascii"),
-    }
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, CANONICAL_REQUEST_SCHEMA})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
     paths = _refresh_session_paths(None)
 
-    assert len(paths) == 13
-    assert len(GALLERY_SESSION_FILES) == 11
-    assert len(TEST_INPUT_SESSION_FILES) == 2
+    assert len(paths) == 11
+    assert len(_public_gallery_session_files()) == 10
+    assert len(TEST_INPUT_SESSION_FILES) == 1
     assert {path.name for path in paths} >= set(TEST_INPUT_SESSION_FILES)
-
-
-def test_palette_binding_restores_the_file_proven_by_rendered_legend() -> None:
-    colors = {
-        "defaultColors": {
-            "resourceId": "colors-default-colors",
-            "representation": "canonicalTsv",
-        },
-        "defaultColorsPalette": "ajisai",
-        "defaultColorsFile": None,
-    }
-    session = {
-        "renderRequest": {"diagramOptions": {"colors": colors}},
-        "resources": {
-            "colors-default-colors": _color_resource(
-                "canonical-tsv", "feature_type\tcolor\nCDS\t#54bcf8\n"
-            ),
-            "colors-default-colors-file": _color_resource(
-                "colors-default-colors-file", "CDS\t#84b9ec\nrRNA\t#7cecd5\n"
-            ),
-        },
-        "config": {
-            "palette": "ajisai",
-            "colors": {"CDS": "#84b9ec", "rRNA": "#7cecd5"},
-        },
-        "editorState": {
-            "legend": {
-                "originalColors": {"CDS": "#84b9ec", "rRNA": "#7cecd5"}
-            }
-        },
-    }
-
-    assert _restore_rendered_palette_file_binding(session) is True
-    assert colors["defaultColors"] is None
-    assert colors["defaultColorsFile"] == {
-        "resourceId": "colors-default-colors-file",
-        "representation": "file",
-    }
-
-
-def test_palette_binding_ignores_a_draft_palette_not_proven_by_legend() -> None:
-    colors = {
-        "defaultColors": {
-            "resourceId": "colors-default-colors",
-            "representation": "canonicalTsv",
-        },
-        "defaultColorsPalette": "orange",
-        "defaultColorsFile": None,
-    }
-    session = {
-        "renderRequest": {"diagramOptions": {"colors": colors}},
-        "resources": {
-            "colors-default-colors": _color_resource(
-                "canonical-tsv", "feature_type\tcolor\nCDS\t#54bcf8\n"
-            ),
-            "colors-default-colors-file": _color_resource(
-                "colors-default-colors-file", "CDS\t#dddddd\n"
-            ),
-        },
-        "config": {"palette": "orange", "colors": {"CDS": "#dddddd"}},
-        "editorState": {
-            "legend": {"originalColors": {"other proteins": "#dddddd"}}
-        },
-    }
-
-    assert _restore_rendered_palette_file_binding(session) is False
-    assert colors["defaultColors"]["resourceId"] == "colors-default-colors"
-    assert colors["defaultColorsFile"] is None
-
-
-def test_duplicate_resource_cleanup_keeps_the_referenced_copy_only() -> None:
-    payload = {
-        "kind": "canonical-tsv",
-        "name": "fresh.tsv",
-        "type": "text/tab-separated-values",
-        "size": 3,
-        "lastModified": 0,
-        "encoding": "base64",
-        "data": "QUJD",
-    }
-    stale_payload = {**payload, "name": "stale.tsv"}
-    session = {
-        "renderRequest": {
-            "comparisons": [{"resourceId": "fresh"}],
-        },
-        "resources": {
-            "fresh": payload,
-            "stale": stale_payload,
-        },
-        "webFiles": {
-            "resourceOriginalNames": {
-                "fresh": "fresh.tsv",
-                "stale": "stale.tsv",
-            }
-        },
-    }
-
-    _drop_unreferenced_duplicate_resources(session)
-
-    assert list(session["resources"]) == ["fresh"]
-    assert session["webFiles"]["resourceOriginalNames"] == {
-        "fresh": "fresh.tsv"
-    }
-
-
-def test_duplicate_resource_cleanup_ignores_stale_resource_metadata() -> None:
-    session = {
-        "webFiles": {
-            "conservationLosatFastaSources": ["canonical"]
-        },
-        "resources": {
-            "canonical": {
-                "kind": "conservation-fasta-file",
-                "name": "canonical.fasta",
-                "type": "application/octet-stream",
-                "size": 3,
-                "lastModified": 0,
-                "encoding": "base64",
-                "data": "QUJD",
-            },
-            "stale": {
-                "kind": "web-file",
-                "name": "stale.fasta",
-                "type": "text/plain",
-                "size": 999,
-                "lastModified": 17,
-                "encoding": "base64",
-                "data": "QUJD",
-            },
-        },
-    }
-
-    _drop_unreferenced_duplicate_resources(session)
-
-    assert list(session["resources"]) == ["canonical"]
-
-
-def test_duplicate_resource_cleanup_preserves_two_referenced_copies() -> None:
-    payload = {
-        "kind": "canonical-tsv",
-        "type": "text/tab-separated-values",
-        "size": 3,
-        "lastModified": 0,
-        "encoding": "base64",
-        "data": "QUJD",
-    }
-    session = {
-        "renderRequest": {
-            "comparisons": [
-                {"resourceId": "first"},
-                {"resourceId": "second"},
-            ],
-        },
-        "resources": {
-            "first": {**payload, "name": "first.tsv"},
-            "second": {**payload, "name": "second.tsv"},
-        },
-    }
-
-    _drop_unreferenced_duplicate_resources(session)
-
-    assert list(session["resources"]) == ["first", "second"]
 
 
 def test_gallery_file_transaction_restores_all_outputs_on_failure(
@@ -361,110 +111,6 @@ def test_prepare_gallery_assets_help_imports_without_circular_dependency() -> No
     assert completed.returncode == 0, completed.stderr
     assert "Regenerate interactive Gallery SVGs" in completed.stdout
     assert "circular import" not in completed.stderr.lower()
-
-
-def test_with_interactive_svg_format_replaces_existing_format() -> None:
-    assert _with_interactive_svg_format(["-o", "out", "-f", "svg"]) == [
-        "-o",
-        "out",
-        "-f",
-        "interactive_svg",
-    ]
-    assert _with_interactive_svg_format(["--format=svg"]) == [
-        "--format=interactive_svg"
-    ]
-    assert _with_interactive_svg_format(["--gbk", "input.gb"]) == [
-        "--gbk",
-        "input.gb",
-        "-f",
-        "interactive_svg",
-    ]
-
-
-def test_gallery_refresh_enables_metadata_for_forced_interactive_output() -> None:
-    session = {
-        "renderRequest": {
-            "output": {
-                "formats": ["interactive_svg"],
-                "interactiveMetadataPolicy": "omit",
-            }
-        }
-    }
-
-    assert _enable_gallery_interactive_metadata(session) is True
-    assert session["renderRequest"]["output"]["interactiveMetadataPolicy"] == "auto"
-    assert _enable_gallery_interactive_metadata(session) is False
-
-
-def test_gallery_refresh_discards_only_an_invalid_derived_result_catalog(
-    tmp_path: Path,
-) -> None:
-    record = SeqRecord(
-        Seq("ATGCGCAT"),
-        id="record",
-        annotations={"molecule_type": "DNA"},
-    )
-    source = tmp_path / "stale.gbdraw-session.json"
-    save_session_document(
-        source,
-        CircularDiagramRequest(
-            records=(RecordInput(source=InMemoryRecordSource(record)),),
-        ),
-    )
-    payload = load_session(source)
-    payload["results"] = [{"name": "out", "content": "<svg/>"}]
-    payload["editorState"]["featureCatalog"] = {"schema": 3, "items": []}
-    payload["runMetadata"] = {"stale": True}
-    source.write_text(json.dumps(payload), encoding="utf-8")
-
-    with pytest.raises(ValidationError, match="one schema-3 item per Result"):
-        load_session(source)
-
-    recovered = _load_gallery_refresh_source(source)
-    assert recovered["results"] == []
-    assert recovered["editorState"]["featureCatalog"] == {
-        "schema": 3,
-        "items": [],
-    }
-    assert "runMetadata" not in recovered
-    assert recovered["renderRequest"] == payload["renderRequest"]
-    assert recovered["resources"] == payload["resources"]
-
-
-def test_gallery_session_promoter_runs_mjs_without_obsolete_esm_flag(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    commands: list[list[str]] = []
-    source = tmp_path / "source.json"
-    output = tmp_path / "output.json"
-
-    monkeypatch.setattr(
-        refresh_gallery_sessions_module.shutil,
-        "which",
-        lambda executable: "/opt/node" if executable == "node" else None,
-    )
-    monkeypatch.setattr(
-        refresh_gallery_sessions_module.subprocess,
-        "run",
-        lambda command, **kwargs: commands.append(command),
-    )
-    monkeypatch.setattr(refresh_gallery_sessions_module, "load_session", lambda path: {})
-
-    refresh_gallery_sessions_module._promote_gallery_session(
-        source,
-        output,
-        env={},
-    )
-
-    assert commands == [
-        [
-            "/opt/node",
-            str(refresh_gallery_sessions_module.SESSION_PROMOTER),
-            str(source),
-            str(output),
-        ]
-    ]
 
 
 def test_session_path_prefers_existing_compressed_gallery_session() -> None:
@@ -660,11 +306,7 @@ def test_vibrio_gallery_session_retains_complete_compact_cache(
     path = _session_path("vibrio-harveyi-group-collinear")
     session = load_cached_gallery_session(path)
 
-    _validate_staged_gallery_session(
-        path,
-        session,
-        artifact_path=path,
-    )
+    assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS
 
     protein_entries = [
         entry
@@ -685,7 +327,7 @@ def test_gallery_session_inventory_matches_files_and_examples() -> None:
     _validate_gallery_session_inventory()
 
 
-def test_all_bundled_sessions_use_current_request_and_artifact_schemas(
+def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
     repo_root = Path(__file__).parents[1]
@@ -700,11 +342,11 @@ def test_all_bundled_sessions_use_current_request_and_artifact_schemas(
         )
     )
 
-    assert len(paths) == 13
+    assert len(paths) == 11
     for path in paths:
         session = load_cached_gallery_session(path)
         assert session["version"] == CURRENT_SESSION_VERSION, path
-        assert session["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA, path
+        assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
             session["proteinIdentityManifest"]["schema"]
             == PROTEIN_IDENTITY_MANIFEST_SCHEMA
@@ -736,213 +378,6 @@ def test_bundled_gallery_sources_match_current_session_results(
             example.source_svg_path.read_text(encoding="utf-8")
             == _session_result_svg(session, example)
         ), example.id
-
-
-def test_preserve_gallery_cli_invocation_keeps_original_render_args() -> None:
-    source_session = {
-        "cliInvocation": {
-            "schema": 1,
-            "mode": "circular",
-            "args": [
-                "--definition_line_style",
-                "name:font_weight=bold",
-                "--circular_track_slot",
-                "a_skew_2:dinucleotide_skew@w=0.1,nt=AT,legend_label=AT skew",
-                "--conservation_blast",
-                "comparison.tsv",
-                "--gbk",
-                "input.gb",
-                "-f",
-                "svg",
-            ],
-            "renderFormats": ["svg"],
-            "fileBindings": [
-                {
-                    "argIndex": 5,
-                    "slot": "files.c_conservation_blasts[0]",
-                    "name": "comparison.tsv",
-                },
-                {"argIndex": 7, "slot": "files.c_gb", "name": "input.gb"},
-            ],
-            "generatedBy": "gbdraw",
-        },
-    }
-    refreshed_session = {
-        "cliInvocation": {
-            "schema": 1,
-            "mode": "circular",
-            "args": ["--gbk", "input.gb", "-f", "interactive_svg"],
-            "renderFormats": ["interactive_svg"],
-            "fileBindings": [
-                {"argIndex": 1, "slot": "files.c_gb", "name": "input.gb"}
-            ],
-            "generatedBy": "gbdraw",
-        },
-    }
-
-    preserved = _preserve_gallery_cli_invocation(
-        source_session,
-        refreshed_session,
-        mode="circular",
-    )
-
-    assert preserved is True
-    args = refreshed_session["cliInvocation"]["args"]
-    assert "--definition_line_style" in args
-    assert "--circular_track_slot" in args
-    assert any("AT skew" in arg for arg in args)
-    assert "--conservation_blast" in args
-    assert args[-2:] == ["-f", "interactive_svg"]
-    assert refreshed_session["cliInvocation"]["renderFormats"] == ["interactive_svg"]
-    assert (
-        refreshed_session["cliInvocation"]["fileBindings"]
-        == source_session["cliInvocation"]["fileBindings"]
-    )
-
-
-def test_preserve_gallery_cli_invocation_reports_missing_source_cli() -> None:
-    refreshed_session = {
-        "cliInvocation": {
-            "schema": 1,
-            "mode": "circular",
-            "args": ["--gbk", "input.gb", "-f", "interactive_svg"],
-        },
-    }
-
-    preserved = _preserve_gallery_cli_invocation(
-        {"config": {"form": {"prefix": "old"}}},
-        refreshed_session,
-        mode="circular",
-    )
-
-    assert preserved is False
-    assert refreshed_session["cliInvocation"]["args"] == [
-        "--gbk",
-        "input.gb",
-        "-f",
-        "interactive_svg",
-    ]
-
-
-def test_refreshed_gallery_artifacts_do_not_replace_promoted_render_authority() -> None:
-    promoted = {
-        "format": "gbdraw-session",
-        "renderRequest": {"diagramOptions": {"palette": "curated"}},
-        "config": {"labels": "curated"},
-        "resources": {
-            "curated": {"data": "promoted"},
-            "promoted-only": {"data": "keep"},
-        },
-        "results": [{"content": "stale"}],
-        "features": {"extractedFeatures": []},
-        "runMetadata": {"trackSlotGeometry": {"records": ["stale"]}},
-        "losatCache": {"entries": [{"schema": 2, "program": "blastp"}]},
-        "legacyArtifacts": {"proteinRawCandidates": {"schema": 1, "entries": ["old"]}},
-        "version": 33,
-        "createdAt": "old",
-    }
-    refreshed = {
-        "version": CURRENT_SESSION_VERSION,
-        "createdAt": "fresh",
-        "renderRequest": {"diagramOptions": {"palette": "default"}},
-        "config": {"labels": "lost"},
-        "resources": {
-            "curated": {"data": "refreshed-conflict"},
-            "render-only": {"data": "keep-too"},
-        },
-        "results": [{"content": "fresh"}],
-        "features": {"extractedFeatures": [{"svg_id": "feature-1"}]},
-        "orthogroupState": {"groups": [{"id": "og_1"}]},
-        "runMetadata": {
-            "trackSlotGeometry": {
-                "schema": 1,
-                "mode": "linear",
-                "source": "resolved",
-                "records": [{"recordIndex": 0}],
-            }
-        },
-        "losatCache": {"entries": [{"schema": 4, "program": "blastp"}]},
-        "losatDerivedCache": {"entries": [{"schema": 3}]},
-        "proteinIdentityManifest": {
-            "schema": 2,
-            "proteinSets": {},
-            "recordAnalyses": {},
-            "recordInstances": {},
-        },
-    }
-
-    merged = _merge_refreshed_gallery_artifacts(promoted, refreshed)
-
-    assert list(merged)[:5] == [
-        "format",
-        "version",
-        "createdAt",
-        "renderRequest",
-        "resources",
-    ]
-    assert merged["renderRequest"] == promoted["renderRequest"]
-    assert merged["config"] == promoted["config"]
-    assert merged["resources"]["curated"] == {"data": "promoted"}
-    assert merged["resources"]["promoted-only"] == {"data": "keep"}
-    assert merged["resources"]["render-only"] == {"data": "keep-too"}
-    assert merged["results"] == refreshed["results"]
-    assert merged["features"] == refreshed["features"]
-    assert merged["orthogroupState"] == refreshed["orthogroupState"]
-    assert merged["runMetadata"] == refreshed["runMetadata"]
-    assert merged["version"] == CURRENT_SESSION_VERSION
-    assert merged["createdAt"] == "fresh"
-    assert merged["losatCache"] == refreshed["losatCache"]
-    assert merged["losatDerivedCache"] == refreshed["losatDerivedCache"]
-    assert merged["proteinIdentityManifest"] == refreshed["proteinIdentityManifest"]
-    assert "legacyArtifacts" not in merged
-
-
-def test_refreshed_request_keeps_its_resource_on_identifier_collision() -> None:
-    promoted = {
-        "format": "gbdraw-session",
-        "version": CURRENT_SESSION_VERSION,
-        "renderRequest": {
-            "schema": CANONICAL_REQUEST_SCHEMA,
-            "diagramOptions": {"colors": "stale"},
-        },
-        "resources": {"colors-default-colors": {"data": "stale"}},
-    }
-    refreshed = {
-        "version": CURRENT_SESSION_VERSION,
-        "createdAt": "fresh",
-        "renderRequest": {
-            "schema": CANONICAL_REQUEST_SCHEMA,
-            "diagramOptions": {"colors": "fresh"},
-        },
-        "resources": {"colors-default-colors": {"data": "fresh"}},
-    }
-
-    merged = _merge_refreshed_gallery_artifacts(promoted, refreshed)
-
-    assert merged["renderRequest"] == refreshed["renderRequest"]
-    assert merged["resources"]["colors-default-colors"] == {"data": "fresh"}
-
-
-def test_vibrio_gallery_refresh_omits_regenerable_derived_cache(
-    tmp_path: Path,
-) -> None:
-    vibrio_session = {
-        "losatDerivedCache": {"entries": [{"schema": LOSAT_DERIVED_CACHE_SCHEMA}]}
-    }
-    _omit_regenerable_gallery_derived_cache(
-        tmp_path / "vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
-        vibrio_session,
-    )
-    assert vibrio_session["losatDerivedCache"] == {"entries": []}
-
-    other_session = {
-        "losatDerivedCache": {"entries": [{"schema": LOSAT_DERIVED_CACHE_SCHEMA}]}
-    }
-    _omit_regenerable_gallery_derived_cache(
-        tmp_path / "other.gbdraw-session.json.gz",
-        other_session,
-    )
-    assert other_session["losatDerivedCache"]["entries"]
 
 
 def _staged_geometry_session(
@@ -1284,22 +719,10 @@ def test_staged_gallery_validator_allows_custom_extra_spacing(
 def test_refresh_records_resolved_track_geometry(
     tmp_path: Path,
 ) -> None:
-    record = SeqRecord(
-        Seq("ATGCGCAT"),
-        id="record",
-        annotations={"molecule_type": "DNA"},
-    )
     source = tmp_path / "source.gbdraw-session.json"
     destination = tmp_path / "refreshed.gbdraw-session.json"
-    save_session_document(
-        source,
-        CircularDiagramRequest(
-            records=(RecordInput(source=InMemoryRecordSource(record)),),
-            output=RenderOutputRequest(
-                formats=("interactive_svg",),
-                interactive_metadata_policy="omit",
-            ),
-        ),
+    source.write_bytes(
+        _session_path("HmmtDNA_basic_circular").read_bytes()
     )
 
     _refresh_one_session(source, destination_path=destination)

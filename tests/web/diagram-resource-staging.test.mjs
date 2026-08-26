@@ -11,6 +11,9 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
 const { createDiagramResourceTransport } = await import(
   '../../gbdraw/web/js/services/diagram-resource-staging.js'
 );
+const { setResourcePayloadOwner } = await import(
+  '../../gbdraw/web/js/services/resource-payload-owner.js'
+);
 
 const descriptor = (text, name = 'record.gb') => ({
   kind: 'genbank',
@@ -47,7 +50,14 @@ test('render staging selects references, transfers bytes once, and reuses the ca
   );
   first.commit();
 
-  const second = await transport.prepare({ request, resources });
+  const fileBackedRecord = setResourcePayloadOwner(
+    { ...record },
+    { arrayBuffer: async () => Buffer.from('LOCUS record\nORIGIN\n//\n').buffer }
+  );
+  const second = await transport.prepare({
+    request,
+    resources: { ...resources, 'record-1-genbank': fileBackedRecord }
+  });
   assert.equal(second.stagedResources.length, 0);
   assert.equal(
     second.resourceManifest[0].cacheToken,

@@ -293,7 +293,7 @@ Status: completed
 
 Evidence: MjeNMV inner-labelの同一設定をmodule-scoped fixtureで一度だけ構築し、同じ構築を使う8件のassertionと`y_overlap` counterで共有した。同値のinner-order testは一ownerへ統合した。対象moduleは68件が83.75秒で通過し、CI baselineの439.2秒から短縮、180秒以内の条件を満たした。
 
-ユーザー指示により30秒閾値は適用せず、Gallery/sessionを含む全suiteを重複監査した。static session decode、SVG parse、figure spec、同一arrow reproductionを既存fixture/cacheへ集約し、Gallery partition全113件が216.05秒で通過した。CIで直接実行するNode specを再実行していた、WSSVを含むpytest wrapper 4件を削除した。Node spec 62件は6.98秒、追加のproject-session 3件は3.98秒で直接ownerが通過した。
+ユーザー指示により30秒閾値は適用せず、Gallery/sessionを含む全suiteを重複監査した。static session decode、SVG parse、figure spec、同一arrow reproductionを既存fixture/cacheへ集約し、Gallery partition全113件が216.05秒で通過した。CIで直接実行するNode specを再実行していた、dataset-specific pytest wrapper 4件を削除した。Node spec 62件は6.98秒、追加のproject-session 3件は3.98秒で直接ownerが通過した。
 
 ### 対象
 

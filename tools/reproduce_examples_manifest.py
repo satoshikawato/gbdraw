@@ -341,39 +341,6 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         ),
         description="Tutorial 1 centered title example.",
     )
-    figures["WSSV_with_labels"] = _figure(
-        figure_id="WSSV_with_labels",
-        output_path="examples/WSSV_with_labels.svg",
-        groups=("docs",),
-        required_inputs=("AP027280.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("AP027280.gb",),
-            extra_args=("--block_stroke_width", "1", "--track_type", "middle", "--labels"),
-        ),
-        description="Tutorial 1 label-focused WSSV example.",
-    )
-    figures["WSSV_filtered"] = _figure(
-        figure_id="WSSV_filtered",
-        output_path="examples/WSSV_filtered.svg",
-        groups=("docs",),
-        required_inputs=("AP027280.gb",),
-        recipe=CliRecipe(
-            subcommand="circular",
-            gbk_files=("AP027280.gb",),
-            extra_args=(
-                "--block_stroke_width",
-                "1",
-                "--no-gc",
-                "--no-skew",
-                "--separate_strands",
-                "--labels",
-                "--legend",
-                "none",
-            ),
-        ),
-        description="Tutorial 1 simplified WSSV example.",
-    )
     figures["MjeNMV_modified_default_colors"] = _figure(
         figure_id="MjeNMV_modified_default_colors",
         output_path="examples/MjeNMV_modified_default_colors.svg",
@@ -984,7 +951,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
         figure_id="outer_label_offset_comparison",
         output_path="examples/outer_label_offset_comparison.png",
         groups=("docs", "composites"),
-        required_inputs=("AP027280.gb",),
+        required_inputs=("NC_001879.gbk",),
         recipe=CompositeRecipe(
             kind="grid",
             columns=3,
@@ -995,7 +962,7 @@ def _docs_and_readme_figures() -> dict[str, FigureSpec]:
                 CompositePanel(
                     recipe=CliRecipe(
                         subcommand="circular",
-                        gbk_files=("AP027280.gb",),
+                        gbk_files=("NC_001879.gbk",),
                         extra_args=(
                             "--block_stroke_width",
                             "1",

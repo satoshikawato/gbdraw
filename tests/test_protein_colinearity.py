@@ -2970,7 +2970,7 @@ def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path
 
 
 @pytest.mark.linear
-def test_web_losatp_pairwise_payload_uses_display_view_transform() -> None:
+def test_web_losatp_pairwise_payload_uses_display_view_transform(tmp_path: Path) -> None:
     namespace = _load_web_helper_namespace()
     hits = pd.DataFrame.from_records(
         [_hit_row("qa", "sb")],
@@ -3022,8 +3022,10 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform() -> None:
         ],
     }
 
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "pairwise",
         1,
         50,
@@ -3043,7 +3045,9 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform() -> None:
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> None:
+def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
+    tmp_path: Path,
+) -> None:
     helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
     namespace: dict[str, object] = {}
@@ -3132,8 +3136,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
         ],
     }
 
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "orthogroup",
         2,
         50,
@@ -3195,7 +3201,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
     assert result["cache"]["filteredHitCacheMisses"] == 2
 
     repeated_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "orthogroup",
         2,
         50,
@@ -3208,7 +3214,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
     assert repeated_result["pairs"] == result["pairs"]
 
     filter_cached_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps(payload),
+        str(pairs_path),
         "orthogroup",
         3,
         50,
@@ -3222,14 +3228,18 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups() -> No
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload() -> None:
+def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
+    tmp_path: Path,
+) -> None:
     helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
     namespace: dict[str, object] = {}
     exec(helper_source, namespace)
 
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps([]), encoding="utf-8")
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        json.dumps([]),
+        str(pairs_path),
         "pairwise",
         2,
         50,

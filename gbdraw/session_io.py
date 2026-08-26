@@ -586,8 +586,27 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
     if version == CURRENT_SESSION_VERSION:
+        _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session)
+
+
+def _validate_current_retired_active_config_paths(
+    session: Mapping[str, Any],
+) -> None:
+    """Reject the two retired v40 circular-track draft paths."""
+
+    config = session.get("config")
+    if not isinstance(config, Mapping):
+        return
+    advanced = config.get("adv")
+    if not isinstance(advanced, Mapping):
+        return
+    for field in ("cli_circular_track_order", "cli_circular_track_slots"):
+        if field in advanced:
+            raise ValidationError(
+                f"Session version 40 cannot contain config.adv.{field}."
+            )
 
 
 def _validate_current_comparison_authority(

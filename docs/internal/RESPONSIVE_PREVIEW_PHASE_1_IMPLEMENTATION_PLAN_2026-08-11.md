@@ -238,7 +238,7 @@ Do not duplicate those prerequisite implementations in this plan. Execute their 
 - Record branch, HEAD, dirty files, and pre-existing failures.
 - Confirm Node and Python Playwright availability.
 - Capture current counts for label reflow: LOSAT executor calls, cache probes, input reads, worker renders, sanitize passes, Result serializations, history begin/commit time, and viewport reset.
-- Measure cold and warm renderer-only candidates on a small diagram and the WSSV large-session fixture.
+- Measure cold and warm renderer-only candidates on a small diagram and a representative large-session fixture.
 - Confirm the current Palette instant preview and Auto Reflow runtime, history, Web writer, and Python/CLI pass-through fields and visible controls.
 
 #### Commands
@@ -397,7 +397,7 @@ Replace the existing Linear browser assertion that expects label reflow to wait 
 
 Add a mixed-divergence fixture: change a manual-only font/track field, then an admitted display-start field. The automatic candidate uses the committed font/track value, applies display start, and leaves `Changes pending` until explicit Generate commits the complete draft.
 
-Add a large-resource fixture that proves projection does not deep-clone unchanged resource payloads before worker dispatch and cannot mutate the committed basis through a returned reference. Extend the same counter through accepted canonical adoption and current-history artifact refresh: one automatic update must not deep-clone the complete unchanged WSSV resource bundle at any point in the transaction.
+Add a large-resource fixture that proves projection does not deep-clone unchanged resource payloads before worker dispatch and cannot mutate the committed basis through a returned reference. Extend the same counter through accepted canonical adoption and current-history artifact refresh: one automatic update must not deep-clone the complete unchanged resource bundle at any point in the transaction.
 
 #### Completion gate
 
@@ -639,7 +639,7 @@ Do not refresh the cache-bust token unless preparing a deployable Web bundle.
 - One render-only transaction performs no full deep clone of unchanged committed resource payloads during projection, worker preparation, canonical adoption, or current-history artifact refresh.
 - One direct action serializes and updates an affected Result at most once.
 - One continuous input interaction creates one history item.
-- WSSV history and SVG-ingestion measurements remain within the completed performance-plan gates.
+- Large-session history and SVG-ingestion measurements remain within the completed performance-plan gates.
 - Slow-pause behaviour follows D9 exactly.
 - Automatic rendering itself changes no renderer geometry or tracked reference SVG.
 

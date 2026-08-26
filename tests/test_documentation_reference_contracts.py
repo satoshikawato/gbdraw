@@ -84,9 +84,9 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40}
     )
-    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5})
+    assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6})
     assert "27–33 and 39–40" in source
-    assert "1, 2, and 5" in source
+    assert "1, 2, 5, and 6" in source
 
 
 def test_input_reference_lists_parser_owned_table_columns() -> None:
@@ -150,15 +150,20 @@ def test_web_reference_defaults_match_the_browser_profile() -> None:
     profile = (REPO_ROOT / "gbdraw" / "web" / "js" / "web-ux-profile.js").read_text(
         encoding="utf-8"
     )
-    state = (REPO_ROOT / "gbdraw" / "web" / "js" / "state.js").read_text(
-        encoding="utf-8"
-    )
+    active_contract = (
+        REPO_ROOT
+        / "gbdraw"
+        / "web"
+        / "js"
+        / "services"
+        / "session-active-config-contract.js"
+    ).read_text(encoding="utf-8")
 
     assert "separateStrands: true" in profile
     assert "legend: 'left'" in profile
     assert "legend: 'bottom'" in profile
-    assert "track_type: 'tuckin'" in state
-    assert "linear_track_layout: 'middle'" in state
+    assert "track_type: 'tuckin'" in active_contract
+    assert "linear_track_layout: 'middle'" in active_contract
     assert "| Separate strands | On | On |" in reference
     assert "| Legend | Left | Bottom |" in reference
     assert "| Feature placement | Tuckin preset | Features on axis |" in reference

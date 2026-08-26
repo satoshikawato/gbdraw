@@ -33,7 +33,7 @@ Scope: `gbdraw/web` の起動、session復元、Undo/Redo、SVG preview、補助
 | --- | --- |
 | 空のSPA初期表示、Tailwind Playあり | 3回の中央値 `571.3 ms` |
 | 空のSPA初期表示、Tailwind Playなし | 3回の中央値 `433.9 ms` |
-| `WSSV_genome_comparison.gbdraw-session.json` 復元 | 約 `7.0 s` |
+| 当時の large Gallery session 復元 | 約 `7.0 s` |
 | 同sessionの最大main-thread long task | 約 `2.89 s` |
 | 同sessionのSVG結果文字数 | `5,879,614` characters |
 | 同sessionのDOMPurify | 約 `291.6 ms` と `326.9 ms` の2回 |
@@ -62,9 +62,9 @@ Scope: `gbdraw/web` の起動、session復元、Undo/Redo、SVG preview、補助
 ### 固定fixture
 
 1. 空のappを新しいbrowser contextで開くcold start。
-2. `gbdraw/web/gallery/sessions/WSSV_genome_comparison.gbdraw-session.json` を復元するlarge SVG path。
-3. WSSV復元後、同じnumber/select/text controlを10回変更してUndo/Redoするhistory path。
-4. 保存済み凡例がすでに一致するWSSV sessionを復元するmain-Pyodide no-op path。
+2. 当時の large Gallery session を復元するlarge SVG path。
+3. large-session復元後、同じnumber/select/text controlを10回変更してUndo/Redoするhistory path。
+4. 保存済み凡例がすでに一致するlarge sessionを復元するmain-Pyodide no-op path。
 5. 既存の25,000-feature interactive SVG search fixtureをsmall-change regression guardとして使う。
 
 ### 記録値
@@ -83,8 +83,8 @@ Scope: `gbdraw/web` の起動、session復元、Undo/Redo、SVG preview、補助
 
 | 対象 | 必須条件 |
 | --- | --- |
-| 通常設定のhistory | WSSVでbegin+commitの各p95が`50 ms`未満。履歴深度1〜10で後半中央値が前半中央値より20%以上悪化しない |
-| WSSV session復元 | 同じartifactのfull-string sanitizeは1回以下。中央値をbaselineより20%以上短縮し、最大long taskを40%以上短縮 |
+| 通常設定のhistory | large sessionでbegin+commitの各p95が`50 ms`未満。履歴深度1〜10で後半中央値が前半中央値より20%以上悪化しない |
+| large-session復元 | 同じartifactのfull-string sanitizeは1回以下。中央値をbaselineより20%以上短縮し、最大long taskを40%以上短縮 |
 | main-thread Pyodide | 既存凡例が一致するsession復元では初期化0回。diagram workerの初期化は維持 |
 | SPA初期表示 | Phase 4前から悪化させず、Phase 4完了後はbaseline中央値より15%以上短縮 |
 | 色ルール | 一つのuser actionでresult serialize/updateは最大1回 |
@@ -310,7 +310,7 @@ python tools/verify_gui_offline.py
 
 - 初期pageにTailwind compiler、Vue development build、jsPDF、svg2pdf、standalone interactivity assetがない。
 - runtime requestは全てsame-originで、offline起動と全export形式が成功する。
-- Tailwindを無効化しただけではWSSV loadの主因は直らないため、Phase 1〜3を飛ばしてPhase 4だけで完了にしない。
+- Tailwindを無効化しただけではlarge-session loadの主因は直らないため、Phase 1〜3を飛ばしてPhase 4だけで完了にしない。
 
 ## 10. Phase 5: 色ルール走査を一回にまとめる（P1、測定条件付き）
 
