@@ -796,6 +796,10 @@ const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
   REPOSITORY_ROOT,
   'tests/web/architecture-ratchet-fixtures.test.mjs'
 );
+const WEB_PROMOTION_CONTEXT_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-promotion-context.mjs'
+);
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
     'services/diagram-generation.js': ['app/editor.js', 'app/run-analysis.js'],
@@ -857,6 +861,10 @@ const BUDGET_FIXTURE = Object.freeze({
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
   'tools/web-change-source.mjs': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
+    'utf8'
+  ),
+  'tools/web-promotion-context.mjs': readFileSync(
+    WEB_PROMOTION_CONTEXT_MODULE,
     'utf8'
   ),
   'tools/web-change-policy.json': `${JSON.stringify(BUDGET_POLICY, null, 2)}\n`,
@@ -949,7 +957,13 @@ const withChangeBudgetRepository = (runCase) => {
       const result = spawnSync(process.execPath, arguments_, {
         cwd: root,
         encoding: 'utf8',
-        env: { ...process.env, ...environment },
+        env: {
+          ...process.env,
+          GITHUB_EVENT_NAME: '',
+          GITHUB_EVENT_PATH: '',
+          GITHUB_REPOSITORY: '',
+          ...environment
+        },
         stdio: ['ignore', 'pipe', 'pipe']
       });
       return {
@@ -975,6 +989,55 @@ const runChangeBudgetCase = (mutate, environment = {}) => withChangeBudgetReposi
     return execute({ environment });
   }
 );
+
+const promotionReportSection = (output, heading) => {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return output.match(new RegExp(`## ${escapedHeading}\\n\\n([\\s\\S]*?)(?=\\n## |$)`))?.[1] || '';
+};
+
+const promotionEventSource = ({
+  base,
+  head,
+  baseRef = 'main',
+  headRef = 'dev',
+  baseRepository = 'satoshikawato/gbdraw',
+  headRepository = 'satoshikawato/gbdraw'
+}) => JSON.stringify({
+  pull_request: {
+    base: {
+      ref: baseRef,
+      sha: base,
+      repo: { full_name: baseRepository }
+    },
+    head: {
+      ref: headRef,
+      sha: head,
+      repo: { full_name: headRepository }
+    }
+  }
+});
+
+const executePromotion = ({
+  execute,
+  root,
+  base,
+  head,
+  event = {},
+  environment = {}
+}) => {
+  const eventPath = join(root, '.git', 'promotion-event.json');
+  writeFileSync(eventPath, promotionEventSource({ base, head, ...event }), 'utf8');
+  return execute({
+    base,
+    head,
+    environment: {
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_REPOSITORY: 'satoshikawato/gbdraw',
+      ...environment
+    }
+  });
+};
 
 const writeBudgetFiles = (write, count) => {
   for (let index = 0; index < count; index += 1) {
@@ -1066,6 +1129,10 @@ const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
     'utf8'
   ),
+  'tools/web-promotion-context.mjs': readFileSync(
+    WEB_PROMOTION_CONTEXT_MODULE,
+    'utf8'
+  ),
   'gbdraw/web/js/app/run-analysis.js': (
     "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
     + "import { buildCanonicalRenderRequest } from '../services/session-request.js';\n"
@@ -1136,6 +1203,12 @@ const withTrustedArchitectureRepository = (mutateHead, runCase, baseFiles = {}) 
     ], {
       cwd: root,
       encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: '',
+        GITHUB_EVENT_PATH: '',
+        GITHUB_REPOSITORY: ''
+      },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     runCase({
@@ -1768,7 +1841,8 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
-    'tools/web-architecture-evaluation.mjs'
+    'tools/web-architecture-evaluation.mjs',
+    'tools/web-promotion-context.mjs'
   ];
   const authorityPaths = [
     'tools/web-change-policy.json',
@@ -1796,7 +1870,8 @@ test('all checker implementations are separated from reserved future authority',
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
-    'tools/web-architecture-evaluation.mjs'
+    'tools/web-architecture-evaluation.mjs',
+    'tools/web-promotion-context.mjs'
   ];
 
   implementationPaths.forEach((implementationPath) => {
@@ -2411,5 +2486,186 @@ test('trusted-base execution rejects self-authorization despite a successful hea
       /privileged capability owners or importers exceed the base allowlist/
     );
     assert.match(trustedBase.output, /Diagram Worker: owner app\/secondary\.js/);
+  });
+});
+
+test('promotion reports runtime and guard aggregation without weakening ordinary PRs', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+    write('.github/workflows/test.yml', 'name: aggregated workflow\n');
+    const head = commit('aggregate runtime and guard changes');
+
+    const ordinary = execute({
+      base,
+      head,
+      environment: {
+        GITHUB_EVENT_NAME: '',
+        GITHUB_EVENT_PATH: '',
+        GITHUB_REPOSITORY: '',
+        WEB_PROMOTION: 'true'
+      }
+    });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(ordinary.output, /Change context: ORDINARY/);
+    assert.match(
+      ordinary.output,
+      /production runtime files and Web guard\/CI files changed together/
+    );
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.match(promotion.output, /Change context: PROMOTION/);
+    assert.match(promotion.output, /Promotion source ancestry: PASS/);
+    assert.match(promotion.output, /Promotion aggregation observations: 1/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion aggregation observations'),
+      /production paths \(1\).*gbdraw\/web\/js\/app\/editor\.js.*guard paths \(1\).*\.github\/workflows\/test\.yml/
+    );
+    assert.equal(promotionReportSection(promotion.output, 'Violations').trim(), '- None');
+  });
+});
+
+test('promotion reports checker and authority aggregation without authorizing ordinary PRs', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write(
+      'tools/web-change-source.mjs',
+      `${BUDGET_FIXTURE['tools/web-change-source.mjs']}\n// aggregate checker change\n`
+    );
+    write('.github/workflows/test.yml', 'name: aggregated authority\n');
+    const head = commit('aggregate checker and authority changes');
+
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(
+      ordinary.output,
+      /Web checker\/source parser and authority policy\/workflow files changed together/
+    );
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.match(promotion.output, /Promotion aggregation observations: 1/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion aggregation observations'),
+      /checker paths \(1\).*tools\/web-change-source\.mjs.*authority paths \(1\).*\.github\/workflows\/test\.yml/
+    );
+  });
+});
+
+test('promotion size excess requires review without changing ordinary limits', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    writeBudgetFiles(write, 9);
+    write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(401, 101));
+    const head = commit('aggregate oversized production change');
+
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(
+      ordinary.output,
+      /production files changed exceed ordinary limit \(10 > 8\)/
+    );
+    assert.match(ordinary.output, /production gross churn exceeds ordinary limit \(912 > 800\)/);
+    assert.match(ordinary.output, /production net additions exceed ordinary limit \(110 > 100\)/);
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.match(promotion.output, /Size review: REQUIRED/);
+    const sizeReasons = promotionReportSection(promotion.output, 'Size review reasons');
+    assert.match(sizeReasons, /production files changed exceed ordinary limit \(10 > 8\)/);
+    assert.match(sizeReasons, /production gross churn exceeds ordinary limit \(912 > 800\)/);
+    assert.match(sizeReasons, /production net additions exceed ordinary limit \(110 > 100\)/);
+    assert.equal(promotionReportSection(promotion.output, 'Violations').trim(), '- None');
+  });
+});
+
+test('promotion still rejects first-party static import cycles', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write(
+      'gbdraw/web/js/app/editor.js',
+      "import './secondary.js';\nexport const editExistingOwner = () => 1;\n"
+    );
+    write(
+      'gbdraw/web/js/app/secondary.js',
+      "import './editor.js';\nexport const editSecondaryOwner = () => 1;\n"
+    );
+    const head = commit('introduce import cycle');
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 1, promotion.output);
+    assert.match(promotion.output, /first-party static import cycles are not allowed/);
+  });
+});
+
+test('promotion still rejects unapproved privileged owners and importers', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write(
+      'gbdraw/web/js/app/secondary.js',
+      "import { runDiagramGeneration } from '../services/diagram-generation.js';\n"
+        + 'export const editSecondaryOwner = () => runDiagramGeneration();\n'
+    );
+    const head = commit('add unapproved privileged caller');
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 1, promotion.output);
+    assert.match(
+      promotion.output,
+      /privileged capability owners or importers exceed the base allowlist/
+    );
+    assert.match(promotion.output, /Diagram Worker: owner app\/secondary\.js/);
+  });
+});
+
+test('promotion still rejects an invalid architecture registry', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('tools/web-architecture-rules.json', '{\n');
+    const head = commit('malform architecture registry');
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 1, promotion.output);
+    assert.match(promotion.output, /candidate architecture rules: Cannot parse/);
+  });
+});
+
+test('promotion fails when dev does not contain the current main head', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const common = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+    const head = commit('promotion source change');
+
+    assert.equal(git(['checkout', '--quiet', '--detach', common]).status, 0);
+    write('.github/workflows/test.yml', 'name: current main\n');
+    const base = commit('advance main separately');
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 1, promotion.output);
+    assert.match(promotion.output, /Promotion source ancestry: FAIL/);
+    assert.match(
+      promotion.output,
+      /The promotion source does not contain the current main head\. Merge or rebase main into dev, then rerun the promotion\./
+    );
+  });
+});
+
+test('pull request SHA mismatches are blocking metadata errors', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+    const head = commit('candidate change');
+
+    const result = executePromotion({
+      execute,
+      root,
+      base,
+      head,
+      event: { base: 'f'.repeat(40) }
+    });
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /Change context: ORDINARY/);
+    assert.match(result.output, /Checker base SHA does not match the GitHub event payload/);
   });
 });
