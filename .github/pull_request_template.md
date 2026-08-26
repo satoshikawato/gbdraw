@@ -2,6 +2,31 @@
 
 ## Verification
 
+## Product behavior semantics
+
+- **Semantics:** `NONE` / `DEFINED` / `UNCERTAIN`
+- **PR role:** `EVIDENCE_ONLY` / `DECISION_ONLY` / `IMPLEMENTATION`
+- **Change intent:** `NOT_APPLICABLE` / `PRESERVE` / `RESTORE` / `IMPROVE`
+- **Basis:** `none` / `BD-###` / `SD-###` / `explicit promise` /
+  `compatibility commitment` / `authoritative domain rule` /
+  `precise unambiguous valid-use invariant`
+- **Rationale:**
+
+Human reviewer comment:
+
+```text
+SEMANTIC-DISPOSITION:
+  NO_USER_VISIBLE_DIFFERENCE
+  COVERED_BY_AUTHORITY
+  ORDINARY_REGRESSION
+  DOMAIN_DERIVED
+  SCENARIO_CANDIDATE
+  INSUFFICIENT_EVIDENCE
+
+BASIS:
+  <source or explanation>
+```
+
 ## Architecture impact
 
 Select exactly one:

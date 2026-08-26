@@ -83,6 +83,25 @@ python -m build
 - Do not manually edit generated artifacts under `dist/` or `gbdraw.egg-info/`.
 - Treat `gbdraw/web/gbdraw-<version>-py3-none-any.whl` as a generated, gitignored asset. Prepare it when tests or packaging need it, but do not commit it.
 
+## Product Behavior Semantics Review
+
+For changes affecting Web runtime or normative Web behavior contracts:
+
+- Identify any reachable user-visible difference or continuation.
+- Search `docs/internal/BEHAVIOR_SEMANTICS_DECISIONS.md` when present, plus
+  explicit promises, compatibility commitments, and authoritative domain rules.
+  Cite a `BD-###` only when that decision exists in the base branch.
+- Treat current code and tests as evidence, not automatic product authority.
+  Classify the case as no user-visible difference, authority-covered behavior,
+  ordinary regression, domain-derived, scenario candidate, or insufficient evidence.
+- Create a scenario candidate only when at least two materially different
+  user-visible outcomes are genuinely reasonable and no authority resolves them.
+  Record the context, user goal, action or completion, current behavior, authority
+  searched, and plausible outcomes without selecting one.
+- Do not implement or harden an unresolved option before supervisor disposition.
+  Codex may advise; human reviewers record the disposition, and the supervisor
+  owns any unresolved normative choice.
+
 ## Showcase Figure Quality
 
 - Treat `examples/gbdraw_social_preview.png` as an owner-maintained asset. Automated agents must not regenerate, replace, or edit it.
