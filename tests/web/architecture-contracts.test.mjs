@@ -1002,9 +1002,11 @@ const withChangeBudgetRepository = (runCase) => {
         encoding: 'utf8',
         env: {
           ...process.env,
+          GITHUB_ACTIONS: '',
           GITHUB_EVENT_NAME: '',
           GITHUB_EVENT_PATH: '',
           GITHUB_REPOSITORY: '',
+          GITHUB_STEP_SUMMARY: '',
           ...environment
         },
         stdio: ['ignore', 'pipe', 'pipe']
