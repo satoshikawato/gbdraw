@@ -282,6 +282,7 @@ jobs:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
     needs: web-change-budget
     if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
@@ -330,6 +331,7 @@ jobs:
     name: Slow (Python ${{ matrix.python-version }})
     needs: web-change-budget
     if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')

@@ -2,7 +2,7 @@
 
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, posix, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   detectPrivilegedWebCapabilities,
   detectReportOnlySourceFacts,
@@ -20,6 +20,10 @@ import {
   validateArchitectureRuleRegistry
 } from './web-architecture-evaluation.mjs';
 import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
+import {
+  classifyWebChangeContext,
+  isPullRequestEvent
+} from './web-promotion-context.mjs';
 
 const runGit = (root, args, options = {}) => execFileSync(
   'git',
@@ -48,6 +52,46 @@ const sizeReviewProfiles = Object.freeze({
 const selectedProfileName = architectureChange ? 'architecture' : 'ordinary';
 const selectedProfile = sizeReviewProfiles[selectedProfileName];
 const diffRefs = head ? [base, head] : [base];
+const githubEventName = process.env.GITHUB_EVENT_NAME || '';
+const githubEventPath = process.env.GITHUB_EVENT_PATH || '';
+const githubEventPayloadSource = isPullRequestEvent(githubEventName)
+  && githubEventPath
+  && existsSync(githubEventPath)
+  ? readFileSync(githubEventPath, 'utf8')
+  : '';
+const changeContext = classifyWebChangeContext({
+  eventName: githubEventName,
+  currentRepository: process.env.GITHUB_REPOSITORY || '',
+  eventPayloadSource: githubEventPayloadSource,
+  baseSha: base,
+  headSha: head
+});
+
+const promotionSourceAncestry = (() => {
+  if (!changeContext.isPromotion) return { status: 'NOT_APPLICABLE', violation: '' };
+  const result = spawnSync(
+    'git',
+    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+  );
+  if (result.status === 0) return { status: 'PASS', violation: '' };
+  if (result.status === 1) {
+    return {
+      status: 'FAIL',
+      violation: (
+        'The promotion source does not contain the current main head. '
+        + 'Merge or rebase main into dev, then rerun the promotion.'
+      )
+    };
+  }
+  return {
+    status: 'ERROR',
+    violation: (
+      'Promotion source ancestry could not be verified. '
+      + 'Fetch complete base and head history, then rerun the promotion.'
+    )
+  };
+})();
 
 const parseDiffLines = (output) => output.trim()
   ? output.trimEnd().split('\n').map((line) => line.split('\t'))
@@ -163,10 +207,12 @@ const guardPaths = new Set([
   architectureRulesPath,
   'tools/web-architecture-violations.json',
   'tools/web-change-source.mjs',
+  'tools/web-promotion-context.mjs',
   policyPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   'tests/web/architecture-contracts.test.mjs',
   'tests/web/architecture-ratchet-fixtures.test.mjs',
+  'tests/web/web-promotion-context.test.mjs',
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
@@ -175,7 +221,8 @@ const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
-  'tools/web-change-source.mjs'
+  'tools/web-change-source.mjs',
+  'tools/web-promotion-context.mjs'
 ]);
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
@@ -819,7 +866,11 @@ if (productionNetAdditions > selectedProfile.netAdditions) {
   );
 }
 
-const blockingViolations = [];
+const blockingViolations = [
+  ...changeContext.errors,
+  ...(promotionSourceAncestry.violation ? [promotionSourceAncestry.violation] : [])
+];
+const promotionAggregationObservations = [];
 if (newProductionDependencies.length) {
   blockingViolations.push('new production dependencies are not allowed');
 }
@@ -830,12 +881,27 @@ if (changedVendorPaths.length) {
   blockingViolations.push('changes under gbdraw/web/vendor/ are not allowed');
 }
 if (productionPaths.length && changedGuards.length && !pureSafePolicyContraction) {
-  blockingViolations.push('production runtime files and Web guard/CI files changed together');
+  const reason = 'production runtime files and Web guard/CI files changed together';
+  if (changeContext.isPromotion) {
+    promotionAggregationObservations.push(
+      `${reason}: production paths (${productionPaths.length}) ${productionPaths.join(', ')}; `
+      + `guard paths (${changedGuards.length}) ${changedGuards.join(', ')}`
+    );
+  } else {
+    blockingViolations.push(reason);
+  }
 }
 if (changedCheckerImplementations.length && changedAuthorities.length) {
-  blockingViolations.push(
-    'Web checker/source parser and authority policy/workflow files changed together'
-  );
+  const reason = 'Web checker/source parser and authority policy/workflow files changed together';
+  if (changeContext.isPromotion) {
+    promotionAggregationObservations.push(
+      `${reason}: checker paths (${changedCheckerImplementations.length}) `
+      + `${changedCheckerImplementations.sort().join(', ')}; authority paths `
+      + `(${changedAuthorities.length}) ${changedAuthorities.sort().join(', ')}`
+    );
+  } else {
+    blockingViolations.push(reason);
+  }
 }
 if (unapprovedCapabilities.length) {
   blockingViolations.push('privileged capability owners or importers exceed the base allowlist');
@@ -997,6 +1063,9 @@ const report = [
   `- Architecture rule base: ${baseArchitectureRulesSource === null ? 'absent' : `\`${base}\``}`,
   `- Architecture rule candidate: ${proposedArchitectureRulesSource === null ? 'absent' : `\`${head || 'working tree'}\``}`,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
+  `- Change context: ${changeContext.context}`,
+  `- Promotion source ancestry: ${promotionSourceAncestry.status}`,
+  `- Promotion aggregation observations: ${promotionAggregationObservations.length}`,
   `- Selected profile: ${selectedProfileName}`,
   `- Size-review threshold for production files: ${selectedProfile.productionFiles}`,
   `- Size-review threshold for gross churn: ${selectedProfile.grossChurn}`,
@@ -1138,6 +1207,10 @@ const report = [
   '## Size review reasons',
   '',
   ...list(sizeReviewReasons),
+  '',
+  '## Promotion aggregation observations',
+  '',
+  ...list(promotionAggregationObservations),
   '',
   '## Blocking violations',
   '',
