@@ -67,7 +67,9 @@ fallback.
 This table records current ownership. Changes to an owner or canonical path
 must follow the repository
 [architecture fitness-function ratchet](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md),
-including complete before and after sets and removal of superseded paths.
+using concise owner/path evidence for ordinary non-increasing changes and
+complete before/after sets only for defined exceptions. Remove superseded paths
+in the same change.
 
 | Area | Owner |
 |---|---|
