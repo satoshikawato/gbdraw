@@ -1002,9 +1002,11 @@ const withChangeBudgetRepository = (runCase) => {
         encoding: 'utf8',
         env: {
           ...process.env,
+          GITHUB_ACTIONS: '',
           GITHUB_EVENT_NAME: '',
           GITHUB_EVENT_PATH: '',
           GITHUB_REPOSITORY: '',
+          GITHUB_STEP_SUMMARY: '',
           ...environment
         },
         stdio: ['ignore', 'pipe', 'pipe']
@@ -2719,7 +2721,8 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
     assert.match(promotion.output, /Change context: PROMOTION/);
-    assert.match(promotion.output, /Promotion source ancestry: PASS/);
+    assert.match(promotion.output, /Promotion source coverage: PASS/);
+    assert.match(promotion.output, /Promotion coverage basis: DIRECT_ANCESTRY/);
     assert.match(promotion.output, /Promotion aggregation observations: 1/);
     assert.match(
       promotionReportSection(promotion.output, 'Promotion aggregation observations'),
@@ -2861,7 +2864,75 @@ test('promotion still rejects an invalid architecture registry', () => {
   });
 });
 
-test('promotion fails when dev does not contain the current main head', () => {
+test('promotion accepts a content-neutral main merge commit without a sync PR', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const common = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+    const promotedDevHead = commit('prior promoted dev head');
+
+    assert.equal(git(['checkout', '--quiet', '--detach', common]).status, 0);
+    assert.equal(
+      git(['merge', '--quiet', '--no-ff', '-m', 'merge prior dev promotion', promotedDevHead]).status,
+      0
+    );
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    assert.equal(git(['merge-base', '--is-ancestor', base, promotedDevHead]).status, 1);
+    assert.equal(
+      git(['rev-parse', `${base}^{tree}`]).stdout.trim(),
+      git(['rev-parse', `${promotedDevHead}^{tree}`]).stdout.trim()
+    );
+
+    assert.equal(git(['checkout', '--quiet', '--detach', promotedDevHead]).status, 0);
+    write('gbdraw/web/js/app/secondary.js', 'export const editSecondaryOwner = () => 2;\n');
+    const head = commit('continue dev after promotion');
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.match(promotion.output, /Promotion source coverage: PASS/);
+    assert.match(promotion.output, /Promotion coverage basis: MERGE_PARENT_TREE/);
+    assert.equal(
+      promotionReportSection(promotion.output, 'Blocking violations').trim(),
+      '- None'
+    );
+  });
+});
+
+test('promotion rejects a main merge commit with main-only tree content', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const common = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
+    const promotedDevHead = commit('prior promoted dev head');
+
+    assert.equal(git(['checkout', '--quiet', '--detach', common]).status, 0);
+    assert.equal(
+      git(['merge', '--quiet', '--no-ff', '-m', 'merge prior dev promotion', promotedDevHead]).status,
+      0
+    );
+    write('.github/workflows/test.yml', 'name: main-only resolution\n');
+    assert.equal(git(['add', '.github/workflows/test.yml']).status, 0);
+    assert.equal(git(['commit', '--quiet', '--amend', '--no-edit']).status, 0);
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    assert.notEqual(
+      git(['rev-parse', `${base}^{tree}`]).stdout.trim(),
+      git(['rev-parse', `${promotedDevHead}^{tree}`]).stdout.trim()
+    );
+
+    assert.equal(git(['checkout', '--quiet', '--detach', promotedDevHead]).status, 0);
+    write('gbdraw/web/js/app/secondary.js', 'export const editSecondaryOwner = () => 2;\n');
+    const head = commit('continue dev without main-only content');
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 1, promotion.output);
+    assert.match(promotion.output, /Promotion source coverage: FAIL/);
+    assert.match(promotion.output, /Promotion coverage basis: MAIN_CONTENT_MISSING/);
+    assert.match(
+      promotion.output,
+      /The promotion source does not contain the current main content\. Merge or rebase main into dev, then rerun the promotion\./
+    );
+  });
+});
+
+test('promotion fails when dev does not contain current main content', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const common = git(['rev-parse', 'HEAD']).stdout.trim();
     write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
@@ -2873,10 +2944,11 @@ test('promotion fails when dev does not contain the current main head', () => {
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /Promotion source ancestry: FAIL/);
+    assert.match(promotion.output, /Promotion source coverage: FAIL/);
+    assert.match(promotion.output, /Promotion coverage basis: MAIN_CONTENT_MISSING/);
     assert.match(
       promotion.output,
-      /The promotion source does not contain the current main head\. Merge or rebase main into dev, then rerun the promotion\./
+      /The promotion source does not contain the current main content\. Merge or rebase main into dev, then rerun the promotion\./
     );
   });
 });

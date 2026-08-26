@@ -67,30 +67,57 @@ const changeContext = classifyWebChangeContext({
   headSha: head
 });
 
-const promotionSourceAncestry = (() => {
-  if (!changeContext.isPromotion) return { status: 'NOT_APPLICABLE', violation: '' };
-  const result = spawnSync(
+const promotionSourceCoverage = (() => {
+  if (!changeContext.isPromotion) {
+    return { status: 'NOT_APPLICABLE', basis: 'NOT_APPLICABLE', violation: '' };
+  }
+  const probeGit = (args) => spawnSync(
     'git',
-    ['-C', repositoryRoot, 'merge-base', '--is-ancestor', base, head],
+    ['-C', repositoryRoot, ...args],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
   );
-  if (result.status === 0) return { status: 'PASS', violation: '' };
-  if (result.status === 1) {
-    return {
-      status: 'FAIL',
-      violation: (
-        'The promotion source does not contain the current main head. '
-        + 'Merge or rebase main into dev, then rerun the promotion.'
-      )
-    };
-  }
-  return {
+  const error = () => ({
     status: 'ERROR',
+    basis: 'UNVERIFIED',
     violation: (
-      'Promotion source ancestry could not be verified. '
+      'Promotion source coverage could not be verified. '
       + 'Fetch complete base and head history, then rerun the promotion.'
     )
-  };
+  });
+  const failure = () => ({
+    status: 'FAIL',
+    basis: 'MAIN_CONTENT_MISSING',
+    violation: (
+      'The promotion source does not contain the current main content. '
+      + 'Merge or rebase main into dev, then rerun the promotion.'
+    )
+  });
+
+  const directAncestry = probeGit(['merge-base', '--is-ancestor', base, head]);
+  if (directAncestry.status === 0) {
+    return { status: 'PASS', basis: 'DIRECT_ANCESTRY', violation: '' };
+  }
+  if (directAncestry.status !== 1) return error();
+
+  const parentResult = probeGit(['rev-list', '--parents', '-n', '1', base]);
+  if (parentResult.status !== 0) return error();
+  const [baseCommit, ...baseParents] = parentResult.stdout.trim().split(/\s+/);
+  if (baseCommit !== base || baseParents.length < 2) return failure();
+
+  const baseTreeResult = probeGit(['rev-parse', `${base}^{tree}`]);
+  if (baseTreeResult.status !== 0) return error();
+  const baseTree = baseTreeResult.stdout.trim();
+  for (const parent of baseParents) {
+    const parentAncestry = probeGit(['merge-base', '--is-ancestor', parent, head]);
+    if (parentAncestry.status !== 0 && parentAncestry.status !== 1) return error();
+    if (parentAncestry.status === 1) continue;
+    const parentTreeResult = probeGit(['rev-parse', `${parent}^{tree}`]);
+    if (parentTreeResult.status !== 0) return error();
+    if (parentTreeResult.stdout.trim() === baseTree) {
+      return { status: 'PASS', basis: 'MERGE_PARENT_TREE', violation: '' };
+    }
+  }
+  return failure();
 })();
 
 const parseDiffLines = (output) => output.trim()
@@ -868,7 +895,7 @@ if (productionNetAdditions > selectedProfile.netAdditions) {
 
 const blockingViolations = [
   ...changeContext.errors,
-  ...(promotionSourceAncestry.violation ? [promotionSourceAncestry.violation] : [])
+  ...(promotionSourceCoverage.violation ? [promotionSourceCoverage.violation] : [])
 ];
 const promotionAggregationObservations = [];
 if (newProductionDependencies.length) {
@@ -1064,7 +1091,8 @@ const report = [
   `- Architecture rule candidate: ${proposedArchitectureRulesSource === null ? 'absent' : `\`${head || 'working tree'}\``}`,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
   `- Change context: ${changeContext.context}`,
-  `- Promotion source ancestry: ${promotionSourceAncestry.status}`,
+  `- Promotion source coverage: ${promotionSourceCoverage.status}`,
+  `- Promotion coverage basis: ${promotionSourceCoverage.basis}`,
   `- Promotion aggregation observations: ${promotionAggregationObservations.length}`,
   `- Selected profile: ${selectedProfileName}`,
   `- Size-review threshold for production files: ${selectedProfile.productionFiles}`,
