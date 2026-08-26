@@ -765,9 +765,10 @@ test('dev staging runs check the complete promotion range explicitly', () => {
   );
 });
 
-test('supported-version and slow matrices cover dev staging runs', () => {
+test('supported-version and slow matrices cover main PRs and dev staging runs', () => {
   const stagingCondition = [
     "    if: >-",
+    "      (github.event_name == 'pull_request' && github.base_ref == 'main') ||",
     "      (github.event_name == 'push' &&",
     "      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||",
     "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')"
@@ -778,7 +779,7 @@ test('supported-version and slow matrices cover dev staging runs', () => {
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
     assert.ok(job, `${jobName} job must exist`);
-    assert.ok(job.includes(stagingCondition), `${jobName} must use the staging condition`);
+    assert.ok(job.includes(stagingCondition), `${jobName} must use the main protection condition`);
   }
 });
 
