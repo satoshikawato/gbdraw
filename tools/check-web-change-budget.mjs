@@ -235,11 +235,15 @@ const guardPaths = new Set([
   'tools/web-architecture-violations.json',
   'tools/web-change-source.mjs',
   'tools/web-promotion-context.mjs',
+  'tools/check-promotion-readiness.mjs',
   policyPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   'tests/web/architecture-contracts.test.mjs',
   'tests/web/architecture-ratchet-fixtures.test.mjs',
+  'tests/web/promotion-readiness.test.mjs',
   'tests/web/web-promotion-context.test.mjs',
+  '.github/workflows/gallery-publication.yml',
+  '.github/workflows/deploy_web.yml',
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
@@ -249,13 +253,16 @@ const checkerImplementationPaths = new Set([
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
   'tools/web-change-source.mjs',
-  'tools/web-promotion-context.mjs'
+  'tools/web-promotion-context.mjs',
+  'tools/check-promotion-readiness.mjs'
 ]);
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   architectureRulesPath,
   'tools/web-architecture-violations.json',
   policyPath,
+  '.github/workflows/gallery-publication.yml',
+  '.github/workflows/deploy_web.yml',
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
