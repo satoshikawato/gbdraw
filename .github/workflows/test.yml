@@ -58,7 +58,6 @@ jobs:
 
   core:
     name: Core (Python ${{ matrix.python-version }})
-    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -90,9 +89,38 @@ jobs:
         if: always()
         run: git diff --exit-code -- tests/reference_outputs/
 
+  core-pr:
+    name: Core PR (Python 3.11)
+    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install core test dependencies
+        run: python -m pip install -e ".[export]" pytest pytest-timeout pytest-xdist Pillow
+
+      - name: Run core tests
+        run: >-
+          python -m pytest tests/
+          -m "not slow and not (recipe or gallery or browser)"
+          -n auto --dist loadfile
+          --durations=30
+
+      - name: Verify reference outputs are unchanged
+        if: always()
+        run: git diff --exit-code -- tests/reference_outputs/
+
   recipes-standard:
     name: Recipes standard (Python 3.11)
-    needs: web-change-budget
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -117,7 +145,6 @@ jobs:
 
   gallery:
     name: Gallery (Python 3.11)
-    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -142,7 +169,6 @@ jobs:
 
   browser:
     name: Browser (Python 3.11)
-    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -192,9 +218,64 @@ jobs:
           -m "slow and browser"
           --durations=30
 
+  web-pr-smoke:
+    name: Web PR smoke
+    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Web PR smoke dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run fast Web JavaScript contracts
+        run: >-
+          find tests/web -maxdepth 1 -type f
+          -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
+          ! -name 'gallery-session-publication.test.mjs'
+          -print0 | xargs -0 node --test
+
+      - name: Run non-slow Python browser tests
+        run: >-
+          python -m pytest tests/
+          -m "browser and not slow"
+          --durations=30
+
+      - name: Run Playwright PR smoke
+        run: npm run test:web:pr-smoke
+
+      - name: Upload Playwright PR smoke traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-pr-smoke-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   playwright-functional:
     name: Playwright functional
-    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -224,7 +305,7 @@ jobs:
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Playwright functional tests
-        run: npm run test:web:functional-smoke
+        run: npm run test:web:functional-full
 
       - name: Upload Playwright functional traces
         if: failure()
@@ -237,7 +318,6 @@ jobs:
 
   playwright-performance:
     name: Playwright performance
-    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -280,7 +360,6 @@ jobs:
 
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
-    needs: web-change-budget
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' &&
@@ -329,7 +408,6 @@ jobs:
 
   slow-main:
     name: Slow (Python ${{ matrix.python-version }})
-    needs: web-change-budget
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'main') ||
       (github.event_name == 'push' &&
@@ -371,7 +449,6 @@ jobs:
 
   lint:
     name: Lint
-    needs: web-change-budget
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -392,7 +469,6 @@ jobs:
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
-    needs: web-change-budget
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -424,3 +500,29 @@ jobs:
 
       - name: Run LOSAT cache migration browser acceptance
         run: python tests/run_losat_cache_browser_acceptance.py
+
+  pr-gate:
+    name: PR / gate
+    needs:
+      - web-change-budget
+      - core-pr
+      - recipes-standard
+      - gallery
+      - lint
+      - web-pr-smoke
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.base_ref == 'dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require all fast PR evidence
+        run: |
+          set -euo pipefail
+          test "${{ needs.web-change-budget.result }}" = "success"
+          test "${{ needs.core-pr.result }}" = "success"
+          test "${{ needs.recipes-standard.result }}" = "success"
+          test "${{ needs.gallery.result }}" = "success"
+          test "${{ needs.lint.result }}" = "success"
+          test "${{ needs.web-pr-smoke.result }}" = "success"
