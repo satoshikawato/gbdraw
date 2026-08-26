@@ -89,7 +89,7 @@ const expectNoPdfOrInteractiveRequests = (requestCount) => {
   expect(requestCount(STANDALONE_ASSET_PATH)).toBe(0);
 };
 
-test('startup and non-PDF exports do not load PDF or interactive payloads', async ({
+test('startup and non-PDF exports do not load PDF or interactive payloads', { tag: '@pr-smoke' }, async ({
   page
 }) => {
   const requestCount = installRequestCounter(page);

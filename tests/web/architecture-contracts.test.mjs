@@ -56,6 +56,26 @@ const BASE_POLICY_WORKFLOW = readFileSync(
   join(REPOSITORY_ROOT, '.github/workflows/web-base-policy.yml'),
   'utf8'
 );
+const PACKAGE_SCRIPTS = JSON.parse(readFileSync(
+  join(REPOSITORY_ROOT, 'package.json'),
+  'utf8'
+)).scripts;
+const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
+  join(REPOSITORY_ROOT, 'playwright.functional.config.js'),
+  'utf8'
+);
+const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
+  join(REPOSITORY_ROOT, 'playwright.pr-smoke.config.js'),
+  'utf8'
+);
+const WORKFLOW_SOURCES = readdirSync(
+  join(REPOSITORY_ROOT, '.github/workflows'),
+  { withFileTypes: true }
+).filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
+  .map((entry) => readFileSync(
+    join(REPOSITORY_ROOT, '.github/workflows', entry.name),
+    'utf8'
+  ));
 const PULL_REQUEST_TEMPLATE = readFileSync(
   join(REPOSITORY_ROOT, '.github/pull_request_template.md'),
   'utf8'
@@ -87,6 +107,19 @@ const walkJavaScriptFiles = (directory) => readdirSync(directory, { withFileType
     if (entry.isDirectory()) return walkJavaScriptFiles(path);
     return entry.isFile() && entry.name.endsWith('.js') ? [path] : [];
   });
+
+const PLAYWRIGHT_SPEC_SOURCES = walkJavaScriptFiles(
+  join(REPOSITORY_ROOT, 'tests/web')
+).filter((path) => path.endsWith('.playwright.spec.js'))
+  .map((path) => readFileSync(path, 'utf8'));
+
+const workflowJob = (jobId) => {
+  const job = TEST_WORKFLOW.match(
+    new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+  )?.[0];
+  assert.ok(job, `${jobId} job must exist`);
+  return job;
+};
 
 const productionSources = new Map(
   walkJavaScriptFiles(JAVASCRIPT_ROOT).map((path) => [
@@ -708,6 +741,134 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
     BASE_POLICY_WORKFLOW,
     /(?:checkout|run):[^\n]*pull_request\.head|ref:.*pull_request\.head|git (?:checkout|switch) /
   );
+  assert.doesNotMatch(BASE_POLICY_WORKFLOW, /Core PR \(Python 3\.11\)|Web PR smoke|PR \/ gate/);
+});
+
+test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evidence', () => {
+  const corePr = workflowJob('core-pr');
+  assert.match(corePr, /\n    name: Core PR \(Python 3\.11\)\n/);
+  assert.match(
+    corePr,
+    /if: github\.event_name == 'pull_request' && github\.base_ref == 'dev'/
+  );
+  assert.match(corePr, /-m "not slow and not \(recipe or gallery or browser\)"/);
+  assert.match(corePr, /git diff --exit-code -- tests\/reference_outputs\//);
+  assert.doesNotMatch(corePr, /matrix:/);
+
+  const webPrSmoke = workflowJob('web-pr-smoke');
+  assert.match(webPrSmoke, /\n    name: Web PR smoke\n/);
+  assert.match(
+    webPrSmoke,
+    /if: github\.event_name == 'pull_request' && github\.base_ref == 'dev'/
+  );
+  assert.match(webPrSmoke, /timeout-minutes: 5/);
+  assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
+  assert.equal([...webPrSmoke.matchAll(/playwright install --with-deps chromium/g)].length, 1);
+  assert.equal([...webPrSmoke.matchAll(/python tools\/prepare_browser_wheel\.py/g)].length, 1);
+  assert.match(webPrSmoke, /Run fast Web JavaScript contracts/);
+  assert.match(webPrSmoke, /! -name 'gallery-session-publication\.test\.mjs'/);
+  assert.match(webPrSmoke, /-m "browser and not slow"/);
+  assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
+  assert.match(webPrSmoke, /if: failure\(\)[\s\S]+path: test-results\//);
+  assert.doesNotMatch(
+    webPrSmoke,
+    /functional-full|perf-smoke|losat-cache|gallery-publication|Vibrio/
+  );
+
+  const gate = workflowJob('pr-gate');
+  assert.match(gate, /\n    name: PR \/ gate\n/);
+  const dependencies = gate.match(
+    /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
+  )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
+  assert.deepEqual(dependencies, [
+    'web-change-budget',
+    'core-pr',
+    'recipes-standard',
+    'gallery',
+    'lint',
+    'web-pr-smoke'
+  ]);
+  assert.match(
+    gate,
+    /if: >-\n      always\(\) &&\n      github\.event_name == 'pull_request' &&\n      github\.base_ref == 'dev'/
+  );
+  dependencies.forEach((jobId) => {
+    assert.ok(
+      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
+      `${jobId} must fail the aggregate unless it succeeds`
+    );
+  });
+  assert.doesNotMatch(gate, /gh api|curl|check-web-change-budget|pull_request_target/);
+});
+
+test('PR smoke selection is explicit while the full functional inventory stays wide', () => {
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:functional-full'],
+    'playwright test --config=playwright.functional.config.js'
+  );
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:pr-smoke'],
+    'playwright test --config=playwright.pr-smoke.config.js'
+  );
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:functional-smoke'],
+    'npm run test:web:functional-full'
+  );
+  assert.doesNotMatch(FUNCTIONAL_PLAYWRIGHT_CONFIG, /\bgrep\s*:/);
+  assert.match(FUNCTIONAL_PLAYWRIGHT_CONFIG, /performance\\\.playwright\\\.spec\\\.js/);
+  assert.match(FUNCTIONAL_PLAYWRIGHT_CONFIG, /losat-cache-migration/);
+
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /grep: \/@pr-smoke\//);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /retries: 0/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /workers: 1/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /reporter: 'list'/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /trace: 'retain-on-failure'/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /name === 'chromium'/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /performance\\\.playwright\\\.spec\\\.js/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /losat-cache-migration/);
+  assert.doesNotMatch(
+    `${PACKAGE_SCRIPTS['test:web:pr-smoke']}\n${PR_SMOKE_PLAYWRIGHT_CONFIG}`,
+    /pass-with-no-tests/
+  );
+
+  const selectedCount = PLAYWRIGHT_SPEC_SOURCES.reduce(
+    (count, source) => count + [...source.matchAll(/tag: ['"]@pr-smoke['"]/g)].length,
+    0
+  );
+  assert.ok(selectedCount >= 6 && selectedCount <= 10, `selected ${selectedCount} smoke tests`);
+});
+
+test('PR 1 preserves legacy check identities and does not add policy owners or mutators', () => {
+  [
+    'Web change budget',
+    'Core (Python ${{ matrix.python-version }})',
+    'Recipes standard (Python 3.11)',
+    'Gallery (Python 3.11)',
+    'Browser (Python 3.11)',
+    'Playwright functional',
+    'Playwright performance',
+    'Lint',
+    'LOSAT cache browser acceptance'
+  ].forEach((displayName) => {
+    assert.ok(TEST_WORKFLOW.includes(`name: ${displayName}`), `Missing legacy job: ${displayName}`);
+  });
+  assert.match(TEST_WORKFLOW, /python-version: \["3\.10", "3\.11", "3\.12"\]/);
+  assert.match(BASE_POLICY_WORKFLOW, /name: Web base policy \(trusted base\)/);
+  assert.doesNotMatch(TEST_WORKFLOW, /needs: web-change-budget/);
+  assert.equal(
+    existsSync(join(REPOSITORY_ROOT, '.github/workflows/dev-staging.yml')),
+    false
+  );
+  assert.equal(
+    existsSync(join(REPOSITORY_ROOT, '.github/workflows/gallery-readiness.yml')),
+    false
+  );
+  assert.doesNotMatch(TEST_WORKFLOW, /dev-staging\.yml|gallery-readiness\.yml/);
+  assert.doesNotMatch(
+    WORKFLOW_SOURCES.join('\n'),
+    /branches\/[^"]+\/protection|required_status_checks|\/rulesets(?:\b|\/)/
+  );
 });
 
 test('the PR template retains architecture evidence anchors', () => {
@@ -764,7 +925,6 @@ test('normal CI uses dev as the staging push branch', () => {
   );
   assert.doesNotMatch(TEST_WORKFLOW, /branches: \[[^\]]*"develop"/);
   assert.match(TEST_WORKFLOW, /\n  workflow_dispatch:\n/);
-  assert.equal([...TEST_WORKFLOW.matchAll(/^    if:/gm)].length, 2);
 });
 
 test('dev staging Web checks scope only the newly integrated change', () => {

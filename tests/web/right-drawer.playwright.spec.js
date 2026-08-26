@@ -60,7 +60,7 @@ test('a remembered unavailable Similarity groups tab reopens as Features', async
   ).toBe('features');
 });
 
-test('individual Feature, Label, and Legend edits update the mounted SVG', async ({
+test('individual Feature, Label, and Legend edits update the mounted SVG', { tag: '@pr-smoke' }, async ({
   page
 }) => {
   const imported = await loadGallerySession(

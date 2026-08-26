@@ -242,7 +242,7 @@ const saveSessionThroughUi = async (page) => {
   return { path, saved };
 };
 
-test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load, and continued Generate', async ({
+test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load, and continued Generate', { tag: '@pr-smoke' }, async ({
   browser,
   page
 }) => {
