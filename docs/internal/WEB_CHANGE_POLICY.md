@@ -9,7 +9,7 @@ owns architecture definitions, arithmetic, and exception evidence. Workflow and
 checker files implement parts of this policy; their current behavior is not a
 substitute for this authority.
 
-The [Product Impact Ratchet](./PRODUCT_IMPACT_RATCHET.md) owns planned
+The [Product Impact Ratchet](./PRODUCT_IMPACT_RATCHET.md) owns
 architecture-to-behavior traceability, product-impact classification, Decision
 Pack semantics, and product-decision eligibility. Its rollout uses the trusted
 admission and self-authorization boundaries in this document.
@@ -239,30 +239,42 @@ The ordinary Web guard additionally treats these files as a separated group:
 
 ```text
 docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
+docs/internal/PRODUCT_IMPACT_RATCHET.md
 .github/pull_request_template.md
 tools/check-web-change-budget.mjs
 tools/web-architecture-detectors.mjs
 tools/web-architecture-evaluation.mjs
+tools/web-product-impact-evaluation.mjs
+tools/web-product-impact-decision-source.mjs
 tools/web-architecture-rules.json
 tools/web-architecture-violations.json
+tools/web-product-impact-map.json
+tools/web-product-decisions.json
 tools/web-change-source.mjs
+tools/web-promotion-context.mjs
+tools/check-promotion-readiness.mjs
 tools/web-change-policy.json
 docs/internal/WEB_CHANGE_POLICY.md
 tests/web/architecture-contracts.test.mjs
 tests/web/architecture-ratchet-fixtures.test.mjs
+tests/web/product-impact-ratchet-fixtures.test.mjs
+tests/web/promotion-readiness.test.mjs
+tests/web/web-promotion-context.test.mjs
+.github/workflows/gallery-publication.yml
+.github/workflows/deploy_web.yml
 .github/workflows/test.yml
 .github/workflows/web-base-policy.yml
 ```
 
-The current executable guard does not yet enumerate every lifecycle evidence
-producer listed above. The broader normative separation governs future wiring;
-the list here documents the current CLI transition without overstating it.
+Mapped Product Impact contracts are classified from the trusted base map when
+an affected concern is evaluated. They do not need a duplicated static path
+list in this policy.
 
-### Planned Product Impact separation
+### Product Impact separation
 
 Product Impact extends the same trust direction without adding a workflow or
 required status. The existing `tools/check-web-change-budget.mjs` remains the
-ordinary Web policy CLI and trusted orchestration owner. The planned pure
+ordinary Web policy CLI and trusted orchestration owner. The pure
 mechanics and bounded decision-source modules are checker implementation:
 
 ```text
@@ -270,7 +282,7 @@ tools/web-product-impact-evaluation.mjs
 tools/web-product-impact-decision-source.mjs
 ```
 
-The planned Product Impact authority and evidence-producing surfaces are:
+The Product Impact authority and evidence-producing surfaces are:
 
 ```text
 docs/internal/PRODUCT_IMPACT_RATCHET.md
@@ -280,8 +292,9 @@ tools/web-product-decisions.json
 mapped behavior contract files
 ```
 
-These planned files are not executable integration. Each layer is added in the
-staged order required by the Product Impact policy.
+The JSON files are inert authority. The checker loads trusted base authority,
+validates candidate authority as data, and evaluates affected concerns without
+executing candidate modules.
 
 Runtime admission uses the trusted base checker, detectors, architecture rules,
 Product Impact map, durable decisions, maintainer allowlist, and base/head
