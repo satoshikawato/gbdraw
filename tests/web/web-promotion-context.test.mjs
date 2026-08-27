@@ -47,22 +47,28 @@ test('same-repository dev to main pull requests are promotions', () => {
   }
 });
 
-test('fork dev to main pull requests are ordinary changes', () => {
+test('fork dev to main pull requests are invalid promotions', () => {
   const result = classify({
     eventPayloadSource: pullRequestPayload({ headRepository: 'contributor/gbdraw' })
   });
-  assert.equal(result.context, 'ORDINARY');
-  assert.equal(result.isPromotion, false);
-  assert.deepEqual(result.errors, []);
+  assert.equal(result.context, 'PROMOTION');
+  assert.equal(result.isPromotion, true);
+  assert.deepEqual(
+    result.errors,
+    ['Promotion pull requests must use dev from the current repository.']
+  );
 });
 
-test('same-repository feature to main pull requests are ordinary changes', () => {
+test('same-repository feature to main pull requests are invalid promotions', () => {
   const result = classify({
     eventPayloadSource: pullRequestPayload({ headRef: 'feature/example' })
   });
-  assert.equal(result.context, 'ORDINARY');
-  assert.equal(result.isPromotion, false);
-  assert.deepEqual(result.errors, []);
+  assert.equal(result.context, 'PROMOTION');
+  assert.equal(result.isPromotion, true);
+  assert.deepEqual(
+    result.errors,
+    ['Promotion pull requests must use dev as the head branch.']
+  );
 });
 
 test('same-repository dev to release pull requests are ordinary changes', () => {
@@ -76,14 +82,16 @@ test('same-repository dev to release pull requests are ordinary changes', () => 
 
 test('checker SHAs must match the pull request payload', () => {
   const baseMismatch = classify({ baseSha: '3'.repeat(40) });
-  assert.equal(baseMismatch.isPromotion, false);
+  assert.equal(baseMismatch.context, 'PROMOTION');
+  assert.equal(baseMismatch.isPromotion, true);
   assert.deepEqual(
     baseMismatch.errors,
     ['Checker base SHA does not match the GitHub event payload.']
   );
 
   const headMismatch = classify({ headSha: '4'.repeat(40) });
-  assert.equal(headMismatch.isPromotion, false);
+  assert.equal(headMismatch.context, 'PROMOTION');
+  assert.equal(headMismatch.isPromotion, true);
   assert.deepEqual(
     headMismatch.errors,
     ['Checker head SHA does not match the GitHub event payload.']
