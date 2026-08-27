@@ -4,9 +4,9 @@ Status: normative repository policy
 
 This policy defines how an architecture change is traced to supported product
 behavior. It governs product-impact classification, authority resolution,
-Decision Pack content, and product-decision eligibility. The staged rollout
-described here does not claim that the planned Product Impact files or checks
-already exist.
+Decision Pack content, and product-decision eligibility. The repository now
+implements the version 1 map, decision authority, evaluator, bounded decision
+source, trusted checker integration, and two-rule hard pilot described here.
 
 ## Scope and delegated authority
 
@@ -252,17 +252,16 @@ checker does not choose one by precedence.
 
 ## Durable decisions
 
-The planned durable authority path is:
+The durable authority path is:
 
 ```text
 tools/web-product-decisions.json
 ```
 
-This file is not introduced by this policy-only change. When implemented, it
-contains active decisions and the base maintainer allowlist. At most one active
-decision may exist for a concern and scenario revision. Replacement receives a
-new `BD-###`; the former record is removed from the active file and remains in
-Git history.
+It contains active decisions and the base maintainer allowlist. At most one
+active decision may exist for a concern and scenario revision. Replacement
+receives a new `BD-###`; the former record is removed from the active file and
+remains in Git history.
 
 A material product change, public-contract change, affordance or compatibility
 retirement requires durable base authority before runtime implementation.
@@ -359,8 +358,9 @@ canonical-path.render-request
 semantic-owner.render-request
 ```
 
-The pilot starts `report-only`. Report-only evidence is reviewed before either
-rule moves to hard enforcement.
+Both pilot rules have complete `hard` enforcement after their report-only audit
+and evidence sequence. Every later concern starts `report-only`; its evidence
+is reviewed before the mapped rules move to hard enforcement.
 
 ## Gate and Review
 

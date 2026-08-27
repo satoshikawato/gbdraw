@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "ruleCoverage": [
+    {
+      "ruleKey": "canonical-path.render-request",
+      "coverage": "complete",
+      "enforcement": "hard"
+    },
+    {
+      "ruleKey": "semantic-owner.render-request",
+      "coverage": "complete",
+      "enforcement": "hard"
+    }
+  ],
+  "concerns": [
+    {
+      "key": "product.canonical-render-request-boundary",
+      "scenarioRevision": 1,
+      "title": "Canonical render request continuity",
+      "layer": "STATE",
+      "journeys": [
+        {
+          "id": "JRN-RENDER-001",
+          "actor": "Web user",
+          "context": "A diagram is configured and ready for generation or later reproduction.",
+          "goal": "Generate a Result and reproduce it from the same canonical state after a Session round trip.",
+          "steps": [
+            "Configure the diagram inputs and layout",
+            "Select Generate",
+            "Inspect the Result",
+            "Save and reload the Session when needed",
+            "Generate again from the restored canonical state"
+          ],
+          "checkpoints": [
+            {
+              "id": "generate-submit",
+              "label": "Generate request submission"
+            },
+            {
+              "id": "fresh-result",
+              "label": "Fresh Result admission"
+            },
+            {
+              "id": "roundtrip-regeneration",
+              "label": "Regeneration after Session round trip"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "id": "EFF-RENDER-REQUEST-CURRENT-STATE",
+          "checkpointRef": "JRN-RENDER-001:generate-submit",
+          "statement": "At Generate submission, the render request reflects the current canonical UI and Session model."
+        },
+        {
+          "id": "EFF-RENDER-REQUEST-ROUNDTRIP",
+          "checkpointRef": "JRN-RENDER-001:roundtrip-regeneration",
+          "statement": "Reloaded and freshly generated output use the same request semantics."
+        }
+      ],
+      "options": [
+        {
+          "id": "canonical-typed-request-boundary",
+          "summary": "Fresh generation and replay converge on one typed canonical render-request boundary.",
+          "effectRefs": [
+            "EFF-RENDER-REQUEST-CURRENT-STATE",
+            "EFF-RENDER-REQUEST-ROUNDTRIP"
+          ],
+          "requirements": [
+            {
+              "id": "REQ-RENDER-REQUEST-ENTRY",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-RENDER-001:generate-submit"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "canonical-path.render-request",
+                  "subjectCategory": "canonical-entry-edge",
+                  "subject": "app/run-analysis.js -> services/session-request.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-RENDER-REQUEST-OWNER",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-RENDER-001:generate-submit",
+                "JRN-RENDER-001:roundtrip-regeneration"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.render-request",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/session-request.js"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "resolution": {
+        "kind": "authority-covered",
+        "selectedOptionId": "canonical-typed-request-boundary",
+        "authorityRefs": [
+          "gbdraw/web/CLAUDE.md#request-and-session-boundary",
+          "gbdraw/web/CLAUDE.md#runtime-data-flow"
+        ]
+      },
+      "contracts": [
+        {
+          "ref": "tests/web/architecture-contracts.test.mjs::production rendering crosses the canonical request and Worker boundary",
+          "checkpointRefs": [
+            "JRN-RENDER-001:generate-submit"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "This contract fixes the Generate-to-request and Worker wiring but does not compare every projected UI field or a Session round trip."
+        },
+        {
+          "ref": "tests/web/contracts/session-regenerate-intent.playwright.spec.js::no-draft session preserves preview, active config, canonical request, and catalog",
+          "checkpointRefs": [
+            "JRN-RENDER-001:fresh-result",
+            "JRN-RENDER-001:roundtrip-regeneration"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "DEV_STAGING",
+          "residualRisk": "The browser contract exercises one representative current no-draft Session during dev staging; alternate modes, migrations, and every request field are not exhaustively covered here."
+        },
+        {
+          "ref": "tests/web/session-request.test.mjs::canonical Session projection rebuilds the same render request",
+          "checkpointRefs": [
+            "JRN-RENDER-001:roundtrip-regeneration"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The DOM-free contract compares one representative current Circular request; browser admission, alternate modes, and Session migrations remain covered separately."
+        }
+      ]
+    }
+  ]
+}

@@ -33,6 +33,10 @@ import {
   validateArchitectureRuleRegistry
 } from '../../tools/web-architecture-evaluation.mjs';
 import {
+  validateProductDecisionAuthority,
+  validateProductImpactMap
+} from '../../tools/web-product-impact-evaluation.mjs';
+import {
   literalImportSpecifiers,
   maskJavaScript
 } from '../../tools/web-change-source.mjs';
@@ -112,6 +116,24 @@ const WEB_CHANGE_BUDGET_SOURCE = readFileSync(
   join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs'),
   'utf8'
 );
+const PRODUCT_IMPACT_EVALUATION_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-product-impact-evaluation.mjs'),
+  'utf8'
+);
+const PRODUCT_IMPACT_DECISION_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-product-impact-decision-source.mjs'),
+  'utf8'
+);
+const PRODUCT_IMPACT_MAP_PATH = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-impact-map.json'
+);
+const PRODUCT_DECISIONS_PATH = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-decisions.json'
+);
+const PRODUCT_IMPACT_MAP_SOURCE = readFileSync(PRODUCT_IMPACT_MAP_PATH, 'utf8');
+const PRODUCT_DECISIONS_SOURCE = readFileSync(PRODUCT_DECISIONS_PATH, 'utf8');
 
 const normalizePath = (path) => path.split(sep).join('/');
 const relativeModulePath = (path) => normalizePath(relative(JAVASCRIPT_ROOT, path));
@@ -660,6 +682,59 @@ test('pure architecture evaluation owns no I/O, source detection, or authority d
   assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^#!|process\.argv/);
 });
 
+test('pure Product Impact mechanics own no I/O, Git, environment, reporting, or CLI', () => {
+  for (const source of [PRODUCT_IMPACT_EVALUATION_SOURCE, PRODUCT_IMPACT_DECISION_SOURCE]) {
+    assert.doesNotMatch(source, /^\s*import\s/m);
+    assert.doesNotMatch(
+      source,
+      /node:(?:fs|path|child_process|process)|process\.|console\.|(?:read|write|append)File|execFile|spawn|fetch\s*\(/
+    );
+    assert.doesNotMatch(source, /^#!|process\.argv/);
+  }
+  assert.doesNotMatch(
+    PRODUCT_IMPACT_EVALUATION_SOURCE,
+    /web-product-impact-(?:map|decisions)\.json|web-architecture-rules\.json/
+  );
+});
+
+test('Product Impact authority bootstrap accepts zero or two inert JSON files', () => {
+  const mapExists = existsSync(PRODUCT_IMPACT_MAP_PATH);
+  const decisionsExist = existsSync(PRODUCT_DECISIONS_PATH);
+  assert.equal(
+    mapExists,
+    decisionsExist,
+    'Product Impact map and durable decision authority must be introduced together'
+  );
+  if (!mapExists) return;
+
+  const map = JSON.parse(readFileSync(PRODUCT_IMPACT_MAP_PATH, 'utf8'));
+  const decisions = JSON.parse(readFileSync(PRODUCT_DECISIONS_PATH, 'utf8'));
+  assert.deepEqual(
+    validateProductImpactMap(map, WEB_ARCHITECTURE_RULES, WEB_ARCHITECTURE_DETECTORS),
+    { valid: true, errors: [] }
+  );
+  assert.deepEqual(validateProductDecisionAuthority(decisions, map), {
+    valid: true,
+    errors: []
+  });
+  const pilotEnforcement = map.ruleCoverage
+    .filter(({ ruleKey }) => [
+      'canonical-path.render-request',
+      'semantic-owner.render-request'
+    ].includes(ruleKey))
+    .map(({ enforcement }) => enforcement);
+  assert.equal(pilotEnforcement.length, 2);
+  assert.equal(
+    new Set(pilotEnforcement).size,
+    1,
+    'the two render-request pilot rules must activate in the same stage'
+  );
+  assert.deepEqual(decisions.decisions, []);
+  map.concerns.flatMap(({ contracts }) => contracts).forEach(({ ref }) => {
+    assert.equal(existsSync(join(REPOSITORY_ROOT, ref.split('::', 1)[0])), true, ref);
+  });
+});
+
 test('registered architecture authority and executable matching have separate owners', () => {
   assert.deepEqual(Object.keys(WEB_ARCHITECTURE_RULES), ['schemaVersion', 'rules']);
   assert.doesNotMatch(
@@ -694,6 +769,22 @@ test('the Web checker remains the sole evaluator orchestrator and CLI entry poin
   assert.match(WEB_CHANGE_BUDGET_SOURCE, /^#!\/usr\/bin\/env node/);
   assert.match(WEB_CHANGE_BUDGET_SOURCE, /WEB_ARCHITECTURE_DETECTORS\[rule\.detector\]/);
   assert.doesNotMatch(WEB_CHANGE_BUDGET_SOURCE, /import\s*\(.*web-architecture-detectors/);
+  assert.match(
+    WEB_CHANGE_BUDGET_SOURCE,
+    /from '\.\/web-product-impact-(?:evaluation|decision-source)\.mjs'/
+  );
+  [
+    'createArchitectureSubjectDelta',
+    'evaluateProductImpact',
+    'parseCurrentProductImpactDecisions',
+    'validateProductDecisionAuthority',
+    'validateProductImpactMap'
+  ].forEach((name) => {
+    assert.match(WEB_CHANGE_BUDGET_SOURCE, new RegExp(`\\b${name}\\s*\\(`));
+  });
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /## Product impact/);
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /NOT_AUTHORITATIVE_CANDIDATE/);
+  assert.match(WEB_CHANGE_BUDGET_SOURCE, /candidate data does not alter this head runtime admission/);
 });
 
 test('report-only source facts preserve the characterized masking behavior', () => {
@@ -721,7 +812,8 @@ test('report-only source facts preserve the characterized masking behavior', () 
 });
 
 test('workflow triggers separate dev admission, dev staging, promotion, and deployment', () => {
-  const activityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
+  const candidateActivityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
+  const trustedActivityTypes = /types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/;
   const triggerBranches = (workflow, trigger) => {
     const match = workflow.match(new RegExp(
       `\\r?\\n  ${trigger}:\\r?\\n    branches: (\\[[^\\r\\n]+\\])`
@@ -733,7 +825,8 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
   assert.match(TEST_WORKFLOW, /\n  pull_request:\n/);
   assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'pull_request'), ['dev']);
   assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'push'), ['dev']);
-  assert.match(TEST_WORKFLOW, activityTypes);
+  assert.match(TEST_WORKFLOW, candidateActivityTypes);
+  assert.doesNotMatch(TEST_WORKFLOW, /types: \[[^\]\r\n]*\bedited\b/);
   assert.match(TEST_WORKFLOW, /name: Run core tests/);
   assert.match(
     TEST_WORKFLOW,
@@ -745,10 +838,20 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
     triggerBranches(BASE_POLICY_WORKFLOW, 'pull_request_target'),
     ['dev', 'main']
   );
-  assert.match(BASE_POLICY_WORKFLOW, activityTypes);
+  assert.match(BASE_POLICY_WORKFLOW, trustedActivityTypes);
   assert.match(
     BASE_POLICY_WORKFLOW,
     /permissions:\n  contents: read\n  pull-requests: read\n  actions: read/
+  );
+  assert.match(
+    BASE_POLICY_WORKFLOW,
+    /group: web-base-policy-\$\{\{ github\.event\.pull_request\.number \}\}/
+  );
+  assert.deepEqual(
+    WORKFLOW_NAMES.filter((name, index) => (
+      /types: \[[^\]\r\n]*\bedited\b/.test(WORKFLOW_SOURCES[index])
+    )),
+    ['web-base-policy.yml']
   );
 
   assert.deepEqual(triggerBranches(GALLERY_PUBLICATION_WORKFLOW, 'push'), ['dev']);
@@ -971,6 +1074,15 @@ test('trusted promotion uses base code for topology, exact-SHA evidence, and tre
   const devPolicy = workflowJob('trusted-base-policy', BASE_POLICY_WORKFLOW);
   assert.match(devPolicy, /\n    name: Web base policy \(trusted base\)\n/);
   assert.match(devPolicy, /if: github\.event\.pull_request\.base\.ref == 'dev'/);
+  assert.equal([...devPolicy.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  assert.match(devPolicy, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(devPolicy, /fetch-depth: 0/);
+  assert.match(devPolicy, /persist-credentials: false/);
+  assert.match(devPolicy, /git fetch --no-tags origin "\$HEAD_SHA"/);
+  assert.doesNotMatch(
+    devPolicy,
+    /ref:.*pull_request\.head|git (?:checkout|switch) |uses: \.\//
+  );
 
   const promotion = workflowJob('promotion-gate', BASE_POLICY_WORKFLOW);
   assert.match(promotion, /\n    name: Promotion \/ gate\n/);
@@ -1058,6 +1170,25 @@ test('the PR template retains architecture evidence anchors', () => {
   ].forEach((anchor) => {
     assert.ok(PULL_REQUEST_TEMPLATE.includes(anchor), `Missing PR template anchor: ${anchor}`);
   });
+});
+
+test('the PR template contains one optional bounded Product Impact decision block', () => {
+  const startMarkers = PULL_REQUEST_TEMPLATE.match(
+    /<!-- gbdraw-product-impact-decision:start -->/g
+  ) || [];
+  const endMarkers = PULL_REQUEST_TEMPLATE.match(
+    /<!-- gbdraw-product-impact-decision:end -->/g
+  ) || [];
+  assert.equal(startMarkers.length, 1);
+  assert.equal(endMarkers.length, 1);
+  assert.ok(
+    PULL_REQUEST_TEMPLATE.indexOf(startMarkers[0])
+      < PULL_REQUEST_TEMPLATE.indexOf(endMarkers[0])
+  );
+  assert.match(
+    PULL_REQUEST_TEMPLATE,
+    /\{"schemaVersion":1,"headSha":"","decisions":\[\]\}/
+  );
 });
 
 test('the PR template requires exact changed-scope architecture debt arithmetic', () => {
@@ -1166,9 +1297,21 @@ const WEB_ARCHITECTURE_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-architecture-evaluation.mjs'
 );
+const PRODUCT_IMPACT_EVALUATION_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-impact-evaluation.mjs'
+);
+const PRODUCT_IMPACT_DECISION_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-impact-decision-source.mjs'
+);
 const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
   REPOSITORY_ROOT,
   'tests/web/architecture-ratchet-fixtures.test.mjs'
+);
+const PRODUCT_IMPACT_RATCHET_FIXTURES = join(
+  REPOSITORY_ROOT,
+  'tests/web/product-impact-ratchet-fixtures.test.mjs'
 );
 const WEB_PROMOTION_CONTEXT_MODULE = join(
   REPOSITORY_ROOT,
@@ -1233,6 +1376,13 @@ const BUDGET_FIXTURE = Object.freeze({
   'docs/internal/WEB_CHANGE_POLICY.md': '# Baseline Web change policy\n',
   'package.json': '{"private":true}\n',
   'tests/web/architecture-contracts.test.mjs': '// baseline contract\n',
+  'tests/web/contracts/session-regenerate-intent.playwright.spec.js': (
+    "test('no-draft session preserves preview, active config, canonical request, and catalog', () => {});\n"
+  ),
+  'tests/web/session-request.test.mjs': (
+    "assert.deepEqual(roundTripCanonical.renderRequest, canonical.renderRequest,\n"
+      + "  'canonical Session projection rebuilds the same render request');\n"
+  ),
   'tests/web/promotion-readiness.test.mjs': readFileSync(
     PROMOTION_READINESS_TEST,
     'utf8'
@@ -1250,6 +1400,16 @@ const BUDGET_FIXTURE = Object.freeze({
     WEB_ARCHITECTURE_EVALUATION_MODULE,
     'utf8'
   ),
+  'tools/web-product-impact-evaluation.mjs': readFileSync(
+    PRODUCT_IMPACT_EVALUATION_MODULE,
+    'utf8'
+  ),
+  'tools/web-product-impact-decision-source.mjs': readFileSync(
+    PRODUCT_IMPACT_DECISION_MODULE,
+    'utf8'
+  ),
+  'tools/web-product-impact-map.json': PRODUCT_IMPACT_MAP_SOURCE,
+  'tools/web-product-decisions.json': PRODUCT_DECISIONS_SOURCE,
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
   'tools/web-change-source.mjs': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
@@ -1262,6 +1422,10 @@ const BUDGET_FIXTURE = Object.freeze({
   'tools/web-change-policy.json': `${JSON.stringify(BUDGET_POLICY, null, 2)}\n`,
   'tests/web/architecture-ratchet-fixtures.test.mjs': readFileSync(
     WEB_ARCHITECTURE_RATCHET_FIXTURES,
+    'utf8'
+  ),
+  'tests/web/product-impact-ratchet-fixtures.test.mjs': readFileSync(
+    PRODUCT_IMPACT_RATCHET_FIXTURES,
     'utf8'
   ),
   'gbdraw/web/index.html': '<main>baseline</main>\n',
@@ -1304,6 +1468,28 @@ const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   'tools/web-architecture-rules.json',
   'tools/web-architecture-violations.json'
+]);
+const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
+  'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  'tools/web-product-impact-map.json',
+  'tools/web-product-decisions.json',
+  'tools/web-product-impact-evaluation.mjs',
+  'tools/web-product-impact-decision-source.mjs',
+  'tests/web/product-impact-ratchet-fixtures.test.mjs'
+]);
+const PRODUCT_IMPACT_CHECKER_IMPLEMENTATION_PATHS = Object.freeze([
+  'tools/web-product-impact-evaluation.mjs',
+  'tools/web-product-impact-decision-source.mjs'
+]);
+const PRODUCT_IMPACT_AUTHORITY_PATHS = Object.freeze([
+  'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  'tools/web-product-impact-map.json',
+  'tools/web-product-decisions.json'
+]);
+const NARROW_PRODUCT_IMPACT_AUTHORITY_BUNDLE = Object.freeze([
+  'tools/web-architecture-rules.json',
+  'tools/web-product-impact-map.json',
+  'tools/web-product-decisions.json'
 ]);
 const reservedPathContent = (path) => {
   if (path === 'tools/web-architecture-rules.json') {
@@ -1518,6 +1704,16 @@ const assertRevisionChangeBudgetFailure = (mutate, expectedPatterns) => {
 
 const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
   'package.json': '{"private":true}\n',
+  'tests/web/architecture-contracts.test.mjs': (
+    "test('production rendering crosses the canonical request and Worker boundary', () => {});\n"
+  ),
+  'tests/web/contracts/session-regenerate-intent.playwright.spec.js': (
+    "test('no-draft session preserves preview, active config, canonical request, and catalog', () => {});\n"
+  ),
+  'tests/web/session-request.test.mjs': (
+    "assert.deepEqual(roundTripCanonical.renderRequest, canonical.renderRequest,\n"
+      + "  'canonical Session projection rebuilds the same render request');\n"
+  ),
   'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
   'tools/web-architecture-detectors.mjs': readFileSync(
     WEB_ARCHITECTURE_DETECTOR_MODULE,
@@ -1528,6 +1724,16 @@ const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
     'utf8'
   ),
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
+  'tools/web-product-impact-evaluation.mjs': readFileSync(
+    PRODUCT_IMPACT_EVALUATION_MODULE,
+    'utf8'
+  ),
+  'tools/web-product-impact-decision-source.mjs': readFileSync(
+    PRODUCT_IMPACT_DECISION_MODULE,
+    'utf8'
+  ),
+  'tools/web-product-impact-map.json': PRODUCT_IMPACT_MAP_SOURCE,
+  'tools/web-product-decisions.json': PRODUCT_DECISIONS_SOURCE,
   'tools/web-change-policy.json': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-policy.json'),
     'utf8'
@@ -1581,11 +1787,203 @@ const preauthorizedCanonicalRulesSource = rulesSource((rules) => {
 const reportOnlyCanonicalRulesSource = rulesSource((rules) => {
   canonicalRule(rules).enforcement = 'report-only';
 });
+const reportOnlyProductImpactMapSource = (() => {
+  const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
+  map.ruleCoverage.forEach((coverage) => { coverage.enforcement = 'report-only'; });
+  return `${JSON.stringify(map, null, 2)}\n`;
+})();
+const productImpactMapSourceForRules = (architectureSource) => {
+  const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
+  const architecture = JSON.parse(architectureSource);
+  const rules = new Map(architecture.rules.map((rule) => [rule.key, rule]));
+  const concern = map.concerns[0];
+  const requirements = new Map(
+    concern.options[0].requirements.map((requirement) => [requirement.id, requirement])
+  );
+  requirements.get('REQ-RENDER-REQUEST-ENTRY').anyOf = rules
+    .get('canonical-path.render-request').allowedEdges.map(({ from, to }) => ({
+      ruleKey: 'canonical-path.render-request',
+      subjectCategory: 'canonical-entry-edge',
+      subject: `${from} -> ${to}`
+    }));
+  requirements.get('REQ-RENDER-REQUEST-OWNER').anyOf = rules
+    .get('semantic-owner.render-request').allowedDefinitionPaths.map((subject) => ({
+      ruleKey: 'semantic-owner.render-request',
+      subjectCategory: 'definition-path',
+      subject
+    }));
+  return `${JSON.stringify(map, null, 2)}\n`;
+};
+const canonicalTransitionProductImpactMapSource = ({
+  enforcement = 'report-only',
+  resolution = { kind: 'decision-required' }
+} = {}) => {
+  const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
+  const concern = map.concerns[0];
+  concern.scenarioRevision = 2;
+  concern.options = [
+    {
+      id: 'after-entry-option',
+      summary: 'Generation uses the preauthorized alternate entry and preserves the supported Result and Session continuation.',
+      effectRefs: [
+        'EFF-RENDER-REQUEST-CURRENT-STATE',
+        'EFF-RENDER-REQUEST-ROUNDTRIP'
+      ],
+      requirements: [
+        {
+          id: 'REQ-AFTER-ENTRY',
+          category: 'SEMANTIC',
+          checkpointRefs: ['JRN-RENDER-001:generate-submit'],
+          anyOf: [{
+            ruleKey: 'canonical-path.render-request',
+            subjectCategory: 'canonical-entry-edge',
+            subject: 'app/alternate.js -> services/session-request.js'
+          }]
+        },
+        {
+          id: 'REQ-AFTER-OWNER',
+          category: 'SEMANTIC',
+          checkpointRefs: [
+            'JRN-RENDER-001:generate-submit',
+            'JRN-RENDER-001:roundtrip-regeneration'
+          ],
+          anyOf: [{
+            ruleKey: 'semantic-owner.render-request',
+            subjectCategory: 'definition-path',
+            subject: 'services/session-request.js'
+          }]
+        }
+      ]
+    },
+    {
+      id: 'before-entry-option',
+      summary: 'Generation uses the current entry and preserves the supported Result and Session continuation.',
+      effectRefs: [
+        'EFF-RENDER-REQUEST-CURRENT-STATE',
+        'EFF-RENDER-REQUEST-ROUNDTRIP'
+      ],
+      requirements: [
+        {
+          id: 'REQ-BEFORE-ENTRY',
+          category: 'SEMANTIC',
+          checkpointRefs: ['JRN-RENDER-001:generate-submit'],
+          anyOf: [{
+            ruleKey: 'canonical-path.render-request',
+            subjectCategory: 'canonical-entry-edge',
+            subject: 'app/run-analysis.js -> services/session-request.js'
+          }]
+        },
+        {
+          id: 'REQ-BEFORE-OWNER',
+          category: 'SEMANTIC',
+          checkpointRefs: [
+            'JRN-RENDER-001:generate-submit',
+            'JRN-RENDER-001:roundtrip-regeneration'
+          ],
+          anyOf: [{
+            ruleKey: 'semantic-owner.render-request',
+            subjectCategory: 'definition-path',
+            subject: 'services/session-request.js'
+          }]
+        }
+      ]
+    }
+  ];
+  concern.resolution = resolution;
+  map.ruleCoverage.forEach((coverage) => { coverage.enforcement = enforcement; });
+  if (enforcement === 'hard') {
+    concern.contracts.forEach((contract) => {
+      contract.execution = 'PR_GATE';
+    });
+  }
+  return `${JSON.stringify(map, null, 2)}\n`;
+};
+const preauthorizedProductPolicy = JSON.parse(JSON.stringify(WEB_CHANGE_POLICY));
+for (const target of ['services/diagram-generation.js', 'services/session-request.js']) {
+  preauthorizedProductPolicy.allowedPrivilegedImporters[target].push('app/alternate.js');
+  preauthorizedProductPolicy.allowedPrivilegedImporters[target].sort();
+}
+for (const capability of ['Diagram Worker', 'Render request']) {
+  preauthorizedProductPolicy.allowedPrivilegedOwners[capability].push('app/alternate.js');
+  preauthorizedProductPolicy.allowedPrivilegedOwners[capability].sort();
+}
+const preauthorizedProductBaseFiles = (mapSource) => ({
+  'tools/web-architecture-rules.json': preauthorizedCanonicalRulesSource,
+  'tools/web-change-policy.json': `${JSON.stringify(preauthorizedProductPolicy, null, 2)}\n`,
+  'tools/web-product-impact-map.json': mapSource
+});
+const moveCanonicalEntry = (write) => {
+  write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+  write('gbdraw/web/js/app/alternate.js', canonicalCallerSource);
+};
+const currentDecisionBody = (head, overrides = {}) => {
+  const decision = {
+    concernKey: 'product.canonical-render-request-boundary',
+    scenarioRevision: 2,
+    selectedOptionId: 'after-entry-option',
+    acceptedImpactClass: 'AFFORDANCE_PRESERVED',
+    rationale: 'The entry changes while the supported Result and Session continuation remains intact.',
+    acknowledgedChangedRequirementRefs: ['REQ-AFTER-ENTRY', 'REQ-BEFORE-ENTRY'],
+    evidenceRefs: [
+      'tests/web/architecture-contracts.test.mjs::production rendering crosses the canonical request and Worker boundary'
+    ],
+    residualRisk: 'Alternate modes remain covered by the mapped staging contract.',
+    ...overrides
+  };
+  return [
+    '<!-- gbdraw-product-impact-decision:start -->',
+    JSON.stringify({ schemaVersion: 1, headSha: head, decisions: [decision] }),
+    '<!-- gbdraw-product-impact-decision:end -->'
+  ].join('\n');
+};
+const productImpactPullRequestEnvironment = ({
+  author = 'satoshikawato',
+  baseRef = 'dev',
+  body = '',
+  eventName = 'pull_request_target',
+  summary = false
+} = {}) => ({ base, head, root }) => {
+  const eventPath = join(root, '.git', 'product-impact-event.json');
+  const resolvedBody = typeof body === 'function' ? body({ base, head }) : body;
+  writeFileSync(eventPath, JSON.stringify({
+    pull_request: {
+      base: {
+        ref: baseRef,
+        sha: base,
+        repo: { full_name: 'satoshikawato/gbdraw' }
+      },
+      head: {
+        ref: 'feature/product-impact-fixture',
+        sha: head,
+        repo: { full_name: 'satoshikawato/gbdraw' }
+      },
+      user: { login: author },
+      body: resolvedBody
+    }
+  }), 'utf8');
+  return {
+    GITHUB_EVENT_NAME: eventName,
+    GITHUB_EVENT_PATH: eventPath,
+    GITHUB_REPOSITORY: 'satoshikawato/gbdraw',
+    ...(summary ? { GITHUB_STEP_SUMMARY: join(root, 'product-impact-summary.md') } : {})
+  };
+};
 
-const withTrustedArchitectureRepository = (mutateHead, runCase, baseFiles = {}) => {
+const withTrustedArchitectureRepository = (
+  mutateHead,
+  runCase,
+  baseFiles = {},
+  executionEnvironment = {}
+) => {
   const root = mkdtempSync(join(tmpdir(), 'gbdraw-architecture-ratchet-'));
   try {
-    Object.entries({ ...TRUSTED_ARCHITECTURE_FIXTURE_FILES, ...baseFiles })
+    const fixtureFiles = { ...TRUSTED_ARCHITECTURE_FIXTURE_FILES, ...baseFiles };
+    if (!Object.hasOwn(baseFiles, 'tools/web-product-impact-map.json')) {
+      fixtureFiles['tools/web-product-impact-map.json'] = productImpactMapSourceForRules(
+        fixtureFiles['tools/web-architecture-rules.json']
+      );
+    }
+    Object.entries(fixtureFiles)
       .forEach(([path, content]) => writeFixtureFile(root, path, content));
     const git = (args) => spawnSync('git', args, {
       cwd: root,
@@ -1603,6 +2001,9 @@ const withTrustedArchitectureRepository = (mutateHead, runCase, baseFiles = {}) 
     assert.equal(git(['commit', '--quiet', '-m', 'candidate head']).status, 0);
     const head = git(['rev-parse', 'HEAD']).stdout.trim();
     assert.equal(git(['checkout', '--quiet', '--detach', base]).status, 0);
+    const extraEnvironment = typeof executionEnvironment === 'function'
+      ? executionEnvironment({ base, head, root })
+      : executionEnvironment;
     const result = spawnSync(process.execPath, [
       'tools/check-web-change-budget.mjs',
       '--base', base,
@@ -1612,15 +2013,19 @@ const withTrustedArchitectureRepository = (mutateHead, runCase, baseFiles = {}) 
       encoding: 'utf8',
       env: {
         ...process.env,
+        GITHUB_ACTIONS: '',
         GITHUB_EVENT_NAME: '',
         GITHUB_EVENT_PATH: '',
-        GITHUB_REPOSITORY: ''
+        GITHUB_REPOSITORY: '',
+        GITHUB_STEP_SUMMARY: '',
+        ...extraEnvironment
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     runCase({
       base,
       head,
+      root,
       status: result.status,
       output: `${result.stdout || ''}${result.stderr || ''}`
     });
@@ -1930,6 +2335,438 @@ test('a preauthorized one-for-one canonical path move passes and requires review
   );
 });
 
+test('trusted Product Impact stays absent for unchanged source and non-authoritative pull requests', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('fixture-note.txt', 'no registered Product Impact delta\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.doesNotMatch(output, /## Product impact/);
+    },
+    {},
+    productImpactPullRequestEnvironment()
+  );
+
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.doesNotMatch(output, /## Product impact/);
+      assert.doesNotMatch(output, /PRIVATE-CANDIDATE-BODY/);
+    },
+    preauthorizedProductBaseFiles(
+      productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+    ),
+    productImpactPullRequestEnvironment({
+      eventName: 'pull_request',
+      body: '<!-- gbdraw-product-impact-decision:start -->PRIVATE-CANDIDATE-BODY'
+    })
+  );
+
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.doesNotMatch(output, /## Product impact/);
+      assert.doesNotMatch(output, /PRIVATE-NON-DEV-BODY/);
+    },
+    preauthorizedProductBaseFiles(
+      productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+    ),
+    productImpactPullRequestEnvironment({
+      baseRef: 'feature-base',
+      body: '<!-- gbdraw-product-impact-decision:start -->PRIVATE-NON-DEV-BODY'
+    })
+  );
+});
+
+test('trusted Product Impact reports a mapped provider substitution as one conforming concern', () => {
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /## Product impact/);
+      assert.match(output, /Runtime context: TRUSTED_BASE_PULL_REQUEST/);
+      assert.match(output, /Impact: NO_USER_VISIBLE_DIFFERENCE/);
+      assert.match(output, /Observation: CONFORMING/);
+      assert.match(output, /Gate contribution: None \(report-only/);
+      assert.equal(
+        [...output.matchAll(/### product\.canonical-render-request-boundary/g)].length,
+        1
+      );
+    },
+    preauthorizedProductBaseFiles(
+      productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+    ),
+    productImpactPullRequestEnvironment()
+  );
+});
+
+test('two changed architecture rules still produce one trusted Product Impact concern packet', () => {
+  const rules = JSON.parse(preauthorizedCanonicalRulesSource);
+  canonicalRule(rules).allowedEdges = [
+    { from: 'app/alternate.js', to: 'services/future-session-request.js' },
+    { from: 'app/run-analysis.js', to: 'services/session-request.js' }
+  ];
+  rules.rules.find(({ key }) => key === 'semantic-owner.render-request')
+    .allowedDefinitionPaths = [
+      'services/future-session-request.js',
+      'services/session-request.js'
+    ];
+  const twoRuleSource = `${JSON.stringify(rules, null, 2)}\n`;
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+      write(
+        'gbdraw/web/js/app/alternate.js',
+        canonicalCallerSource.replaceAll('session-request.js', 'future-session-request.js')
+      );
+      write(
+        'gbdraw/web/js/services/session-request.js',
+        'export const retiredRequestHelper = () => ({});\n'
+      );
+      write(
+        'gbdraw/web/js/services/future-session-request.js',
+        'export const buildCanonicalRenderRequest = () => ({});\n'
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Rule: `canonical-path\.render-request`/);
+      assert.match(output, /Rule: `semantic-owner\.render-request`/);
+      assert.equal(
+        [...output.matchAll(/### product\.canonical-render-request-boundary/g)].length,
+        1
+      );
+      assert.match(output, /Observation: CONFORMING/);
+    },
+    {
+      ...preauthorizedProductBaseFiles(productImpactMapSourceForRules(twoRuleSource)),
+      'tools/web-architecture-rules.json': twoRuleSource
+    },
+    productImpactPullRequestEnvironment()
+  );
+});
+
+test('report-only Product Impact regression requires review without changing a passing Gate', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(output, /Impact: RETIREMENT/);
+      assert.match(output, /Observation: ORDINARY_REGRESSION/);
+      assert.match(output, /Gate contribution: None \(report-only/);
+    },
+    {
+      'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource
+    },
+    productImpactPullRequestEnvironment()
+  );
+});
+
+test('Decision Pack routing is outcome-oriented and accepts only an eligible exact-head decision', () => {
+  const transitionMap = canonicalTransitionProductImpactMapSource();
+  const baseFiles = preauthorizedProductBaseFiles(transitionMap);
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Observation: UNRESOLVED_DECISION/);
+      assert.match(output, /#### Decision Pack/);
+      for (const code of ['A', 'B', 'C', 'D', 'E', 'F']) {
+        assert.match(output, new RegExp(`  - ${code}\\.`));
+      }
+      assert.match(output, /B\..*after-entry-option.*PR_LOCAL_ALLOWED/);
+      assert.match(output, /Action: Configure the diagram inputs and layout -> Select Generate/);
+      assert.match(output, /Effects: `EFF-RENDER-REQUEST-CURRENT-STATE`:/);
+      assert.match(output, /Concern: product\.canonical-render-request-boundary/);
+      assert.match(output, /Scenario revision: 2/);
+      assert.match(output, /The human does not edit JSON, SHA, requirement refs, or evidence refs/);
+    },
+    baseFiles,
+    productImpactPullRequestEnvironment()
+  );
+
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Resolution: CURRENT_MAINTAINER_DECISION/);
+      assert.match(output, /Observation: CONFORMING/);
+      assert.match(
+        output,
+        /entry changes while the supported Result and Session continuation remains intact/
+      );
+      assert.match(output, /\\<script\\>not markup\\<\/script\\>/);
+      assert.equal(output.includes('<script>'), false);
+      assert.doesNotMatch(output, /#### Decision Pack/);
+    },
+    baseFiles,
+    productImpactPullRequestEnvironment({
+      body: ({ head }) => currentDecisionBody(head, {
+        rationale: (
+          'The entry changes while the supported Result and Session continuation remains intact; '
+          + '<script>not markup</script>.'
+        )
+      })
+    })
+  );
+});
+
+test('stale and non-maintainer Product Impact decisions remain unresolved and routed', () => {
+  const baseFiles = preauthorizedProductBaseFiles(
+    canonicalTransitionProductImpactMapSource()
+  );
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Current decision declaration/);
+      assert.match(output, /Observation: INSUFFICIENT_EVIDENCE/);
+      assert.match(output, /Observation: UNRESOLVED_DECISION/);
+      assert.match(output, /review the exact current head/);
+    },
+    baseFiles,
+    productImpactPullRequestEnvironment({
+      body: () => currentDecisionBody('a'.repeat(40))
+    })
+  );
+
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /not an eligible Product Decision Owner/);
+      assert.match(output, /B\..*after-entry-option.*DURABLE_AUTHORITY_REQUIRED/);
+    },
+    baseFiles,
+    productImpactPullRequestEnvironment({
+      author: 'contributor',
+      body: ({ head }) => currentDecisionBody(head)
+    })
+  );
+});
+
+test('invalid current Product Impact authority fails closed without exposing body content', () => {
+  const secret = 'PRIVATE-SEQUENCE-DO-NOT-ECHO';
+  const baseFiles = preauthorizedProductBaseFiles(
+    canonicalTransitionProductImpactMapSource()
+  );
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /invalid-current-impact-class/);
+      assert.doesNotMatch(output, new RegExp(secret));
+    },
+    baseFiles,
+    productImpactPullRequestEnvironment({
+      body: ({ head }) => currentDecisionBody(head, {
+        acceptedImpactClass: 'PRODUCT_CHANGE',
+        rationale: secret
+      })
+    })
+  );
+});
+
+test('conflicting static and current Product Impact authority is report-only but explicit', () => {
+  const map = canonicalTransitionProductImpactMapSource({
+    resolution: {
+      kind: 'authority-covered',
+      selectedOptionId: 'before-entry-option',
+      authorityRefs: ['gbdraw/web/CLAUDE.md#runtime-data-flow']
+    }
+  });
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Resolution: CONFLICT/);
+      assert.match(output, /Observation: AUTHORITY_CONFLICT/);
+      assert.match(output, /`STATIC_AUTHORITY` -> `before-entry-option`/);
+      assert.match(output, /`CURRENT_MAINTAINER_DECISION` -> `after-entry-option`/);
+      assert.match(output, /authority-only change/);
+    },
+    preauthorizedProductBaseFiles(map),
+    productImpactPullRequestEnvironment({
+      body: ({ head }) => currentDecisionBody(head)
+    })
+  );
+});
+
+test('candidate Product Impact authority is validation-only and cannot authorize candidate runtime', () => {
+  withTrustedArchitectureRepository(
+    (write) => {
+      moveCanonicalEntry(write);
+      write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource);
+      write(
+        'tools/web-product-impact-map.json',
+        productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Candidate authority validation: VALID \(inert data only\)/);
+      assert.match(output, /candidate data does not alter this head runtime admission/);
+      assert.match(output, /Observation: INSUFFICIENT_EVIDENCE/);
+      assert.doesNotMatch(output, /Observation: CONFORMING/);
+    },
+    {},
+    productImpactPullRequestEnvironment()
+  );
+});
+
+test('malformed candidate Product Impact authority fails closed', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('tools/web-product-decisions.json', '{'),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /candidate Product Impact authority: Cannot parse/);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+    },
+    {},
+    productImpactPullRequestEnvironment()
+  );
+});
+
+test('mapped contract changes are surfaced while unrelated tests add no Product Impact burden', () => {
+  const rules = JSON.parse(WEB_ARCHITECTURE_RULES_SOURCE);
+  rules.rules.forEach((rule) => { rule.enforcement = 'report-only'; });
+  const reportOnlyRules = `${JSON.stringify(rules, null, 2)}\n`;
+  withTrustedArchitectureRepository(
+    (write) => {
+      write(
+        'gbdraw/web/js/services/session-request.js',
+        'export const retiredRequestHelper = () => ({});\n'
+      );
+      write(
+        'tests/web/contracts/session-regenerate-intent.playwright.spec.js',
+        "test('no-draft session preserves preview, active config, canonical request, and catalog', () => { /* changed */ });\n"
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /integrity=CANDIDATE_MODIFIED/);
+      assert.match(output, /mapped contract changed in the candidate/);
+      assert.match(output, /Gate contribution: None \(report-only/);
+    },
+    {
+      'tools/web-architecture-rules.json': reportOnlyRules,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource
+    },
+    productImpactPullRequestEnvironment()
+  );
+
+  withTrustedArchitectureRepository(
+    (write) => write('tests/web/unrelated.test.mjs', 'test("unrelated", () => {});\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.doesNotMatch(output, /## Product impact/);
+    },
+    {},
+    productImpactPullRequestEnvironment()
+  );
+});
+
+test('Product Impact stdout and GitHub summary use the same deterministic report', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n'),
+    ({ root, status, output }) => {
+      assert.equal(status, 0, output);
+      const summary = readFileSync(join(root, 'product-impact-summary.md'), 'utf8');
+      assert.equal(output, summary);
+      assert.match(summary, /Observation: ORDINARY_REGRESSION/);
+    },
+    {
+      'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource
+    },
+    productImpactPullRequestEnvironment({ summary: true })
+  );
+});
+
+test('hard Product Impact fixtures block every blocking observation', () => {
+  const reportOnlyRules = rulesSource((rules) => {
+    rules.rules.forEach((rule) => { rule.enforcement = 'report-only'; });
+  });
+  const hardCurrentMap = (() => {
+    const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
+    map.ruleCoverage.forEach((coverage) => { coverage.enforcement = 'hard'; });
+    map.concerns[0].contracts.forEach((contract) => { contract.execution = 'PR_GATE'; });
+    return `${JSON.stringify(map, null, 2)}\n`;
+  })();
+  withTrustedArchitectureRepository(
+    (write) => write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n'),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Product Impact hard enforcement:.*ORDINARY_REGRESSION/);
+    },
+    {
+      'tools/web-architecture-rules.json': reportOnlyRules,
+      'tools/web-product-impact-map.json': hardCurrentMap
+    },
+    productImpactPullRequestEnvironment()
+  );
+
+  const hardTransition = canonicalTransitionProductImpactMapSource({ enforcement: 'hard' });
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Product Impact hard enforcement:.*UNRESOLVED_DECISION/);
+    },
+    preauthorizedProductBaseFiles(hardTransition),
+    productImpactPullRequestEnvironment()
+  );
+
+  const hardConflict = canonicalTransitionProductImpactMapSource({
+    enforcement: 'hard',
+    resolution: {
+      kind: 'authority-covered',
+      selectedOptionId: 'before-entry-option',
+      authorityRefs: ['gbdraw/web/CLAUDE.md#runtime-data-flow']
+    }
+  });
+  withTrustedArchitectureRepository(
+    moveCanonicalEntry,
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Product Impact hard enforcement:.*AUTHORITY_CONFLICT/);
+    },
+    preauthorizedProductBaseFiles(hardConflict),
+    productImpactPullRequestEnvironment({ body: ({ head }) => currentDecisionBody(head) })
+  );
+
+  const hardEvidenceMap = JSON.parse(hardTransition);
+  hardEvidenceMap.concerns[0].contracts[0].ref = (
+    'tests/web/contracts/product-impact-entry.test.mjs::canonical alternate entry'
+  );
+  const hardEvidenceSource = `${JSON.stringify(hardEvidenceMap, null, 2)}\n`;
+  withTrustedArchitectureRepository(
+    (write) => {
+      moveCanonicalEntry(write);
+      write(
+        'tests/web/contracts/product-impact-entry.test.mjs',
+        "test('canonical alternate entry', () => { /* candidate modified */ });\n"
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Product Impact hard enforcement:.*INSUFFICIENT_EVIDENCE/);
+      assert.match(output, /integrity=CANDIDATE_MODIFIED/);
+    },
+    {
+      ...preauthorizedProductBaseFiles(hardEvidenceSource),
+      'tests/web/contracts/product-impact-entry.test.mjs': (
+        "test('canonical alternate entry', () => {});\n"
+      )
+    },
+    productImpactPullRequestEnvironment()
+  );
+});
+
 test('report-only rules report absence without consulting an accepted store or failing', () => {
   withTrustedArchitectureRepository(
     (write) => write(
@@ -1947,6 +2784,7 @@ test('report-only rules report absence without consulting an accepted store or f
     },
     {
       'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource,
       'tools/web-architecture-violations.json': 'not valid JSON and must not be loaded\n'
     }
   );
@@ -2034,9 +2872,15 @@ test('proposed detector ID and implementation cannot alter trusted source observ
   );
 });
 
-test('isolated architecture-rule preauthorization passes and requires review', () => {
+test('cross-validated inert architecture and Product Impact preauthorization passes and requires review', () => {
   withTrustedArchitectureRepository(
-    (write) => write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource),
+    (write) => {
+      write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource);
+      write(
+        'tools/web-product-impact-map.json',
+        productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+      );
+    },
     ({ status, output }) => {
       assert.equal(status, 0, output);
       assert.match(output, /Gate: \*\*PASS\*\*/);
@@ -2554,6 +3398,76 @@ test('reserved future guard paths need not exist before their rollout', () => {
   assert.doesNotMatch(result.output, /- Result:|- Size review:/);
 });
 
+test('every Product Impact policy, checker, authority, parser, and fixture path is guarded', () => {
+  PRODUCT_IMPACT_GUARD_PATHS.forEach((guardPath) => {
+    assertNonWaivableWorkingTreeFailure((write) => {
+      write(
+        'gbdraw/web/js/services/session-file.js',
+        'export const readSession = () => ({ version: 2 });\n'
+      );
+      write(
+        guardPath,
+        BUDGET_FIXTURE[guardPath]
+          ? `${BUDGET_FIXTURE[guardPath]}\n// changed\n`
+          : reservedPathContent(guardPath)
+      );
+    }, [/production runtime files and Web guard\/CI files changed together/], guardPath);
+  });
+});
+
+test('Product Impact checker implementation is separate from Product Impact authority', () => {
+  PRODUCT_IMPACT_CHECKER_IMPLEMENTATION_PATHS.forEach((implementationPath) => {
+    PRODUCT_IMPACT_AUTHORITY_PATHS.forEach((authorityPath) => {
+      assertNonWaivableWorkingTreeFailure((write) => {
+        write(
+          implementationPath,
+          `${BUDGET_FIXTURE[implementationPath]}\n// changed\n`
+        );
+        write(authorityPath, reservedPathContent(authorityPath));
+      }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
+    });
+  });
+});
+
+test('the narrow inert authority bundle contains only architecture rules, map, and decisions', () => {
+  assert.deepEqual(NARROW_PRODUCT_IMPACT_AUTHORITY_BUNDLE, [
+    'tools/web-architecture-rules.json',
+    'tools/web-product-impact-map.json',
+    'tools/web-product-decisions.json'
+  ]);
+
+  const productAuthorityOnly = runChangeBudgetCase((write) => {
+    write('tools/web-product-impact-map.json', `${PRODUCT_IMPACT_MAP_SOURCE}\n`);
+    write('tools/web-product-decisions.json', `${PRODUCT_DECISIONS_SOURCE}\n`);
+  });
+  assert.equal(productAuthorityOnly.status, 0, productAuthorityOnly.output);
+  assert.match(productAuthorityOnly.output, /Gate: \*\*PASS\*\*/);
+  assert.match(productAuthorityOnly.output, /Review: \*\*REQUIRED\*\*/);
+
+  const completeBundle = runChangeBudgetCase((write) => {
+    write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource);
+    write(
+      'tools/web-product-impact-map.json',
+      productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+    );
+    write('tools/web-product-decisions.json', `${PRODUCT_DECISIONS_SOURCE}\n`);
+  });
+  assert.equal(completeBundle.status, 0, completeBundle.output);
+  assert.match(completeBundle.output, /Classification: EXPANSION/);
+
+  const expandedBundle = runChangeBudgetCase((write) => {
+    write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource);
+    write(
+      'tools/web-product-impact-map.json',
+      productImpactMapSourceForRules(preauthorizedCanonicalRulesSource)
+    );
+    write('tools/web-product-decisions.json', `${PRODUCT_DECISIONS_SOURCE}\n`);
+    write('docs/internal/PRODUCT_IMPACT_RATCHET.md', '# changed policy\n');
+  });
+  assert.equal(expandedBundle.status, 1, expandedBundle.output);
+  assert.match(expandedBundle.output, /architecture rule authority changes must be isolated/);
+});
+
 test('runtime cannot co-change with any protected architecture guard path', () => {
   PROTECTED_ARCHITECTURE_GUARD_PATHS.forEach((guardPath) => {
     assertNonWaivableWorkingTreeFailure((write) => {
@@ -2572,15 +3486,20 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
+    'tools/web-product-impact-evaluation.mjs',
+    'tools/web-product-impact-decision-source.mjs',
     'tools/web-promotion-context.mjs',
     'tools/check-promotion-readiness.mjs'
   ];
   const authorityPaths = [
     'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    'docs/internal/PRODUCT_IMPACT_RATCHET.md',
     'docs/internal/WEB_CHANGE_POLICY.md',
     'tools/web-change-policy.json',
     'tools/web-architecture-rules.json',
     'tools/web-architecture-violations.json',
+    'tools/web-product-impact-map.json',
+    'tools/web-product-decisions.json',
     '.github/workflows/gallery-publication.yml',
     '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
@@ -2608,6 +3527,8 @@ test('all checker implementations are separated from reserved future authority',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
+    'tools/web-product-impact-evaluation.mjs',
+    'tools/web-product-impact-decision-source.mjs',
     'tools/web-promotion-context.mjs',
     'tools/check-promotion-readiness.mjs'
   ];
