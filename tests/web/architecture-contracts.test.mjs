@@ -1371,6 +1371,10 @@ const BUDGET_FIXTURE = Object.freeze({
   'tests/web/contracts/session-regenerate-intent.playwright.spec.js': (
     "test('no-draft session preserves preview, active config, canonical request, and catalog', () => {});\n"
   ),
+  'tests/web/session-request.test.mjs': (
+    "assert.deepEqual(roundTripCanonical.renderRequest, canonical.renderRequest,\n"
+      + "  'canonical Session projection rebuilds the same render request');\n"
+  ),
   'tests/web/promotion-readiness.test.mjs': readFileSync(
     PROMOTION_READINESS_TEST,
     'utf8'
@@ -1697,6 +1701,10 @@ const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
   ),
   'tests/web/contracts/session-regenerate-intent.playwright.spec.js': (
     "test('no-draft session preserves preview, active config, canonical request, and catalog', () => {});\n"
+  ),
+  'tests/web/session-request.test.mjs': (
+    "assert.deepEqual(roundTripCanonical.renderRequest, canonical.renderRequest,\n"
+      + "  'canonical Session projection rebuilds the same render request');\n"
   ),
   'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
   'tools/web-architecture-detectors.mjs': readFileSync(
