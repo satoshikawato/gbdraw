@@ -343,7 +343,8 @@ const state = {
     features: ['CDS'], feature_shapes: { CDS: 'arrow' }, nt: 'GC', evalue: '1e-5',
     arrow_head_length_ratio: null, arrow_shaft_width_ratio: 1.0,
     min_bitscore: 50, identity: 70, alignment_length: 0, plot_title_position: 'none',
-    gc_content_mode: 'deviation', gc_content_show_axis: true, gc_content_show_ticks: true,
+    gc_content_mode: 'deviation', gc_content_min_percent: 0, gc_content_max_percent: 100,
+    gc_content_show_axis: true, gc_content_show_ticks: true,
     depth_color: '#4A90E2', depth_show_axis: true, depth_show_ticks: true,
     depth_large_tick_interval: 25,
     pairwise_match_style: 'ribbon', multi_record_size_mode: 'auto',
@@ -1402,6 +1403,15 @@ assert.equal(
 );
 
 const projection = projectCanonicalSessionRequest(canonical);
+const roundTripCanonical = buildCanonicalRenderRequest({
+  state: stateForCanonicalProjection(projection),
+  filesData: projection.files
+});
+assert.deepEqual(
+  roundTripCanonical.renderRequest,
+  canonical.renderRequest,
+  'canonical Session projection rebuilds the same render request'
+);
 assert.equal(projection.mode, 'circular');
 assert.equal(projection.inputType, 'gb');
 assert.equal(projection.files.c_gb.data, genbank.data);
