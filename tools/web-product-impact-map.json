@@ -127,6 +127,15 @@
           "sensitivity": "DIRECT_ASSERTION",
           "execution": "DEV_STAGING",
           "residualRisk": "The browser contract exercises one representative current no-draft Session during dev staging; alternate modes, migrations, and every request field are not exhaustively covered here."
+        },
+        {
+          "ref": "tests/web/session-request.test.mjs::canonical Session projection rebuilds the same render request",
+          "checkpointRefs": [
+            "JRN-RENDER-001:roundtrip-regeneration"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The DOM-free contract compares one representative current Circular request; browser admission, alternate modes, and Session migrations remain covered separately."
         }
       ]
     }
