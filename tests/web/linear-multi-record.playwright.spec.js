@@ -669,7 +669,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
   });
 });
 
-test('No comparison completes a real render without touching dormant comparison work', async ({ page }) => {
+test('No comparison completes a real render without touching dormant comparison work', { tag: '@pr-smoke' }, async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
   await page.addInitScript(() => {

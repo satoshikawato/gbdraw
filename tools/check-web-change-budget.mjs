@@ -31,6 +31,52 @@ const runGit = (root, args, options = {}) => execFileSync(
   { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options }
 );
 
+const stableReasons = (values) => [...new Set(values.filter(Boolean))]
+  .sort((left, right) => left.localeCompare(right));
+const createPolicyResult = ({
+  blockingViolations = [],
+  reviewReasons = [],
+  context,
+  observations = {}
+}) => {
+  const stableBlockingViolations = stableReasons(blockingViolations);
+  const stableReviewReasons = stableReasons(reviewReasons);
+  return Object.freeze({
+    gate: stableBlockingViolations.length ? 'FAIL' : 'PASS',
+    review: stableReviewReasons.length ? 'REQUIRED' : 'CLEAR',
+    blockingViolations: Object.freeze(stableBlockingViolations),
+    reviewReasons: Object.freeze(stableReviewReasons),
+    context,
+    observations: Object.freeze(observations)
+  });
+};
+const list = (values) => values.length ? values.map((value) => `- ${value}`) : ['- None'];
+const reviewCategorySummary = (reviewReasons) => {
+  const counts = new Map();
+  reviewReasons.forEach((reason) => {
+    const category = reason.includes(':') ? reason.slice(0, reason.indexOf(':')) : 'Other';
+    counts.set(category, (counts.get(category) || 0) + 1);
+  });
+  return [...counts]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([category, count]) => `${category}=${count}`)
+    .join(', ');
+};
+const emitPolicyReport = (result, report) => {
+  process.stdout.write(report);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(resolve(process.env.GITHUB_STEP_SUMMARY), report, 'utf8');
+  }
+  if (process.env.GITHUB_ACTIONS === 'true' && result.review === 'REQUIRED') {
+    process.stdout.write(
+      '::warning title=Web policy review required::Web policy review required: '
+      + `reasons=${result.reviewReasons.length}; `
+      + `categories=${reviewCategorySummary(result.reviewReasons)}; see the step summary.\n`
+    );
+  }
+  if (result.gate === 'FAIL') process.exitCode = 1;
+};
+
 const repositoryRoot = runGit(process.cwd(), ['rev-parse', '--show-toplevel']).trim();
 const argumentsByName = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -70,6 +116,9 @@ const changeContext = classifyWebChangeContext({
 const promotionSourceCoverage = (() => {
   if (!changeContext.isPromotion) {
     return { status: 'NOT_APPLICABLE', basis: 'NOT_APPLICABLE', violation: '' };
+  }
+  if (changeContext.errors.length) {
+    return { status: 'NOT_EVALUATED', basis: 'INVALID_CONTEXT', violation: '' };
   }
   const probeGit = (args) => spawnSync(
     'git',
@@ -120,6 +169,47 @@ const promotionSourceCoverage = (() => {
   return failure();
 })();
 
+const renderBoundedContextReport = () => {
+  const result = createPolicyResult({
+    blockingViolations: [
+      ...changeContext.errors,
+      promotionSourceCoverage.violation
+    ],
+    reviewReasons: [],
+    context: changeContext.context,
+    observations: { promotionSourceCoverage }
+  });
+  const report = [
+    '# Web change policy',
+    '',
+    `- Context: ${result.context}`,
+    `- Base: \`${base}\``,
+    `- Head: \`${head || 'working tree'}\``,
+    `- Gate: **${result.gate}**`,
+    `- Review: **${result.review}**`,
+    '',
+    '## Blocking violations',
+    '',
+    ...list(result.blockingViolations),
+    '',
+    '## Review reasons',
+    '',
+    ...list(result.reviewReasons),
+    ...(result.context === 'PROMOTION' ? [
+      '',
+      '## Promotion source coverage',
+      '',
+      `- Status: ${promotionSourceCoverage.status}`,
+      `- Basis: ${promotionSourceCoverage.basis}`,
+      '- Scope: topology and source-content coverage only.',
+      '- Exact-SHA workflow evidence and result-tree identity remain owned by the promotion readiness helper and trusted workflow.',
+      ''
+    ] : [''])
+  ].join('\n');
+  emitPolicyReport(result, report);
+};
+
+const runOrdinaryPolicy = () => {
 const parseDiffLines = (output) => output.trim()
   ? output.trimEnd().split('\n').map((line) => line.split('\t'))
   : [];
@@ -225,6 +315,8 @@ const addedBinaryRuntimePaths = productionPaths.filter((path) => {
 const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbdraw/web/vendor/'));
 const policyPath = 'tools/web-change-policy.json';
 const architectureRulesPath = 'tools/web-architecture-rules.json';
+const acceptedViolationsPath = 'tools/web-architecture-violations.json';
+const trustedWorkflowPath = '.github/workflows/web-base-policy.yml';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
@@ -232,14 +324,18 @@ const guardPaths = new Set([
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
   architectureRulesPath,
-  'tools/web-architecture-violations.json',
+  acceptedViolationsPath,
   'tools/web-change-source.mjs',
   'tools/web-promotion-context.mjs',
+  'tools/check-promotion-readiness.mjs',
   policyPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   'tests/web/architecture-contracts.test.mjs',
   'tests/web/architecture-ratchet-fixtures.test.mjs',
+  'tests/web/promotion-readiness.test.mjs',
   'tests/web/web-promotion-context.test.mjs',
+  '.github/workflows/gallery-publication.yml',
+  '.github/workflows/deploy_web.yml',
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
@@ -249,19 +345,59 @@ const checkerImplementationPaths = new Set([
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
   'tools/web-change-source.mjs',
-  'tools/web-promotion-context.mjs'
+  'tools/web-promotion-context.mjs',
+  'tools/check-promotion-readiness.mjs'
 ]);
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  'docs/internal/WEB_CHANGE_POLICY.md',
   architectureRulesPath,
-  'tools/web-architecture-violations.json',
+  acceptedViolationsPath,
   policyPath,
+  '.github/workflows/gallery-publication.yml',
+  '.github/workflows/deploy_web.yml',
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
 const changedCheckerImplementations = [...changed.keys()]
-  .filter((path) => checkerImplementationPaths.has(path));
-const changedAuthorities = [...changed.keys()].filter((path) => authorityPaths.has(path));
+  .filter((path) => checkerImplementationPaths.has(path))
+  .sort();
+const changedAuthorities = [...changed.keys()]
+  .filter((path) => authorityPaths.has(path))
+  .sort();
+const governancePaths = new Set([
+  ...authorityPaths,
+  '.github/pull_request_template.md'
+]);
+const changedGovernancePaths = [...changed.keys()]
+  .filter((path) => governancePaths.has(path))
+  .sort();
+const baseAcceptedViolationsSource = readRevisionFile(base, acceptedViolationsPath);
+const candidateAcceptedViolationsSource = readHeadFile(acceptedViolationsPath);
+const acceptedViolationAuthorityErrors = [];
+if (
+  changed.has(acceptedViolationsPath)
+  && baseAcceptedViolationsSource === null
+  && candidateAcceptedViolationsSource !== null
+) {
+  acceptedViolationAuthorityErrors.push(
+    'accepted-violation authority cannot be introduced while frozen-rule mechanics are unavailable'
+  );
+}
+
+const unsafeTrustedWorkflowChanges = [];
+if (changed.has(trustedWorkflowPath)) {
+  const candidateTrustedWorkflowSource = readHeadFile(trustedWorkflowPath) || '';
+  const unsafePatterns = [
+    /ref:\s*\$\{\{\s*github\.event\.pull_request\.head\.(?:sha|ref)\s*\}\}/,
+    /\bgit\s+(?:checkout|switch)\b[^\n]*(?:HEAD_SHA|pull_request\.head)/
+  ];
+  if (unsafePatterns.some((pattern) => pattern.test(candidateTrustedWorkflowSource))) {
+    unsafeTrustedWorkflowChanges.push(
+      'candidate trusted workflow would check out or switch to pull-request head code'
+    );
+  }
+}
 
 const listProductionJavaScriptPaths = () => {
   if (head) {
@@ -893,11 +1029,93 @@ if (productionNetAdditions > selectedProfile.netAdditions) {
   );
 }
 
+const deltaChanged = (delta) => delta.added.length || delta.removed.length;
+const architectureSignalDeltas = [
+  ['registered authority locations', registeredAuthorityLocationDelta],
+  ['registered canonical contracts', registeredCanonicalContractDelta],
+  ['privileged operator permissions', privilegedOperatorPermissionDelta],
+  ['privileged importer permissions', privilegedImporterPermissionDelta],
+  ['production modules', sourceInventoryDeltas.modules],
+  ['public exports', sourceInventoryDeltas.exports],
+  ['create* declarations', sourceInventoryDeltas.createDeclarations],
+  ['reactive declarations', sourceInventoryDeltas.reactiveDeclarations],
+  ['watcher calls', sourceInventoryDeltas.watcherCalls],
+  ['resource-like declarations', sourceInventoryDeltas.resourceNames],
+  ['canonical-entry import edges', privilegedImportFanOutDelta],
+  ['session schema fields', sourceInventoryDeltas.sessionObjectKeys],
+  ['compatibility-like paths', sourceInventoryDeltas.compatibilityNames]
+];
+const changedArchitectureSignals = architectureSignalDeltas
+  .filter(([, delta]) => deltaChanged(delta))
+  .map(([name]) => name);
+const changedPaths = [...changed.keys()].sort();
+const performanceEvidencePaths = new Set([
+  'tests/test_gallery_publication_performance.py',
+  'tests/test_performance_short_circuits.py',
+  'tests/web/interactive-svg-search-performance.playwright.spec.js',
+  'tests/web/webapp-performance.playwright.spec.js',
+  'tools/measure_gallery_publication_performance.py'
+]);
+const changedPerformanceEvidencePaths = changedPaths.filter((path) => (
+  path.startsWith('tests/performance/') || performanceEvidencePaths.has(path)
+));
+const changedReferenceOutputPaths = changedPaths.filter((path) => (
+  path.startsWith('tests/reference_outputs/')
+));
+const changedSessionContractPaths = changedPaths.filter((path) => (
+  isWebSessionSourcePath(path)
+  || path.startsWith('gbdraw/web/gallery/sessions/')
+  || path.startsWith('tests/fixtures/sessions/')
+));
+const reviewReasons = sizeReviewReasons.map((reason) => `Size and scope: ${reason}`);
+if (changedCheckerImplementations.length) {
+  reviewReasons.push(
+    `Governance and authority: Web checker implementation changed (${changedCheckerImplementations.join(', ')})`
+  );
+}
+if (changedGovernancePaths.length) {
+  reviewReasons.push(
+    `Governance and authority: registered governance or authority files changed (${changedGovernancePaths.join(', ')})`
+  );
+}
+if (policyContractions.length || policyExpansions.length) {
+  reviewReasons.push(
+    'Governance and authority: privileged policy permissions changed '
+    + `(added=${policyExpansions.length}, removed=${policyContractions.length})`
+  );
+}
+if (architectureAuthorityDelta.changes.length) {
+  reviewReasons.push(
+    'Governance and authority: registered architecture-rule authority changed '
+    + `(${architectureAuthorityDelta.changes.length} change(s))`
+  );
+}
+if (changedArchitectureSignals.length) {
+  reviewReasons.push(
+    `Architecture-bearing signals: deterministic inventories changed (${changedArchitectureSignals.join(', ')})`
+  );
+}
+if (changedPerformanceEvidencePaths.length) {
+  reviewReasons.push(
+    `Material behavior/output risk: registered performance evidence paths changed (${changedPerformanceEvidencePaths.join(', ')})`
+  );
+}
+if (changedReferenceOutputPaths.length) {
+  reviewReasons.push(
+    `Material behavior/output risk: reference output paths changed (${changedReferenceOutputPaths.join(', ')})`
+  );
+}
+if (changedSessionContractPaths.length) {
+  reviewReasons.push(
+    `Material behavior/output risk: registered session or compatibility paths changed (${changedSessionContractPaths.join(', ')})`
+  );
+}
+
 const blockingViolations = [
   ...changeContext.errors,
-  ...(promotionSourceCoverage.violation ? [promotionSourceCoverage.violation] : [])
+  ...acceptedViolationAuthorityErrors,
+  ...unsafeTrustedWorkflowChanges
 ];
-const promotionAggregationObservations = [];
 if (newProductionDependencies.length) {
   blockingViolations.push('new production dependencies are not allowed');
 }
@@ -908,27 +1126,12 @@ if (changedVendorPaths.length) {
   blockingViolations.push('changes under gbdraw/web/vendor/ are not allowed');
 }
 if (productionPaths.length && changedGuards.length && !pureSafePolicyContraction) {
-  const reason = 'production runtime files and Web guard/CI files changed together';
-  if (changeContext.isPromotion) {
-    promotionAggregationObservations.push(
-      `${reason}: production paths (${productionPaths.length}) ${productionPaths.join(', ')}; `
-      + `guard paths (${changedGuards.length}) ${changedGuards.join(', ')}`
-    );
-  } else {
-    blockingViolations.push(reason);
-  }
+  blockingViolations.push('production runtime files and Web guard/CI files changed together');
 }
 if (changedCheckerImplementations.length && changedAuthorities.length) {
-  const reason = 'Web checker/source parser and authority policy/workflow files changed together';
-  if (changeContext.isPromotion) {
-    promotionAggregationObservations.push(
-      `${reason}: checker paths (${changedCheckerImplementations.length}) `
-      + `${changedCheckerImplementations.sort().join(', ')}; authority paths `
-      + `(${changedAuthorities.length}) ${changedAuthorities.sort().join(', ')}`
-    );
-  } else {
-    blockingViolations.push(reason);
-  }
+  blockingViolations.push(
+    'Web checker/source parser and authority policy/workflow files changed together'
+  );
 }
 if (unapprovedCapabilities.length) {
   blockingViolations.push('privileged capability owners or importers exceed the base allowlist');
@@ -970,10 +1173,20 @@ blockingViolations.push(...activeArchitectureErrors.map((error) => (
 blockingViolations.push(...activeArchitectureFailures.map((error) => (
   `active architecture rules: ${error}`
 )));
-const result = blockingViolations.length ? 'FAIL' : 'PASS';
-const sizeReview = sizeReviewReasons.length ? 'REQUIRED' : 'CLEAR';
+const policyResult = createPolicyResult({
+  blockingViolations,
+  reviewReasons,
+  context: changeContext.context,
+  observations: {
+    architectureAuthorityDelta,
+    changedArchitectureSignals,
+    productionGrossChurn,
+    productionNetAdditions,
+    productionPaths,
+    selectedProfile: selectedProfileName
+  }
+});
 
-const list = (values) => values.length ? values.map((value) => `- ${value}`) : ['- None'];
 const signed = (value) => value > 0 ? `+${value}` : String(value);
 const differentialInventories = [
   {
@@ -1082,27 +1295,32 @@ const fanOutRows = fanOutPaths.map((path) => {
 });
 const statusRows = productionPaths.map((path) => `${changed.get(path)} ${path}`);
 const report = [
-  '# Web change budget',
+  '# Web change policy',
   '',
+  `- Context: ${policyResult.context}`,
   `- Base: \`${base}\``,
   `- Head: \`${head || 'working tree'}\``,
+  `- Gate: **${policyResult.gate}**`,
+  `- Review: **${policyResult.review}**`,
   `- Privileged allowlist revision: \`${policyRevision}\``,
   `- Architecture rule base: ${baseArchitectureRulesSource === null ? 'absent' : `\`${base}\``}`,
   `- Architecture rule candidate: ${proposedArchitectureRulesSource === null ? 'absent' : `\`${head || 'working tree'}\``}`,
   '- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`',
-  `- Change context: ${changeContext.context}`,
-  `- Promotion source coverage: ${promotionSourceCoverage.status}`,
-  `- Promotion coverage basis: ${promotionSourceCoverage.basis}`,
-  `- Promotion aggregation observations: ${promotionAggregationObservations.length}`,
   `- Selected profile: ${selectedProfileName}`,
   `- Size-review threshold for production files: ${selectedProfile.productionFiles}`,
   `- Size-review threshold for gross churn: ${selectedProfile.grossChurn}`,
   `- Size-review threshold for net additions: ${selectedProfile.netAdditions}`,
   `- \`architecture-change\` label: ${architectureChange ? 'present' : 'absent'}`,
-  `- Result: **${result}**`,
-  `- Size review: **${sizeReview}**`,
   '',
-  '## Architecture differential summary',
+  '## Blocking violations',
+  '',
+  ...list(policyResult.blockingViolations),
+  '',
+  '## Review reasons',
+  '',
+  ...list(policyResult.reviewReasons),
+  '',
+  '## Key architecture differential summary',
   '',
   '| Inventory | Before | Added | Removed | After | Delta | Classification |',
   '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
@@ -1231,32 +1449,47 @@ const report = [
   '## Guard files touched',
   '',
   ...list(changedGuards),
-  '',
-  '## Size review reasons',
-  '',
-  ...list(sizeReviewReasons),
-  '',
-  '## Promotion aggregation observations',
-  '',
-  ...list(promotionAggregationObservations),
-  '',
-  '## Blocking violations',
-  '',
-  ...list(blockingViolations),
   ''
 ].join('\n');
 
-process.stdout.write(report);
-if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(resolve(process.env.GITHUB_STEP_SUMMARY), report, 'utf8');
+emitPolicyReport(policyResult, report);
+};
+
+if (changeContext.isPromotion || changeContext.errors.length) {
+  renderBoundedContextReport();
+} else {
+  try {
+    runOrdinaryPolicy();
+  } catch (error) {
+    const errorMessage = error?.message || String(error);
+    const result = createPolicyResult({
+      blockingViolations: [
+        `Web policy evaluation failed closed: ${errorMessage}`
+      ],
+      reviewReasons: /tools\/web-(?:change-policy|architecture-(?:rules|violations))\.json/.test(
+        errorMessage
+      ) ? ['Governance and authority: required authority input is malformed'] : [],
+      context: changeContext.context,
+      observations: { errorType: error?.name || typeof error }
+    });
+    const report = [
+      '# Web change policy',
+      '',
+      `- Context: ${result.context}`,
+      `- Base: \`${base}\``,
+      `- Head: \`${head || 'working tree'}\``,
+      `- Gate: **${result.gate}**`,
+      `- Review: **${result.review}**`,
+      '',
+      '## Blocking violations',
+      '',
+      ...list(result.blockingViolations),
+      '',
+      '## Review reasons',
+      '',
+      ...list(result.reviewReasons),
+      ''
+    ].join('\n');
+    emitPolicyReport(result, report);
+  }
 }
-if (process.env.GITHUB_ACTIONS === 'true' && sizeReviewReasons.length) {
-  process.stdout.write(
-    '::warning title=Web change size review::Web change size review required: '
-    + `profile=${selectedProfileName}; `
-    + `productionFiles=${productionPaths.length}/${selectedProfile.productionFiles}; `
-    + `grossChurn=${productionGrossChurn}/${selectedProfile.grossChurn}; `
-    + `netAdditions=${productionNetAdditions}/${selectedProfile.netAdditions}\n`
-  );
-}
-if (blockingViolations.length) process.exitCode = 1;

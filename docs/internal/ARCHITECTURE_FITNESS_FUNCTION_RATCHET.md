@@ -8,6 +8,11 @@ decisions. `CLAUDE.md` owns the repository architecture, and
 `gbdraw/web/CLAUDE.md` records the current Web runtime path and module owners.
 Those documents link here when a change can alter an owner or path.
 
+The normative CI lifecycle, independent Gate and Review results, workflow
+ownership, and self-authorization boundaries are defined in
+[`WEB_CHANGE_POLICY.md`](./WEB_CHANGE_POLICY.md). A Review result can require
+human attention without changing the executable Gate result.
+
 The initial executable scope is the Web application. Human review applies to
 architecture-bearing changes across the repository. The ratchet protects
 convergence without treating fewer files or fewer lines as an architecture
@@ -224,10 +229,24 @@ registered definition locations or observed canonical entry edges.
 
 ### Exact changed-scope arithmetic
 
-Humans select the changed capabilities, behaviors, compatibility namespaces,
-and complete before and after sets. Static analysis may provide observations
-for that review, but it cannot infer complete repository-wide `OE`, `PE`, or
-`CB` values.
+Full changed-scope sets and arithmetic are exception evidence. They are required
+only when at least one of these conditions applies:
+
+- `delta(OE) > 0`;
+- `delta(PE) > 0`;
+- `delta(CB) > 0` for a new persisted compatibility path;
+- an accepted deterministic violation is added;
+- multiple canonical owners or paths are intentionally retained; or
+- a hard invariant receives a time-bounded waiver.
+
+The last case records governance evidence; it does not turn a failing
+deterministic check into a passing one. Authority and checker changes still
+follow the separation and bootstrap order in `WEB_CHANGE_POLICY.md`.
+
+For an exception, humans select the changed capabilities, behaviors,
+compatibility namespaces, and complete before and after sets. Static analysis
+may provide observations for that review, but it cannot infer complete
+repository-wide `OE`, `PE`, or `CB` values.
 
 Declare one owner-excess row for every changed capability. Each row has a stable
 row ID, the semantic owner sets before and after, `O before`, `T before`, `O
@@ -265,13 +284,27 @@ CB before -> CB after; delta(CB) = CB after - CB before
 
 Every displayed value and delta is an integer. Multiple changed capabilities,
 behaviors, or compatibility namespaces require multiple rows; sum those rows
-explicitly. If a component has no changed rows, declare `none` and record `0 ->
-0; delta = 0` for that component.
+explicitly. If an exception packet has no changed rows for a component, declare
+`none` and record `0 -> 0; delta = 0` for that component.
 
 ## Required author evidence
 
-The pull-request author records the exact changed-scope rows and totals. Each
-declaration must include:
+An ordinary non-increasing change records concise decision evidence:
+
+- what owner, path, or responsibility changes;
+- its canonical location before and after;
+- the superseded location removed, or the reason it remains;
+- user-visible behavior verification;
+- applicable deterministic checks; and
+- rollback.
+
+This concise form covers private decomposition, a one-for-one owner move, path
+consolidation, deletion, and unchanged architecture when none of the exception
+conditions above applies. It does not require an empty multi-row table or a
+dedicated maintainer approval permalink.
+
+For an `ARCHITECTURE_EXCEPTION`, the author records the exact changed-scope rows
+and totals. The declaration includes:
 
 - the capability or behavior and why the selected scope is complete;
 - semantic owner sets, `O`, `T`, `OE`, and `delta(OE)` before and after for each
@@ -284,28 +317,27 @@ declaration must include:
 - superseded semantic owners, canonical production paths, and compatibility
   paths in three separate lists;
 - the classification of each new module;
+- the best non-exception alternative and why it was not selected;
+- an expiry or concrete removal condition;
 - persisted-compatibility, performance, scientific-output, and deterministic
-  checker evidence when applicable.
+  checker evidence when applicable; and
+- an explicit maintainer decision on the exact proposed head.
 
-Use `none` for an empty set. Do not replace these sets with unsupported
-repository-wide totals. `<= 0`, `non-positive`, or `yes` alone is insufficient
-evidence. The completeness rationale matters because a favorable delta over an
-incomplete capability scope can hide a parallel owner or path and is invalid.
-
-The declaration is evidence, not approval. The architecture owner reviews the
-exact proposed head as described under [Manual architecture review](#manual-architecture-review).
+Use `none` for an empty exception set. Do not replace complete sets with
+unsupported repository-wide totals. `<= 0`, `non-positive`, or `yes` alone is
+insufficient exception evidence. A favorable delta over an incomplete scope can
+hide a parallel owner or path and is invalid.
 
 ## Merge acceptance
 
-Merge acceptance has two independent parts:
+Architecture merge acceptance uses the independent Gate and Review axes:
 
 ```text
-MERGEABLE =
-  DETERMINISTIC_GATE_PASSED
-  AND ARCHITECTURE_REVIEW_PASSED
+Gate = PASS only when every applicable deterministic condition passes
+Review = REQUIRED for architecture-bearing or exception work
 ```
 
-`DETERMINISTIC_GATE_PASSED` requires all applicable conditions below:
+The executable Gate requires all applicable conditions below:
 
 ```text
 intended behavior is verified by its test or output gate
@@ -318,24 +350,27 @@ AND gated performance or scientific-output regressions = 0
 AND guard and authority separation remains intact
 ```
 
-`ARCHITECTURE_REVIEW_PASSED` requires the concrete before and after sets and a
-maintainer decision that confirms:
+For an ordinary non-increasing change, human review confirms the concise
+evidence, complete owner/path scope, and these bounds:
 
 ```text
 delta(OE) <= 0
 AND delta(PE) <= 0
-AND (
-      delta(CB) <= 0
-      OR the persisted-compatibility exception is satisfied
-    )
+AND delta(CB) <= 0
 AND every superseded owner or path is removed in the same change
 AND the declared changed-capability scope is complete
 ```
 
-These inequalities define acceptance, not the evidence format. The author and
-maintainer must record the exact before value, after value, and integer delta
-for all three components. They must also list the superseded sets instead of
-recording only `yes`.
+These inequalities define ordinary acceptance, not a mandatory table format.
+Reviewers may ask for more detail when concise evidence does not establish the
+bounds or completeness.
+
+An exception may proceed only with the complete packet and explicit maintainer
+decision described above. Positive debt, a new persisted compatibility path,
+retained multiple owners or paths, or an accepted deterministic violation is
+never authorized by a label, a passing size review, incomplete arithmetic, or
+silence. A hard invariant remains Gate-failing until a separately authorized
+and correctly sequenced executable authority change represents the disposition.
 
 A new capability may begin with one new semantic owner without increasing owner
 excess. It must also begin with one canonical path.
@@ -444,7 +479,7 @@ violation remains is an invalid authority change and fails.
 | Cross-cutting executable contracts | `tests/web/architecture-contracts.test.mjs` |
 | Fixture-heavy ratchet mechanics | `tests/web/architecture-ratchet-fixtures.test.mjs` |
 | Human change declaration | `.github/pull_request_template.md` |
-| Human architecture approval | Structured manual maintainer review |
+| Architecture-exception approval | Structured manual maintainer review |
 
 `tools/check-web-change-budget.mjs` is the sole Web CLI and CI entry point. A
 single entry point does not require one monolithic implementation module. The
@@ -711,17 +746,21 @@ bootstrap exception.
 
 ## Manual architecture review
 
-Before requesting approval, the author or automated agent must prepare a
-maintainer review packet. It contains the exact head SHA, concrete before and
-after evidence, completed CI results, known limitations, and a fully populated,
-ready-to-post version of the structured comment below. The maintainer reviews
-the packet and then posts, edits, or rejects the comment manually as their own
-decision. Preparing the packet is not approval, and an automated agent must not
-post the comment.
+Ordinary architecture-bearing changes use the concise evidence and normal PR
+review described above. They do not require a separate reviewer-comment
+template or a dedicated approval permalink.
 
-The pull-request template contains one author declaration. For an
-architecture-bearing change, the architecture owner reviews the final proposed
-head and posts this structured comment manually:
+For an `ARCHITECTURE_EXCEPTION`, the author or automated agent prepares a
+maintainer review packet before requesting a decision. It contains the exact
+head SHA, complete before and after evidence, arithmetic, alternative,
+expiry/removal condition, completed CI results, known limitations, and a fully
+populated, ready-to-post version of the structured comment below. The maintainer
+reviews the packet and then posts, edits, or rejects the comment manually as
+their own decision. Preparing the packet is not approval, and an automated agent
+must not post the decision.
+
+The architecture owner reviews the final exception head and posts this
+structured comment manually:
 
 ```markdown
 Architecture decision: APPROVED
@@ -746,21 +785,23 @@ Persisted-compatibility exception:
 - <none, or exact exception and evidence>
 Limitations:
 - <none, or explicit non-authorizing limitation>
+Expiry or removal condition:
+- <date, release, issue, or measurable condition>
 ```
 
-The PR template stores a permalink to the comment. `Reviewed head SHA` must
-equal the pull request's current head SHA. Any later commit invalidates the
-decision and requires a new comment.
+The exception section of the PR template stores a permalink to the decision.
+`Reviewed head SHA` must equal the pull request's current head SHA. Any later
+commit invalidates the exception decision and requires a new comment.
 
 An automated agent may prepare evidence but must not post the approval. The
-author declaration cannot substitute for the owner comment. If the sole
+author declaration cannot substitute for the exception decision. If the sole
 architecture maintainer is also the author, that maintainer may post the
-separate comment after reviewing the final head.
+separate decision after reviewing the final head.
 
-This is a manual review gate. The repository test protects template anchors,
-but does not inspect GitHub comments, comment authors, or live head SHAs.
-Workflow presence and branch protection do not prove that the required comment
-exists or matches the merge candidate.
+This is an exception review requirement, not an ordinary CI status. Repository
+tests may protect template anchors, but do not inspect GitHub comments, comment
+authors, or live head SHAs. Workflow presence and branch protection do not prove
+that an exception decision exists or matches the merge candidate.
 
 ## External precedents
 

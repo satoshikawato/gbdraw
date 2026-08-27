@@ -235,7 +235,7 @@ test.describe('active Result Feature fill transaction', () => {
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog || null)).toBeNull();
   };
 
-  test('visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export', async ({
+  test('visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export', { tag: '@pr-smoke' }, async ({
     page,
     browser
   }, testInfo) => {

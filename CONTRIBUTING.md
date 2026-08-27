@@ -145,7 +145,7 @@ ruff check gbdraw/
 # Fast test suite (excludes slow/regression-heavy tests)
 pytest tests/ -v -m "not slow"
 
-# Full suite, including slow tests (only run on push to main in CI)
+# Full suite, including slow tests (runs in integrated staging and release CI)
 pytest tests/ -v
 ```
 
@@ -233,10 +233,21 @@ pytest tests/ -v -k documentation
 ## Branch roles
 
 - Approved work starts from the latest merged `dev`.
-- Pull requests target `dev`.
-- `dev` is the integration branch.
-- `main` is the release branch.
-- Promotion from `dev` to `main` is performed by the maintainer.
+- Work-branch pull requests target `dev` and use the fast implementation
+  admission checks.
+- `dev` is the integration branch. Heavy supported-version, slow, browser, and
+  Gallery checks run after merge against the exact integrated `dev` SHA.
+- `main` is the release branch. A maintainer promotion pull request from `dev`
+  contains no implementation changes and uses trusted exact-SHA readiness and
+  tree evidence.
+- A push to `main` performs release verification, build, and deployment against
+  the exact release SHA.
+- Direct `main` hotfixes are unsupported. Urgent fixes still go through `dev`
+  staging and promotion.
+
+See the normative
+[Web change, review, and delivery policy](./docs/internal/WEB_CHANGE_POLICY.md)
+for lifecycle ownership and trust boundaries.
 
 For a fork, keep your fork as `origin`, add this repository as `upstream`, and
 create a non-tracking work branch from `upstream/dev`:
@@ -253,6 +264,36 @@ If this repository is already your `origin`, use:
 git fetch origin
 git switch --no-track -c <branch-name> origin/dev
 ```
+
+## Pull request change classes and review results
+
+Select exactly one change class in the pull request template:
+
+- `STANDARD` for implementation, tests, documentation, refactoring, or cleanup
+  that does not need a governance, architecture-exception, or promotion packet;
+- `GOVERNANCE` for authority, policy, CI evidence-producer, template, or
+  repository-governance changes;
+- `ARCHITECTURE_EXCEPTION` only when architecture debt increases, a new
+  persisted compatibility path is introduced, multiple owners or paths remain,
+  an accepted deterministic violation is added, or a time-bounded hard-invariant
+  waiver is requested; and
+- `PROMOTION` only for a no-implementation `dev` to `main` release-admission
+  pull request.
+
+An ordinary architecture-bearing `STANDARD` change supplies concise owner/path
+evidence and removes superseded locations; it does not need an empty OE/PE/CB
+packet or a dedicated approval permalink. Full sets, arithmetic, alternatives,
+removal conditions, and an explicit maintainer decision are reserved for
+`ARCHITECTURE_EXCEPTION`.
+
+Apply the `architecture-change` label to a Web implementation that changes an
+architecture owner, canonical path, compatibility path, privileged boundary, or
+lifecycle responsibility. The label selects the architecture size-review
+profile and routes attention. It does not waive deterministic gates.
+
+Policy reports distinguish `Gate: PASS | FAIL` from `Review: CLEAR | REQUIRED`.
+Gate controls the CI exit status. `Review: REQUIRED` means a human must examine
+the identified risk; by itself it exits zero and is not a CI failure.
 
 ## Submitting a pull request
 
@@ -271,15 +312,15 @@ corresponding issue. Then:
    ```
 
 5. Target `dev` and link the agreed issue.
-6. Explain the problem, agreed behavior, implementation boundary, validation,
-   compatibility effects, scientific-output effects, and any intentional
-   rendering changes.
-7. Complete exactly one declaration under `Architecture impact` in the
-   [pull request template](./.github/pull_request_template.md).
-8. For an architecture-bearing change, provide the complete before and after
-   sets and other evidence required by the
-   [architecture fitness-function ratchet](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
-9. If SVG output changes, review the actual output and the reference diff, and
+6. Select exactly one change class in the
+   [pull request template](./.github/pull_request_template.md), then explain the
+   problem, agreed behavior, implementation boundary, validation, compatibility
+   effects, scientific-output effects, and any intentional rendering changes.
+7. For an ordinary architecture-bearing change, provide the concise owner/path,
+   behavior-verification, deterministic-check, and rollback evidence required by
+   the [architecture fitness-function ratchet](./docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
+   Complete the full OE/PE/CB packet only for `ARCHITECTURE_EXCEPTION`.
+8. If SVG output changes, review the actual output and the reference diff, and
    identify every intentional rendering change.
 
 Passing CI is necessary but not sufficient for merge. The maintainer also

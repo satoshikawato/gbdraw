@@ -19,7 +19,7 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
-test('diagram Worker startup leaves no main-thread Python runtime', async ({ page }) => {
+test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-smoke' }, async ({ page }) => {
   test.setTimeout(180000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
   await openApp(page);
@@ -944,7 +944,7 @@ test('Definition line colors preserve raw values and present named, Auto, and No
   expect(result.editedNameRaw).toBe('#00ff00');
 });
 
-test('Invalid Annotation slot is rejected before worker startup and preserves committed state', async ({ page }) => {
+test('Invalid Annotation slot is rejected before worker startup and preserves committed state', { tag: '@pr-smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
     const nativePostMessage = Worker.prototype.postMessage;
     window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ = 0;

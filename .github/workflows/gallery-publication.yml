@@ -5,9 +5,7 @@ permissions:
 
 on:
   push:
-    branches: ["main", "refactoring", "dev"]
-  pull_request:
-    branches: ["dev", "main"]
+    branches: ["dev"]
   workflow_dispatch:
     inputs:
       complete_refresh:
@@ -17,7 +15,7 @@ on:
         type: boolean
 
 concurrency:
-  group: gallery-publication-${{ github.ref }}
+  group: gallery-publication-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -55,7 +53,7 @@ jobs:
         run: npm run ${{ matrix.command }}
 
   performance:
-    name: Gallery publication performance
+    name: Gallery publication performance (projection)
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -83,3 +81,18 @@ jobs:
           python tools/measure_gallery_publication_performance.py refresh
           --baseline-revision 574b33b83962949397839e2aaa862a8b96667625
           --revision ${{ github.sha }}
+
+  readiness-gate:
+    name: Gallery readiness / gate
+    needs:
+      - browser
+      - performance
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require all Gallery readiness evidence
+        run: |
+          set -euo pipefail
+          test "${{ needs.browser.result }}" = "success"
+          test "${{ needs.performance.result }}" = "success"

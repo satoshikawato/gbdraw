@@ -130,9 +130,10 @@ Architecture changes should keep these entry points convergent:
 
 Architecture-bearing changes must follow the
 [architecture fitness-function ratchet](docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md).
-Pull requests record complete before and after owner, canonical-path, and
-compatibility-path sets. A separate maintainer decision approves the exact
-reviewed head.
+Ordinary non-increasing changes record concise owner/path evidence and remove
+superseded paths. Complete before/after OE, PE, and CB sets plus a separate
+maintainer decision are required only for the exception conditions defined by
+that policy.
 
 ### Persisted-format compatibility
 

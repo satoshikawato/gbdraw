@@ -56,6 +56,38 @@ const BASE_POLICY_WORKFLOW = readFileSync(
   join(REPOSITORY_ROOT, '.github/workflows/web-base-policy.yml'),
   'utf8'
 );
+const GALLERY_PUBLICATION_WORKFLOW = readFileSync(
+  join(REPOSITORY_ROOT, '.github/workflows/gallery-publication.yml'),
+  'utf8'
+);
+const DEPLOY_WORKFLOW = readFileSync(
+  join(REPOSITORY_ROOT, '.github/workflows/deploy_web.yml'),
+  'utf8'
+);
+const PACKAGE_SCRIPTS = JSON.parse(readFileSync(
+  join(REPOSITORY_ROOT, 'package.json'),
+  'utf8'
+)).scripts;
+const BASE_PLAYWRIGHT_CONFIG = readFileSync(
+  join(REPOSITORY_ROOT, 'playwright.config.js'),
+  'utf8'
+);
+const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
+  join(REPOSITORY_ROOT, 'playwright.functional.config.js'),
+  'utf8'
+);
+const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
+  join(REPOSITORY_ROOT, 'playwright.pr-smoke.config.js'),
+  'utf8'
+);
+const WORKFLOW_SOURCES = readdirSync(
+  join(REPOSITORY_ROOT, '.github/workflows'),
+  { withFileTypes: true }
+).filter((entry) => entry.isFile() && /\.ya?ml$/.test(entry.name))
+  .map((entry) => readFileSync(
+    join(REPOSITORY_ROOT, '.github/workflows', entry.name),
+    'utf8'
+  ));
 const PULL_REQUEST_TEMPLATE = readFileSync(
   join(REPOSITORY_ROOT, '.github/pull_request_template.md'),
   'utf8'
@@ -87,6 +119,19 @@ const walkJavaScriptFiles = (directory) => readdirSync(directory, { withFileType
     if (entry.isDirectory()) return walkJavaScriptFiles(path);
     return entry.isFile() && entry.name.endsWith('.js') ? [path] : [];
   });
+
+const PLAYWRIGHT_SPEC_SOURCES = walkJavaScriptFiles(
+  join(REPOSITORY_ROOT, 'tests/web')
+).filter((path) => path.endsWith('.playwright.spec.js'))
+  .map((path) => readFileSync(path, 'utf8'));
+
+const workflowJob = (jobId, workflow = TEST_WORKFLOW) => {
+  const job = workflow.match(
+    new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+  )?.[0];
+  assert.ok(job, `${jobId} job must exist`);
+  return job;
+};
 
 const productionSources = new Map(
   walkJavaScriptFiles(JAVASCRIPT_ROOT).map((path) => [
@@ -672,11 +717,11 @@ test('report-only source facts preserve the characterized masking behavior', () 
   });
 });
 
-test('PR workflows separate normal tests from trusted base-policy execution', () => {
+test('workflow triggers separate dev admission, dev staging, promotion, and deployment', () => {
   const activityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
   const triggerBranches = (workflow, trigger) => {
     const match = workflow.match(new RegExp(
-      `\\n  ${trigger}:\\n    branches: (\\[[^\\n]+\\])`
+      `\\r?\\n  ${trigger}:\\r?\\n    branches: (\\[[^\\r\\n]+\\])`
     ));
     assert.ok(match, `${trigger} branch filter must exist`);
     return JSON.parse(match[1]);
@@ -684,8 +729,13 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
 
   assert.match(TEST_WORKFLOW, /\n  pull_request:\n/);
   assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'pull_request'), ['dev', 'main']);
+  assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'push'), ['dev']);
   assert.match(TEST_WORKFLOW, activityTypes);
   assert.match(TEST_WORKFLOW, /name: Run core tests/);
+  assert.match(
+    TEST_WORKFLOW,
+    /group: tests-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/
+  );
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
   assert.deepEqual(
@@ -693,20 +743,331 @@ test('PR workflows separate normal tests from trusted base-policy execution', ()
     ['dev', 'main']
   );
   assert.match(BASE_POLICY_WORKFLOW, activityTypes);
-  assert.match(BASE_POLICY_WORKFLOW, /permissions:\n  contents: read/);
-  assert.match(BASE_POLICY_WORKFLOW, /name: Web base policy \(trusted base\)/);
-  assert.match(BASE_POLICY_WORKFLOW, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(BASE_POLICY_WORKFLOW, /fetch-depth: 0/);
-  assert.match(BASE_POLICY_WORKFLOW, /persist-credentials: false/);
-  assert.equal([...BASE_POLICY_WORKFLOW.matchAll(/uses: actions\/checkout@/g)].length, 1);
-  assert.match(BASE_POLICY_WORKFLOW, /git fetch --no-tags origin "\$HEAD_SHA"/);
   assert.match(
     BASE_POLICY_WORKFLOW,
+    /permissions:\n  contents: read\n  pull-requests: read\n  actions: read/
+  );
+
+  assert.deepEqual(triggerBranches(GALLERY_PUBLICATION_WORKFLOW, 'push'), ['dev']);
+  assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /\n  pull_request:\n/);
+  assert.match(GALLERY_PUBLICATION_WORKFLOW, /\n  workflow_dispatch:\n/);
+
+  assert.deepEqual(triggerBranches(DEPLOY_WORKFLOW, 'push'), ['main']);
+  assert.doesNotMatch(TEST_WORKFLOW, /branches: \[[^\]]*"main"[^\]]*\]\n  pull_request:/);
+  assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /"main"|"refactoring"/);
+});
+
+test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evidence', () => {
+  const corePr = workflowJob('core-pr');
+  assert.match(corePr, /\n    name: Core PR \(Python 3\.11\)\n/);
+  assert.match(
+    corePr,
+    /if: github\.event_name == 'pull_request' && github\.base_ref == 'dev'/
+  );
+  assert.match(corePr, /-m "not slow and not \(recipe or gallery or browser\)"/);
+  assert.match(corePr, /git diff --exit-code -- tests\/reference_outputs\//);
+  assert.doesNotMatch(corePr, /matrix:/);
+
+  const webPrSmoke = workflowJob('web-pr-smoke');
+  assert.match(webPrSmoke, /\n    name: Web PR smoke\n/);
+  assert.match(
+    webPrSmoke,
+    /if: github\.event_name == 'pull_request' && github\.base_ref == 'dev'/
+  );
+  assert.match(webPrSmoke, /timeout-minutes: 5/);
+  assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
+  assert.equal([...webPrSmoke.matchAll(/playwright install --with-deps chromium/g)].length, 1);
+  assert.equal([...webPrSmoke.matchAll(/python tools\/prepare_browser_wheel\.py/g)].length, 1);
+  assert.match(webPrSmoke, /Run fast Web JavaScript contracts/);
+  assert.match(webPrSmoke, /! -name 'gallery-session-publication\.test\.mjs'/);
+  assert.match(webPrSmoke, /-m "browser and not slow"/);
+  assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
+  assert.match(webPrSmoke, /if: failure\(\)[\s\S]+path: test-results\//);
+  assert.doesNotMatch(
+    webPrSmoke,
+    /functional-full|perf-smoke|losat-cache|gallery-publication|Vibrio/
+  );
+
+  const gate = workflowJob('pr-gate');
+  assert.match(gate, /\n    name: PR \/ gate\n/);
+  const dependencies = gate.match(
+    /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
+  )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
+  assert.deepEqual(dependencies, [
+    'web-change-budget',
+    'core-pr',
+    'recipes-standard',
+    'gallery',
+    'lint',
+    'web-pr-smoke'
+  ]);
+  assert.match(
+    gate,
+    /if: >-\n      always\(\) &&\n      github\.event_name == 'pull_request' &&\n      github\.base_ref == 'dev'/
+  );
+  dependencies.forEach((jobId) => {
+    assert.ok(
+      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
+      `${jobId} must fail the aggregate unless it succeeds`
+    );
+  });
+  assert.doesNotMatch(gate, /gh api|curl|check-web-change-budget|pull_request_target/);
+
+  for (const jobId of ['web-change-budget', 'recipes-standard', 'gallery', 'lint']) {
+    assert.match(
+      workflowJob(jobId),
+      /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/,
+      `${jobId} must remain in the fast dev-PR graph`
+    );
+  }
+  for (const jobId of [
+    'core',
+    'browser',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'losat-cache-browser-acceptance'
+  ]) {
+    const job = workflowJob(jobId);
+    assert.doesNotMatch(
+      job,
+      /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/,
+      `${jobId} must not run on a dev pull request`
+    );
+  }
+});
+
+test('PR smoke selection is explicit while the full functional inventory stays wide', () => {
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:functional-full'],
+    'playwright test --config=playwright.functional.config.js'
+  );
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:pr-smoke'],
+    'playwright test --config=playwright.pr-smoke.config.js'
+  );
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:functional-smoke'],
+    'npm run test:web:functional-full'
+  );
+  assert.doesNotMatch(FUNCTIONAL_PLAYWRIGHT_CONFIG, /\bgrep\s*:/);
+  assert.match(FUNCTIONAL_PLAYWRIGHT_CONFIG, /performance\\\.playwright\\\.spec\\\.js/);
+  assert.match(FUNCTIONAL_PLAYWRIGHT_CONFIG, /losat-cache-migration/);
+
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /grep: \/@pr-smoke\//);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /retries: 0/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /workers: 1/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /reporter: 'list'/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /trace: 'retain-on-failure'/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /name === 'chromium'/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /performance\\\.playwright\\\.spec\\\.js/);
+  assert.match(PR_SMOKE_PLAYWRIGHT_CONFIG, /losat-cache-migration/);
+  assert.doesNotMatch(
+    `${PACKAGE_SCRIPTS['test:web:pr-smoke']}\n${PR_SMOKE_PLAYWRIGHT_CONFIG}`,
+    /pass-with-no-tests/
+  );
+
+  const selectedCount = PLAYWRIGHT_SPEC_SOURCES.reduce(
+    (count, source) => count + [...source.matchAll(/tag: ['"]@pr-smoke['"]/g)].length,
+    0
+  );
+  assert.ok(selectedCount >= 6 && selectedCount <= 10, `selected ${selectedCount} smoke tests`);
+});
+
+test('exact dev staging runs the full inventory with four mandatory Playwright shards', () => {
+  const stagingOnly = [
+    'core',
+    'browser',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'losat-cache-browser-acceptance'
+  ];
+  for (const jobId of stagingOnly) {
+    const job = workflowJob(jobId);
+    assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+    assert.match(
+      job,
+      /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+    );
+  }
+
+  const fullPlaywright = workflowJob('playwright-functional');
+  assert.match(fullPlaywright, /\n    name: Playwright functional \(shard \$\{\{ matrix\.shard \}\}\/4\)\n/);
+  assert.match(fullPlaywright, /shard: \[1, 2, 3, 4\]/);
+  assert.match(
+    fullPlaywright,
+    /npm run test:web:functional-full -- --shard=\$\{\{ matrix\.shard \}\}\/4/
+  );
+  assert.match(fullPlaywright, /playwright-functional-shard-\$\{\{ matrix\.shard \}\}-traces-/);
+  assert.match(BASE_PLAYWRIGHT_CONFIG, /retries: process\.env\.CI \? 2 : 0/);
+  assert.match(BASE_PLAYWRIGHT_CONFIG, /workers: process\.env\.CI \? 1 : undefined/);
+
+  const gate = workflowJob('dev-staging-gate');
+  const dependencies = gate.match(
+    /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
+  )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
+  assert.deepEqual(dependencies, [
+    'web-change-budget',
+    'core',
+    'recipes-standard',
+    'gallery',
+    'browser',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'lint',
+    'losat-cache-browser-acceptance'
+  ]);
+  assert.match(gate, /\n    name: Dev staging \/ gate\n/);
+  assert.match(gate, /always\(\)/);
+  assert.match(gate, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+  assert.match(
+    gate,
+    /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+  );
+  dependencies.forEach((jobId) => {
+    assert.ok(
+      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
+      `${jobId} must fail the staging aggregate unless it succeeds`
+    );
+  });
+  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+});
+
+test('Gallery readiness aggregates common, Vibrio, and projection evidence on dev', () => {
+  const browser = workflowJob('browser', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(browser, /example: common 9\n            command: test:web:gallery-publication/);
+  assert.match(browser, /example: Vibrio\n            command: test:web:vibrio-generate/);
+  assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
+
+  const performance = workflowJob('performance', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(performance, /\n    name: Gallery publication performance \(projection\)\n/);
+  assert.match(performance, /measure_gallery_publication_performance\.py projection/);
+  assert.match(performance, /github\.event_name == 'workflow_dispatch' && inputs\.complete_refresh/);
+  assert.match(performance, /measure_gallery_publication_performance\.py refresh/);
+
+  const gate = workflowJob('readiness-gate', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(gate, /\n    name: Gallery readiness \/ gate\n/);
+  assert.match(gate, /\n    needs:\n      - browser\n      - performance\n/);
+  assert.match(gate, /\n    if: always\(\)\n/);
+  for (const jobId of ['browser', 'performance']) {
+    assert.ok(
+      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
+      `${jobId} must fail the Gallery aggregate unless all matrix jobs succeed`
+    );
+  }
+  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+});
+
+test('trusted promotion uses base code for topology, exact-SHA evidence, and tree proof', () => {
+  const devPolicy = workflowJob('trusted-base-policy', BASE_POLICY_WORKFLOW);
+  assert.match(devPolicy, /\n    name: Web base policy \(trusted base\)\n/);
+  assert.match(devPolicy, /if: github\.event\.pull_request\.base\.ref == 'dev'/);
+
+  const promotion = workflowJob('promotion-gate', BASE_POLICY_WORKFLOW);
+  assert.match(promotion, /\n    name: Promotion \/ gate\n/);
+  assert.match(promotion, /if: github\.event\.pull_request\.base\.ref == 'main'/);
+  assert.equal([...promotion.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  assert.match(promotion, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(promotion, /fetch-depth: 0/);
+  assert.match(promotion, /persist-credentials: false/);
+  assert.match(promotion, /EXPECTED_REPOSITORY: satoshikawato\/gbdraw/);
+  assert.match(promotion, /test "\$BASE_REF" = "main"/);
+  assert.match(promotion, /test "\$HEAD_REF" = "dev"/);
+  assert.match(promotion, /test "\$HEAD_REPOSITORY" = "\$EXPECTED_REPOSITORY"/);
+  assert.match(
+    promotion,
+    /git fetch --no-tags origin "refs\/heads\/dev:refs\/remotes\/origin\/dev"/
+  );
+  assert.match(promotion, /test "\$HEAD_SHA" = "\$REMOTE_DEV_SHA"/);
+  assert.match(
+    promotion,
     /node tools\/check-web-change-budget\.mjs --base "\$BASE_SHA" --head "\$HEAD_SHA"/
   );
+  assert.equal([...promotion.matchAll(/workflow-evidence/g)].length, 2);
+  assert.match(
+    promotion,
+    /--workflow-path \.github\/workflows\/test\.yml[\s\S]*--aggregate-name "Dev staging \/ gate"/
+  );
+  assert.match(
+    promotion,
+    /--workflow-path \.github\/workflows\/gallery-publication\.yml[\s\S]*--aggregate-name "Gallery readiness \/ gate"/
+  );
+  assert.match(promotion, /check-promotion-readiness\.mjs merge-tree/);
+  assert.match(promotion, /--base-sha "\$BASE_SHA"[\s\S]*--head-sha "\$HEAD_SHA"/);
   assert.doesNotMatch(
+    promotion,
+    /ref:.*pull_request\.head|git (?:checkout|switch) |npm ci|pip install|functional-full|perf-smoke|pytest/
+  );
+  assert.doesNotMatch(promotion, /uses: \.\//);
+});
+
+test('foundation promotion keeps substantive producers for legacy main contexts', () => {
+  [
+    'Web change budget',
+    'Core (Python ${{ matrix.python-version }})',
+    'Recipes standard (Python 3.11)',
+    'Gallery (Python 3.11)',
+    'Browser (Python 3.11)',
+    'Playwright performance',
+    'Lint',
+    'LOSAT cache browser acceptance'
+  ].forEach((displayName) => {
+    assert.ok(TEST_WORKFLOW.includes(`name: ${displayName}`), `Missing legacy job: ${displayName}`);
+  });
+  assert.match(TEST_WORKFLOW, /python-version: \["3\.10", "3\.11", "3\.12"\]/);
+  const mainFunctional = workflowJob('playwright-functional-main-transition');
+  assert.match(mainFunctional, /\n    name: Playwright functional\n/);
+  assert.match(mainFunctional, /npm run test:web:functional-full/);
+  assert.doesNotMatch(mainFunctional, /--shard=/);
+
+  for (const jobId of [
+    'web-change-budget',
+    'core',
+    'recipes-standard',
+    'gallery',
+    'browser',
+    'playwright-functional-main-transition',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'slow-main',
+    'lint',
+    'losat-cache-browser-acceptance'
+  ]) {
+    const job = workflowJob(jobId);
+    assert.match(job, /github\.base_ref == 'main'|pull_request\.base\.ref == 'main'/);
+    assert.match(job, /github\.head_ref == 'dev'|pull_request\.head\.ref == 'dev'/);
+    assert.match(job, /head\.repo\.full_name == github\.repository/);
+  }
+
+  const mainPolicy = workflowJob(
+    'trusted-base-policy-main-transition',
+    BASE_POLICY_WORKFLOW
+  );
+  assert.match(mainPolicy, /\n    name: Web base policy \(trusted base\)\n/);
+  assert.match(mainPolicy, /node tools\/check-web-change-budget\.mjs/);
+  assert.match(
     BASE_POLICY_WORKFLOW,
-    /(?:checkout|run):[^\n]*pull_request\.head|ref:.*pull_request\.head|git (?:checkout|switch) /
+    /PR 7 removes this legacy producer[\s\S]*trusted-base-policy-main-transition:/
+  );
+  assert.doesNotMatch(TEST_WORKFLOW, /needs: web-change-budget/);
+  assert.equal(
+    existsSync(join(REPOSITORY_ROOT, '.github/workflows/dev-staging.yml')),
+    false
+  );
+  assert.equal(
+    existsSync(join(REPOSITORY_ROOT, '.github/workflows/gallery-readiness.yml')),
+    false
+  );
+  assert.doesNotMatch(TEST_WORKFLOW, /dev-staging\.yml|gallery-readiness\.yml/);
+  assert.doesNotMatch(
+    WORKFLOW_SOURCES.join('\n'),
+    /branches\/[^"]+\/protection|required_status_checks|\/rulesets(?:\b|\/)/
   );
 });
 
@@ -757,14 +1118,12 @@ test('the PR template requires exact changed-scope architecture debt arithmetic'
   });
 });
 
-test('normal CI uses dev as the staging push branch', () => {
+test('normal CI uses only dev as the staging push branch', () => {
   assert.match(
     TEST_WORKFLOW,
-    /push:\n    branches: \["main", "refactoring", "dev"\]/
+    /push:\n    branches: \["dev"\]/
   );
-  assert.doesNotMatch(TEST_WORKFLOW, /branches: \[[^\]]*"develop"/);
   assert.match(TEST_WORKFLOW, /\n  workflow_dispatch:\n/);
-  assert.equal([...TEST_WORKFLOW.matchAll(/^    if:/gm)].length, 2);
 });
 
 test('dev staging Web checks scope only the newly integrated change', () => {
@@ -808,13 +1167,14 @@ test('dev staging Web checks scope only the newly integrated change', () => {
   );
 });
 
-test('supported-version and slow matrices cover main PRs and dev staging runs', () => {
+test('supported-version and slow matrices cover dev staging and transition promotions', () => {
   const stagingCondition = [
     "    if: >-",
-    "      (github.event_name == 'pull_request' && github.base_ref == 'main') ||",
-    "      (github.event_name == 'push' &&",
-    "      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||",
-    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')"
+    "      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||",
+    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||",
+    "      (github.event_name == 'pull_request' && github.base_ref == 'main' &&",
+    "      github.head_ref == 'dev' &&",
+    "      github.event.pull_request.head.repo.full_name == github.repository)"
   ].join('\n');
 
   for (const jobName of ['acceptance-supported-main', 'slow-main']) {
@@ -822,7 +1182,7 @@ test('supported-version and slow matrices cover main PRs and dev staging runs', 
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
     assert.ok(job, `${jobName} job must exist`);
-    assert.ok(job.includes(stagingCondition), `${jobName} must use the main protection condition`);
+    assert.ok(job.includes(stagingCondition), `${jobName} must use the staging transition condition`);
   }
 });
 
@@ -842,6 +1202,14 @@ const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
 const WEB_PROMOTION_CONTEXT_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-promotion-context.mjs'
+);
+const PROMOTION_READINESS_HELPER = join(
+  REPOSITORY_ROOT,
+  'tools/check-promotion-readiness.mjs'
+);
+const PROMOTION_READINESS_TEST = join(
+  REPOSITORY_ROOT,
+  'tests/web/promotion-readiness.test.mjs'
 );
 const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
@@ -887,11 +1255,21 @@ const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
   )
 ].join('\n') + '\n';
 const BUDGET_FIXTURE = Object.freeze({
+  '.github/workflows/deploy_web.yml': 'name: baseline deploy\n',
+  '.github/workflows/gallery-publication.yml': 'name: baseline gallery\n',
   '.github/workflows/test.yml': 'name: baseline\n',
   '.github/workflows/web-base-policy.yml': 'name: baseline policy\n',
   'docs/internal/WEB_CHANGE_POLICY.md': '# Baseline Web change policy\n',
   'package.json': '{"private":true}\n',
   'tests/web/architecture-contracts.test.mjs': '// baseline contract\n',
+  'tests/web/promotion-readiness.test.mjs': readFileSync(
+    PROMOTION_READINESS_TEST,
+    'utf8'
+  ),
+  'tools/check-promotion-readiness.mjs': readFileSync(
+    PROMOTION_READINESS_HELPER,
+    'utf8'
+  ),
   'tools/check-web-change-budget.mjs': readFileSync(CHANGE_BUDGET_CHECKER, 'utf8'),
   'tools/web-architecture-detectors.mjs': readFileSync(
     WEB_ARCHITECTURE_DETECTOR_MODULE,
@@ -1139,7 +1517,7 @@ const reportSection = (output, heading) => {
 };
 
 const workflowWarningCount = (output) => (
-  output.match(/::warning title=Web change size review::/g) || []
+  output.match(/::warning title=Web policy review required::/g) || []
 ).length;
 
 const assertNonWaivableWorkingTreeFailure = (mutate, expectedPatterns, context = '') => {
@@ -1366,6 +1744,21 @@ test('a first-party static self-import fails as a one-node cycle', () => {
   );
 });
 
+test('an unresolved first-party static import fails closed', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/unresolved.js',
+      "import './missing-module.js';\nexport const unresolved = true;\n"
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+      assert.match(output, /head first-party static import graph is incomplete/);
+      assert.match(output, /cannot resolve first-party static import \.\/missing-module\.js/);
+    }
+  );
+});
+
 test('two-node and three-node first-party static cycles fail', () => {
   const cases = [
     {
@@ -1460,7 +1853,8 @@ test('compatibility-like names report and a private helper adds no authority', (
         output,
         /Registered Authority Location Count \| 1 \| 0 \| 0 \| 1 \| 0 \| registered rule/
       );
-      assert.match(output, /Result: \*\*PASS\*\*/);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     }
   );
 });
@@ -1530,6 +1924,41 @@ test('an inactive preauthorized edge does not fail', () => {
   );
 });
 
+test('a preauthorized one-for-one canonical path move passes and requires review', () => {
+  const preauthorizedPolicy = JSON.parse(JSON.stringify(WEB_CHANGE_POLICY));
+  for (const target of ['services/diagram-generation.js', 'services/session-request.js']) {
+    preauthorizedPolicy.allowedPrivilegedImporters[target].push('app/alternate.js');
+    preauthorizedPolicy.allowedPrivilegedImporters[target].sort();
+  }
+  for (const capability of ['Diagram Worker', 'Render request']) {
+    preauthorizedPolicy.allowedPrivilegedOwners[capability].push('app/alternate.js');
+    preauthorizedPolicy.allowedPrivilegedOwners[capability].sort();
+  }
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+      write('gbdraw/web/js/app/alternate.js', canonicalCallerSource);
+    },
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(
+        reportSection(output, 'Review reasons'),
+        /Architecture-bearing signals:.*registered canonical contracts/
+      );
+      assert.match(
+        output,
+        /canonical-path\.render-request \| subject=app\/alternate\.js -> services\/session-request\.js .* decision=PASS/
+      );
+    },
+    {
+      'tools/web-architecture-rules.json': preauthorizedCanonicalRulesSource,
+      'tools/web-change-policy.json': `${JSON.stringify(preauthorizedPolicy, null, 2)}\n`
+    }
+  );
+});
+
 test('report-only rules report absence without consulting an accepted store or failing', () => {
   withTrustedArchitectureRepository(
     (write) => write(
@@ -1542,7 +1971,8 @@ test('report-only rules report absence without consulting an accepted store or f
         output,
         /canonical-path\.render-request .* observation=ABSENT_REQUIRED .* mode=REPORT_ONLY .* decision=REPORT/
       );
-      assert.match(output, /Result: \*\*PASS\*\*/);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     },
     {
       'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
@@ -1557,7 +1987,8 @@ test('hard rules do not consult an accepted-violation store', () => {
     ({ status, output }) => {
       assert.equal(status, 0, output);
       assert.doesNotMatch(output, /Cannot parse tools\/web-architecture-violations\.json/);
-      assert.match(output, /Result: \*\*PASS\*\*/);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*CLEAR\*\*/);
     },
     { 'tools/web-architecture-violations.json': 'not valid JSON and must not be loaded\n' }
   );
@@ -1569,7 +2000,8 @@ test('trusted checker rejects malformed proposed rule JSON as inert data', () =>
     ({ status, output }) => {
       assert.equal(status, 1, output);
       assert.match(output, /Cannot parse tools\/web-architecture-rules\.json/);
-      assert.match(output, /Result: \*\*FAIL\*\*/);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     }
   );
 });
@@ -1631,6 +2063,22 @@ test('proposed detector ID and implementation cannot alter trusted source observ
   );
 });
 
+test('isolated architecture-rule preauthorization passes and requires review', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(
+        reportSection(output, 'Review reasons'),
+        /registered architecture-rule authority changed/
+      );
+      assert.match(output, /Classification: EXPANSION/);
+    }
+  );
+});
+
 test('mutually conforming proposed rules and source cannot replace base authority', () => {
   const proposedRules = rulesSource((rules) => {
     canonicalRule(rules).allowedEdges = [{
@@ -1651,7 +2099,8 @@ test('mutually conforming proposed rules and source cannot replace base authorit
         /canonical-path\.render-request \| subject=app\/alternate\.js -> services\/session-request\.js \| observation=DIVERGENT .* decision=FAIL/
       );
       assert.match(output, /architecture rule authority changes must be isolated/);
-      assert.match(output, /Result: \*\*FAIL\*\*/);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     }
   );
 });
@@ -1668,19 +2117,19 @@ test('fixed profiles classify exact and excess production-file review thresholds
       exact.output,
       new RegExp(`Size-review threshold for production files: ${profile.productionFiles}`)
     );
-    assert.match(exact.output, /Result: \*\*PASS\*\*/);
-    assert.match(exact.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(exact.output, 'Size review reasons').trim(), '- None');
+    assert.match(exact.output, /Gate: \*\*PASS\*\*/);
+    assert.match(exact.output, /Review: \*\*REQUIRED\*\*/);
+    assert.doesNotMatch(reportSection(exact.output, 'Review reasons'), /Size and scope:/);
 
     const excess = runChangeBudgetCase(
       (write) => writeBudgetFiles(write, profile.productionFiles + 1),
       profile.environment
     );
     assert.equal(excess.status, 0, `${profile.name} excess\n${excess.output}`);
-    assert.match(excess.output, /Result: \*\*PASS\*\*/);
-    assert.match(excess.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(excess.output, /Gate: \*\*PASS\*\*/);
+    assert.match(excess.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(excess.output, 'Size review reasons'),
+      reportSection(excess.output, 'Review reasons'),
       new RegExp(
         `production files changed exceed ${profile.name} size-review threshold `
         + `\\(${profile.productionFiles + 1} > ${profile.productionFiles}\\)`
@@ -1701,18 +2150,18 @@ test('fixed profiles classify exact and excess gross-churn review thresholds', (
     }, profile.environment);
     assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
     assert.match(exact.output, new RegExp(`Gross churn: ${profile.grossChurn}`));
-    assert.match(exact.output, /Result: \*\*PASS\*\*/);
-    assert.match(exact.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(exact.output, 'Size review reasons').trim(), '- None');
+    assert.match(exact.output, /Gate: \*\*PASS\*\*/);
+    assert.match(exact.output, /Review: \*\*CLEAR\*\*/);
+    assert.equal(reportSection(exact.output, 'Review reasons').trim(), '- None');
 
     const excess = runChangeBudgetCase((write) => {
       write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(replacementLines, 1));
     }, profile.environment);
     assert.equal(excess.status, 0, `${profile.name} excess\n${excess.output}`);
-    assert.match(excess.output, /Result: \*\*PASS\*\*/);
-    assert.match(excess.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(excess.output, /Gate: \*\*PASS\*\*/);
+    assert.match(excess.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(excess.output, 'Size review reasons'),
+      reportSection(excess.output, 'Review reasons'),
       new RegExp(
         `production gross churn exceeds ${profile.name} size-review threshold `
         + `\\(${profile.grossChurn + 1} > ${profile.grossChurn}\\)`
@@ -1732,18 +2181,18 @@ test('fixed profiles classify exact and excess net-addition review thresholds', 
     }, profile.environment);
     assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
     assert.match(exact.output, new RegExp(`Net additions: ${profile.netAdditions}`));
-    assert.match(exact.output, /Result: \*\*PASS\*\*/);
-    assert.match(exact.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(exact.output, 'Size review reasons').trim(), '- None');
+    assert.match(exact.output, /Gate: \*\*PASS\*\*/);
+    assert.match(exact.output, /Review: \*\*CLEAR\*\*/);
+    assert.equal(reportSection(exact.output, 'Review reasons').trim(), '- None');
 
     const excess = runChangeBudgetCase((write) => {
       write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(0, profile.netAdditions + 1));
     }, profile.environment);
     assert.equal(excess.status, 0, `${profile.name} excess\n${excess.output}`);
-    assert.match(excess.output, /Result: \*\*PASS\*\*/);
-    assert.match(excess.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(excess.output, /Gate: \*\*PASS\*\*/);
+    assert.match(excess.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(excess.output, 'Size review reasons'),
+      reportSection(excess.output, 'Review reasons'),
       new RegExp(
         `production net additions exceed ${profile.name} size-review threshold `
         + `\\(${profile.netAdditions + 1} > ${profile.netAdditions}\\)`
@@ -1760,8 +2209,8 @@ test('the architecture label selects a larger advisory profile without waiving b
   const mutate = (write) => writeBudgetFiles(write, 9);
   const ordinary = runChangeBudgetCase(mutate);
   assert.equal(ordinary.status, 0, ordinary.output);
-  assert.match(ordinary.output, /Result: \*\*PASS\*\*/);
-  assert.match(ordinary.output, /Size review: \*\*REQUIRED\*\*/);
+  assert.match(ordinary.output, /Gate: \*\*PASS\*\*/);
+  assert.match(ordinary.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(
     ordinary.output,
     /production files changed exceed ordinary size-review threshold \(9 > 8\)/
@@ -1771,8 +2220,12 @@ test('the architecture label selects a larger advisory profile without waiving b
   const architecture = runChangeBudgetCase(mutate, { WEB_ARCHITECTURE_CHANGE: 'true' });
   assert.equal(architecture.status, 0, architecture.output);
   assert.match(architecture.output, /Selected profile: architecture/);
-  assert.match(architecture.output, /Result: \*\*PASS\*\*/);
-  assert.match(architecture.output, /Size review: \*\*CLEAR\*\*/);
+  assert.match(architecture.output, /Gate: \*\*PASS\*\*/);
+  assert.match(architecture.output, /Review: \*\*REQUIRED\*\*/);
+  assert.doesNotMatch(
+    reportSection(architecture.output, 'Review reasons'),
+    /Size and scope:/
+  );
   assert.doesNotMatch(architecture.output, /waived/i);
 });
 
@@ -1785,8 +2238,8 @@ test('net-zero rewrites above gross thresholds require review in both profiles',
       );
     }, profile.environment);
     assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
-    assert.match(result.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(result.output, /Net additions: 0/);
     assert.match(result.output, /production gross churn exceeds .* size-review threshold/);
   });
@@ -1808,7 +2261,53 @@ test('new module, export, create, reactive, and watcher signals are report-only'
     assert.match(result.output, /createBudgetOwner/);
     assert.match(result.output, /budgetState \(ref\)/);
     assert.match(result.output, /\+1 watcher call/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   });
+});
+
+test('registered performance, reference-output, and session paths require review', () => {
+  const cases = [
+    [
+      'performance',
+      (write) => write('tests/performance/gallery-publication-baseline.json', '{}\n'),
+      /registered performance evidence paths changed/
+    ],
+    [
+      'reference output',
+      (write) => write('tests/reference_outputs/fixture.svg', '<svg/>\n'),
+      /reference output paths changed/
+    ],
+    [
+      'session contract',
+      (write) => write(
+        'gbdraw/web/js/services/session-file.js',
+        'export const readSession = () => ({ version: 2 });\n'
+      ),
+      /registered session or compatibility paths changed/
+    ]
+  ];
+  cases.forEach(([name, mutate, reason]) => {
+    const result = runChangeBudgetCase(mutate);
+    assert.equal(result.status, 0, `${name}\n${result.output}`);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.match(reportSection(result.output, 'Review reasons'), reason);
+  });
+});
+
+test('review reasons are deduplicated and deterministically sorted', () => {
+  const result = runChangeBudgetCase((write) => {
+    write('tests/performance/gallery-publication-baseline.json', '{}\n');
+    write('tests/reference_outputs/fixture.svg', '<svg/>\n');
+    write('gbdraw/web/js/app/review-signal.js', 'export const createCacheManager = () => 1;\n');
+  });
+  assert.equal(result.status, 0, result.output);
+  const reasons = reportSection(result.output, 'Review reasons')
+    .trim()
+    .split('\n')
+    .map((line) => line.replace(/^- /, ''));
+  assert.deepEqual(reasons, [...new Set(reasons)].sort((left, right) => left.localeCompare(right)));
 });
 
 test('report-only inventory contractions display removals without failing', () => {
@@ -1840,7 +2339,7 @@ test('report-only inventory contractions display removals without failing', () =
   );
 });
 
-test('the GitHub step summary separates merge result from size review', () => {
+test('the GitHub step summary leads with independent Gate and Review results', () => {
   BUDGET_PROFILES.forEach((profile) => {
     withChangeBudgetRepository(({ execute, root, write }) => {
       const summaryPath = join(root, 'step-summary.md');
@@ -1853,13 +2352,14 @@ test('the GitHub step summary separates merge result from size review', () => {
       });
       assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
       const summary = readFileSync(summaryPath, 'utf8');
-      assert.match(summary, /Result: \*\*PASS\*\*/);
-      assert.match(summary, /Size review: \*\*REQUIRED\*\*/);
+      assert.match(summary, /Gate: \*\*PASS\*\*/);
+      assert.match(summary, /Review: \*\*REQUIRED\*\*/);
+      assert.doesNotMatch(summary, /- Result:|- Size review:/);
       assert.match(
         summary,
         new RegExp(`Size-review threshold for production files: ${profile.productionFiles}`)
       );
-      assert.match(summary, /## Architecture differential summary/);
+      assert.match(summary, /## Key architecture differential summary/);
       assert.match(
         summary,
         /\| Inventory \| Before \| Added \| Removed \| After \| Delta \| Classification \|/
@@ -1868,7 +2368,7 @@ test('the GitHub step summary separates merge result from size review', () => {
       assert.match(summary, /## Production files touched/);
       assert.match(summary, /## Production additions\/deletions/);
       assert.match(
-        reportSection(summary, 'Size review reasons'),
+        reportSection(summary, 'Review reasons'),
         new RegExp(
           `production files changed exceed ${profile.name} size-review threshold `
           + `\\(${profile.productionFiles + 1} > ${profile.productionFiles}\\)`
@@ -1879,8 +2379,28 @@ test('the GitHub step summary separates merge result from size review', () => {
   });
 });
 
-test('size review and blocking violations produce independent result states', () => {
+test('review reasons and blocking violations produce the four independent decision states', () => {
   BUDGET_PROFILES.forEach((profile) => {
+    const clear = runChangeBudgetCase((write) => {
+      write(
+        'gbdraw/web/js/services/diagram-generation.js',
+        'export const runDiagramGeneration = () => 2;\n'
+      );
+    }, profile.environment);
+    assert.equal(clear.status, 0, `${profile.name} clear\n${clear.output}`);
+    assert.match(clear.output, /Gate: \*\*PASS\*\*/);
+    assert.match(clear.output, /Review: \*\*CLEAR\*\*/);
+
+    const reviewOnly = runChangeBudgetCase((write) => {
+      write(
+        'gbdraw/web/js/app/budget-lines.js',
+        budgetLineSource(profile.grossChurn / 2, 1)
+      );
+    }, profile.environment);
+    assert.equal(reviewOnly.status, 0, `${profile.name} review only\n${reviewOnly.output}`);
+    assert.match(reviewOnly.output, /Gate: \*\*PASS\*\*/);
+    assert.match(reviewOnly.output, /Review: \*\*REQUIRED\*\*/);
+
     const mixed = runChangeBudgetCase((write) => {
       writeBudgetFiles(write, profile.productionFiles + 1);
       write(
@@ -1889,10 +2409,10 @@ test('size review and blocking violations produce independent result states', ()
       );
     }, profile.environment);
     assert.equal(mixed.status, 1, `${profile.name} mixed\n${mixed.output}`);
-    assert.match(mixed.output, /Result: \*\*FAIL\*\*/);
-    assert.match(mixed.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(mixed.output, /Gate: \*\*FAIL\*\*/);
+    assert.match(mixed.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(mixed.output, 'Size review reasons'),
+      reportSection(mixed.output, 'Review reasons'),
       /production files changed exceed/
     );
     assert.match(
@@ -1911,9 +2431,9 @@ test('size review and blocking violations produce independent result states', ()
       );
     }, profile.environment);
     assert.equal(blockerOnly.status, 1, `${profile.name} blocker only\n${blockerOnly.output}`);
-    assert.match(blockerOnly.output, /Result: \*\*FAIL\*\*/);
-    assert.match(blockerOnly.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(blockerOnly.output, 'Size review reasons').trim(), '- None');
+    assert.match(blockerOnly.output, /Gate: \*\*FAIL\*\*/);
+    assert.match(blockerOnly.output, /Review: \*\*CLEAR\*\*/);
+    assert.equal(reportSection(blockerOnly.output, 'Review reasons').trim(), '- None');
     assert.match(
       reportSection(blockerOnly.output, 'Blocking violations'),
       /new production dependencies are not allowed/
@@ -1921,7 +2441,7 @@ test('size review and blocking violations produce independent result states', ()
   });
 });
 
-test('GitHub Actions emits one bounded warning when size review is required', () => {
+test('GitHub Actions emits one bounded warning only when Review is required', () => {
   BUDGET_PROFILES.forEach((profile) => {
     const required = runChangeBudgetCase((write) => {
       write(
@@ -1931,25 +2451,27 @@ test('GitHub Actions emits one bounded warning when size review is required', ()
       writeBudgetFiles(write, profile.productionFiles);
     }, { ...profile.environment, GITHUB_ACTIONS: 'true' });
     assert.equal(required.status, 0, `${profile.name} required\n${required.output}`);
-    assert.match(required.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(required.output, /Review: \*\*REQUIRED\*\*/);
     assert.equal(workflowWarningCount(required.output), 1, required.output);
     const warning = required.output.split('\n').find((line) => line.startsWith('::warning'));
     assert.match(
       warning,
       new RegExp(
-        '^::warning title=Web change size review::Web change size review required: '
-        + `profile=${profile.name}; productionFiles=\\d+/${profile.productionFiles}; `
-        + `grossChurn=\\d+/${profile.grossChurn}; `
-        + `netAdditions=-?\\d+/${profile.netAdditions}$`
+        '^::warning title=Web policy review required::Web policy review required: '
+        + 'reasons=4; categories=Architecture-bearing signals=1, Size and scope=3; '
+        + 'see the step summary\\.$'
       )
     );
 
     const clear = runChangeBudgetCase(
-      (write) => writeBudgetFiles(write, profile.productionFiles),
+      (write) => write(
+        'gbdraw/web/js/services/diagram-generation.js',
+        'export const runDiagramGeneration = () => 2;\n'
+      ),
       { ...profile.environment, GITHUB_ACTIONS: 'true' }
     );
     assert.equal(clear.status, 0, `${profile.name} clear\n${clear.output}`);
-    assert.match(clear.output, /Size review: \*\*CLEAR\*\*/);
+    assert.match(clear.output, /Review: \*\*CLEAR\*\*/);
     assert.equal(workflowWarningCount(clear.output), 0, clear.output);
   });
 });
@@ -2011,6 +2533,44 @@ test('dependency, vendor, binary, and runtime/guard rules are non-waivable', () 
   });
 });
 
+test('malformed authority and unsupported accepted-violation authority fail canonically', () => {
+  const malformedPolicy = runChangeBudgetCase((write) => {
+    write('tools/web-change-policy.json', '{\n');
+  });
+  assert.equal(malformedPolicy.status, 1, malformedPolicy.output);
+  assert.match(malformedPolicy.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(malformedPolicy.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(malformedPolicy.output, /Web policy evaluation failed closed: Cannot parse/);
+
+  const acceptedViolation = runChangeBudgetCase((write) => {
+    write('tools/web-architecture-violations.json', '{"schemaVersion":1,"violations":[]}\n');
+  });
+  assert.equal(acceptedViolation.status, 1, acceptedViolation.output);
+  assert.match(acceptedViolation.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(acceptedViolation.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(acceptedViolation.output, /accepted-violation authority cannot be introduced/);
+});
+
+test('a trusted workflow cannot check out candidate head code', () => {
+  const result = runChangeBudgetCase((write) => {
+    write(
+      '.github/workflows/web-base-policy.yml',
+      'name: unsafe trusted workflow\n'
+        + 'on: pull_request_target\n'
+        + 'jobs:\n'
+        + '  policy:\n'
+        + '    steps:\n'
+        + '      - uses: actions/checkout@v4\n'
+        + '        with:\n'
+        + '          ref: ${{ github.event.pull_request.head.sha }}\n'
+    );
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(result.output, /candidate trusted workflow would check out/);
+});
+
 test('reserved future guard paths need not exist before their rollout', () => {
   assert.deepEqual(
     FUTURE_GUARD_PATHS.filter((path) => Object.hasOwn(BUDGET_FIXTURE, path)),
@@ -2018,7 +2578,9 @@ test('reserved future guard paths need not exist before their rollout', () => {
   );
   const result = runChangeBudgetCase(() => {});
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*CLEAR\*\*/);
+  assert.doesNotMatch(result.output, /- Result:|- Size review:/);
 });
 
 test('runtime cannot co-change with any protected architecture guard path', () => {
@@ -2039,10 +2601,17 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
-    'tools/web-promotion-context.mjs'
+    'tools/web-promotion-context.mjs',
+    'tools/check-promotion-readiness.mjs'
   ];
   const authorityPaths = [
+    'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    'docs/internal/WEB_CHANGE_POLICY.md',
     'tools/web-change-policy.json',
+    'tools/web-architecture-rules.json',
+    'tools/web-architecture-violations.json',
+    '.github/workflows/gallery-publication.yml',
+    '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
     '.github/workflows/web-base-policy.yml'
   ];
@@ -2055,7 +2624,7 @@ test('checker implementation and authority files cannot change together', () => 
           authorityPath,
           authorityPath === 'tools/web-change-policy.json'
             ? `${JSON.stringify(BUDGET_POLICY)}\n`
-            : `${BUDGET_FIXTURE[authorityPath]}# changed\n`
+            : `${BUDGET_FIXTURE[authorityPath] || reservedPathContent(authorityPath)}# changed\n`
         );
       }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
     });
@@ -2068,7 +2637,8 @@ test('all checker implementations are separated from reserved future authority',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
-    'tools/web-promotion-context.mjs'
+    'tools/web-promotion-context.mjs',
+    'tools/check-promotion-readiness.mjs'
   ];
 
   implementationPaths.forEach((implementationPath) => {
@@ -2084,6 +2654,27 @@ test('all checker implementations are separated from reserved future authority',
       }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
     });
   });
+});
+
+test('promotion helper stays checker-only while evidence workflows stay authority-only', () => {
+  const helperOnly = runChangeBudgetCase((write) => {
+    write(
+      'tools/check-promotion-readiness.mjs',
+      `${BUDGET_FIXTURE['tools/check-promotion-readiness.mjs']}\n// helper changed\n`
+    );
+  });
+  assert.equal(helperOnly.status, 0, helperOnly.output);
+
+  for (const workflowPath of [
+    '.github/workflows/gallery-publication.yml',
+    '.github/workflows/deploy_web.yml'
+  ]) {
+    const workflowOnly = runChangeBudgetCase((write) => {
+      write(workflowPath, `${BUDGET_FIXTURE[workflowPath]}# workflow changed\n`);
+    });
+    assert.equal(workflowOnly.status, 0, workflowOnly.output);
+    assert.match(workflowOnly.output, new RegExp(workflowPath.replaceAll('.', '\\.')));
+  }
 });
 
 test('evaluator fixtures stay implementation-only while active rule authority stays isolated', () => {
@@ -2175,7 +2766,8 @@ test('the Web change-budget checker allows an owner-internal edit', () => {
     );
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*CLEAR\*\*/);
 });
 
 test('privileged ownership and import contractions do not require a policy edit', () => {
@@ -2186,13 +2778,15 @@ test('privileged ownership and import contractions do not require a policy edit'
     );
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
 });
 
 test('runtime removal may contract its now-inactive owner authorization in one revision', () => {
   const result = runRevisionChangeBudgetCase(applySingleOwnerContraction);
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(
     result.output,
     /allowedPrivilegedOwners\.Diagram Worker: app\/editor\.js/
@@ -2218,14 +2812,15 @@ test('runtime removal may contract exactly its inactive owner and importer autho
     removeEditorOwnerAndImporterUse(write);
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(
     result.output,
     /allowedPrivilegedImporters\.services\/diagram-generation\.js: app\/editor\.js/
   );
 });
 
-test('safe contraction is clear at every exact ordinary and architecture review threshold', () => {
+test('safe contraction passes but requires review at exact size thresholds', () => {
   BUDGET_PROFILES.forEach((profile) => {
     const result = runRevisionChangeBudgetCase((write) => {
       applySingleOwnerContraction(write);
@@ -2241,8 +2836,9 @@ test('safe contraction is clear at every exact ordinary and architecture review 
       writeBudgetFiles(write, additionalFiles);
     }, profile.environment);
     assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
-    assert.match(result.output, /Size review: \*\*CLEAR\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.doesNotMatch(reportSection(result.output, 'Review reasons'), /Size and scope:/);
     assert.match(
       result.output,
       new RegExp(`Size-review threshold for production files: ${profile.productionFiles}`)
@@ -2405,9 +3001,13 @@ test('runtime plus a semantically unchanged policy remains separated', () => {
 test('runtime plus policy contraction rejects every additional guard change', () => {
   const guardCases = [
     ['checker', 'tools/check-web-change-budget.mjs'],
+    ['promotion helper', 'tools/check-promotion-readiness.mjs'],
     ['architecture detectors', 'tools/web-architecture-detectors.mjs'],
     ['source parser', 'tools/web-change-source.mjs'],
     ['architecture contracts', 'tests/web/architecture-contracts.test.mjs'],
+    ['promotion readiness tests', 'tests/web/promotion-readiness.test.mjs'],
+    ['Gallery workflow', '.github/workflows/gallery-publication.yml'],
+    ['deploy workflow', '.github/workflows/deploy_web.yml'],
     ['normal workflow', '.github/workflows/test.yml'],
     ['trusted-base workflow', '.github/workflows/web-base-policy.yml'],
     ['policy documentation', 'docs/internal/WEB_CHANGE_POLICY.md']
@@ -2428,8 +3028,8 @@ test('safe contraction requires review above the selected production-file thresh
       writeBudgetFiles(write, profile.productionFiles);
     }, profile.environment);
     assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
-    assert.match(result.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
       result.output,
       new RegExp(
@@ -2505,7 +3105,8 @@ test('an unused privileged owner allowlist entry can contract', () => {
     const head = commit('remove inactive owner allowlist entry');
     const result = execute({ base, head });
     assert.equal(result.status, 0, result.output);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
       result.output,
       /allowedPrivilegedOwners\.Diagram Worker: app\/future-owner\.js/
@@ -2596,6 +3197,8 @@ test('privileged expansion requires policy preauthorization on the base revision
 
     const preauthorization = execute();
     assert.equal(preauthorization.status, 0, preauthorization.output);
+    assert.match(preauthorization.output, /Gate: \*\*PASS\*\*/);
+    assert.match(preauthorization.output, /Review: \*\*REQUIRED\*\*/);
     const preauthorizedBase = commit('preauthorize secondary owner');
 
     write(
@@ -2606,7 +3209,8 @@ test('privileged expansion requires policy preauthorization on the base revision
     const implementationHead = commit('use preauthorized secondary owner');
     const implementation = execute({ base: preauthorizedBase, head: implementationHead });
     assert.equal(implementation.status, 0, implementation.output);
-    assert.match(implementation.output, /Result: \*\*PASS\*\*/);
+    assert.match(implementation.output, /Gate: \*\*PASS\*\*/);
+    assert.match(implementation.output, /Review: \*\*REQUIRED\*\*/);
 
     assert.equal(git(['diff', '--quiet', `${preauthorizedBase}^`, preauthorizedBase, '--', 'gbdraw/web']).status, 0);
   });
@@ -2626,6 +3230,7 @@ test('comments, strings, and local session object keys are not hard failures', (
   });
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Report-only session object keys and compatibility names/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
 });
 
 test('index.html growth counts toward the net-addition review threshold', () => {
@@ -2634,8 +3239,8 @@ test('index.html growth counts toward the net-addition review threshold', () => 
     write('gbdraw/web/index.html', `<main>baseline</main>\n${additions.join('\n')}\n`);
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
-  assert.match(result.output, /Size review: \*\*REQUIRED\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(result.output, /M gbdraw\/web\/index\.html/);
   assert.match(
     result.output,
@@ -2694,7 +3299,7 @@ test('trusted-base execution rejects self-authorization despite a successful hea
   });
 });
 
-test('promotion reports runtime and guard aggregation without weakening ordinary PRs', () => {
+test('promotion omits runtime and guard inventories without weakening ordinary PRs', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
@@ -2712,7 +3317,7 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
       }
     });
     assert.equal(ordinary.status, 1, ordinary.output);
-    assert.match(ordinary.output, /Change context: ORDINARY/);
+    assert.match(ordinary.output, /Context: ORDINARY/);
     assert.match(
       ordinary.output,
       /production runtime files and Web guard\/CI files changed together/
@@ -2720,14 +3325,12 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Change context: PROMOTION/);
-    assert.match(promotion.output, /Promotion source coverage: PASS/);
-    assert.match(promotion.output, /Promotion coverage basis: DIRECT_ANCESTRY/);
-    assert.match(promotion.output, /Promotion aggregation observations: 1/);
-    assert.match(
-      promotionReportSection(promotion.output, 'Promotion aggregation observations'),
-      /production paths \(1\).*gbdraw\/web\/js\/app\/editor\.js.*guard paths \(1\).*\.github\/workflows\/test\.yml/
-    );
+    assert.match(promotion.output, /Context: PROMOTION/);
+    assert.match(promotion.output, /Gate: \*\*PASS\*\*/);
+    assert.match(promotion.output, /Review: \*\*CLEAR\*\*/);
+    assert.match(promotionReportSection(promotion.output, 'Promotion source coverage'), /Status: PASS/);
+    assert.match(promotionReportSection(promotion.output, 'Promotion source coverage'), /Basis: DIRECT_ANCESTRY/);
+    assert.doesNotMatch(promotion.output, /Production files touched|Architecture differential/);
     assert.equal(
       promotionReportSection(promotion.output, 'Blocking violations').trim(),
       '- None'
@@ -2735,7 +3338,7 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
   });
 });
 
-test('promotion reports checker and authority aggregation without authorizing ordinary PRs', () => {
+test('promotion omits checker and authority aggregation without authorizing ordinary PRs', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write(
@@ -2754,15 +3357,13 @@ test('promotion reports checker and authority aggregation without authorizing or
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Promotion aggregation observations: 1/);
-    assert.match(
-      promotionReportSection(promotion.output, 'Promotion aggregation observations'),
-      /checker paths \(1\).*tools\/web-change-source\.mjs.*authority paths \(1\).*\.github\/workflows\/test\.yml/
-    );
+    assert.match(promotion.output, /Gate: \*\*PASS\*\*/);
+    assert.match(promotion.output, /Review: \*\*CLEAR\*\*/);
+    assert.doesNotMatch(promotion.output, /tools\/web-change-source\.mjs|\.github\/workflows\/test\.yml/);
   });
 });
 
-test('promotion and ordinary size excess use the same advisory thresholds', () => {
+test('promotion omits ordinary size profiling while ordinary review remains required', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     writeBudgetFiles(write, 9);
@@ -2771,8 +3372,8 @@ test('promotion and ordinary size excess use the same advisory thresholds', () =
 
     const ordinary = execute({ base, head });
     assert.equal(ordinary.status, 0, ordinary.output);
-    assert.match(ordinary.output, /Size review: \*\*REQUIRED\*\*/);
-    const ordinarySizeReasons = promotionReportSection(ordinary.output, 'Size review reasons');
+    assert.match(ordinary.output, /Review: \*\*REQUIRED\*\*/);
+    const ordinarySizeReasons = promotionReportSection(ordinary.output, 'Review reasons');
     assert.match(
       ordinarySizeReasons,
       /production files changed exceed ordinary size-review threshold \(10 > 8\)/
@@ -2792,20 +3393,8 @@ test('promotion and ordinary size excess use the same advisory thresholds', () =
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Size review: \*\*REQUIRED\*\*/);
-    const sizeReasons = promotionReportSection(promotion.output, 'Size review reasons');
-    assert.match(
-      sizeReasons,
-      /production files changed exceed ordinary size-review threshold \(10 > 8\)/
-    );
-    assert.match(
-      sizeReasons,
-      /production gross churn exceeds ordinary size-review threshold \(912 > 800\)/
-    );
-    assert.match(
-      sizeReasons,
-      /production net additions exceed ordinary size-review threshold \(110 > 100\)/
-    );
+    assert.match(promotion.output, /Review: \*\*CLEAR\*\*/);
+    assert.doesNotMatch(promotion.output, /size-review threshold|Production files touched/);
     assert.equal(
       promotionReportSection(promotion.output, 'Blocking violations').trim(),
       '- None'
@@ -2813,7 +3402,7 @@ test('promotion and ordinary size excess use the same advisory thresholds', () =
   });
 });
 
-test('promotion still rejects first-party static import cycles', () => {
+test('promotion relies on exact staging instead of rerunning ordinary import-cycle checks', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write(
@@ -2826,13 +3415,17 @@ test('promotion still rejects first-party static import cycles', () => {
     );
     const head = commit('introduce import cycle');
 
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(ordinary.output, /first-party static import cycles are not allowed/);
+
     const promotion = executePromotion({ execute, root, base, head });
-    assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /first-party static import cycles are not allowed/);
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.doesNotMatch(promotion.output, /first-party static import/);
   });
 });
 
-test('promotion still rejects unapproved privileged owners and importers', () => {
+test('promotion relies on exact staging instead of rerunning ordinary privileged checks', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write(
@@ -2842,25 +3435,85 @@ test('promotion still rejects unapproved privileged owners and importers', () =>
     );
     const head = commit('add unapproved privileged caller');
 
-    const promotion = executePromotion({ execute, root, base, head });
-    assert.equal(promotion.status, 1, promotion.output);
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
     assert.match(
-      promotion.output,
+      ordinary.output,
       /privileged capability owners or importers exceed the base allowlist/
     );
-    assert.match(promotion.output, /Diagram Worker: owner app\/secondary\.js/);
+    assert.match(ordinary.output, /Diagram Worker: owner app\/secondary\.js/);
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.doesNotMatch(promotion.output, /privileged capability/);
   });
 });
 
-test('promotion still rejects an invalid architecture registry', () => {
+test('promotion relies on exact staging instead of parsing ordinary architecture authority', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write('tools/web-architecture-rules.json', '{\n');
     const head = commit('malform architecture registry');
 
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(ordinary.output, /candidate architecture rules: Cannot parse/);
+
     const promotion = executePromotion({ execute, root, base, head });
-    assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /candidate architecture rules: Cannot parse/);
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.doesNotMatch(promotion.output, /architecture rules/);
+  });
+});
+
+test('arbitrary-head and fork pull requests to main fail the bounded promotion gate', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('fixture-note.txt', 'safe source change\n');
+    const head = commit('candidate source');
+    const cases = [
+      [
+        'arbitrary head',
+        { headRef: 'feature/example' },
+        /Promotion pull requests must use dev as the head branch/
+      ],
+      [
+        'fork head',
+        { headRepository: 'contributor/gbdraw' },
+        /Promotion pull requests must use dev from the current repository/
+      ]
+    ];
+    cases.forEach(([name, event, reason]) => {
+      const result = executePromotion({ execute, root, base, head, event });
+      assert.equal(result.status, 1, `${name}\n${result.output}`);
+      assert.match(result.output, /Context: PROMOTION/);
+      assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+      assert.match(result.output, /Review: \*\*CLEAR\*\*/);
+      assert.match(result.output, reason);
+      assert.match(result.output, /Status: NOT_EVALUATED/);
+    });
+  });
+});
+
+test('malformed pull-request metadata fails before ordinary inventory evaluation', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('fixture-note.txt', 'safe source change\n');
+    const head = commit('candidate source');
+    const eventPath = join(root, '.git', 'malformed-event.json');
+    writeFileSync(eventPath, '{', 'utf8');
+    const result = execute({
+      base,
+      head,
+      environment: {
+        GITHUB_EVENT_NAME: 'pull_request_target',
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: 'satoshikawato/gbdraw'
+      }
+    });
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+    assert.match(result.output, /GitHub pull request event payload is missing or malformed/);
+    assert.doesNotMatch(result.output, /Architecture differential|Production files touched/);
   });
 });
 
@@ -2888,8 +3541,10 @@ test('promotion accepts a content-neutral main merge commit without a sync PR', 
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Promotion source coverage: PASS/);
-    assert.match(promotion.output, /Promotion coverage basis: MERGE_PARENT_TREE/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion source coverage'),
+      /Status: PASS[\s\S]*Basis: MERGE_PARENT_TREE/
+    );
     assert.equal(
       promotionReportSection(promotion.output, 'Blocking violations').trim(),
       '- None'
@@ -2923,8 +3578,10 @@ test('promotion rejects a main merge commit with main-only tree content', () => 
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /Promotion source coverage: FAIL/);
-    assert.match(promotion.output, /Promotion coverage basis: MAIN_CONTENT_MISSING/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion source coverage'),
+      /Status: FAIL[\s\S]*Basis: MAIN_CONTENT_MISSING/
+    );
     assert.match(
       promotion.output,
       /The promotion source does not contain the current main content\. Merge or rebase main into dev, then rerun the promotion\./
@@ -2944,8 +3601,10 @@ test('promotion fails when dev does not contain current main content', () => {
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /Promotion source coverage: FAIL/);
-    assert.match(promotion.output, /Promotion coverage basis: MAIN_CONTENT_MISSING/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion source coverage'),
+      /Status: FAIL[\s\S]*Basis: MAIN_CONTENT_MISSING/
+    );
     assert.match(
       promotion.output,
       /The promotion source does not contain the current main content\. Merge or rebase main into dev, then rerun the promotion\./
@@ -2967,7 +3626,7 @@ test('pull request SHA mismatches are blocking metadata errors', () => {
       event: { base: 'f'.repeat(40) }
     });
     assert.equal(result.status, 1, result.output);
-    assert.match(result.output, /Change context: ORDINARY/);
+    assert.match(result.output, /Context: PROMOTION/);
     assert.match(result.output, /Checker base SHA does not match the GitHub event payload/);
   });
 });
