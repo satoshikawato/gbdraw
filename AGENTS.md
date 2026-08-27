@@ -112,6 +112,17 @@ For changes affecting Web runtime or normative Web behavior contracts:
 - Keep minimal smoke diagrams in tests. Do not use them as tutorial images, Gallery entries, release examples, or other public showcases.
 - Render and visually inspect the final artifact at a readable scale. Confirm that its documented command, session, or reproduction recipe generates the displayed figure.
 
+## Pull request communication
+
+- Before creating, editing, or reviewing a PR title or maintainer-facing body,
+  read `.agents/skills/write-clear-pull-request/SKILL.md`.
+- Write for a maintainer who has not read the implementation plan or earlier
+  PRs. Internal labels are metadata, not explanations.
+- Keep exact identifiers in backticks and explain their concrete role.
+- Prepare the complete body file first, then run `gh pr create` or a
+  wording-changing `gh pr edit` as a separate command so the hook can inspect it.
+- Do not use `gh pr create --fill`, `--fill-first`, or `--fill-verbose`.
+
 ## Completion Handoff
 
 - After completing an implementation, treat the session as one commit and provide a proposed commit title and summary in English.

@@ -1,3 +1,14 @@
+<!--
+Use a concrete action and object in the PR title. Assume the reader has not read the implementation plan or earlier PRs.
+-->
+
+## Plain-language summary
+
+<!--
+In 2-4 sentences, explain what changes, why it changes, and what will be different after merge.
+Keep exact check names, paths, and identifiers in backticks, then explain their role in ordinary language.
+-->
+
 ## Change class
 
 Select exactly one:
