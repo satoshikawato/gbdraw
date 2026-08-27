@@ -717,9 +717,17 @@ test('Product Impact authority bootstrap accepts zero or two inert JSON files', 
     valid: true,
     errors: []
   });
-  assert.deepEqual(
-    map.ruleCoverage.map(({ enforcement }) => enforcement),
-    ['report-only', 'report-only']
+  const pilotEnforcement = map.ruleCoverage
+    .filter(({ ruleKey }) => [
+      'canonical-path.render-request',
+      'semantic-owner.render-request'
+    ].includes(ruleKey))
+    .map(({ enforcement }) => enforcement);
+  assert.equal(pilotEnforcement.length, 2);
+  assert.equal(
+    new Set(pilotEnforcement).size,
+    1,
+    'the two render-request pilot rules must activate in the same stage'
   );
   assert.deepEqual(decisions.decisions, []);
   map.concerns.flatMap(({ contracts }) => contracts).forEach(({ ref }) => {
@@ -1779,6 +1787,11 @@ const preauthorizedCanonicalRulesSource = rulesSource((rules) => {
 const reportOnlyCanonicalRulesSource = rulesSource((rules) => {
   canonicalRule(rules).enforcement = 'report-only';
 });
+const reportOnlyProductImpactMapSource = (() => {
+  const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
+  map.ruleCoverage.forEach((coverage) => { coverage.enforcement = 'report-only'; });
+  return `${JSON.stringify(map, null, 2)}\n`;
+})();
 const productImpactMapSourceForRules = (architectureSource) => {
   const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
   const architecture = JSON.parse(architectureSource);
@@ -2445,7 +2458,10 @@ test('report-only Product Impact regression requires review without changing a p
       assert.match(output, /Observation: ORDINARY_REGRESSION/);
       assert.match(output, /Gate contribution: None \(report-only/);
     },
-    { 'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource },
+    {
+      'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource
+    },
     productImpactPullRequestEnvironment()
   );
 });
@@ -2636,7 +2652,10 @@ test('mapped contract changes are surfaced while unrelated tests add no Product 
       assert.match(output, /mapped contract changed in the candidate/);
       assert.match(output, /Gate contribution: None \(report-only/);
     },
-    { 'tools/web-architecture-rules.json': reportOnlyRules },
+    {
+      'tools/web-architecture-rules.json': reportOnlyRules,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource
+    },
     productImpactPullRequestEnvironment()
   );
 
@@ -2660,7 +2679,10 @@ test('Product Impact stdout and GitHub summary use the same deterministic report
       assert.equal(output, summary);
       assert.match(summary, /Observation: ORDINARY_REGRESSION/);
     },
-    { 'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource },
+    {
+      'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource
+    },
     productImpactPullRequestEnvironment({ summary: true })
   );
 });
@@ -2762,6 +2784,7 @@ test('report-only rules report absence without consulting an accepted store or f
     },
     {
       'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
+      'tools/web-product-impact-map.json': reportOnlyProductImpactMapSource,
       'tools/web-architecture-violations.json': 'not valid JSON and must not be loaded\n'
     }
   );
