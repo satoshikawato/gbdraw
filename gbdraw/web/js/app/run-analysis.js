@@ -822,6 +822,7 @@ export const createRunAnalysis = ({
     generationCancelRequested,
     results,
     selectedResultIndex,
+    failedGeneratePreservedResult,
     resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
@@ -4236,11 +4237,19 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null
-  ) => runAnalysisInternal({
-    runMode: 'manual',
-    comparisonPlanSnapshot,
-    generatedArtifactHandle
-  });
+  ) => {
+    const outcome = await runAnalysisInternal({
+      runMode: 'manual',
+      comparisonPlanSnapshot,
+      generatedArtifactHandle
+    });
+    if (outcome?.status === 'error') {
+      failedGeneratePreservedResult.value = results.value.length > 0;
+    } else if (outcome?.status === 'ok') {
+      failedGeneratePreservedResult.value = false;
+    }
+    return outcome;
+  };
 
   const cancelRunAnalysis = () => {
     latestGenerationToken += 1;

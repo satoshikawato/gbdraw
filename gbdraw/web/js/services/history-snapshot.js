@@ -1042,8 +1042,14 @@ export const createHistorySnapshotService = ({
     return Object.freeze(handle);
   };
 
-  const restoreGeneratedArtifactHandle = async (handle) => {
+  const restoreGeneratedArtifactHandle = async (
+    handle,
+    { clearFailedGeneratePresentation = false } = {}
+  ) => {
     if (!handle || handle.kind !== 'GeneratedArtifactHandle') return false;
+    if (clearFailedGeneratePresentation && state.failedGeneratePreservedResult) {
+      state.failedGeneratePreservedResult.value = false;
+    }
     if (generatedArtifactRestoreDepth === 0) {
       restoreSemanticSuppressionBaseline = Boolean(
         getGeneratedArtifactRef(state.semanticFileWatchersSuppressed, false)

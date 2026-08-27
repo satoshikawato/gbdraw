@@ -428,6 +428,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     { status: 'ok' },
     JSON.stringify(state.errorLog.value)
   );
+  assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.deepEqual(state.results.value, [committedResult]);
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
   assert.equal(state.extractedFeatures.value.length, 1);
@@ -456,6 +457,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
     state.errorLog.value?.summary || '',
     /incompatible feature metadata/
@@ -467,6 +469,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     { schema: 2, items: [] }
   ));
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
     state.errorLog.value?.summary || '',
     /incompatible feature metadata/
@@ -502,6 +505,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   cancelDuringCandidate = true;
   assert.deepEqual(await runner.runAnalysis(), { status: 'canceled' });
   cancelDuringCandidate = false;
+  assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.deepEqual(committedFeatureState(), canceledState);
   assert.notEqual(state.results.value, canceledResultIdentity);
   assert.deepEqual(state.results.value, canceledResultIdentity);
@@ -528,6 +532,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const readyResult = result('ready.svg', 'ready');
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
+  assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(activePrimaryReads, 2);
 
   Object.assign(state.circularRecordDiscovery, {
