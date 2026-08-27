@@ -1517,7 +1517,7 @@ const reportSection = (output, heading) => {
 };
 
 const workflowWarningCount = (output) => (
-  output.match(/::warning title=Web change size review::/g) || []
+  output.match(/::warning title=Web policy review required::/g) || []
 ).length;
 
 const assertNonWaivableWorkingTreeFailure = (mutate, expectedPatterns, context = '') => {
@@ -1744,6 +1744,21 @@ test('a first-party static self-import fails as a one-node cycle', () => {
   );
 });
 
+test('an unresolved first-party static import fails closed', () => {
+  withTrustedArchitectureRepository(
+    (write) => write(
+      'gbdraw/web/js/app/unresolved.js',
+      "import './missing-module.js';\nexport const unresolved = true;\n"
+    ),
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+      assert.match(output, /head first-party static import graph is incomplete/);
+      assert.match(output, /cannot resolve first-party static import \.\/missing-module\.js/);
+    }
+  );
+});
+
 test('two-node and three-node first-party static cycles fail', () => {
   const cases = [
     {
@@ -1838,7 +1853,8 @@ test('compatibility-like names report and a private helper adds no authority', (
         output,
         /Registered Authority Location Count \| 1 \| 0 \| 0 \| 1 \| 0 \| registered rule/
       );
-      assert.match(output, /Result: \*\*PASS\*\*/);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     }
   );
 });
@@ -1908,6 +1924,41 @@ test('an inactive preauthorized edge does not fail', () => {
   );
 });
 
+test('a preauthorized one-for-one canonical path move passes and requires review', () => {
+  const preauthorizedPolicy = JSON.parse(JSON.stringify(WEB_CHANGE_POLICY));
+  for (const target of ['services/diagram-generation.js', 'services/session-request.js']) {
+    preauthorizedPolicy.allowedPrivilegedImporters[target].push('app/alternate.js');
+    preauthorizedPolicy.allowedPrivilegedImporters[target].sort();
+  }
+  for (const capability of ['Diagram Worker', 'Render request']) {
+    preauthorizedPolicy.allowedPrivilegedOwners[capability].push('app/alternate.js');
+    preauthorizedPolicy.allowedPrivilegedOwners[capability].sort();
+  }
+  withTrustedArchitectureRepository(
+    (write) => {
+      write('gbdraw/web/js/app/run-analysis.js', 'export const run = () => 1;\n');
+      write('gbdraw/web/js/app/alternate.js', canonicalCallerSource);
+    },
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(
+        reportSection(output, 'Review reasons'),
+        /Architecture-bearing signals:.*registered canonical contracts/
+      );
+      assert.match(
+        output,
+        /canonical-path\.render-request \| subject=app\/alternate\.js -> services\/session-request\.js .* decision=PASS/
+      );
+    },
+    {
+      'tools/web-architecture-rules.json': preauthorizedCanonicalRulesSource,
+      'tools/web-change-policy.json': `${JSON.stringify(preauthorizedPolicy, null, 2)}\n`
+    }
+  );
+});
+
 test('report-only rules report absence without consulting an accepted store or failing', () => {
   withTrustedArchitectureRepository(
     (write) => write(
@@ -1920,7 +1971,8 @@ test('report-only rules report absence without consulting an accepted store or f
         output,
         /canonical-path\.render-request .* observation=ABSENT_REQUIRED .* mode=REPORT_ONLY .* decision=REPORT/
       );
-      assert.match(output, /Result: \*\*PASS\*\*/);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     },
     {
       'tools/web-architecture-rules.json': reportOnlyCanonicalRulesSource,
@@ -1935,7 +1987,8 @@ test('hard rules do not consult an accepted-violation store', () => {
     ({ status, output }) => {
       assert.equal(status, 0, output);
       assert.doesNotMatch(output, /Cannot parse tools\/web-architecture-violations\.json/);
-      assert.match(output, /Result: \*\*PASS\*\*/);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*CLEAR\*\*/);
     },
     { 'tools/web-architecture-violations.json': 'not valid JSON and must not be loaded\n' }
   );
@@ -1947,7 +2000,8 @@ test('trusted checker rejects malformed proposed rule JSON as inert data', () =>
     ({ status, output }) => {
       assert.equal(status, 1, output);
       assert.match(output, /Cannot parse tools\/web-architecture-rules\.json/);
-      assert.match(output, /Result: \*\*FAIL\*\*/);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     }
   );
 });
@@ -2009,6 +2063,22 @@ test('proposed detector ID and implementation cannot alter trusted source observ
   );
 });
 
+test('isolated architecture-rule preauthorization passes and requires review', () => {
+  withTrustedArchitectureRepository(
+    (write) => write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      assert.match(output, /Gate: \*\*PASS\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(
+        reportSection(output, 'Review reasons'),
+        /registered architecture-rule authority changed/
+      );
+      assert.match(output, /Classification: EXPANSION/);
+    }
+  );
+});
+
 test('mutually conforming proposed rules and source cannot replace base authority', () => {
   const proposedRules = rulesSource((rules) => {
     canonicalRule(rules).allowedEdges = [{
@@ -2029,7 +2099,8 @@ test('mutually conforming proposed rules and source cannot replace base authorit
         /canonical-path\.render-request \| subject=app\/alternate\.js -> services\/session-request\.js \| observation=DIVERGENT .* decision=FAIL/
       );
       assert.match(output, /architecture rule authority changes must be isolated/);
-      assert.match(output, /Result: \*\*FAIL\*\*/);
+      assert.match(output, /Gate: \*\*FAIL\*\*/);
+      assert.match(output, /Review: \*\*REQUIRED\*\*/);
     }
   );
 });
@@ -2046,19 +2117,19 @@ test('fixed profiles classify exact and excess production-file review thresholds
       exact.output,
       new RegExp(`Size-review threshold for production files: ${profile.productionFiles}`)
     );
-    assert.match(exact.output, /Result: \*\*PASS\*\*/);
-    assert.match(exact.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(exact.output, 'Size review reasons').trim(), '- None');
+    assert.match(exact.output, /Gate: \*\*PASS\*\*/);
+    assert.match(exact.output, /Review: \*\*REQUIRED\*\*/);
+    assert.doesNotMatch(reportSection(exact.output, 'Review reasons'), /Size and scope:/);
 
     const excess = runChangeBudgetCase(
       (write) => writeBudgetFiles(write, profile.productionFiles + 1),
       profile.environment
     );
     assert.equal(excess.status, 0, `${profile.name} excess\n${excess.output}`);
-    assert.match(excess.output, /Result: \*\*PASS\*\*/);
-    assert.match(excess.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(excess.output, /Gate: \*\*PASS\*\*/);
+    assert.match(excess.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(excess.output, 'Size review reasons'),
+      reportSection(excess.output, 'Review reasons'),
       new RegExp(
         `production files changed exceed ${profile.name} size-review threshold `
         + `\\(${profile.productionFiles + 1} > ${profile.productionFiles}\\)`
@@ -2079,18 +2150,18 @@ test('fixed profiles classify exact and excess gross-churn review thresholds', (
     }, profile.environment);
     assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
     assert.match(exact.output, new RegExp(`Gross churn: ${profile.grossChurn}`));
-    assert.match(exact.output, /Result: \*\*PASS\*\*/);
-    assert.match(exact.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(exact.output, 'Size review reasons').trim(), '- None');
+    assert.match(exact.output, /Gate: \*\*PASS\*\*/);
+    assert.match(exact.output, /Review: \*\*CLEAR\*\*/);
+    assert.equal(reportSection(exact.output, 'Review reasons').trim(), '- None');
 
     const excess = runChangeBudgetCase((write) => {
       write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(replacementLines, 1));
     }, profile.environment);
     assert.equal(excess.status, 0, `${profile.name} excess\n${excess.output}`);
-    assert.match(excess.output, /Result: \*\*PASS\*\*/);
-    assert.match(excess.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(excess.output, /Gate: \*\*PASS\*\*/);
+    assert.match(excess.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(excess.output, 'Size review reasons'),
+      reportSection(excess.output, 'Review reasons'),
       new RegExp(
         `production gross churn exceeds ${profile.name} size-review threshold `
         + `\\(${profile.grossChurn + 1} > ${profile.grossChurn}\\)`
@@ -2110,18 +2181,18 @@ test('fixed profiles classify exact and excess net-addition review thresholds', 
     }, profile.environment);
     assert.equal(exact.status, 0, `${profile.name} exact\n${exact.output}`);
     assert.match(exact.output, new RegExp(`Net additions: ${profile.netAdditions}`));
-    assert.match(exact.output, /Result: \*\*PASS\*\*/);
-    assert.match(exact.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(exact.output, 'Size review reasons').trim(), '- None');
+    assert.match(exact.output, /Gate: \*\*PASS\*\*/);
+    assert.match(exact.output, /Review: \*\*CLEAR\*\*/);
+    assert.equal(reportSection(exact.output, 'Review reasons').trim(), '- None');
 
     const excess = runChangeBudgetCase((write) => {
       write('gbdraw/web/js/app/budget-lines.js', budgetLineSource(0, profile.netAdditions + 1));
     }, profile.environment);
     assert.equal(excess.status, 0, `${profile.name} excess\n${excess.output}`);
-    assert.match(excess.output, /Result: \*\*PASS\*\*/);
-    assert.match(excess.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(excess.output, /Gate: \*\*PASS\*\*/);
+    assert.match(excess.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(excess.output, 'Size review reasons'),
+      reportSection(excess.output, 'Review reasons'),
       new RegExp(
         `production net additions exceed ${profile.name} size-review threshold `
         + `\\(${profile.netAdditions + 1} > ${profile.netAdditions}\\)`
@@ -2138,8 +2209,8 @@ test('the architecture label selects a larger advisory profile without waiving b
   const mutate = (write) => writeBudgetFiles(write, 9);
   const ordinary = runChangeBudgetCase(mutate);
   assert.equal(ordinary.status, 0, ordinary.output);
-  assert.match(ordinary.output, /Result: \*\*PASS\*\*/);
-  assert.match(ordinary.output, /Size review: \*\*REQUIRED\*\*/);
+  assert.match(ordinary.output, /Gate: \*\*PASS\*\*/);
+  assert.match(ordinary.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(
     ordinary.output,
     /production files changed exceed ordinary size-review threshold \(9 > 8\)/
@@ -2149,8 +2220,12 @@ test('the architecture label selects a larger advisory profile without waiving b
   const architecture = runChangeBudgetCase(mutate, { WEB_ARCHITECTURE_CHANGE: 'true' });
   assert.equal(architecture.status, 0, architecture.output);
   assert.match(architecture.output, /Selected profile: architecture/);
-  assert.match(architecture.output, /Result: \*\*PASS\*\*/);
-  assert.match(architecture.output, /Size review: \*\*CLEAR\*\*/);
+  assert.match(architecture.output, /Gate: \*\*PASS\*\*/);
+  assert.match(architecture.output, /Review: \*\*REQUIRED\*\*/);
+  assert.doesNotMatch(
+    reportSection(architecture.output, 'Review reasons'),
+    /Size and scope:/
+  );
   assert.doesNotMatch(architecture.output, /waived/i);
 });
 
@@ -2163,8 +2238,8 @@ test('net-zero rewrites above gross thresholds require review in both profiles',
       );
     }, profile.environment);
     assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
-    assert.match(result.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(result.output, /Net additions: 0/);
     assert.match(result.output, /production gross churn exceeds .* size-review threshold/);
   });
@@ -2186,7 +2261,53 @@ test('new module, export, create, reactive, and watcher signals are report-only'
     assert.match(result.output, /createBudgetOwner/);
     assert.match(result.output, /budgetState \(ref\)/);
     assert.match(result.output, /\+1 watcher call/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   });
+});
+
+test('registered performance, reference-output, and session paths require review', () => {
+  const cases = [
+    [
+      'performance',
+      (write) => write('tests/performance/gallery-publication-baseline.json', '{}\n'),
+      /registered performance evidence paths changed/
+    ],
+    [
+      'reference output',
+      (write) => write('tests/reference_outputs/fixture.svg', '<svg/>\n'),
+      /reference output paths changed/
+    ],
+    [
+      'session contract',
+      (write) => write(
+        'gbdraw/web/js/services/session-file.js',
+        'export const readSession = () => ({ version: 2 });\n'
+      ),
+      /registered session or compatibility paths changed/
+    ]
+  ];
+  cases.forEach(([name, mutate, reason]) => {
+    const result = runChangeBudgetCase(mutate);
+    assert.equal(result.status, 0, `${name}\n${result.output}`);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.match(reportSection(result.output, 'Review reasons'), reason);
+  });
+});
+
+test('review reasons are deduplicated and deterministically sorted', () => {
+  const result = runChangeBudgetCase((write) => {
+    write('tests/performance/gallery-publication-baseline.json', '{}\n');
+    write('tests/reference_outputs/fixture.svg', '<svg/>\n');
+    write('gbdraw/web/js/app/review-signal.js', 'export const createCacheManager = () => 1;\n');
+  });
+  assert.equal(result.status, 0, result.output);
+  const reasons = reportSection(result.output, 'Review reasons')
+    .trim()
+    .split('\n')
+    .map((line) => line.replace(/^- /, ''));
+  assert.deepEqual(reasons, [...new Set(reasons)].sort((left, right) => left.localeCompare(right)));
 });
 
 test('report-only inventory contractions display removals without failing', () => {
@@ -2218,7 +2339,7 @@ test('report-only inventory contractions display removals without failing', () =
   );
 });
 
-test('the GitHub step summary separates merge result from size review', () => {
+test('the GitHub step summary leads with independent Gate and Review results', () => {
   BUDGET_PROFILES.forEach((profile) => {
     withChangeBudgetRepository(({ execute, root, write }) => {
       const summaryPath = join(root, 'step-summary.md');
@@ -2231,13 +2352,14 @@ test('the GitHub step summary separates merge result from size review', () => {
       });
       assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
       const summary = readFileSync(summaryPath, 'utf8');
-      assert.match(summary, /Result: \*\*PASS\*\*/);
-      assert.match(summary, /Size review: \*\*REQUIRED\*\*/);
+      assert.match(summary, /Gate: \*\*PASS\*\*/);
+      assert.match(summary, /Review: \*\*REQUIRED\*\*/);
+      assert.doesNotMatch(summary, /- Result:|- Size review:/);
       assert.match(
         summary,
         new RegExp(`Size-review threshold for production files: ${profile.productionFiles}`)
       );
-      assert.match(summary, /## Architecture differential summary/);
+      assert.match(summary, /## Key architecture differential summary/);
       assert.match(
         summary,
         /\| Inventory \| Before \| Added \| Removed \| After \| Delta \| Classification \|/
@@ -2246,7 +2368,7 @@ test('the GitHub step summary separates merge result from size review', () => {
       assert.match(summary, /## Production files touched/);
       assert.match(summary, /## Production additions\/deletions/);
       assert.match(
-        reportSection(summary, 'Size review reasons'),
+        reportSection(summary, 'Review reasons'),
         new RegExp(
           `production files changed exceed ${profile.name} size-review threshold `
           + `\\(${profile.productionFiles + 1} > ${profile.productionFiles}\\)`
@@ -2257,8 +2379,28 @@ test('the GitHub step summary separates merge result from size review', () => {
   });
 });
 
-test('size review and blocking violations produce independent result states', () => {
+test('review reasons and blocking violations produce the four independent decision states', () => {
   BUDGET_PROFILES.forEach((profile) => {
+    const clear = runChangeBudgetCase((write) => {
+      write(
+        'gbdraw/web/js/services/diagram-generation.js',
+        'export const runDiagramGeneration = () => 2;\n'
+      );
+    }, profile.environment);
+    assert.equal(clear.status, 0, `${profile.name} clear\n${clear.output}`);
+    assert.match(clear.output, /Gate: \*\*PASS\*\*/);
+    assert.match(clear.output, /Review: \*\*CLEAR\*\*/);
+
+    const reviewOnly = runChangeBudgetCase((write) => {
+      write(
+        'gbdraw/web/js/app/budget-lines.js',
+        budgetLineSource(profile.grossChurn / 2, 1)
+      );
+    }, profile.environment);
+    assert.equal(reviewOnly.status, 0, `${profile.name} review only\n${reviewOnly.output}`);
+    assert.match(reviewOnly.output, /Gate: \*\*PASS\*\*/);
+    assert.match(reviewOnly.output, /Review: \*\*REQUIRED\*\*/);
+
     const mixed = runChangeBudgetCase((write) => {
       writeBudgetFiles(write, profile.productionFiles + 1);
       write(
@@ -2267,10 +2409,10 @@ test('size review and blocking violations produce independent result states', ()
       );
     }, profile.environment);
     assert.equal(mixed.status, 1, `${profile.name} mixed\n${mixed.output}`);
-    assert.match(mixed.output, /Result: \*\*FAIL\*\*/);
-    assert.match(mixed.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(mixed.output, /Gate: \*\*FAIL\*\*/);
+    assert.match(mixed.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
-      reportSection(mixed.output, 'Size review reasons'),
+      reportSection(mixed.output, 'Review reasons'),
       /production files changed exceed/
     );
     assert.match(
@@ -2289,9 +2431,9 @@ test('size review and blocking violations produce independent result states', ()
       );
     }, profile.environment);
     assert.equal(blockerOnly.status, 1, `${profile.name} blocker only\n${blockerOnly.output}`);
-    assert.match(blockerOnly.output, /Result: \*\*FAIL\*\*/);
-    assert.match(blockerOnly.output, /Size review: \*\*CLEAR\*\*/);
-    assert.equal(reportSection(blockerOnly.output, 'Size review reasons').trim(), '- None');
+    assert.match(blockerOnly.output, /Gate: \*\*FAIL\*\*/);
+    assert.match(blockerOnly.output, /Review: \*\*CLEAR\*\*/);
+    assert.equal(reportSection(blockerOnly.output, 'Review reasons').trim(), '- None');
     assert.match(
       reportSection(blockerOnly.output, 'Blocking violations'),
       /new production dependencies are not allowed/
@@ -2299,7 +2441,7 @@ test('size review and blocking violations produce independent result states', ()
   });
 });
 
-test('GitHub Actions emits one bounded warning when size review is required', () => {
+test('GitHub Actions emits one bounded warning only when Review is required', () => {
   BUDGET_PROFILES.forEach((profile) => {
     const required = runChangeBudgetCase((write) => {
       write(
@@ -2309,25 +2451,27 @@ test('GitHub Actions emits one bounded warning when size review is required', ()
       writeBudgetFiles(write, profile.productionFiles);
     }, { ...profile.environment, GITHUB_ACTIONS: 'true' });
     assert.equal(required.status, 0, `${profile.name} required\n${required.output}`);
-    assert.match(required.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(required.output, /Review: \*\*REQUIRED\*\*/);
     assert.equal(workflowWarningCount(required.output), 1, required.output);
     const warning = required.output.split('\n').find((line) => line.startsWith('::warning'));
     assert.match(
       warning,
       new RegExp(
-        '^::warning title=Web change size review::Web change size review required: '
-        + `profile=${profile.name}; productionFiles=\\d+/${profile.productionFiles}; `
-        + `grossChurn=\\d+/${profile.grossChurn}; `
-        + `netAdditions=-?\\d+/${profile.netAdditions}$`
+        '^::warning title=Web policy review required::Web policy review required: '
+        + 'reasons=4; categories=Architecture-bearing signals=1, Size and scope=3; '
+        + 'see the step summary\\.$'
       )
     );
 
     const clear = runChangeBudgetCase(
-      (write) => writeBudgetFiles(write, profile.productionFiles),
+      (write) => write(
+        'gbdraw/web/js/services/diagram-generation.js',
+        'export const runDiagramGeneration = () => 2;\n'
+      ),
       { ...profile.environment, GITHUB_ACTIONS: 'true' }
     );
     assert.equal(clear.status, 0, `${profile.name} clear\n${clear.output}`);
-    assert.match(clear.output, /Size review: \*\*CLEAR\*\*/);
+    assert.match(clear.output, /Review: \*\*CLEAR\*\*/);
     assert.equal(workflowWarningCount(clear.output), 0, clear.output);
   });
 });
@@ -2389,6 +2533,44 @@ test('dependency, vendor, binary, and runtime/guard rules are non-waivable', () 
   });
 });
 
+test('malformed authority and unsupported accepted-violation authority fail canonically', () => {
+  const malformedPolicy = runChangeBudgetCase((write) => {
+    write('tools/web-change-policy.json', '{\n');
+  });
+  assert.equal(malformedPolicy.status, 1, malformedPolicy.output);
+  assert.match(malformedPolicy.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(malformedPolicy.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(malformedPolicy.output, /Web policy evaluation failed closed: Cannot parse/);
+
+  const acceptedViolation = runChangeBudgetCase((write) => {
+    write('tools/web-architecture-violations.json', '{"schemaVersion":1,"violations":[]}\n');
+  });
+  assert.equal(acceptedViolation.status, 1, acceptedViolation.output);
+  assert.match(acceptedViolation.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(acceptedViolation.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(acceptedViolation.output, /accepted-violation authority cannot be introduced/);
+});
+
+test('a trusted workflow cannot check out candidate head code', () => {
+  const result = runChangeBudgetCase((write) => {
+    write(
+      '.github/workflows/web-base-policy.yml',
+      'name: unsafe trusted workflow\n'
+        + 'on: pull_request_target\n'
+        + 'jobs:\n'
+        + '  policy:\n'
+        + '    steps:\n'
+        + '      - uses: actions/checkout@v4\n'
+        + '        with:\n'
+        + '          ref: ${{ github.event.pull_request.head.sha }}\n'
+    );
+  });
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(result.output, /candidate trusted workflow would check out/);
+});
+
 test('reserved future guard paths need not exist before their rollout', () => {
   assert.deepEqual(
     FUTURE_GUARD_PATHS.filter((path) => Object.hasOwn(BUDGET_FIXTURE, path)),
@@ -2396,7 +2578,9 @@ test('reserved future guard paths need not exist before their rollout', () => {
   );
   const result = runChangeBudgetCase(() => {});
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*CLEAR\*\*/);
+  assert.doesNotMatch(result.output, /- Result:|- Size review:/);
 });
 
 test('runtime cannot co-change with any protected architecture guard path', () => {
@@ -2421,7 +2605,11 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/check-promotion-readiness.mjs'
   ];
   const authorityPaths = [
+    'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    'docs/internal/WEB_CHANGE_POLICY.md',
     'tools/web-change-policy.json',
+    'tools/web-architecture-rules.json',
+    'tools/web-architecture-violations.json',
     '.github/workflows/gallery-publication.yml',
     '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
@@ -2436,7 +2624,7 @@ test('checker implementation and authority files cannot change together', () => 
           authorityPath,
           authorityPath === 'tools/web-change-policy.json'
             ? `${JSON.stringify(BUDGET_POLICY)}\n`
-            : `${BUDGET_FIXTURE[authorityPath]}# changed\n`
+            : `${BUDGET_FIXTURE[authorityPath] || reservedPathContent(authorityPath)}# changed\n`
         );
       }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
     });
@@ -2578,7 +2766,8 @@ test('the Web change-budget checker allows an owner-internal edit', () => {
     );
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*CLEAR\*\*/);
 });
 
 test('privileged ownership and import contractions do not require a policy edit', () => {
@@ -2589,13 +2778,15 @@ test('privileged ownership and import contractions do not require a policy edit'
     );
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
 });
 
 test('runtime removal may contract its now-inactive owner authorization in one revision', () => {
   const result = runRevisionChangeBudgetCase(applySingleOwnerContraction);
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(
     result.output,
     /allowedPrivilegedOwners\.Diagram Worker: app\/editor\.js/
@@ -2621,14 +2812,15 @@ test('runtime removal may contract exactly its inactive owner and importer autho
     removeEditorOwnerAndImporterUse(write);
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(
     result.output,
     /allowedPrivilegedImporters\.services\/diagram-generation\.js: app\/editor\.js/
   );
 });
 
-test('safe contraction is clear at every exact ordinary and architecture review threshold', () => {
+test('safe contraction passes but requires review at exact size thresholds', () => {
   BUDGET_PROFILES.forEach((profile) => {
     const result = runRevisionChangeBudgetCase((write) => {
       applySingleOwnerContraction(write);
@@ -2644,8 +2836,9 @@ test('safe contraction is clear at every exact ordinary and architecture review 
       writeBudgetFiles(write, additionalFiles);
     }, profile.environment);
     assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
-    assert.match(result.output, /Size review: \*\*CLEAR\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.doesNotMatch(reportSection(result.output, 'Review reasons'), /Size and scope:/);
     assert.match(
       result.output,
       new RegExp(`Size-review threshold for production files: ${profile.productionFiles}`)
@@ -2835,8 +3028,8 @@ test('safe contraction requires review above the selected production-file thresh
       writeBudgetFiles(write, profile.productionFiles);
     }, profile.environment);
     assert.equal(result.status, 0, `${profile.name}\n${result.output}`);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
-    assert.match(result.output, /Size review: \*\*REQUIRED\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
       result.output,
       new RegExp(
@@ -2912,7 +3105,8 @@ test('an unused privileged owner allowlist entry can contract', () => {
     const head = commit('remove inactive owner allowlist entry');
     const result = execute({ base, head });
     assert.equal(result.status, 0, result.output);
-    assert.match(result.output, /Result: \*\*PASS\*\*/);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
     assert.match(
       result.output,
       /allowedPrivilegedOwners\.Diagram Worker: app\/future-owner\.js/
@@ -3003,6 +3197,8 @@ test('privileged expansion requires policy preauthorization on the base revision
 
     const preauthorization = execute();
     assert.equal(preauthorization.status, 0, preauthorization.output);
+    assert.match(preauthorization.output, /Gate: \*\*PASS\*\*/);
+    assert.match(preauthorization.output, /Review: \*\*REQUIRED\*\*/);
     const preauthorizedBase = commit('preauthorize secondary owner');
 
     write(
@@ -3013,7 +3209,8 @@ test('privileged expansion requires policy preauthorization on the base revision
     const implementationHead = commit('use preauthorized secondary owner');
     const implementation = execute({ base: preauthorizedBase, head: implementationHead });
     assert.equal(implementation.status, 0, implementation.output);
-    assert.match(implementation.output, /Result: \*\*PASS\*\*/);
+    assert.match(implementation.output, /Gate: \*\*PASS\*\*/);
+    assert.match(implementation.output, /Review: \*\*REQUIRED\*\*/);
 
     assert.equal(git(['diff', '--quiet', `${preauthorizedBase}^`, preauthorizedBase, '--', 'gbdraw/web']).status, 0);
   });
@@ -3033,6 +3230,7 @@ test('comments, strings, and local session object keys are not hard failures', (
   });
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Report-only session object keys and compatibility names/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
 });
 
 test('index.html growth counts toward the net-addition review threshold', () => {
@@ -3041,8 +3239,8 @@ test('index.html growth counts toward the net-addition review threshold', () => 
     write('gbdraw/web/index.html', `<main>baseline</main>\n${additions.join('\n')}\n`);
   });
   assert.equal(result.status, 0, result.output);
-  assert.match(result.output, /Result: \*\*PASS\*\*/);
-  assert.match(result.output, /Size review: \*\*REQUIRED\*\*/);
+  assert.match(result.output, /Gate: \*\*PASS\*\*/);
+  assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
   assert.match(result.output, /M gbdraw\/web\/index\.html/);
   assert.match(
     result.output,
@@ -3101,7 +3299,7 @@ test('trusted-base execution rejects self-authorization despite a successful hea
   });
 });
 
-test('promotion reports runtime and guard aggregation without weakening ordinary PRs', () => {
+test('promotion omits runtime and guard inventories without weakening ordinary PRs', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write('gbdraw/web/js/app/editor.js', 'export const editExistingOwner = () => 2;\n');
@@ -3119,7 +3317,7 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
       }
     });
     assert.equal(ordinary.status, 1, ordinary.output);
-    assert.match(ordinary.output, /Change context: ORDINARY/);
+    assert.match(ordinary.output, /Context: ORDINARY/);
     assert.match(
       ordinary.output,
       /production runtime files and Web guard\/CI files changed together/
@@ -3127,14 +3325,12 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Change context: PROMOTION/);
-    assert.match(promotion.output, /Promotion source coverage: PASS/);
-    assert.match(promotion.output, /Promotion coverage basis: DIRECT_ANCESTRY/);
-    assert.match(promotion.output, /Promotion aggregation observations: 1/);
-    assert.match(
-      promotionReportSection(promotion.output, 'Promotion aggregation observations'),
-      /production paths \(1\).*gbdraw\/web\/js\/app\/editor\.js.*guard paths \(1\).*\.github\/workflows\/test\.yml/
-    );
+    assert.match(promotion.output, /Context: PROMOTION/);
+    assert.match(promotion.output, /Gate: \*\*PASS\*\*/);
+    assert.match(promotion.output, /Review: \*\*CLEAR\*\*/);
+    assert.match(promotionReportSection(promotion.output, 'Promotion source coverage'), /Status: PASS/);
+    assert.match(promotionReportSection(promotion.output, 'Promotion source coverage'), /Basis: DIRECT_ANCESTRY/);
+    assert.doesNotMatch(promotion.output, /Production files touched|Architecture differential/);
     assert.equal(
       promotionReportSection(promotion.output, 'Blocking violations').trim(),
       '- None'
@@ -3142,7 +3338,7 @@ test('promotion reports runtime and guard aggregation without weakening ordinary
   });
 });
 
-test('promotion reports checker and authority aggregation without authorizing ordinary PRs', () => {
+test('promotion omits checker and authority aggregation without authorizing ordinary PRs', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write(
@@ -3161,15 +3357,13 @@ test('promotion reports checker and authority aggregation without authorizing or
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Promotion aggregation observations: 1/);
-    assert.match(
-      promotionReportSection(promotion.output, 'Promotion aggregation observations'),
-      /checker paths \(1\).*tools\/web-change-source\.mjs.*authority paths \(1\).*\.github\/workflows\/test\.yml/
-    );
+    assert.match(promotion.output, /Gate: \*\*PASS\*\*/);
+    assert.match(promotion.output, /Review: \*\*CLEAR\*\*/);
+    assert.doesNotMatch(promotion.output, /tools\/web-change-source\.mjs|\.github\/workflows\/test\.yml/);
   });
 });
 
-test('promotion and ordinary size excess use the same advisory thresholds', () => {
+test('promotion omits ordinary size profiling while ordinary review remains required', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     writeBudgetFiles(write, 9);
@@ -3178,8 +3372,8 @@ test('promotion and ordinary size excess use the same advisory thresholds', () =
 
     const ordinary = execute({ base, head });
     assert.equal(ordinary.status, 0, ordinary.output);
-    assert.match(ordinary.output, /Size review: \*\*REQUIRED\*\*/);
-    const ordinarySizeReasons = promotionReportSection(ordinary.output, 'Size review reasons');
+    assert.match(ordinary.output, /Review: \*\*REQUIRED\*\*/);
+    const ordinarySizeReasons = promotionReportSection(ordinary.output, 'Review reasons');
     assert.match(
       ordinarySizeReasons,
       /production files changed exceed ordinary size-review threshold \(10 > 8\)/
@@ -3199,20 +3393,8 @@ test('promotion and ordinary size excess use the same advisory thresholds', () =
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Size review: \*\*REQUIRED\*\*/);
-    const sizeReasons = promotionReportSection(promotion.output, 'Size review reasons');
-    assert.match(
-      sizeReasons,
-      /production files changed exceed ordinary size-review threshold \(10 > 8\)/
-    );
-    assert.match(
-      sizeReasons,
-      /production gross churn exceeds ordinary size-review threshold \(912 > 800\)/
-    );
-    assert.match(
-      sizeReasons,
-      /production net additions exceed ordinary size-review threshold \(110 > 100\)/
-    );
+    assert.match(promotion.output, /Review: \*\*CLEAR\*\*/);
+    assert.doesNotMatch(promotion.output, /size-review threshold|Production files touched/);
     assert.equal(
       promotionReportSection(promotion.output, 'Blocking violations').trim(),
       '- None'
@@ -3220,7 +3402,7 @@ test('promotion and ordinary size excess use the same advisory thresholds', () =
   });
 });
 
-test('promotion still rejects first-party static import cycles', () => {
+test('promotion relies on exact staging instead of rerunning ordinary import-cycle checks', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write(
@@ -3233,13 +3415,17 @@ test('promotion still rejects first-party static import cycles', () => {
     );
     const head = commit('introduce import cycle');
 
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(ordinary.output, /first-party static import cycles are not allowed/);
+
     const promotion = executePromotion({ execute, root, base, head });
-    assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /first-party static import cycles are not allowed/);
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.doesNotMatch(promotion.output, /first-party static import/);
   });
 });
 
-test('promotion still rejects unapproved privileged owners and importers', () => {
+test('promotion relies on exact staging instead of rerunning ordinary privileged checks', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write(
@@ -3249,25 +3435,85 @@ test('promotion still rejects unapproved privileged owners and importers', () =>
     );
     const head = commit('add unapproved privileged caller');
 
-    const promotion = executePromotion({ execute, root, base, head });
-    assert.equal(promotion.status, 1, promotion.output);
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
     assert.match(
-      promotion.output,
+      ordinary.output,
       /privileged capability owners or importers exceed the base allowlist/
     );
-    assert.match(promotion.output, /Diagram Worker: owner app\/secondary\.js/);
+    assert.match(ordinary.output, /Diagram Worker: owner app\/secondary\.js/);
+
+    const promotion = executePromotion({ execute, root, base, head });
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.doesNotMatch(promotion.output, /privileged capability/);
   });
 });
 
-test('promotion still rejects an invalid architecture registry', () => {
+test('promotion relies on exact staging instead of parsing ordinary architecture authority', () => {
   withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
     const base = git(['rev-parse', 'HEAD']).stdout.trim();
     write('tools/web-architecture-rules.json', '{\n');
     const head = commit('malform architecture registry');
 
+    const ordinary = execute({ base, head });
+    assert.equal(ordinary.status, 1, ordinary.output);
+    assert.match(ordinary.output, /candidate architecture rules: Cannot parse/);
+
     const promotion = executePromotion({ execute, root, base, head });
-    assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /candidate architecture rules: Cannot parse/);
+    assert.equal(promotion.status, 0, promotion.output);
+    assert.doesNotMatch(promotion.output, /architecture rules/);
+  });
+});
+
+test('arbitrary-head and fork pull requests to main fail the bounded promotion gate', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('fixture-note.txt', 'safe source change\n');
+    const head = commit('candidate source');
+    const cases = [
+      [
+        'arbitrary head',
+        { headRef: 'feature/example' },
+        /Promotion pull requests must use dev as the head branch/
+      ],
+      [
+        'fork head',
+        { headRepository: 'contributor/gbdraw' },
+        /Promotion pull requests must use dev from the current repository/
+      ]
+    ];
+    cases.forEach(([name, event, reason]) => {
+      const result = executePromotion({ execute, root, base, head, event });
+      assert.equal(result.status, 1, `${name}\n${result.output}`);
+      assert.match(result.output, /Context: PROMOTION/);
+      assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+      assert.match(result.output, /Review: \*\*CLEAR\*\*/);
+      assert.match(result.output, reason);
+      assert.match(result.output, /Status: NOT_EVALUATED/);
+    });
+  });
+});
+
+test('malformed pull-request metadata fails before ordinary inventory evaluation', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write('fixture-note.txt', 'safe source change\n');
+    const head = commit('candidate source');
+    const eventPath = join(root, '.git', 'malformed-event.json');
+    writeFileSync(eventPath, '{', 'utf8');
+    const result = execute({
+      base,
+      head,
+      environment: {
+        GITHUB_EVENT_NAME: 'pull_request_target',
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_REPOSITORY: 'satoshikawato/gbdraw'
+      }
+    });
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+    assert.match(result.output, /GitHub pull request event payload is missing or malformed/);
+    assert.doesNotMatch(result.output, /Architecture differential|Production files touched/);
   });
 });
 
@@ -3295,8 +3541,10 @@ test('promotion accepts a content-neutral main merge commit without a sync PR', 
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 0, promotion.output);
-    assert.match(promotion.output, /Promotion source coverage: PASS/);
-    assert.match(promotion.output, /Promotion coverage basis: MERGE_PARENT_TREE/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion source coverage'),
+      /Status: PASS[\s\S]*Basis: MERGE_PARENT_TREE/
+    );
     assert.equal(
       promotionReportSection(promotion.output, 'Blocking violations').trim(),
       '- None'
@@ -3330,8 +3578,10 @@ test('promotion rejects a main merge commit with main-only tree content', () => 
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /Promotion source coverage: FAIL/);
-    assert.match(promotion.output, /Promotion coverage basis: MAIN_CONTENT_MISSING/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion source coverage'),
+      /Status: FAIL[\s\S]*Basis: MAIN_CONTENT_MISSING/
+    );
     assert.match(
       promotion.output,
       /The promotion source does not contain the current main content\. Merge or rebase main into dev, then rerun the promotion\./
@@ -3351,8 +3601,10 @@ test('promotion fails when dev does not contain current main content', () => {
 
     const promotion = executePromotion({ execute, root, base, head });
     assert.equal(promotion.status, 1, promotion.output);
-    assert.match(promotion.output, /Promotion source coverage: FAIL/);
-    assert.match(promotion.output, /Promotion coverage basis: MAIN_CONTENT_MISSING/);
+    assert.match(
+      promotionReportSection(promotion.output, 'Promotion source coverage'),
+      /Status: FAIL[\s\S]*Basis: MAIN_CONTENT_MISSING/
+    );
     assert.match(
       promotion.output,
       /The promotion source does not contain the current main content\. Merge or rebase main into dev, then rerun the promotion\./
@@ -3374,7 +3626,7 @@ test('pull request SHA mismatches are blocking metadata errors', () => {
       event: { base: 'f'.repeat(40) }
     });
     assert.equal(result.status, 1, result.output);
-    assert.match(result.output, /Change context: ORDINARY/);
+    assert.match(result.output, /Context: PROMOTION/);
     assert.match(result.output, /Checker base SHA does not match the GitHub event payload/);
   });
 });

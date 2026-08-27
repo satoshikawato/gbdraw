@@ -68,11 +68,18 @@ export const classifyWebChangeContext = ({
     errors.push('Checker head SHA does not match the GitHub event payload.');
   }
 
-  const isPromotion = !errors.length
-    && eventBaseRef === 'main'
-    && eventHeadRef === 'dev'
-    && eventBaseRepository === repository
-    && eventHeadRepository === repository;
+  const isPromotion = eventBaseRef === 'main';
+  if (isPromotion) {
+    if (eventHeadRef && eventHeadRef !== 'dev') {
+      errors.push('Promotion pull requests must use dev as the head branch.');
+    }
+    if (eventBaseRepository && repository && eventBaseRepository !== repository) {
+      errors.push('Promotion pull requests must target the current repository.');
+    }
+    if (eventHeadRepository && repository && eventHeadRepository !== repository) {
+      errors.push('Promotion pull requests must use dev from the current repository.');
+    }
+  }
 
   return {
     context: isPromotion ? 'PROMOTION' : 'ORDINARY',
