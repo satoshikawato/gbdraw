@@ -13,6 +13,12 @@ ownership, and self-authorization boundaries are defined in
 [`WEB_CHANGE_POLICY.md`](./WEB_CHANGE_POLICY.md). A Review result can require
 human attention without changing the executable Gate result.
 
+Architecture-to-behavior traceability, product-impact classification, Decision
+Pack semantics, and product-decision eligibility are defined in
+[`PRODUCT_IMPACT_RATCHET.md`](./PRODUCT_IMPACT_RATCHET.md). That policy does not
+redefine semantic owner, canonical path, `OE`, `PE`, or `CB`, and it cannot
+waive an architecture Gate failure.
+
 The initial executable scope is the Web application. Human review applies to
 architecture-bearing changes across the repository. The ratchet protects
 convergence without treating fewer files or fewer lines as an architecture
