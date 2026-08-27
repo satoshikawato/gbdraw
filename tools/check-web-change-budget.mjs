@@ -316,15 +316,26 @@ const changedVendorPaths = productionPaths.filter((path) => path.startsWith('gbd
 const policyPath = 'tools/web-change-policy.json';
 const architectureRulesPath = 'tools/web-architecture-rules.json';
 const acceptedViolationsPath = 'tools/web-architecture-violations.json';
+const productImpactPolicyPath = 'docs/internal/PRODUCT_IMPACT_RATCHET.md';
+const productImpactMapPath = 'tools/web-product-impact-map.json';
+const productDecisionAuthorityPath = 'tools/web-product-decisions.json';
+const productImpactEvaluationPath = 'tools/web-product-impact-evaluation.mjs';
+const productImpactDecisionSourcePath = 'tools/web-product-impact-decision-source.mjs';
+const productImpactFixturePath = 'tests/web/product-impact-ratchet-fixtures.test.mjs';
 const trustedWorkflowPath = '.github/workflows/web-base-policy.yml';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  productImpactPolicyPath,
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
+  productImpactEvaluationPath,
+  productImpactDecisionSourcePath,
   architectureRulesPath,
   acceptedViolationsPath,
+  productImpactMapPath,
+  productDecisionAuthorityPath,
   'tools/web-change-source.mjs',
   'tools/web-promotion-context.mjs',
   'tools/check-promotion-readiness.mjs',
@@ -332,6 +343,7 @@ const guardPaths = new Set([
   'docs/internal/WEB_CHANGE_POLICY.md',
   'tests/web/architecture-contracts.test.mjs',
   'tests/web/architecture-ratchet-fixtures.test.mjs',
+  productImpactFixturePath,
   'tests/web/promotion-readiness.test.mjs',
   'tests/web/web-promotion-context.test.mjs',
   '.github/workflows/gallery-publication.yml',
@@ -344,15 +356,20 @@ const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
   'tools/web-architecture-evaluation.mjs',
+  productImpactEvaluationPath,
+  productImpactDecisionSourcePath,
   'tools/web-change-source.mjs',
   'tools/web-promotion-context.mjs',
   'tools/check-promotion-readiness.mjs'
 ]);
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  productImpactPolicyPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   architectureRulesPath,
   acceptedViolationsPath,
+  productImpactMapPath,
+  productDecisionAuthorityPath,
   policyPath,
   '.github/workflows/gallery-publication.yml',
   '.github/workflows/deploy_web.yml',
@@ -372,6 +389,11 @@ const governancePaths = new Set([
 const changedGovernancePaths = [...changed.keys()]
   .filter((path) => governancePaths.has(path))
   .sort();
+const narrowAuthorityBundlePaths = new Set([
+  architectureRulesPath,
+  productImpactMapPath,
+  productDecisionAuthorityPath
+]);
 const baseAcceptedViolationsSource = readRevisionFile(base, acceptedViolationsPath);
 const candidateAcceptedViolationsSource = readHeadFile(acceptedViolationsPath);
 const acceptedViolationAuthorityErrors = [];
@@ -821,7 +843,7 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
     );
     if (architectureAuthorityDelta.changes.length) {
       const companionPaths = [...changed.keys()]
-        .filter((path) => path !== architectureRulesPath)
+        .filter((path) => !narrowAuthorityBundlePaths.has(path))
         .sort();
       if (companionPaths.length) {
         candidateArchitectureErrors.push(

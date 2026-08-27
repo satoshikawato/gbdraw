@@ -85,6 +85,76 @@ const stableTextSet = (values, label) => {
   return Object.freeze(stableUnique(values));
 };
 
+const SUBJECT_DELTA_FIELDS = Object.freeze([
+  'afterSubjects',
+  'beforeSubjects',
+  'detector',
+  'kind',
+  'ruleKey',
+  'subjectCategory'
+]);
+const CANONICAL_IDENTIFIER_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+
+const canonicalSubjectSet = (values, label) => {
+  const subjects = stableTextSet(values, label);
+  subjects.forEach((subject) => {
+    if (!subject || subject !== subject.trim() || /[\u0000-\u001f\u007f]/.test(subject)) {
+      throw new Error(`${label} must contain canonical nonempty subject strings`);
+    }
+  });
+  return subjects;
+};
+
+export const createArchitectureSubjectDelta = (input) => {
+  if (!isRecord(input)) {
+    throw new Error('Architecture subject delta requires one input object');
+  }
+  const fields = Object.keys(input).sort(compareText);
+  if (
+    fields.length !== SUBJECT_DELTA_FIELDS.length
+    || fields.some((field, index) => field !== SUBJECT_DELTA_FIELDS[index])
+  ) {
+    throw new Error(
+      `Architecture subject delta requires exactly: ${SUBJECT_DELTA_FIELDS.join(', ')}`
+    );
+  }
+  if (typeof input.ruleKey !== 'string' || !RULE_KEY_PATTERN.test(input.ruleKey)) {
+    throw new Error('Architecture subject delta ruleKey must be a canonical rule key');
+  }
+  if (typeof input.detector !== 'string' || !DETECTOR_ID_PATTERN.test(input.detector)) {
+    throw new Error('Architecture subject delta detector must be a versioned detector ID');
+  }
+  for (const field of ['kind', 'subjectCategory']) {
+    if (
+      typeof input[field] !== 'string'
+      || !CANONICAL_IDENTIFIER_PATTERN.test(input[field])
+    ) {
+      throw new Error(`Architecture subject delta ${field} must be a canonical identifier`);
+    }
+  }
+  const beforeSubjects = canonicalSubjectSet(
+    input.beforeSubjects,
+    'Architecture subject delta beforeSubjects'
+  );
+  const afterSubjects = canonicalSubjectSet(
+    input.afterSubjects,
+    'Architecture subject delta afterSubjects'
+  );
+  const addedSubjects = Object.freeze(stableDifference(afterSubjects, beforeSubjects));
+  const removedSubjects = Object.freeze(stableDifference(beforeSubjects, afterSubjects));
+  return Object.freeze({
+    ruleKey: input.ruleKey,
+    kind: input.kind,
+    detector: input.detector,
+    subjectCategory: input.subjectCategory,
+    beforeSubjects,
+    addedSubjects,
+    removedSubjects,
+    afterSubjects,
+    changed: addedSubjects.length > 0 || removedSubjects.length > 0
+  });
+};
+
 export const summarizeArchitectureInventory = (beforeValues, afterValues) => {
   const before = stableTextSet(beforeValues, 'Architecture inventory before');
   const after = stableTextSet(afterValues, 'Architecture inventory after');

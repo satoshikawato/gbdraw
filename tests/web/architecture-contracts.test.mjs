@@ -33,6 +33,10 @@ import {
   validateArchitectureRuleRegistry
 } from '../../tools/web-architecture-evaluation.mjs';
 import {
+  validateProductDecisionAuthority,
+  validateProductImpactMap
+} from '../../tools/web-product-impact-evaluation.mjs';
+import {
   literalImportSpecifiers,
   maskJavaScript
 } from '../../tools/web-change-source.mjs';
@@ -111,6 +115,22 @@ const WEB_ARCHITECTURE_RULES = JSON.parse(WEB_ARCHITECTURE_RULES_SOURCE);
 const WEB_CHANGE_BUDGET_SOURCE = readFileSync(
   join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs'),
   'utf8'
+);
+const PRODUCT_IMPACT_EVALUATION_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-product-impact-evaluation.mjs'),
+  'utf8'
+);
+const PRODUCT_IMPACT_DECISION_SOURCE = readFileSync(
+  join(REPOSITORY_ROOT, 'tools/web-product-impact-decision-source.mjs'),
+  'utf8'
+);
+const PRODUCT_IMPACT_MAP_PATH = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-impact-map.json'
+);
+const PRODUCT_DECISIONS_PATH = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-decisions.json'
 );
 
 const normalizePath = (path) => path.split(sep).join('/');
@@ -660,6 +680,43 @@ test('pure architecture evaluation owns no I/O, source detection, or authority d
   assert.doesNotMatch(WEB_ARCHITECTURE_EVALUATION_SOURCE, /^#!|process\.argv/);
 });
 
+test('pure Product Impact mechanics own no I/O, Git, environment, reporting, or CLI', () => {
+  for (const source of [PRODUCT_IMPACT_EVALUATION_SOURCE, PRODUCT_IMPACT_DECISION_SOURCE]) {
+    assert.doesNotMatch(source, /^\s*import\s/m);
+    assert.doesNotMatch(
+      source,
+      /node:(?:fs|path|child_process|process)|process\.|console\.|(?:read|write|append)File|execFile|spawn|fetch\s*\(/
+    );
+    assert.doesNotMatch(source, /^#!|process\.argv/);
+  }
+  assert.doesNotMatch(
+    PRODUCT_IMPACT_EVALUATION_SOURCE,
+    /web-product-impact-(?:map|decisions)\.json|web-architecture-rules\.json/
+  );
+});
+
+test('Product Impact authority bootstrap accepts zero or two inert JSON files', () => {
+  const mapExists = existsSync(PRODUCT_IMPACT_MAP_PATH);
+  const decisionsExist = existsSync(PRODUCT_DECISIONS_PATH);
+  assert.equal(
+    mapExists,
+    decisionsExist,
+    'Product Impact map and durable decision authority must be introduced together'
+  );
+  if (!mapExists) return;
+
+  const map = JSON.parse(readFileSync(PRODUCT_IMPACT_MAP_PATH, 'utf8'));
+  const decisions = JSON.parse(readFileSync(PRODUCT_DECISIONS_PATH, 'utf8'));
+  assert.deepEqual(
+    validateProductImpactMap(map, WEB_ARCHITECTURE_RULES, WEB_ARCHITECTURE_DETECTORS),
+    { valid: true, errors: [] }
+  );
+  assert.deepEqual(validateProductDecisionAuthority(decisions, map), {
+    valid: true,
+    errors: []
+  });
+});
+
 test('registered architecture authority and executable matching have separate owners', () => {
   assert.deepEqual(Object.keys(WEB_ARCHITECTURE_RULES), ['schemaVersion', 'rules']);
   assert.doesNotMatch(
@@ -694,6 +751,11 @@ test('the Web checker remains the sole evaluator orchestrator and CLI entry poin
   assert.match(WEB_CHANGE_BUDGET_SOURCE, /^#!\/usr\/bin\/env node/);
   assert.match(WEB_CHANGE_BUDGET_SOURCE, /WEB_ARCHITECTURE_DETECTORS\[rule\.detector\]/);
   assert.doesNotMatch(WEB_CHANGE_BUDGET_SOURCE, /import\s*\(.*web-architecture-detectors/);
+  assert.doesNotMatch(
+    WEB_CHANGE_BUDGET_SOURCE,
+    /from '\.\/web-product-impact-(?:evaluation|decision-source)\.mjs'/
+  );
+  assert.doesNotMatch(WEB_CHANGE_BUDGET_SOURCE, /## Product impact/);
 });
 
 test('report-only source facts preserve the characterized masking behavior', () => {
@@ -1060,6 +1122,25 @@ test('the PR template retains architecture evidence anchors', () => {
   });
 });
 
+test('the PR template contains one optional bounded Product Impact decision block', () => {
+  const startMarkers = PULL_REQUEST_TEMPLATE.match(
+    /<!-- gbdraw-product-impact-decision:start -->/g
+  ) || [];
+  const endMarkers = PULL_REQUEST_TEMPLATE.match(
+    /<!-- gbdraw-product-impact-decision:end -->/g
+  ) || [];
+  assert.equal(startMarkers.length, 1);
+  assert.equal(endMarkers.length, 1);
+  assert.ok(
+    PULL_REQUEST_TEMPLATE.indexOf(startMarkers[0])
+      < PULL_REQUEST_TEMPLATE.indexOf(endMarkers[0])
+  );
+  assert.match(
+    PULL_REQUEST_TEMPLATE,
+    /\{"schemaVersion":1,"headSha":"","decisions":\[\]\}/
+  );
+});
+
 test('the PR template requires exact changed-scope architecture debt arithmetic', () => {
   [
     'Owner-excess rows (repeat for every changed capability)',
@@ -1166,9 +1247,21 @@ const WEB_ARCHITECTURE_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-architecture-evaluation.mjs'
 );
+const PRODUCT_IMPACT_EVALUATION_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-impact-evaluation.mjs'
+);
+const PRODUCT_IMPACT_DECISION_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-product-impact-decision-source.mjs'
+);
 const WEB_ARCHITECTURE_RATCHET_FIXTURES = join(
   REPOSITORY_ROOT,
   'tests/web/architecture-ratchet-fixtures.test.mjs'
+);
+const PRODUCT_IMPACT_RATCHET_FIXTURES = join(
+  REPOSITORY_ROOT,
+  'tests/web/product-impact-ratchet-fixtures.test.mjs'
 );
 const WEB_PROMOTION_CONTEXT_MODULE = join(
   REPOSITORY_ROOT,
@@ -1250,6 +1343,14 @@ const BUDGET_FIXTURE = Object.freeze({
     WEB_ARCHITECTURE_EVALUATION_MODULE,
     'utf8'
   ),
+  'tools/web-product-impact-evaluation.mjs': readFileSync(
+    PRODUCT_IMPACT_EVALUATION_MODULE,
+    'utf8'
+  ),
+  'tools/web-product-impact-decision-source.mjs': readFileSync(
+    PRODUCT_IMPACT_DECISION_MODULE,
+    'utf8'
+  ),
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
   'tools/web-change-source.mjs': readFileSync(
     join(REPOSITORY_ROOT, 'tools/web-change-source.mjs'),
@@ -1262,6 +1363,10 @@ const BUDGET_FIXTURE = Object.freeze({
   'tools/web-change-policy.json': `${JSON.stringify(BUDGET_POLICY, null, 2)}\n`,
   'tests/web/architecture-ratchet-fixtures.test.mjs': readFileSync(
     WEB_ARCHITECTURE_RATCHET_FIXTURES,
+    'utf8'
+  ),
+  'tests/web/product-impact-ratchet-fixtures.test.mjs': readFileSync(
+    PRODUCT_IMPACT_RATCHET_FIXTURES,
     'utf8'
   ),
   'gbdraw/web/index.html': '<main>baseline</main>\n',
@@ -1304,6 +1409,28 @@ const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   'tools/web-architecture-rules.json',
   'tools/web-architecture-violations.json'
+]);
+const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
+  'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  'tools/web-product-impact-map.json',
+  'tools/web-product-decisions.json',
+  'tools/web-product-impact-evaluation.mjs',
+  'tools/web-product-impact-decision-source.mjs',
+  'tests/web/product-impact-ratchet-fixtures.test.mjs'
+]);
+const PRODUCT_IMPACT_CHECKER_IMPLEMENTATION_PATHS = Object.freeze([
+  'tools/web-product-impact-evaluation.mjs',
+  'tools/web-product-impact-decision-source.mjs'
+]);
+const PRODUCT_IMPACT_AUTHORITY_PATHS = Object.freeze([
+  'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  'tools/web-product-impact-map.json',
+  'tools/web-product-decisions.json'
+]);
+const NARROW_PRODUCT_IMPACT_AUTHORITY_BUNDLE = Object.freeze([
+  'tools/web-architecture-rules.json',
+  'tools/web-product-impact-map.json',
+  'tools/web-product-decisions.json'
 ]);
 const reservedPathContent = (path) => {
   if (path === 'tools/web-architecture-rules.json') {
@@ -2554,6 +2681,70 @@ test('reserved future guard paths need not exist before their rollout', () => {
   assert.doesNotMatch(result.output, /- Result:|- Size review:/);
 });
 
+test('every Product Impact policy, checker, authority, parser, and fixture path is guarded', () => {
+  PRODUCT_IMPACT_GUARD_PATHS.forEach((guardPath) => {
+    assertNonWaivableWorkingTreeFailure((write) => {
+      write(
+        'gbdraw/web/js/services/session-file.js',
+        'export const readSession = () => ({ version: 2 });\n'
+      );
+      write(
+        guardPath,
+        BUDGET_FIXTURE[guardPath]
+          ? `${BUDGET_FIXTURE[guardPath]}\n// changed\n`
+          : reservedPathContent(guardPath)
+      );
+    }, [/production runtime files and Web guard\/CI files changed together/], guardPath);
+  });
+});
+
+test('Product Impact checker implementation is separate from Product Impact authority', () => {
+  PRODUCT_IMPACT_CHECKER_IMPLEMENTATION_PATHS.forEach((implementationPath) => {
+    PRODUCT_IMPACT_AUTHORITY_PATHS.forEach((authorityPath) => {
+      assertNonWaivableWorkingTreeFailure((write) => {
+        write(
+          implementationPath,
+          `${BUDGET_FIXTURE[implementationPath]}\n// changed\n`
+        );
+        write(authorityPath, reservedPathContent(authorityPath));
+      }, [/Web checker\/source parser and authority policy\/workflow files changed together/]);
+    });
+  });
+});
+
+test('the narrow inert authority bundle contains only architecture rules, map, and decisions', () => {
+  assert.deepEqual(NARROW_PRODUCT_IMPACT_AUTHORITY_BUNDLE, [
+    'tools/web-architecture-rules.json',
+    'tools/web-product-impact-map.json',
+    'tools/web-product-decisions.json'
+  ]);
+
+  const productAuthorityOnly = runChangeBudgetCase((write) => {
+    write('tools/web-product-impact-map.json', '{"schemaVersion":1}\n');
+    write('tools/web-product-decisions.json', '{"schemaVersion":1}\n');
+  });
+  assert.equal(productAuthorityOnly.status, 0, productAuthorityOnly.output);
+  assert.match(productAuthorityOnly.output, /Gate: \*\*PASS\*\*/);
+  assert.match(productAuthorityOnly.output, /Review: \*\*REQUIRED\*\*/);
+
+  const completeBundle = runChangeBudgetCase((write) => {
+    write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource);
+    write('tools/web-product-impact-map.json', '{"schemaVersion":1}\n');
+    write('tools/web-product-decisions.json', '{"schemaVersion":1}\n');
+  });
+  assert.equal(completeBundle.status, 0, completeBundle.output);
+  assert.match(completeBundle.output, /Classification: EXPANSION/);
+
+  const expandedBundle = runChangeBudgetCase((write) => {
+    write('tools/web-architecture-rules.json', preauthorizedCanonicalRulesSource);
+    write('tools/web-product-impact-map.json', '{"schemaVersion":1}\n');
+    write('tools/web-product-decisions.json', '{"schemaVersion":1}\n');
+    write('docs/internal/PRODUCT_IMPACT_RATCHET.md', '# changed policy\n');
+  });
+  assert.equal(expandedBundle.status, 1, expandedBundle.output);
+  assert.match(expandedBundle.output, /architecture rule authority changes must be isolated/);
+});
+
 test('runtime cannot co-change with any protected architecture guard path', () => {
   PROTECTED_ARCHITECTURE_GUARD_PATHS.forEach((guardPath) => {
     assertNonWaivableWorkingTreeFailure((write) => {
@@ -2572,15 +2763,20 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
+    'tools/web-product-impact-evaluation.mjs',
+    'tools/web-product-impact-decision-source.mjs',
     'tools/web-promotion-context.mjs',
     'tools/check-promotion-readiness.mjs'
   ];
   const authorityPaths = [
     'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    'docs/internal/PRODUCT_IMPACT_RATCHET.md',
     'docs/internal/WEB_CHANGE_POLICY.md',
     'tools/web-change-policy.json',
     'tools/web-architecture-rules.json',
     'tools/web-architecture-violations.json',
+    'tools/web-product-impact-map.json',
+    'tools/web-product-decisions.json',
     '.github/workflows/gallery-publication.yml',
     '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
@@ -2608,6 +2804,8 @@ test('all checker implementations are separated from reserved future authority',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
+    'tools/web-product-impact-evaluation.mjs',
+    'tools/web-product-impact-decision-source.mjs',
     'tools/web-promotion-context.mjs',
     'tools/check-promotion-readiness.mjs'
   ];
