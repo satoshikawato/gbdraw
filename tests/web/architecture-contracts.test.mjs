@@ -804,7 +804,8 @@ test('report-only source facts preserve the characterized masking behavior', () 
 });
 
 test('workflow triggers separate dev admission, dev staging, promotion, and deployment', () => {
-  const activityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
+  const candidateActivityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
+  const trustedActivityTypes = /types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/;
   const triggerBranches = (workflow, trigger) => {
     const match = workflow.match(new RegExp(
       `\\r?\\n  ${trigger}:\\r?\\n    branches: (\\[[^\\r\\n]+\\])`
@@ -816,7 +817,8 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
   assert.match(TEST_WORKFLOW, /\n  pull_request:\n/);
   assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'pull_request'), ['dev']);
   assert.deepEqual(triggerBranches(TEST_WORKFLOW, 'push'), ['dev']);
-  assert.match(TEST_WORKFLOW, activityTypes);
+  assert.match(TEST_WORKFLOW, candidateActivityTypes);
+  assert.doesNotMatch(TEST_WORKFLOW, /types: \[[^\]\r\n]*\bedited\b/);
   assert.match(TEST_WORKFLOW, /name: Run core tests/);
   assert.match(
     TEST_WORKFLOW,
@@ -828,10 +830,20 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
     triggerBranches(BASE_POLICY_WORKFLOW, 'pull_request_target'),
     ['dev', 'main']
   );
-  assert.match(BASE_POLICY_WORKFLOW, activityTypes);
+  assert.match(BASE_POLICY_WORKFLOW, trustedActivityTypes);
   assert.match(
     BASE_POLICY_WORKFLOW,
     /permissions:\n  contents: read\n  pull-requests: read\n  actions: read/
+  );
+  assert.match(
+    BASE_POLICY_WORKFLOW,
+    /group: web-base-policy-\$\{\{ github\.event\.pull_request\.number \}\}/
+  );
+  assert.deepEqual(
+    WORKFLOW_NAMES.filter((name, index) => (
+      /types: \[[^\]\r\n]*\bedited\b/.test(WORKFLOW_SOURCES[index])
+    )),
+    ['web-base-policy.yml']
   );
 
   assert.deepEqual(triggerBranches(GALLERY_PUBLICATION_WORKFLOW, 'push'), ['dev']);
@@ -1054,6 +1066,15 @@ test('trusted promotion uses base code for topology, exact-SHA evidence, and tre
   const devPolicy = workflowJob('trusted-base-policy', BASE_POLICY_WORKFLOW);
   assert.match(devPolicy, /\n    name: Web base policy \(trusted base\)\n/);
   assert.match(devPolicy, /if: github\.event\.pull_request\.base\.ref == 'dev'/);
+  assert.equal([...devPolicy.matchAll(/uses: actions\/checkout@/g)].length, 1);
+  assert.match(devPolicy, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(devPolicy, /fetch-depth: 0/);
+  assert.match(devPolicy, /persist-credentials: false/);
+  assert.match(devPolicy, /git fetch --no-tags origin "\$HEAD_SHA"/);
+  assert.doesNotMatch(
+    devPolicy,
+    /ref:.*pull_request\.head|git (?:checkout|switch) |uses: \.\//
+  );
 
   const promotion = workflowJob('promotion-gate', BASE_POLICY_WORKFLOW);
   assert.match(promotion, /\n    name: Promotion \/ gate\n/);
