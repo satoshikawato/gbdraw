@@ -14,11 +14,18 @@ import {
 import {
   classifyArchitectureAuthorityDelta,
   classifyArchitectureRuleObservation,
+  createArchitectureSubjectDelta,
   evaluateArchitectureRuleResult,
   findDirectedGraphCycles,
   summarizeArchitectureInventory,
   validateArchitectureRuleRegistry
 } from './web-architecture-evaluation.mjs';
+import { parseCurrentProductImpactDecisions } from './web-product-impact-decision-source.mjs';
+import {
+  evaluateProductImpact,
+  validateProductDecisionAuthority,
+  validateProductImpactMap
+} from './web-product-impact-evaluation.mjs';
 import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
 import {
   classifyWebChangeContext,
@@ -33,6 +40,10 @@ const runGit = (root, args, options = {}) => execFileSync(
 
 const stableReasons = (values) => [...new Set(values.filter(Boolean))]
   .sort((left, right) => left.localeCompare(right));
+const safeReportText = (value) => String(value || '')
+  .replace(/([\\`*{}\[\]<>#|])/g, '\\$1');
+const reportSentenceFragment = (value) => safeReportText(value).replace(/[.!?]+$/, '');
+const inlineCode = (value) => `\`${String(value || '').replaceAll('`', '\\`')}\``;
 const createPolicyResult = ({
   blockingViolations = [],
   reviewReasons = [],
@@ -112,6 +123,37 @@ const changeContext = classifyWebChangeContext({
   baseSha: base,
   headSha: head
 });
+const emptyPullRequestProductImpactMetadata = Object.freeze({
+  authorLogin: '',
+  body: '',
+  headSha: '',
+  trustedToDev: false
+});
+const pullRequestProductImpactMetadata = (() => {
+  if (
+    githubEventName !== 'pull_request_target'
+    || changeContext.isPromotion
+    || changeContext.errors.length
+    || !githubEventPayloadSource
+  ) {
+    return emptyPullRequestProductImpactMetadata;
+  }
+  try {
+    const payload = JSON.parse(githubEventPayloadSource);
+    const pullRequest = payload?.pull_request;
+    if (pullRequest?.base?.ref !== 'dev') return emptyPullRequestProductImpactMetadata;
+    return Object.freeze({
+      authorLogin: typeof pullRequest?.user?.login === 'string'
+        ? pullRequest.user.login
+        : '',
+      body: typeof pullRequest?.body === 'string' ? pullRequest.body : '',
+      headSha: typeof pullRequest?.head?.sha === 'string' ? pullRequest.head.sha : '',
+      trustedToDev: true
+    });
+  } catch (_error) {
+    return emptyPullRequestProductImpactMetadata;
+  }
+})();
 
 const promotionSourceCoverage = (() => {
   if (!changeContext.isPromotion) {
@@ -226,6 +268,7 @@ if (!head) {
   ]).split('\0').filter(Boolean);
   untracked.forEach((path) => changed.set(path, 'A'));
 }
+const changedPaths = [...changed.keys()].sort();
 
 const numstat = new Map(
   parseDiffLines(runGit(repositoryRoot, [
@@ -233,12 +276,22 @@ const numstat = new Map(
   ])).map(([additions, deletions, path]) => [path, { additions, deletions }])
 );
 
+const revisionFileCache = new Map();
 const readRevisionFile = (revision, path) => {
+  const key = `${revision}\u0000${path}`;
+  if (revisionFileCache.has(key)) return revisionFileCache.get(key);
+  let source;
   try {
-    return runGit(repositoryRoot, ['show', `${revision}:${path}`], { stdio: ['ignore', 'pipe', 'ignore'] });
+    source = runGit(
+      repositoryRoot,
+      ['show', `${revision}:${path}`],
+      { stdio: ['ignore', 'pipe', 'ignore'] }
+    );
   } catch (_error) {
-    return null;
+    source = null;
   }
+  revisionFileCache.set(key, source);
+  return source;
 };
 
 const readRevisionFiles = (revision, paths) => {
@@ -693,6 +746,10 @@ let architectureAuthorityDelta = Object.freeze({
   directions: Object.freeze([]),
   changes: Object.freeze([])
 });
+let baseArchitectureRegistry = null;
+let candidateArchitectureRegistry = null;
+let baseArchitectureRuleFacts = [];
+let headArchitectureRuleFacts = [];
 
 const parseArchitectureRuleRegistry = (source, revision) => {
   if (source === null) return { registry: emptyRuleRegistry(), error: null };
@@ -731,6 +788,7 @@ const evaluateArchitectureSource = (registry, sources) => {
   const rows = [];
   const authorityLocations = [];
   const canonicalContracts = [];
+  const ruleFacts = [];
   [...registry.rules]
     .sort((left, right) => left.key.localeCompare(right.key))
     .forEach((rule) => {
@@ -738,6 +796,11 @@ const evaluateArchitectureSource = (registry, sources) => {
       try {
         const detectorOutput = detector.detect(sources);
         const observation = classifyArchitectureRuleObservation(rule, detectorOutput);
+        ruleFacts.push(Object.freeze({
+          ruleKey: rule.key,
+          subjectCategory: detector.subjectCategory,
+          subjects: Object.freeze([...observation.subjects].sort())
+        }));
         const result = evaluateArchitectureRuleResult({
           observation: observation.observation,
           mode: rule.enforcement.replace('-', '_').toUpperCase(),
@@ -773,7 +836,14 @@ const evaluateArchitectureSource = (registry, sources) => {
         errors.push(`${rule.key}: ${error.message}`);
       }
     });
-  return { errors, failures, rows, authorityLocations, canonicalContracts };
+  return {
+    errors,
+    failures,
+    rows,
+    authorityLocations,
+    canonicalContracts,
+    ruleFacts
+  };
 };
 
 const baseArchitectureRulesSource = readRevisionFile(base, architectureRulesPath);
@@ -811,6 +881,8 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
       ...formatRuleValidationErrors('candidate registry', candidateValidation)
     );
   }
+  if (baseValidation?.valid) baseArchitectureRegistry = parsedBase.registry;
+  if (candidateValidation?.valid) candidateArchitectureRegistry = parsedCandidate.registry;
 
   if (baseValidation?.valid) {
     const beforeArchitecture = evaluateArchitectureSource(
@@ -826,6 +898,8 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
     activeArchitectureErrors.push(...afterArchitecture.errors);
     activeArchitectureFailures.push(...afterArchitecture.failures);
     activeArchitectureRows.push(...afterArchitecture.rows);
+    baseArchitectureRuleFacts = beforeArchitecture.ruleFacts;
+    headArchitectureRuleFacts = afterArchitecture.ruleFacts;
     registeredAuthorityLocationDelta = summarizeArchitectureInventory(
       beforeArchitecture.authorityLocations,
       afterArchitecture.authorityLocations
@@ -915,6 +989,239 @@ if (baseArchitectureRulesSource !== null || proposedArchitectureRulesSource !== 
         }
       });
     }
+  }
+}
+
+const productImpactBaseErrors = [];
+const productImpactCandidateErrors = [];
+const productImpactDecisionDeclarationIssues = [];
+const changedProductImpactAuthorityPaths = [
+  productImpactMapPath,
+  productDecisionAuthorityPath
+].filter((path) => changed.has(path));
+const candidateAuthorityCompanionPaths = changedProductImpactAuthorityPaths.length
+  ? changedPaths.filter((path) => !narrowAuthorityBundlePaths.has(path))
+  : [];
+if (candidateAuthorityCompanionPaths.length) {
+  productImpactCandidateErrors.push(
+    'Product Impact authority changes must use only the narrow inert authority bundle: '
+    + candidateAuthorityCompanionPaths.join(', ')
+  );
+}
+
+const parseProductImpactJson = (source, path, revision, errors) => {
+  if (source === null) {
+    errors.push(`Missing required ${path} at ${revision}`);
+    return null;
+  }
+  try {
+    return JSON.parse(source);
+  } catch (error) {
+    errors.push(`Cannot parse ${path} at ${revision}: ${error.message}`);
+    return null;
+  }
+};
+const formatProductValidationErrors = (label, validation) => validation.errors.map((error) => (
+  `${label} ${error.path} [${error.code}]: ${error.message}`
+));
+const mappedContractPaths = (map) => stableReasons((map?.concerns || []).flatMap((concern) => (
+  (concern.contracts || []).map(({ ref }) => String(ref || '').split('::', 1)[0])
+)));
+const requireBaseContractFiles = (map, label, errors) => {
+  mappedContractPaths(map).forEach((path) => {
+    if (readRevisionFile(base, path) === null) {
+      errors.push(`${label} references a mapped contract file absent from trusted base: ${path}`);
+    }
+  });
+};
+
+const baseProductImpactMapSource = readRevisionFile(base, productImpactMapPath);
+const candidateProductImpactMapSource = readHeadFile(productImpactMapPath);
+const baseProductDecisionAuthoritySource = readRevisionFile(base, productDecisionAuthorityPath);
+const candidateProductDecisionAuthoritySource = readHeadFile(productDecisionAuthorityPath);
+const baseProductImpactMap = parseProductImpactJson(
+  baseProductImpactMapSource,
+  productImpactMapPath,
+  base,
+  productImpactBaseErrors
+);
+const candidateProductImpactMap = parseProductImpactJson(
+  candidateProductImpactMapSource,
+  productImpactMapPath,
+  head || 'working tree',
+  productImpactCandidateErrors
+);
+const baseProductDecisionAuthority = parseProductImpactJson(
+  baseProductDecisionAuthoritySource,
+  productDecisionAuthorityPath,
+  base,
+  productImpactBaseErrors
+);
+const candidateProductDecisionAuthority = parseProductImpactJson(
+  candidateProductDecisionAuthoritySource,
+  productDecisionAuthorityPath,
+  head || 'working tree',
+  productImpactCandidateErrors
+);
+
+let baseProductImpactMapValid = false;
+let candidateProductImpactMapValid = false;
+let baseProductDecisionAuthorityValid = false;
+let candidateProductDecisionAuthorityValid = false;
+if (baseProductImpactMap && baseArchitectureRegistry) {
+  const validation = validateProductImpactMap(
+    baseProductImpactMap,
+    baseArchitectureRegistry,
+    WEB_ARCHITECTURE_DETECTORS
+  );
+  baseProductImpactMapValid = validation.valid;
+  productImpactBaseErrors.push(...formatProductValidationErrors('base Product Impact map', validation));
+  if (validation.valid) requireBaseContractFiles(
+    baseProductImpactMap,
+    'Base Product Impact map',
+    productImpactBaseErrors
+  );
+}
+if (candidateProductImpactMap && candidateArchitectureRegistry) {
+  const validation = validateProductImpactMap(
+    candidateProductImpactMap,
+    candidateArchitectureRegistry,
+    WEB_ARCHITECTURE_DETECTORS
+  );
+  candidateProductImpactMapValid = validation.valid;
+  productImpactCandidateErrors.push(
+    ...formatProductValidationErrors('candidate Product Impact map', validation)
+  );
+  if (validation.valid) requireBaseContractFiles(
+    candidateProductImpactMap,
+    'Candidate Product Impact map',
+    productImpactCandidateErrors
+  );
+}
+if (baseProductDecisionAuthority && baseProductImpactMapValid) {
+  const validation = validateProductDecisionAuthority(
+    baseProductDecisionAuthority,
+    baseProductImpactMap
+  );
+  baseProductDecisionAuthorityValid = validation.valid;
+  productImpactBaseErrors.push(
+    ...formatProductValidationErrors('base Product Impact decisions', validation)
+  );
+}
+if (candidateProductDecisionAuthority && candidateProductImpactMapValid) {
+  const validation = validateProductDecisionAuthority(
+    candidateProductDecisionAuthority,
+    candidateProductImpactMap
+  );
+  candidateProductDecisionAuthorityValid = validation.valid;
+  productImpactCandidateErrors.push(
+    ...formatProductValidationErrors('candidate Product Impact decisions', validation)
+  );
+}
+
+const trustedBasePullRequest = githubEventName === 'pull_request_target'
+  && pullRequestProductImpactMetadata.trustedToDev;
+const productImpactRuntimeStatus = trustedBasePullRequest
+  ? 'TRUSTED_BASE_PULL_REQUEST'
+  : isPullRequestEvent(githubEventName)
+    ? 'NOT_AUTHORITATIVE_CANDIDATE'
+    : ['push', 'workflow_dispatch'].includes(githubEventName)
+      ? 'TRUSTED_INTEGRATED_DIFF'
+      : 'TRUSTED_LOCAL_DIFF';
+const parseCurrentDecisionSource = ({ body = '', authorLogin = '', headSha = '' } = {}) => (
+  parseCurrentProductImpactDecisions({
+    body,
+    eventAuthorLogin: authorLogin,
+    eventHeadSha: headSha
+  })
+);
+let currentProductImpactDecisions = parseCurrentDecisionSource();
+if (productImpactRuntimeStatus === 'TRUSTED_BASE_PULL_REQUEST') {
+  currentProductImpactDecisions = parseCurrentDecisionSource({
+    body: pullRequestProductImpactMetadata.body,
+    authorLogin: pullRequestProductImpactMetadata.authorLogin,
+    headSha: pullRequestProductImpactMetadata.headSha
+  });
+}
+if (!currentProductImpactDecisions.valid) {
+  const staleOnly = currentProductImpactDecisions.errors.length > 0
+    && currentProductImpactDecisions.errors.every(({ code }) => code === 'stale-head-sha');
+  if (staleOnly) {
+    productImpactDecisionDeclarationIssues.push(
+      'Observation: INSUFFICIENT_EVIDENCE. The current decision is stale for the event head SHA.'
+    );
+    currentProductImpactDecisions = parseCurrentDecisionSource({
+      authorLogin: pullRequestProductImpactMetadata.authorLogin,
+      headSha: pullRequestProductImpactMetadata.headSha
+    });
+  } else {
+    productImpactBaseErrors.push(...currentProductImpactDecisions.errors.map((error) => (
+      `current Product Impact decision ${error.path} [${error.code}]: ${error.message}`
+    )));
+  }
+}
+
+const baseRuleFactsByKey = new Map(
+  baseArchitectureRuleFacts.map((fact) => [fact.ruleKey, fact])
+);
+const headRuleFactsByKey = new Map(
+  headArchitectureRuleFacts.map((fact) => [fact.ruleKey, fact])
+);
+const productImpactRuleFacts = [];
+const productImpactSubjectDeltas = [];
+if (baseArchitectureRegistry) {
+  [...baseArchitectureRegistry.rules]
+    .sort((left, right) => left.key.localeCompare(right.key))
+    .forEach((rule) => {
+      const before = baseRuleFactsByKey.get(rule.key);
+      const after = headRuleFactsByKey.get(rule.key);
+      if (!before || !after) {
+        productImpactBaseErrors.push(
+          `Product Impact source facts are missing for architecture rule ${rule.key}`
+        );
+        return;
+      }
+      productImpactRuleFacts.push(Object.freeze({
+        ruleKey: rule.key,
+        subjectCategory: before.subjectCategory,
+        beforeSubjects: before.subjects,
+        afterSubjects: after.subjects
+      }));
+      try {
+        productImpactSubjectDeltas.push(createArchitectureSubjectDelta({
+          ruleKey: rule.key,
+          kind: rule.kind,
+          detector: rule.detector,
+          subjectCategory: before.subjectCategory,
+          beforeSubjects: before.subjects,
+          afterSubjects: after.subjects
+        }));
+      } catch (error) {
+        productImpactBaseErrors.push(
+          `Product Impact subject delta failed for ${rule.key}: ${error.message}`
+        );
+      }
+    });
+}
+
+let productImpactResults = [];
+if (
+  productImpactRuntimeStatus !== 'NOT_AUTHORITATIVE_CANDIDATE'
+  && baseProductImpactMapValid
+  && baseProductDecisionAuthorityValid
+  && !productImpactBaseErrors.length
+) {
+  try {
+    productImpactResults = evaluateProductImpact({
+      subjectDeltas: productImpactSubjectDeltas,
+      ruleFacts: productImpactRuleFacts,
+      map: baseProductImpactMap,
+      decisionAuthority: baseProductDecisionAuthority,
+      currentDecisions: currentProductImpactDecisions,
+      changedPaths
+    });
+  } catch (error) {
+    productImpactBaseErrors.push(`Product Impact runtime evaluation failed: ${error.message}`);
   }
 }
 
@@ -1070,7 +1377,6 @@ const architectureSignalDeltas = [
 const changedArchitectureSignals = architectureSignalDeltas
   .filter(([, delta]) => deltaChanged(delta))
   .map(([name]) => name);
-const changedPaths = [...changed.keys()].sort();
 const performanceEvidencePaths = new Set([
   'tests/test_gallery_publication_performance.py',
   'tests/test_performance_short_circuits.py',
@@ -1132,11 +1438,45 @@ if (changedSessionContractPaths.length) {
     `Material behavior/output risk: registered session or compatibility paths changed (${changedSessionContractPaths.join(', ')})`
   );
 }
+if (changedProductImpactAuthorityPaths.length) {
+  reviewReasons.push(
+    'Governance and authority: Product Impact authority changed for future revisions '
+    + `(${changedProductImpactAuthorityPaths.join(', ')})`
+  );
+}
+if (productImpactDecisionDeclarationIssues.length) {
+  reviewReasons.push(
+    `Product impact: current decision declaration requires attention (${productImpactDecisionDeclarationIssues.length} issue(s))`
+  );
+}
+productImpactResults.forEach((result) => {
+  const candidateModifiedContracts = result.contractResults
+    .filter(({ candidateModified }) => candidateModified)
+    .map(({ ref }) => ref);
+  if (
+    result.observation !== 'CONFORMING'
+    || result.impactClass !== 'NO_USER_VISIBLE_DIFFERENCE'
+    || result.currentDecisionIssues.length
+    || candidateModifiedContracts.length
+  ) {
+    reviewReasons.push(
+      `Product impact: ${result.concernKey} is ${result.observation} `
+      + `with ${result.impactClass}`
+    );
+  }
+  if (candidateModifiedContracts.length) {
+    reviewReasons.push(
+      `Product impact: mapped contract changed in the candidate (${candidateModifiedContracts.join(', ')})`
+    );
+  }
+});
 
 const blockingViolations = [
   ...changeContext.errors,
   ...acceptedViolationAuthorityErrors,
-  ...unsafeTrustedWorkflowChanges
+  ...unsafeTrustedWorkflowChanges,
+  ...productImpactBaseErrors.map((error) => `trusted Product Impact authority: ${error}`),
+  ...productImpactCandidateErrors.map((error) => `candidate Product Impact authority: ${error}`)
 ];
 if (newProductionDependencies.length) {
   blockingViolations.push('new production dependencies are not allowed');
@@ -1195,6 +1535,38 @@ blockingViolations.push(...activeArchitectureErrors.map((error) => (
 blockingViolations.push(...activeArchitectureFailures.map((error) => (
   `active architecture rules: ${error}`
 )));
+const productImpactCoverageByRule = new Map(
+  (baseProductImpactMap?.ruleCoverage || []).map((coverage) => [coverage.ruleKey, coverage])
+);
+const productImpactResultRuleKeys = (result) => {
+  if (result.triggeringRuleKeys.length) return result.triggeringRuleKeys;
+  const concern = (baseProductImpactMap?.concerns || []).find(({ key }) => (
+    key === result.concernKey
+  ));
+  return stableReasons((concern?.options || []).flatMap((option) => (
+    option.requirements.flatMap((requirement) => (
+      requirement.anyOf.map(({ ruleKey }) => ruleKey)
+    ))
+  )));
+};
+productImpactResults.forEach((result) => {
+  const hard = productImpactResultRuleKeys(result).some((ruleKey) => (
+    productImpactCoverageByRule.get(ruleKey)?.enforcement === 'hard'
+  ));
+  if (
+    hard
+    && [
+      'AUTHORITY_CONFLICT',
+      'INSUFFICIENT_EVIDENCE',
+      'ORDINARY_REGRESSION',
+      'UNRESOLVED_DECISION'
+    ].includes(result.observation)
+  ) {
+    blockingViolations.push(
+      `Product Impact hard enforcement: ${result.concernKey} is ${result.observation}`
+    );
+  }
+});
 const policyResult = createPolicyResult({
   blockingViolations,
   reviewReasons,
@@ -1202,6 +1574,8 @@ const policyResult = createPolicyResult({
   observations: {
     architectureAuthorityDelta,
     changedArchitectureSignals,
+    productImpactResults,
+    productImpactRuntimeStatus,
     productionGrossChurn,
     productionNetAdditions,
     productionPaths,
@@ -1316,6 +1690,277 @@ const fanOutRows = fanOutPaths.map((path) => {
   return `| ${path} | ${beforeCount} | ${afterCount} | ${signed(afterCount - beforeCount)} |`;
 });
 const statusRows = productionPaths.map((path) => `${changed.get(path)} ${path}`);
+const productConcernByKey = new Map(
+  (baseProductImpactMap?.concerns || []).map((concern) => [concern.key, concern])
+);
+const productDecisionOwnerLogin = currentProductImpactDecisions.metadata.eventAuthorLogin;
+const productDecisionOwnerEligible = Boolean(
+  productDecisionOwnerLogin
+  && baseProductDecisionAuthority?.maintainerLogins?.includes(productDecisionOwnerLogin)
+);
+const stableIntersection = (left, right) => {
+  const rightSet = new Set(right);
+  return left.filter((value) => rightSet.has(value));
+};
+const productImpactGateContribution = (result) => {
+  const hard = productImpactResultRuleKeys(result).some((ruleKey) => (
+    productImpactCoverageByRule.get(ruleKey)?.enforcement === 'hard'
+  ));
+  const blocking = [
+    'AUTHORITY_CONFLICT',
+    'INSUFFICIENT_EVIDENCE',
+    'ORDINARY_REGRESSION',
+    'UNRESOLVED_DECISION'
+  ].includes(result.observation);
+  return hard && blocking ? 'FAIL' : 'None (report-only for the triggering rule set)';
+};
+const renderDecisionPack = (result, concern) => {
+  const optionsById = new Map(concern.options.map((option) => [option.id, option]));
+  const optionResultsById = new Map(
+    result.optionResults.map((option) => [option.optionId, option])
+  );
+  const beforeOptionId = result.beforeOptions[0] || '';
+  const afterOptionId = result.afterOptions[0] || '';
+  const beforeEffects = result.beforeEffects;
+  const routeForMappedOption = (optionId) => {
+    const optionResult = optionResultsById.get(optionId);
+    if (!optionResult?.afterRealized) return 'NOT_ALLOWED';
+    const effectEquivalent = JSON.stringify([...optionResult.effectRefs].sort())
+      === JSON.stringify([...beforeEffects].sort());
+    if (!effectEquivalent) return 'DURABLE_AUTHORITY_REQUIRED';
+    return productDecisionOwnerEligible
+      ? 'PR_LOCAL_ALLOWED'
+      : 'DURABLE_AUTHORITY_REQUIRED';
+  };
+  const choices = [
+    {
+      code: 'A',
+      optionId: beforeOptionId,
+      outcome: beforeOptionId
+        ? `Keep the before behavior: ${optionsById.get(beforeOptionId)?.summary || beforeOptionId}`
+        : 'Keep the before behavior.',
+      route: beforeOptionId ? routeForMappedOption(beforeOptionId) : 'NOT_ALLOWED'
+    },
+    {
+      code: 'B',
+      optionId: afterOptionId,
+      outcome: afterOptionId
+        ? `Select the after behavior: ${optionsById.get(afterOptionId)?.summary || afterOptionId}`
+        : 'Select the after behavior.',
+      route: afterOptionId ? routeForMappedOption(afterOptionId) : 'NOT_ALLOWED'
+    },
+    {
+      code: 'C',
+      optionId: '',
+      outcome: 'Define a new mapped option that combines useful properties.',
+      route: 'DURABLE_AUTHORITY_REQUIRED'
+    },
+    {
+      code: 'D',
+      optionId: '',
+      outcome: 'Preserve both outcomes as distinct supported workflows.',
+      route: 'DURABLE_AUTHORITY_REQUIRED'
+    },
+    {
+      code: 'E',
+      optionId: '',
+      outcome: 'Intentionally retire a supported behavior or affordance.',
+      route: 'DURABLE_AUTHORITY_REQUIRED'
+    },
+    {
+      code: 'F',
+      optionId: '',
+      outcome: 'Defer the convergence and gather the missing evidence.',
+      route: 'EVIDENCE_REQUIRED'
+    }
+  ];
+  const renderOptionEffects = (optionId) => {
+    const effectRefs = optionsById.get(optionId)?.effectRefs || [];
+    return effectRefs.length
+      ? effectRefs.map((effectRef) => (
+        `${inlineCode(effectRef)}: ${reportSentenceFragment(
+          concern.effects.find(({ id }) => id === effectRef)?.statement
+        )}`
+      )).join('; ')
+      : 'not mapped';
+  };
+  return [
+    '',
+    '#### Decision Pack',
+    '',
+    '- Why a decision is required: the mapped options differ and no eligible authority selects the proposed outcome.',
+    `- Actor: ${safeReportText(result.journeys[0]?.actor)}`,
+    `- Context: ${safeReportText(result.journeys[0]?.context)}`,
+    `- Goal: ${safeReportText(result.journeys[0]?.goal)}`,
+    `- Action: ${(result.journeys[0]?.steps || []).map(safeReportText).join(' -> ')}`,
+    `- Before option(s): ${result.beforeOptions.length ? result.beforeOptions.map(inlineCode).join(', ') : 'None'}`,
+    `- After option(s): ${result.afterOptions.length ? result.afterOptions.map(inlineCode).join(', ') : 'None'}`,
+    `- Authority searched: ${result.authorityResolution}; no eligible selecting authority was found.`,
+    `- Product Decision Owner: base allowlisted maintainer; event author ${productDecisionOwnerLogin ? inlineCode(productDecisionOwnerLogin) : 'is unavailable'} (${productDecisionOwnerEligible ? 'eligible' : 'not eligible for PR-local routing'}).`,
+    '- Choices:',
+    ...choices.map(({ code, optionId, outcome, route }) => (
+      `  - ${code}. ${safeReportText(outcome)} Option ID: ${optionId ? inlineCode(optionId) : 'not mapped'}. Effects: ${renderOptionEffects(optionId)}. Route: ${inlineCode(route)}.`
+    )),
+    '- Removal consequences:',
+    `  - Lost effects: ${result.lostEffectRefs.length ? result.lostEffectRefs.map(inlineCode).join(', ') : 'None'}`,
+    `  - Lost affordance/compatibility requirements: ${result.lostRequirementRefs.length ? result.lostRequirementRefs.map(inlineCode).join(', ') : 'None'}`,
+    '- Route meanings:',
+    '  - `PR_LOCAL_ALLOWED`: Product Decision Owner response -> Codex serializes an exact-head PR-body decision.',
+    '  - `DURABLE_AUTHORITY_REQUIRED`: Product Decision Owner response -> Codex prepares a narrow authority-only PR -> merge -> rebase implementation.',
+    '  - `EVIDENCE_REQUIRED`: stop the runtime convergence and collect evidence or merge an evidence-only PR.',
+    '  - `NOT_ALLOWED`: revise the implementation; product authority cannot waive the failing boundary.',
+    '- The Product Decision Owner returns this short response to Codex. The human does not edit JSON, SHA, requirement refs, or evidence refs; Codex serializes only the explicit choice and the trusted checker validates it.',
+    '',
+    '```text',
+    'PRODUCT_DECISION',
+    `Concern: ${result.concernKey}`,
+    `Scenario revision: ${result.scenarioRevision}`,
+    'Choice:',
+    'Rationale:',
+    'Must preserve:',
+    'May retire:',
+    'Accepted residual risk:',
+    '```'
+  ];
+};
+const renderProductImpactPacket = (result) => {
+  const concern = productConcernByKey.get(result.concernKey);
+  if (!concern) return [];
+  const effectsById = new Map(concern.effects.map((effect) => [effect.id, effect]));
+  const preservedEffects = stableIntersection(result.beforeEffects, result.afterEffects);
+  const authorityRefs = concern.resolution.authorityRefs || [];
+  const durableDecision = (baseProductDecisionAuthority?.decisions || []).find((decision) => (
+    decision.concernKey === result.concernKey
+    && decision.scenarioRevision === result.scenarioRevision
+  ));
+  const currentDecision = (currentProductImpactDecisions.declaration.decisions || [])
+    .find((decision) => (
+      decision.concernKey === result.concernKey
+      && decision.scenarioRevision === result.scenarioRevision
+    ));
+  const authoritySelections = [
+    ...(['authority-covered', 'domain-derived'].includes(concern.resolution.kind) ? [{
+      type: concern.resolution.kind === 'domain-derived' ? 'DOMAIN_AUTHORITY' : 'STATIC_AUTHORITY',
+      selectedOptionId: concern.resolution.selectedOptionId
+    }] : []),
+    ...(durableDecision ? [{
+      type: 'DURABLE_DECISION',
+      selectedOptionId: durableDecision.selectedOptionId
+    }] : []),
+    ...(currentDecision ? [{
+      type: 'CURRENT_MAINTAINER_DECISION',
+      selectedOptionId: currentDecision.selectedOptionId
+    }] : [])
+  ];
+  const lines = [
+    `### ${result.concernKey}`,
+    '',
+    `- Scenario revision: ${result.scenarioRevision}`,
+    `- Layer: ${concern.layer}`,
+    `- Product Decision Owner eligibility: ${productDecisionOwnerEligible ? 'eligible base maintainer' : 'no eligible PR-local author in this context'}`,
+    '',
+    '#### Architecture delta',
+    '',
+    ...result.subjectDeltas.flatMap((delta) => [
+      `- Rule: ${inlineCode(delta.ruleKey)}`,
+      `  - Added: ${delta.addedSubjects.length ? delta.addedSubjects.map(inlineCode).join(', ') : 'None'}`,
+      `  - Removed: ${delta.removedSubjects.length ? delta.removedSubjects.map(inlineCode).join(', ') : 'None'}`
+    ]),
+    '',
+    '#### Journeys and checkpoints',
+    '',
+    ...result.journeys.flatMap((journey) => [
+      `- ${inlineCode(journey.id)}: ${safeReportText(journey.actor)}; ${safeReportText(journey.context)}`,
+      `  - Goal: ${safeReportText(journey.goal)}`,
+      `  - Checkpoints: ${journey.checkpoints.map(({ id }) => inlineCode(`${journey.id}:${id}`)).join(', ')}`
+    ]),
+    '',
+    '#### Requirement realization',
+    '',
+    '| Requirement | Category | Before | After | Before providers | After providers |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...result.requirementResults.map((requirement) => (
+      `| ${inlineCode(requirement.requirementRef)} | ${requirement.category} | ${requirement.beforeSatisfied} | ${requirement.afterSatisfied} | `
+      + `${requirement.beforeActiveSubjects.length ? requirement.beforeActiveSubjects.map(inlineCode).join(', ') : 'None'} | `
+      + `${requirement.afterActiveSubjects.length ? requirement.afterActiveSubjects.map(inlineCode).join(', ') : 'None'} |`
+    )),
+    '',
+    '#### Behavior options and effects',
+    '',
+    `- Before realized options: ${result.beforeOptions.length ? result.beforeOptions.map(inlineCode).join(', ') : 'None'}`,
+    `- After realized options: ${result.afterOptions.length ? result.afterOptions.map(inlineCode).join(', ') : 'None'}`,
+    `- Preserved effects: ${preservedEffects.length ? preservedEffects.map((id) => `${inlineCode(id)}: ${reportSentenceFragment(effectsById.get(id)?.statement)}`).join('; ') : 'None'}`,
+    `- Added effects: ${result.addedEffectRefs.length ? result.addedEffectRefs.map(inlineCode).join(', ') : 'None'}`,
+    `- Lost effects: ${result.lostEffectRefs.length ? result.lostEffectRefs.map(inlineCode).join(', ') : 'None'}`,
+    '',
+    '#### Authority and contracts',
+    '',
+    `- Resolution: ${result.authorityResolution}`,
+    `- Selected option: ${result.selectedOptionId ? inlineCode(result.selectedOptionId) : 'None'}`,
+    `- Authority selections: ${authoritySelections.length ? authoritySelections
+      .map(({ type, selectedOptionId }) => (
+        `${inlineCode(type)} -> ${inlineCode(selectedOptionId)}`
+      )).join('; ') : 'None'}`,
+    `- Authority references: ${authorityRefs.length ? authorityRefs.map(inlineCode).join(', ') : 'None'}`,
+    `- Current-decision rationale: ${result.decisionRationale ? safeReportText(result.decisionRationale) : 'None'}`,
+    ...result.contractResults.map((contract) => (
+      `- Contract ${inlineCode(contract.ref)}: sensitivity=${contract.sensitivity}; execution=${contract.execution}; integrity=${contract.candidateModified ? 'CANDIDATE_MODIFIED' : 'UNCHANGED'}`
+    )),
+    ...result.residualRisks.map((risk) => `- Residual risk: ${safeReportText(risk)}`),
+    ...result.evidenceGaps.map((gap) => `- Evidence gap: ${safeReportText(gap)}`),
+    ...result.currentDecisionIssues.map((issue) => `- Current decision issue: ${safeReportText(issue)}`),
+    '',
+    '#### Result',
+    '',
+    `- Impact: ${result.impactClass}`,
+    `- Observation: ${result.observation}`,
+    `- Product decision required: ${result.decisionRequired ? 'yes' : 'no'}`,
+    `- Gate contribution: ${productImpactGateContribution(result)}`,
+    `- Next action: ${safeReportText(result.nextAction)}`
+  ];
+  if (result.decisionRequired) lines.push(...renderDecisionPack(result, concern));
+  return lines;
+};
+const productImpactAuthorityProposal = Boolean(
+  changedProductImpactAuthorityPaths.length || architectureAuthorityDelta.changes.length
+);
+const productImpactReportUseful = Boolean(
+  productImpactResults.length
+  || productImpactDecisionDeclarationIssues.length
+  || productImpactAuthorityProposal
+);
+const productImpactReportLines = productImpactReportUseful ? [
+  '## Product impact',
+  '',
+  `- Runtime context: ${productImpactRuntimeStatus}`,
+  '- Runtime authority: trusted base map, decisions, architecture rules, detectors, and checker only.',
+  `- Base authority validation: ${productImpactBaseErrors.length ? 'INVALID' : 'VALID'}`,
+  `- Candidate authority validation: ${candidateProductImpactMapValid && candidateProductDecisionAuthorityValid ? 'VALID (inert data only)' : 'INVALID'}`,
+  `- Candidate authority separation: ${candidateAuthorityCompanionPaths.length ? 'INVALID' : 'VALID'}`,
+  `- Runtime result count: ${productImpactResults.length}`,
+  ...(productImpactRuntimeStatus === 'NOT_AUTHORITATIVE_CANDIDATE' ? [
+    '- This pull request context is non-authoritative and emits no runtime admission packet.'
+  ] : []),
+  ...(productImpactAuthorityProposal ? [
+    '',
+    '### Candidate authority proposal',
+    '',
+    `- Changed Product Impact authority paths: ${changedProductImpactAuthorityPaths.length ? changedProductImpactAuthorityPaths.map(inlineCode).join(', ') : 'None'}`,
+    `- Candidate map: ${candidateProductImpactMapValid ? 'VALID' : 'INVALID'}`,
+    `- Candidate decision registry: ${candidateProductDecisionAuthorityValid ? 'VALID' : 'INVALID'}`,
+    '- Runtime effect: validation-only future preauthorization; candidate data does not alter this head runtime admission.'
+  ] : []),
+  ...productImpactDecisionDeclarationIssues.flatMap((issue) => [
+    '',
+    '### Current decision declaration',
+    '',
+    `- ${safeReportText(issue)}`,
+    '- Gate contribution: None (report-only).',
+    '- Next action: the Product Decision Owner must review the exact current head and Codex must serialize a renewed declaration.'
+  ]),
+  ...productImpactResults.flatMap((result) => ['', ...renderProductImpactPacket(result)]),
+  ''
+] : [];
 const report = [
   '# Web change policy',
   '',
@@ -1342,6 +1987,7 @@ const report = [
   '',
   ...list(policyResult.reviewReasons),
   '',
+  ...productImpactReportLines,
   '## Key architecture differential summary',
   '',
   '| Inventory | Before | Added | Removed | After | Delta | Classification |',
@@ -1490,7 +2136,9 @@ if (changeContext.isPromotion || changeContext.errors.length) {
       ],
       reviewReasons: /tools\/web-(?:change-policy|architecture-(?:rules|violations))\.json/.test(
         errorMessage
-      ) ? ['Governance and authority: required authority input is malformed'] : [],
+      ) || /tools\/web-product-(?:impact-map|decisions)\.json/.test(errorMessage)
+        ? ['Governance and authority: required authority input is malformed']
+        : [],
       context: changeContext.context,
       observations: { errorType: error?.name || typeof error }
     });
