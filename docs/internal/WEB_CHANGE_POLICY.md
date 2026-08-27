@@ -9,6 +9,11 @@ owns architecture definitions, arithmetic, and exception evidence. Workflow and
 checker files implement parts of this policy; their current behavior is not a
 substitute for this authority.
 
+The [Product Impact Ratchet](./PRODUCT_IMPACT_RATCHET.md) owns planned
+architecture-to-behavior traceability, product-impact classification, Decision
+Pack semantics, and product-decision eligibility. Its rollout uses the trusted
+admission and self-authorization boundaries in this document.
+
 ## Delivery lifecycle
 
 gbdraw uses four distinct boundaries:
@@ -252,6 +257,56 @@ tests/web/architecture-ratchet-fixtures.test.mjs
 The current executable guard does not yet enumerate every lifecycle evidence
 producer listed above. The broader normative separation governs future wiring;
 the list here documents the current CLI transition without overstating it.
+
+### Planned Product Impact separation
+
+Product Impact extends the same trust direction without adding a workflow or
+required status. The existing `tools/check-web-change-budget.mjs` remains the
+ordinary Web policy CLI and trusted orchestration owner. The planned pure
+mechanics and bounded decision-source modules are checker implementation:
+
+```text
+tools/web-product-impact-evaluation.mjs
+tools/web-product-impact-decision-source.mjs
+```
+
+The planned Product Impact authority and evidence-producing surfaces are:
+
+```text
+docs/internal/PRODUCT_IMPACT_RATCHET.md
+tools/web-product-impact-map.json
+tools/web-product-decisions.json
+.github/pull_request_template.md
+mapped behavior contract files
+```
+
+These planned files are not executable integration. Each layer is added in the
+staged order required by the Product Impact policy.
+
+Runtime admission uses the trusted base checker, detectors, architecture rules,
+Product Impact map, durable decisions, maintainer allowlist, and base/head
+source facts. Candidate authority is validation-only inert data and cannot
+authorize the same candidate runtime. A runtime pull request therefore cannot
+change Product Impact authority or durable decisions to approve itself.
+
+Future preauthorization may use only this narrow inert authority bundle:
+
+```text
+tools/web-architecture-rules.json
+tools/web-product-impact-map.json
+tools/web-product-decisions.json
+```
+
+The bundle is valid only when changed paths are a subset of those files and no
+runtime, checker, workflow, template, or evidence-producing contract changes.
+The trusted checker validates candidate authority but continues to evaluate
+runtime with base authority.
+
+Mapped evidence follows the same separation. An affected runtime pull request
+cannot replace its mapped behavior contract and use that candidate change as
+the sole proof of hard safety. Update or add the contract in a prior
+evidence-only pull request, then update its authority reference separately.
+Unrelated test changes are unaffected.
 
 The runtime/guard exception applies only when `tools/web-change-policy.json` is
 the sole changed guard file and the change is a pure policy contraction. The

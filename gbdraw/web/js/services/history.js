@@ -720,7 +720,9 @@ export const createHistoryManager = ({
     }
     restoring.value = true;
     try {
-      await restoreGeneratedArtifactHandle(handle);
+      await restoreGeneratedArtifactHandle(handle, {
+        clearFailedGeneratePresentation: true
+      });
     } finally {
       restoring.value = false;
     }

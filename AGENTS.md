@@ -88,20 +88,25 @@ python -m build
 
 For changes affecting Web runtime or normative Web behavior contracts:
 
-- Identify any reachable user-visible difference or continuation.
-- Search `docs/internal/BEHAVIOR_SEMANTICS_DECISIONS.md` when present, plus
-  explicit promises, compatibility commitments, and authoritative domain rules.
-  Cite a `BD-###` only when that decision exists in the base branch.
-- Treat current code and tests as evidence, not automatic product authority.
-  Classify the case as no user-visible difference, authority-covered behavior,
-  ordinary regression, domain-derived, scenario candidate, or insufficient evidence.
-- Create a scenario candidate only when at least two materially different
-  user-visible outcomes are genuinely reasonable and no authority resolves them.
-  Record the context, user goal, action or completion, current behavior, authority
-  searched, and plausible outcomes without selecting one.
-- Do not implement or harden an unresolved option before supervisor disposition.
-  Codex may advise; human reviewers record the disposition, and the supervisor
-  owns any unresolved normative choice.
+- Follow [`docs/internal/PRODUCT_IMPACT_RATCHET.md`](docs/internal/PRODUCT_IMPACT_RATCHET.md).
+- Identify every reachable user-visible difference or continuation and separate
+  the product outcome from the owner or path used to implement it.
+- Search explicit supported behavior, compatibility commitments, authoritative
+  domain rules, and accepted base-branch decisions. Current code and tests are
+  evidence, not automatic product authority. Cite a `BD-###` only when it exists
+  in the base branch.
+- Compare option realization with AND-of-OR requirements. Matching option IDs do
+  not prove that independent behavior contributions remain satisfied.
+- Keep the common path automatic for changes with no registered Product Impact
+  delta or unresolved outcome.
+- Stop the affected convergence when materially different user-visible outcomes
+  remain unresolved. Do not select a product option autonomously.
+- Present the Product Decision Owner with stable outcome choices, decision
+  routes, and the documented `PRODUCT_DECISION` response template.
+- After an explicit human choice, serialize only that outcome and show the
+  generated machine representation for review. Do not infer missing rationale,
+  retirement intent, or accepted residual risk, and do not broaden the choice.
+- Candidate authority never authorizes the same candidate runtime.
 
 ## Showcase Figure Quality
 

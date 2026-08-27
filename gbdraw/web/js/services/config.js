@@ -3194,6 +3194,7 @@ const resetSessionBaseline = () => {
   state.sessionTitle.value = '';
   state.errorLog.value = null;
   state.results.value = [];
+  state.failedGeneratePreservedResult.value = false;
   state.selectedResultIndex.value = 0;
   state.resultPanelTab.value = 'preview';
   state.lastRunInfo.value = null;
@@ -3341,6 +3342,7 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
 };
 
 export const applyResultsData = (resultsData = [], ui = {}) => {
+  state.failedGeneratePreservedResult.value = false;
   if (Array.isArray(resultsData)) {
     const logicalResults = normalizeLogicalResults(resultsData.map((res, idx) => (
       isCommittedSvgResult(res)

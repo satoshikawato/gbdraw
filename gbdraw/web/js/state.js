@@ -40,6 +40,7 @@ const sessionImportRollbackInProgress = ref(false);
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
+const failedGeneratePreservedResult = ref(false);
 const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
@@ -761,6 +762,7 @@ export const state = {
   sessionImportRollbackInProgress,
   results,
   selectedResultIndex,
+  failedGeneratePreservedResult,
   resultPanelTab,
   lastRunInfo,
   trackSlotResolvedGeometry,

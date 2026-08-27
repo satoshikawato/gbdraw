@@ -945,6 +945,7 @@ test('Definition line colors preserve raw values and present named, Auto, and No
 });
 
 test('Invalid Annotation slot is rejected before worker startup and preserves committed state', { tag: '@pr-smoke' }, async ({ page }) => {
+  test.setTimeout(240000);
   await page.addInitScript(() => {
     const nativePostMessage = Worker.prototype.postMessage;
     window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ = 0;
@@ -969,6 +970,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   await openApp(page, { waitForPalette: false });
   await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
   await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
+  await expect(svgExport).toBeEnabled();
 
   const outcome = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1023,6 +1026,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     );
     app.adv.linear_track_slots_axis_index = 0;
     app.setLinearTrackSlotsEnabled(true);
+    app.form.plot_title = 'Failed Generate attempt title';
     await window.Vue.nextTick();
     app.editableLabels = [{
       key: 'transaction-label',
@@ -1033,6 +1037,10 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       kind: 'regular',
       draftText: 'Keep this label'
     }];
+    const settlePreviewFrames = () => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    await settlePreviewFrames();
 
     const snapshot = () => ({
       results: app.results.map((entry) => ({
@@ -1050,20 +1058,34 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       liveLegend: (
         document.querySelector('svg #legend, svg #feature_legend, svg [id*="legend" i]')
           ?.outerHTML || null
-      )
+      ),
+      liveSvg: document.querySelector('[aria-label="Result Preview"] svg')?.outerHTML || null
     });
     const before = snapshot();
     const workerMessagesBefore = window.__GBDRAW_DIAGRAM_RUN_MESSAGES__;
-    const result = await app.runAnalysis();
+    const firstResult = await app.runAnalysis();
+    const firstPresentation = app.failedGeneratePreservedResult;
+    const repeatedAttempt = app.runAnalysis();
+    const presentationWhileRepeatedAttemptStarts = app.failedGeneratePreservedResult;
+    const repeatedResult = await repeatedAttempt;
+    await settlePreviewFrames();
     const after = snapshot();
     const same = (field) => JSON.stringify(after[field]) === JSON.stringify(before[field]);
 
     return {
-      result,
+      firstResult,
+      repeatedResult,
+      firstPresentation,
+      presentationWhileRepeatedAttemptStarts,
+      repeatedPresentation: app.failedGeneratePreservedResult,
       errorSummary: String(app.errorLog?.summary || ''),
       diagramWorkerMessages:
         window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ - workerMessagesBefore,
       beforeResultCount: before.results.length,
+      serializedSvgPreserved:
+        after.results[after.selectedResultIndex]?.content ===
+        before.results[before.selectedResultIndex]?.content,
+      liveSvgPreserved: same('liveSvg'),
       resultsPreserved: same('results'),
       resultSelectionPreserved: same('selectedResultIndex'),
       featureSelectionPreserved:
@@ -1075,10 +1097,16 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     };
   });
 
-  expect(outcome.result?.status).toBe('error');
+  expect(outcome.firstResult?.status).toBe('error');
+  expect(outcome.repeatedResult?.status).toBe('error');
+  expect(outcome.firstPresentation).toBe(true);
+  expect(outcome.presentationWhileRepeatedAttemptStarts).toBe(true);
+  expect(outcome.repeatedPresentation).toBe(true);
   expect(outcome.errorSummary).toContain("references unknown set 'missing'");
   expect(outcome.diagramWorkerMessages).toBe(0);
   expect(outcome.beforeResultCount).toBeGreaterThan(0);
+  expect(outcome.serializedSvgPreserved).toBe(true);
+  expect(outcome.liveSvgPreserved).toBe(true);
   expect(outcome.resultsPreserved).toBe(true);
   expect(outcome.resultSelectionPreserved).toBe(true);
   expect(outcome.featureSelectionPreserved).toBe(true);
@@ -1086,6 +1114,100 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   expect(outcome.strokeOverridesPreserved).toBe(true);
   expect(outcome.legendPreserved).toBe(true);
   expect(outcome.editableLabelsPreserved).toBe(true);
+
+  const generationError = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(generationError).toBeVisible();
+  await expect(generationError).toContainText("references unknown set 'missing'");
+  await expect(
+    page.getByRole('heading', { name: 'Last Successful Result', exact: true })
+  ).toBeVisible();
+  const preservedResultNotice = page.getByRole('status').filter({
+    hasText: /Showing the last successful result\.\s*Current changes were not applied\./
+  });
+  await expect(preservedResultNotice).toHaveCount(1);
+  await expect(preservedResultNotice.getByText('Showing the last successful result.', { exact: true }))
+    .toBeVisible();
+  await expect(preservedResultNotice.getByText('Current changes were not applied.', { exact: true }))
+    .toBeVisible();
+  await expect(svgExport).toBeEnabled();
+
+  const successfulRetry = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    const committedContentBefore = app.results[app.selectedResultIndex]?.content || '';
+    const generationKeyBefore = state.resultGenerationKey.value;
+    const invalidSlotIndex = app.adv.linear_track_slots.findIndex(
+      (slot) => slot.id === 'invalid_annotation'
+    );
+    app.adv.linear_track_slots.splice(invalidSlotIndex, 1);
+    await window.Vue.nextTick();
+    const result = await app.runAnalysis();
+    return {
+      result,
+      resultCount: app.results.length,
+      committedContentChanged:
+        app.results[app.selectedResultIndex]?.content !== committedContentBefore,
+      generationKeyAdvanced: state.resultGenerationKey.value > generationKeyBefore,
+      errorLog: app.errorLog,
+      failedGeneratePreservedResult: app.failedGeneratePreservedResult
+    };
+  });
+
+  expect(successfulRetry.result?.status).toBe('ok');
+  expect(successfulRetry.resultCount).toBeGreaterThan(0);
+  expect(successfulRetry.committedContentChanged).toBe(true);
+  expect(successfulRetry.generationKeyAdvanced).toBe(true);
+  expect(successfulRetry.errorLog).toBeNull();
+  expect(successfulRetry.failedGeneratePreservedResult).toBe(false);
+  await expect(generationError).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Result Preview', exact: true })).toBeVisible();
+  await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
+  await expect(svgExport).toBeEnabled();
+});
+
+test('preserved Result presentation ignores no-Result Generate failures and non-Generate errors', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+
+  const noResultFailure = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return {
+      result,
+      resultCount: app.results.length,
+      failedGeneratePreservedResult: app.failedGeneratePreservedResult
+    };
+  });
+
+  expect(noResultFailure.result?.status).toBe('error');
+  expect(noResultFailure.resultCount).toBe(0);
+  expect(noResultFailure.failedGeneratePreservedResult).toBe(false);
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Last Successful Result', exact: true }))
+    .toHaveCount(0);
+  await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
+
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(bgcSessionPath);
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.results?.length > 0);
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    state.errorLog.value = {
+      summary: 'Non-Generate operation failed.',
+      details: []
+    };
+    await window.Vue.nextTick();
+  });
+
+  await expect(page.getByRole('alert', { name: 'Generation Error' }))
+    .toContainText('Non-Generate operation failed.');
+  await expect(page.getByRole('heading', { name: 'Result Preview', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Last Successful Result', exact: true }))
+    .toHaveCount(0);
+  await expect(page.getByText('Showing the last successful result.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Current changes were not applied.', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.failedGeneratePreservedResult))
+    .toBe(false);
 });
 
 test('Session preflight rejects invalid canonical data without resetting live state', async ({ page }) => {
