@@ -1,0 +1,18 @@
+{
+  "description": "Repository pull request wording guardrail.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/tools/check-pr-language.mjs\" --hook",
+            "timeout": 5,
+            "statusMessage": "Checking pull request title and summary"
+          }
+        ]
+      }
+    ]
+  }
+}
