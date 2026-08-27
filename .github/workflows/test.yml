@@ -5,19 +5,28 @@ permissions:
 
 on:
   push:
-    branches: ["main", "refactoring", "dev"]
+    branches: ["dev"]
   pull_request:
     branches: ["dev", "main"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
-  group: tests-${{ github.ref }}
+  # Promotion accepts only the current remote dev tip, so older dev staging can be canceled.
+  group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   web-change-budget:
     name: Web change budget
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -58,6 +67,13 @@ jobs:
 
   core:
     name: Core (Python ${{ matrix.python-version }})
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -121,6 +137,14 @@ jobs:
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -145,6 +169,14 @@ jobs:
 
   gallery:
     name: Gallery (Python 3.11)
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -169,6 +201,13 @@ jobs:
 
   browser:
     name: Browser (Python 3.11)
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -275,7 +314,61 @@ jobs:
           retention-days: 7
 
   playwright-functional:
+    name: Playwright functional (shard ${{ matrix.shard }}/4)
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Playwright functional dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run Playwright functional tests
+        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/4
+
+      - name: Upload Playwright functional traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-functional-shard-${{ matrix.shard }}-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # PR 7 removes this legacy producer after main protection no longer requires it.
+  playwright-functional-main-transition:
     name: Playwright functional
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -311,13 +404,20 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-functional-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          name: playwright-functional-main-transition-traces-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
 
   playwright-performance:
     name: Playwright performance
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -360,11 +460,13 @@ jobs:
 
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
+    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
-      (github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -408,11 +510,13 @@ jobs:
 
   slow-main:
     name: Slow (Python ${{ matrix.python-version }})
+    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
-      (github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -449,6 +553,14 @@ jobs:
 
   lint:
     name: Lint
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -469,6 +581,13 @@ jobs:
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
+    # PR 7 removes the main-PR branch after final promotion protection is active.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
+      github.head_ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -526,3 +645,39 @@ jobs:
           test "${{ needs.gallery.result }}" = "success"
           test "${{ needs.lint.result }}" = "success"
           test "${{ needs.web-pr-smoke.result }}" = "success"
+
+  dev-staging-gate:
+    name: Dev staging / gate
+    needs:
+      - web-change-budget
+      - core
+      - recipes-standard
+      - gallery
+      - browser
+      - playwright-functional
+      - playwright-performance
+      - acceptance-supported-main
+      - slow-main
+      - lint
+      - losat-cache-browser-acceptance
+    if: >-
+      always() &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require all exact-SHA staging evidence
+        run: |
+          set -euo pipefail
+          test "${{ needs.web-change-budget.result }}" = "success"
+          test "${{ needs.core.result }}" = "success"
+          test "${{ needs.recipes-standard.result }}" = "success"
+          test "${{ needs.gallery.result }}" = "success"
+          test "${{ needs.browser.result }}" = "success"
+          test "${{ needs.playwright-functional.result }}" = "success"
+          test "${{ needs.playwright-performance.result }}" = "success"
+          test "${{ needs.acceptance-supported-main.result }}" = "success"
+          test "${{ needs.slow-main.result }}" = "success"
+          test "${{ needs.lint.result }}" = "success"
+          test "${{ needs.losat-cache-browser-acceptance.result }}" = "success"

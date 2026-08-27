@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: read
 
 concurrency:
   group: web-base-policy-${{ github.event.pull_request.number }}
@@ -15,6 +17,7 @@ concurrency:
 jobs:
   trusted-base-policy:
     name: Web base policy (trusted base)
+    if: github.event.pull_request.base.ref == 'dev'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -41,3 +44,113 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WEB_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
         run: node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # PR 7 removes this legacy producer after main protection no longer requires it.
+  trusted-base-policy-main-transition:
+    name: Web base policy (trusted base)
+    if: >-
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch PR head as Git data
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git fetch --no-tags origin "$HEAD_SHA"
+
+      - name: Check Web policy from trusted base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WEB_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
+        run: node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  promotion-gate:
+    name: Promotion / gate
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted main base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify promotion topology and current dev tip
+        env:
+          EXPECTED_REPOSITORY: satoshikawato/gbdraw
+          BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          test "$BASE_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          test "$HEAD_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          test "$BASE_REF" = "main"
+          test "$HEAD_REF" = "dev"
+          git fetch --no-tags origin "refs/heads/dev:refs/remotes/origin/dev"
+          REMOTE_DEV_SHA="$(git rev-parse refs/remotes/origin/dev)"
+          test "$HEAD_SHA" = "$REMOTE_DEV_SHA"
+          git cat-file -e "$HEAD_SHA^{commit}"
+
+      - name: Check source coverage from trusted main
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+
+      - name: Verify exact dev Tests staging evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node tools/check-promotion-readiness.mjs workflow-evidence
+          --repository "$GITHUB_REPOSITORY"
+          --workflow-path .github/workflows/test.yml
+          --aggregate-name "Dev staging / gate"
+          --head-sha "$HEAD_SHA"
+
+      - name: Verify exact dev Gallery readiness evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node tools/check-promotion-readiness.mjs workflow-evidence
+          --repository "$GITHUB_REPOSITORY"
+          --workflow-path .github/workflows/gallery-publication.yml
+          --aggregate-name "Gallery readiness / gate"
+          --head-sha "$HEAD_SHA"
+
+      - name: Prove promotion result tree identity
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          node tools/check-promotion-readiness.mjs merge-tree
+          --repository-root .
+          --base-sha "$BASE_SHA"
+          --head-sha "$HEAD_SHA"
