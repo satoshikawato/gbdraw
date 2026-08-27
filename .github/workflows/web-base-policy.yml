@@ -3,7 +3,7 @@ name: Web base policy
 on:
   pull_request_target:
     branches: ["dev", "main"]
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
   contents: read
