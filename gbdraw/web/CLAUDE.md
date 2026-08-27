@@ -38,6 +38,14 @@ saved sessions, and replay must converge on the typed render-request boundary.
 JavaScript owns browser state and resource bytes; Python owns request validation,
 planning, loading, diagram assembly, and rendering.
 
+For an owner or canonical-path change, apply the
+[Product Impact Ratchet](../../docs/internal/PRODUCT_IMPACT_RATCHET.md) and trace
+the affected architecture subjects through their mapped requirements, user
+effects, checkpoints, authority, and behavior contracts. Select the supported
+behavior before choosing its implementation location. Preserve every jointly
+required contribution; matching a high-level option ID alone is not evidence
+of preservation.
+
 The application has one Pyodide runtime, owned by the lazy diagram Worker.
 Typed helper operations, generation-time feature extraction, and diagram
 rendering share that runtime; Python must not return to the main thread.
