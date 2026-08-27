@@ -7,7 +7,7 @@ on:
   push:
     branches: ["dev"]
   pull_request:
-    branches: ["dev", "main"]
+    branches: ["dev"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
@@ -19,14 +19,10 @@ concurrency:
 jobs:
   web-change-budget:
     name: Web change budget
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -67,13 +63,9 @@ jobs:
 
   core:
     name: Core (Python ${{ matrix.python-version }})
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -137,14 +129,10 @@ jobs:
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -169,14 +157,10 @@ jobs:
 
   gallery:
     name: Gallery (Python 3.11)
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -201,13 +185,9 @@ jobs:
 
   browser:
     name: Browser (Python 3.11)
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -362,62 +342,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # PR 7 removes this legacy producer after main protection no longer requires it.
-  playwright-functional-main-transition:
-    name: Playwright functional
-    if: >-
-      github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-
-      - name: Install Playwright functional dependencies
-        run: |
-          python -m pip install -e ".[dev]"
-          npm ci
-          npx playwright install --with-deps chromium
-
-      - name: Prepare browser wheel
-        run: python tools/prepare_browser_wheel.py
-
-      - name: Run Playwright functional tests
-        run: npm run test:web:functional-full
-
-      - name: Upload Playwright functional traces
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-functional-main-transition-traces-${{ github.run_id }}-${{ github.run_attempt }}
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 7
-
   playwright-performance:
     name: Playwright performance
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -460,13 +389,9 @@ jobs:
 
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -510,13 +435,9 @@ jobs:
 
   slow-main:
     name: Slow (Python ${{ matrix.python-version }})
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -553,14 +474,10 @@ jobs:
 
   lint:
     name: Lint
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -581,13 +498,9 @@ jobs:
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
-    # PR 7 removes the main-PR branch after final promotion protection is active.
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main' &&
-      github.head_ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
