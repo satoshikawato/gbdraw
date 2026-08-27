@@ -45,40 +45,6 @@ jobs:
           WEB_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
         run: node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
 
-  # PR 7 removes this legacy producer after main protection no longer requires it.
-  trusted-base-policy-main-transition:
-    name: Web base policy (trusted base)
-    if: >-
-      github.event.pull_request.base.ref == 'main' &&
-      github.event.pull_request.head.ref == 'dev' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout trusted base
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Fetch PR head as Git data
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: git fetch --no-tags origin "$HEAD_SHA"
-
-      - name: Check Web policy from trusted base
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          WEB_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') }}
-        run: node tools/check-web-change-budget.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
-
   promotion-gate:
     name: Promotion / gate
     if: github.event.pull_request.base.ref == 'main'
