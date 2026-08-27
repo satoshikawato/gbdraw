@@ -4,12 +4,12 @@
     {
       "ruleKey": "canonical-path.render-request",
       "coverage": "complete",
-      "enforcement": "report-only"
+      "enforcement": "hard"
     },
     {
       "ruleKey": "semantic-owner.render-request",
       "coverage": "complete",
-      "enforcement": "report-only"
+      "enforcement": "hard"
     }
   ],
   "concerns": [
