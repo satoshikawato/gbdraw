@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -29,7 +30,10 @@ from gbdraw.api.options import (
     LinearOutputOptions,
     LinearTrackOptions,
 )
-from gbdraw.analysis.collinearity import CollinearityResult
+from gbdraw.analysis.collinearity import (
+    CollinearityResult,
+    LosslessCollinearityParameters,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.exceptions import ValidationError
@@ -135,6 +139,141 @@ def test_linear_assembler_forwards_normalized_collinearity_anchor_mode(
     )
 
     assert captured["edge_mode"] == expected
+
+
+@pytest.mark.parametrize(
+    ("option_name", "value", "helper_name"),
+    [
+        ("collinearity_unit_mode", "auto", "unit_mode"),
+        ("collinearity_unit_mode", "cds", "unit_mode"),
+        ("collinearity_unit_mode", "locus", "unit_mode"),
+        ("collinearity_anchor_mode", "all", "edge_mode"),
+        ("collinearity_anchor_mode", "one_to_one", "edge_mode"),
+        ("collinearity_anchor_mode", "rbh", "edge_mode"),
+        ("collinearity_search_scope", "adjacent", "search_scope"),
+        ("collinearity_search_scope", "all", "search_scope"),
+        ("merge_orientation", "strand", "params"),
+        ("merge_orientation", "order", "params"),
+        ("merge_orientation", "either", "params"),
+    ],
+)
+def test_each_collinearity_enum_reaches_real_analysis_helper(
+    option_name: str,
+    value: str,
+    helper_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_build(*_args, **kwargs):
+        captured.update(kwargs)
+        return CollinearityResult(blocks=())
+
+    monkeypatch.setattr(
+        api_diagram_module,
+        "build_orthogroup_collinearity_blocks",
+        fake_build,
+    )
+    options: dict[str, object] = {"protein_blastp_mode": "collinear"}
+    if option_name == "merge_orientation":
+        options["collinearity_params"] = LosslessCollinearityParameters(
+            merge_orientation=value,
+        )
+    else:
+        options[option_name] = value
+
+    api_diagram_module.assemble_linear_diagram_from_records(
+        [
+            SeqRecord(Seq("ATGC" * 25), id="rec1"),
+            SeqRecord(Seq("ATGC" * 25), id="rec2"),
+        ],
+        cfg=apply_config_overrides(None, None),
+        legend="none",
+        **options,
+    )
+
+    if helper_name == "params":
+        params = captured[helper_name]
+        assert isinstance(params, LosslessCollinearityParameters)
+        assert params.merge_orientation == value
+    else:
+        assert captured[helper_name] == value
+
+
+@pytest.mark.parametrize(
+    "color_mode",
+    ("average_identity", "orientation", "orientation_identity"),
+)
+def test_each_collinearity_color_mode_reaches_projection_consumer(
+    color_mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_convert(_result, *, records, color_mode, search_scope):
+        captured.update(
+            records=records,
+            color_mode=color_mode,
+            search_scope=search_scope,
+        )
+        return []
+
+    monkeypatch.setattr(
+        api_diagram_module,
+        "convert_collinearity_blocks_to_comparisons",
+        fake_convert,
+    )
+    api_diagram_module.assemble_linear_diagram_from_records(
+        [
+            SeqRecord(Seq("ATGC" * 25), id="rec1"),
+            SeqRecord(Seq("ATGC" * 25), id="rec2"),
+        ],
+        cfg=apply_config_overrides(None, None),
+        collinearity_blocks=CollinearityResult(blocks=()),
+        collinearity_color_mode=color_mode,
+        legend="none",
+    )
+
+    assert captured["color_mode"] == color_mode
+    assert captured["search_scope"] == "adjacent"
+
+
+def _production_call_owners(path: Path, target: str) -> list[str]:
+    owners: list[str] = []
+    stack: list[str] = []
+
+    class Visitor(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            stack.append(node.name)
+            self.generic_visit(node)
+            stack.pop()
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if isinstance(node.func, ast.Name) and node.func.id == target:
+                owners.append(stack[-1] if stack else "<module>")
+            self.generic_visit(node)
+
+    Visitor().visit(ast.parse(path.read_text(encoding="utf-8")))
+    return owners
+
+
+def test_protein_helpers_have_no_parallel_invocation_builder() -> None:
+    root = Path(__file__).parents[1]
+    diagram_path = root / "gbdraw" / "api" / "diagram.py"
+    protein_path = root / "gbdraw" / "analysis" / "protein_colinearity.py"
+
+    for helper_name in (
+        "build_pairwise_protein_blastp_comparisons",
+        "build_rbh_orthogroup_protein_blastp_comparisons",
+        "build_orthogroup_collinearity_blocks",
+    ):
+        assert _production_call_owners(diagram_path, helper_name) == [
+            "_invoke_protein_analysis_helper"
+        ]
+    assert _production_call_owners(protein_path, "run_losatp_blastp") == [
+        "_execute_losatp_search"
+    ]
+    assert "_cache_runner_for_search" not in protein_path.read_text(encoding="utf-8")
 
 
 def test_typed_config_override_preserves_label_filtering_dataframes() -> None:

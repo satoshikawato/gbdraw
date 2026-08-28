@@ -45,7 +45,6 @@ from .analysis.collinearity import (
     normalize_collinearity_search_scope,
 )
 from .analysis.protein_colinearity import (
-    ORTHOGROUP_INFERENCE_VERSION,
     PROTEIN_BLASTP_MODES,
     hydrate_protein_losat_tsv,
     is_protein_losat_cache_entry,
@@ -118,6 +117,9 @@ def _parse_optional_positive_int(value: str) -> int | None:
 # Setup for the logging system
 logger = logging.getLogger()
 setup_logging()
+
+_LINEAR_OPTION_DEFAULTS = LinearDiagramOptions()
+_COLLINEARITY_PARAMETER_DEFAULTS = LosslessCollinearityParameters()
 
 
 def _linear_cli_record_cardinality(
@@ -263,37 +265,37 @@ def _get_args(args) -> argparse.Namespace:
         dest='losatp_bin',
         help='Native LOSAT executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: losat).',
         type=str,
-        default='losat')
+        default=_LINEAR_OPTION_DEFAULTS.losatp_bin)
     parser.add_argument(
         '--ncbi_blastp_bin',
         dest='ncbi_blastp_bin',
         help='NCBI BLAST+ blastp executable for --protein_blastp_mode pairwise/orthogroup/collinear (default: use automatic runtime resolution).',
         type=str,
-        default=None)
+        default=_LINEAR_OPTION_DEFAULTS.ncbi_blastp_bin)
     parser.add_argument(
         '--losatp_threads',
         dest='losatp_threads',
         help='Threads passed to the selected protein blastp runtime for --protein_blastp_mode pairwise/orthogroup/collinear (default: runtime default).',
         type=int,
-        default=None)
+        default=_LINEAR_OPTION_DEFAULTS.losatp_threads)
     parser.add_argument(
         '--protein_blastp_mode',
         dest='protein_blastp_mode',
         help='Protein blastp comparison mode: none, pairwise adjacent ribbons, all-record similarity groups (orthogroup), or collinear blocks (default: none).',
         choices=PROTEIN_BLASTP_MODES,
-        default='none')
+        default=_LINEAR_OPTION_DEFAULTS.protein_blastp_mode)
     parser.add_argument(
         '--protein_blastp_max_hits',
         dest='protein_blastp_max_hits',
         help='Maximum distinct subject protein hits per query protein for pairwise protein blastp display links (default: 5).',
         type=int,
-        default=5)
+        default=_LINEAR_OPTION_DEFAULTS.protein_blastp_max_hits)
     parser.add_argument(
         '--protein_blastp_candidate_limit',
         dest='protein_blastp_candidate_limit',
         help="Optional protein blastp candidate cap per query; use 'none' for no cap (default: none).",
         type=_parse_optional_positive_int,
-        default=None)
+        default=_LINEAR_OPTION_DEFAULTS.protein_blastp_candidate_limit)
     parser.add_argument(
         '--protein_blastp_output',
         metavar='TSV',
@@ -315,7 +317,7 @@ def _get_args(args) -> argparse.Namespace:
         dest='collinear_unit_mode',
         help=argparse.SUPPRESS,
         choices=["auto", "cds", "locus"],
-        default='auto')
+        default=_LINEAR_OPTION_DEFAULTS.collinearity_unit_mode)
     parser.add_argument(
         '--collinear_search_scope',
         dest='collinear_search_scope',
@@ -328,44 +330,44 @@ def _get_args(args) -> argparse.Namespace:
         ),
         type=_parse_collinear_search_scope,
         choices=["adjacent", "all"],
-        default='adjacent')
+        default=_LINEAR_OPTION_DEFAULTS.collinearity_search_scope)
     parser.add_argument(
         '--collinear_min_anchors',
         dest='collinear_min_anchors',
         help='Minimum anchors/genes required for a rendered Collinear block; 1 allows singleton links (default: 1).',
         type=int,
-        default=1)
+        default=_COLLINEARITY_PARAMETER_DEFAULTS.min_anchors)
     parser.add_argument(
         '--collinear_max_unit_gap',
         dest='collinear_max_unit_gap',
         help='Maximum unit gap between neighboring collinear anchors (default: 0).',
         type=int,
-        default=0)
+        default=_COLLINEARITY_PARAMETER_DEFAULTS.max_unit_gap)
     parser.add_argument(
         '--collinear_max_diagonal_drift',
         dest='collinear_max_diagonal_drift',
         help='Maximum order-space diagonal drift allowed within or between collinear runs (default: 0).',
         type=int,
-        default=0)
+        default=_COLLINEARITY_PARAMETER_DEFAULTS.max_diagonal_drift)
     parser.add_argument(
         '--collinear_max_conflicts_in_merge_gap',
         dest='collinear_max_conflicts_in_merge_gap',
         help=argparse.SUPPRESS,
         type=int,
-        default=1)
+        default=_COLLINEARITY_PARAMETER_DEFAULTS.max_conflicts)
     parser.add_argument(
         '--collinear_max_paralog_links_per_orthogroup',
         dest='collinear_max_paralog_links_per_orthogroup',
         help=argparse.SUPPRESS,
         type=int,
-        default=2)
+        default=_LINEAR_OPTION_DEFAULTS.collinear_max_paralog_links_per_orthogroup)
     parser.add_argument(
         '--collinear_color_mode',
         dest='collinear_color_mode',
         help='Collinear ribbon color mode: average_identity, orientation, or orientation_identity (default: orientation).',
         type=_parse_collinear_color_mode,
         choices=["average_identity", "orientation", "orientation_identity"],
-        default='orientation')
+        default=_LINEAR_OPTION_DEFAULTS.collinearity_color_mode)
     parser.add_argument(
         '-t',
         '--table',
@@ -1036,19 +1038,34 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         source_session = None
     out_file_prefix: str = args.output
     blast_files: list[str] | None = args.blast
-    protein_blastp_mode: str = str(args.protein_blastp_mode or "none")
+    protein_blastp_mode: str = str(
+        args.protein_blastp_mode or _LINEAR_OPTION_DEFAULTS.protein_blastp_mode
+    )
     losatp_bin: str = args.losatp_bin
     ncbi_blastp_bin: str | None = getattr(args, "ncbi_blastp_bin", None)
     losatp_threads: int | None = args.losatp_threads
     protein_blastp_max_hits: int = args.protein_blastp_max_hits
     protein_blastp_candidate_limit: int | None = args.protein_blastp_candidate_limit
-    orthogroup_membership_mode: str = ORTHOGROUP_INFERENCE_VERSION
-    orthogroup_member_max_hits: int = 5
+    orthogroup_membership_mode: str = str(
+        _LINEAR_OPTION_DEFAULTS.orthogroup_membership_mode
+    )
+    orthogroup_member_max_hits: int = (
+        _LINEAR_OPTION_DEFAULTS.orthogroup_member_max_hits
+    )
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()
-    collinear_unit_mode: str = str(args.collinear_unit_mode or "auto")
-    collinear_anchor_mode: str = "rbh"
-    collinear_search_scope: str = str(args.collinear_search_scope or "adjacent")
-    collinear_color_mode: str = str(args.collinear_color_mode or "orientation")
+    collinear_unit_mode: str = str(
+        args.collinear_unit_mode or _LINEAR_OPTION_DEFAULTS.collinearity_unit_mode
+    )
+    collinear_anchor_mode: str = str(
+        _LINEAR_OPTION_DEFAULTS.collinearity_anchor_mode
+    )
+    collinear_search_scope: str = str(
+        args.collinear_search_scope
+        or _LINEAR_OPTION_DEFAULTS.collinearity_search_scope
+    )
+    collinear_color_mode: str = str(
+        args.collinear_color_mode or _LINEAR_OPTION_DEFAULTS.collinearity_color_mode
+    )
     collinearity_params = LosslessCollinearityParameters(
         min_anchors=args.collinear_min_anchors,
         max_unit_gap=args.collinear_max_unit_gap,

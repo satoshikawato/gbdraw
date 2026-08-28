@@ -233,7 +233,7 @@ def test_derived_identity_includes_hidden_reverse_and_self_raw_inputs(
         LosslessCollinearityParameters(min_anchors=2),
         LosslessCollinearityParameters(max_unit_gap=1),
         LosslessCollinearityParameters(max_diagonal_drift=1),
-        LosslessCollinearityParameters(max_conflicts=1),
+        LosslessCollinearityParameters(max_conflicts=0),
         LosslessCollinearityParameters(merge_orientation="strand"),
     ),
     ids=(
@@ -271,7 +271,7 @@ def test_derived_identity_changes_with_each_lossless_collinearity_parameter(
         "minAnchors": 1,
         "maxGeneGap": 0,
         "maxDiagonalDrift": 0,
-        "maxConflictsInMergeGap": 0,
+        "maxConflictsInMergeGap": 1,
         "mergeOrientation": "either",
     }
     assert collinear["parameterIdentity"] == {
@@ -280,12 +280,18 @@ def test_derived_identity_changes_with_each_lossless_collinearity_parameter(
             "minAnchors": 1,
             "maxUnitGap": 0,
             "maxDiagonalDrift": 0,
-            "maxConflicts": 0,
+            "maxConflicts": 1,
             "mergeOrientation": "either",
         },
     }
     assert unchanged["key"] == baseline["key"]
     assert changed["key"] != baseline["key"]
+
+
+def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> None:
+    assert _derived_entry_for_params(None)["key"] == _derived_entry_for_params(
+        LosslessCollinearityParameters()
+    )["key"]
 
 @pytest.mark.parametrize("mode", ("orthogroup", "collinear"))
 def test_empty_api_derived_result_passes_current_session_validation(

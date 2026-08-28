@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.analysis.collinearity import (
@@ -764,39 +765,51 @@ def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
         ]
         return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
-    results: dict[int, CollinearityResult] = {}
-    for max_conflicts in (0, 1):
-        params = LosslessCollinearityParameters(
+    params_by_case = {
+        "explicit-zero": LosslessCollinearityParameters(
             max_unit_gap=1,
-            max_conflicts=max_conflicts,
+            max_conflicts=0,
             merge_orientation="strand",
-        )
+        ),
+        "default": LosslessCollinearityParameters(
+            max_unit_gap=1,
+            merge_orientation="strand",
+        ),
+    }
+    results: dict[str, CollinearityResult] = {}
+    for case, params in params_by_case.items():
         request = LinearDiagramRequest(
             records=tuple(
                 RecordInput(source=InMemoryRecordSource(record)) for record in records
             ),
             options=LinearDiagramOptions(
                 protein_blastp_mode="collinear",
-                collinearity_unit_mode="cds",
+                collinearity_unit_mode="auto",
                 collinearity_params=params,
             ),
         )
         prepared = request_render_module.build_request_diagram(request)
         assert prepared.request.options.collinearity_params is params
+        assert prepared.request.options.collinearity_unit_mode == "auto"
         assert prepared.linear_metadata is not None
         result = prepared.linear_metadata.collinearity_result
         assert result is not None
-        results[max_conflicts] = result
+        assert {
+            anchor.query_unit_kind
+            for block in result.blocks
+            for anchor in block.anchors
+        } == {"cds"}
+        results[case] = result
 
     assert [
         [anchor.query_order for anchor in block.anchors]
-        for block in results[0].blocks
+        for block in results["explicit-zero"].blocks
     ] == [[0, 1], [2], [3, 4]]
     assert [
         [anchor.query_order for anchor in block.anchors]
-        for block in results[1].blocks
+        for block in results["default"].blocks
     ] == [[0, 1, 3, 4], [2]]
 
 
@@ -1332,7 +1345,7 @@ def test_anchor_core_record_local_ids_are_deterministic_after_cross_record_group
 
 
 @pytest.mark.linear
-def test_anchor_core_record_local_member_hit_limit_does_not_change_membership() -> None:
+def test_anchor_core_record_local_membership_survives_when_hits_fit_limit() -> None:
     records = [
         _record(
             "record_a",
@@ -1448,7 +1461,7 @@ def test_anchor_core_record_local_edges_do_not_create_collinearity_anchors() -> 
 
 
 @pytest.mark.linear
-def test_anchor_core_member_hit_limit_does_not_change_inferred_membership() -> None:
+def test_anchor_core_membership_survives_reciprocal_candidates_within_limit() -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
         _record(
@@ -1731,7 +1744,7 @@ def test_build_blocks_from_hits_can_render_selected_non_adjacent_pairs() -> None
 
 
 @pytest.mark.linear
-def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatch) -> None:
+def test_orthogroup_collinearity_rbh_search_defaults_to_uncapped_candidates(monkeypatch) -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
         _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
@@ -1740,18 +1753,25 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatc
     observed_limits: list[int | None] = []
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hits,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
-        assert losatp_threads is None
         assert max_hsps_per_subject is None
-        observed_limits.append(candidate_limit)
+        observed_limits.append(max_hits)
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
         return pd.DataFrame.from_records(
             [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     result = collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1774,7 +1794,7 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatc
 
 
 @pytest.mark.linear
-def test_orthogroup_collinearity_anchor_core_ignores_member_hit_depth(monkeypatch) -> None:
+def test_orthogroup_collinearity_member_hit_depth_is_post_search(monkeypatch) -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
         _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
@@ -1782,16 +1802,24 @@ def test_orthogroup_collinearity_anchor_core_ignores_member_hit_depth(monkeypatc
     ]
     observed_limits: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hits,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
         assert max_hsps_per_subject is None
-        observed_limits.append(candidate_limit)
+        observed_limits.append(max_hits)
         return pd.DataFrame.from_records(
             [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1814,18 +1842,25 @@ def test_orthogroup_collinearity_all_hits_keeps_uncapped_search(monkeypatch) -> 
     observed_limits: list[int | None] = []
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hits,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
-        assert losatp_threads is None
         assert max_hsps_per_subject is None
-        observed_limits.append(candidate_limit)
+        observed_limits.append(max_hits)
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
         return pd.DataFrame.from_records(
             [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     result = collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1861,9 +1896,15 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
     ]
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
-        assert losatp_threads is None
         assert max_hsps_per_subject is None
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
         return pd.DataFrame.from_records(
@@ -1871,7 +1912,7 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     collinearity_module.build_orthogroup_collinearity_blocks(
         records,

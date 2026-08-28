@@ -2449,14 +2449,16 @@ class LosatpCacheManager:
                     return promoted_result
 
             raw_text_holder: dict[str, str] = {}
-            result = run_losatp_blastp(
+            result = _execute_losatp_search(
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
                 ncbi_blastp_bin=ncbi_blastp_bin,
-                max_hits=candidate_limit,
+                candidate_limit=candidate_limit,
                 max_hsps_per_subject=max_hsps_per_subject,
-                threads=losatp_threads,
+                losatp_threads=losatp_threads,
+                runner=None,
+                losatp_cache=None,
                 raw_output_callback=lambda text: raw_text_holder.__setitem__("text", text),
             )
             entry = {
@@ -3350,6 +3352,21 @@ def select_top_hits_per_query(
         .head(int(max_hits))
         .reset_index(drop=True)
     )
+
+
+def _select_member_candidate_hits_per_query(
+    hits: DataFrame,
+    *,
+    max_hits: int,
+) -> DataFrame:
+    """Keep every HSP for the strongest distinct member candidates."""
+
+    selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
+    if selected_pairs.empty:
+        return hits.iloc[0:0].copy()
+    pair_index = pd.MultiIndex.from_frame(selected_pairs[["query", "subject"]])
+    hit_index = pd.MultiIndex.from_frame(hits[["query", "subject"]])
+    return hits.loc[hit_index.isin(pair_index)].reset_index(drop=True)
 
 
 def select_reciprocal_best_hits(hits: DataFrame) -> DataFrame:
@@ -6024,30 +6041,6 @@ def _validate_extraction_has_proteins(
         )
 
 
-def _run_losatp_search(
-    query_fasta: str,
-    subject_fasta: str,
-    *,
-    losatp_bin: str,
-    ncbi_blastp_bin: str | None,
-    losatp_threads: int | None,
-    candidate_limit: int | None,
-    max_hsps_per_subject: int | None = 1,
-    runner: LosatpRunner | None,
-) -> DataFrame:
-    if runner is not None:
-        return runner(query_fasta, subject_fasta)
-    return run_losatp_blastp(
-        query_fasta,
-        subject_fasta,
-        losatp_bin=losatp_bin,
-        ncbi_blastp_bin=ncbi_blastp_bin,
-        max_hits=candidate_limit,
-        max_hsps_per_subject=max_hsps_per_subject,
-        threads=losatp_threads,
-    )
-
-
 def _losatp_cache_args(
     *,
     candidate_limit: int | None,
@@ -6061,32 +6054,49 @@ def _losatp_cache_args(
     return args
 
 
-def _cache_runner_for_search(
-    losatp_cache: LosatpCacheManager | None,
+def _execute_losatp_search(
+    query_fasta: str,
+    subject_fasta: str,
     *,
-    runner: LosatpRunner | None,
     losatp_bin: str,
     ncbi_blastp_bin: str | None,
     losatp_threads: int | None,
     candidate_limit: int | None,
     max_hsps_per_subject: int | None,
+    runner: LosatpRunner | None,
+    losatp_cache: LosatpCacheManager | None,
     filename: str = "",
     display: bool = False,
-) -> LosatpRunner | None:
-    if runner is not None or losatp_cache is None:
-        return runner
-    return losatp_cache.runner_for_search(
-        losatp_bin=losatp_bin,
-        ncbi_blastp_bin=ncbi_blastp_bin,
-        losatp_threads=losatp_threads,
-        candidate_limit=candidate_limit,
-        max_hsps_per_subject=max_hsps_per_subject,
-        args=_losatp_cache_args(
+    raw_output_callback: Callable[[str], None] | None = None,
+) -> DataFrame:
+    """Build one raw-search invocation from already resolved values."""
+
+    resolved_runner = runner
+    if resolved_runner is None and losatp_cache is not None:
+        resolved_runner = losatp_cache.runner_for_search(
+            losatp_bin=losatp_bin,
+            ncbi_blastp_bin=ncbi_blastp_bin,
+            losatp_threads=losatp_threads,
             candidate_limit=candidate_limit,
             max_hsps_per_subject=max_hsps_per_subject,
-        ),
-        filename=filename,
-        display=display,
+            args=_losatp_cache_args(
+                candidate_limit=candidate_limit,
+                max_hsps_per_subject=max_hsps_per_subject,
+            ),
+            filename=filename,
+            display=display,
+        )
+    if resolved_runner is not None:
+        return resolved_runner(query_fasta, subject_fasta)
+    return run_losatp_blastp(
+        query_fasta,
+        subject_fasta,
+        losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
+        max_hits=candidate_limit,
+        max_hsps_per_subject=max_hsps_per_subject,
+        threads=losatp_threads,
+        raw_output_callback=raw_output_callback,
     )
 
 
@@ -6500,8 +6510,19 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     """Select anchor-core orthogroups and their adjacent display edges."""
 
     normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
+    _validate_max_hits(
+        orthogroup_member_max_hits,
+        option_name="orthogroup_member_max_hits",
+    )
+    member_hits = {
+        pair: _select_member_candidate_hits_per_query(
+            hits,
+            max_hits=int(orthogroup_member_max_hits),
+        )
+        for pair, hits in directional_hits_by_pair.items()
+    }
     return _select_anchor_core_orthogroup_edges_from_directional_hits(
-        directional_hits_by_pair,
+        member_hits,
         protein_map,
         record_count=record_count,
         include_singletons=include_singletons,
@@ -6551,7 +6572,7 @@ def build_pairwise_protein_blastp_comparisons(
     for record_index in range(len(records) - 1):
         query_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
         subject_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index + 1])
-        protein_hits = _run_losatp_search(
+        protein_hits = _execute_losatp_search(
             query_fasta,
             subject_fasta,
             losatp_bin=losatp_bin,
@@ -6559,21 +6580,14 @@ def build_pairwise_protein_blastp_comparisons(
             losatp_threads=losatp_threads,
             candidate_limit=candidate_limit,
             max_hsps_per_subject=1,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=candidate_limit,
-                max_hsps_per_subject=1,
-                filename=(
-                    str(cache_filenames[record_index])
-                    if cache_filenames is not None and record_index < len(cache_filenames)
-                    else ""
-                ),
-                display=True,
+            runner=runner,
+            losatp_cache=losatp_cache,
+            filename=(
+                str(cache_filenames[record_index])
+                if cache_filenames is not None and record_index < len(cache_filenames)
+                else ""
             ),
+            display=True,
         )
         filtered_hits = filter_protein_hits_by_thresholds(
             protein_hits,
@@ -6643,7 +6657,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
             query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
             subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
 
-            forward_hits = _run_losatp_search(
+            forward_hits = _execute_losatp_search(
                 query_fasta,
                 subject_fasta,
                 losatp_bin=losatp_bin,
@@ -6651,21 +6665,14 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 max_hsps_per_subject=None,
-                runner=_cache_runner_for_search(
-                    losatp_cache,
-                    runner=runner,
-                    losatp_bin=losatp_bin,
-                    ncbi_blastp_bin=ncbi_blastp_bin,
-                    losatp_threads=losatp_threads,
-                    candidate_limit=search_candidate_limit,
-                    max_hsps_per_subject=None,
-                    filename=(
-                        str(cache_filenames[query_index])
-                        if cache_filenames is not None and query_index < len(cache_filenames)
-                        else ""
-                    ),
-                    display=subject_index == query_index + 1,
+                runner=runner,
+                losatp_cache=losatp_cache,
+                filename=(
+                    str(cache_filenames[query_index])
+                    if cache_filenames is not None and query_index < len(cache_filenames)
+                    else ""
                 ),
+                display=subject_index == query_index + 1,
             )
             filtered_forward_hits = filter_protein_hits_by_thresholds(
                 forward_hits,
@@ -6677,7 +6684,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
             directional_hits_by_pair[(query_index, subject_index)] = filtered_forward_hits
             if query_index == subject_index:
                 continue
-            reverse_hits = _run_losatp_search(
+            reverse_hits = _execute_losatp_search(
                 subject_fasta,
                 query_fasta,
                 losatp_bin=losatp_bin,
@@ -6685,16 +6692,9 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
                 losatp_threads=losatp_threads,
                 candidate_limit=search_candidate_limit,
                 max_hsps_per_subject=None,
-                runner=_cache_runner_for_search(
-                    losatp_cache,
-                    runner=runner,
-                    losatp_bin=losatp_bin,
-                    ncbi_blastp_bin=ncbi_blastp_bin,
-                    losatp_threads=losatp_threads,
-                    candidate_limit=search_candidate_limit,
-                    max_hsps_per_subject=None,
-                    display=False,
-                ),
+                runner=runner,
+                losatp_cache=losatp_cache,
+                display=False,
             )
             filtered_reverse_hits = filter_protein_hits_by_thresholds(
                 reverse_hits,
