@@ -4,6 +4,7 @@ import base64
 from collections import Counter
 from collections.abc import Callable
 import gzip
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -314,6 +315,12 @@ def test_vibrio_gallery_session_retains_complete_compact_cache(
         if entry.get("schema") == PROTEIN_LOSAT_CACHE_SCHEMA
     ]
     assert len(protein_entries) == VIBRIO_RAW_ENTRY_COUNT
+    wasm_sha256 = hashlib.sha256(
+        (Path(__file__).parents[1] / "gbdraw/web/wasm/losat/losat.wasm").read_bytes()
+    ).hexdigest()
+    assert {entry.get("toolIdentity") for entry in protein_entries} == {
+        f"losat-wasm-sha256:{wasm_sha256}"
+    }
     assert {
         (
             entry["queryRecordInstanceKey"],

@@ -15,7 +15,6 @@ from gbdraw.analysis.protein_colinearity import (
     ProteinExtractionResult,
     build_protein_losat_invocation,
     proteins_to_fasta,
-    validate_protein_raw_entry_references,
 )
 from gbdraw.api.diagram import LinearDiagramMetadata, _run_generated_protein_analysis
 from gbdraw.api.request_render import _PreparedLinearArtifacts, _build_current_derived_entries
@@ -278,12 +277,6 @@ def assemble_web_protein_analysis(
         raise ValidationError(
             "Protein raw artifacts do not match the canonical planned invocations."
         )
-    for key, entry in admitted_raw.items():
-        if not validate_protein_raw_entry_references(
-            entry,
-            extraction.identity_manifest,
-        ):
-            raise ValidationError(f"Protein raw artifact {key!r} failed admission.")
     request = _artifact_request(records, extraction, options, record_payloads)
     expected_metadata = _run_generated_protein_analysis(
         records,

@@ -1530,12 +1530,12 @@ def raw_protein_tsv_matches_bindings(
             len(columns) != len(COMPARISON_COLUMNS)
             or columns[0] not in query_ids
             or columns[1] not in subject_ids
+            or any(
+                not _is_strict_outfmt6_numeric_field(column, columns[index])
+                for index, column in enumerate(COMPARISON_COLUMNS[2:], start=2)
+            )
         ):
             return False
-    try:
-        parse_losatp_outfmt6(str(text))
-    except ParseError:
-        return False
     return True
 
 
@@ -2418,20 +2418,6 @@ class LosatpCacheManager:
         if tuple(str(arg) for arg in cached.get("args") or ()) != tuple(str(arg) for arg in args):
             return None
         if cached.get("toolIdentity") != expected.get("toolIdentity"):
-            return None
-        query_ids = _binding_runtime_ids(
-            self.identity_manifest,
-            pair_identity.query_record_instance_key,
-        )
-        subject_ids = _binding_runtime_ids(
-            self.identity_manifest,
-            pair_identity.subject_record_instance_key,
-        )
-        if not raw_protein_tsv_matches_bindings(
-            str(cached.get("text") or ""),
-            query_ids=query_ids,
-            subject_ids=subject_ids,
-        ):
             return None
         return cached
 
