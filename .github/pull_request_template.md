@@ -48,8 +48,10 @@ This block does not waive any other gate. Product change or retirement requires 
 -->
 
 - Product-impact role: N/A | EVIDENCE_ONLY | DECISION_ONLY | IMPLEMENTATION
+- Product preflight classification: N/A | IMPLEMENT_EXISTING_AUTHORITY | EVIDENCE_REQUIRED | PRODUCT_DECISION_REQUIRED | NOT_ALLOWED
 - Affected concern(s), if known:
 - Authority and decision references:
+- Decision Pack or evidence reference, if required:
 - Behavior contracts and residual risk:
 
 <!-- gbdraw-product-impact-decision:start -->

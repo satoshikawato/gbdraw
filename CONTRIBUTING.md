@@ -117,6 +117,13 @@ Substantial implementation must wait for maintainer confirmation. Agreement
 that a problem exists is not approval of a patch. The maintainer may first ask
 for a smaller evidence-producing change or an explicit behavior decision.
 
+Before implementation, maintainers and developers apply the
+[Product Impact Ratchet](./docs/internal/PRODUCT_IMPACT_RATCHET.md) to both
+registered architecture-subject changes and unmapped material user-effect
+ambiguity. Unresolved evidence or Product judgment uses the non-normative
+[Product Decision Pack template](./docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md);
+the completed working template does not itself authorize an outcome.
+
 ## Development setup
 
 ```bash

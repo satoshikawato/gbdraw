@@ -292,6 +292,36 @@ tools/web-product-decisions.json
 mapped behavior contract files
 ```
 
+The exact preauthorized future static Product authority path for broad or
+currently unmapped durable Option Integrity outcomes is:
+
+```text
+docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
+```
+
+That path is normative preauthorization only at this stage. The file is absent,
+supplies no Product outcome, and is not yet part of executable guard or
+authority path recognition. A later checker-only pull request must add
+exact-path enforcement from a base that contains this policy before any
+authority-only pull request creates the file.
+
+The required bootstrap order is:
+
+```text
+normative process/path preauthorization
+  -> checker-only exact-path enforcement
+      -> explicit human Product Decision receipt
+          -> authority-only Product Contract creation
+              -> dependent runtime implementation
+```
+
+The Product Contract, once correctly created through that sequence, is an inert
+static Product authority surface. It does not add a workflow, required status,
+evaluator, or machine-readable decision store. Candidate Product Contract
+content cannot authorize candidate runtime, and the authority-only creation
+pull request cannot include checker, workflow, evidence-producer, runtime, or
+expected-output changes.
+
 The JSON files are inert authority. The checker loads trusted base authority,
 validates candidate authority as data, and evaluates affected concerns without
 executing candidate modules.
