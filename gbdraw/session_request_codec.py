@@ -3034,6 +3034,7 @@ def _decode_comparisons(
     explicit_comparisons: list[LinearComparison] = []
     result: dict[str, Any] = {}
     singleton_kinds: set[str] = set()
+    has_orthogroup_metadata = False
     for index, raw in enumerate(comparisons):
         path = f"renderRequest.comparisons[{index}]"
         item = _object(raw, path=path, required={"kind"}, exact=False)
@@ -3090,6 +3091,13 @@ def _decode_comparisons(
                     resource_paths=resource_paths,
                 ),
                 context=path,
+            )
+            has_orthogroup_metadata |= (
+                any(
+                    str(value).strip().lower() not in {"", "nan"}
+                    for value in table.get("orthogroup_id", ())
+                )
+                or "orthogroup" in set(table.get("group_kind", ()))
             )
             if schema >= 2:
                 query_index = _non_negative_index(
@@ -3151,6 +3159,12 @@ def _decode_comparisons(
             raise CanonicalRequestDecodingError(
                 f"Unsupported comparison kind at {path}: {kind!r}."
             )
+    if (
+        result.get("protein_blastp_mode") != "orthogroup"
+        and not has_orthogroup_metadata
+        and not result.get("orthogroups")
+    ):
+        result.pop("align_orthogroup_feature", None)
     if blast_files:
         result["blast_files"] = tuple(blast_files)
     if protein_tables:

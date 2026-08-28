@@ -924,6 +924,50 @@ def test_standard_collinearity_embedded_max_paralog_is_inert_in_orthogroup_mode(
     assert decoded.options.collinear_max_paralog_links_per_orthogroup == 2
 
 
+@pytest.mark.parametrize("mode", ("pairwise", "collinear", "none"))
+def test_orthogroup_alignment_draft_is_inert_outside_orthogroup_mode(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    sources = tuple(
+        _source_file(tmp_path / f"inactive-alignment-{index}.gbk")
+        for index in range(2)
+    )
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=tuple(
+                RecordInput(source=GenBankInputSource(source))
+                for source in sources
+            ),
+            options=LinearDiagramOptions(
+                protein_blastp_mode="orthogroup",
+                align_orthogroup_feature="saved-orthogroup-anchor",
+                protein_comparisons=(
+                    pd.DataFrame({"orthogroup_id": [""], "group_kind": [""]}),
+                ),
+            ),
+        )
+    )
+    pipeline = next(
+        item
+        for item in encoded.payload["comparisons"]
+        if item["kind"] == "generatedProteinComparison"
+    )
+    pipeline["mode"] = mode
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(
+            encoded,
+            tmp_path / f"inactive-alignment-{mode}-resources",
+        ),
+        output_directory=tmp_path / f"inactive-alignment-{mode}-output",
+    )
+
+    assert decoded.options.protein_blastp_mode == mode
+    assert decoded.options.align_orthogroup_feature is None
+
+
 def test_current_schema_rejects_standard_collinearity_parameters(
     tmp_path: Path,
 ) -> None:
