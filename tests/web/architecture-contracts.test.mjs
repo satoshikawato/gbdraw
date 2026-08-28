@@ -832,6 +832,7 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
     TEST_WORKFLOW,
     /group: tests-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/
   );
+  assert.match(TEST_WORKFLOW, /cancel-in-progress: true/);
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
   assert.deepEqual(
@@ -873,7 +874,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   );
   assert.match(planner, /CI_IMPACT_REPOSITORY_ROOT: \$\{\{ github\.workspace \}\}/);
   assert.match(planner, /node \.ci-trusted-base\/tools\/ci-impact\.mjs plan/);
-  assert.match(planner, /Build shadow dev CI impact plan[\s\S]*node tools\/ci-impact\.mjs plan/);
+  assert.match(planner, /Build dev CI impact plan[\s\S]*node tools\/ci-impact\.mjs plan/);
   assert.doesNotMatch(TEST_WORKFLOW, /\n    paths(?:-ignore)?:/);
 
   const corePr = workflowJob('core-pr');
@@ -1014,18 +1015,25 @@ test('PR smoke selection is explicit while the full functional inventory stays w
   assert.ok(selectedCount >= 6 && selectedCount <= 10, `selected ${selectedCount} smoke tests`);
 });
 
-test('exact dev staging runs the full inventory with four mandatory Playwright shards', () => {
-  const stagingOnly = [
+test('exact dev staging routes every job through the protected-branch plan', () => {
+  const stagingJobs = [
+    'web-change-budget',
     'core',
+    'recipes-standard',
+    'gallery',
     'browser',
     'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'lint',
     'losat-cache-browser-acceptance'
   ];
-  for (const jobId of stagingOnly) {
+  for (const jobId of stagingJobs) {
     const job = workflowJob(jobId);
+    assert.match(job, /needs: ci-impact/, jobId);
+    assert.match(job, /needs\.ci-impact\.result == 'success'/, jobId);
+    assert.match(job, new RegExp(`requiredJobs, '${jobId}'`), jobId);
     assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
     assert.match(
       job,
@@ -1069,13 +1077,13 @@ test('exact dev staging runs the full inventory with four mandatory Playwright s
     gate,
     /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
   );
-  dependencies.forEach((jobId) => {
-    assert.ok(
-      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
-      `${jobId} must fail the staging aggregate unless it succeeds`
-    );
-  });
-  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+  assert.match(gate, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: dev/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /node tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(gate, /test "\$\{\{ needs\.|gh api|curl|check-promotion-readiness/);
 });
 
 test('Gallery readiness aggregates common, Vibrio, and projection evidence on dev', () => {
@@ -1306,18 +1314,19 @@ test('dev staging Web checks scope only the newly integrated change', () => {
 });
 
 test('supported-version and slow matrices cover exact dev staging', () => {
-  const stagingCondition = [
-    "    if: >-",
-    "      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||",
-    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')"
-  ].join('\n');
-
   for (const jobName of ['acceptance-supported-main', 'slow-main']) {
     const job = TEST_WORKFLOW.match(
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
     assert.ok(job, `${jobName} job must exist`);
-    assert.ok(job.includes(stagingCondition), `${jobName} must use the exact dev staging condition`);
+    assert.match(job, /needs: ci-impact/);
+    assert.match(job, /needs\.ci-impact\.result == 'success'/);
+    assert.match(job, new RegExp(`requiredJobs, '${jobName}'`));
+    assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+    assert.match(
+      job,
+      /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+    );
   }
 });
 

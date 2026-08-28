@@ -1,7 +1,7 @@
 # Selective CI impact planning
 
-Status: pull-request routing is active; `dev` staging remains in shadow mode, and the
-Gallery workflow is not connected to the planner.
+Status: pull-request and `dev` staging routing are active. The Gallery workflow is not
+connected to the planner.
 
 ## Purpose
 
@@ -11,8 +11,9 @@ when the changed paths are clearly lightweight and the directly preceding truste
 revision already has successful exact-SHA aggregate evidence.
 
 The `Tests` workflow routes pull-request jobs from a plan produced by the trusted base
-revision. Pushes to `dev` still run the existing full staging inventory. The Gallery
-workflow does not yet use the plan for job selection.
+revision. Pushes to `dev` use the planner from the protected branch and inherit only
+successful evidence from the direct parent commit. The Gallery workflow does not yet
+use the plan for job selection.
 
 ## Impact classes
 
@@ -87,6 +88,31 @@ API errors; and insufficient token access produce `decision=full` with
 planner. Invalid inputs, malformed schemas, unsafe output writes, and programming errors
 remain control-plane failures and do not get hidden by a full fallback.
 
+## Active dev staging routing
+
+For a push to `dev`, the planner compares `github.event.before` with the current SHA.
+When the direct parent has successful exact-SHA `Dev staging / gate` evidence, the
+`dev` profile selects these project-owned jobs:
+
+| `dev` impact | Jobs that run |
+| --- | --- |
+| `metadata` | `CI impact plan`, `Dev staging / gate` |
+| `documentation` | `CI impact plan`, `Recipes standard (Python 3.11)`, `Dev staging / gate` |
+| `full` | `CI impact plan`, all 11 staging job IDs, `Dev staging / gate` |
+
+The 11 staging job IDs and their existing commands, matrices, timeouts, and artifact
+steps are unchanged. `workflow_dispatch` always produces a full plan.
+
+The direct-parent requirement handles rapid consecutive pushes. If a later push
+cancels the parent's run, or reaches the planner before the parent completes, the
+current run cannot inherit that evidence and runs the full staging profile. This keeps
+`cancel-in-progress: true` without admitting untested runtime changes.
+
+`Dev staging / gate` validates the plan and every result from the current workflow run
+with the protected branch's `tools/ci-impact.mjs`. It always creates aggregate evidence
+for the current SHA. The promotion verifier continues to require that exact current-SHA
+job; it does not accept the parent's job directly.
+
 ## Direct evidence only
 
 Selective planning inherits evidence from exactly one revision:
@@ -117,10 +143,10 @@ The following display names are external admission contracts and stay fixed:
 - `Promotion / gate`
 
 Each workflow continues to start on every relevant event and creates its aggregate job
-for the current SHA. Pull-request selection happens at job level. `dev` staging and
-Gallery selection are not active. Keeping the aggregate names and current-SHA jobs
-stable avoids branch-protection changes and allows the existing promotion verifier to
-continue checking exact staging evidence.
+for the current SHA. Pull-request and `dev` staging selection happen at job level. The
+Gallery workflow still runs its full inventory. Keeping the aggregate names and
+current-SHA jobs stable avoids branch-protection changes and allows the existing
+promotion verifier to continue checking exact staging evidence.
 
 Workflow-level `paths` and `paths-ignore` filters are not used. Such filters can prevent
 a required check from being created, leaving a pull request pending, and would remove
@@ -143,6 +169,17 @@ the CI planner tests classify as full.
 The `pull_request_target` workflow remains separate. It checks candidate Git data with
 trusted base code and never executes the candidate checkout.
 
+## Dev trust boundary
+
+Code merged to protected `dev` is the staging control plane. Push and manual-dispatch
+plans run the current checkout's helper. A change to the workflow, planner, policy, or
+planner tests classifies as `full`, so the commit that changes routing must run the full
+staging profile before its aggregate can succeed.
+
+This trust boundary differs from pull requests, where the candidate helper is tested
+but the base revision decides the route. The Gallery workflow has its own gate and is
+not routed by the `Tests` workflow's dev plan.
+
 ## Aggregate validation
 
 The shared gate validator fails closed unless:
@@ -156,8 +193,9 @@ The shared gate validator fails closed unless:
 An unexpected failure or cancellation remains blocking even for a job the plan did not
 require. Malformed plan or `needs` JSON is also blocking.
 
-`PR / gate` runs the validator from `.ci-trusted-base`. The existing fixed shell
-aggregate remains in `Dev staging / gate` while `dev` routing is in shadow mode.
+`PR / gate` runs the validator from `.ci-trusted-base`. `Dev staging / gate` runs the
+same validator from the current protected-branch checkout with expected profile `dev`
+and the current workflow SHA.
 
 ## Rollout
 
@@ -166,7 +204,7 @@ Selective CI uses four separately reviewed stages:
 1. Implemented: deterministic policy, adapter, validator, tests, documentation, and
    shadow summary.
 2. Active: selective pull-request routing with the trusted base planner and validator.
-3. Not implemented: evidence-aware selection for exact `dev` staging runs.
+3. Active: evidence-aware selection for exact `dev` staging runs.
 4. Not implemented: evidence-aware selection for Gallery readiness runs.
 
 Each stage keeps the aggregate check names stable and can be reverted independently.
@@ -184,10 +222,10 @@ The `CI impact plan` summary includes:
 - inherited run and aggregate links when evidence succeeds; and
 - the fallback code and bounded reason when evidence is unavailable.
 
-The `pr` summary states that routing is active. The `dev` summary states that routing is
-observational. The Gallery workflow does not produce a planner summary while its stage
-is unimplemented. Tokens are never included in the plan or summary and are redacted
-from CLI diagnostics.
+The `pr` and `dev` summaries state that routing is active and name the applicable trust
+boundary. The Gallery workflow does not produce a planner summary while its stage is
+unimplemented. Tokens are never included in the plan or summary and are redacted from
+CLI diagnostics.
 
 ## Troubleshooting
 
@@ -222,6 +260,14 @@ Compare the plan profile and workflow SHA with the gate environment. Confirm tha
 known job is present in `needs`, required jobs succeeded, and unrequired jobs did not
 fail or get cancelled unexpectedly. Do not weaken the validator to accept a missing or
 skipped required job.
+
+### Consecutive dev pushes run the full profile
+
+Inspect `basis` and the evidence failure in `CI impact plan`. If the direct parent's
+workflow is queued, running, cancelled, failed, or absent, the current push must use
+`INHERITED_EVIDENCE_UNAVAILABLE` and run the full profile. Wait for a successful direct
+parent before using a lightweight commit when selective staging is important. Do not
+replace the direct parent with an older green SHA or disable concurrency.
 
 ### Pull-request jobs are all skipped
 

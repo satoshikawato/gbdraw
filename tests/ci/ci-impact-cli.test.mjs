@@ -137,6 +137,134 @@ test('dev and Gallery planning use a two-commit diff and direct parent evidence'
   }
 });
 
+test('dev metadata and documentation changes select only changed surfaces', async () => {
+  for (const [path, impact, requiredJobs] of [
+    ['.agents/skills/example/SKILL.md', 'metadata', []],
+    ['docs/FAQ.md', 'documentation', ['recipes-standard']]
+  ]) {
+    let evidenceArguments;
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'dev',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', path),
+      verifyWorkflowEvidenceImpl: async (args) => {
+        evidenceArguments = args;
+        return successfulEvidence();
+      }
+    });
+    assert.equal(evidenceArguments.expectedHeadSha, SHA.base);
+    assert.equal(evidenceArguments.workflowPath, '.github/workflows/test.yml');
+    assert.equal(evidenceArguments.expectedAggregateName, 'Dev staging / gate');
+    assert.equal(outcome.plan.impact, impact);
+    assert.equal(outcome.plan.decision, 'selective');
+    assert.equal(outcome.plan.basis, 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE');
+    assert.deepEqual(outcome.plan.requiredJobs, requiredJobs);
+  }
+});
+
+test('dev control-plane changes run the full profile without inherited evidence', async () => {
+  for (const path of ['tools/ci-impact.mjs', '.github/workflows/test.yml']) {
+    let evidenceCalls = 0;
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'dev',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', path),
+      verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
+    });
+    assert.equal(evidenceCalls, 0, path);
+    assert.equal(outcome.plan.impact, 'full', path);
+    assert.equal(outcome.plan.decision, 'full', path);
+    assert.equal(outcome.plan.basis, 'FULL_CHANGE', path);
+  }
+});
+
+test('dev direct-parent staging failures force the current run to full', async () => {
+  for (const code of [
+    'NO_MATCHING_RUN',
+    'RUN_NOT_SUCCESSFUL',
+    'AGGREGATE_JOB_NOT_SUCCESSFUL',
+    'API_REQUEST_FAILED'
+  ]) {
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'dev',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', '.gitignore'),
+      verifyWorkflowEvidenceImpl: async () => {
+        throw new PromotionReadinessError(code, `Direct parent evidence unavailable: ${code}`);
+      }
+    });
+    assert.equal(outcome.plan.impact, 'metadata', code);
+    assert.equal(outcome.plan.decision, 'full', code);
+    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', code);
+    assert.deepEqual(outcome.plan.requiredJobs, [
+      'web-change-budget',
+      'core',
+      'recipes-standard',
+      'gallery',
+      'browser',
+      'playwright-functional',
+      'playwright-performance',
+      'acceptance-supported-main',
+      'slow-main',
+      'lint',
+      'losat-cache-browser-acceptance'
+    ], code);
+  }
+});
+
+test('rapid dev pushes fall back to full while the direct parent is running or cancelled', async () => {
+  for (const state of ['in progress', 'cancelled']) {
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'dev',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
+      verifyWorkflowEvidenceImpl: async () => {
+        throw new PromotionReadinessError(
+          'RUN_NOT_SUCCESSFUL',
+          `Direct parent run is ${state}.`
+        );
+      }
+    });
+    assert.equal(outcome.plan.impact, 'documentation', state);
+    assert.equal(outcome.plan.decision, 'full', state);
+    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', state);
+  }
+});
+
+test('a zero dev before SHA fails closed without querying inherited evidence', async () => {
+  let evidenceCalls = 0;
+  const outcome = await buildImpactPlan({
+    configuration: configuration({
+      CI_IMPACT_PROFILE: 'dev',
+      CI_IMPACT_EVENT_NAME: 'push',
+      CI_IMPACT_CHANGE_BASE_SHA: '0'.repeat(40)
+    }),
+    token: 'test-token',
+    runGitImpl: () => ({
+      status: 128,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.from('bad object 0000000000000000000000000000000000000000')
+    }),
+    verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
+  });
+  assert.equal(evidenceCalls, 0);
+  assert.equal(outcome.plan.impact, 'full');
+  assert.equal(outcome.plan.decision, 'full');
+  assert.equal(outcome.plan.basis, 'UNKNOWN_OR_INVALID_CHANGE');
+});
+
 test('evidence verifier failures fall back to the full profile', async () => {
   const unavailableToken = 'unavailable-token';
   const outcome = await buildImpactPlan({
@@ -255,6 +383,27 @@ test('plan command writes one compact output line and escapes summary paths', as
   assert.doesNotMatch(stdout.value(), /test-token/);
 });
 
+test('dev plan summary reports active protected-branch routing', async () => {
+  const writes = new Map();
+  const status = await runCiImpactCli({
+    argv: ['plan'],
+    env: environment({
+      CI_IMPACT_PROFILE: 'dev',
+      CI_IMPACT_EVENT_NAME: 'push',
+      GITHUB_STEP_SUMMARY: '/tmp/ci-impact-dev-summary'
+    }),
+    stdout: textWriter().stream,
+    stderr: textWriter().stream,
+    appendFileImpl: (path, content) => writes.set(path, (writes.get(path) || '') + content),
+    runGitImpl: () => gitResult('M', '.gitignore'),
+    verifyWorkflowEvidenceImpl: async () => successfulEvidence()
+  });
+  assert.equal(status, 0);
+  const summary = writes.get('/tmp/ci-impact-dev-summary');
+  assert.match(summary, /Routing: active; dev staging jobs use the protected-branch plan/);
+  assert.doesNotMatch(summary, /shadow mode/);
+});
+
 test('unexpected failures are not converted to full plans and redact tokens', async () => {
   const secret = 'token-with-secret-value';
   const stdout = textWriter();
@@ -295,7 +444,7 @@ test('CLI rejects unknown arguments and invalid profile/event contracts', async 
   );
 });
 
-test('workflow routes PR jobs with the trusted base plan and keeps dev routing full', () => {
+test('workflow keeps trusted PR routing and activates protected dev routing', () => {
   const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
   const workflowJob = (jobId) => workflow.match(
     new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
@@ -315,7 +464,7 @@ test('workflow routes PR jobs with the trusted base plan and keeps dev routing f
   );
   assert.match(planner, /CI_IMPACT_REPOSITORY_ROOT: \$\{\{ github\.workspace \}\}/);
   assert.match(planner, /run: node \.ci-trusted-base\/tools\/ci-impact\.mjs plan/);
-  assert.match(planner, /Build shadow dev CI impact plan[\s\S]*run: node tools\/ci-impact\.mjs plan/);
+  assert.match(planner, /Build dev CI impact plan[\s\S]*run: node tools\/ci-impact\.mjs plan/);
 
   for (const jobId of [
     'web-change-budget',
@@ -343,16 +492,34 @@ test('workflow routes PR jobs with the trusted base plan and keeps dev routing f
     }
   }
 
-  for (const jobId of [
+  const devJobs = [
+    'web-change-budget',
     'core',
+    'recipes-standard',
+    'gallery',
     'browser',
     'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'lint',
     'losat-cache-browser-acceptance'
-  ]) {
-    assert.doesNotMatch(workflowJob(jobId), /requiredJobs/);
+  ];
+  for (const jobId of devJobs) {
+    const job = workflowJob(jobId);
+    assert.match(job, /needs: ci-impact/, jobId);
+    assert.match(job, /needs\.ci-impact\.result == 'success'/, jobId);
+    assert.match(
+      job,
+      new RegExp(`contains\\(fromJSON\\(needs\\.ci-impact\\.outputs\\.plan\\)\\.requiredJobs, '${jobId}'\\)`),
+      jobId
+    );
+    assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/, jobId);
+    assert.match(
+      job,
+      /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/,
+      jobId
+    );
   }
 
   const gate = workflowJob('pr-gate');
@@ -362,4 +529,14 @@ test('workflow routes PR jobs with the trusted base plan and keeps dev routing f
   assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(gate, /run: node \.ci-trusted-base\/tools\/ci-impact\.mjs gate/);
   assert.doesNotMatch(gate, /test "\$\{\{ needs\./);
+
+  const devGate = workflowJob('dev-staging-gate');
+  assert.match(devGate, /name: Dev staging \/ gate/);
+  assert.match(devGate, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(devGate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(devGate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(devGate, /CI_IMPACT_EXPECTED_PROFILE: dev/);
+  assert.match(devGate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(devGate, /run: node tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(devGate, /test "\$\{\{ needs\./);
 });

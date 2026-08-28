@@ -34,6 +34,12 @@ const plan = (overrides = {}) => createImpactPlan({
   ...overrides
 });
 
+const devPlan = (overrides = {}) => plan({
+  profile: 'dev',
+  basis: 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
+  ...overrides
+});
+
 const needsFor = (impactPlan = plan()) => Object.fromEntries([
   ['ci-impact', { result: 'success' }],
   ...knownJobsFor(impactPlan.profile).map((jobId) => [
@@ -81,6 +87,88 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
   successfulNeeds.gallery.result = 'success';
   const successful = validate(impactPlan, successfulNeeds);
   assert.equal(successful.ok, true);
+});
+
+test('gate accepts metadata, documentation, and full dev staging routes', () => {
+  const routes = [
+    devPlan({ impact: 'metadata' }),
+    devPlan(),
+    devPlan({
+      impact: 'full',
+      decision: 'full',
+      basis: 'FULL_CHANGE',
+      inheritedEvidence: null
+    })
+  ];
+  assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
+    [],
+    ['recipes-standard'],
+    [
+      'web-change-budget',
+      'core',
+      'recipes-standard',
+      'gallery',
+      'browser',
+      'playwright-functional',
+      'playwright-performance',
+      'acceptance-supported-main',
+      'slow-main',
+      'lint',
+      'losat-cache-browser-acceptance'
+    ]
+  ]);
+  routes.forEach((impactPlan) => {
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+  });
+});
+
+test('dev gate treats each matrix aggregate as one required job result', () => {
+  const full = devPlan({
+    impact: 'full',
+    decision: 'full',
+    basis: 'FULL_CHANGE',
+    inheritedEvidence: null
+  });
+  const fullNeeds = needsFor(full);
+  assert.equal(validate(full, fullNeeds).ok, true);
+  for (const result of ['skipped', 'failure']) {
+    const invalid = needsFor(full);
+    invalid['playwright-functional'].result = result;
+    assert.throws(
+      () => validate(full, invalid),
+      /required CI job did not succeed/,
+      result
+    );
+  }
+
+  const metadata = devPlan({ impact: 'metadata' });
+  const optionalSuccess = needsFor(metadata);
+  optionalSuccess['playwright-functional'].result = 'success';
+  assert.equal(validate(metadata, optionalSuccess).ok, true);
+  const optionalFailure = needsFor(metadata);
+  optionalFailure['playwright-functional'].result = 'failure';
+  assert.throws(() => validate(metadata, optionalFailure), /unrequired CI job failed unexpectedly/);
+});
+
+test('dev gate rejects the wrong current SHA and malformed inherited evidence', () => {
+  const impactPlan = devPlan();
+  assert.throws(() => validateGateResults({
+    plan: impactPlan,
+    needs: needsFor(impactPlan),
+    knownJobs: knownJobsFor('dev'),
+    expected: { profile: 'dev', workflowSha: 'd'.repeat(40) }
+  }), /workflow SHA does not match/);
+
+  const malformed = {
+    ...impactPlan,
+    inheritedEvidence: { ...impactPlan.inheritedEvidence, runId: '101' }
+  };
+  assert.throws(() => validateGateResults({
+    plan: malformed,
+    needs: needsFor(impactPlan),
+    knownJobs: knownJobsFor('dev'),
+    expected: { profile: 'dev', workflowSha: SHA.workflow }
+  }), /Inherited evidence identity is invalid/);
 });
 
 test('gate rejects required skipped, failure, and cancellation', () => {
