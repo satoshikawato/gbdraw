@@ -365,8 +365,11 @@ const html = (source) => visiblePath(source)
 
 export const formatPlanSummary = ({ plan, classification, evidenceFailure }) => {
   const requiredJobs = plan.requiredJobs.length ? plan.requiredJobs.map((job) => `\`${job}\``).join(', ') : 'none';
+  const routing = plan.profile === 'pr'
+    ? 'active; pull-request jobs use the trusted-base plan'
+    : 'observation only; existing test job conditions are unchanged';
   const lines = [
-    '## CI impact plan (shadow mode)',
+    `## CI impact plan${plan.profile === 'pr' ? '' : ' (shadow mode)'}`,
     '',
     `- Profile: \`${plan.profile}\``,
     `- Impact: \`${plan.impact}\``,
@@ -376,7 +379,7 @@ export const formatPlanSummary = ({ plan, classification, evidenceFailure }) => 
     `- Workflow SHA: \`${plan.workflowSha}\``,
     `- Changed paths: ${plan.changedPathCount}`,
     `- Planned required job IDs: ${requiredJobs}`,
-    '- Routing: observation only; existing test job conditions are unchanged',
+    `- Routing: ${routing}`,
     ''
   ];
   if (plan.inheritedEvidence) {

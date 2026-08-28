@@ -250,6 +250,8 @@ test('plan command writes one compact output line and escapes summary paths', as
   const summary = writes.get('/tmp/ci-impact-summary');
   assert.match(summary, /docs\/&lt;unsafe&gt;\\nname\.md/);
   assert.doesNotMatch(summary, /docs\/<unsafe>/);
+  assert.match(summary, /Routing: active; pull-request jobs use the trusted-base plan/);
+  assert.doesNotMatch(summary, /shadow mode/);
   assert.doesNotMatch(stdout.value(), /test-token/);
 });
 
@@ -293,31 +295,71 @@ test('CLI rejects unknown arguments and invalid profile/event contracts', async 
   );
 });
 
-test('shadow workflow exposes the plan without routing existing test jobs', () => {
+test('workflow routes PR jobs with the trusted base plan and keeps dev routing full', () => {
   const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const workflowJob = (jobId) => workflow.match(
+    new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+  )?.[0];
+
   assert.match(workflow, /actions: read/);
-  assert.match(workflow, /\n  ci-impact:\n[\s\S]*?name: CI impact plan/);
-  assert.match(workflow, /node --test tests\/ci\/\*\.test\.mjs/);
-  assert.match(workflow, /id: plan[\s\S]*node tools\/ci-impact\.mjs plan/);
+  assert.doesNotMatch(workflow, /\n    paths(?:-ignore)?:/);
+
+  const planner = workflowJob('ci-impact');
+  assert.ok(planner);
+  assert.match(planner, /name: CI impact plan/);
+  assert.match(planner, /Checkout complete history[\s\S]*fetch-depth: 0/);
+  assert.match(planner, /node --test tests\/ci\/\*\.test\.mjs/);
+  assert.match(
+    planner,
+    /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*path: \.ci-trusted-base[\s\S]*persist-credentials: false/
+  );
+  assert.match(planner, /CI_IMPACT_REPOSITORY_ROOT: \$\{\{ github\.workspace \}\}/);
+  assert.match(planner, /run: node \.ci-trusted-base\/tools\/ci-impact\.mjs plan/);
+  assert.match(planner, /Build shadow dev CI impact plan[\s\S]*run: node tools\/ci-impact\.mjs plan/);
+
   for (const jobId of [
     'web-change-budget',
-    'core',
     'core-pr',
     'recipes-standard',
     'gallery',
+    'lint',
+    'web-pr-smoke'
+  ]) {
+    const job = workflowJob(jobId);
+    assert.ok(job, jobId);
+    assert.match(job, /needs: ci-impact/);
+    assert.match(job, /needs\.ci-impact\.result == 'success'/);
+    assert.match(
+      job,
+      new RegExp(`contains\\(fromJSON\\(needs\\.ci-impact\\.outputs\\.plan\\)\\.requiredJobs, '${jobId}'\\)`)
+    );
+    if (['web-change-budget', 'recipes-standard', 'gallery', 'lint'].includes(jobId)) {
+      assert.match(job, /!cancelled\(\)/);
+      assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+      assert.match(
+        job,
+        /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+      );
+    }
+  }
+
+  for (const jobId of [
+    'core',
     'browser',
-    'web-pr-smoke',
     'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
-    'lint',
     'losat-cache-browser-acceptance'
   ]) {
-    const job = workflow.match(
-      new RegExp(`\\n  ${jobId}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
-    )?.[0];
-    assert.ok(job, jobId);
-    assert.doesNotMatch(job, /needs(?:\.[a-z-]+)?\.ci-impact|needs:\s+ci-impact/);
+    assert.doesNotMatch(workflowJob(jobId), /requiredJobs/);
   }
+
+  const gate = workflowJob('pr-gate');
+  assert.match(gate, /name: PR \/ gate/);
+  assert.match(gate, /path: \.ci-trusted-base/);
+  assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(gate, /run: node \.ci-trusted-base\/tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(gate, /test "\$\{\{ needs\./);
 });

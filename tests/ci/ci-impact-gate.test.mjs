@@ -49,11 +49,34 @@ const validate = (impactPlan, needs) => validateGateResults({
   expected: { profile: impactPlan.profile, workflowSha: SHA.workflow }
 });
 
-test('gate accepts required success and unrequired skipped or success', () => {
-  const impactPlan = plan();
-  const skipped = validate(impactPlan, needsFor(impactPlan));
-  assert.equal(skipped.ok, true);
+test('gate accepts metadata, documentation, and full PR routes', () => {
+  const routes = [
+    plan({ impact: 'metadata' }),
+    plan(),
+    plan({
+      impact: 'full',
+      decision: 'full',
+      basis: 'FULL_CHANGE',
+      inheritedEvidence: null
+    })
+  ];
+  assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
+    [],
+    ['recipes-standard'],
+    [
+      'web-change-budget',
+      'core-pr',
+      'recipes-standard',
+      'gallery',
+      'lint',
+      'web-pr-smoke'
+    ]
+  ]);
+  routes.forEach((impactPlan) => {
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+  });
 
+  const impactPlan = plan();
   const successfulNeeds = needsFor(impactPlan);
   successfulNeeds.gallery.result = 'success';
   const successful = validate(impactPlan, successfulNeeds);
@@ -107,7 +130,7 @@ test('unknown jobs may succeed or skip but may not fail', () => {
   assert.throws(() => validate(impactPlan, failed), /unknown CI job failed unexpectedly/);
 });
 
-test('gate rejects wrong profile, workflow SHA, and schema', () => {
+test('trusted gate rejects wrong profile, workflow SHA, and helper schema', () => {
   const impactPlan = plan();
   const needs = needsFor(impactPlan);
   assert.throws(() => validateGateResults({
@@ -162,6 +185,22 @@ test('gate CLI rejects malformed plan and needs JSON', async () => {
     assert.equal(stdout.value(), '');
     assert.match(stderr.value(), /MALFORMED_JSON/);
   }
+});
+
+test('gate CLI rejects a missing plan', async () => {
+  const stderr = textWriter();
+  const status = await runCiImpactCli({
+    argv: ['gate'],
+    env: {
+      CI_IMPACT_NEEDS_JSON: JSON.stringify(needsFor()),
+      CI_IMPACT_EXPECTED_PROFILE: 'pr',
+      CI_IMPACT_EXPECTED_WORKFLOW_SHA: SHA.workflow
+    },
+    stdout: textWriter().stream,
+    stderr: stderr.stream
+  });
+  assert.equal(status, 1);
+  assert.match(stderr.value(), /MISSING_ENVIRONMENT/);
 });
 
 test('gate CLI emits a passing summary for a valid payload', async () => {
