@@ -40,6 +40,17 @@ const devPlan = (overrides = {}) => plan({
   ...overrides
 });
 
+const galleryPlan = (overrides = {}) => plan({
+  profile: 'gallery',
+  basis: 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
+  inheritedEvidence: {
+    ...plan().inheritedEvidence,
+    workflowPath: '.github/workflows/gallery-publication.yml',
+    aggregateName: 'Gallery readiness / gate'
+  },
+  ...overrides
+});
+
 const needsFor = (impactPlan = plan()) => Object.fromEntries([
   ['ci-impact', { result: 'success' }],
   ...knownJobsFor(impactPlan.profile).map((jobId) => [
@@ -120,6 +131,66 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
   routes.forEach((impactPlan) => {
     assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
   });
+});
+
+test('Gallery gate accepts both light routes and requires both full jobs', () => {
+  const routes = [
+    galleryPlan({ impact: 'metadata' }),
+    galleryPlan(),
+    galleryPlan({
+      impact: 'full',
+      decision: 'full',
+      basis: 'FULL_CHANGE',
+      inheritedEvidence: null
+    })
+  ];
+  assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
+    [],
+    [],
+    ['browser', 'performance']
+  ]);
+  routes.forEach((impactPlan) => {
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+  });
+
+  const full = routes[2];
+  for (const jobId of ['browser', 'performance']) {
+    for (const result of ['skipped', 'failure', 'cancelled']) {
+      const needs = needsFor(full);
+      needs[jobId].result = result;
+      assert.throws(
+        () => validate(full, needs),
+        /required CI job did not succeed/,
+        `${jobId}: ${result}`
+      );
+    }
+  }
+
+  const optionalFailure = needsFor(routes[0]);
+  optionalFailure.browser.result = 'failure';
+  assert.throws(
+    () => validate(routes[0], optionalFailure),
+    /unrequired CI job failed unexpectedly/
+  );
+});
+
+test('Gallery gate rejects the wrong profile, workflow SHA, and schema', () => {
+  const impactPlan = galleryPlan();
+  const needs = needsFor(impactPlan);
+  for (const [candidate, expected, message] of [
+    [impactPlan, { profile: 'dev', workflowSha: SHA.workflow }, /profile does not match/],
+    [impactPlan, { profile: 'gallery', workflowSha: 'd'.repeat(40) }, /workflow SHA does not match/],
+    [{ ...impactPlan, schemaVersion: 2 }, {
+      profile: 'gallery', workflowSha: SHA.workflow
+    }, /schema version is not supported/]
+  ]) {
+    assert.throws(() => validateGateResults({
+      plan: candidate,
+      needs,
+      knownJobs: knownJobsFor('gallery'),
+      expected
+    }), message);
+  }
 });
 
 test('dev gate treats each matrix aggregate as one required job result', () => {

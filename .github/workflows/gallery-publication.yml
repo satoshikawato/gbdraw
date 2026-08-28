@@ -2,6 +2,7 @@ name: Gallery publication
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
@@ -19,8 +20,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-impact:
+    name: CI impact plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - name: Checkout exact workflow SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Gallery CI impact plan
+        id: plan
+        env:
+          CI_IMPACT_PROFILE: gallery
+          CI_IMPACT_EVENT_NAME: ${{ github.event_name }}
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.sha }}
+          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.sha }}
+          CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_ARCHITECTURE_CHANGE: 'false'
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/ci-impact.mjs plan
+
   browser:
     name: Gallery browser (${{ matrix.example }})
+    needs: ci-impact
+    if: >-
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'browser')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -54,6 +91,10 @@ jobs:
 
   performance:
     name: Gallery publication performance (projection)
+    needs: ci-impact
+    if: >-
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'performance')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -85,14 +126,24 @@ jobs:
   readiness-gate:
     name: Gallery readiness / gate
     needs:
+      - ci-impact
       - browser
       - performance
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Require all Gallery readiness evidence
-        run: |
-          set -euo pipefail
-          test "${{ needs.browser.result }}" = "success"
-          test "${{ needs.performance.result }}" = "success"
+      - name: Checkout protected dev CI policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate required Gallery readiness evidence
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
+          CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_IMPACT_EXPECTED_PROFILE: gallery
+          CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: node tools/ci-impact.mjs gate

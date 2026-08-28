@@ -1086,29 +1086,70 @@ test('exact dev staging routes every job through the protected-branch plan', () 
   assert.doesNotMatch(gate, /test "\$\{\{ needs\.|gh api|curl|check-promotion-readiness/);
 });
 
-test('Gallery readiness aggregates common, Vibrio, and projection evidence on dev', () => {
+test('Gallery readiness routes jobs from direct-parent evidence and aggregates the current SHA', () => {
+  assert.match(
+    GALLERY_PUBLICATION_WORKFLOW,
+    /permissions:\n  contents: read\n  actions: read/
+  );
+  assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /\n    paths(?:-ignore)?:/);
+
+  const planner = workflowJob('ci-impact', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(planner, /\n    name: CI impact plan\n/);
+  assert.match(planner, /timeout-minutes: 5/);
+  assert.match(planner, /plan: \$\{\{ steps\.plan\.outputs\.plan \}\}/);
+  assert.match(
+    planner,
+    /Checkout exact workflow SHA[\s\S]*ref: \$\{\{ github\.sha \}\}[\s\S]*fetch-depth: 0[\s\S]*persist-credentials: false/
+  );
+  assert.match(planner, /node-version: "20"/);
+  assert.match(planner, /CI_IMPACT_PROFILE: gallery/);
+  assert.match(planner, /CI_IMPACT_EVENT_NAME: \$\{\{ github\.event_name \}\}/);
+  assert.match(
+    planner,
+    /CI_IMPACT_CHANGE_BASE_SHA: \$\{\{ github\.event_name == 'push' && github\.event\.before \|\| github\.sha \}\}/
+  );
+  assert.match(planner, /CI_IMPACT_CHANGE_HEAD_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(planner, /CI_IMPACT_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(planner, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(planner, /node tools\/ci-impact\.mjs plan/);
+  assert.doesNotMatch(planner, /node --test/);
+
   const browser = workflowJob('browser', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(browser, /needs: ci-impact/);
+  assert.match(browser, /needs\.ci-impact\.result == 'success'/);
+  assert.match(browser, /requiredJobs, 'browser'/);
   assert.match(browser, /example: common 9\n            command: test:web:gallery-publication/);
   assert.match(browser, /example: Vibrio\n            command: test:web:vibrio-generate/);
   assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(browser, /npm run \$\{\{ matrix\.command \}\}/);
 
   const performance = workflowJob('performance', GALLERY_PUBLICATION_WORKFLOW);
   assert.match(performance, /\n    name: Gallery publication performance \(projection\)\n/);
+  assert.match(performance, /needs: ci-impact/);
+  assert.match(performance, /needs\.ci-impact\.result == 'success'/);
+  assert.match(performance, /requiredJobs, 'performance'/);
   assert.match(performance, /measure_gallery_publication_performance\.py projection/);
   assert.match(performance, /github\.event_name == 'workflow_dispatch' && inputs\.complete_refresh/);
   assert.match(performance, /measure_gallery_publication_performance\.py refresh/);
+  assert.equal(
+    [...performance.matchAll(/--baseline-revision 574b33b83962949397839e2aaa862a8b96667625/g)].length,
+    2
+  );
 
   const gate = workflowJob('readiness-gate', GALLERY_PUBLICATION_WORKFLOW);
   assert.match(gate, /\n    name: Gallery readiness \/ gate\n/);
-  assert.match(gate, /\n    needs:\n      - browser\n      - performance\n/);
+  assert.match(gate, /\n    needs:\n      - ci-impact\n      - browser\n      - performance\n/);
   assert.match(gate, /\n    if: always\(\)\n/);
-  for (const jobId of ['browser', 'performance']) {
-    assert.ok(
-      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
-      `${jobId} must fail the Gallery aggregate unless all matrix jobs succeed`
-    );
-  }
-  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+  assert.match(gate, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: gallery/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /node tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(
+    gate,
+    /test "\$\{\{ needs\.|gh api|curl|check-promotion-readiness/
+  );
 });
 
 test('trusted promotion uses base code for topology, exact-SHA evidence, and tree proof', () => {

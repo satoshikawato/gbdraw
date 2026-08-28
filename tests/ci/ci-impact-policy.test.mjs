@@ -177,8 +177,14 @@ test('profile job registries are exact and centralized', () => {
   ]);
   assert.deepEqual(knownJobsFor('gallery'), ['browser', 'performance']);
   assert.deepEqual(requiredJobsFor({
+    profile: 'gallery', impact: 'metadata', decision: 'selective'
+  }), []);
+  assert.deepEqual(requiredJobsFor({
     profile: 'gallery', impact: 'documentation', decision: 'selective'
   }), []);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'gallery', impact: 'full', decision: 'full'
+  }), ['browser', 'performance']);
 });
 
 test('impact plans are strict, policy-derived, and immutable', () => {
