@@ -901,6 +901,7 @@ test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evi
     /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
   )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
   assert.deepEqual(dependencies, [
+    'ci-impact',
     'web-change-budget',
     'core-pr',
     'recipes-standard',
@@ -1017,6 +1018,7 @@ test('exact dev staging runs the full inventory with four mandatory Playwright s
     /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
   )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
   assert.deepEqual(dependencies, [
+    'ci-impact',
     'web-change-budget',
     'core',
     'recipes-standard',

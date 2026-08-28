@@ -2,6 +2,7 @@ name: Tests
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
@@ -17,6 +18,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-impact:
+    name: CI impact plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Test CI impact policy and adapters
+        run: node --test tests/ci/*.test.mjs
+
+      - name: Build shadow CI impact plan
+        id: plan
+        env:
+          CI_IMPACT_PROFILE: ${{ github.event_name == 'pull_request' && 'pr' || 'dev' }}
+          CI_IMPACT_EVENT_NAME: ${{ github.event_name }}
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
+          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_ARCHITECTURE_CHANGE: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'architecture-change') && 'true' || 'false' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/ci-impact.mjs plan
+
   web-change-budget:
     name: Web change budget
     if: >-
@@ -536,6 +570,7 @@ jobs:
   pr-gate:
     name: PR / gate
     needs:
+      - ci-impact
       - web-change-budget
       - core-pr
       - recipes-standard
@@ -552,6 +587,7 @@ jobs:
       - name: Require all fast PR evidence
         run: |
           set -euo pipefail
+          test "${{ needs.ci-impact.result }}" = "success"
           test "${{ needs.web-change-budget.result }}" = "success"
           test "${{ needs.core-pr.result }}" = "success"
           test "${{ needs.recipes-standard.result }}" = "success"
@@ -562,6 +598,7 @@ jobs:
   dev-staging-gate:
     name: Dev staging / gate
     needs:
+      - ci-impact
       - web-change-budget
       - core
       - recipes-standard
@@ -583,6 +620,7 @@ jobs:
       - name: Require all exact-SHA staging evidence
         run: |
           set -euo pipefail
+          test "${{ needs.ci-impact.result }}" = "success"
           test "${{ needs.web-change-budget.result }}" = "success"
           test "${{ needs.core.result }}" = "success"
           test "${{ needs.recipes-standard.result }}" = "success"
