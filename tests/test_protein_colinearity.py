@@ -2173,7 +2173,14 @@ def test_pairwise_blastp_search_keeps_one_hsp_cap(monkeypatch: pytest.MonkeyPatc
     ]
     observed_caps: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
         observed_caps.append(max_hsps_per_subject)
         return pd.DataFrame.from_records(
@@ -2181,7 +2188,7 @@ def test_pairwise_blastp_search_keeps_one_hsp_cap(monkeypatch: pytest.MonkeyPatc
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(protein_colinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     build_pairwise_protein_blastp_comparisons(records)
 
@@ -2196,7 +2203,14 @@ def test_orthogroup_blastp_search_omits_one_hsp_cap(monkeypatch: pytest.MonkeyPa
     ]
     observed_caps: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
         observed_caps.append(max_hsps_per_subject)
         query_id = query_fasta.splitlines()[0][1:].split()[0]
@@ -2206,11 +2220,106 @@ def test_orthogroup_blastp_search_omits_one_hsp_cap(monkeypatch: pytest.MonkeyPa
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(protein_colinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     build_rbh_orthogroup_protein_blastp_comparisons(records)
 
     assert observed_caps == [None, None, None, None]
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("candidate_limit", (None, 7))
+def test_candidate_and_pairwise_display_limits_reach_independent_consumers(
+    candidate_limit: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record(
+            "record_b",
+            features=[_cds(index * 12, index * 12 + 9) for index in range(3)],
+        ),
+    ]
+    observed_raw_limits: list[int | None] = []
+
+    def fake_search(query_fasta, subject_fasta, *, max_hits, **_kwargs):
+        observed_raw_limits.append(max_hits)
+        query_id = query_fasta.splitlines()[0][1:].split()[0]
+        subject_ids = [
+            line[1:].split()[0]
+            for line in subject_fasta.splitlines()
+            if line.startswith(">")
+        ]
+        return pd.DataFrame.from_records(
+            [
+                _hit_row(query_id, subject_id, bitscore=300 - index)
+                for index, subject_id in enumerate(subject_ids)
+            ],
+            columns=COMPARISON_COLUMNS,
+        )
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
+
+    result = build_pairwise_protein_blastp_comparisons(
+        records,
+        max_hits=2,
+        candidate_limit=candidate_limit,
+    )
+
+    assert observed_raw_limits == [candidate_limit]
+    assert len(result.comparisons[0]) == 2
+
+
+@pytest.mark.linear
+def test_member_hit_limit_bounds_derived_candidates_and_preserves_their_hsps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _record("record_a", features=[_cds(0, 9)]),
+        _record(
+            "record_b",
+            features=[_cds(index * 12, index * 12 + 9) for index in range(3)],
+        ),
+    ]
+    extraction = extract_cds_proteins(records)
+    query_id = extraction.proteins_by_record[0][0].protein_id
+    subject_ids = [protein.protein_id for protein in extraction.proteins_by_record[1]]
+    directional_hits = {
+        (0, 1): pd.DataFrame.from_records(
+            [
+                _hit_row(query_id, subject_ids[0], bitscore=300),
+                _hit_row(query_id, subject_ids[1], bitscore=250),
+                _hit_row(query_id, subject_ids[1], bitscore=240),
+                _hit_row(query_id, subject_ids[2], bitscore=200),
+            ],
+            columns=COMPARISON_COLUMNS,
+        ),
+    }
+    captured: dict[tuple[int, int], pd.DataFrame] = {}
+    real_consumer = (
+        protein_colinearity_module._select_anchor_core_orthogroup_edges_from_directional_hits
+    )
+
+    def spy_consumer(member_hits, *args, **kwargs):
+        captured.update({pair: hits.copy() for pair, hits in member_hits.items()})
+        return real_consumer(member_hits, *args, **kwargs)
+
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_select_anchor_core_orthogroup_edges_from_directional_hits",
+        spy_consumer,
+    )
+
+    select_rbh_orthogroup_edges_from_directional_hits(
+        directional_hits,
+        extraction.protein_map,
+        record_count=2,
+        orthogroup_member_max_hits=2,
+    )
+
+    observed = captured[(0, 1)]
+    assert set(observed["subject"]) == set(subject_ids[:2])
+    assert len(observed.loc[observed["subject"] == subject_ids[1]]) == 2
 
 
 def _long_cds(protein_id: str, length: int = 1000) -> SeqFeature:

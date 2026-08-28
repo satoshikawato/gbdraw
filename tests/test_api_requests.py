@@ -8,6 +8,7 @@ import pytest
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.analysis.collinearity import LosslessCollinearityParameters
 from gbdraw.api.options import (
     CircularDiagramOptions,
     CircularMultiRecordOptions,
@@ -410,6 +411,34 @@ def test_linear_options_normalize_supported_mode_aliases() -> None:
     assert options.collinearity_anchor_mode == "one_to_one"
     assert options.collinearity_color_mode == "average_identity"
     assert options.orthogroup_membership_mode == "anchor_core_v1"
+
+
+def test_linear_protein_option_defaults_match_explicit_typed_values() -> None:
+    omitted = LinearDiagramOptions()
+    explicit = LinearDiagramOptions(
+        protein_blastp_mode="none",
+        collinearity_unit_mode="auto",
+        collinearity_anchor_mode="rbh",
+        collinearity_search_scope="adjacent",
+        collinearity_color_mode="orientation",
+        losatp_bin="losat",
+        ncbi_blastp_bin=None,
+        losatp_threads=None,
+        protein_blastp_max_hits=5,
+        protein_blastp_candidate_limit=None,
+        orthogroup_membership_mode="anchor_core_v1",
+        orthogroup_member_max_hits=5,
+        collinear_max_paralog_links_per_orthogroup=2,
+    )
+
+    assert omitted == explicit
+    assert LosslessCollinearityParameters() == LosslessCollinearityParameters(
+        min_anchors=1,
+        max_unit_gap=0,
+        max_diagonal_drift=0,
+        max_conflicts=1,
+        merge_orientation="either",
+    )
 
 
 def test_render_output_request_normalizes_formats_and_paths() -> None:

@@ -22,8 +22,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupMembershipMode,
     OrthogroupResult,
     ProteinExtractionResult,
-    _cache_runner_for_search,
-    _run_losatp_search,
+    _execute_losatp_search,
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
@@ -151,7 +150,7 @@ class LosslessCollinearityParameters:
     min_anchors: int = 1
     max_unit_gap: int = 0
     max_diagonal_drift: int = 0
-    max_conflicts: int = 0
+    max_conflicts: int = 1
     merge_orientation: Literal["strand", "order", "either"] = "either"
 
     def validate(self) -> None:
@@ -1274,7 +1273,7 @@ def build_orthogroup_collinearity_blocks(
     directional_tables: dict[tuple[int, int], DataFrame] = {}
     for record_index in range(len(records)):
         record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
-        same_record_hits = _run_losatp_search(
+        same_record_hits = _execute_losatp_search(
             record_fasta,
             record_fasta,
             losatp_bin=losatp_bin,
@@ -1282,16 +1281,9 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                display=False,
-            ),
+            runner=runner,
+            losatp_cache=losatp_cache,
+            display=False,
         )
         directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
             same_record_hits,
@@ -1311,7 +1303,7 @@ def build_orthogroup_collinearity_blocks(
     for query_index, subject_index in search_pairs:
         query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
         subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
-        forward_hits = _run_losatp_search(
+        forward_hits = _execute_losatp_search(
             query_fasta,
             subject_fasta,
             losatp_bin=losatp_bin,
@@ -1319,21 +1311,14 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                filename=(
-                    str(cache_filenames[query_index])
-                    if cache_filenames is not None and query_index < len(cache_filenames)
-                    else ""
-                ),
-                display=subject_index == query_index + 1,
+            runner=runner,
+            losatp_cache=losatp_cache,
+            filename=(
+                str(cache_filenames[query_index])
+                if cache_filenames is not None and query_index < len(cache_filenames)
+                else ""
             ),
+            display=subject_index == query_index + 1,
         )
         directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
             forward_hits,
@@ -1342,7 +1327,7 @@ def build_orthogroup_collinearity_blocks(
             identity=identity,
             alignment_length=alignment_length,
         )
-        reverse_hits = _run_losatp_search(
+        reverse_hits = _execute_losatp_search(
             subject_fasta,
             query_fasta,
             losatp_bin=losatp_bin,
@@ -1350,16 +1335,9 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                display=False,
-            ),
+            runner=runner,
+            losatp_cache=losatp_cache,
+            display=False,
         )
         directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
             reverse_hits,
