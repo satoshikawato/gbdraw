@@ -35,6 +35,12 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.requests import (
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+)
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     convert_protein_hits_to_genomic_links,
@@ -99,10 +105,20 @@ def _record(record_id: str, features: list[SeqFeature]) -> SeqRecord:
     return record
 
 
-def _cds(start: int, end: int, qualifiers: dict[str, list[str]]) -> SeqFeature:
+def _cds(
+    start: int,
+    end: int,
+    qualifiers: dict[str, list[str]],
+    *,
+    strand: int = 1,
+) -> SeqFeature:
     merged = {"translation": ["MKK"]}
     merged.update(qualifiers)
-    return SeqFeature(FeatureLocation(start, end, strand=1), type="CDS", qualifiers=merged)
+    return SeqFeature(
+        FeatureLocation(start, end, strand=strand),
+        type="CDS",
+        qualifiers=merged,
+    )
 
 
 def _hit_row(
@@ -137,6 +153,14 @@ def _first_fasta_id(fasta_text: str) -> str:
         if line.startswith(">"):
             return line[1:].split(None, 1)[0]
     return ""
+
+
+def _fasta_ids(fasta_text: str) -> list[str]:
+    return [
+        line[1:].split(None, 1)[0]
+        for line in str(fasta_text).splitlines()
+        if line.startswith(">")
+    ]
 
 
 def _hex_distance(color_a: str, color_b: str) -> float:
@@ -620,6 +644,160 @@ def test_lossless_collinearity_preserves_every_adjacent_orthogroup_edge() -> Non
     assert {(query_id, subject_id) for query_id, subject_id, *_ in expected_edge_ids} <= rendered_edge_ids
     assert any(block.kind == "singleton" for block in result.blocks)
     assert any(block.kind == "cluster" and len(block.anchors) > 1 for block in result.blocks)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("anchors", "max_unit_gap", "expected_zero", "expected_one"),
+    [
+        (
+            [
+                _anchor(0, 0),
+                _anchor(1, 1),
+                _anchor(2, 5, subject_strand=-1),
+                _anchor(3, 3),
+                _anchor(4, 4),
+            ],
+            1,
+            [[0, 1, 3, 4], [2]],
+            [[0, 1, 3, 4], [2]],
+        ),
+        (
+            [
+                _anchor(0, 0),
+                _anchor(1, 1),
+                _anchor(2, 2, subject_strand=-1),
+                _anchor(3, 3),
+                _anchor(4, 4),
+            ],
+            1,
+            [[0, 1], [2], [3, 4]],
+            [[0, 1, 3, 4], [2]],
+        ),
+        (
+            [
+                _anchor(0, 0),
+                _anchor(1, 1),
+                _anchor(2, 3, subject_strand=-1),
+                _anchor(3, 2),
+                _anchor(4, 4),
+                _anchor(5, 5),
+            ],
+            2,
+            [[0, 1], [2], [3], [4, 5]],
+            [[0, 1], [2], [3], [4, 5]],
+        ),
+    ],
+    ids=(
+        "zero-interior-conflicts",
+        "one-interior-conflict",
+        "two-interior-conflicts",
+    ),
+)
+def test_lossless_max_conflicts_threshold_controls(
+    anchors: list[CollinearityAnchor],
+    max_unit_gap: int,
+    expected_zero: list[list[int]],
+    expected_one: list[list[int]],
+) -> None:
+    input_members = {
+        (anchor.query_order, anchor.subject_order) for anchor in anchors
+    }
+    for max_conflicts, expected in enumerate((expected_zero, expected_one)):
+        result = cluster_lossless_collinearity_anchors(
+            anchors,
+            params=LosslessCollinearityParameters(
+                max_unit_gap=max_unit_gap,
+                max_conflicts=max_conflicts,
+                merge_orientation="strand",
+            ),
+        )
+
+        assert [
+            [anchor.query_order for anchor in block.anchors]
+            for block in result.blocks
+        ] == expected
+        assert sum(len(block.anchors) for block in result.blocks) == len(anchors)
+        assert {
+            (anchor.query_order, anchor.subject_order)
+            for block in result.blocks
+            for anchor in block.anchors
+        } == input_members
+
+
+@pytest.mark.linear
+def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(
+                    index * 12,
+                    index * 12 + 9,
+                    {"locus_tag": [f"q{index}"], "protein_id": [f"q{index}"]},
+                )
+                for index in range(5)
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(
+                    index * 12,
+                    index * 12 + 9,
+                    {"locus_tag": [f"s{index}"], "protein_id": [f"s{index}"]},
+                    strand=-1 if index == 2 else 1,
+                )
+                for index in range(5)
+            ],
+        ),
+    ]
+
+    def fake_search(query_fasta, subject_fasta, **_kwargs):
+        query_ids = _fasta_ids(query_fasta)
+        subject_ids = _fasta_ids(subject_fasta)
+        rows = [
+            _hit_row(query_id, subject_id)
+            for query_id, subject_id in zip(query_ids, subject_ids, strict=True)
+        ]
+        return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+
+    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+
+    results: dict[int, CollinearityResult] = {}
+    for max_conflicts in (0, 1):
+        params = LosslessCollinearityParameters(
+            max_unit_gap=1,
+            max_conflicts=max_conflicts,
+            merge_orientation="strand",
+        )
+        request = LinearDiagramRequest(
+            records=tuple(
+                RecordInput(source=InMemoryRecordSource(record)) for record in records
+            ),
+            options=LinearDiagramOptions(
+                protein_blastp_mode="collinear",
+                collinearity_unit_mode="cds",
+                collinearity_params=params,
+            ),
+        )
+        prepared = request_render_module.build_request_diagram(request)
+        assert prepared.request.options.collinearity_params is params
+        assert prepared.linear_metadata is not None
+        result = prepared.linear_metadata.collinearity_result
+        assert result is not None
+        results[max_conflicts] = result
+
+    assert [
+        [anchor.query_order for anchor in block.anchors]
+        for block in results[0].blocks
+    ] == [[0, 1], [2], [3, 4]]
+    assert [
+        [anchor.query_order for anchor in block.anchors]
+        for block in results[1].blocks
+    ] == [[0, 1, 3, 4], [2]]
 
 
 @pytest.mark.linear

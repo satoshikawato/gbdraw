@@ -738,12 +738,39 @@ def _lossless_initial_clusters_for_pair(
     return blocks
 
 
+def _lossless_conflicts_between_clusters(
+    left: CollinearityBlock,
+    right: CollinearityBlock,
+    anchors: Sequence[CollinearityAnchor],
+) -> int:
+    left_path = _path_sorted_anchors(left.anchors, left.orientation)
+    right_path = _path_sorted_anchors(right.anchors, right.orientation)
+    if not left_path or not right_path:
+        return 0
+    left_end = left_path[-1]
+    right_start = right_path[0]
+    query_min = min(int(left_end.query_order), int(right_start.query_order))
+    query_max = max(int(left_end.query_order), int(right_start.query_order))
+    subject_min = min(int(left_end.subject_order), int(right_start.subject_order))
+    subject_max = max(int(left_end.subject_order), int(right_start.subject_order))
+    cluster_anchors = {*left.anchors, *right.anchors}
+    return sum(
+        1
+        for anchor in anchors
+        if anchor not in cluster_anchors
+        and query_min < int(anchor.query_order) < query_max
+        and subject_min < int(anchor.subject_order) < subject_max
+    )
+
+
 def _lossless_clusters_can_merge(
     left: CollinearityBlock,
     right: CollinearityBlock,
+    *,
+    anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> bool:
-    if left.kind == "singleton" and right.kind == "singleton":
+    if left.kind != "cluster" or right.kind != "cluster":
         return False
     if left.orientation != right.orientation:
         return False
@@ -751,21 +778,34 @@ def _lossless_clusters_can_merge(
     right_path = _path_sorted_anchors(right.anchors, right.orientation)
     if not left_path or not right_path:
         return False
-    return _lossless_anchors_are_compatible(
+    if not _lossless_anchors_are_compatible(
         left_path[-1],
         right_path[0],
         orientation=left.orientation,
         params=params,
+    ):
+        return False
+    return _lossless_conflicts_between_clusters(left, right, anchors) <= int(
+        params.max_conflicts
     )
 
 
 def _merge_lossless_clusters(
     blocks: Sequence[CollinearityBlock],
+    *,
+    anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> tuple[CollinearityBlock, ...]:
     merged: list[CollinearityBlock] = []
-    for block in sorted(blocks, key=_final_block_sort_key):
-        if not merged or not _lossless_clusters_can_merge(merged[-1], block, params):
+    singleton_blocks = [block for block in blocks if block.kind == "singleton"]
+    cluster_blocks = [block for block in blocks if block.kind == "cluster"]
+    for block in sorted(cluster_blocks, key=_final_block_sort_key):
+        if not merged or not _lossless_clusters_can_merge(
+            merged[-1],
+            block,
+            anchors=anchors,
+            params=params,
+        ):
             merged.append(block)
             continue
         previous = merged[-1]
@@ -775,7 +815,7 @@ def _merge_lossless_clusters(
             orientation=previous.orientation,
             anchors=(*previous.anchors, *block.anchors),
         )
-    return tuple(merged)
+    return tuple(sorted((*merged, *singleton_blocks), key=_final_block_sort_key))
 
 
 def _filter_blocks_by_min_anchors(
@@ -847,7 +887,13 @@ def cluster_lossless_collinearity_anchors(
             anchors_by_pair[pair],
             resolved_params,
         )
-        blocks.extend(_merge_lossless_clusters(pair_blocks, resolved_params))
+        blocks.extend(
+            _merge_lossless_clusters(
+                pair_blocks,
+                anchors=anchors_by_pair[pair],
+                params=resolved_params,
+            )
+        )
     filtered_blocks, unblocked_anchors = _filter_blocks_by_min_anchors(
         blocks,
         min_anchors=resolved_params.min_anchors,
