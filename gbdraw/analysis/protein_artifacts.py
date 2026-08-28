@@ -87,13 +87,20 @@ def _is_nonnegative_integer(value: object) -> bool:
 
 def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
     mode = entry.get("mode")
-    if mode not in {"orthogroup", "collinear"}:
+    if mode not in {"pairwise", "orthogroup", "collinear"}:
         return False
     payload = entry.get("payload")
     if not isinstance(payload, Mapping):
         return False
 
-    allowed_keys = {"identity", "pairs", "orthogroups"}
+    allowed_keys = {
+        "identity",
+        "provenance",
+        "pairs",
+        "orthogroups",
+        "orthogroupResult",
+        "collinearityResult",
+    }
     if mode == "collinear":
         allowed_keys.update(
             {
@@ -117,6 +124,21 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
         raw_cache_keys = identity.get("rawCacheKeys")
         if not isinstance(raw_cache_keys, list) or not all(
             isinstance(key, str) and bool(key) for key in raw_cache_keys
+        ):
+            return False
+
+    for resource_key, resource_kind in (
+        ("orthogroupResult", "orthogroupResult"),
+        ("collinearityResult", "result"),
+    ):
+        if resource_key not in payload:
+            continue
+        resource = payload[resource_key]
+        if (
+            not isinstance(resource, Mapping)
+            or resource.get("schema") != 2
+            or resource.get("kind") != resource_kind
+            or "value" not in resource
         ):
             return False
 

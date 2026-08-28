@@ -253,8 +253,9 @@ class ProteinLosatPairIdentity:
         args: Sequence[str],
         program: str = "blastp",
         outfmt: str = "6",
+        tool_identity: str | None = None,
     ) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "cacheSchema": PROTEIN_LOSAT_CACHE_SCHEMA,
             "identityKind": "protein",
             "idEncoding": "runtime-handle-v1",
@@ -268,6 +269,12 @@ class ProteinLosatPairIdentity:
             "queryRecordInstanceKey": self.query_record_instance_key,
             "subjectRecordInstanceKey": self.subject_record_instance_key,
         }
+        if tool_identity is not None:
+            normalized_tool_identity = str(tool_identity).strip()
+            if not normalized_tool_identity:
+                raise ValidationError("tool_identity must be non-empty or None.")
+            payload["toolIdentity"] = normalized_tool_identity
+        return payload
 
 @dataclass(frozen=True)
 class LegacyProteinRawCachePromotion:
@@ -1401,12 +1408,18 @@ def build_protein_losat_cache_key(
     args: Sequence[str],
     program: str = "blastp",
     outfmt: str = "6",
+    tool_identity: str | None = None,
 ) -> str:
     """Return the Web-compatible directional schema-4 protein raw key."""
 
     return _hash_text_sha256(
         _web_json_dumps(
-            pair_identity.cache_payload(args=args, program=program, outfmt=outfmt)
+            pair_identity.cache_payload(
+                args=args,
+                program=program,
+                outfmt=outfmt,
+                tool_identity=tool_identity,
+            )
         )
     )
 
@@ -1600,6 +1613,11 @@ def validate_protein_raw_entry_references(
             args=args,
             program=str(entry.get("program") or "blastp"),
             outfmt=str(entry.get("outfmt") or "6"),
+            tool_identity=(
+                str(entry["toolIdentity"])
+                if entry.get("toolIdentity") is not None
+                else None
+            ),
         )
         if str(entry.get("key") or "") != expected_key:
             return False
@@ -2035,6 +2053,7 @@ def promote_legacy_protein_raw_cache_entries(
     expected_args: Sequence[str],
     expected_program: str = "blastp",
     expected_outfmt: str = "6",
+    expected_tool_identity: str | None = None,
 ) -> LegacyProteinRawCachePromotionScan:
     """Find and verify a legacy pair, then return a schema-4 copy.
 
@@ -2129,6 +2148,7 @@ def promote_legacy_protein_raw_cache_entries(
                 args=expected_arg_tuple,
                 program=expected_program,
                 outfmt=expected_outfmt,
+                tool_identity=expected_tool_identity,
             )
             promoted: dict[str, object] = {
                 "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
@@ -2142,6 +2162,11 @@ def promote_legacy_protein_raw_cache_entries(
                 "program": str(expected_program),
                 "outfmt": str(expected_outfmt),
                 "args": list(expected_arg_tuple),
+                **(
+                    {"toolIdentity": str(expected_tool_identity)}
+                    if expected_tool_identity is not None
+                    else {}
+                ),
                 "queryProteinSetHash": pair_identity.query_protein_set_hash,
                 "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
                 "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
@@ -2185,9 +2210,17 @@ class LosatpCacheManager:
         identity_manifest: ProteinIdentityManifest | Mapping[str, object] | None = None,
         threads_per_job: str | int = "auto",
         runtime_compatibility: str = "threaded-compatible-v1",
+        tool_identity: str | None = None,
+        allow_execution: bool = True,
     ) -> None:
         self.threads_per_job = threads_per_job
         self.runtime_compatibility = runtime_compatibility
+        self.tool_identity = (
+            str(tool_identity).strip() if tool_identity is not None else None
+        )
+        if self.tool_identity == "":
+            raise ValidationError("tool_identity must be non-empty or None.")
+        self.allow_execution = bool(allow_execution)
         self.identity_manifest = (
             identity_manifest
             if isinstance(identity_manifest, ProteinIdentityManifest)
@@ -2223,6 +2256,11 @@ class LosatpCacheManager:
                 "program": str(entry.get("program") or "blastp"),
                 "outfmt": str(entry.get("outfmt") or "6"),
                 "args": [str(arg) for arg in entry.get("args") or ()],
+                **(
+                    {"toolIdentity": str(entry["toolIdentity"])}
+                    if entry.get("toolIdentity") is not None
+                    else {}
+                ),
                 "queryProteinSetHash": str(entry.get("queryProteinSetHash") or ""),
                 "subjectProteinSetHash": str(entry.get("subjectProteinSetHash") or ""),
                 "queryRuntimeBindingHash": str(
@@ -2352,11 +2390,17 @@ class LosatpCacheManager:
         program: str,
         outfmt: str,
         args: Sequence[str],
+        tool_identity: str | None,
     ) -> dict[str, object] | None:
         cached = self._entries_by_key.get(cache_key)
         if cached is None or self.identity_manifest is None:
             return None
-        expected = pair_identity.cache_payload(args=args, program=program, outfmt=outfmt)
+        expected = pair_identity.cache_payload(
+            args=args,
+            program=program,
+            outfmt=outfmt,
+            tool_identity=tool_identity,
+        )
         for payload_key, entry_key in (
             ("queryProteinSetHash", "queryProteinSetHash"),
             ("subjectProteinSetHash", "subjectProteinSetHash"),
@@ -2372,6 +2416,8 @@ class LosatpCacheManager:
         if str(cached.get("outfmt") or "") != outfmt:
             return None
         if tuple(str(arg) for arg in cached.get("args") or ()) != tuple(str(arg) for arg in args):
+            return None
+        if cached.get("toolIdentity") != expected.get("toolIdentity"):
             return None
         query_ids = _binding_runtime_ids(
             self.identity_manifest,
@@ -2398,9 +2444,14 @@ class LosatpCacheManager:
         candidate_limit: int | None,
         max_hsps_per_subject: int | None,
         args: Sequence[str],
+        tool_identity: str | None = None,
         filename: str = "",
         display: bool = False,
     ) -> LosatpRunner:
+        resolved_tool_identity = (
+            self.tool_identity if tool_identity is None else str(tool_identity).strip()
+        )
+
         def _runner(query_fasta: str, subject_fasta: str) -> DataFrame:
             pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
             cache_key = build_protein_losat_cache_key(
@@ -2408,6 +2459,7 @@ class LosatpCacheManager:
                 args=args,
                 program="blastp",
                 outfmt="6",
+                tool_identity=resolved_tool_identity,
             )
             cached = self._find_cached_entry(
                 cache_key=cache_key,
@@ -2415,6 +2467,7 @@ class LosatpCacheManager:
                 program="blastp",
                 outfmt="6",
                 args=args,
+                tool_identity=resolved_tool_identity,
             )
             if cached is not None:
                 if display:
@@ -2438,6 +2491,7 @@ class LosatpCacheManager:
                     expected_args=args,
                     expected_program="blastp",
                     expected_outfmt="6",
+                    expected_tool_identity=resolved_tool_identity,
                 )
                 if scan.promotion is not None:
                     promotion = scan.promotion
@@ -2447,6 +2501,12 @@ class LosatpCacheManager:
                     if display:
                         self._mark_display(cache_key, filename)
                     return promoted_result
+
+            if not self.allow_execution:
+                raise ValidationError(
+                    "Required protein raw-stage artifact is missing or mismatched: "
+                    f"{cache_key}."
+                )
 
             raw_text_holder: dict[str, str] = {}
             result = _execute_losatp_search(
@@ -2473,6 +2533,11 @@ class LosatpCacheManager:
                 "program": "blastp",
                 "outfmt": "6",
                 "args": [str(arg) for arg in args],
+                **(
+                    {"toolIdentity": str(resolved_tool_identity)}
+                    if resolved_tool_identity is not None
+                    else {}
+                ),
                 "queryProteinSetHash": pair_identity.query_protein_set_hash,
                 "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
                 "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
@@ -6054,6 +6119,55 @@ def _losatp_cache_args(
     return args
 
 
+def build_protein_losat_invocation(
+    manifest: ProteinIdentityManifest | Mapping[str, object],
+    *,
+    query_record_instance_key: str,
+    subject_record_instance_key: str,
+    candidate_limit: int | None,
+    max_hsps_per_subject: int | None,
+    tool_identity: str | None = None,
+) -> dict[str, object]:
+    """Describe and key the canonical raw invocation at the raw-cache owner."""
+
+    tool_identity = (
+        str(tool_identity).strip() if tool_identity is not None else None
+    )
+    args = _losatp_cache_args(
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=max_hsps_per_subject,
+    )
+    pair_identity = build_protein_losat_pair_identity(
+        manifest,
+        query_record_instance_key=query_record_instance_key,
+        subject_record_instance_key=subject_record_instance_key,
+    )
+    key = build_protein_losat_cache_key(
+        pair_identity,
+        args=args,
+        program="blastp",
+        outfmt="6",
+        tool_identity=tool_identity,
+    )
+    return {
+        "key": key,
+        "program": "blastp",
+        "outfmt": "6",
+        "args": args,
+        **(
+            {"toolIdentity": str(tool_identity)}
+            if tool_identity is not None
+            else {}
+        ),
+        "queryProteinSetHash": pair_identity.query_protein_set_hash,
+        "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
+        "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
+        "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
+        "queryRecordInstanceKey": pair_identity.query_record_instance_key,
+        "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
+    }
+
+
 def _execute_losatp_search(
     query_fasta: str,
     subject_fasta: str,
@@ -6764,6 +6878,7 @@ __all__ = [
     "build_legacy_protein_reference_map",
     "build_protein_export_id_map",
     "build_protein_losat_cache_key",
+    "build_protein_losat_invocation",
     "build_protein_losat_pair_identity",
     "build_protein_runtime_handle",
     "build_web_losat_cache_key",

@@ -27,6 +27,7 @@ from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     build_legacy_protein_reference_map,
     build_protein_export_id_map,
+    build_protein_losat_invocation,
     build_protein_losat_cache_key,
     build_protein_losat_pair_identity,
     build_protein_runtime_handle,
@@ -171,6 +172,135 @@ def _load_web_helper_namespace() -> dict[str, object]:
     namespace: dict[str, object] = {}
     exec(helper_source, namespace)
     return namespace
+
+
+def _web_protein_analysis_inputs(
+    records: list[SeqRecord],
+    *,
+    reverse: tuple[bool, ...] | None = None,
+) -> tuple[
+    dict[str, object],
+    tuple[SeqRecord, ...],
+    object,
+    tuple[dict[str, object], ...],
+]:
+    keys = tuple(f"record-{index + 1}" for index in range(len(records)))
+    extraction = extract_protein_identity_manifest(
+        records,
+        record_instance_keys=keys,
+    )
+    assert extraction.identity_manifest is not None
+    helpers = _load_web_helper_namespace()
+    serialize = helpers["_serialize_cds_protein"]
+    reverse_values = reverse or tuple(False for _record in records)
+    raw_records = []
+    for index, (record, proteins, instance_key) in enumerate(
+        zip(records, extraction.proteins_by_record, keys, strict=True)
+    ):
+        raw_records.append(
+            {
+                "recordIndex": index,
+                "recordId": record.id,
+                "recordLength": len(record.seq),
+                "recordInstanceKey": instance_key,
+                "sequenceKey": f"protein:{index}",
+                "fasta": proteins_to_fasta(proteins),
+                "proteinMap": {
+                    protein.protein_id: serialize(protein, record)
+                    for protein in proteins
+                },
+                "viewTransform": {
+                    "length": len(record.seq),
+                    "reverse": reverse_values[index],
+                },
+            }
+        )
+    prepared_records, prepared_extraction, payloads = helpers[
+        "_web_protein_analysis_inputs"
+    ](
+        {"records": raw_records},
+        extraction.identity_manifest.to_dict(),
+    )
+    return helpers, prepared_records, prepared_extraction, payloads
+
+
+def _web_protein_intent(
+    mode: str,
+    *,
+    settings: dict[str, object] | None = None,
+    diagram_options: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return {
+        "generatedProteinComparison": {
+            "kind": "generatedProteinComparison",
+            "mode": mode,
+            "pairs": [
+                {"queryRecordIndex": 0, "subjectRecordIndex": 1},
+            ],
+            "settings": settings or {},
+        },
+        "diagramOptions": diagram_options or {},
+    }
+
+
+def _assemble_web_protein_hits(
+    records: list[SeqRecord],
+    *,
+    mode: str,
+    pair_hits: dict[tuple[int, int], list[tuple[int, int, float]]],
+    settings: dict[str, object] | None = None,
+    diagram_options: dict[str, object] | None = None,
+    reverse: tuple[bool, ...] | None = None,
+    cached_derived_entries: tuple[dict[str, object], ...] = (),
+) -> tuple[dict[str, object], object]:
+    helpers, prepared_records, extraction, payloads = _web_protein_analysis_inputs(
+        records,
+        reverse=reverse,
+    )
+    intent = _web_protein_intent(
+        mode,
+        settings=settings,
+        diagram_options=diagram_options,
+    )
+    plan = helpers["plan_web_protein_analysis"](
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-test-runtime",
+    )
+    raw_entries = []
+    for job in plan["jobs"]:
+        query_index = int(job["queryIndex"])
+        subject_index = int(job["subjectIndex"])
+        rows = [
+            _hit_row(
+                extraction.proteins_by_record[query_index][query_protein_index].protein_id,
+                extraction.proteins_by_record[subject_index][subject_protein_index].protein_id,
+                bitscore=bitscore,
+            )
+            for query_protein_index, subject_protein_index, bitscore in pair_hits.get(
+                (query_index, subject_index),
+                [],
+            )
+        ]
+        text = pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS).to_csv(
+            sep="\t",
+            header=False,
+            index=False,
+            lineterminator="\n",
+        )
+        raw_entries.append({**job["rawEntry"], "text": text})
+    result = helpers["assemble_web_protein_analysis"](
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        raw_entries,
+        "losat-test-runtime",
+        cached_derived_entries,
+    )
+    return result, extraction
 
 
 def _current_protein_manifest_payload_for_validation() -> dict[str, object]:
@@ -3019,6 +3149,23 @@ def test_web_cds_span_transform_maps_reverse_display_span_and_strand() -> None:
 
 
 @pytest.mark.linear
+def test_web_protein_helper_error_preserves_type_status_and_message() -> None:
+    namespace = _load_web_helper_namespace()
+
+    class WorkerFailure(RuntimeError):
+        status = 422
+
+    try:
+        raise WorkerFailure("canonical protein request was rejected")
+    except WorkerFailure as error:
+        payload = namespace["_web_structured_error"](error, "fallback")
+
+    assert payload["error"]["type"] == "WorkerFailure"
+    assert payload["error"]["status"] == 422
+    assert payload["error"]["message"] == "canonical protein request was rejected"
+
+
+@pytest.mark.linear
 def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path) -> None:
     namespace = _load_web_helper_namespace()
     record = _record(
@@ -3060,306 +3207,554 @@ def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path
     assert result["record_analysis_id"].startswith("sha256:")
     assert result["runtime_binding_hash"].startswith("sha256:")
     assert result["display_binding_hash"].startswith("sha256:")
-    boundary_key = json.loads(
-        str(
-            namespace["build_protein_losat_cache_key_json"](
-                json.dumps(result["identity_manifest"]),
-                "record_a_region",
-                "record_a_region",
-                json.dumps({"program": "blastp", "outfmt": "6", "args": []}),
-            )
-        )
-    )["key"]
+    invocation = build_protein_losat_invocation(
+        result["identity_manifest"],
+        query_record_instance_key="record_a_region",
+        subject_record_instance_key="record_a_region",
+        candidate_limit=None,
+        max_hsps_per_subject=None,
+        tool_identity="test-losat",
+    )
     expected_identity = build_protein_losat_pair_identity(
         result["identity_manifest"],
         query_record_instance_key="record_a_region",
         subject_record_instance_key="record_a_region",
     )
-    assert boundary_key == build_protein_losat_cache_key(expected_identity, args=[])
+    assert invocation["key"] == build_protein_losat_cache_key(
+        expected_identity,
+        args=[],
+        tool_identity="test-losat",
+    )
 
 
 @pytest.mark.linear
-def test_web_losatp_pairwise_payload_uses_display_view_transform(tmp_path: Path) -> None:
-    namespace = _load_web_helper_namespace()
-    hits = pd.DataFrame.from_records(
-        [_hit_row("qa", "sb")],
-        columns=COMPARISON_COLUMNS,
+def test_web_protein_plan_uses_canonical_candidate_and_display_limits() -> None:
+    records = [
+        _record("query", features=[_cds(0, 30, qualifiers={"translation": ["M" * 10]})]),
+        _record("subject", features=[_cds(30, 60, qualifiers={"translation": ["M" * 10]})]),
+    ]
+    helpers, prepared_records, extraction, payloads = _web_protein_analysis_inputs(records)
+    plan = helpers["plan_web_protein_analysis"]
+    display_five = plan(
+        _web_protein_intent(
+            "pairwise",
+            settings={
+                "proteinBlastpMaxHits": 5,
+                "orthogroupMemberMaxHits": 0,
+                "collinearityUnitMode": "invalid-dormant-unit",
+            },
+        ),
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-test-runtime",
     )
-    payload = {
-        "records": [
-            {
-                "recordIndex": 0,
-                "recordId": "record_a",
-                "proteinMap": {
-                    "qa": _web_protein_entry(
-                        "qa",
-                        record_index=0,
-                        record_id="record_a",
-                        start=0,
-                        end=30,
-                        strand=1,
-                    )
-                },
-                "proteinCacheKey": "record-a-cache",
-                "viewTransform": {"length": 300, "reverse": True},
+    display_seven = plan(
+        _web_protein_intent(
+            "pairwise",
+            settings={"proteinBlastpMaxHits": 7},
+        ),
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-test-runtime",
+    )
+    finite_candidate = plan(
+        _web_protein_intent(
+            "pairwise",
+            settings={
+                "proteinBlastpMaxHits": 7,
+                "proteinBlastpCandidateLimit": 11,
             },
-            {
-                "recordIndex": 1,
-                "recordId": "record_b",
-                "proteinMap": {
-                    "sb": _web_protein_entry(
-                        "sb",
-                        record_index=1,
-                        record_id="record_b",
-                        start=100,
-                        end=160,
-                        strand=-1,
-                    )
-                },
-                "proteinCacheKey": "record-b-cache",
-                "viewTransform": {"length": 200, "reverse": False},
-            },
-        ],
-        "pairs": [
-            {
-                "pairIndex": 0,
-                "queryIndex": 0,
-                "subjectIndex": 1,
-                "cacheKey": "pair-a-b",
-                "blastText": hits.to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
-            }
-        ],
-    }
+        ),
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-test-runtime",
+    )
+    different_tool = plan(
+        _web_protein_intent(
+            "pairwise",
+            settings={"proteinBlastpMaxHits": 5},
+        ),
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-other-runtime",
+    )
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
-    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
+    first = display_five["jobs"][0]["rawEntry"]
+    assert first["args"] == ["--max-hsps-per-subject", "1"]
+    assert first["toolIdentity"] == "losat-test-runtime"
+    assert display_five["requested"]["collinearityUnitMode"] == (
+        "invalid-dormant-unit"
+    )
+    assert display_seven["jobs"][0]["rawEntry"]["key"] == first["key"]
+    assert finite_candidate["jobs"][0]["rawEntry"]["args"] == [
+        "--max-hsps-per-subject",
+        "1",
+        "--max-target-seqs",
+        "11",
+    ]
+    assert finite_candidate["jobs"][0]["rawEntry"]["key"] != first["key"]
+    assert different_tool["jobs"][0]["rawEntry"]["key"] != first["key"]
+
+
+@pytest.mark.linear
+def test_web_protein_fresh_and_cached_assembly_match_provenance() -> None:
+    records = [
+        _record(
+            "query",
+            sequence="A" * 300,
+            features=[_cds(0, 30, qualifiers={"translation": ["M" * 10]})],
+        ),
+        _record(
+            "subject",
+            sequence="A" * 200,
+            features=[_cds(100, 160, qualifiers={"translation": ["M" * 20]})],
+        ),
+    ]
+    helpers, prepared_records, extraction, payloads = _web_protein_analysis_inputs(
+        records,
+        reverse=(True, False),
+    )
+    intent = _web_protein_intent(
         "pairwise",
-        1,
-        50,
-        "1e-5",
-        0,
-        0,
+        settings={"proteinBlastpMaxHits": 1},
+        diagram_options={"bitscore": 50, "evalue": 1e-5},
     )
-    result = json.loads(str(raw_result))
+    plan = helpers["plan_web_protein_analysis"](
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-test-runtime",
+    )
+    query_id = extraction.proteins_by_record[0][0].protein_id
+    subject_id = extraction.proteins_by_record[1][0].protein_id
+    hit = pd.DataFrame.from_records(
+        [_hit_row(query_id, subject_id)],
+        columns=COMPARISON_COLUMNS,
+    ).to_csv(sep="\t", header=False, index=False, lineterminator="\n")
+    raw_entries = [
+        {**job["rawEntry"], "text": hit}
+        for job in plan["jobs"]
+    ]
+    assemble = helpers["assemble_web_protein_analysis"]
+    fresh = assemble(
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        raw_entries,
+        "losat-test-runtime",
+    )
+    cached = assemble(
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        raw_entries,
+        "losat-test-runtime",
+        (fresh["derivedEntry"],),
+    )
 
-    assert "error" not in result
-    row = result["pairs"][0]["rows"][0]
-    assert row["query_protein_id"] == "qa"
+    assert fresh["cacheHit"] is False
+    assert cached["cacheHit"] is True
+    assert cached["pairs"] == fresh["pairs"]
+    assert cached["provenance"] == fresh["provenance"]
+    row = fresh["pairs"][0]["rows"][0]
     assert row["qstart"] == 300
     assert row["qend"] == 271
-    assert row["sstart"] == 160
-    assert row["send"] == 101
-
-
-@pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
-    tmp_path: Path,
-) -> None:
-    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
-    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
-    namespace: dict[str, object] = {}
-    exec(helper_source, namespace)
-
-    forward_hits = pd.DataFrame.from_records(
-        [
-            _hit_row("a1", "b", bitscore=300),
-            _hit_row("a2", "b", bitscore=250),
-        ],
-        columns=COMPARISON_COLUMNS,
-    )
-    reverse_hits = pd.DataFrame.from_records(
-        [_hit_row("b", "a1", bitscore=300)],
-        columns=COMPARISON_COLUMNS,
-    )
-    query_map = {
-        "a1": _web_protein_entry(
-            "a1",
-            record_index=0,
-            record_id="record_a",
-            feature_index=0,
-            gene="rpoB",
-            product="DNA-directed RNA polymerase beta subunit",
-        ),
-        "a2": _web_protein_entry(
-            "a2",
-            record_index=0,
-            record_id="record_a",
-            feature_index=1,
-            start=100,
-            end=190,
-        ),
-    }
-    subject_map = {
-        "b": _web_protein_entry(
-            "b",
-            record_index=1,
-            record_id="record_b",
-            gene="rpoB",
-            product="DNA-directed RNA polymerase beta subunit",
-        ),
-    }
-    payload = {
-        "records": [
-            {
-                "recordIndex": 0,
-                "recordId": "record_a",
-                "proteinMap": query_map,
-                "proteinCacheKey": "record-a-cache",
-                "viewTransform": {"length": 200, "reverse": False},
-            },
-            {
-                "recordIndex": 1,
-                "recordId": "record_b",
-                "proteinMap": subject_map,
-                "proteinCacheKey": "record-b-cache",
-                "viewTransform": {"length": 200, "reverse": True},
-            },
-        ],
-        "pairs": [
-            {
-                "pairIndex": 0,
-                "queryIndex": 0,
-                "subjectIndex": 1,
-                "cacheKey": "pair-a-b",
-                "blastText": forward_hits.to_csv(
-                    sep="\t",
-                    header=False,
-                    index=False,
-                    lineterminator="\n",
-                ),
-            },
-            {
-                "pairIndex": 0,
-                "queryIndex": 1,
-                "subjectIndex": 0,
-                "cacheKey": "pair-b-a",
-                "blastText": reverse_hits.to_csv(
-                    sep="\t",
-                    header=False,
-                    index=False,
-                    lineterminator="\n",
-                ),
-            },
-        ],
-    }
-
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
-    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
-        "orthogroup",
-        2,
-        50,
-        "1e-5",
-        0,
-        0,
-        orthogroup_membership_mode="rbh",
-    )
-    result = json.loads(str(raw_result))
-
-    assert "error" not in result
-    assert result["orthogroupResult"]["schema"] == 2
-    assert result["orthogroupResult"]["kind"] == "orthogroupResult"
-    assert result["orthogroupResult"]["value"]["type"] == "OrthogroupResult"
-    typed_fields = result["orthogroupResult"]["value"]["fields"]
-    group_id = next(iter(typed_fields["orthogroups"]))
-    group_members = typed_fields["orthogroups"][group_id]
-    display_start, display_end, display_strand = namespace["_web_transform_cds_span"](
-        subject_map["b"]["start"],
-        subject_map["b"]["end"],
-        subject_map["b"]["strand"],
-        payload["records"][1]["viewTransform"],
-    )
-    display_feature_svg_id = namespace["_display_feature_svg_id_from_data"](
-        subject_map["b"],
-        display_start,
-        display_end,
-        display_strand,
-        payload["records"][1]["viewTransform"],
-    )
-    assert display_feature_svg_id != subject_map["b"]["feature_svg_id"]
-    assert len(group_members) == 3
-    assert typed_fields["namesByOrthogroupId"][group_id] == "rpoB"
-    assert typed_fields["confidenceByOrthogroupId"][group_id] == "high"
-    first_candidate = typed_fields["nameCandidatesByOrthogroupId"][group_id][0][
-        "fields"
+    assert row["sstart"] == 101
+    assert row["send"] == 160
+    assert fresh["provenance"]["actualInvocations"][0]["args"] == [
+        "--max-hsps-per-subject",
+        "1",
     ]
-    assert first_candidate["recordCoverageCount"] == 2
-    assert first_candidate["source"] == "gene"
-    assert group_members[0]["fields"]["product"] == (
-        "DNA-directed RNA polymerase beta subunit"
-    )
-    subject_member = next(
-        member["fields"]
-        for member in group_members
-        if member["fields"]["proteinId"] == "b"
-    )
-    assert subject_member["featureSvgId"] == "feature_b"
-    assert "orthogroups" not in result
-    rows = result["pairs"][0]["rows"]
-    assert rows[0]["subject_feature_svg_id"] == "feature_b"
-    assert rows[0]["subject_view_feature_svg_id"] == display_feature_svg_id
-    assert rows[0]["orthogroup_id"] == "og_1"
-    assert rows[0]["edge_kind"] == "rbh"
-    assert rows[1]["orthogroup_id"] == "og_1"
-    assert rows[1]["edge_kind"] == "coortholog"
-    assert len(rows) == 2
-    assert result["cache"]["convertedPayloadHit"] is False
-    assert result["cache"]["filteredHitCacheMisses"] == 2
-
-    repeated_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
-        "orthogroup",
-        2,
-        50,
-        "1e-5",
-        0,
-        0,
-        orthogroup_membership_mode="rbh",
-    )))
-    assert repeated_result["cache"]["convertedPayloadHit"] is True
-    assert repeated_result["pairs"] == result["pairs"]
-
-    filter_cached_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
-        "orthogroup",
-        3,
-        50,
-        "1e-5",
-        0,
-        0,
-        orthogroup_membership_mode="rbh",
-    )))
-    assert filter_cached_result["cache"]["convertedPayloadHit"] is False
-    assert filter_cached_result["cache"]["filteredHitCacheHits"] == 2
+    assert fresh["provenance"]["requested"]["bitscore"] == 50
+    assert fresh["provenance"]["effective"]["bitscore"] == 50.0
+    assert fresh["provenance"]["reasons"]["bitscore"] == "explicit"
+    assert fresh["provenance"]["upstreamStageIdentities"] == [
+        plan["jobs"][0]["rawEntry"]["key"]
+    ]
+    assert fresh["provenance"]["versions"]["proteinRawCacheSchema"] == 4
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
-    tmp_path: Path,
-) -> None:
-    helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
-    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
-    namespace: dict[str, object] = {}
-    exec(helper_source, namespace)
-
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps([]), encoding="utf-8")
-    raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
-        "pairwise",
-        2,
-        50,
-        "1e-5",
-        0,
-        0,
+def test_web_protein_collinear_assembly_returns_typed_blocks_and_rows() -> None:
+    records = [
+        _record(
+            record_id,
+            sequence="A" * 120,
+            features=[
+                _cds(
+                    index * 12,
+                    index * 12 + 9,
+                    qualifiers={"translation": ["MKT"]},
+                )
+                for index in range(8)
+            ],
+        )
+        for record_id in ("record_a", "record_b")
+    ]
+    pair_hits = {
+        (0, 1): [(index, index, 200.0) for index in range(8)],
+        (1, 0): [(index, index, 200.0) for index in range(8)],
+    }
+    result, extraction = _assemble_web_protein_hits(
+        records,
+        mode="collinear",
+        pair_hits=pair_hits,
+        settings={
+            "proteinBlastpCandidateLimit": 50,
+            "orthogroupMembershipMode": "rbh",
+            "collinearityParams": {
+                "parameters": {
+                    "minAnchors": 3,
+                    "maxUnitGap": 25,
+                    "maxDiagonalDrift": 1,
+                    "maxConflicts": 2,
+                }
+            },
+            "collinearityUnitMode": "cds",
+            "collinearityAnchorMode": "one_to_one",
+            "collinearitySearchScope": "adjacent",
+            "collinearityColorMode": "orientation",
+        },
+        diagram_options={
+            "evalue": 1e-5,
+            "bitscore": 0,
+            "identity": 0,
+            "alignmentLength": 0,
+        },
     )
-    result = json.loads(str(raw_result))
 
-    assert "error" in result
-    assert "must be an object" in result["error"]
+    typed = result["collinearityResult"]
+    assert typed["schema"] == 2
+    assert typed["kind"] == "result"
+    typed_fields = typed["value"]["fields"]
+    assert typed_fields["blocks"][0]["fields"]["blockId"] == "block_0001"
+    assert len(typed_fields["orthogroups"]["fields"]["orthogroups"]) == 8
+    rows = result["pairs"][0]["rows"]
+    assert len(rows) == 1
+    assert rows[0]["collinearity_block_id"] == "block_0001"
+    assert rows[0]["collinearity_block_kind"] == "cluster"
+    assert rows[0]["collinearity_anchor_count"] == 8
+    assert rows[0]["collinearity_color_mode"] == "orientation"
+    assert rows[0]["collinearity_block_evalue"] is None
+    assert rows[0]["group_kind"] == "collinear_gene_group"
+    assert rows[0]["group_scope"] == "adjacent_local"
+    assert rows[0]["collinear_group_scope"] == "adjacent_local"
+    assert rows[0]["query_feature_svg_id"] == ";".join(
+        protein.feature_svg_id for protein in extraction.proteins_by_record[0]
+    )
+    assert rows[0]["query_view_feature_svg_id"] == rows[0][
+        "query_feature_svg_id"
+    ]
+
+
+@pytest.mark.linear
+def test_web_collinear_cache_hit_reprojects_current_color_mode() -> None:
+    records = [
+        _record(
+            record_id,
+            sequence="A" * 120,
+            features=[
+                _cds(index * 12, index * 12 + 9, qualifiers={"translation": ["MKT"]})
+                for index in range(8)
+            ],
+        )
+        for record_id in ("record_a", "record_b")
+    ]
+    pair_hits = {
+        (0, 1): [(index, index, 200.0) for index in range(8)],
+        (1, 0): [(index, index, 200.0) for index in range(8)],
+    }
+    shared = {
+        "orthogroupMembershipMode": "rbh",
+        "collinearityParams": {
+            "parameters": {
+                "minAnchors": 3,
+                "maxUnitGap": 25,
+                "maxDiagonalDrift": 1,
+                "maxConflicts": 2,
+            }
+        },
+        "collinearityUnitMode": "cds",
+        "collinearityAnchorMode": "one_to_one",
+        "collinearitySearchScope": "adjacent",
+    }
+    orientation, _ = _assemble_web_protein_hits(
+        records,
+        mode="collinear",
+        pair_hits=pair_hits,
+        settings={**shared, "collinearityColorMode": "orientation"},
+    )
+    average_identity, _ = _assemble_web_protein_hits(
+        records,
+        mode="collinear",
+        pair_hits=pair_hits,
+        settings={**shared, "collinearityColorMode": "average_identity"},
+    )
+    cached, _ = _assemble_web_protein_hits(
+        records,
+        mode="collinear",
+        pair_hits=pair_hits,
+        settings={**shared, "collinearityColorMode": "average_identity"},
+        cached_derived_entries=(orientation["derivedEntry"],),
+    )
+
+    assert cached["cacheHit"] is True
+    assert cached["derivedEntry"]["key"] == orientation["derivedEntry"]["key"]
+    assert cached["pairs"] == average_identity["pairs"]
+    assert cached["pairs"] != orientation["pairs"]
+    assert cached["pairs"][0]["rows"][0]["collinearity_color_mode"] == (
+        "average_identity"
+    )
+
+
+@pytest.mark.linear
+def test_web_protein_collinear_assembly_uses_rbh_anchor_mode() -> None:
+    records = [
+        _record(
+            record_id,
+            sequence="A" * 60,
+            features=[
+                _cds(
+                    index * 12,
+                    index * 12 + 9,
+                    qualifiers={"translation": ["MKT"]},
+                )
+                for index in range(2)
+            ],
+        )
+        for record_id in ("record_a", "record_b")
+    ]
+    pair_hits = {
+        (0, 1): [(0, 0, 300.0), (1, 1, 250.0)],
+        (1, 0): [(0, 0, 300.0), (1, 0, 400.0)],
+    }
+
+    def assemble(min_anchors: int) -> tuple[dict[str, object], object]:
+        return _assemble_web_protein_hits(
+            records,
+            mode="collinear",
+            pair_hits=pair_hits,
+            settings={
+                "proteinBlastpCandidateLimit": 50,
+                "orthogroupMembershipMode": "rbh",
+                "collinearityParams": {
+                    "parameters": {
+                        "minAnchors": min_anchors,
+                        "maxUnitGap": 25,
+                        "maxDiagonalDrift": 1,
+                        "maxConflicts": 2,
+                    }
+                },
+                "collinearityUnitMode": "cds",
+                "collinearityAnchorMode": "rbh",
+                "collinearitySearchScope": "adjacent",
+                "collinearityColorMode": "orientation",
+            },
+            diagram_options={"evalue": 1e-5, "bitscore": 0, "identity": 0},
+        )
+
+    result, extraction = assemble(1)
+    rows = result["pairs"][0]["rows"]
+    assert len(rows) == 1
+    assert rows[0]["collinearity_anchor_count"] == 1
+    assert rows[0]["collinearity_block_kind"] == "singleton"
+    assert rows[0]["query_protein_id"] == (
+        extraction.proteins_by_record[0][0].protein_id
+    )
+    assert rows[0]["subject_protein_id"] == (
+        extraction.proteins_by_record[1][0].protein_id
+    )
+    min_two, _ = assemble(2)
+    assert min_two["pairs"][0]["rows"] == []
+
+
+@pytest.mark.linear
+def test_web_protein_collinear_assembly_applies_search_scope() -> None:
+    records = [
+        _record(
+            record_id,
+            sequence="A" * 30,
+            features=[_cds(0, 9, qualifiers={"translation": ["MKT"]})],
+        )
+        for record_id in ("record_a", "record_b", "record_c")
+    ]
+    pair_hits = {
+        (0, 1): [(0, 0, 200.0)],
+        (1, 0): [(0, 0, 200.0)],
+        (0, 2): [(0, 0, 200.0)],
+        (2, 0): [(0, 0, 200.0)],
+    }
+
+    def assemble(scope: str) -> tuple[dict[str, object], object]:
+        return _assemble_web_protein_hits(
+            records,
+            mode="collinear",
+            pair_hits=pair_hits,
+            settings={
+                "orthogroupMembershipMode": "rbh",
+                "collinearityParams": {
+                    "parameters": {
+                        "minAnchors": 1,
+                        "maxUnitGap": 25,
+                        "maxDiagonalDrift": 1,
+                        "maxConflicts": 2,
+                    }
+                },
+                "collinearityUnitMode": "cds",
+                "collinearityAnchorMode": "one_to_one",
+                "collinearitySearchScope": scope,
+                "collinearityColorMode": "orientation",
+            },
+        )
+
+    adjacent, adjacent_extraction = assemble("adjacent")
+    all_records, all_extraction = assemble("all")
+
+    def member_sets(result: dict[str, object]) -> list[set[str]]:
+        groups = result["collinearityResult"]["value"]["fields"][
+            "orthogroups"
+        ]["fields"]["orthogroups"]
+        return [
+            {member["fields"]["proteinId"] for member in members}
+            for members in groups.values()
+        ]
+
+    adjacent_ids = {
+        adjacent_extraction.proteins_by_record[index][0].protein_id
+        for index in (0, 1)
+    }
+    all_ids = {
+        all_extraction.proteins_by_record[index][0].protein_id
+        for index in (0, 1, 2)
+    }
+    assert adjacent_ids in member_sets(adjacent)
+    assert all_ids in member_sets(all_records)
+    assert all(
+        block["fields"]["subjectRecordIndex"]
+        == block["fields"]["queryRecordIndex"] + 1
+        for block in all_records["collinearityResult"]["value"]["fields"]["blocks"]
+    )
+
+
+@pytest.mark.linear
+def test_web_protein_orthogroup_result_separates_stable_and_view_ids() -> None:
+    records = [
+        _record(
+            "record_a",
+            sequence="A" * 60,
+            features=[
+                _cds(
+                    0,
+                    30,
+                    qualifiers={
+                        "translation": ["M" * 10],
+                        "protein_id": ["PUBLIC_A"],
+                    },
+                )
+            ],
+        ),
+        _record(
+            "record_b",
+            sequence="A" * 90,
+            features=[
+                _cds(
+                    30,
+                    60,
+                    qualifiers={
+                        "translation": ["M" * 10],
+                        "protein_id": ["PUBLIC_B"],
+                    },
+                )
+            ],
+        ),
+    ]
+    result, extraction = _assemble_web_protein_hits(
+        records,
+        mode="orthogroup",
+        pair_hits={
+            (0, 1): [(0, 0, 200.0)],
+            (1, 0): [(0, 0, 200.0)],
+        },
+        settings={"orthogroupMembershipMode": "rbh"},
+        reverse=(False, True),
+    )
+    target = extraction.proteins_by_record[1][0]
+    typed_fields = result["orthogroupResult"]["value"]["fields"]
+    typed_members = next(iter(typed_fields["orthogroups"].values()))
+    target_member = next(
+        member["fields"]
+        for member in typed_members
+        if member["fields"]["proteinId"] == target.protein_id
+    )
+    assert target_member["featureSvgId"] == target.feature_svg_id
+    assert target_member["sourceProteinId"] == "PUBLIC_B"
+    target_row = next(
+        row
+        for row in result["pairs"][0]["rows"]
+        if row["subject_protein_id"] == target.protein_id
+    )
+    assert target_row["subject_feature_svg_id"] == target.feature_svg_id
+    assert target_row["subject_view_feature_svg_id"] == target.view_feature_svg_id
+    assert target.feature_svg_id != target.view_feature_svg_id
+
+
+@pytest.mark.linear
+def test_web_protein_assembly_rejects_mismatched_cached_identity() -> None:
+    records = [
+        _record("query", features=[_cds(0, 30, qualifiers={"translation": ["M" * 10]})]),
+        _record("subject", features=[_cds(30, 60, qualifiers={"translation": ["M" * 10]})]),
+    ]
+    helpers, prepared_records, extraction, payloads = _web_protein_analysis_inputs(records)
+    intent = _web_protein_intent("pairwise")
+    plan = helpers["plan_web_protein_analysis"](
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        "losat-test-runtime",
+    )
+    raw_entries = [{**job["rawEntry"], "text": ""} for job in plan["jobs"]]
+    assemble = helpers["assemble_web_protein_analysis"]
+    fresh = assemble(
+        intent,
+        prepared_records,
+        extraction,
+        payloads,
+        raw_entries,
+        "losat-test-runtime",
+    )
+    corrupted = copy.deepcopy(fresh["derivedEntry"])
+    corrupted["payload"]["identity"]["thresholds"]["bitscore"] = "999"
+
+    mismatched_raw = copy.deepcopy(raw_entries)
+    mismatched_raw[0]["key"] = "stale-raw-stage"
+    with pytest.raises(ValidationError, match="planned invocations"):
+        assemble(
+            intent,
+            prepared_records,
+            extraction,
+            payloads,
+            mismatched_raw,
+            "losat-test-runtime",
+        )
+
+    with pytest.raises(ValidationError, match="identity does not match its key"):
+        assemble(
+            intent,
+            prepared_records,
+            extraction,
+            payloads,
+            raw_entries,
+            "losat-test-runtime",
+            (corrupted,),
+        )
 
 
 @pytest.mark.linear

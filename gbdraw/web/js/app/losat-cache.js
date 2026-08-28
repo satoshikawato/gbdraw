@@ -397,11 +397,18 @@ const isNonnegativeInteger = (value) => Number.isInteger(value) && value >= 0;
 
 const isStrictEmptyDerivedResult = (entry) => {
   const mode = entry?.mode;
-  if (!['orthogroup', 'collinear'].includes(mode) || !isPlainObject(entry?.payload)) {
+  if (!['pairwise', 'orthogroup', 'collinear'].includes(mode) || !isPlainObject(entry?.payload)) {
     return false;
   }
   const payload = entry.payload;
-  const allowedKeys = new Set(['identity', 'pairs', 'orthogroups']);
+  const allowedKeys = new Set([
+    'identity',
+    'provenance',
+    'pairs',
+    'orthogroups',
+    'orthogroupResult',
+    'collinearityResult'
+  ]);
   if (mode === 'collinear') {
     [
       'collinearGroups',
@@ -420,6 +427,20 @@ const isStrictEmptyDerivedResult = (entry) => {
       identity.mode !== mode ||
       !Array.isArray(identity.rawCacheKeys) ||
       identity.rawCacheKeys.some((key) => typeof key !== 'string' || !key)
+    ) return false;
+  }
+
+  for (const [resourceKey, resourceKind] of [
+    ['orthogroupResult', 'orthogroupResult'],
+    ['collinearityResult', 'result']
+  ]) {
+    if (!Object.prototype.hasOwnProperty.call(payload, resourceKey)) continue;
+    const resource = payload[resourceKey];
+    if (
+      !isPlainObject(resource) ||
+      resource.schema !== 2 ||
+      resource.kind !== resourceKind ||
+      !Object.prototype.hasOwnProperty.call(resource, 'value')
     ) return false;
   }
 
@@ -586,6 +607,10 @@ export const getCurrentRawLosatCacheEntry = (cacheMap, cacheKey, metadata = {}, 
     if (String(entry.program || '') !== String(metadata.program || 'blastp')) return null;
     if (String(entry.outfmt || '6') !== String(metadata.outfmt || '6')) return null;
     if (!sameLosatArgs(entry.args, metadata.args)) return null;
+    if (
+      metadata.toolIdentity &&
+      entry.toolIdentity !== metadata.toolIdentity
+    ) return null;
     if (
       metadata.queryRuntimeBindingHash &&
       entry.queryRuntimeBindingHash !== metadata.queryRuntimeBindingHash

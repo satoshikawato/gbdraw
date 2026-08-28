@@ -132,13 +132,6 @@ const normalizeLosatProgram = (value) => {
   return ['blastn', 'tblastx', 'blastp'].includes(normalized) ? normalized : 'blastn';
 };
 
-const normalizeBlastpMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized)
-    ? normalized
-    : 'orthogroup';
-};
-
 const intentKeyForPlan = (plan) => {
   if (plan.mode === LINEAR_COMPARISON_MODES.NONE) {
     return LINEAR_COMPARISON_INTENT_KEYS.NONE;
@@ -519,7 +512,7 @@ export const projectLinearComparisonUi = ({
   plan = {},
   resolution = {},
   losatProgram = 'blastn',
-  blastpMode = 'orthogroup',
+  blastpMode = '',
   filters = {}
 } = {}) => {
   const normalizedPlan = normalizeLinearComparisonPlan(plan);
@@ -528,9 +521,9 @@ export const projectLinearComparisonUi = ({
   const planned = plannedSources(normalizedPlan);
   const selectedTopology = normalizedPlan.mode === LINEAR_COMPARISON_MODES.SELECTED;
   const losatModeKey = normalizeLosatProgram(losatProgram);
-  const losatpModeKey = normalizeBlastpMode(blastpMode);
+  const losatpModeKey = String(blastpMode || '');
   const losatModeLabel = LOSAT_MODE_BY_KEY.get(losatModeKey).label;
-  const losatpModeLabel = LOSATP_MODE_BY_KEY.get(losatpModeKey).label;
+  const losatpModeLabel = LOSATP_MODE_BY_KEY.get(losatpModeKey)?.label || 'Unrecognized mode';
   const losatMethodSummaryLabel = losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP
     ? `${losatModeLabel} · ${losatpModeLabel}`
     : losatModeLabel;
