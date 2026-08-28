@@ -370,6 +370,7 @@ const policyPath = 'tools/web-change-policy.json';
 const architectureRulesPath = 'tools/web-architecture-rules.json';
 const acceptedViolationsPath = 'tools/web-architecture-violations.json';
 const productImpactPolicyPath = 'docs/internal/PRODUCT_IMPACT_RATCHET.md';
+const productContractAuthorityPath = 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md';
 const productImpactMapPath = 'tools/web-product-impact-map.json';
 const productDecisionAuthorityPath = 'tools/web-product-decisions.json';
 const productImpactEvaluationPath = 'tools/web-product-impact-evaluation.mjs';
@@ -379,6 +380,7 @@ const trustedWorkflowPath = '.github/workflows/web-base-policy.yml';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
+  productContractAuthorityPath,
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
@@ -418,6 +420,7 @@ const checkerImplementationPaths = new Set([
 const authorityPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
+  productContractAuthorityPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   architectureRulesPath,
   acceptedViolationsPath,
@@ -996,15 +999,21 @@ const productImpactBaseErrors = [];
 const productImpactCandidateErrors = [];
 const productImpactDecisionDeclarationIssues = [];
 const changedProductImpactAuthorityPaths = [
+  productContractAuthorityPath,
   productImpactMapPath,
   productDecisionAuthorityPath
 ].filter((path) => changed.has(path));
-const candidateAuthorityCompanionPaths = changedProductImpactAuthorityPaths.length
-  ? changedPaths.filter((path) => !narrowAuthorityBundlePaths.has(path))
-  : [];
+const productContractAuthorityChanged = changed.has(productContractAuthorityPath);
+const candidateAuthorityCompanionPaths = productContractAuthorityChanged
+  ? changedPaths.filter((path) => path !== productContractAuthorityPath)
+  : changedProductImpactAuthorityPaths.length
+    ? changedPaths.filter((path) => !narrowAuthorityBundlePaths.has(path))
+    : [];
 if (candidateAuthorityCompanionPaths.length) {
   productImpactCandidateErrors.push(
-    'Product Impact authority changes must use only the narrow inert authority bundle: '
+    (productContractAuthorityChanged
+      ? 'Product Contract authority changes must be isolated from other changed paths: '
+      : 'Product Impact authority changes must use only the narrow inert authority bundle: ')
     + candidateAuthorityCompanionPaths.join(', ')
   );
 }

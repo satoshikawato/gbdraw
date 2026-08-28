@@ -1441,6 +1441,7 @@ const BUDGET_PROFILES = Object.freeze([
   })
 ]);
 const BUDGET_LINE_CAPACITY = 800;
+const PRODUCT_CONTRACT_AUTHORITY_PATH = 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md';
 const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
   ...Array.from(
     { length: BUDGET_LINE_CAPACITY },
@@ -1554,6 +1555,7 @@ const FUTURE_AUTHORITY_PATHS = Object.freeze([
 ]);
 const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
   'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  PRODUCT_CONTRACT_AUTHORITY_PATH,
   'tools/web-product-impact-map.json',
   'tools/web-product-decisions.json',
   'tools/web-product-impact-evaluation.mjs',
@@ -1566,6 +1568,7 @@ const PRODUCT_IMPACT_CHECKER_IMPLEMENTATION_PATHS = Object.freeze([
 ]);
 const PRODUCT_IMPACT_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  PRODUCT_CONTRACT_AUTHORITY_PATH,
   'tools/web-product-impact-map.json',
   'tools/web-product-decisions.json'
 ]);
@@ -3512,6 +3515,42 @@ test('Product Impact checker implementation is separate from Product Impact auth
   });
 });
 
+test('the Product Contract authority path is exact and isolated', () => {
+  const authorityOnly = runChangeBudgetCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, '# Option Integrity Product Contract\n');
+  });
+  assert.equal(authorityOnly.status, 0, authorityOnly.output);
+  assert.match(authorityOnly.output, /Gate: \*\*PASS\*\*/);
+  assert.match(authorityOnly.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(
+    authorityOnly.output,
+    /Changed Product Impact authority paths: `docs\/internal\/OPTION_INTEGRITY_PRODUCT_CONTRACT\.md`/
+  );
+  assert.match(
+    reportSection(authorityOnly.output, 'Guard files touched'),
+    /docs\/internal\/OPTION_INTEGRITY_PRODUCT_CONTRACT\.md/
+  );
+
+  const similarPath = 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md';
+  const lookalikeOnly = runChangeBudgetCase((write) => {
+    write(similarPath, '# Similar name, unrelated path\n');
+  });
+  assert.equal(lookalikeOnly.status, 0, lookalikeOnly.output);
+  assert.match(lookalikeOnly.output, /Review: \*\*CLEAR\*\*/);
+  assert.equal(reportSection(lookalikeOnly.output, 'Guard files touched').trim(), '- None');
+
+  const ambiguousBundle = runChangeBudgetCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, '# Option Integrity Product Contract\n');
+    write(similarPath, '# Similar name, unrelated path\n');
+  });
+  assert.equal(ambiguousBundle.status, 1, ambiguousBundle.output);
+  assert.match(ambiguousBundle.output, /Gate: \*\*FAIL\*\*/);
+  assert.match(
+    ambiguousBundle.output,
+    /Product Contract authority changes must be isolated from other changed paths: docs\/internal\/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY\.md/
+  );
+});
+
 test('the narrow inert authority bundle contains only architecture rules, map, and decisions', () => {
   assert.deepEqual(NARROW_PRODUCT_IMPACT_AUTHORITY_BUNDLE, [
     'tools/web-architecture-rules.json',
@@ -3576,6 +3615,7 @@ test('checker implementation and authority files cannot change together', () => 
   ];
   const authorityPaths = [
     'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    PRODUCT_CONTRACT_AUTHORITY_PATH,
     'docs/internal/PRODUCT_IMPACT_RATCHET.md',
     'docs/internal/WEB_CHANGE_POLICY.md',
     'tools/web-change-policy.json',
@@ -4271,6 +4311,41 @@ test('trusted-base execution rejects self-authorization despite a successful hea
       /privileged capability owners or importers exceed the base allowlist/
     );
     assert.match(trustedBase.output, /Diagram Worker: owner app\/secondary\.js/);
+  });
+});
+
+test('trusted-base execution rejects runtime plus a candidate Product Contract and checker', () => {
+  withChangeBudgetRepository(({ commit, execute, git, root, write }) => {
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+    write(
+      'gbdraw/web/js/services/session-file.js',
+      'export const readSession = () => ({ version: 2 });\n'
+    );
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, '# Candidate Product Contract\n');
+    write('tools/check-web-change-budget.mjs', 'process.exit(0);\n');
+    const head = commit('candidate Product Contract self-authorizes runtime');
+
+    const headChecker = spawnSync(
+      process.execPath,
+      [join(root, 'tools/check-web-change-budget.mjs'), '--base', base, '--head', head],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    assert.equal(headChecker.status, 0, `${headChecker.stdout}${headChecker.stderr}`);
+
+    const trustedBase = execute({ base, head });
+    assert.equal(trustedBase.status, 1, trustedBase.output);
+    assert.match(
+      trustedBase.output,
+      /production runtime files and Web guard\/CI files changed together/
+    );
+    assert.match(
+      trustedBase.output,
+      /Web checker\/source parser and authority policy\/workflow files changed together/
+    );
+    assert.match(
+      trustedBase.output,
+      /Product Contract authority changes must be isolated from other changed paths/
+    );
   });
 });
 
