@@ -1,4 +1,8 @@
-import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import {
+  getLosatToolIdentity,
+  prepareLosatRuntime,
+  runLosatPairsParallel
+} from '../services/losat.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -7,7 +11,10 @@ import {
   runDiagramGeneration,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { buildCanonicalRenderRequest } from '../services/session-request.js';
+import {
+  buildCanonicalProteinAnalysisIntent,
+  buildCanonicalRenderRequest
+} from '../services/session-request.js';
 import {
   buildLabelOverrideTsv,
   serializeLabelOverrideRows
@@ -41,11 +48,6 @@ import {
   syncDepthSlotLabels
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
-import {
-  normalizeCollinearAnchorMode,
-  normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode
-} from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
 import {
   buildPairwiseLosatJobSpecs,
@@ -78,19 +80,15 @@ import {
   discoverSequenceRecords
 } from './record-discovery.js';
 import {
-  LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
-  PROTEIN_LOSAT_CACHE_SCHEMA,
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
   getCurrentRawLosatCacheEntry,
   isCurrentRawLosatCacheEntry,
-  isLosatDerivedCacheEntry,
   mergeProteinIdentityManifests,
   normalizeLosatArgs,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
-  validateDerivedProteinReferences,
   validateProteinIdentityManifest
 } from './losat-cache.js';
 import { comparisonFiltersForMode } from '../mode-profiles.js';
@@ -140,6 +138,13 @@ const hashText = async (text) => {
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
+const throwProteinHelperError = (failure, fallback) => {
+  if (!failure) return;
+  const error = new Error(String(failure.message || fallback));
+  error.name = String(failure.type || 'Error');
+  if (failure.status !== undefined) error.status = failure.status;
+  throw error;
+};
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
 const proteinExtractionCache = new WeakMap();
@@ -176,36 +181,13 @@ export const confirmHydratedLosatExport = (
 );
 
 const buildLosatCachePayload = ({
-  identityKind,
   flow,
   program,
   outfmt,
   args,
   queryCanonicalHash,
-  subjectCanonicalHash,
-  queryProteinSetHash,
-  subjectProteinSetHash,
-  queryRuntimeBindingHash,
-  subjectRuntimeBindingHash,
-  queryRecordInstanceKey,
-  subjectRecordInstanceKey
+  subjectCanonicalHash
 }) => {
-  if (identityKind === 'protein') {
-    return {
-      cacheSchema: PROTEIN_LOSAT_CACHE_SCHEMA,
-      identityKind: 'protein',
-      program: String(program || 'blastp'),
-      outfmt: String(outfmt || '6'),
-      args: normalizeLosatArgs(args),
-      idEncoding: 'runtime-handle-v1',
-      queryProteinSetHash: String(queryProteinSetHash || ''),
-      subjectProteinSetHash: String(subjectProteinSetHash || ''),
-      queryRuntimeBindingHash: String(queryRuntimeBindingHash || ''),
-      subjectRuntimeBindingHash: String(subjectRuntimeBindingHash || ''),
-      queryRecordInstanceKey: String(queryRecordInstanceKey || ''),
-      subjectRecordInstanceKey: String(subjectRecordInstanceKey || '')
-    };
-  }
   const payload = {
     cacheSchema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     program,
@@ -273,124 +255,6 @@ const pruneLosatDerivedCache = (cacheMap) => {
   }
 };
 
-export const buildLosatDerivedPayloadCachePayload = ({
-  mode,
-  maxHits,
-  bitscore,
-  evalue,
-  identity,
-  alignmentLength,
-  collinearMinAnchors,
-  collinearMaxUnitGap,
-  collinearUnitMode,
-  collinearColorMode,
-  collinearAnchorMode,
-  collinearMaxDiagonalDrift,
-  collinearMaxConflictsInMergeGap,
-  collinearMaxParalogLinksPerOrthogroup,
-  collinearSearchScope,
-  orthogroupMembershipMode,
-  orthogroupMemberMaxHits,
-  recordPayloads,
-  pairPayloads
-}) => ({
-  cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
-  idEncoding: 'runtime-handle-v1',
-  converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
-  featureIdentity: 'stable-source-rendered-display-v1',
-  mode: String(mode || 'pairwise'),
-  maxHits: Number(maxHits) || 5,
-  thresholds: {
-    bitscore: String(bitscore),
-    evalue: String(evalue),
-    identity: String(identity),
-    alignmentLength: String(alignmentLength)
-  },
-  orthogroup: {
-    membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
-    memberMaxHits: Number(orthogroupMemberMaxHits) || 5
-  },
-  collinear: {
-    minAnchors: String(collinearMinAnchors),
-    // Persisted LOSAT derived-cache schema 3 uses this historical identity key.
-    maxGeneGap: String(collinearMaxUnitGap),
-    unitMode: String(collinearUnitMode || 'auto'),
-    colorMode: String(collinearColorMode || 'orientation'),
-    anchorMode: String(collinearAnchorMode || 'rbh'),
-    maxDiagonalDrift: String(collinearMaxDiagonalDrift),
-    maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
-    maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
-    searchScope: String(collinearSearchScope || 'adjacent')
-  },
-  records: (Array.isArray(recordPayloads) ? recordPayloads : [])
-    .map((record) => ({
-      recordIndex: Number(record?.recordIndex),
-      proteinCacheKey: String(record?.proteinCacheKey || ''),
-      runtimeBindingHash: String(record?.runtimeBindingHash || ''),
-      displayBindingHash: String(record?.displayBindingHash || ''),
-      viewTransform: {
-        length: Number(record?.viewTransform?.length || 0),
-        reverse: Boolean(record?.viewTransform?.reverse)
-      }
-    }))
-    .sort((left, right) => left.recordIndex - right.recordIndex),
-  pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
-    .map((pair) => ({
-      pairIndex: Number(pair?.pairIndex),
-      queryIndex: Number(pair?.queryIndex),
-      subjectIndex: Number(pair?.subjectIndex),
-      cacheKey: String(pair?.cacheKey || '')
-    }))
-});
-
-const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
-  if (!cacheMap || !key) return null;
-  const entry = cacheMap.get(key);
-  if (
-    !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateDerivedProteinReferences(entry, manifest) ||
-    !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
-  ) return null;
-  cacheMap.delete(key);
-  cacheMap.set(key, entry);
-  return entry.payload;
-};
-
-export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
-  const normalizedMode = String(mode || '').trim().toLowerCase();
-  if (!['orthogroup', 'collinear'].includes(normalizedMode)) return true;
-  const resource = normalizedMode === 'collinear'
-    ? payload?.collinearityResult
-    : payload?.orthogroupResult;
-  const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
-  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupResult';
-  return Boolean(
-    resource
-    && typeof resource === 'object'
-    && !Array.isArray(resource)
-    && [1, 2].includes(resource.schema)
-    && resource.kind === expectedKind
-    && resource.value?.type === expectedType
-    && resource.value.fields
-    && typeof resource.value.fields === 'object'
-    && !Array.isArray(resource.value.fields)
-  );
-};
-
-export const resolveProteinBlastpCandidateLimit = (mode, candidateLimit, maxHits = 5) => {
-  const source = ['orthogroup', 'collinear'].includes(normalizeBlastpMode(mode)) ? candidateLimit : maxHits;
-  if (source === null || source === undefined || source === '') return null;
-  return normalizePositiveInteger(source, null);
-};
-
-const stripRuntimeCacheStats = (payload) => {
-  const cloned = cloneJsonData(payload);
-  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
-    delete cloned.cache;
-  }
-  return cloned;
-};
-
 const LEGACY_PROTEIN_REFERENCE_RE = /p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}(?:_[2-9][0-9]*)?/g;
 
 const collectLegacyProteinReferences = (...values) => {
@@ -444,29 +308,6 @@ const rewriteMappedProteinReferences = (value, idMap) => {
     rewritten[nextKey] = rewriteMappedProteinReferences(item, idMap);
   });
   return rewritten;
-};
-
-const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) => {
-  if (!cacheMap || !key || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return null;
-  }
-  const entry = {
-    schema: LOSAT_DERIVED_CACHE_SCHEMA,
-    kind: 'derived-losatp-payload',
-    idEncoding: 'runtime-handle-v1',
-    key,
-    mode: String(mode || ''),
-    payload: stripRuntimeCacheStats(payload)
-  };
-  if (
-    !isLosatDerivedCacheEntry(entry, { allowLegacy: false }) ||
-    !validateDerivedProteinReferences(entry, manifest) ||
-    !hasRequiredCanonicalAnalysisResource(entry.mode, entry.payload)
-  ) return null;
-  if (cacheMap.has(key)) cacheMap.delete(key);
-  cacheMap.set(key, entry);
-  pruneLosatDerivedCache(cacheMap);
-  return entry.payload;
 };
 
 const makeSafeFilename = (name) => {
@@ -696,10 +537,6 @@ const normalizeBlastThresholdText = (value, defaultValue) => {
   const normalized = String(value ?? '').trim();
   return normalized === '' ? defaultValue : normalized;
 };
-const normalizeBlastpMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
-};
 const normalizeCircularConservationLosatProgram = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'tblastx' ? 'tblastx' : 'blastn';
@@ -707,11 +544,6 @@ const normalizeCircularConservationLosatProgram = (value) => {
 const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
-const normalizeCollinearColorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  if (normalized === 'identity') return 'average_identity';
-  return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -1396,13 +1228,19 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const shouldSuppressPairwiseIdentityLegend = (comparisonPlanSnapshot = null) => {
+  const shouldSuppressPairwiseIdentityLegend = (
+    comparisonPlanSnapshot = null,
+    effectiveProteinAnalysis = null
+  ) => {
     return (
       mode.value === 'linear' &&
       comparisonPlanSnapshot?.hasLosatIntent === true &&
       losatProgram.value === 'blastp' &&
-      normalizeBlastpMode(losat.blastp?.mode) === 'collinear' &&
-      normalizeCollinearColorMode(losat.blastp?.collinearColorMode) === 'orientation'
+      String(effectiveProteinAnalysis?.mode ?? losat.blastp?.mode) === 'collinear' &&
+      String(
+        effectiveProteinAnalysis?.collinearityColorMode
+        ?? losat.blastp?.collinearColorMode
+      ) === 'orientation'
     );
   };
 
@@ -1530,7 +1368,7 @@ export const createRunAnalysis = ({
             sequences: linearSeqs,
             layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
             losatProgram: losatProgram.value,
-            blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+            blastpMode: losat.blastp?.mode
           })
         )
       : null;
@@ -1689,10 +1527,13 @@ export const createRunAnalysis = ({
     const manualRunStartedAt = isReflow ? null : getNow();
     const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
     let structuredLosatTelemetry = null;
+    let effectiveProteinAnalysis = null;
     if (!isReflow) globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = null;
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
     let commitProteinMigration = null;
+    let commitLosatCaches = null;
+    let candidateProteinIdentityManifest = proteinIdentityManifest.value;
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -2323,7 +2164,7 @@ export const createRunAnalysis = ({
             const subjectHash = await hashText(subjectEntry.fasta);
             const subjectSequenceKey = `circular-subject:${subjectHash}`;
             const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectEntry.fasta]]);
-            const cacheMap = losatCache.value || new Map();
+            const cacheMap = new Map(losatCache.value || []);
             const cacheInfo = [];
             const losatPairs = [];
             const losatJobs = [];
@@ -2443,8 +2284,10 @@ export const createRunAnalysis = ({
                 text: blastText
               });
             }
-            losatCacheInfo.value = cacheInfo;
-            losatCache.value = cacheMap;
+            commitLosatCaches = () => {
+              losatCacheInfo.value = cacheInfo;
+              losatCache.value = cacheMap;
+            };
             return resolved;
           };
 
@@ -2458,7 +2301,9 @@ export const createRunAnalysis = ({
             circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
               : 'auto';
-            losatCacheInfo.value = [];
+            commitLosatCaches = () => {
+              losatCacheInfo.value = [];
+            };
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
@@ -2549,128 +2394,31 @@ export const createRunAnalysis = ({
           ));
         const useLosat = hasLosatIntent && !reuseResolvedProteinArtifacts;
         if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
-        const blastpMode = useProteinBlastp
-          ? normalizeBlastpMode(losat.blastp?.mode)
-          : String(losat.blastp?.mode ?? '');
-        const usePairwiseBlastp = useProteinBlastp && blastpMode === 'pairwise';
-        const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
-        const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
+        let blastpMode = '';
+        let usePairwiseBlastp = false;
+        let useOrthogroupBlastp = false;
+        let useCollinearBlastp = false;
         if (hasComparisonIntent) {
           adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
-          adv.min_bitscore = normalizeBlastThresholdNumber(
-            adv.min_bitscore,
-            DEFAULT_LINEAR_BLAST_FILTERS.bitscore
-          );
-          adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
-          adv.identity = normalizeBlastThresholdNumber(
-            adv.identity,
-            DEFAULT_LINEAR_BLAST_FILTERS.identity
-          );
-          adv.alignment_length = normalizeBlastThresholdNumber(
-            adv.alignment_length,
-            DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
-            { integer: true }
-          );
-        }
-
-        const blastpMaxHits = usePairwiseBlastp
-          ? Math.max(1, normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true }))
-          : 5;
-        const blastpCandidateLimit = useProteinBlastp
-          ? resolveProteinBlastpCandidateLimit(
-              blastpMode,
-              losat.blastp?.candidateLimit,
-              blastpMaxHits
-            )
-          : null;
-        const orthogroupMembershipMode = useOrthogroupBlastp
-          ? normalizeOrthogroupMembershipMode(losat.blastp?.orthogroupMembershipMode)
-          : 'anchor_core_v1';
-        const orthogroupMemberMaxHits = useOrthogroupBlastp
-          ? Math.max(
-              1,
-              normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
-            )
-          : 5;
-        const collinearMinAnchors = useCollinearBlastp
-          ? Math.max(
-              1,
-              normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
-            )
-          : 1;
-        const collinearMaxUnitGap = useCollinearBlastp
-          ? Math.max(
-              0,
-              normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
-            )
-          : 0;
-        const collinearMaxDiagonalDrift = useCollinearBlastp
-          ? Math.max(
-              0,
-              normalizeBlastThresholdNumber(
-                losat.blastp?.collinearMaxDiagonalDrift,
-                0,
-                { integer: true }
-              )
-            )
-          : 0;
-        const collinearMaxConflictsInMergeGap = useCollinearBlastp
-          ? Math.max(
-              0,
-              normalizeBlastThresholdNumber(
-                losat.blastp?.collinearMaxConflictsInMergeGap,
-                1,
-                { integer: true }
-              )
-            )
-          : 1;
-        const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
-          ? Math.max(
-              1,
-              normalizeBlastThresholdNumber(
-                losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
-                2,
-                { integer: true }
-              )
-            )
-          : 2;
-        const collinearColorMode = useCollinearBlastp
-          ? normalizeCollinearColorMode(losat.blastp?.collinearColorMode)
-          : 'orientation';
-        const rawCollinearUnitMode = String(
-          losat.blastp?.collinearUnitMode || ''
-        ).trim().toLowerCase();
-        const collinearUnitMode = useCollinearBlastp &&
-          ['auto', 'cds', 'locus'].includes(rawCollinearUnitMode)
-          ? rawCollinearUnitMode
-          : 'auto';
-        const collinearAnchorMode = useCollinearBlastp
-          ? normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
-          : 'rbh';
-        const collinearSearchScope = useCollinearBlastp
-          ? normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope)
-          : 'adjacent';
-
-        if (useProteinBlastp) losat.blastp.mode = blastpMode;
-        if (usePairwiseBlastp) {
-          losat.blastp.maxHits = blastpMaxHits;
-          losat.blastp.candidateLimit = null;
-        } else if (useOrthogroupBlastp) {
-          losat.blastp.candidateLimit = blastpCandidateLimit;
-          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
-          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
-        } else if (useCollinearBlastp) {
-          losat.blastp.candidateLimit = blastpCandidateLimit;
-          losat.blastp.collinearMinAnchors = collinearMinAnchors;
-          losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
-          losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
-          losat.blastp.collinearMaxConflictsInMergeGap = collinearMaxConflictsInMergeGap;
-          losat.blastp.collinearMaxParalogLinksPerOrthogroup =
-            collinearMaxParalogLinksPerOrthogroup;
-          losat.blastp.collinearColorMode = collinearColorMode;
-          losat.blastp.collinearUnitMode = collinearUnitMode;
-          losat.blastp.collinearAnchorMode = collinearAnchorMode;
-          losat.blastp.collinearSearchScope = collinearSearchScope;
+          if (!useProteinBlastp) {
+            adv.min_bitscore = normalizeBlastThresholdNumber(
+              adv.min_bitscore,
+              DEFAULT_LINEAR_BLAST_FILTERS.bitscore
+            );
+            adv.evalue = normalizeBlastThresholdText(
+              adv.evalue,
+              DEFAULT_LINEAR_BLAST_FILTERS.evalue
+            );
+            adv.identity = normalizeBlastThresholdNumber(
+              adv.identity,
+              DEFAULT_LINEAR_BLAST_FILTERS.identity
+            );
+            adv.alignment_length = normalizeBlastThresholdNumber(
+              adv.alignment_length,
+              DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
+              { integer: true }
+            );
+          }
         }
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
@@ -2755,16 +2503,9 @@ export const createRunAnalysis = ({
         const fastaHashCache = new Map();
         const sequenceEntriesByKey = new Map();
         const linearFileTextCache = new WeakMap();
-        if (!reuseResolvedProteinArtifacts) {
-          collinearGroups.value = [];
-          if (useOrthogroupBlastp) {
-            clearOrthogroupMetadata();
-          } else {
-            clearOrthogroupMetadata({ clearSelection: true });
-          }
-        }
         let cacheInfo = [];
-        const cacheMap = losatCache.value || new Map();
+        const cacheMap = new Map(losatCache.value || []);
+        const derivedCacheMap = new Map(losatDerivedCache.value || []);
         const losatTiming = useLosat
           ? {
               inputWriteMs: 0,
@@ -2808,11 +2549,11 @@ export const createRunAnalysis = ({
             })
           : null;
 
-        if (!hasLosatIntent) {
-          losatCacheInfo.value = [];
-        }
-
         let proteinRecordInstanceKeys = [];
+        let proteinAnalysisIntent = null;
+        let proteinRecordPayloads = null;
+        let proteinToolIdentity = '';
+        let proteinPlan = null;
 
         const buildProteinRecordInstanceKeys = async () => {
           const used = new Set();
@@ -3014,22 +2755,6 @@ export const createRunAnalysis = ({
         };
 
         const buildCacheMetadata = async (argsKey, queryIdx, subjectIdx) => {
-          if (useProteinBlastp) {
-            const queryEntry = await getSeqEntry(queryIdx);
-            const subjectEntry = await getSeqEntry(subjectIdx);
-            return {
-              identityKind: 'protein',
-              program: 'blastp',
-              outfmt: String(losat.outfmt || '6'),
-              args: argsKey,
-              queryProteinSetHash: queryEntry.proteinSetHash,
-              subjectProteinSetHash: subjectEntry.proteinSetHash,
-              queryRuntimeBindingHash: queryEntry.runtimeBindingHash,
-              subjectRuntimeBindingHash: subjectEntry.runtimeBindingHash,
-              queryRecordInstanceKey: queryEntry.recordInstanceKey,
-              subjectRecordInstanceKey: subjectEntry.recordInstanceKey
-            };
-          }
           const queryHash = await getSeqHash(queryIdx);
           const subjectHash = await getSeqHash(subjectIdx);
           return {
@@ -3042,29 +2767,9 @@ export const createRunAnalysis = ({
           };
         };
 
-        const buildCacheKey = async (metadata) => {
-          if (metadata?.identityKind === 'protein') {
-            const response = await runDiagramHelperOperation(
-              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY,
-              {
-                identityManifest: cloneJsonData(proteinIdentityManifest.value),
-                queryRecordInstanceKey: metadata.queryRecordInstanceKey,
-                subjectRecordInstanceKey: metadata.subjectRecordInstanceKey,
-                expectedOptions: {
-                  program: metadata.program,
-                  outfmt: metadata.outfmt,
-                  args: normalizeLosatArgs(metadata.args)
-                }
-              }
-            );
-            const result = response.result;
-            if (result.error || !result.key) {
-              throw new Error(result.error || 'Protein cache key generation failed.');
-            }
-            return String(result.key);
-          }
-          return hashText(JSON.stringify(buildLosatCachePayload(metadata)));
-        };
+        const buildCacheKey = async (metadata) => (
+          hashText(JSON.stringify(buildLosatCachePayload(metadata)))
+        );
 
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
@@ -3094,11 +2799,12 @@ export const createRunAnalysis = ({
               subjectFasta: String(subjectEntry?.fasta || ''),
               queryProteinMap: cloneJsonData(queryEntry?.proteinMap || {}),
               subjectProteinMap: cloneJsonData(subjectEntry?.proteinMap || {}),
-              identityManifest: cloneJsonData(proteinIdentityManifest.value),
+              identityManifest: cloneJsonData(candidateProteinIdentityManifest),
               expectedOptions: {
                 program: metadata.program,
                 outfmt: metadata.outfmt,
-                args: normalizeLosatArgs(metadata.args)
+                args: normalizeLosatArgs(metadata.args),
+                toolIdentity: metadata.toolIdentity
               }
             }
           );
@@ -3138,7 +2844,7 @@ export const createRunAnalysis = ({
             cacheMap,
             cacheKey,
             metadata,
-            proteinIdentityManifest.value
+            candidateProteinIdentityManifest
           );
           if (!verified) {
             cacheMap.delete(cacheKey);
@@ -3193,11 +2899,6 @@ export const createRunAnalysis = ({
           return num;
         };
 
-        const getBlastpCandidateLimit = () => {
-          if (!useProteinBlastp) return null;
-          return blastpCandidateLimit;
-        };
-
         const buildLosatArgs = (queryIdx, subjectIdx) => {
           const args = [];
           if (losatProgram.value === 'blastn') {
@@ -3205,18 +2906,13 @@ export const createRunAnalysis = ({
           } else if (losatProgram.value === 'tblastx') {
             pushArg(args, '--query-gencode', getGencode(queryIdx));
             pushArg(args, '--db-gencode', getGencode(subjectIdx));
-          } else {
-            if (!useOrthogroupBlastp && !useCollinearBlastp) {
-              pushArg(args, '--max-hsps-per-subject', 1);
-            }
-            pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());
           }
           return args;
         };
 
         {
           const inputWriteStartedAt = getNow();
-          const losatRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
+          const losatRecordIndexes = useProteinBlastp
             ? new Set(linearSeqs.map((_, index) => index))
             : new Set(comparisonResolution.edges
                 .filter((edge) => edge.source === 'losat')
@@ -3250,12 +2946,7 @@ export const createRunAnalysis = ({
         regionSpecs = linearSeqs.map((seq, idx) => buildRegionSpec(seq, idx));
         if (useLosat && useProteinBlastp) {
           proteinRecordInstanceKeys = await buildProteinRecordInstanceKeys();
-          const proteinRecordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-            ? linearSeqs.map((_, index) => index)
-            : Array.from(new Set(comparisonResolution.edges
-                .filter((edge) => edge.source === 'losat')
-                .flatMap((edge) => [edge.queryIndex, edge.subjectIndex])))
-                .sort((left, right) => left - right);
+          const proteinRecordIndexes = linearSeqs.map((_, index) => index);
           const proteinEntries = [];
           for (const index of proteinRecordIndexes) {
             proteinEntries.push(await getSeqEntry(index));
@@ -3266,7 +2957,7 @@ export const createRunAnalysis = ({
               'Protein comparison metadata could not be validated. Reload the page and try again.'
             );
           }
-          proteinIdentityManifest.value = mergeProteinIdentityManifests(manifests);
+          candidateProteinIdentityManifest = mergeProteinIdentityManifests(manifests);
           const legacyReferenceIds = collectLegacyProteinReferences(
             orthogroups.value,
             selectedOrthogroupAlignmentFeature.value,
@@ -3281,7 +2972,7 @@ export const createRunAnalysis = ({
                   proteinMap: entry.proteinMap || {},
                   fasta: entry.fasta || ''
                 }))),
-                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                identityManifest: cloneJsonData(candidateProteinIdentityManifest),
                 referenceIds: cloneJsonData(legacyReferenceIds)
               }
             );
@@ -3319,6 +3010,46 @@ export const createRunAnalysis = ({
               throw new Error('Legacy protein UI references remain after migration.');
             }
           }
+          proteinRecordPayloads = [];
+          for (const [index, entry] of proteinEntries.entries()) {
+            proteinRecordPayloads.push({
+              recordIndex: index,
+              recordId: entry.recordId || `seq_${index + 1}`,
+              recordLength: Number(entry.canonicalLength || 0),
+              recordInstanceKey: entry.recordInstanceKey,
+              sequenceKey: entry.sequenceKey,
+              fasta: entry.fasta,
+              proteinMap: entry.proteinMap || {},
+              viewTransform: await getViewTransform(index)
+            });
+          }
+          proteinAnalysisIntent = buildCanonicalProteinAnalysisIntent({
+            state,
+            comparisonPlanSnapshot: activeComparisonPlanSnapshot
+          });
+          proteinToolIdentity = await getLosatToolIdentity();
+          throwIfGenerationCanceled();
+          const response = await runDiagramHelperOperation(
+            DIAGRAM_HELPER_OPERATIONS.PLAN_PROTEIN_ANALYSIS,
+            {
+              files: [{
+                role: 'protein',
+                bytes: textEncoder.encode(JSON.stringify({
+                  records: proteinRecordPayloads
+                })).buffer
+              }],
+              proteinIntent: cloneJsonData(proteinAnalysisIntent),
+              identityManifest: cloneJsonData(candidateProteinIdentityManifest),
+              toolIdentity: proteinToolIdentity
+            }
+          );
+          throwIfGenerationCanceled();
+          throwProteinHelperError(response.result?.error, 'Protein analysis planning failed.');
+          proteinPlan = response.result;
+          blastpMode = String(proteinPlan.mode || '');
+          usePairwiseBlastp = blastpMode === 'pairwise';
+          useOrthogroupBlastp = blastpMode === 'orthogroup';
+          useCollinearBlastp = blastpMode === 'collinear';
         }
 
         if (useLosat) {
@@ -3338,44 +3069,26 @@ export const createRunAnalysis = ({
             resolvedLosatEdges.find((edge) => edge.ordinal === ordinal) ||
             resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
           );
-          const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
-            const edge = edgeForOrdinal(ordinal);
-            if (!edge) return;
-            jobSpecs.push({
-              edgeKey: edge.edgeKey,
-              ordinal: edge.ordinal,
-              queryUid: edge.queryUid,
-              subjectUid: edge.subjectUid,
-              queryIndex,
-              subjectIndex,
-              program: losatProgram.value
-            });
-          };
-          if (useOrthogroupBlastp) {
-            for (let i = 0; i < linearSeqs.length; i++) {
-              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              for (let j = i + 1; j < linearSeqs.length; j++) {
-                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-          } else if (useCollinearBlastp) {
-            for (let i = 0; i < linearSeqs.length; i++) {
-              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-            }
-            if (collinearSearchScope === 'all') {
-              for (let i = 0; i < linearSeqs.length - 1; i++) {
-                for (let j = i + 1; j < linearSeqs.length; j++) {
-                  pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                  pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                }
-              }
-            } else {
-              resolvedLosatEdges.forEach((edge) => {
-                pushExpandedJobSpec(edge.queryIndex, edge.subjectIndex, edge.ordinal);
-                pushExpandedJobSpec(edge.subjectIndex, edge.queryIndex, edge.ordinal);
-              });
-            }
+          if (useProteinBlastp) {
+            jobSpecs.push(...proteinPlan.jobs.map((job) => {
+              const displayEdge = job.display === true
+                ? resolvedLosatEdges[Number(job.pairIndex)]
+                : null;
+              const edge = displayEdge || edgeForOrdinal(Number(job.pairIndex));
+              return {
+                edgeKey: edge?.edgeKey || '',
+                ordinal: Number(job.pairIndex),
+                queryUid: edge?.queryUid || '',
+                subjectUid: edge?.subjectUid || '',
+                queryIndex: Number(job.queryIndex),
+                subjectIndex: Number(job.subjectIndex),
+                program: 'blastp',
+                displayPair: job.display === true,
+                rawEntry: job.rawEntry,
+                querySequenceKey: job.querySequenceKey,
+                subjectSequenceKey: job.subjectSequenceKey
+              };
+            }));
           } else {
             jobSpecs.push(...buildPairwiseLosatJobSpecs({
               resolution: comparisonResolution,
@@ -3390,14 +3103,23 @@ export const createRunAnalysis = ({
             throwIfGenerationCanceled();
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
             throwIfGenerationCanceled();
-            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
-            const cacheMetadata = await buildCacheMetadata(losatArgs, spec.queryIndex, spec.subjectIndex);
-            const cacheKey = await buildCacheKey(cacheMetadata);
+            const losatArgs = useProteinBlastp
+              ? normalizeLosatArgs(spec.rawEntry?.args)
+              : buildLosatArgs(spec.queryIndex, spec.subjectIndex);
+            const cacheMetadata = useProteinBlastp
+              ? { ...spec.rawEntry, args: losatArgs }
+              : await buildCacheMetadata(losatArgs, spec.queryIndex, spec.subjectIndex);
+            const cacheKey = useProteinBlastp
+              ? String(spec.rawEntry?.key || '')
+              : await buildCacheKey(cacheMetadata);
+            if (!cacheKey) throw new Error('LOSAT cache identity was not prepared.');
             throwIfGenerationCanceled();
-            const queryCanonicalHash = await getSeqHash(spec.queryIndex);
-            throwIfGenerationCanceled();
-            const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
-            throwIfGenerationCanceled();
+            const queryCanonicalHash = useProteinBlastp
+              ? ''
+              : await getSeqHash(spec.queryIndex);
+            const subjectCanonicalHash = useProteinBlastp
+              ? ''
+              : await getSeqHash(spec.subjectIndex);
             if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
               throw new Error('LOSAT sequence cache key was not prepared.');
             }
@@ -3407,7 +3129,7 @@ export const createRunAnalysis = ({
               cacheMap,
               cacheKey,
               cacheMetadata,
-              proteinIdentityManifest.value
+              candidateProteinIdentityManifest
             );
             if (!cached && useProteinBlastp) {
               cached = await tryPromoteLegacyProteinEntry({
@@ -3426,11 +3148,13 @@ export const createRunAnalysis = ({
             const resolvedEdge = comparisonResolution.edges.find(
               (edge) => edge.edgeKey === spec.edgeKey
             );
-            const isResolvedDisplayPair = Boolean(
-              resolvedEdge &&
-              spec.queryIndex === resolvedEdge.queryIndex &&
-              spec.subjectIndex === resolvedEdge.subjectIndex
-            );
+            const isResolvedDisplayPair = useProteinBlastp
+              ? spec.displayPair === true
+              : Boolean(
+                  resolvedEdge &&
+                  spec.queryIndex === resolvedEdge.queryIndex &&
+                  spec.subjectIndex === resolvedEdge.subjectIndex
+                );
             const pair = {
               pairIndex: spec.ordinal,
               ordinal: spec.ordinal,
@@ -3440,7 +3164,9 @@ export const createRunAnalysis = ({
               queryIndex: spec.queryIndex,
               subjectIndex: spec.subjectIndex,
               cacheKey,
-              filename: buildCacheFilename(spec, queryEntry, subjectEntry),
+              filename: useProteinBlastp
+                ? String(spec.rawEntry?.filename || '')
+                : buildCacheFilename(spec, queryEntry, subjectEntry),
               displayPair: isResolvedDisplayPair
             };
             losatPairs.push(pair);
@@ -3518,33 +3244,25 @@ export const createRunAnalysis = ({
               const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
               const cacheMetadata = job?.cacheMetadata || {};
               const isProteinEntry = cacheMetadata.identityKind === 'protein';
-              const rawEntry = {
-                schema: isProteinEntry
-                  ? PROTEIN_LOSAT_CACHE_SCHEMA
-                  : NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
-                kind: 'raw-losat',
-                identityKind: isProteinEntry ? 'protein' : 'nucleotide',
-                ...(isProteinEntry ? { idEncoding: 'runtime-handle-v1' } : {}),
-                text: result.text,
-                program: losatProgram.value,
-                outfmt: String(losat.outfmt || '6'),
-                args: job?.extraArgs || [],
-                ...(isProteinEntry
-                  ? {
-                      queryProteinSetHash: cacheMetadata.queryProteinSetHash,
-                      subjectProteinSetHash: cacheMetadata.subjectProteinSetHash,
-                      queryRuntimeBindingHash: cacheMetadata.queryRuntimeBindingHash,
-                      subjectRuntimeBindingHash: cacheMetadata.subjectRuntimeBindingHash,
-                      queryRecordInstanceKey: cacheMetadata.queryRecordInstanceKey,
-                      subjectRecordInstanceKey: cacheMetadata.subjectRecordInstanceKey,
-                      queryCanonicalHash: job?.queryCanonicalHash || '',
-                      subjectCanonicalHash: job?.subjectCanonicalHash || ''
-                    }
-                  : {
-                      queryCanonicalHash: job?.queryCanonicalHash || '',
-                      subjectCanonicalHash: job?.subjectCanonicalHash || ''
-                    })
-              };
+              const rawEntry = isProteinEntry
+                ? {
+                    ...cacheMetadata,
+                    text: result.text
+                  }
+                : {
+                    schema: NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+                    kind: 'raw-losat',
+                    identityKind: 'nucleotide',
+                    text: result.text,
+                    program: losatProgram.value,
+                    outfmt: String(losat.outfmt || '6'),
+                    args: job?.extraArgs || [],
+                    queryCanonicalHash: job?.queryCanonicalHash || '',
+                    subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                  };
+              delete rawEntry.key;
+              delete rawEntry.filename;
+              delete rawEntry.display;
               cacheMap.set(result.cacheKey, rawEntry);
             });
           } else {
@@ -3554,135 +3272,53 @@ export const createRunAnalysis = ({
           const blastWriteStartedAt = getNow();
           throwIfGenerationCanceled();
           if (useProteinBlastp) {
-            const recordPayloads = [];
-            const recordIndexes = (useOrthogroupBlastp || useCollinearBlastp)
-              ? linearSeqs.map((_, index) => index)
-              : Array.from(new Set(losatPairs.flatMap((pair) => [
-                  pair.queryIndex,
-                  pair.subjectIndex
-                ]))).sort((left, right) => left - right);
-            for (const i of recordIndexes) {
-              const entry = await getSeqEntry(i);
-              recordPayloads.push({
-                recordIndex: i,
-                recordId: entry.recordId || `seq_${i + 1}`,
-                proteinMap: entry.proteinMap || {},
-                proteinCacheKey: entry.proteinCacheKey || entry.sequenceKey || `record:${i}`,
-                runtimeBindingHash: entry.runtimeBindingHash || '',
-                displayBindingHash: entry.displayBindingHash || '',
-                viewTransform: await getViewTransform(i)
-              });
-            }
-            const pairPayloads = [];
-            for (const pair of losatPairs) {
-              throwIfGenerationCanceled();
-              const cached = cacheMap.get(pair.cacheKey);
-              const losatText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
-              pairPayloads.push({
-                pairIndex: pair.pairIndex,
-                ordinal: pair.ordinal,
-                edgeKey: pair.edgeKey,
-                queryIndex: pair.queryIndex,
-                subjectIndex: pair.subjectIndex,
-                displayPair: pair.displayPair,
-                cacheKey: pair.cacheKey,
-                blastText: losatText
-              });
-            }
             setProcessingStatus(
               useCollinearBlastp
                 ? 'Converting LOSAT protein links to collinear ribbons...'
                 : 'Converting LOSAT protein hits...'
             );
-            const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
-            const derivedCacheMap = losatDerivedCache.value || new Map();
-            let derivedCacheKey = '';
-            let convertedPayload = null;
-            if (useDerivedProteinPayloadCache) {
-              const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
-                mode: blastpMode,
-                maxHits: blastpMaxHits,
-                bitscore: adv.min_bitscore,
-                evalue: adv.evalue,
-                identity: adv.identity,
-                alignmentLength: adv.alignment_length,
-                collinearMinAnchors,
-                collinearMaxUnitGap,
-                collinearUnitMode: 'cds',
-                collinearColorMode,
-                collinearAnchorMode: 'rbh',
-                collinearMaxDiagonalDrift,
-                collinearMaxConflictsInMergeGap,
-                collinearMaxParalogLinksPerOrthogroup,
-                collinearSearchScope,
-                orthogroupMembershipMode,
-                orthogroupMemberMaxHits,
-                recordPayloads,
-                pairPayloads
-              });
-              derivedCacheKey = await hashText(JSON.stringify(derivedCachePayload));
-              convertedPayload = getLosatDerivedCacheEntry(
-                derivedCacheMap,
-                derivedCacheKey,
-                proteinIdentityManifest.value
-              );
-              if (convertedPayload) {
-                convertedPayload = {
-                  ...convertedPayload,
-                  cache: {
-                    ...(convertedPayload.cache || {}),
-                    derivedPayloadHit: true
-                  }
-                };
-                losatTiming.proteinDerivedPayloadCacheHits += 1;
-              } else {
-                losatTiming.proteinDerivedPayloadCacheMisses += 1;
+            const rawEntries = proteinPlan.jobs.map((job) => {
+              const key = String(job.rawEntry?.key || '');
+              const cached = cacheMap.get(key);
+              if (!isCurrentRawLosatCacheEntry(cached)) {
+                throw new Error(`Protein raw artifact '${key}' is unavailable.`);
               }
-            }
-            if (!convertedPayload) {
-              const response = await runDiagramHelperOperation(
-                DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD,
-                {
-                  files: [{ role: 'pairs', bytes: textEncoder.encode(JSON.stringify({ records: recordPayloads, pairs: pairPayloads })).buffer }],
-                  mode: blastpMode,
-                  maxHits: blastpMaxHits,
-                  bitscore: adv.min_bitscore,
-                  evalue: adv.evalue,
-                  identity: adv.identity,
-                  alignmentLength: adv.alignment_length,
-                  collinearMinAnchors,
-                  collinearMaxUnitGap,
-                  collinearUnitMode: 'cds',
-                  collinearColorMode,
-                  collinearAnchorMode: 'rbh',
-                  collinearMaxDiagonalDrift,
-                  collinearMaxConflictsInMergeGap,
-                  collinearMaxParalogLinksPerOrthogroup,
-                  collinearSearchScope,
-                  orthogroupMembershipMode,
-                  orthogroupMemberMaxHits
-                }
-              );
-              convertedPayload = response.result;
-              if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
-                convertedPayload = setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
-                  mode: blastpMode,
-                  payload: convertedPayload,
-                  manifest: proteinIdentityManifest.value
-                }) || convertedPayload;
+              return { ...job.rawEntry, ...cached, key };
+            });
+            const response = await runDiagramHelperOperation(
+              DIAGRAM_HELPER_OPERATIONS.ASSEMBLE_PROTEIN_ANALYSIS,
+              {
+                files: [{
+                  role: 'protein',
+                  bytes: textEncoder.encode(JSON.stringify({
+                    records: proteinRecordPayloads,
+                    rawEntries,
+                    cachedDerivedEntries: Array.from(derivedCacheMap.values())
+                  })).buffer
+                }],
+                proteinIntent: cloneJsonData(proteinAnalysisIntent),
+                identityManifest: cloneJsonData(candidateProteinIdentityManifest),
+                toolIdentity: proteinToolIdentity
               }
+            );
+            throwIfGenerationCanceled();
+            throwProteinHelperError(response.result?.error, 'Protein analysis failed.');
+            const convertedPayload = response.result;
+            effectiveProteinAnalysis = convertedPayload.provenance?.effective || null;
+            const derivedEntry = convertedPayload.derivedEntry;
+            if (!derivedEntry?.key) {
+              throw new Error('Protein analysis did not return a derived artifact identity.');
             }
-            losatDerivedCache.value = derivedCacheMap;
-            if (convertedPayload.error) throw new Error(convertedPayload.error);
-            if (!hasRequiredCanonicalAnalysisResource(blastpMode, convertedPayload)) {
-              throw new Error(
-                'Protein comparison analysis did not return its canonical typed result.'
-              );
+            if (derivedCacheMap.has(derivedEntry.key)) {
+              derivedCacheMap.delete(derivedEntry.key);
             }
-            const conversionCache = convertedPayload.cache || {};
-            if (conversionCache.convertedPayloadHit) losatTiming.proteinConversionCacheHits += 1;
-            losatTiming.proteinFilteredHitCacheHits += Number(conversionCache.filteredHitCacheHits || 0);
-            losatTiming.proteinFilteredHitCacheMisses += Number(conversionCache.filteredHitCacheMisses || 0);
+            derivedCacheMap.set(derivedEntry.key, derivedEntry);
+            pruneLosatDerivedCache(derivedCacheMap);
+            if (convertedPayload.cacheHit) {
+              losatTiming.proteinDerivedPayloadCacheHits += 1;
+            } else {
+              losatTiming.proteinDerivedPayloadCacheMisses += 1;
+            }
             if (useCollinearBlastp) {
               resolvedComparisons.push({
                 kind: 'collinearityResult',
@@ -3850,10 +3486,17 @@ export const createRunAnalysis = ({
           );
         }
         if (useLosat) {
-          losatCacheInfo.value = cacheInfo.sort(
+          const admittedCacheInfo = cacheInfo.sort(
             (left, right) => Number(left?.ordinal) - Number(right?.ordinal)
           );
-          losatCache.value = cacheMap;
+          commitLosatCaches = () => {
+            losatCacheInfo.value = admittedCacheInfo;
+            losatCache.value = cacheMap;
+            if (useProteinBlastp) {
+              losatDerivedCache.value = derivedCacheMap;
+              proteinIdentityManifest.value = candidateProteinIdentityManifest;
+            }
+          };
           recordSessionLifecycleEvent('losat-cache-preparation-end', {
             cacheHits: Number(losatTiming?.cacheHits || 0),
             cacheMisses: Number(losatTiming?.cacheMisses || 0),
@@ -3864,6 +3507,10 @@ export const createRunAnalysis = ({
               losatTiming?.proteinDerivedPayloadCacheMisses || 0
             )
           });
+        } else if (!hasLosatIntent) {
+          commitLosatCaches = () => {
+            losatCacheInfo.value = [];
+          };
         }
         if ((!useLinearTrackSlots && form.show_depth) || linearSlotNeedsDepth) {
           const depthRows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -4035,7 +3682,8 @@ export const createRunAnalysis = ({
       }
 
       const suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend(
-        activeComparisonPlanSnapshot
+        activeComparisonPlanSnapshot,
+        effectiveProteinAnalysis
       );
       if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-start');
       const candidateCatalog = isReflow
@@ -4198,6 +3846,7 @@ export const createRunAnalysis = ({
           results: candidateCommit.results
         });
       }
+      if (!isReflow) commitLosatCaches?.();
       return { status: 'ok' };
     } catch (e) {
       if (!legacyPromotionCommitted) {

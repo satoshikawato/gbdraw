@@ -14,7 +14,7 @@ const DEFAULT_MAX_THREADS_PER_JOB = 16;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
-const wasmModulePromises = new Map();
+const wasmResourcePromises = new Map();
 const threadedSupportPromises = new Map();
 
 const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
@@ -61,21 +61,39 @@ const loadWasiShim = async () => {
   return wasiShimPromise;
 };
 
-const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
+const loadLosatResource = async (wasmPath = DEFAULT_WASM_PATH) => {
   const key = String(wasmPath || DEFAULT_WASM_PATH);
-  if (!wasmModulePromises.has(key)) {
-    wasmModulePromises.set(key, (async () => {
+  if (!wasmResourcePromises.has(key)) {
+    wasmResourcePromises.set(key, (async () => {
       const resolvedWasmPath = resolveAssetUrl(wasmPath);
       const response = await fetch(resolvedWasmPath, { cache: 'no-store' });
       if (!response.ok) {
         throw new Error(`Missing packaged asset: LOSAT wasm not found at ${resolvedWasmPath}`);
       }
       const bytes = await response.arrayBuffer();
-      return WebAssembly.compile(bytes);
+      if (!globalThis.crypto?.subtle) {
+        throw new Error('Web Crypto is required to identify the packaged LOSAT runtime.');
+      }
+      const [wasmModule, digest] = await Promise.all([
+        WebAssembly.compile(bytes),
+        crypto.subtle.digest('SHA-256', bytes)
+      ]);
+      const sha256 = Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+      return { wasmModule, sha256 };
     })());
   }
-  return wasmModulePromises.get(key);
+  return wasmResourcePromises.get(key);
 };
+
+const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => (
+  (await loadLosatResource(wasmPath)).wasmModule
+);
+
+export const getLosatToolIdentity = async () => (
+  `losat-wasm-sha256:${(await loadLosatResource(DEFAULT_WASM_PATH)).sha256}`
+);
 
 const moduleHasThreadedWasiShape = (wasmModule) => {
   const exports = WebAssembly.Module.exports(wasmModule);

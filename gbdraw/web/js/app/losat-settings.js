@@ -1,5 +1,3 @@
-import { normalizeCollinearSearchScope } from './losat-normalization.js';
-
 const { computed, ref, watch, onMounted } = window.Vue;
 
 const DEFAULT_LOSAT_PAIR_WORKER_AUTO_LIMIT = 4;
@@ -61,11 +59,11 @@ export const createLosatSettings = ({ state }) => {
     if (recordCount < 2) return 0;
     if (losatProgram.value !== 'blastp') return losatEdgeCount;
 
-    const blastpMode = String(losat.blastp?.mode || 'orthogroup').trim().toLowerCase();
+    const blastpMode = String(losat.blastp?.mode || '');
     const expandsAllRecords = resolution.mode === 'adjacent' && resolution.defaultSource === 'losat';
     if (expandsAllRecords && blastpMode === 'orthogroup') return recordCount * recordCount;
     if (expandsAllRecords && blastpMode === 'collinear') {
-      const scope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
+      const scope = String(losat.blastp?.collinearSearchScope || '');
       const pairCount = scope === 'all'
         ? Math.floor((recordCount * (recordCount - 1)) / 2)
         : recordCount - 1;
