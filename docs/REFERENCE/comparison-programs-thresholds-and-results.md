@@ -51,7 +51,9 @@ Display filters are e-value, bit score, identity, and alignment length. Values
 must be finite and non-negative; identity is limited to 0 through 100, and
 alignment length is an integer. Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
-and conflict rules.
+and conflict rules. `max_conflicts` limits how many retained singleton anchors
+may lie inside both order intervals when two compatible clusters merge. Those
+singleton anchors remain in the result.
 
 Filters apply to display or derived results after raw search rows exist. A raw
 TSV can therefore contain more rows than the finished diagram. Record the
