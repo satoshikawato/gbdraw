@@ -165,6 +165,64 @@ test('dev metadata and documentation changes select only changed surfaces', asyn
   }
 });
 
+test('Gallery metadata and documentation changes skip browser and performance', async () => {
+  for (const [path, impact] of [
+    ['.agents/skills/example/SKILL.md', 'metadata'],
+    ['docs/FAQ.md', 'documentation']
+  ]) {
+    let evidenceArguments;
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'gallery',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', path),
+      verifyWorkflowEvidenceImpl: async (args) => {
+        evidenceArguments = args;
+        return successfulEvidence({
+          workflowPath: '.github/workflows/gallery-publication.yml',
+          aggregateName: 'Gallery readiness / gate'
+        });
+      }
+    });
+    assert.equal(evidenceArguments.expectedHeadSha, SHA.base);
+    assert.equal(evidenceArguments.workflowPath, '.github/workflows/gallery-publication.yml');
+    assert.equal(evidenceArguments.expectedAggregateName, 'Gallery readiness / gate');
+    assert.equal(outcome.plan.impact, impact);
+    assert.equal(outcome.plan.decision, 'selective');
+    assert.equal(outcome.plan.basis, 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE');
+    assert.deepEqual(outcome.plan.requiredJobs, []);
+  }
+});
+
+test('Gallery-impacting surfaces select the full Gallery profile without evidence lookup', async () => {
+  for (const path of [
+    '.github/workflows/gallery-publication.yml',
+    'gbdraw/web/gallery/sessions/example.gbdraw-session.json',
+    'gbdraw/web/js/app.js',
+    'pyproject.toml',
+    'tools/ci-impact.mjs',
+    'tests/ci/ci-impact-cli.test.mjs'
+  ]) {
+    let evidenceCalls = 0;
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'gallery',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', path),
+      verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
+    });
+    assert.equal(evidenceCalls, 0, path);
+    assert.equal(outcome.plan.impact, 'full', path);
+    assert.equal(outcome.plan.decision, 'full', path);
+    assert.equal(outcome.plan.basis, 'FULL_CHANGE', path);
+    assert.deepEqual(outcome.plan.requiredJobs, ['browser', 'performance'], path);
+  }
+});
+
 test('dev control-plane changes run the full profile without inherited evidence', async () => {
   for (const path of ['tools/ci-impact.mjs', '.github/workflows/test.yml']) {
     let evidenceCalls = 0;
@@ -243,26 +301,79 @@ test('rapid dev pushes fall back to full while the direct parent is running or c
   }
 });
 
-test('a zero dev before SHA fails closed without querying inherited evidence', async () => {
-  let evidenceCalls = 0;
+test('Gallery direct-parent evidence failures fall back to both Gallery jobs', async () => {
+  for (const [code, state] of [
+    ['NO_MATCHING_RUN', 'missing'],
+    ['RUN_NOT_SUCCESSFUL', 'in progress'],
+    ['RUN_NOT_SUCCESSFUL', 'cancelled'],
+    ['RUN_NOT_SUCCESSFUL', 'failure'],
+    ['API_REQUEST_FAILED', 'API error']
+  ]) {
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: 'gallery',
+        CI_IMPACT_EVENT_NAME: 'push'
+      }),
+      token: 'test-token',
+      runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
+      verifyWorkflowEvidenceImpl: async () => {
+        throw new PromotionReadinessError(code, `Direct parent Gallery run is ${state}.`);
+      }
+    });
+    assert.equal(outcome.plan.impact, 'documentation', state);
+    assert.equal(outcome.plan.decision, 'full', state);
+    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', state);
+    assert.deepEqual(outcome.plan.requiredJobs, ['browser', 'performance'], state);
+  }
+});
+
+test('a successful exact parent aggregate can extend a selective Gallery evidence chain', async () => {
   const outcome = await buildImpactPlan({
     configuration: configuration({
-      CI_IMPACT_PROFILE: 'dev',
-      CI_IMPACT_EVENT_NAME: 'push',
-      CI_IMPACT_CHANGE_BASE_SHA: '0'.repeat(40)
+      CI_IMPACT_PROFILE: 'gallery',
+      CI_IMPACT_EVENT_NAME: 'push'
     }),
     token: 'test-token',
-    runGitImpl: () => ({
-      status: 128,
-      stdout: Buffer.alloc(0),
-      stderr: Buffer.from('bad object 0000000000000000000000000000000000000000')
-    }),
-    verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
+    runGitImpl: () => gitResult('M', '.gitignore'),
+    verifyWorkflowEvidenceImpl: async ({ expectedHeadSha }) => ({
+      ...successfulEvidence({
+        workflowPath: '.github/workflows/gallery-publication.yml',
+        aggregateName: 'Gallery readiness / gate'
+      }),
+      run: {
+        ...successfulEvidence().run,
+        headSha: expectedHeadSha,
+        composedFromSelectiveEvidence: true
+      }
+    })
   });
-  assert.equal(evidenceCalls, 0);
-  assert.equal(outcome.plan.impact, 'full');
-  assert.equal(outcome.plan.decision, 'full');
-  assert.equal(outcome.plan.basis, 'UNKNOWN_OR_INVALID_CHANGE');
+  assert.equal(outcome.plan.decision, 'selective');
+  assert.equal(outcome.plan.inheritedEvidence.headSha, SHA.base);
+  assert.deepEqual(outcome.plan.requiredJobs, []);
+});
+
+test('a zero push before SHA fails closed without querying inherited evidence', async () => {
+  for (const profile of ['dev', 'gallery']) {
+    let evidenceCalls = 0;
+    const outcome = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: profile,
+        CI_IMPACT_EVENT_NAME: 'push',
+        CI_IMPACT_CHANGE_BASE_SHA: '0'.repeat(40)
+      }),
+      token: 'test-token',
+      runGitImpl: () => ({
+        status: 128,
+        stdout: Buffer.alloc(0),
+        stderr: Buffer.from('bad object 0000000000000000000000000000000000000000')
+      }),
+      verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
+    });
+    assert.equal(evidenceCalls, 0, profile);
+    assert.equal(outcome.plan.impact, 'full', profile);
+    assert.equal(outcome.plan.decision, 'full', profile);
+    assert.equal(outcome.plan.basis, 'UNKNOWN_OR_INVALID_CHANGE', profile);
+  }
 });
 
 test('evidence verifier failures fall back to the full profile', async () => {
@@ -331,17 +442,35 @@ test('invalid and empty diffs fail closed without querying evidence', async () =
 
 test('manual runs and architecture-change labels force full execution', async () => {
   let calls = 0;
-  const manual = await buildImpactPlan({
-    configuration: configuration({
-      CI_IMPACT_PROFILE: 'dev',
-      CI_IMPACT_EVENT_NAME: 'workflow_dispatch'
-    }),
-    token: 'test-token',
-    runGitImpl: () => { calls += 1; },
-    verifyWorkflowEvidenceImpl: async () => { calls += 1; }
-  });
+  for (const [profile, requiredJobs] of [
+    ['dev', [
+      'web-change-budget',
+      'core',
+      'recipes-standard',
+      'gallery',
+      'browser',
+      'playwright-functional',
+      'playwright-performance',
+      'acceptance-supported-main',
+      'slow-main',
+      'lint',
+      'losat-cache-browser-acceptance'
+    ]],
+    ['gallery', ['browser', 'performance']]
+  ]) {
+    const manual = await buildImpactPlan({
+      configuration: configuration({
+        CI_IMPACT_PROFILE: profile,
+        CI_IMPACT_EVENT_NAME: 'workflow_dispatch'
+      }),
+      token: 'test-token',
+      runGitImpl: () => { calls += 1; },
+      verifyWorkflowEvidenceImpl: async () => { calls += 1; }
+    });
+    assert.equal(manual.plan.basis, 'MANUAL_FULL_RUN', profile);
+    assert.deepEqual(manual.plan.requiredJobs, requiredJobs, profile);
+  }
   assert.equal(calls, 0);
-  assert.equal(manual.plan.basis, 'MANUAL_FULL_RUN');
 
   const architecture = await buildImpactPlan({
     configuration: configuration({ CI_IMPACT_ARCHITECTURE_CHANGE: 'true' }),
@@ -402,6 +531,33 @@ test('dev plan summary reports active protected-branch routing', async () => {
   const summary = writes.get('/tmp/ci-impact-dev-summary');
   assert.match(summary, /Routing: active; dev staging jobs use the protected-branch plan/);
   assert.doesNotMatch(summary, /shadow mode/);
+});
+
+test('Gallery plan summary reports active protected-branch routing', async () => {
+  const writes = new Map();
+  const status = await runCiImpactCli({
+    argv: ['plan'],
+    env: environment({
+      CI_IMPACT_PROFILE: 'gallery',
+      CI_IMPACT_EVENT_NAME: 'push',
+      GITHUB_STEP_SUMMARY: '/tmp/ci-impact-gallery-summary'
+    }),
+    stdout: textWriter().stream,
+    stderr: textWriter().stream,
+    appendFileImpl: (path, content) => writes.set(path, (writes.get(path) || '') + content),
+    runGitImpl: () => gitResult('M', '.gitignore'),
+    verifyWorkflowEvidenceImpl: async () => successfulEvidence({
+      workflowPath: '.github/workflows/gallery-publication.yml',
+      aggregateName: 'Gallery readiness / gate'
+    })
+  });
+  assert.equal(status, 0);
+  const summary = writes.get('/tmp/ci-impact-gallery-summary');
+  assert.match(
+    summary,
+    /Routing: active; Gallery readiness jobs use the protected-branch plan/
+  );
+  assert.doesNotMatch(summary, /shadow mode|observation only/);
 });
 
 test('unexpected failures are not converted to full plans and redact tokens', async () => {

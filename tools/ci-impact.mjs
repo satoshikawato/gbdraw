@@ -369,9 +369,9 @@ export const formatPlanSummary = ({ plan, classification, evidenceFailure }) => 
     ? 'active; pull-request jobs use the trusted-base plan'
     : plan.profile === 'dev'
       ? 'active; dev staging jobs use the protected-branch plan'
-      : 'observation only; existing test job conditions are unchanged';
+      : 'active; Gallery readiness jobs use the protected-branch plan';
   const lines = [
-    `## CI impact plan${plan.profile === 'gallery' ? ' (shadow mode)' : ''}`,
+    '## CI impact plan',
     '',
     `- Profile: \`${plan.profile}\``,
     `- Impact: \`${plan.impact}\``,

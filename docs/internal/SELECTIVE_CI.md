@@ -1,7 +1,6 @@
 # Selective CI impact planning
 
-Status: pull-request and `dev` staging routing are active. The Gallery workflow is not
-connected to the planner.
+Status: pull-request, `dev` staging, and Gallery readiness routing are active.
 
 ## Purpose
 
@@ -12,8 +11,9 @@ revision already has successful exact-SHA aggregate evidence.
 
 The `Tests` workflow routes pull-request jobs from a plan produced by the trusted base
 revision. Pushes to `dev` use the planner from the protected branch and inherit only
-successful evidence from the direct parent commit. The Gallery workflow does not yet
-use the plan for job selection.
+successful evidence from the direct parent commit. The `Gallery publication` workflow
+uses the same protected-branch planner and direct-parent rule for its browser and
+performance jobs.
 
 ## Impact classes
 
@@ -113,6 +113,33 @@ with the protected branch's `tools/ci-impact.mjs`. It always creates aggregate e
 for the current SHA. The promotion verifier continues to require that exact current-SHA
 job; it does not accept the parent's job directly.
 
+## Active Gallery readiness routing
+
+For a push to `dev`, the Gallery planner compares `github.event.before` with the current
+SHA. When the direct parent has successful exact-SHA `Gallery readiness / gate`
+evidence, the `gallery` profile selects these jobs:
+
+| Gallery impact | Jobs that run |
+| --- | --- |
+| `metadata` | `CI impact plan`, `Gallery readiness / gate` |
+| `documentation` | `CI impact plan`, `Gallery readiness / gate` |
+| `full` | `CI impact plan`, both `Gallery browser` matrix entries, `Gallery publication performance (projection)`, `Gallery readiness / gate` |
+
+Documentation tests remain in the `Tests` workflow's recipe suite. Public Markdown and
+files under `docs/` do not change the packaged Gallery sessions, Web bundle, browser
+generation path, or performance projection, so the Gallery profile does not rerun
+either Gallery test job for those changes.
+
+The `browser` and `performance` job IDs retain their existing commands, matrices,
+timeouts, and performance baseline. Every `workflow_dispatch` run is full. When
+`complete_refresh=true`, the full performance job still runs its three-trial projection
+and complete-refresh gates.
+
+`Gallery readiness / gate` validates the Gallery plan and current-run job results with
+the protected branch's shared gate validator. A selective run therefore still creates
+successful aggregate evidence for the current SHA. Promotion continues to check that
+current-SHA job rather than the inherited parent job.
+
 ## Direct evidence only
 
 Selective planning inherits evidence from exactly one revision:
@@ -143,10 +170,10 @@ The following display names are external admission contracts and stay fixed:
 - `Promotion / gate`
 
 Each workflow continues to start on every relevant event and creates its aggregate job
-for the current SHA. Pull-request and `dev` staging selection happen at job level. The
-Gallery workflow still runs its full inventory. Keeping the aggregate names and
-current-SHA jobs stable avoids branch-protection changes and allows the existing
-promotion verifier to continue checking exact staging evidence.
+for the current SHA. Pull-request, `dev` staging, and Gallery selection happen at job
+level. Keeping the aggregate names and current-SHA jobs stable avoids branch-protection
+changes and allows the existing promotion verifier to continue checking exact staging
+evidence.
 
 Workflow-level `paths` and `paths-ignore` filters are not used. Such filters can prevent
 a required check from being created, leaving a pull request pending, and would remove
@@ -172,13 +199,13 @@ trusted base code and never executes the candidate checkout.
 ## Dev trust boundary
 
 Code merged to protected `dev` is the staging control plane. Push and manual-dispatch
-plans run the current checkout's helper. A change to the workflow, planner, policy, or
-planner tests classifies as `full`, so the commit that changes routing must run the full
-staging profile before its aggregate can succeed.
+plans run the current checkout's helper. A change to a workflow, planner, policy, or
+planner test classifies as `full`, so the commit that changes routing must run the full
+staging and Gallery profiles before their aggregates can succeed.
 
 This trust boundary differs from pull requests, where the candidate helper is tested
-but the base revision decides the route. The Gallery workflow has its own gate and is
-not routed by the `Tests` workflow's dev plan.
+but the base revision decides the route. The Gallery workflow creates its own `gallery`
+plan and gate; it does not consume the `Tests` workflow's `dev` plan.
 
 ## Aggregate validation
 
@@ -193,9 +220,9 @@ The shared gate validator fails closed unless:
 An unexpected failure or cancellation remains blocking even for a job the plan did not
 require. Malformed plan or `needs` JSON is also blocking.
 
-`PR / gate` runs the validator from `.ci-trusted-base`. `Dev staging / gate` runs the
-same validator from the current protected-branch checkout with expected profile `dev`
-and the current workflow SHA.
+`PR / gate` runs the validator from `.ci-trusted-base`. `Dev staging / gate` and
+`Gallery readiness / gate` run the same validator from the current protected-branch
+checkout with their expected profile and the current workflow SHA.
 
 ## Rollout
 
@@ -205,11 +232,19 @@ Selective CI uses four separately reviewed stages:
    shadow summary.
 2. Active: selective pull-request routing with the trusted base planner and validator.
 3. Active: evidence-aware selection for exact `dev` staging runs.
-4. Not implemented: evidence-aware selection for Gallery readiness runs.
+4. Active: evidence-aware selection for exact Gallery readiness runs.
 
 Each stage keeps the aggregate check names stable and can be reverted independently.
 Reverting a routing stage restores the previous full-suite conditions without a
 repository-settings change.
+
+To roll back only Gallery selection, restore the `browser` and `performance` jobs to
+their unconditional event behavior and restore the fixed two-job readiness check.
+`Gallery readiness / gate` keeps the same display name, so repository settings do not
+need to change. The planner and the other two profiles can remain active.
+
+Selective CI does not alter `.github/workflows/deploy_web.yml`, deployment triggering,
+or GitHub's CodeQL setup. Those systems remain outside the impact planner.
 
 ## Observability
 
@@ -222,10 +257,9 @@ The `CI impact plan` summary includes:
 - inherited run and aggregate links when evidence succeeds; and
 - the fallback code and bounded reason when evidence is unavailable.
 
-The `pr` and `dev` summaries state that routing is active and name the applicable trust
-boundary. The Gallery workflow does not produce a planner summary while its stage is
-unimplemented. Tokens are never included in the plan or summary and are redacted from
-CLI diagnostics.
+The `pr`, `dev`, and `gallery` summaries state that routing is active and name the
+applicable trust boundary. Tokens are never included in the plan or summary and are
+redacted from CLI diagnostics.
 
 ## Troubleshooting
 
@@ -261,13 +295,14 @@ known job is present in `needs`, required jobs succeeded, and unrequired jobs di
 fail or get cancelled unexpectedly. Do not weaken the validator to accept a missing or
 skipped required job.
 
-### Consecutive dev pushes run the full profile
+### Consecutive dev pushes run a full profile
 
 Inspect `basis` and the evidence failure in `CI impact plan`. If the direct parent's
-workflow is queued, running, cancelled, failed, or absent, the current push must use
-`INHERITED_EVIDENCE_UNAVAILABLE` and run the full profile. Wait for a successful direct
-parent before using a lightweight commit when selective staging is important. Do not
-replace the direct parent with an older green SHA or disable concurrency.
+`Tests` or `Gallery publication` workflow is queued, running, cancelled, failed, or
+absent, the current push must use `INHERITED_EVIDENCE_UNAVAILABLE` and run the full
+profile for that workflow. Wait for a successful direct parent before using a
+lightweight commit when selective staging is important. Do not replace the direct
+parent with an older green SHA or disable concurrency.
 
 ### Pull-request jobs are all skipped
 
