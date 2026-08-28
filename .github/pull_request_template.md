@@ -20,6 +20,8 @@ Select exactly one:
 
 ## Purpose
 
+- Applicable baseline: base branch and exact SHA; current required checks and trusted CI profile; focused test owners or behavior contracts:
+
 ## User-visible impact
 
 ## Changes
@@ -33,6 +35,10 @@ Select exactly one:
 - Architecture impact: state whether **This is not architecture-bearing** or
   **This is architecture-bearing**, and identify the affected owner, path, or
   responsibility.
+- Architecture baseline and changed-scope conclusion, if architecture-bearing:
+  semantic owners; canonical and compatibility paths; `OE`/`PE`/`CB` before and
+  after conclusion. Use `N/A` when not applicable; full tables remain limited
+  to `ARCHITECTURE_EXCEPTION`.
 - `architecture-change` label, if relevant:
 
 ## Rollback
@@ -48,8 +54,11 @@ This block does not waive any other gate. Product change or retirement requires 
 -->
 
 - Product-impact role: N/A | EVIDENCE_ONLY | DECISION_ONLY | IMPLEMENTATION
+- Product preflight classification: N/A | IMPLEMENT_EXISTING_AUTHORITY | EVIDENCE_REQUIRED | PRODUCT_DECISION_REQUIRED | NOT_ALLOWED
 - Affected concern(s), if known:
+- Affected journey/checkpoint effects:
 - Authority and decision references:
+- Decision Pack or evidence reference, if required:
 - Behavior contracts and residual risk:
 
 <!-- gbdraw-product-impact-decision:start -->

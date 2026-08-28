@@ -117,6 +117,13 @@ Substantial implementation must wait for maintainer confirmation. Agreement
 that a problem exists is not approval of a patch. The maintainer may first ask
 for a smaller evidence-producing change or an explicit behavior decision.
 
+Before implementation, maintainers and developers apply the
+[Product Impact Ratchet](./docs/internal/PRODUCT_IMPACT_RATCHET.md) to both
+registered architecture-subject changes and unmapped material user-effect
+ambiguity. Unresolved evidence or Product judgment uses the non-normative
+[Product Decision Pack template](./docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md);
+the completed working template does not itself authorize an outcome.
+
 ## Development setup
 
 ```bash
@@ -294,6 +301,14 @@ profile and routes attention. It does not waive deterministic gates.
 Policy reports distinguish `Gate: PASS | FAIL` from `Review: CLEAR | REQUIRED`.
 Gate controls the CI exit status. `Review: REQUIRED` means a human must examine
 the identified risk; by itself it exits zero and is not a CI failure.
+
+Record pull request baselines in proportion to the change. Ordinary
+non-architecture pull requests use the normal concise template. Product-impact
+work additionally records the applicable Product authority and affected
+journey effects. Architecture-bearing work additionally records the relevant
+semantic owners, canonical paths, compatibility paths, and changed-scope
+`OE`/`PE`/`CB` conclusion. Mark non-applicable fields `N/A`; they do not require
+an expanded packet.
 
 ## Submitting a pull request
 

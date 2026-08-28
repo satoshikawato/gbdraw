@@ -95,6 +95,11 @@ For changes affecting Web runtime or normative Web behavior contracts:
   domain rules, and accepted base-branch decisions. Current code and tests are
   evidence, not automatic product authority. Cite a `BD-###` only when it exists
   in the base branch.
+- Before implementation, use the same policy's developer preflight when a
+  proposed change may alter a material user effect but no registered concern is
+  triggered. Use
+  [`docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md`](docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md)
+  when evidence or Product judgment is required.
 - Compare option realization with AND-of-OR requirements. Matching option IDs do
   not prove that independent behavior contributions remain satisfied.
 - Keep the common path automatic for changes with no registered Product Impact
