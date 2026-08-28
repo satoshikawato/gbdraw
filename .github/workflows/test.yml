@@ -2,6 +2,7 @@ name: Tests
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
@@ -17,12 +18,74 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-impact:
+    name: CI impact plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.pr_plan.outputs.plan || steps.dev_plan.outputs.plan }}
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Test CI impact policy and adapters
+        run: node --test tests/ci/*.test.mjs
+
+      - name: Checkout trusted CI policy
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build trusted PR CI impact plan
+        if: github.event_name == 'pull_request'
+        id: pr_plan
+        env:
+          CI_IMPACT_PROFILE: pr
+          CI_IMPACT_EVENT_NAME: pull_request
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_REPOSITORY_ROOT: ${{ github.workspace }}
+          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') && 'true' || 'false' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .ci-trusted-base/tools/ci-impact.mjs plan
+
+      - name: Build dev CI impact plan
+        if: github.event_name != 'pull_request'
+        id: dev_plan
+        env:
+          CI_IMPACT_PROFILE: dev
+          CI_IMPACT_EVENT_NAME: ${{ github.event_name }}
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.sha }}
+          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.sha }}
+          CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_ARCHITECTURE_CHANGE: 'false'
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/ci-impact.mjs plan
+
   web-change-budget:
     name: Web change budget
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-change-budget') &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -63,9 +126,13 @@ jobs:
 
   core:
     name: Core (Python ${{ matrix.python-version }})
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -99,7 +166,11 @@ jobs:
 
   core-pr:
     name: Core PR (Python 3.11)
-    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    needs: ci-impact
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -129,10 +200,14 @@ jobs:
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'recipes-standard') &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -157,10 +232,14 @@ jobs:
 
   gallery:
     name: Gallery (Python 3.11)
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'gallery') &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -185,9 +264,13 @@ jobs:
 
   browser:
     name: Browser (Python 3.11)
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'browser') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -239,7 +322,11 @@ jobs:
 
   web-pr-smoke:
     name: Web PR smoke
-    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    needs: ci-impact
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -295,9 +382,13 @@ jobs:
 
   playwright-functional:
     name: Playwright functional (shard ${{ matrix.shard }}/4)
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -344,9 +435,13 @@ jobs:
 
   playwright-performance:
     name: Playwright performance
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-performance') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -389,9 +484,13 @@ jobs:
 
   acceptance-supported-main:
     name: ${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }})
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'acceptance-supported-main') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -435,9 +534,13 @@ jobs:
 
   slow-main:
     name: Slow (Python ${{ matrix.python-version }})
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'slow-main') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -474,10 +577,14 @@ jobs:
 
   lint:
     name: Lint
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'lint') &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -498,9 +605,13 @@ jobs:
 
   losat-cache-browser-acceptance:
     name: LOSAT cache browser acceptance
+    needs: ci-impact
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      !cancelled() &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'losat-cache-browser-acceptance') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -536,6 +647,7 @@ jobs:
   pr-gate:
     name: PR / gate
     needs:
+      - ci-impact
       - web-change-budget
       - core-pr
       - recipes-standard
@@ -549,19 +661,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Require all fast PR evidence
-        run: |
-          set -euo pipefail
-          test "${{ needs.web-change-budget.result }}" = "success"
-          test "${{ needs.core-pr.result }}" = "success"
-          test "${{ needs.recipes-standard.result }}" = "success"
-          test "${{ needs.gallery.result }}" = "success"
-          test "${{ needs.lint.result }}" = "success"
-          test "${{ needs.web-pr-smoke.result }}" = "success"
+      - name: Checkout trusted CI policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate required PR evidence
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
+          CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_IMPACT_EXPECTED_PROFILE: pr
+          CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: node .ci-trusted-base/tools/ci-impact.mjs gate
 
   dev-staging-gate:
     name: Dev staging / gate
     needs:
+      - ci-impact
       - web-change-budget
       - core
       - recipes-standard
@@ -580,17 +699,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Require all exact-SHA staging evidence
-        run: |
-          set -euo pipefail
-          test "${{ needs.web-change-budget.result }}" = "success"
-          test "${{ needs.core.result }}" = "success"
-          test "${{ needs.recipes-standard.result }}" = "success"
-          test "${{ needs.gallery.result }}" = "success"
-          test "${{ needs.browser.result }}" = "success"
-          test "${{ needs.playwright-functional.result }}" = "success"
-          test "${{ needs.playwright-performance.result }}" = "success"
-          test "${{ needs.acceptance-supported-main.result }}" = "success"
-          test "${{ needs.slow-main.result }}" = "success"
-          test "${{ needs.lint.result }}" = "success"
-          test "${{ needs.losat-cache-browser-acceptance.result }}" = "success"
+      - name: Checkout protected dev CI policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate required dev staging evidence
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
+          CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_IMPACT_EXPECTED_PROFILE: dev
+          CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: node tools/ci-impact.mjs gate

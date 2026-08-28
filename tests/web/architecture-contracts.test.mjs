@@ -832,6 +832,7 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
     TEST_WORKFLOW,
     /group: tests-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/
   );
+  assert.match(TEST_WORKFLOW, /cancel-in-progress: true/);
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
   assert.deepEqual(
@@ -863,23 +864,33 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
   assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /"main"|"refactoring"/);
 });
 
-test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evidence', () => {
+test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
+  const planner = workflowJob('ci-impact');
+  assert.match(planner, /Checkout complete history[\s\S]*fetch-depth: 0/);
+  assert.match(planner, /node --test tests\/ci\/\*\.test\.mjs/);
+  assert.match(
+    planner,
+    /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*path: \.ci-trusted-base[\s\S]*persist-credentials: false/
+  );
+  assert.match(planner, /CI_IMPACT_REPOSITORY_ROOT: \$\{\{ github\.workspace \}\}/);
+  assert.match(planner, /node \.ci-trusted-base\/tools\/ci-impact\.mjs plan/);
+  assert.match(planner, /Build dev CI impact plan[\s\S]*node tools\/ci-impact\.mjs plan/);
+  assert.doesNotMatch(TEST_WORKFLOW, /\n    paths(?:-ignore)?:/);
+
   const corePr = workflowJob('core-pr');
   assert.match(corePr, /\n    name: Core PR \(Python 3\.11\)\n/);
-  assert.match(
-    corePr,
-    /if: github\.event_name == 'pull_request' && github\.base_ref == 'dev'/
-  );
+  assert.match(corePr, /needs: ci-impact/);
+  assert.match(corePr, /needs\.ci-impact\.result == 'success'/);
+  assert.match(corePr, /requiredJobs, 'core-pr'/);
   assert.match(corePr, /-m "not slow and not \(recipe or gallery or browser\)"/);
   assert.match(corePr, /git diff --exit-code -- tests\/reference_outputs\//);
   assert.doesNotMatch(corePr, /matrix:/);
 
   const webPrSmoke = workflowJob('web-pr-smoke');
   assert.match(webPrSmoke, /\n    name: Web PR smoke\n/);
-  assert.match(
-    webPrSmoke,
-    /if: github\.event_name == 'pull_request' && github\.base_ref == 'dev'/
-  );
+  assert.match(webPrSmoke, /needs: ci-impact/);
+  assert.match(webPrSmoke, /needs\.ci-impact\.result == 'success'/);
+  assert.match(webPrSmoke, /requiredJobs, 'web-pr-smoke'/);
   assert.match(webPrSmoke, /timeout-minutes: 5/);
   assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
@@ -901,6 +912,7 @@ test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evi
     /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
   )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
   assert.deepEqual(dependencies, [
+    'ci-impact',
     'web-change-budget',
     'core-pr',
     'recipes-standard',
@@ -912,20 +924,41 @@ test('PR-to-dev fast candidates and aggregate fail closed over the mandatory evi
     gate,
     /if: >-\n      always\(\) &&\n      github\.event_name == 'pull_request' &&\n      github\.base_ref == 'dev'/
   );
-  dependencies.forEach((jobId) => {
-    assert.ok(
-      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
-      `${jobId} must fail the aggregate unless it succeeds`
-    );
-  });
+  assert.match(
+    gate,
+    /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}[\s\S]*path: \.ci-trusted-base[\s\S]*persist-credentials: false/
+  );
+  assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: pr/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /node \.ci-trusted-base\/tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(gate, /test "\$\{\{ needs\./);
   assert.doesNotMatch(gate, /gh api|curl|check-web-change-budget|pull_request_target/);
 
-  for (const jobId of ['web-change-budget', 'recipes-standard', 'gallery', 'lint']) {
+  for (const jobId of [
+    'web-change-budget',
+    'core-pr',
+    'recipes-standard',
+    'gallery',
+    'lint',
+    'web-pr-smoke'
+  ]) {
+    const job = workflowJob(jobId);
+    assert.match(job, /needs: ci-impact/, `${jobId} must wait for the plan`);
     assert.match(
-      workflowJob(jobId),
-      /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/,
-      `${jobId} must remain in the fast dev-PR graph`
+      job,
+      new RegExp(`requiredJobs, '${jobId}'`),
+      `${jobId} must read its selection from the plan`
     );
+    if (['web-change-budget', 'recipes-standard', 'gallery', 'lint'].includes(jobId)) {
+      assert.match(job, /!cancelled\(\)/, `${jobId} must remain runnable on dev`);
+      assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+      assert.match(
+        job,
+        /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+      );
+    }
   }
   for (const jobId of [
     'core',
@@ -982,18 +1015,25 @@ test('PR smoke selection is explicit while the full functional inventory stays w
   assert.ok(selectedCount >= 6 && selectedCount <= 10, `selected ${selectedCount} smoke tests`);
 });
 
-test('exact dev staging runs the full inventory with four mandatory Playwright shards', () => {
-  const stagingOnly = [
+test('exact dev staging routes every job through the protected-branch plan', () => {
+  const stagingJobs = [
+    'web-change-budget',
     'core',
+    'recipes-standard',
+    'gallery',
     'browser',
     'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'lint',
     'losat-cache-browser-acceptance'
   ];
-  for (const jobId of stagingOnly) {
+  for (const jobId of stagingJobs) {
     const job = workflowJob(jobId);
+    assert.match(job, /needs: ci-impact/, jobId);
+    assert.match(job, /needs\.ci-impact\.result == 'success'/, jobId);
+    assert.match(job, new RegExp(`requiredJobs, '${jobId}'`), jobId);
     assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
     assert.match(
       job,
@@ -1017,6 +1057,7 @@ test('exact dev staging runs the full inventory with four mandatory Playwright s
     /\n    needs:\n((?:      - [a-z0-9-]+\n)+)/
   )?.[1].trim().split('\n').map((line) => line.replace('- ', '').trim());
   assert.deepEqual(dependencies, [
+    'ci-impact',
     'web-change-budget',
     'core',
     'recipes-standard',
@@ -1036,38 +1077,79 @@ test('exact dev staging runs the full inventory with four mandatory Playwright s
     gate,
     /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
   );
-  dependencies.forEach((jobId) => {
-    assert.ok(
-      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
-      `${jobId} must fail the staging aggregate unless it succeeds`
-    );
-  });
-  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+  assert.match(gate, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: dev/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /node tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(gate, /test "\$\{\{ needs\.|gh api|curl|check-promotion-readiness/);
 });
 
-test('Gallery readiness aggregates common, Vibrio, and projection evidence on dev', () => {
+test('Gallery readiness routes jobs from direct-parent evidence and aggregates the current SHA', () => {
+  assert.match(
+    GALLERY_PUBLICATION_WORKFLOW,
+    /permissions:\n  contents: read\n  actions: read/
+  );
+  assert.doesNotMatch(GALLERY_PUBLICATION_WORKFLOW, /\n    paths(?:-ignore)?:/);
+
+  const planner = workflowJob('ci-impact', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(planner, /\n    name: CI impact plan\n/);
+  assert.match(planner, /timeout-minutes: 5/);
+  assert.match(planner, /plan: \$\{\{ steps\.plan\.outputs\.plan \}\}/);
+  assert.match(
+    planner,
+    /Checkout exact workflow SHA[\s\S]*ref: \$\{\{ github\.sha \}\}[\s\S]*fetch-depth: 0[\s\S]*persist-credentials: false/
+  );
+  assert.match(planner, /node-version: "20"/);
+  assert.match(planner, /CI_IMPACT_PROFILE: gallery/);
+  assert.match(planner, /CI_IMPACT_EVENT_NAME: \$\{\{ github\.event_name \}\}/);
+  assert.match(
+    planner,
+    /CI_IMPACT_CHANGE_BASE_SHA: \$\{\{ github\.event_name == 'push' && github\.event\.before \|\| github\.sha \}\}/
+  );
+  assert.match(planner, /CI_IMPACT_CHANGE_HEAD_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(planner, /CI_IMPACT_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(planner, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(planner, /node tools\/ci-impact\.mjs plan/);
+  assert.doesNotMatch(planner, /node --test/);
+
   const browser = workflowJob('browser', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(browser, /needs: ci-impact/);
+  assert.match(browser, /needs\.ci-impact\.result == 'success'/);
+  assert.match(browser, /requiredJobs, 'browser'/);
   assert.match(browser, /example: common 9\n            command: test:web:gallery-publication/);
   assert.match(browser, /example: Vibrio\n            command: test:web:vibrio-generate/);
   assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(browser, /npm run \$\{\{ matrix\.command \}\}/);
 
   const performance = workflowJob('performance', GALLERY_PUBLICATION_WORKFLOW);
   assert.match(performance, /\n    name: Gallery publication performance \(projection\)\n/);
+  assert.match(performance, /needs: ci-impact/);
+  assert.match(performance, /needs\.ci-impact\.result == 'success'/);
+  assert.match(performance, /requiredJobs, 'performance'/);
   assert.match(performance, /measure_gallery_publication_performance\.py projection/);
   assert.match(performance, /github\.event_name == 'workflow_dispatch' && inputs\.complete_refresh/);
   assert.match(performance, /measure_gallery_publication_performance\.py refresh/);
+  assert.equal(
+    [...performance.matchAll(/--baseline-revision 574b33b83962949397839e2aaa862a8b96667625/g)].length,
+    2
+  );
 
   const gate = workflowJob('readiness-gate', GALLERY_PUBLICATION_WORKFLOW);
   assert.match(gate, /\n    name: Gallery readiness \/ gate\n/);
-  assert.match(gate, /\n    needs:\n      - browser\n      - performance\n/);
+  assert.match(gate, /\n    needs:\n      - ci-impact\n      - browser\n      - performance\n/);
   assert.match(gate, /\n    if: always\(\)\n/);
-  for (const jobId of ['browser', 'performance']) {
-    assert.ok(
-      gate.includes(`test "\${{ needs.${jobId}.result }}" = "success"`),
-      `${jobId} must fail the Gallery aggregate unless all matrix jobs succeed`
-    );
-  }
-  assert.doesNotMatch(gate, /gh api|curl|check-promotion-readiness/);
+  assert.match(gate, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /CI_IMPACT_PLAN_JSON: \$\{\{ needs\.ci-impact\.outputs\.plan \}\}/);
+  assert.match(gate, /CI_IMPACT_NEEDS_JSON: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: gallery/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(gate, /node tools\/ci-impact\.mjs gate/);
+  assert.doesNotMatch(
+    gate,
+    /test "\$\{\{ needs\.|gh api|curl|check-promotion-readiness/
+  );
 });
 
 test('trusted promotion uses base code for topology, exact-SHA evidence, and tree proof', () => {
@@ -1273,18 +1355,19 @@ test('dev staging Web checks scope only the newly integrated change', () => {
 });
 
 test('supported-version and slow matrices cover exact dev staging', () => {
-  const stagingCondition = [
-    "    if: >-",
-    "      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||",
-    "      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')"
-  ].join('\n');
-
   for (const jobName of ['acceptance-supported-main', 'slow-main']) {
     const job = TEST_WORKFLOW.match(
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
     assert.ok(job, `${jobName} job must exist`);
-    assert.ok(job.includes(stagingCondition), `${jobName} must use the exact dev staging condition`);
+    assert.match(job, /needs: ci-impact/);
+    assert.match(job, /needs\.ci-impact\.result == 'success'/);
+    assert.match(job, new RegExp(`requiredJobs, '${jobName}'`));
+    assert.match(job, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/);
+    assert.match(
+      job,
+      /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
+    );
   }
 });
 
