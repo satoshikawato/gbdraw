@@ -144,6 +144,16 @@ test('profile job registries are exact and centralized', () => {
   assert.deepEqual(requiredJobsFor({
     profile: 'pr', impact: 'documentation', decision: 'selective'
   }), ['recipes-standard']);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'pr', impact: 'full', decision: 'full'
+  }), [
+    'web-change-budget',
+    'core-pr',
+    'recipes-standard',
+    'gallery',
+    'lint',
+    'web-pr-smoke'
+  ]);
   assert.deepEqual(knownJobsFor('pr'), [
     'web-change-budget',
     'core-pr',

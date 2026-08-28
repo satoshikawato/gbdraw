@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      plan: ${{ steps.plan.outputs.plan }}
+      plan: ${{ steps.pr_plan.outputs.plan || steps.shadow_plan.outputs.plan }}
     steps:
       - name: Checkout complete history
         uses: actions/checkout@v4
@@ -38,25 +38,54 @@ jobs:
       - name: Test CI impact policy and adapters
         run: node --test tests/ci/*.test.mjs
 
-      - name: Build shadow CI impact plan
-        id: plan
+      - name: Checkout trusted CI policy
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build trusted PR CI impact plan
+        if: github.event_name == 'pull_request'
+        id: pr_plan
         env:
-          CI_IMPACT_PROFILE: ${{ github.event_name == 'pull_request' && 'pr' || 'dev' }}
+          CI_IMPACT_PROFILE: pr
+          CI_IMPACT_EVENT_NAME: pull_request
+          CI_IMPACT_REPOSITORY: ${{ github.repository }}
+          CI_IMPACT_REPOSITORY_ROOT: ${{ github.workspace }}
+          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
+          CI_IMPACT_ARCHITECTURE_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'architecture-change') && 'true' || 'false' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .ci-trusted-base/tools/ci-impact.mjs plan
+
+      - name: Build shadow dev CI impact plan
+        if: github.event_name != 'pull_request'
+        id: shadow_plan
+        env:
+          CI_IMPACT_PROFILE: dev
           CI_IMPACT_EVENT_NAME: ${{ github.event_name }}
           CI_IMPACT_REPOSITORY: ${{ github.repository }}
-          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || github.sha }}
-          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.sha }}
+          CI_IMPACT_CHANGE_HEAD_SHA: ${{ github.sha }}
           CI_IMPACT_WORKFLOW_SHA: ${{ github.sha }}
-          CI_IMPACT_ARCHITECTURE_CHANGE: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'architecture-change') && 'true' || 'false' }}
+          CI_IMPACT_ARCHITECTURE_CHANGE: 'false'
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/ci-impact.mjs plan
 
   web-change-budget:
     name: Web change budget
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-change-budget')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -133,7 +162,11 @@ jobs:
 
   core-pr:
     name: Core PR (Python 3.11)
-    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    needs: ci-impact
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'core-pr')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -163,10 +196,14 @@ jobs:
 
   recipes-standard:
     name: Recipes standard (Python 3.11)
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'recipes-standard')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -191,10 +228,14 @@ jobs:
 
   gallery:
     name: Gallery (Python 3.11)
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'gallery')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -273,7 +314,11 @@ jobs:
 
   web-pr-smoke:
     name: Web PR smoke
-    if: github.event_name == 'pull_request' && github.base_ref == 'dev'
+    needs: ci-impact
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -508,10 +553,14 @@ jobs:
 
   lint:
     name: Lint
+    needs: ci-impact
     if: >-
-      (github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      !cancelled() &&
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'lint')) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -584,16 +633,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Require all fast PR evidence
-        run: |
-          set -euo pipefail
-          test "${{ needs.ci-impact.result }}" = "success"
-          test "${{ needs.web-change-budget.result }}" = "success"
-          test "${{ needs.core-pr.result }}" = "success"
-          test "${{ needs.recipes-standard.result }}" = "success"
-          test "${{ needs.gallery.result }}" = "success"
-          test "${{ needs.lint.result }}" = "success"
-          test "${{ needs.web-pr-smoke.result }}" = "success"
+      - name: Checkout trusted CI policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate required PR evidence
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
+          CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_IMPACT_EXPECTED_PROFILE: pr
+          CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: node .ci-trusted-base/tools/ci-impact.mjs gate
 
   dev-staging-gate:
     name: Dev staging / gate

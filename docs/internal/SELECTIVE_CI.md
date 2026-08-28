@@ -1,6 +1,7 @@
 # Selective CI impact planning
 
-Status: staged rollout; the planner currently runs in shadow mode.
+Status: pull-request routing is active; `dev` staging remains in shadow mode, and the
+Gallery workflow is not connected to the planner.
 
 ## Purpose
 
@@ -9,8 +10,9 @@ classifier is deliberately coarse and conservative. It can avoid unrelated work 
 when the changed paths are clearly lightweight and the directly preceding trusted
 revision already has successful exact-SHA aggregate evidence.
 
-The first rollout stage records the plan in the GitHub Actions job summary but does not
-route test jobs. All existing pull-request and `dev` staging test conditions still run.
+The `Tests` workflow routes pull-request jobs from a plan produced by the trusted base
+revision. Pushes to `dev` still run the existing full staging inventory. The Gallery
+workflow does not yet use the plan for job selection.
 
 ## Impact classes
 
@@ -46,14 +48,33 @@ objects all fail closed to `full`.
 
 The planner emits one versioned `ImpactPlan` JSON object. It records the profile,
 impact, decision, stable basis code, change and workflow SHAs, required job IDs,
-changed-path count, and inherited evidence when present. Job IDs—not display names or
-human-readable reason text—form the routing contract.
+changed-path count, and inherited evidence when present. Job IDs, not display names or
+human-readable reason text, form the routing contract.
 
-Profiles cover the three eventual consumers:
+The policy defines three profiles:
 
 - `pr`: the `Tests` workflow for a pull request into `dev`
 - `dev`: the `Tests` workflow for a push to `dev`
 - `gallery`: the `Gallery publication` workflow for a push to `dev`
+
+## Active pull-request routing
+
+When the pull-request base has successful exact-SHA `Dev staging / gate` evidence, the
+`pr` profile selects these project-owned jobs:
+
+| Pull-request impact | Jobs that run |
+| --- | --- |
+| `metadata` | `CI impact plan`, `PR / gate` |
+| `documentation` | `CI impact plan`, `Recipes standard (Python 3.11)`, `PR / gate` |
+| `full` | `CI impact plan`, `Web change budget`, `Core PR (Python 3.11)`, `Recipes standard (Python 3.11)`, `Gallery (Python 3.11)`, `Lint`, `Web PR smoke`, `PR / gate` |
+
+Documentation changes run the recipe suite because it owns documented-contract,
+tutorial, CLI reference, and session compatibility checks. A full plan keeps the six
+existing pull-request test commands unchanged.
+
+`Web base policy (trusted base)` remains a separate required check. It evaluates Web
+change policy from `pull_request_target`; it does not select tests or replace
+`PR / gate`.
 
 A full-impact change always produces a full plan without calling the GitHub Actions
 API. Manual dispatch and a pull request carrying the `architecture-change` label also
@@ -96,9 +117,10 @@ The following display names are external admission contracts and stay fixed:
 - `Promotion / gate`
 
 Each workflow continues to start on every relevant event and creates its aggregate job
-for the current SHA. Selection happens at job level in later rollout stages. Keeping the
-aggregate names and current-SHA jobs stable avoids branch-protection changes and allows
-the existing promotion verifier to continue checking exact staging evidence.
+for the current SHA. Pull-request selection happens at job level. `dev` staging and
+Gallery selection are not active. Keeping the aggregate names and current-SHA jobs
+stable avoids branch-protection changes and allows the existing promotion verifier to
+continue checking exact staging evidence.
 
 Workflow-level `paths` and `paths-ignore` filters are not used. Such filters can prevent
 a required check from being created, leaving a pull request pending, and would remove
@@ -106,15 +128,17 @@ the current-SHA aggregate evidence required for promotion.
 
 ## Pull-request trust boundary
 
-A pull request is untrusted input. Candidate code is tested, but it must not decide its
-own admission route. Once selective pull-request routing is enabled, the workflow will
-execute the planner and gate validator from the pull-request base SHA in a separate
-trusted checkout. Candidate versions of the planner remain test inputs only.
+A pull request is untrusted input. Candidate code is tested, but it does not decide its
+own admission route. The workflow checks out the pull-request base SHA under
+`.ci-trusted-base` and runs that revision's `tools/ci-impact.mjs` for both planning and
+aggregate validation. The planner reads Git history from the candidate repository root.
+Candidate versions of `tools/ci-impact*.mjs` remain unit-test inputs only.
 
-The initial shadow-mode pull request is the bootstrap exception: no planner exists on
-its base, so the candidate planner produces an observational summary while all existing
-jobs still run. Changes below `.github/workflows/**`, `tools/ci-impact*.mjs`, and the CI
-planner tests classify as full.
+The bootstrap pull request ran the candidate planner only because its base had no
+helper. That exception is no longer used. If the trusted base helper is absent,
+unusable, or emits an invalid plan, `ci-impact` or `PR / gate` fails instead of guessing
+a lightweight route. Changes below `.github/workflows/**`, `tools/ci-impact*.mjs`, and
+the CI planner tests classify as full.
 
 The `pull_request_target` workflow remains separate. It checks candidate Git data with
 trusted base code and never executes the candidate checkout.
@@ -132,18 +156,18 @@ The shared gate validator fails closed unless:
 An unexpected failure or cancellation remains blocking even for a job the plan did not
 require. Malformed plan or `needs` JSON is also blocking.
 
-The validator is implemented and tested during shadow mode. Existing shell aggregate
-checks remain in place until the rollout stage that connects selective routing.
+`PR / gate` runs the validator from `.ci-trusted-base`. The existing fixed shell
+aggregate remains in `Dev staging / gate` while `dev` routing is in shadow mode.
 
 ## Rollout
 
-Selective CI is introduced in four separately reviewed pull requests:
+Selective CI uses four separately reviewed stages:
 
-1. Add the deterministic policy, adapter, validator, tests, documentation, and shadow
-   summary. Keep all existing test routing.
-2. Enable selective routing for pull requests using the trusted base planner.
-3. Enable evidence-aware routing for exact `dev` staging runs.
-4. Enable evidence-aware routing for Gallery readiness runs.
+1. Implemented: deterministic policy, adapter, validator, tests, documentation, and
+   shadow summary.
+2. Active: selective pull-request routing with the trusted base planner and validator.
+3. Not implemented: evidence-aware selection for exact `dev` staging runs.
+4. Not implemented: evidence-aware selection for Gallery readiness runs.
 
 Each stage keeps the aggregate check names stable and can be reverted independently.
 Reverting a routing stage restores the previous full-suite conditions without a
@@ -160,8 +184,10 @@ The `CI impact plan` summary includes:
 - inherited run and aggregate links when evidence succeeds; and
 - the fallback code and bounded reason when evidence is unavailable.
 
-In shadow mode the summary explicitly states that routing is observational. Tokens are
-never included in the plan or summary and are redacted from CLI diagnostics.
+The `pr` summary states that routing is active. The `dev` summary states that routing is
+observational. The Gallery workflow does not produce a planner summary while its stage
+is unimplemented. Tokens are never included in the plan or summary and are redacted
+from CLI diagnostics.
 
 ## Troubleshooting
 
@@ -196,6 +222,19 @@ Compare the plan profile and workflow SHA with the gate environment. Confirm tha
 known job is present in `needs`, required jobs succeeded, and unrequired jobs did not
 fail or get cancelled unexpectedly. Do not weaken the validator to accept a missing or
 skipped required job.
+
+### Pull-request jobs are all skipped
+
+Open `CI impact plan` first. If the planner failed or its `plan` output is missing,
+`PR / gate` must fail even though the six test jobs are skipped. If the plan is valid,
+compare its `requiredJobs` array with each job's result in the aggregate summary.
+
+### The trusted helper cannot run
+
+Confirm that the pull-request base SHA contains `tools/ci-impact.mjs`,
+`tools/ci-impact-policy.mjs`, and `tools/check-promotion-readiness.mjs`. Do not run the
+candidate helper as a fallback. Restore the trusted base prerequisite or keep the
+control job failing.
 
 ## Policy-extension review checklist
 
