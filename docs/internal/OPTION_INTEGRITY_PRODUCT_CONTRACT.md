@@ -5,21 +5,25 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `1`
+- Contract revision: `2`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
-- Decision source: explicit Product Decision Owner instructions for this
-  authority-only change
+- Decision source: explicit Product Decision Owner selection of one (`1`) after
+  review of the merged deterministic evidence
 - Reviewed candidate:
   `03_INITIAL_OPTION_INTEGRITY_PRODUCT_CONTRACT_CANDIDATE.md`
 - Candidate SHA-256:
   `26b41219ca04ff26b56a29e11aa4be74c6030b0a22e386332afc28ac7a80623f`
+- Reviewed evidence:
+  [`COLLINEAR_MAX_CONFLICTS_COMPARISON_EVIDENCE_2026-08-28.md`](./COLLINEAR_MAX_CONFLICTS_COMPARISON_EVIDENCE_2026-08-28.md),
+  merged by PR `#422` at `878c62ba17c61c45cd0adbd05cbd9fb36306db9d`
 - Approved decision IDs: `PD-OI-001`, `PD-OI-002`, `PD-OI-003`,
   `PD-OI-004`, `PD-OI-005`, `PD-OI-006`, `PD-OI-007`, `PD-OI-008`,
   `PD-OI-009`, `PD-OI-010`, `PD-OI-011`, `PD-OI-012`, `PD-OI-013`,
   `PD-OI-014`, `PD-OI-015`, `PD-OI-016`, and `PD-OI-017`
-- Modified decision: `PD-OI-014`, as recorded below
-- Records remaining `EVIDENCE_REQUIRED`: `PD-OI-007`
+- Initial candidate modification: `PD-OI-014`, as recorded below
+- Current revision change: `PD-OI-007`, as recorded below
+- Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
 This contract owns the user-observable outcomes recorded below. It does not
@@ -224,25 +228,26 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-007: Collinear merge-conflict fresh default
 
 - Concern key: `diagram-generation.collinear-max-conflicts-default`
-- Scenario revision: `1`
-- Status: `EVIDENCE_REQUIRED`
-- Normative outcome: Compare explicit `max_conflicts=0` and `max_conflicts=1`
-  on representative deterministic fixtures before selecting the fresh
-  default. Both explicit values must validate, execute, round-trip, and appear
-  in provenance while the decision is pending.
-- Rationale: The value can change block merging and scientific
-  interpretation; current code or a historical default is insufficient
-  Product authority.
-- Must preserve: Explicit values `0` and `1`; reproducible evidence; no default
-  change in the evidence-only work.
-- May retire: Nothing until an authority-only decision replaces this record.
-- Accepted residual risk: The fresh cross-surface default remains pending.
+- Scenario revision: `2`
+- Status: `ACCEPTED`
+- Normative outcome: The fresh `max_conflicts` default is one (`1`). Explicit
+  zero (`0`) remains supported. Omission and explicit one are
+  execution-equivalent.
+- Rationale: Merged deterministic evidence established the consumer behavior
+  of both values, and the Product Decision Owner selected one after reviewing
+  that evidence.
+- Must preserve: Explicit zero and one; retained singleton anchors; agreement
+  among request intent, execution, round trip, and provenance; reproducible
+  evidence for the merge-threshold effect.
+- May retire: Conflicting fresh omission defaults across surfaces.
+- Accepted residual risk: At one, compatible clusters may merge across one
+  retained interior singleton where zero keeps them separate. The singleton
+  remains in the result, and the selected behavior remains visible in
+  provenance.
 - Acceptance contracts: `OIC-004`, `OIC-005`.
-- Evidence route: Deterministic evidence-only comparison followed by a
-  separate authority-only Product Decision.
-- Finalization rule: The authority-only replacement records the selected
-  numeric value, rationale, preserved effects, residual risk, and evidence
-  reference. A coding agent does not infer the value.
+- Evidence: [`COLLINEAR_MAX_CONFLICTS_COMPARISON_EVIDENCE_2026-08-28.md`](./COLLINEAR_MAX_CONFLICTS_COMPARISON_EVIDENCE_2026-08-28.md),
+  merged by PR `#422` at `878c62ba17c61c45cd0adbd05cbd9fb36306db9d`.
+- Supersedes: `PD-OI-007`, scenario revision `1`.
 - Owner and decision date: `satoshikawato`, `2026-08-28`.
 
 ### PD-OI-008: Imported comparison reconstruction and resolution
