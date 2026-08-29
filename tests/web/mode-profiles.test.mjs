@@ -257,8 +257,8 @@ const { createDefaultAdv, createDefaultForm, createDefaultLosat, state } = await
 );
 assert.equal(
   createDefaultLosat().blastp.collinearSearchScope,
-  'all',
-  'fresh Collinear LOSATP must search all record pairs by default'
+  'adjacent',
+  'fresh Collinear LOSATP must search adjacent record pairs by default'
 );
 assert.equal(Object.keys(state.form).includes('legend'), false);
 assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
@@ -429,8 +429,8 @@ assert.deepEqual(
   assert.equal(state.form.show_scale, true);
   assert.equal(
     state.losat.blastp.collinearSearchScope,
-    'all',
-    'Reset must restore the fresh all-vs-all Collinear default'
+    'adjacent',
+    'Reset must restore the fresh adjacent Collinear default'
   );
   assert.deepEqual(
     state.adv.circular_track_slots,
@@ -670,6 +670,6 @@ const defaultCollinearComparison = defaultCollinearRequest.comparisons.find(
 assert.equal(defaultCollinearComparison.mode, 'collinear');
 assert.equal(
   defaultCollinearComparison.settings.collinearitySearchScope,
-  'all',
-  'the fresh all-vs-all scope must reach the canonical Collinear request'
+  'adjacent',
+  'the fresh adjacent scope must reach the canonical Collinear request'
 );

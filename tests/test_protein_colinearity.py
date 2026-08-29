@@ -545,6 +545,36 @@ def test_identical_record_instances_share_content_but_not_runtime_bindings() -> 
 
 
 @pytest.mark.linear
+def test_protein_raw_identity_tracks_candidate_limit_args_exactly() -> None:
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("query", features=[_cds(0, 9)]),
+            _record("subject", features=[_cds(3, 12)]),
+        ],
+        record_instance_keys=("query-row", "subject-row"),
+    )
+    identity = build_protein_losat_pair_identity(
+        extraction.identity_manifest,
+        query_record_instance_key="query-row",
+        subject_record_instance_key="subject-row",
+    )
+
+    omitted = build_protein_losat_cache_key(identity, args=[])
+    explicit_none = build_protein_losat_cache_key(identity, args=[])
+    finite = build_protein_losat_cache_key(
+        identity,
+        args=["--max-target-seqs", "7"],
+    )
+
+    assert explicit_none == omitted
+    assert finite != omitted
+    assert finite == build_protein_losat_cache_key(
+        identity,
+        args=["--max-target-seqs", "7"],
+    )
+
+
+@pytest.mark.linear
 def test_legacy_protein_artifact_references_resolve_to_runtime_handles() -> None:
     extraction = extract_protein_identity_manifest(
         [
@@ -3079,7 +3109,10 @@ def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path
 
 
 @pytest.mark.linear
-def test_web_losatp_pairwise_payload_uses_display_view_transform(tmp_path: Path) -> None:
+def test_web_losatp_pairwise_payload_uses_display_view_transform(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
     namespace = _load_web_helper_namespace()
     hits = pd.DataFrame.from_records(
         [_hit_row("qa", "sb")],
@@ -3131,10 +3164,10 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(tmp_path: Path)
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "pairwise",
         1,
         50,
@@ -3156,6 +3189,7 @@ def test_web_losatp_pairwise_payload_uses_display_view_transform(tmp_path: Path)
 @pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     tmp_path: Path,
+    stage_web_losatp_transport,
 ) -> None:
     helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
@@ -3245,10 +3279,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "orthogroup",
         2,
         50,
@@ -3308,9 +3342,14 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert len(rows) == 2
     assert result["cache"]["convertedPayloadHit"] is False
     assert result["cache"]["filteredHitCacheMisses"] == 2
+    assert result["cache"]["rawTsvEntryCount"] == 2
+    assert result["cache"]["rawTsvBytes"] == raw_tsv_path.stat().st_size
+    assert 0 < result["cache"]["rawTsvLargestEntryBytes"] <= raw_tsv_path.stat().st_size
+    assert result["cache"]["simultaneousParsedTables"] == 2
 
     repeated_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "orthogroup",
         2,
         50,
@@ -3320,10 +3359,12 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
         orthogroup_membership_mode="rbh",
     )))
     assert repeated_result["cache"]["convertedPayloadHit"] is True
+    assert repeated_result["cache"]["simultaneousParsedTables"] == 0
     assert repeated_result["pairs"] == result["pairs"]
 
     filter_cached_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "orthogroup",
         3,
         50,
@@ -3346,9 +3387,12 @@ def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
     exec(helper_source, namespace)
 
     pairs_path = tmp_path / "losatp-pairs.json"
+    raw_tsv_path = tmp_path / "losatp-pairs.tsv"
     pairs_path.write_text(json.dumps([]), encoding="utf-8")
+    raw_tsv_path.write_bytes(b"")
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "pairwise",
         2,
         50,

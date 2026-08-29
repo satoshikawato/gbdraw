@@ -56,6 +56,33 @@ export const requireCurrentLinearLabelPlacement = (value) => (
   )
 );
 
+export const requireCurrentProteinBlastpMode = (value) => (
+  requireCurrentValue(
+    value,
+    'orthogroup',
+    ['pairwise', 'orthogroup', 'collinear'],
+    'Protein BLASTP mode'
+  )
+);
+
+export const requireCurrentCollinearSearchScope = (value) => (
+  requireCurrentValue(
+    value,
+    'adjacent',
+    ['adjacent', 'all'],
+    'Collinear search scope'
+  )
+);
+
+export const requireCurrentProteinBlastpCandidateLimit = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    throw new Error('Protein BLASTP Candidate limit must be a positive integer or None.');
+  }
+  return numeric;
+};
+
 export const migratePersistedCircularMultiRecordSizeMode = (value) => {
   const normalized = normalizedValue(value, 'auto');
   return requireCurrentCircularMultiRecordSizeMode(

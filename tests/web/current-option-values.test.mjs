@@ -6,8 +6,11 @@ import {
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames,
   requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentCollinearSearchScope,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
+  requireCurrentProteinBlastpCandidateLimit,
+  requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
 } from '../../gbdraw/web/js/app/current-option-values.js';
 
@@ -35,6 +38,29 @@ assert.throws(
   () => requireCurrentLinearLabelPlacement('on_feature'),
   /Linear label placement/
 );
+
+assert.equal(requireCurrentProteinBlastpMode(), 'orthogroup');
+for (const mode of ['pairwise', 'orthogroup', 'collinear']) {
+  assert.equal(requireCurrentProteinBlastpMode(mode), mode);
+}
+assert.throws(() => requireCurrentProteinBlastpMode('similarity'), /Protein BLASTP mode/);
+
+assert.equal(requireCurrentCollinearSearchScope(), 'adjacent');
+assert.equal(requireCurrentCollinearSearchScope('adjacent'), 'adjacent');
+assert.equal(requireCurrentCollinearSearchScope('all'), 'all');
+assert.throws(() => requireCurrentCollinearSearchScope('all-records'), /search scope/i);
+
+for (const omitted of [undefined, null, '']) {
+  assert.equal(requireCurrentProteinBlastpCandidateLimit(omitted), null);
+}
+assert.equal(requireCurrentProteinBlastpCandidateLimit(7), 7);
+assert.equal(requireCurrentProteinBlastpCandidateLimit('7'), 7);
+for (const invalid of [0, -1, 1.5, 'unbounded']) {
+  assert.throws(
+    () => requireCurrentProteinBlastpCandidateLimit(invalid),
+    /Candidate limit/
+  );
+}
 
 assert.equal(migratePersistedCircularMultiRecordSizeMode('sqrt'), 'auto');
 assert.equal(migratePersistedLinearTrackLayout('spreadout'), 'above');

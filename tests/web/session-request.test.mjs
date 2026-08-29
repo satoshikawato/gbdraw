@@ -3873,6 +3873,7 @@ const activeProteinFiles = {
 };
 const inactiveProteinDefaults = {
   proteinBlastpMaxHits: 5,
+  proteinBlastpCandidateLimit: null,
   orthogroupMembershipMode: 'anchor_core_v1',
   orthogroupMemberMaxHits: 5,
   collinearMinAnchors: 1,
@@ -3900,18 +3901,24 @@ const invalidDormantProteinSettings = {
 for (const { mode, activeSettings, expected } of [
   {
     mode: 'pairwise',
-    activeSettings: { maxHits: 13 },
-    expected: { ...inactiveProteinDefaults, proteinBlastpMaxHits: 13 }
+    activeSettings: { maxHits: 13, candidateLimit: 11 },
+    expected: {
+      ...inactiveProteinDefaults,
+      proteinBlastpMaxHits: 13,
+      proteinBlastpCandidateLimit: 11
+    }
   },
   {
     mode: 'orthogroup',
     activeSettings: {
       orthogroupMembershipMode: 'anchor_core_v1',
-      orthogroupMemberMaxHits: 9
+      orthogroupMemberMaxHits: 9,
+      candidateLimit: 11
     },
     expected: {
       ...inactiveProteinDefaults,
-      orthogroupMemberMaxHits: 9
+      orthogroupMemberMaxHits: 9,
+      proteinBlastpCandidateLimit: 11
     }
   },
   {
@@ -3924,7 +3931,8 @@ for (const { mode, activeSettings, expected } of [
       collinearUnitMode: 'locus',
       collinearAnchorMode: 'rbh',
       collinearSearchScope: 'all',
-      collinearColorMode: 'orientation_identity'
+      collinearColorMode: 'orientation_identity',
+      candidateLimit: 11
     },
     expected: {
       ...inactiveProteinDefaults,
@@ -3934,7 +3942,8 @@ for (const { mode, activeSettings, expected } of [
       collinearMaxConflicts: 0,
       collinearityUnitMode: 'locus',
       collinearitySearchScope: 'all',
-      collinearityColorMode: 'orientation_identity'
+      collinearityColorMode: 'orientation_identity',
+      proteinBlastpCandidateLimit: 11
     }
   }
 ]) {
@@ -3967,6 +3976,7 @@ for (const { mode, activeSettings, expected } of [
   assert.deepEqual(activeProteinState.losat, activeProteinStateBefore);
   assert.deepEqual({
     proteinBlastpMaxHits: generated.settings.proteinBlastpMaxHits,
+    proteinBlastpCandidateLimit: generated.settings.proteinBlastpCandidateLimit,
     orthogroupMembershipMode: generated.settings.orthogroupMembershipMode,
     orthogroupMemberMaxHits: generated.settings.orthogroupMemberMaxHits,
     collinearMinAnchors: generated.settings.collinearityParams.parameters.minAnchors,
@@ -3979,6 +3989,69 @@ for (const { mode, activeSettings, expected } of [
     collinearitySearchScope: generated.settings.collinearitySearchScope,
     collinearityColorMode: generated.settings.collinearityColorMode
   }, expected, `${mode} must canonicalize only the request copy of dormant settings`);
+}
+
+const canonicalCandidateLimit = (candidateLimit, { omitted = false } = {}) => {
+  const blastp = {
+    ...structuredClone(comparisonContractState.losat.blastp),
+    mode: 'pairwise',
+    candidateLimit
+  };
+  if (omitted) delete blastp.candidateLimit;
+  const candidateState = {
+    ...comparisonContractState,
+    losatProgram: ref('blastp'),
+    losat: {
+      ...structuredClone(comparisonContractState.losat),
+      blastp
+    },
+    linearComparisonPlan: structuredClone(activeProteinPlan)
+  };
+  const request = buildCanonicalRenderRequestRaw({
+    state: candidateState,
+    filesData: activeProteinFiles,
+    comparisonPlanSnapshot: resolveLinearComparisonPlan({
+      plan: activeProteinPlan,
+      sequences: comparisonContractSequences,
+      losatProgram: 'blastp',
+      blastpMode: 'pairwise'
+    })
+  });
+  return request.renderRequest.comparisons.find(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  ).settings.proteinBlastpCandidateLimit;
+};
+assert.equal(canonicalCandidateLimit(undefined, { omitted: true }), null);
+assert.equal(canonicalCandidateLimit(null), null);
+assert.equal(canonicalCandidateLimit(17), 17);
+
+for (const blastpOverride of [
+  { mode: 'pairwise', candidateLimit: 0 },
+  { mode: 'unsupported', candidateLimit: null },
+  { mode: 'collinear', candidateLimit: null, collinearSearchScope: 'global' }
+]) {
+  const invalidProteinState = {
+    ...comparisonContractState,
+    losatProgram: ref('blastp'),
+    losat: {
+      ...structuredClone(comparisonContractState.losat),
+      blastp: {
+        ...structuredClone(comparisonContractState.losat.blastp),
+        ...blastpOverride
+      }
+    },
+    linearComparisonPlan: structuredClone(activeProteinPlan)
+  };
+  assert.throws(() => buildCanonicalRenderRequestRaw({
+    state: invalidProteinState,
+    filesData: activeProteinFiles,
+    comparisonPlanSnapshot: resolveLinearComparisonPlan({
+      plan: activeProteinPlan,
+      sequences: comparisonContractSequences,
+      losatProgram: 'blastp',
+      blastpMode: blastpOverride.mode
+    })
+  }));
 }
 
 const emptySelectedSnapshot = resolveLinearComparisonPlan({

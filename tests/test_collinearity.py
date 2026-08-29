@@ -2175,7 +2175,10 @@ def test_linear_cli_rejects_nonpositive_collinear_min_anchors() -> None:
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path) -> None:
+def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
     class JsNull:
         def __str__(self) -> str:
             return "null"
@@ -2248,10 +2251,10 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path)
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "collinear",
         5,
         50,
@@ -2302,6 +2305,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path)
 @pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
     tmp_path: Path,
+    stage_web_losatp_transport,
 ) -> None:
     class JsNull:
         def __str__(self) -> str:
@@ -2375,10 +2379,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "collinear",
         5,
         50,
@@ -2406,6 +2410,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
 
     raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "collinear",
         5,
         50,
@@ -2430,6 +2435,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
 @pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
     tmp_path: Path,
+    stage_web_losatp_transport,
 ) -> None:
     helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
@@ -2523,12 +2529,16 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
 
-    def convert(scope: str, input_payload: Path = pairs_path) -> dict[str, object]:
+    def convert(
+        scope: str,
+        input_payload: Path = pairs_path,
+        input_raw_tsv: Path = raw_tsv_path,
+    ) -> dict[str, object]:
         raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
             str(input_payload),
+            str(input_raw_tsv),
             "collinear",
             5,
             50,
@@ -2550,18 +2560,38 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
 
     adjacent = convert("adjacent")
     all_records = convert("all")
+    invalid_scope = convert("global")
+    invalid_mode = json.loads(
+        str(
+            namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                str(pairs_path),
+                str(raw_tsv_path),
+                "similarity",
+            )
+        )
+    )
     multi_row_payload = json.loads(json.dumps(payload))
     for pair in multi_row_payload["pairs"]:
         pair["displayPair"] = (
             pair["queryIndex"] == 0 and pair["subjectIndex"] == 2
         )
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(multi_row_payload), encoding="utf-8")
-    multi_row_adjacent = convert("adjacent", pairs_path)
+    multi_row_pairs_path, multi_row_raw_tsv_path = stage_web_losatp_transport(
+        tmp_path,
+        multi_row_payload,
+        "losatp-multi-row-pairs",
+    )
+    multi_row_adjacent = convert(
+        "adjacent",
+        multi_row_pairs_path,
+        multi_row_raw_tsv_path,
+    )
 
     assert "error" not in adjacent
     assert "error" not in all_records
     assert "error" not in multi_row_adjacent
+    assert "Unsupported Collinear search scope" in invalid_scope["error"]
+    assert "Unsupported LOSATP blastp mode" in invalid_mode["error"]
+
     def member_sets(result: dict[str, object]) -> list[set[str]]:
         groups = result["collinearityResult"]["value"]["fields"][
             "orthogroups"

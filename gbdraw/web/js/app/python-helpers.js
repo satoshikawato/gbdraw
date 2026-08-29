@@ -955,6 +955,7 @@ def _dataframe_json_rows(df):
 
 def convert_losatp_blastp_pairs_to_genomic_payload(
     pairs_path,
+    raw_tsv_path,
     mode="pairwise",
     max_hits=5,
     bitscore=50,
@@ -1003,7 +1004,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             raise ValueError("LOSATP blastp conversion payload must contain 'records' and 'pairs' lists.")
         normalized_mode = str(mode or "pairwise").strip().lower()
         if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
-            normalized_mode = "pairwise"
+            raise ValueError(f"Unsupported LOSATP blastp mode: {mode!r}")
         normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode or "anchor_core_v1"))
         try:
             normalized_member_max_hits = int(orthogroup_member_max_hits or 5)
@@ -1018,11 +1019,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         if normalized_max_paralog_links <= 0:
             normalized_max_paralog_links = 2
         normalized_collinear_anchor_mode = "rbh"
-        normalized_collinear_search_scope = str(collinear_search_scope or "adjacent").strip().lower().replace("-", "_")
-        if normalized_collinear_search_scope in {"all_records", "all_pairs", "all_record_pairs", "global"}:
-            normalized_collinear_search_scope = "all"
-        elif normalized_collinear_search_scope not in {"adjacent", "all"}:
-            normalized_collinear_search_scope = "adjacent"
+        normalized_collinear_search_scope = str(collinear_search_scope or "adjacent").strip().lower()
+        if normalized_collinear_search_scope not in {"adjacent", "all"}:
+            raise ValueError(
+                f"Unsupported Collinear search scope: {collinear_search_scope!r}"
+            )
 
         record_payloads = []
         for idx, record in enumerate(raw_records):
@@ -1043,6 +1044,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             )
 
         pair_payloads = []
+        with open(str(raw_tsv_path), "rb") as raw_tsv_handle:
+            raw_tsv_handle.seek(0, 2)
+            raw_tsv_size = raw_tsv_handle.tell()
         for idx, item in enumerate(raw_pairs):
             if not isinstance(item, dict):
                 raise ValueError(f"LOSATP pair payload #{idx + 1} must be an object.")
@@ -1054,6 +1058,13 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 subject_index = int(item["subjectIndex"])
             except Exception as exc:
                 raise ValueError(f"LOSATP pair payload #{idx + 1} is missing a valid subjectIndex.") from exc
+            try:
+                raw_offset = int(item["rawTsvOffset"])
+                raw_bytes = int(item["rawTsvBytes"])
+            except Exception as exc:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} is missing a valid raw TSV range.") from exc
+            if raw_offset < 0 or raw_bytes < 0 or raw_offset + raw_bytes > raw_tsv_size:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} has an invalid raw TSV range.")
             pair_index = int(item.get("pairIndex", min(query_index, subject_index)))
             cache_key = str(item.get("cacheKey") or "").strip()
             if not cache_key:
@@ -1065,9 +1076,19 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "subject_index": subject_index,
                     "display_pair": item.get("displayPair") is True,
                     "cache_key": cache_key,
-                    "blast_text": str(item.get("blastText") or ""),
+                    "raw_tsv_offset": raw_offset,
+                    "raw_tsv_bytes": raw_bytes,
                 }
             )
+
+        raw_tsv_stats = {
+            "rawTsvEntryCount": len(pair_payloads),
+            "rawTsvBytes": raw_tsv_size,
+            "rawTsvLargestEntryBytes": max(
+                (item["raw_tsv_bytes"] for item in pair_payloads),
+                default=0,
+            ),
+        }
 
         conversion_cache_key = (
             normalized_mode,
@@ -1114,6 +1135,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 convertedPayloadHit=True,
                 filteredHitCacheHits=0,
                 filteredHitCacheMisses=0,
+                simultaneousParsedTables=0,
+                **raw_tsv_stats,
             )
 
         protein_maps_by_record = {}
@@ -1149,7 +1172,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             )
             filtered = _web_losatp_cache_get("filtered", filter_cache_key)
             if filtered is None:
-                hits = parse_losatp_outfmt6(item["blast_text"])
+                with open(str(raw_tsv_path), "rb") as raw_tsv_handle:
+                    raw_tsv_handle.seek(item["raw_tsv_offset"])
+                    blast_text = raw_tsv_handle.read(item["raw_tsv_bytes"]).decode("utf-8")
+                hits = parse_losatp_outfmt6(blast_text)
                 filtered = filter_protein_hits_by_thresholds(
                     hits,
                     evalue=evalue,
@@ -1177,6 +1203,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             "convertedPayloadHit": False,
             "filteredHitCacheHits": filtered_cache_hits,
             "filteredHitCacheMisses": filtered_cache_misses,
+            "simultaneousParsedTables": len(pair_items),
+            **raw_tsv_stats,
         }
 
         def _finalize_losatp_payload(payload):
