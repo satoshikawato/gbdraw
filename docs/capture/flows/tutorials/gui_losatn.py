@@ -173,7 +173,7 @@ def capture_gui_losatn(
         task.select_option("megablast")
         expect(task).to_have_value("megablast")
         pairwise_match_height = settings.get_by_label(
-            "Pairwise Match Height", exact=True
+            "Comparison match height", exact=True
         )
         pairwise_match_height.fill("120")
         pairwise_match_height.press("Tab")
