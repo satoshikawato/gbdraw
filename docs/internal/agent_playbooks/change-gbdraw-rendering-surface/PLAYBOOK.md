@@ -1,15 +1,12 @@
----
-name: change-gbdraw-rendering-surface
-description: Implement or review a gbdraw rendering contract that intentionally changes multiple owning or persistence surfaces, such as shared option semantics, Python/CLI/Web request parity, session serialization, or renderer/output topology. Do not invoke for a bug confined to one surface, an internal refactor, a test or documentation-only change, or a Gallery content refresh when the shared contract is unchanged.
----
+> Reference playbook. Use only when a user or task-specific instruction explicitly requests this playbook. Do not auto-route to it from file paths, changed modules, or task category.
 
 # Change a gbdraw rendering surface
 
-Read `AGENTS.md` and `CLAUDE.md` first. Read `gbdraw/web/CLAUDE.md` when the Web app, session projection, browser worker, or Gallery is in scope. Use `$maintain-python-api` for public API contract details and `$web-gallery-screenshot-maintenance` for Gallery media work.
+Read `AGENTS.md` and `CLAUDE.md` first. Read `gbdraw/web/CLAUDE.md` when the Web app, session projection, browser worker, or Gallery is in scope. Use the [maintain Python API playbook](../maintain-python-api/PLAYBOOK.md) for public API contract details and the [Web Gallery screenshot maintenance playbook](../web-gallery-screenshot-maintenance/PLAYBOOK.md) for Gallery media work.
 
-## Decide whether this Skill applies
+## Decide whether this playbook applies
 
-Use this Skill when the requested outcome changes a shared or persisted rendering contract. Typical triggers are:
+Use this playbook when the requested outcome changes a shared or persisted rendering contract. Typical triggers are:
 
 - a typed schema, option, default, or validation rule shared by more than one public surface;
 - the same option semantics crossing Python, CLI, Web request construction, or the renderer;
@@ -22,7 +19,7 @@ If evidence found during a local fix shows that the shared contract itself is in
 
 ## Map the current owner
 
-After confirming that the Skill applies, trace the concept through the surfaces it actually uses:
+After confirming that the playbook applies, trace the concept through the surfaces it actually uses:
 
 | Surface | Inspect |
 |---|---|
@@ -90,4 +87,4 @@ Render and inspect the final artifact at a readable scale. Check clipping, label
 
 Audit production code, tests, documentation, and generated output as separate diffs. Report the surface matrix covered, commands run, browser cases checked, reference-output status, and any unsupported surface. Provide the requested commit title and summary.
 
-When changing this Skill's routing or execution rules, verify the lightweight scenarios in [EVALS.md](EVALS.md).
+When changing this playbook's routing or execution rules, verify the lightweight scenarios in [EVALS.md](EVALS.md).

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Change gbdraw Rendering Surface"
-  short_description: "Keep shared rendering contracts aligned"
-  default_prompt: "Use $change-gbdraw-rendering-surface to update this shared rendering contract across the owning and persisted surfaces that actually apply."
