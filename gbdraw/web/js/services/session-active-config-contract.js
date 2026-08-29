@@ -1,6 +1,6 @@
 import { createDefaultLinearDefinitionLineStyles } from '../app/definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from '../app/circular-track-slots.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from '../app/linear-track-slots.js'; import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearSearchScope, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -38,7 +38,7 @@ export const createDefaultLosat = () => ({
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: 5, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
-    collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearSearchScope: 'all' }
+    collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearSearchScope: 'adjacent' }
 });
 export const createDefaultCircularConservation = () => ({ enabled: false, source: 'losat', losat_program: 'blastn',
   subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });
@@ -144,6 +144,16 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
     if (value !== undefined && !['blastn', 'tblastx', 'blastp'].includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
+  }
+  if (isObject(config.losat?.blastp)) {
+    const blastp = config.losat.blastp;
+    if (has(blastp, 'mode')) requireCurrentProteinBlastpMode(blastp.mode);
+    if (has(blastp, 'candidateLimit')) {
+      requireCurrentProteinBlastpCandidateLimit(blastp.candidateLimit);
+    }
+    if (has(blastp, 'collinearSearchScope')) {
+      requireCurrentCollinearSearchScope(blastp.collinearSearchScope);
+    }
   }
   if (has(config, 'filterMode') && !['None', 'Whitelist', 'Blacklist'].includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
   if (has(config, 'palette') && !config.palette.trim()) throw new Error('Current session active configuration config.palette cannot be empty.');

@@ -822,12 +822,17 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   state.losatCache.value = new Map(cacheEntries);
   state.losatDerivedCache.value = new Map();
 
+  let failLateArtifactAdoption = false;
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
-    adoptCanonicalRenderArtifacts: () => {},
+    adoptCanonicalRenderArtifacts: () => {
+      if (failLateArtifactAdoption) {
+        throw new Error('injected LOSAT late artifact adoption failure');
+      }
+    },
     prepareLinearRecordCatalog: async () => ({
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''
@@ -1029,6 +1034,46 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       'the explicit staged text fast path must not materialize file text again'
     );
 
+    const committedLosatCache = state.losatCache.value;
+    const committedLosatCacheEntries = Array.from(committedLosatCache.entries());
+    const committedLosatCacheInfo = structuredClone(state.losatCacheInfo.value);
+    const committedLosatTelemetry = structuredClone(
+      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__
+    );
+    state.losat.blastn.task = 'blastn';
+    failLateArtifactAdoption = true;
+    workerHelperResponses.push({
+      ok: true,
+      result: {
+        tsv: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+      }
+    });
+    const failedLinearResult = result('lazy-linear-failed.svg', 'lazy-linear-failed');
+    workerResponses.push(response(
+      failedLinearResult,
+      validCatalog(failedLinearResult.name)
+    ));
+    assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+    failLateArtifactAdoption = false;
+    state.losat.blastn.task = 'megablast';
+    assert.match(
+      state.errorLog.value?.summary || '',
+      /injected LOSAT late artifact adoption failure/
+    );
+    assert.notEqual(state.losatCache.value, committedLosatCache);
+    assert.deepEqual(
+      Array.from(state.losatCache.value.entries()),
+      committedLosatCacheEntries,
+      'artifact rollback may restore a snapshot map but must not publish candidate entries'
+    );
+    assert.deepEqual(state.losatCacheInfo.value, committedLosatCacheInfo);
+    assert.deepEqual(
+      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
+      committedLosatTelemetry,
+      'failed candidate provenance must roll back with the committed artifact'
+    );
+    assert.equal(losatCalls, 2, 'the failed candidate must execute without becoming committed evidence');
+
     const warmCacheInfo = [{
       key: 'warm-cache', edgeKey: 'multi->third', queryUid: 'multi', subjectUid: 'third',
       queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
@@ -1053,7 +1098,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
     );
-    assert.equal(losatCalls, 1, 'resolved protein artifacts must bypass LOSAT execution');
+    assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
   } finally {
     if (previousTestHooks === undefined) {

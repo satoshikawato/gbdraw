@@ -272,7 +272,8 @@ const HELPER_FILE_NAMES = Object.freeze({
   gff: 'source.gff',
   fasta: 'source.fasta',
   pairs: 'pairs.json',
-  visibility: 'feature-visibility.tsv'
+  visibility: 'feature-visibility.tsv',
+  rawTsv: 'raw-losatp.tsv'
 });
 
 const requirePayloadObject = (payload, operation) => {
@@ -614,12 +615,13 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'orthogroupMembershipMode',
       'orthogroupMemberMaxHits'
     ],
-    fileRoles: ['pairs'],
+    fileRoles: ['pairs', 'rawTsv'],
     run: (pyodide, payload, paths, operation) => callJsonHelper(
       pyodide,
       'convert_losatp_blastp_pairs_to_genomic_payload',
       [
         requireHelperFile(paths, 'pairs', operation),
+        requireHelperFile(paths, 'rawTsv', operation),
         payload.mode ?? 'pairwise',
         payload.maxHits ?? 5,
         payload.bitscore ?? 50,

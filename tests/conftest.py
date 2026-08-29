@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from collections.abc import Callable
@@ -23,6 +24,34 @@ INPUT_SEARCH_DIRS = (
     Path("/home/kawato/study/2025-09-17_gbdraw_test"),
     Path("/home/kawato/study/2025-05-15_gbdraw"),
 )
+
+
+@pytest.fixture
+def stage_web_losatp_transport() -> Callable[
+    [Path, dict[str, object], str], tuple[Path, Path]
+]:
+    """Stage Web LOSATP pair metadata beside one binary raw-TSV bundle."""
+
+    def stage(
+        directory: Path,
+        payload: dict[str, object],
+        stem: str = "losatp-pairs",
+    ) -> tuple[Path, Path]:
+        manifest = json.loads(json.dumps(payload))
+        raw_tsv = bytearray()
+        for pair in manifest.get("pairs", []):
+            blast_text = str(pair.pop("blastText"))
+            encoded = blast_text.encode("utf-8")
+            pair["rawTsvOffset"] = len(raw_tsv)
+            pair["rawTsvBytes"] = len(encoded)
+            raw_tsv.extend(encoded)
+        pairs_path = directory / f"{stem}.json"
+        raw_tsv_path = directory / f"{stem}.tsv"
+        pairs_path.write_text(json.dumps(manifest), encoding="utf-8")
+        raw_tsv_path.write_bytes(raw_tsv)
+        return pairs_path, raw_tsv_path
+
+    return stage
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

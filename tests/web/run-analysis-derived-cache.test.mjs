@@ -7,10 +7,12 @@ import {
   resolveProteinBlastpCandidateLimit
 } from '../../gbdraw/web/js/app/run-analysis.js';
 
-assert.equal(resolveProteinBlastpCandidateLimit('collinear', 5), 5);
-assert.equal(resolveProteinBlastpCandidateLimit('orthogroup', '7'), 7);
-assert.equal(resolveProteinBlastpCandidateLimit('pairwise', null, 3), 3);
-assert.equal(resolveProteinBlastpCandidateLimit('collinear', null), null);
+assert.equal(resolveProteinBlastpCandidateLimit(5), 5);
+assert.equal(resolveProteinBlastpCandidateLimit('7'), 7);
+assert.equal(resolveProteinBlastpCandidateLimit(null), null);
+assert.equal(resolveProteinBlastpCandidateLimit(undefined), null);
+assert.throws(() => resolveProteinBlastpCandidateLimit(0), /Candidate limit/);
+assert.throws(() => resolveProteinBlastpCandidateLimit('invalid'), /Candidate limit/);
 
 const baselineInput = {
   mode: 'collinear',

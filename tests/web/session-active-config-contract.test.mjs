@@ -8,6 +8,7 @@ const {
   CURRENT_WRITER_FORM_FIELDS,
   createDefaultAdv,
   createDefaultForm,
+  createDefaultLosat,
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 
@@ -29,6 +30,39 @@ assert.deepEqual(CURRENT_WRITER_ADV_FIELDS, [
   'plot_title_position',
   'losatProgram'
 ]);
+assert.equal(createDefaultLosat().blastp.candidateLimit, null);
+assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
+
+for (const [candidateLimit, collinearSearchScope] of [[null, 'adjacent'], [9, 'all']]) {
+  assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
+    mode: 'linear',
+    storedConfig: {
+      ...storedConfig,
+      losat: {
+        ...createDefaultLosat(),
+        blastp: {
+          ...createDefaultLosat().blastp,
+          mode: 'collinear',
+          candidateLimit,
+          collinearSearchScope
+        }
+      }
+    }
+  }));
+}
+for (const blastp of [
+  { mode: 'unsupported' },
+  { candidateLimit: 0 },
+  { collinearSearchScope: 'global' }
+]) {
+  assert.throws(() => validateCurrentWriterActiveConfig({
+    mode: 'linear',
+    storedConfig: {
+      ...storedConfig,
+      losat: { blastp }
+    }
+  }));
+}
 
 const retiredTrackOrder = structuredClone(storedConfig);
 retiredTrackOrder.adv.cli_circular_track_order = ['features'];

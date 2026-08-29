@@ -127,6 +127,7 @@ const recordPlacementSummary = (page) => page.evaluate(() => {
 const installCanonicalRequestCapture = (page) => page.evaluate(() => {
   const previousPostMessage = Worker.prototype.postMessage;
   window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__ = [];
+  window.__GBDRAW_VIBRIO_RAW_HELPER_TRANSPORTS__ = [];
   Worker.prototype.postMessage = function captureCanonicalRequest(message, transfer) {
     if (message?.type === 'run' && message.payload?.request) {
       window.__GBDRAW_VIBRIO_CANONICAL_REQUESTS__.push(
@@ -135,6 +136,23 @@ const installCanonicalRequestCapture = (page) => page.evaluate(() => {
           resourceManifest: structuredClone(message.payload.resourceManifest || [])
         }
       );
+    }
+    if (
+      message?.type === 'helper'
+      && message.operation === 'convertLosatpPairsToGenomicPayload'
+    ) {
+      const files = Array.isArray(message.payload?.files) ? message.payload.files : [];
+      const pairs = files.find(({ role }) => role === 'pairs');
+      const rawTsv = files.find(({ role }) => role === 'rawTsv');
+      const manifestText = pairs?.bytes instanceof ArrayBuffer
+        ? new TextDecoder().decode(pairs.bytes)
+        : '';
+      window.__GBDRAW_VIBRIO_RAW_HELPER_TRANSPORTS__.push({
+        roles: files.map(({ role }) => String(role || '')),
+        metadataBytes: Number(pairs?.bytes?.byteLength || 0),
+        rawTsvBytes: Number(rawTsv?.bytes?.byteLength || 0),
+        manifestContainsBlastText: manifestText.includes('"blastText"')
+      });
     }
     if (transfer === undefined) return previousPostMessage.call(this, message);
     return previousPostMessage.call(this, message, transfer);
@@ -175,6 +193,15 @@ const canonicalRequestEvidence = async (page) => {
           : [],
         recordRows: Array.isArray(request.records)
           ? request.records.map(({ presentation }) => Number(presentation?.gridRow || 0))
+          : [],
+        proteinSearchSettings: Array.isArray(request.comparisons)
+          ? request.comparisons
+            .filter(({ kind }) => kind === 'generatedProteinComparison')
+            .map(({ mode, settings }) => ({
+              mode: String(mode || ''),
+              candidateLimit: settings?.proteinBlastpCandidateLimit ?? null,
+              searchScope: String(settings?.collinearitySearchScope || '')
+            }))
           : [],
         layout: request.layout || null,
         colors: request.diagramOptions?.colors || null,
@@ -265,6 +292,11 @@ const activeIntentSummary = (page) => page.evaluate(async () => {
       }))
     },
     linearComparisonPlan: plain(state.linearComparisonPlan),
+    proteinSearch: {
+      mode: state.losat.blastp.mode,
+      candidateLimit: state.losat.blastp.candidateLimit,
+      searchScope: state.losat.blastp.collinearSearchScope
+    },
     linearRecordLayout: {
       enabled: state.linearRecordLayoutEnabled.value,
       recordGap: state.linearRecordGap.value,
@@ -677,7 +709,12 @@ const invokeGeneration = async (page, terminal, runnerEvidence, terminalSignal) 
           historyStructural: Object.fromEntries(diagnosticFields.map((name) => [
             name,
             Number(historyAfter[name] || 0) - Number(historyBefore[name] || 0)
-          ]))
+          ])),
+          rawSearchTelemetry: JSON.parse(JSON.stringify(
+            app.lastRunInfo?.losatTelemetry
+              || window.__GBDRAW_LAST_LOSAT_TELEMETRY__
+              || null
+          ))
         };
       } catch (error) {
         return {
@@ -844,6 +881,11 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     defaultSource: 'losat',
     edges: []
   });
+  expect(preFirstGenerateActiveIntent.proteinSearch).toEqual({
+    mode: 'collinear',
+    candidateLimit: 5,
+    searchScope: 'adjacent'
+  });
   expect(preFirstGenerateActiveIntent.linearRecordLayout).toMatchObject({
     enabled: true,
     recordGap: 48
@@ -889,6 +931,9 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   const secondRecordPlacements = await recordPlacementSummary(page);
   const postSecondGenerateActiveIntent = await activeIntentSummary(page);
   const canonicalRequestCapture = await canonicalRequestEvidence(page);
+  const rawHelperTransports = await page.evaluate(() => (
+    structuredClone(window.__GBDRAW_VIBRIO_RAW_HELPER_TRANSPORTS__ || [])
+  ));
   const capturedCanonicalRequests = canonicalRequestCapture.requests;
   expect(capturedCanonicalRequests).toHaveLength(2);
   expect(capturedCanonicalRequests[0]).toMatchObject({
@@ -901,11 +946,55 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     recordRows: [1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
     layout: {
       recordGapPx: 48
-    }
+    },
+    proteinSearchSettings: [{
+      mode: 'none',
+      candidateLimit: 5,
+      searchScope: 'adjacent'
+    }]
   });
   expect(capturedCanonicalRequests[0].layout).not.toHaveProperty('multiRecordPositions');
   expect(canonicalRequestCapture.repeatComparison).toMatchObject({ equivalent: true });
   expect(postSecondGenerateActiveIntent.sha256).toBe(preFirstGenerateActiveIntent.sha256);
+  expect(first.outcome.rawSearchTelemetry).toMatchObject({
+    mode: 'collinear',
+    candidateLimitRequested: 5,
+    candidateLimitEffective: 5,
+    collinearSearchScope: 'adjacent',
+    program: 'blastp',
+    outfmt: '6',
+    cacheMisses: 0,
+    helperRequestFileCount: 2
+  });
+  expect(first.outcome.rawSearchTelemetry.totalPairs).toBeGreaterThan(0);
+  expect(first.outcome.rawSearchTelemetry.cacheHits).toBe(
+    first.outcome.rawSearchTelemetry.totalPairs
+  );
+  expect(first.outcome.rawSearchTelemetry.rawTsvEntryCount).toBe(
+    first.outcome.rawSearchTelemetry.totalPairs
+  );
+  expect(first.outcome.rawSearchTelemetry.rawJobs).toHaveLength(
+    first.outcome.rawSearchTelemetry.totalPairs
+  );
+  expect(first.outcome.rawSearchTelemetry.rawJobs.every(({ cacheKey, args }) => (
+    /^[0-9a-f]{64}$/.test(cacheKey)
+      && args.includes('--max-target-seqs')
+      && args[args.indexOf('--max-target-seqs') + 1] === '5'
+  ))).toBe(true);
+  expect(first.outcome.rawSearchTelemetry.rawTsvBytes).toBeGreaterThan(0);
+  expect(first.outcome.rawSearchTelemetry.rawTsvLargestEntryBytes).toBeGreaterThan(0);
+  expect(first.outcome.rawSearchTelemetry.helperRequestMetadataBytes).toBeGreaterThan(0);
+  expect(first.outcome.rawSearchTelemetry.helperRequestRawTransferBytes).toBe(
+    first.outcome.rawSearchTelemetry.rawTsvBytes
+  );
+  expect(first.outcome.rawSearchTelemetry.simultaneousParsedTables).toBeGreaterThan(0);
+  expect(second.outcome.rawSearchTelemetry).toBeNull();
+  expect(rawHelperTransports).toEqual([{
+    roles: ['pairs', 'rawTsv'],
+    metadataBytes: first.outcome.rawSearchTelemetry.helperRequestMetadataBytes,
+    rawTsvBytes: first.outcome.rawSearchTelemetry.helperRequestRawTransferBytes,
+    manifestContainsBlastText: false
+  }]);
   const expectedRecordPlacements = [
     [0, 0], [0, 1], [0, 2],
     [1, 0], [1, 1],
@@ -1326,6 +1415,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
       generatedSvgCharacters: resultSvgCharacters,
       firstElapsedMs: first.outcome.elapsedMs,
       secondElapsedMs: second.outcome.elapsedMs,
+      rawHelperTransports,
       firstPhaseAttribution,
       secondPhaseAttribution
     },
@@ -1367,6 +1457,8 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
     preFirstGenerateActiveIntent: report.load.preFirstGenerateActiveIntent,
     firstGenerateMs: report.generations.firstElapsedMs,
     secondGenerateMs: report.generations.secondElapsedMs,
+    firstRawSearchTelemetry: report.generations.first.outcome.rawSearchTelemetry,
+    secondRawSearchTelemetry: report.generations.second.outcome.rawSearchTelemetry,
     referencedResourceCount: report.generations.referencedResourceCount,
     referencedDeclaredBytes: report.generations.referencedDeclaredBytes,
     firstTransferredBytes: report.generations.firstTransferredBytes,

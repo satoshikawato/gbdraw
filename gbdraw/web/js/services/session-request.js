@@ -72,8 +72,11 @@ import {
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentCollinearSearchScope,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
+  requireCurrentProteinBlastpCandidateLimit,
+  requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
@@ -1207,6 +1210,7 @@ const buildTrackPlan = ({
 
 const generatedProteinSettings = (state, baseline = {}) => {
   const blastp = state.losat.blastp || {};
+  const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
   const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
   const nonNegativeInteger = (value, fallback) => {
     const numeric = optionalNumber(value);
@@ -1255,14 +1259,17 @@ const generatedProteinSettings = (state, baseline = {}) => {
     },
     collinearityUnitMode,
     collinearityAnchorMode: normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
-    collinearitySearchScope: normalizeCollinearSearchScope(blastp.collinearSearchScope),
+    collinearitySearchScope: blastpMode === 'collinear'
+      ? requireCurrentCollinearSearchScope(blastp.collinearSearchScope)
+      : normalizeCollinearSearchScope(blastp.collinearSearchScope),
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
     losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
     proteinBlastpMaxHits: positiveInteger(blastp.maxHits, 5),
-    proteinBlastpCandidateLimit:
-      baseline.proteinBlastpCandidateLimit ?? optionalPositiveInteger(blastp.candidateLimit),
+    proteinBlastpCandidateLimit: requireCurrentProteinBlastpCandidateLimit(
+      blastp.candidateLimit
+    ),
     orthogroupMembershipMode: normalizeOrthogroupMembershipMode(
       blastp.orthogroupMembershipMode
     ),
