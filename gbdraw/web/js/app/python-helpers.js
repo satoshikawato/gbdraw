@@ -17,70 +17,58 @@ from gbdraw.web_support.request_render import (
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.api.prepared import PreparedBiologicalInputCache
-from gbdraw.web_support.protein_analysis import (
-    assemble_web_protein_analysis,
-    plan_web_protein_analysis,
-)
 
+_WEB_LOSATP_FILTERED_HIT_CACHE = {}
+_WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
+_WEB_LOSATP_CACHE_ORDER = []
+_WEB_LOSATP_CACHE_LIMIT = 64
 _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
 
-def _web_structured_error(error, fallback):
-    payload = {
-        "type": error.__class__.__name__,
-        "message": str(error) if str(error) else fallback,
-        "traceback": traceback.format_exc(),
-    }
-    if getattr(error, "status", None) is not None:
-        payload["status"] = error.status
-    return {"error": payload}
+def _web_losatp_cache_by_name(name):
+    if name == "filtered":
+        return _WEB_LOSATP_FILTERED_HIT_CACHE
+    if name == "converted":
+        return _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE
+    raise KeyError(name)
 
-def plan_web_protein_analysis_json(
-    intent_json,
-    payload_path,
-    identity_manifest_json,
-    tool_identity,
-):
+def _web_losatp_cache_get(name, key):
+    cache = _web_losatp_cache_by_name(name)
+    if key not in cache:
+        return None
+    marker = (name, key)
     try:
-        with open(str(payload_path), "r", encoding="utf-8") as payload_handle:
-            payload = json.load(payload_handle)
-        records, extraction, record_payloads = _web_protein_analysis_inputs(
-            payload,
-            json.loads(str(identity_manifest_json)),
-        )
-        return json.dumps(plan_web_protein_analysis(
-            json.loads(str(intent_json)),
-            records,
-            extraction,
-            record_payloads,
-            str(tool_identity),
-        ))
-    except Exception as error:
-        return json.dumps(_web_structured_error(error, "Protein analysis planning failed"))
+        _WEB_LOSATP_CACHE_ORDER.remove(marker)
+    except ValueError:
+        pass
+    _WEB_LOSATP_CACHE_ORDER.append(marker)
+    return cache[key]
 
-def assemble_web_protein_analysis_json(
-    intent_json,
-    payload_path,
-    identity_manifest_json,
-    tool_identity,
-):
+def _web_losatp_cache_set(name, key, value):
+    cache = _web_losatp_cache_by_name(name)
+    marker = (name, key)
     try:
-        with open(str(payload_path), "r", encoding="utf-8") as payload_handle:
-            payload = json.load(payload_handle)
-        records, extraction, record_payloads = _web_protein_analysis_inputs(
-            payload,
-            json.loads(str(identity_manifest_json)),
-        )
-        return json.dumps(assemble_web_protein_analysis(
-            json.loads(str(intent_json)),
-            records,
-            extraction,
-            record_payloads,
-            payload.get("rawEntries"),
-            str(tool_identity),
-            payload.get("cachedDerivedEntries") or (),
-        ))
-    except Exception as error:
-        return json.dumps(_web_structured_error(error, "Protein analysis failed"))
+        _WEB_LOSATP_CACHE_ORDER.remove(marker)
+    except ValueError:
+        pass
+    cache[key] = value
+    _WEB_LOSATP_CACHE_ORDER.append(marker)
+    while len(_WEB_LOSATP_CACHE_ORDER) > _WEB_LOSATP_CACHE_LIMIT:
+        old_name, old_key = _WEB_LOSATP_CACHE_ORDER.pop(0)
+        _web_losatp_cache_by_name(old_name).pop(old_key, None)
+
+def _web_losatp_json_with_cache_stats(payload_json, **stats):
+    try:
+        payload = json.loads(str(payload_json))
+    except Exception:
+        return payload_json
+    if not isinstance(payload, dict):
+        return payload_json
+    cache_payload = payload.get("cache")
+    if not isinstance(cache_payload, dict):
+        cache_payload = {}
+    cache_payload.update(stats)
+    payload["cache"] = cache_payload
+    return json.dumps(payload)
 
 def _is_blank_or_js_nullish(value):
     if value is None:
@@ -761,7 +749,6 @@ def promote_legacy_losatp_cache_candidates(
             expected_args=options.get("args") or [],
             expected_program=str(options.get("program") or "blastp"),
             expected_outfmt=str(options.get("outfmt") or "6"),
-            expected_tool_identity=options.get("toolIdentity"),
         )
         rejections = [
             {
@@ -848,6 +835,37 @@ def resolve_legacy_protein_reference_map_json(
     except Exception:
         return json.dumps({"status": "error", "error": traceback.format_exc()})
 
+def build_protein_losat_cache_key_json(
+    identity_manifest_json,
+    query_record_instance_key,
+    subject_record_instance_key,
+    expected_options_json,
+):
+    """Build the directional schema-4 key with the Python identity owner."""
+    try:
+        from gbdraw.analysis.protein_colinearity import (
+            build_protein_losat_cache_key,
+            build_protein_losat_pair_identity,
+        )
+
+        manifest = json.loads(str(identity_manifest_json))
+        options = json.loads(str(expected_options_json))
+        pair_identity = build_protein_losat_pair_identity(
+            manifest,
+            query_record_instance_key=str(query_record_instance_key),
+            subject_record_instance_key=str(subject_record_instance_key),
+        )
+        return json.dumps({
+            "key": build_protein_losat_cache_key(
+                pair_identity,
+                args=options.get("args") or [],
+                program=str(options.get("program") or "blastp"),
+                outfmt=str(options.get("outfmt") or "6"),
+            )
+        })
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
+
 def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
     """Hydrate one internal schema-4 protein TSV for user download."""
     try:
@@ -915,70 +933,6 @@ def _build_web_protein_extraction(protein_maps, identity_manifest=None):
         identity_manifest=identity_manifest,
     )
 
-def _web_protein_analysis_inputs(payload, identity_manifest):
-    from Bio.Seq import Seq
-    from Bio.SeqRecord import SeqRecord
-    from dataclasses import replace
-    from gbdraw.analysis.protein_colinearity import (
-        ProteinExtractionResult,
-        validate_protein_identity_manifest,
-    )
-
-    raw_records = payload.get("records") if isinstance(payload, dict) else None
-    if not isinstance(raw_records, list) or not raw_records:
-        raise ValueError("Protein analysis payload must contain records.")
-    manifest = validate_protein_identity_manifest(identity_manifest)
-    records = []
-    proteins_by_record = []
-    protein_map = {}
-    instance_keys = []
-    analysis_ids = []
-    protein_set_hashes = []
-    runtime_binding_hashes = []
-    display_binding_hashes = []
-    for index, raw in enumerate(raw_records):
-        if not isinstance(raw, dict) or int(raw.get("recordIndex", -1)) != index:
-            raise ValueError("Protein records must be ordered by recordIndex.")
-        source_proteins = _web_ordered_proteins_from_fasta(
-            raw.get("proteinMap") or {},
-            raw.get("fasta") or "",
-        )
-        display_map = _build_display_web_cds_protein_map(
-            raw.get("proteinMap") or {},
-            raw.get("viewTransform") or {},
-        )
-        display_proteins = [
-            replace(display_map[item.protein_id], sequence=item.sequence)
-            for item in source_proteins
-        ]
-        instance_key = str(raw.get("recordInstanceKey") or "")
-        binding = manifest.binding_for(instance_key)
-        analysis_id = str(binding["recordAnalysisId"])
-        analysis = manifest.record_analyses[analysis_id]
-        length = int(raw.get("recordLength") or 0)
-        records.append(SeqRecord(Seq("N" * length), id=str(raw.get("recordId") or "")))
-        proteins_by_record.append(display_proteins)
-        for protein in display_proteins:
-            if protein.protein_id in protein_map:
-                raise ValueError("Protein runtime handles must be unique.")
-            protein_map[protein.protein_id] = protein
-        instance_keys.append(instance_key)
-        analysis_ids.append(analysis_id)
-        protein_set_hashes.append(str(analysis["proteinSetHash"]))
-        runtime_binding_hashes.append(str(binding["runtimeBindingHash"]))
-        display_binding_hashes.append(str(binding["displayBindingHash"]))
-    extraction = ProteinExtractionResult(
-        proteins_by_record=proteins_by_record,
-        protein_map=protein_map,
-        identity_manifest=manifest,
-        record_instance_keys=tuple(instance_keys),
-        protein_set_hashes=tuple(protein_set_hashes),
-        record_analysis_ids=tuple(analysis_ids),
-        runtime_binding_hashes=tuple(runtime_binding_hashes),
-        display_binding_hashes=tuple(display_binding_hashes),
-    )
-    return tuple(records), extraction, tuple(raw_records)
-
 def _clean_json_scalar(value):
     try:
         import pandas as pd
@@ -998,6 +952,440 @@ def _dataframe_json_rows(df):
     for row in df.to_dict(orient="records"):
         rows.append({str(key): _clean_json_scalar(value) for key, value in row.items()})
     return rows
+
+def convert_losatp_blastp_pairs_to_genomic_payload(
+    pairs_path,
+    mode="pairwise",
+    max_hits=5,
+    bitscore=50,
+    evalue="1e-2",
+    identity=0,
+    alignment_length=0,
+    collinear_min_anchors=1,
+    collinear_max_unit_gap=0,
+    collinear_unit_mode="auto",
+    collinear_color_mode="orientation",
+    collinear_anchor_mode="rbh",
+    collinear_max_diagonal_drift=0,
+    collinear_max_conflicts_in_merge_gap=1,
+    collinear_max_paralog_links_per_orthogroup=2,
+    collinear_search_scope="adjacent",
+    orthogroup_membership_mode="anchor_core_v1",
+    orthogroup_member_max_hits=5,
+):
+    """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
+    try:
+        from io import StringIO
+        import pandas as pd
+        from gbdraw.analysis.collinearity import (
+            LosslessCollinearityParameters,
+            build_orthogroup_collinearity_blocks_from_hits,
+            convert_collinearity_blocks_to_comparisons,
+            convert_collinearity_blocks_to_pair_comparisons,
+        )
+        from gbdraw.analysis.protein_colinearity import (
+            convert_pair_protein_hits_to_genomic_links,
+            filter_protein_hits_by_thresholds,
+            normalize_orthogroup_membership_mode,
+            parse_losatp_outfmt6,
+            select_rbh_orthogroup_edges_from_directional_hits,
+            select_top_hits_per_query,
+        )
+        from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+        with open(str(pairs_path), "r", encoding="utf-8") as pairs_handle:
+            raw_payload = json.load(pairs_handle)
+        if not isinstance(raw_payload, dict):
+            raise ValueError("LOSATP blastp conversion payload must be an object with 'records' and 'pairs' lists.")
+        raw_records = raw_payload.get("records")
+        raw_pairs = raw_payload.get("pairs")
+        if not isinstance(raw_records, list) or not isinstance(raw_pairs, list):
+            raise ValueError("LOSATP blastp conversion payload must contain 'records' and 'pairs' lists.")
+        normalized_mode = str(mode or "pairwise").strip().lower()
+        if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
+            normalized_mode = "pairwise"
+        normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode or "anchor_core_v1"))
+        try:
+            normalized_member_max_hits = int(orthogroup_member_max_hits or 5)
+        except Exception:
+            normalized_member_max_hits = 5
+        if normalized_member_max_hits <= 0:
+            normalized_member_max_hits = 5
+        try:
+            normalized_max_paralog_links = int(collinear_max_paralog_links_per_orthogroup or 2)
+        except Exception:
+            normalized_max_paralog_links = 2
+        if normalized_max_paralog_links <= 0:
+            normalized_max_paralog_links = 2
+        normalized_collinear_anchor_mode = "rbh"
+        normalized_collinear_search_scope = str(collinear_search_scope or "adjacent").strip().lower().replace("-", "_")
+        if normalized_collinear_search_scope in {"all_records", "all_pairs", "all_record_pairs", "global"}:
+            normalized_collinear_search_scope = "all"
+        elif normalized_collinear_search_scope not in {"adjacent", "all"}:
+            normalized_collinear_search_scope = "adjacent"
+
+        record_payloads = []
+        for idx, record in enumerate(raw_records):
+            if not isinstance(record, dict):
+                raise ValueError(f"LOSATP record payload #{idx + 1} must be an object.")
+            try:
+                record_index = int(record["recordIndex"])
+            except Exception as exc:
+                raise ValueError(f"LOSATP record payload #{idx + 1} is missing a valid recordIndex.") from exc
+            record_payloads.append(
+                {
+                    "record_index": record_index,
+                    "record_id": str(record.get("recordId") or ""),
+                    "protein_map": record.get("proteinMap") or {},
+                    "protein_cache_key": str(record.get("proteinCacheKey") or ""),
+                    "view_transform": _normalize_web_view_transform(record.get("viewTransform") or {}),
+                }
+            )
+
+        pair_payloads = []
+        for idx, item in enumerate(raw_pairs):
+            if not isinstance(item, dict):
+                raise ValueError(f"LOSATP pair payload #{idx + 1} must be an object.")
+            try:
+                query_index = int(item["queryIndex"])
+            except Exception as exc:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} is missing a valid queryIndex.") from exc
+            try:
+                subject_index = int(item["subjectIndex"])
+            except Exception as exc:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} is missing a valid subjectIndex.") from exc
+            pair_index = int(item.get("pairIndex", min(query_index, subject_index)))
+            cache_key = str(item.get("cacheKey") or "").strip()
+            if not cache_key:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} is missing cacheKey.")
+            pair_payloads.append(
+                {
+                    "pair_index": pair_index,
+                    "query_index": query_index,
+                    "subject_index": subject_index,
+                    "display_pair": item.get("displayPair") is True,
+                    "cache_key": cache_key,
+                    "blast_text": str(item.get("blastText") or ""),
+                }
+            )
+
+        conversion_cache_key = (
+            normalized_mode,
+            int(max_hits or 5),
+            str(bitscore),
+            str(evalue),
+            str(identity),
+            str(alignment_length),
+            str(normalized_membership_mode),
+            str(normalized_member_max_hits),
+            str(collinear_min_anchors),
+            str(collinear_max_unit_gap),
+            str(collinear_unit_mode),
+            str(collinear_color_mode),
+            normalized_collinear_anchor_mode,
+            str(collinear_max_diagonal_drift),
+            str(collinear_max_conflicts_in_merge_gap),
+            str(collinear_max_paralog_links_per_orthogroup),
+            normalized_collinear_search_scope,
+            tuple(
+                (
+                    item["record_index"],
+                    item["protein_cache_key"],
+                    int(item["view_transform"]["length"]),
+                    bool(item["view_transform"]["reverse"]),
+                )
+                for item in sorted(record_payloads, key=lambda current: current["record_index"])
+            ),
+            tuple(
+                (
+                    item["pair_index"],
+                    item["query_index"],
+                    item["subject_index"],
+                    item["display_pair"],
+                    item["cache_key"],
+                )
+                for item in pair_payloads
+            ),
+        )
+        cached_payload = _web_losatp_cache_get("converted", conversion_cache_key)
+        if cached_payload is not None:
+            return _web_losatp_json_with_cache_stats(
+                cached_payload,
+                convertedPayloadHit=True,
+                filteredHitCacheHits=0,
+                filteredHitCacheMisses=0,
+            )
+
+        protein_maps_by_record = {}
+        for record in record_payloads:
+            record_index = int(record["record_index"])
+            if record_index in protein_maps_by_record:
+                raise ValueError(f"LOSATP record payload contains duplicate recordIndex {record_index}.")
+            protein_maps_by_record[record_index] = _build_display_web_cds_protein_map(
+                record["protein_map"],
+                record["view_transform"],
+            )
+        combined_protein_map = {}
+        for protein_map in protein_maps_by_record.values():
+            combined_protein_map.update(protein_map)
+        extraction = _build_web_protein_extraction(protein_maps_by_record.values())
+
+        filtered_cache_hits = 0
+        filtered_cache_misses = 0
+        pair_items = []
+        for idx, item in enumerate(pair_payloads):
+            query_index = int(item["query_index"])
+            subject_index = int(item["subject_index"])
+            if query_index not in protein_maps_by_record:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} references missing queryIndex {query_index}.")
+            if subject_index not in protein_maps_by_record:
+                raise ValueError(f"LOSATP pair payload #{idx + 1} references missing subjectIndex {subject_index}.")
+            filter_cache_key = (
+                item["cache_key"],
+                str(bitscore),
+                str(evalue),
+                str(identity),
+                str(alignment_length),
+            )
+            filtered = _web_losatp_cache_get("filtered", filter_cache_key)
+            if filtered is None:
+                hits = parse_losatp_outfmt6(item["blast_text"])
+                filtered = filter_protein_hits_by_thresholds(
+                    hits,
+                    evalue=evalue,
+                    bitscore=bitscore,
+                    identity=identity,
+                    alignment_length=alignment_length,
+                )
+                _web_losatp_cache_set("filtered", filter_cache_key, filtered.copy())
+                filtered_cache_misses += 1
+            else:
+                filtered = filtered.copy()
+                filtered_cache_hits += 1
+            pair_items.append(
+                {
+                    "pair_index": item["pair_index"],
+                    "query_index": query_index,
+                    "subject_index": subject_index,
+                    "hits": filtered,
+                    "query_map": protein_maps_by_record[query_index],
+                    "subject_map": protein_maps_by_record[subject_index],
+                }
+            )
+
+        cache_stats = {
+            "convertedPayloadHit": False,
+            "filteredHitCacheHits": filtered_cache_hits,
+            "filteredHitCacheMisses": filtered_cache_misses,
+        }
+
+        def _finalize_losatp_payload(payload):
+            payload["cache"] = cache_stats
+            result_json = json.dumps(payload)
+            _web_losatp_cache_set("converted", conversion_cache_key, result_json)
+            return result_json
+
+        if normalized_mode == "collinear":
+            record_ids = []
+            for record_proteins in extraction.proteins_by_record:
+                if record_proteins:
+                    record_ids.append(str(record_proteins[0].record_id))
+                else:
+                    record_ids.append("")
+            def _collinear_int(value, default):
+                if _is_blank_or_js_nullish(value):
+                    return int(default)
+                return int(value)
+            def _collinear_float(value, default):
+                if _is_blank_or_js_nullish(value):
+                    return float(default)
+                return float(value)
+            def _collinear_text(value, default):
+                if _is_blank_or_js_nullish(value):
+                    return default
+                return str(value).strip()
+            anchor_mode = normalized_collinear_anchor_mode
+            search_scope = normalized_collinear_search_scope
+            max_paralog_links = normalized_max_paralog_links
+            directional_tables = {}
+            for item in pair_items:
+                query_index = int(item["query_index"])
+                subject_index = int(item["subject_index"])
+                directional_tables[(query_index, subject_index)] = item["hits"]
+            display_pairs = tuple(sorted({
+                tuple(sorted((
+                    int(item["query_index"]),
+                    int(item["subject_index"]),
+                )))
+                for item in pair_payloads
+                if item["display_pair"]
+                and int(item["query_index"]) != int(item["subject_index"])
+            }))
+            params = LosslessCollinearityParameters(
+                min_anchors=_collinear_int(collinear_min_anchors, 1),
+                max_unit_gap=_collinear_int(collinear_max_unit_gap, 0),
+                max_diagonal_drift=_collinear_int(collinear_max_diagonal_drift, 0),
+                max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1),
+            )
+            collinearity_result = build_orthogroup_collinearity_blocks_from_hits(
+                directional_tables,
+                extraction,
+                params=params,
+                unit_mode="cds",
+                edge_mode=anchor_mode,
+                search_scope=search_scope,
+                orthogroup_membership_mode=normalized_membership_mode,
+                orthogroup_member_max_hits=normalized_member_max_hits,
+                max_paralog_links_per_orthogroup=max_paralog_links,
+                comparison_pairs=(
+                    display_pairs
+                    if search_scope == "adjacent" and display_pairs
+                    else None
+                ),
+            )
+            color_mode = _collinear_text(collinear_color_mode, "orientation")
+            if search_scope == "adjacent" and display_pairs:
+                display_pair_indices = {
+                    tuple(sorted((
+                        int(item["query_index"]),
+                        int(item["subject_index"]),
+                    ))): int(item["pair_index"])
+                    for item in pair_payloads
+                    if item["display_pair"]
+                }
+                converted_by_pair = convert_collinearity_blocks_to_pair_comparisons(
+                    collinearity_result,
+                    record_ids=record_ids,
+                    color_mode=color_mode,
+                    search_scope=search_scope,
+                )
+                converted_frames = [
+                    (display_pair_indices[pair], converted_by_pair[pair])
+                    for pair in display_pairs
+                    if pair in converted_by_pair
+                ]
+            else:
+                converted_frames = enumerate(convert_collinearity_blocks_to_comparisons(
+                    collinearity_result,
+                    record_ids=record_ids,
+                    color_mode=color_mode,
+                    search_scope=search_scope,
+                ))
+            converted_pairs = []
+            for pair_index, converted in converted_frames:
+                handle = StringIO()
+                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                    handle,
+                    sep=chr(9),
+                    header=False,
+                    index=False,
+                    lineterminator=chr(10),
+                )
+                converted_pairs.append(
+                    {
+                        "pair_index": pair_index,
+                        "tsv": handle.getvalue(),
+                        "rows": _dataframe_json_rows(converted),
+                        "hit_count": int(converted.shape[0]),
+                    }
+                )
+            return _finalize_losatp_payload({
+                "pairs": converted_pairs,
+                "collinearityResult": json.loads(
+                    encode_canonical_typed_resource(
+                        "result",
+                        collinearity_result,
+                    ).decode("utf-8")
+                ),
+            })
+
+        if normalized_mode == "pairwise":
+            converted_pairs = []
+            for item in pair_items:
+                display_hits = select_top_hits_per_query(
+                    item["hits"],
+                    max_hits=int(max_hits or 5),
+                )
+                converted = convert_pair_protein_hits_to_genomic_links(
+                    display_hits,
+                    item["query_map"],
+                    item["subject_map"],
+                    orthogroups=None,
+                )
+                handle = StringIO()
+                converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                    handle,
+                    sep=chr(9),
+                    header=False,
+                    index=False,
+                    lineterminator=chr(10),
+                )
+                converted_pairs.append(
+                    {
+                        "pair_index": item["pair_index"],
+                        "tsv": handle.getvalue(),
+                        "rows": _dataframe_json_rows(converted),
+                        "hit_count": int(converted.shape[0]),
+                    }
+                )
+            return _finalize_losatp_payload({"pairs": converted_pairs, "orthogroups": []})
+
+        hits_by_direction = {
+            (item["query_index"], item["subject_index"]): item
+            for item in pair_items
+        }
+        directional_tables = {
+            pair: item["hits"]
+            for pair, item in hits_by_direction.items()
+        }
+        edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+            directional_tables,
+            combined_protein_map,
+            orthogroup_membership_mode=normalized_membership_mode,
+            orthogroup_member_max_hits=normalized_member_max_hits,
+            max_related_edges_per_orthogroup=normalized_max_paralog_links,
+        )
+        orthogroups = edge_selection.orthogroups
+
+        converted_pairs = []
+        for query_index, subject_index in sorted(edge_selection.adjacent_display_edges_by_pair):
+            display_hits = edge_selection.adjacent_display_edges_by_pair[(query_index, subject_index)]
+            forward = hits_by_direction.get((query_index, subject_index))
+            if forward is None:
+                continue
+            converted = convert_pair_protein_hits_to_genomic_links(
+                display_hits,
+                forward["query_map"],
+                forward["subject_map"],
+                orthogroups=orthogroups,
+            )
+            handle = StringIO()
+            converted.loc[:, list(COMPARISON_COLUMNS)].to_csv(
+                handle,
+                sep=chr(9),
+                header=False,
+                index=False,
+                lineterminator=chr(10),
+            )
+            converted_pairs.append(
+                {
+                    "pair_index": min(query_index, subject_index),
+                    "tsv": handle.getvalue(),
+                    "rows": _dataframe_json_rows(converted),
+                    "hit_count": int(converted.shape[0]),
+                }
+            )
+        return _finalize_losatp_payload({
+            "pairs": converted_pairs,
+            "orthogroupResult": json.loads(
+                encode_canonical_typed_resource(
+                    "orthogroupResult",
+                    orthogroups,
+                ).decode("utf-8")
+            ),
+        })
+    except Exception:
+        return json.dumps({"error": traceback.format_exc()})
 
 def get_record_length(path, fmt, record_id=None, record_index=None):
     """Return record length for a GenBank/FASTA file."""

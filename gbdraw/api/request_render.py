@@ -68,7 +68,6 @@ from gbdraw.render.interactive_context import (
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.render.formats import resolve_output_paths
 from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
-from gbdraw.version import __version__
 
 from .diagram import (
     DEFAULT_SELECTED_FEATURES,
@@ -1553,7 +1552,7 @@ def _prepare_linear_artifacts(
         cache=cache,
         extraction=extraction,
         nucleotide_entries=nucleotide_entries,
-        passthrough_derived_entries=passthrough_derived,
+        passthrough_derived_entries=(),
         source_mode=_source_protein_mode(request, artifacts),
     )
 
@@ -1661,13 +1660,11 @@ def _build_current_derived_entries(
     records: tuple[SeqRecord, ...],
     artifacts: _PreparedLinearArtifacts,
     raw_entries: Sequence[Mapping[str, Any]],
-    *,
-    requested_values: Mapping[str, Any] | None = None,
 ) -> tuple[Mapping[str, Any], ...]:
     if artifacts.extraction is None:
         return artifacts.passthrough_derived_entries
     mode = artifacts.source_mode
-    if mode not in {"pairwise", "orthogroup", "collinear"}:
+    if mode not in {"orthogroup", "collinear"}:
         return ()
     manifest = artifacts.extraction.identity_manifest
     if manifest is None:
@@ -1700,20 +1697,42 @@ def _build_current_derived_entries(
             if str(entry.get("key") or "")
         }
     )
+    parameter_identity, effective_collinearity_params = (
+        _collinearity_parameter_identity(
+            request.options.collinearity_params
+        )
+    )
     identity = {
         "cacheSchema": 3,
         "idEncoding": "runtime-handle-v1",
+        "converter": "convert_losatp_blastp_pairs_to_genomic_payload",
         "mode": mode,
         # Orthogroup and collinearity inference can consume self, reverse, and
         # hidden non-adjacent comparisons that are not represented by the
         # displayed pair payloads below.  Bind the derived key to every raw
         # schema-4 entry available to that inference run.
         "rawCacheKeys": raw_cache_keys,
+        "maxHits": int(request.options.protein_blastp_max_hits),
         "thresholds": {
             "bitscore": str(request.options.bitscore),
             "evalue": str(request.options.evalue),
             "identity": str(request.options.identity),
             "alignmentLength": str(request.options.alignment_length),
+        },
+        "orthogroup": {
+            "membershipMode": str(request.options.orthogroup_membership_mode),
+            "memberMaxHits": int(request.options.orthogroup_member_max_hits),
+        },
+        "collinear": {
+            **effective_collinearity_params,
+            "unitMode": str(request.options.collinearity_unit_mode),
+            "colorMode": str(request.options.collinearity_color_mode),
+            "anchorMode": str(request.options.collinearity_anchor_mode),
+            "searchScope": str(request.options.collinearity_search_scope),
+            "maxParalogLinksPerOrthogroup": int(
+                request.options.collinear_max_paralog_links_per_orthogroup
+            ),
+            "parameterIdentity": parameter_identity,
         },
         "records": [
             {
@@ -1761,31 +1780,6 @@ def _build_current_derived_entries(
             for pair in pair_payloads
         ],
     }
-    if mode == "pairwise":
-        identity["pairwise"] = {
-            "displayMaxHits": int(request.options.protein_blastp_max_hits),
-        }
-    if mode in {"orthogroup", "collinear"}:
-        identity["orthogroup"] = {
-            "membershipMode": str(request.options.orthogroup_membership_mode),
-            "memberMaxHits": int(request.options.orthogroup_member_max_hits),
-            "maxParalogLinksPerOrthogroup": int(
-                request.options.collinear_max_paralog_links_per_orthogroup
-            ),
-        }
-    if mode == "collinear":
-        parameter_identity, effective_collinearity_params = (
-            _collinearity_parameter_identity(
-                request.options.collinearity_params
-            )
-        )
-        identity["collinear"] = {
-            **effective_collinearity_params,
-            "unitMode": str(request.options.collinearity_unit_mode),
-            "anchorMode": str(request.options.collinearity_anchor_mode),
-            "searchScope": str(request.options.collinearity_search_scope),
-            "parameterIdentity": parameter_identity,
-        }
     key = hashlib.sha256(
         json.dumps(
             identity,
@@ -1795,82 +1789,6 @@ def _build_current_derived_entries(
             allow_nan=False,
         ).encode("utf-8")
     ).hexdigest()
-    effective_values: dict[str, Any] = {
-        "mode": mode,
-        "evalue": request.options.evalue,
-        "bitscore": request.options.bitscore,
-        "identity": request.options.identity,
-        "alignmentLength": request.options.alignment_length,
-        "proteinBlastpCandidateLimit": (
-            request.options.protein_blastp_candidate_limit
-        ),
-    }
-    if mode == "pairwise":
-        effective_values["proteinBlastpMaxHits"] = (
-            request.options.protein_blastp_max_hits
-        )
-    if mode in {"orthogroup", "collinear"}:
-        effective_values.update(
-            {
-                "orthogroupMembershipMode": (
-                    request.options.orthogroup_membership_mode
-                ),
-                "orthogroupMemberMaxHits": (
-                    request.options.orthogroup_member_max_hits
-                ),
-                "collinearMaxParalogLinksPerOrthogroup": (
-                    request.options.collinear_max_paralog_links_per_orthogroup
-                ),
-            }
-        )
-    if mode == "collinear":
-        effective_values.update(
-            {
-                "collinearityParams": identity["collinear"]["parameterIdentity"],
-                "collinearityUnitMode": request.options.collinearity_unit_mode,
-                "collinearityAnchorMode": request.options.collinearity_anchor_mode,
-                "collinearitySearchScope": request.options.collinearity_search_scope,
-                "collinearityColorMode": request.options.collinearity_color_mode,
-            }
-        )
-    requested_snapshot = copy.deepcopy(
-        dict(requested_values)
-        if requested_values is not None
-        else effective_values
-    )
-    explicit_names = set(requested_snapshot)
-    provenance = {
-        "requested": requested_snapshot,
-        "effective": copy.deepcopy(effective_values),
-        "reasons": {
-            name: "explicit" if name in explicit_names else "default"
-            for name in effective_values
-        },
-        "actualInvocations": [
-            {
-                "rawStageIdentity": str(entry.get("key") or ""),
-                "program": str(entry.get("program") or "blastp"),
-                "outfmt": str(entry.get("outfmt") or "6"),
-                "args": [str(arg) for arg in entry.get("args") or ()],
-                **(
-                    {"toolIdentity": str(entry["toolIdentity"])}
-                    if entry.get("toolIdentity") is not None
-                    else {}
-                ),
-            }
-            for entry in sorted(
-                protein_raw_entries,
-                key=lambda item: str(item.get("key") or ""),
-            )
-        ],
-        "upstreamStageIdentities": raw_cache_keys,
-        "versions": {
-            "gbdraw": __version__,
-            "proteinRawCacheSchema": 4,
-            "proteinDerivedArtifactSchema": 3,
-            "proteinIdentityManifestSchema": 2,
-        },
-    }
     entry: Mapping[str, Any] = {
         "schema": 3,
         "kind": "derived-losatp-payload",
@@ -1879,58 +1797,10 @@ def _build_current_derived_entries(
         "mode": mode,
         "payload": {
             "identity": identity,
-            "provenance": provenance,
             "pairs": pair_payloads,
             "orthogroups": orthogroup_payload,
         },
     }
-    if orthogroups is not None:
-        from gbdraw.session_request_codec import encode_canonical_typed_resource
-
-        entry["payload"]["orthogroupResult"] = json.loads(
-            encode_canonical_typed_resource(
-                "orthogroupResult",
-                orthogroups,
-            ).decode("utf-8")
-        )
-    collinearity_result = (
-        metadata.collinearity_result
-        if metadata is not None
-        else (
-            request.options.collinearity_blocks
-            if isinstance(request.options.collinearity_blocks, CollinearityResult)
-            else None
-        )
-    )
-    if collinearity_result is not None:
-        from gbdraw.session_request_codec import encode_canonical_typed_resource
-
-        entry["payload"]["collinearityResult"] = json.loads(
-            encode_canonical_typed_resource(
-                "result",
-                collinearity_result,
-            ).decode("utf-8")
-        )
-    for cached in artifacts.passthrough_derived_entries:
-        if str(cached.get("key") or "") != key:
-            continue
-        cached_payload = cached.get("payload")
-        cached_identity = (
-            cached_payload.get("identity")
-            if isinstance(cached_payload, Mapping)
-            else None
-        )
-        if cached_identity != identity:
-            raise ValidationError(
-                "Current derived LOSATP artifact identity does not match its key."
-            )
-        admitted = copy.deepcopy(dict(cached))
-        admitted_payload = admitted.get("payload")
-        assert isinstance(admitted_payload, dict)
-        admitted_payload["provenance"] = provenance
-        if mode == "collinear":
-            admitted_payload["pairs"] = pair_payloads
-        return (admitted,)
     return (entry,)
 
 

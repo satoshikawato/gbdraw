@@ -149,6 +149,135 @@ def test_reverse_complement_protein_extraction_uses_biological_hash_parts() -> N
     assert (protein.start, protein.end, protein.strand) == (23735, 24758, -1)
 
 
+def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
+    tmp_path: Path,
+) -> None:
+    helpers_js = (
+        Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
+    ).read_text(encoding="utf-8")
+    helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
+    namespace: dict[str, object] = {}
+    exec(helper_source, namespace)
+
+    saved_source = _bgc_record_five_saved_source()
+    proteins = extract_protein_identity_manifest(
+        [saved_source],
+        record_instance_keys=["record-5"],
+        record_index_offset=4,
+    )
+    protein = next(
+        item
+        for item in proteins.proteins_by_record[0]
+        if item.source_protein_id == SOURCE_PROTEIN_ID
+    )
+    raw_data = namespace["_serialize_cds_protein"](protein, saved_source)
+    view_transform = {"length": len(saved_source), "reverse": True}
+    display_start, display_end, display_strand = namespace["_web_transform_cds_span"](
+        raw_data["start"],
+        raw_data["end"],
+        raw_data["strand"],
+        view_transform,
+    )
+    display_feature_id = namespace["_display_feature_svg_id_from_data"](
+        raw_data,
+        display_start,
+        display_end,
+        display_strand,
+        view_transform,
+    )
+    assert raw_data["feature_svg_id"] == BIOLOGICAL_FEATURE_ID
+    assert display_feature_id == PROCESSED_FEATURE_ID
+
+    other_runtime_handle = "h_" + ("a" * 26)
+    target_runtime_handle = protein.protein_id
+    raw_data["source_protein_id"] = "PUBLIC_ID_MUST_NOT_JOIN"
+    other_data = {
+        **raw_data,
+        "protein_id": other_runtime_handle,
+        "runtime_handle": other_runtime_handle,
+        "record_index": 3,
+        "feature_svg_id": "other-stable-id",
+        "source_protein_id": "OTHER_PUBLIC_ID_MUST_NOT_JOIN",
+    }
+    forward_hit = (
+        f"{other_runtime_handle}\t{target_runtime_handle}"
+        "\t99\t340\t0\t0\t1\t340\t1\t340\t1e-20\t200\n"
+    )
+    reverse_hit = (
+        f"{target_runtime_handle}\t{other_runtime_handle}"
+        "\t99\t340\t0\t0\t1\t340\t1\t340\t1e-20\t200\n"
+    )
+    payload = {
+        "records": [
+            {
+                "recordIndex": 3,
+                "recordId": "other-record",
+                "proteinMap": {other_runtime_handle: other_data},
+                "proteinCacheKey": "other-record-cache",
+                "viewTransform": {"length": len(saved_source), "reverse": False},
+            },
+            {
+                "recordIndex": 4,
+                "recordId": saved_source.id,
+                "proteinMap": {target_runtime_handle: raw_data},
+                "proteinCacheKey": "target-record-cache",
+                "viewTransform": view_transform,
+            },
+        ],
+        "pairs": [
+            {
+                "pairIndex": 3,
+                "queryIndex": 3,
+                "subjectIndex": 4,
+                "cacheKey": "forward-cache",
+                "blastText": forward_hit,
+            },
+            {
+                "pairIndex": 3,
+                "queryIndex": 4,
+                "subjectIndex": 3,
+                "cacheKey": "reverse-cache",
+                "blastText": reverse_hit,
+            },
+        ],
+    }
+    pairs_path = tmp_path / "losatp-pairs.json"
+    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    result = json.loads(
+        str(
+            namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                str(pairs_path),
+                "orthogroup",
+                5,
+                50,
+                "1e-5",
+                0,
+                0,
+                orthogroup_membership_mode="rbh",
+            )
+        )
+    )
+
+    assert "error" not in result
+    typed_fields = result["orthogroupResult"]["value"]["fields"]
+    typed_members = next(iter(typed_fields["orthogroups"].values()))
+    target_member = next(
+        member["fields"]
+        for member in typed_members
+        if member["fields"]["proteinId"] == target_runtime_handle
+    )
+    assert target_member["featureSvgId"] == BIOLOGICAL_FEATURE_ID
+    assert target_member["sourceProteinId"] == "PUBLIC_ID_MUST_NOT_JOIN"
+    target_row = next(
+        row
+        for row in result["pairs"][0]["rows"]
+        if row["subject_protein_id"] == target_runtime_handle
+    )
+    assert target_row["subject_feature_svg_id"] == BIOLOGICAL_FEATURE_ID
+    assert target_row["subject_view_feature_svg_id"] == PROCESSED_FEATURE_ID
+    assert "orthogroups" not in result
+
+
 def test_web_helper_uses_cropped_view_parts_for_forward_and_reverse_ids() -> None:
     helpers_js = (
         Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"

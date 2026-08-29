@@ -881,13 +881,13 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
 
     for fragment in (
         "collinearGroups,",
+        "collinearGroups.value = [];",
         "kind: 'collinearityResult'",
         "typedResource: convertedPayload.collinearityResult",
         "setOrthogroupMetadata(candidateCommit.featureState.orthogroups);",
         "collinearGroups.value = Array.isArray(candidateCommit.featureState.collinearGroups)",
     ):
         assert fragment in run_analysis
-    assert "collinearGroups.value = [];" not in run_analysis
     assert "Array.isArray(convertedPayload.collinearGroups)" not in run_analysis
     assert "const committedOrthogroups" not in run_analysis
 
