@@ -541,7 +541,7 @@ const buildRecords = ({ state, filesData, resources }) => {
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
         recordKey: String(seq.uid || `record-${index + 1}`),
-        cardinality: selector || region ? 'exactly_one' : 'all',
+        cardinality: seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
         source,
         selector,
         region,

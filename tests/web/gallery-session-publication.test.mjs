@@ -18,6 +18,7 @@ const {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   compareCanonicalRenderRequests,
+  promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
 const { promoteGallerySessionToCurrent } = await import(
@@ -34,6 +35,7 @@ const {
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
+  promoteRequest: promoteCanonicalRenderRequestToCurrent,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });
@@ -90,6 +92,11 @@ const [lambdaPrepared, alteredPrepared] = await Promise.all([
   prepareGallerySessionForPublication(lambda),
   prepareGallerySessionForPublication(alteredProvenance)
 ]);
+assert.deepEqual(
+  lambdaPrepared.session.renderRequest.records.map(({ cardinality }) => cardinality),
+  ['exactly_one'],
+  'publication must preserve schema-5 materialized record cardinality'
+);
 assert.equal(
   lambdaPrepared.equivalence.actual.digest,
   alteredPrepared.equivalence.actual.digest
