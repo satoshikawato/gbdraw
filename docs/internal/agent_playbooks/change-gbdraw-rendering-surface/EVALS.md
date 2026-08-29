@@ -1,6 +1,6 @@
 # Routing and continuation Eval scenarios
 
-Use these scenarios when the Skill's description, routing boundary, authority rules, or stop conditions change. Evaluate the proposed response and edit plan, not exact wording.
+Use these scenarios when the playbook's scope, authority rules, or stop conditions change. Evaluate the proposed response and edit plan, not exact wording.
 
 ## Routing controls
 
@@ -8,13 +8,13 @@ Use these scenarios when the Skill's description, routing boundary, authority ru
 
 The Web Feature picker calls a raw setter instead of the existing scope-aware handler. The current Python, CLI, request, session, and renderer contracts already express the intended behavior.
 
-Expected: do not invoke this Skill. Repair the Web owner and focused tests without adding a schema version, compatibility layer, public API, Gallery refresh, or reference-output change.
+Expected: do not use this playbook. Repair the Web owner and focused tests without adding a schema version, compatibility layer, public API, Gallery refresh, or reference-output change.
 
 ### Shared persisted option
 
 A diagram option is intentionally added to the typed request, Python API, CLI, Web control, saved session, and both render modes.
 
-Expected: invoke this Skill, map the applicable owners, keep one semantic path, and verify default and non-default behavior across the shared surfaces.
+Expected: use this playbook, map the applicable owners, keep one semantic path, and verify default and non-default behavior across the shared surfaces.
 
 ## Continuation controls
 
