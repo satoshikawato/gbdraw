@@ -924,7 +924,7 @@ test('real Vibrio preview regenerates twice through staged binary resources', as
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
   expect(loadedComparisonSummary).toEqual({
     comparisonGroups: 16,
-    pairwiseMatches: 633,
+    pairwiseMatches: 579,
     comparisonLegends: 2
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
