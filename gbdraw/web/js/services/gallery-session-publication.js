@@ -41,13 +41,25 @@ const publicationConfig = (session, projection) => {
   delete config.blastSource; delete config.adv.losatProgram;
   return config;
 };
+const publicationCanonicalRequest = (request, promoteRequest) => {
+  const current = promoteRequest(request);
+  if (Number(request?.schema) === 5) {
+    current.records.forEach((record) => { record.cardinality = 'exactly_one'; });
+  }
+  return current;
+};
 const rebuildIntent = async (session, owners) => {
-  const projection = owners.projectRequest({ renderRequest: session.renderRequest,
+  const renderRequest = publicationCanonicalRequest(session.renderRequest, owners.promoteRequest);
+  const projection = owners.projectRequest({ renderRequest,
     resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: session.config,
     fileBindings: session.cliInvocation?.fileBindings, sessionResourceTable: adoptCurrentSessionResources(session.resources),
     deferResourceContent: false, adoptCanonicalPayloads: true });
   const config = publicationConfig(session, projection); validateCurrentWriterActiveConfig({ mode: projection.mode, storedConfig: config });
-  const filesData = projection.files, state = owners.buildRequestState({ session, projection, config, filesData });
+  const filesData = projection.files;
+  if (projection.mode === 'linear') filesData.linearSeqs.forEach((sequence, index) => {
+    sequence.cardinality = renderRequest.records[index]?.cardinality;
+  });
+  const state = owners.buildRequestState({ session, projection, config, filesData });
   const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs,
     layout: state.linearRecordLayoutEnabled.value ? state.linearRecordRows : [],
     losatProgram: state.losatProgram.value, blastpMode: state.losat?.blastp?.mode }) : null;
@@ -57,7 +69,7 @@ const rebuildIntent = async (session, owners) => {
   if (isObject(session.renderRequest.diagramOptions?.config)) {
     rebuilt.renderRequest.diagramOptions.config = clone(session.renderRequest.diagramOptions.config); delete rebuilt.renderRequest.diagramOptions.configOverrides;
   }
-  return { config, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: session.renderRequest,
+  return { config, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: renderRequest,
     expectedResources: session.resources, actualRequest: rebuilt.renderRequest, actualResources: rebuilt.resources }) };
 };
 const mergeReplayResources = (prepared, replayed) => {
