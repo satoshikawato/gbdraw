@@ -272,7 +272,6 @@ const HELPER_FILE_NAMES = Object.freeze({
   gff: 'source.gff',
   fasta: 'source.fasta',
   pairs: 'pairs.json',
-  protein: 'protein.json',
   visibility: 'feature-visibility.tsv'
 });
 
@@ -537,17 +536,22 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]);
     }
   },
-  [DIAGRAM_HELPER_OPERATIONS.PLAN_PROTEIN_ANALYSIS]: {
-    keys: ['files', 'proteinIntent', 'identityManifest', 'toolIdentity'],
-    fileRoles: ['protein'],
-    run: (pyodide, payload, paths, operation) => callJsonHelper(
+  [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY]: {
+    keys: [
+      'identityManifest',
+      'queryRecordInstanceKey',
+      'subjectRecordInstanceKey',
+      'expectedOptions'
+    ],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
       pyodide,
-      'plan_web_protein_analysis_json',
+      'build_protein_losat_cache_key_json',
       [
-        jsonArgument(payload.proteinIntent, {}),
-        requireHelperFile(paths, 'protein', operation),
         jsonArgument(payload.identityManifest, {}),
-        String(payload.toolIdentity || '')
+        String(payload.queryRecordInstanceKey || ''),
+        String(payload.subjectRecordInstanceKey || ''),
+        jsonArgument(payload.expectedOptions, {})
       ]
     )
   },
@@ -589,17 +593,50 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
-  [DIAGRAM_HELPER_OPERATIONS.ASSEMBLE_PROTEIN_ANALYSIS]: {
-    keys: ['files', 'proteinIntent', 'identityManifest', 'toolIdentity'],
-    fileRoles: ['protein'],
+  [DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD]: {
+    keys: [
+      'files',
+      'mode',
+      'maxHits',
+      'bitscore',
+      'evalue',
+      'identity',
+      'alignmentLength',
+      'collinearMinAnchors',
+      'collinearMaxUnitGap',
+      'collinearUnitMode',
+      'collinearColorMode',
+      'collinearAnchorMode',
+      'collinearMaxDiagonalDrift',
+      'collinearMaxConflictsInMergeGap',
+      'collinearMaxParalogLinksPerOrthogroup',
+      'collinearSearchScope',
+      'orthogroupMembershipMode',
+      'orthogroupMemberMaxHits'
+    ],
+    fileRoles: ['pairs'],
     run: (pyodide, payload, paths, operation) => callJsonHelper(
       pyodide,
-      'assemble_web_protein_analysis_json',
+      'convert_losatp_blastp_pairs_to_genomic_payload',
       [
-        jsonArgument(payload.proteinIntent, {}),
-        requireHelperFile(paths, 'protein', operation),
-        jsonArgument(payload.identityManifest, {}),
-        String(payload.toolIdentity || '')
+        requireHelperFile(paths, 'pairs', operation),
+        payload.mode ?? 'pairwise',
+        payload.maxHits ?? 5,
+        payload.bitscore ?? 50,
+        payload.evalue ?? '1e-2',
+        payload.identity ?? 0,
+        payload.alignmentLength ?? 0,
+        payload.collinearMinAnchors ?? 1,
+        payload.collinearMaxUnitGap ?? 0,
+        payload.collinearUnitMode ?? 'auto',
+        payload.collinearColorMode ?? 'orientation',
+        payload.collinearAnchorMode ?? 'rbh',
+        payload.collinearMaxDiagonalDrift ?? 0,
+        payload.collinearMaxConflictsInMergeGap ?? 1,
+        payload.collinearMaxParalogLinksPerOrthogroup ?? 2,
+        payload.collinearSearchScope ?? 'adjacent',
+        payload.orthogroupMembershipMode ?? 'anchor_core_v1',
+        payload.orthogroupMemberMaxHits ?? 5
       ]
     )
   },

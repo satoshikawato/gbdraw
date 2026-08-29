@@ -40,6 +40,11 @@ import {
   decodeDepthText,
   isEncodedDepthFileEntry
 } from './depth-file-codec.js';
+import {
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeOrthogroupMembershipMode
+} from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
@@ -560,6 +565,17 @@ const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim(
 const normalizePositiveInteger = (value, fallback) => {
   const numeric = Number(value);
   return Number.isInteger(numeric) && numeric > 0 ? numeric : fallback;
+};
+
+const normalizeBlastpMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
+};
+
+const normalizeCollinearColorMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'identity') return 'average_identity';
+  return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
 };
 
 const normalizePairwiseMatchStyle = (value) => {
@@ -1897,6 +1913,38 @@ export const applyConfigData = (data) => {
       (Number.isInteger(parsedTotalThreadBudget) && parsedTotalThreadBudget >= 1)
       ? (rawTotalThreadBudget === 'auto' ? 'safe' : rawTotalThreadBudget)
       : 'safe';
+    state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
+    state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
+    state.losat.blastp.candidateLimit = normalizePositiveInteger(
+      state.losat.blastp?.candidateLimit,
+      null
+    );
+    if (
+      (state.losat.blastp.orthogroupMemberMaxHits === null ||
+        state.losat.blastp.orthogroupMemberMaxHits === undefined) &&
+      state.losat.blastp.orthogroupMaxHits !== null &&
+      state.losat.blastp.orthogroupMaxHits !== undefined
+    ) {
+      state.losat.blastp.orthogroupMemberMaxHits = state.losat.blastp.orthogroupMaxHits;
+    }
+    state.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(state.losat.blastp?.orthogroupMembershipMode);
+    state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, 5);
+    state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
+    {
+      const maxGap = Number(state.losat.blastp?.collinearMaxUnitGap);
+      state.losat.blastp.collinearMaxUnitGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
+      const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
+      state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
+      const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
+      state.losat.blastp.collinearMaxConflictsInMergeGap = Number.isInteger(mergeConflicts) && mergeConflicts >= 0 ? mergeConflicts : 1;
+      const paralogLinks = Number(state.losat.blastp?.collinearMaxParalogLinksPerOrthogroup);
+      state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = Number.isInteger(paralogLinks) && paralogLinks > 0 ? paralogLinks : 2;
+      state.losat.blastp.collinearColorMode = normalizeCollinearColorMode(state.losat.blastp?.collinearColorMode);
+      const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
+      state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
+      state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
+      state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
+    }
     delete state.losat.blastp.collinearBlockMergeGap;
     delete state.losat.blastp.collinearSingletonMergeGap;
     delete state.losat.blastp.orthogroupHitPolicy;

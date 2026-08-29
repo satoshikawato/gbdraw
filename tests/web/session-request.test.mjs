@@ -3871,6 +3871,19 @@ const activeProteinFiles = {
   linearComparisons: [],
   linearCanonicalComparisons: []
 };
+const inactiveProteinDefaults = {
+  proteinBlastpMaxHits: 5,
+  orthogroupMembershipMode: 'anchor_core_v1',
+  orthogroupMemberMaxHits: 5,
+  collinearMinAnchors: 1,
+  collinearMaxUnitGap: 0,
+  collinearMaxDiagonalDrift: 0,
+  collinearMaxConflicts: 1,
+  collinearityUnitMode: 'auto',
+  collinearityAnchorMode: 'rbh',
+  collinearitySearchScope: 'adjacent',
+  collinearityColorMode: 'orientation'
+};
 const invalidDormantProteinSettings = {
   maxHits: 'invalid-dormant-max-hits',
   orthogroupMembershipMode: 'invalid-dormant-membership',
@@ -3884,24 +3897,11 @@ const invalidDormantProteinSettings = {
   collinearSearchScope: 'invalid-dormant-scope',
   collinearColorMode: 'invalid-dormant-color'
 };
-const transportedDormantProteinSettings = {
-  proteinBlastpMaxHits: 'invalid-dormant-max-hits',
-  orthogroupMembershipMode: 'invalid-dormant-membership',
-  orthogroupMemberMaxHits: 0,
-  collinearMinAnchors: 0,
-  collinearMaxUnitGap: -1,
-  collinearMaxDiagonalDrift: 'invalid-dormant-drift',
-  collinearMaxConflicts: -1,
-  collinearityUnitMode: 'invalid-dormant-unit',
-  collinearityAnchorMode: 'invalid-dormant-anchor',
-  collinearitySearchScope: 'invalid-dormant-scope',
-  collinearityColorMode: 'invalid-dormant-color'
-};
 for (const { mode, activeSettings, expected } of [
   {
     mode: 'pairwise',
     activeSettings: { maxHits: 13 },
-    expected: { ...transportedDormantProteinSettings, proteinBlastpMaxHits: 13 }
+    expected: { ...inactiveProteinDefaults, proteinBlastpMaxHits: 13 }
   },
   {
     mode: 'orthogroup',
@@ -3910,8 +3910,7 @@ for (const { mode, activeSettings, expected } of [
       orthogroupMemberMaxHits: 9
     },
     expected: {
-      ...transportedDormantProteinSettings,
-      orthogroupMembershipMode: 'anchor_core_v1',
+      ...inactiveProteinDefaults,
       orthogroupMemberMaxHits: 9
     }
   },
@@ -3928,13 +3927,12 @@ for (const { mode, activeSettings, expected } of [
       collinearColorMode: 'orientation_identity'
     },
     expected: {
-      ...transportedDormantProteinSettings,
+      ...inactiveProteinDefaults,
       collinearMinAnchors: 4,
       collinearMaxUnitGap: 3,
       collinearMaxDiagonalDrift: 2,
       collinearMaxConflicts: 0,
       collinearityUnitMode: 'locus',
-      collinearityAnchorMode: 'rbh',
       collinearitySearchScope: 'all',
       collinearityColorMode: 'orientation_identity'
     }
@@ -3980,7 +3978,7 @@ for (const { mode, activeSettings, expected } of [
     collinearityAnchorMode: generated.settings.collinearityAnchorMode,
     collinearitySearchScope: generated.settings.collinearitySearchScope,
     collinearityColorMode: generated.settings.collinearityColorMode
-  }, expected, `${mode} must transport the Web draft without choosing scientific defaults`);
+  }, expected, `${mode} must canonicalize only the request copy of dormant settings`);
 }
 
 const emptySelectedSnapshot = resolveLinearComparisonPlan({

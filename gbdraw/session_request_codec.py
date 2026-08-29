@@ -68,7 +68,6 @@ from .api.options import (
     LinearMultiRecordOptions,
     LinearOutputOptions,
     LinearRequestTrackOptions,
-    resolve_linear_diagram_options,
 )
 from .api.requests import (
     CircularBatchRequest,
@@ -3034,7 +3033,6 @@ def _decode_comparisons(
     explicit_comparisons: list[LinearComparison] = []
     result: dict[str, Any] = {}
     singleton_kinds: set[str] = set()
-    has_orthogroup_metadata = False
     for index, raw in enumerate(comparisons):
         path = f"renderRequest.comparisons[{index}]"
         item = _object(raw, path=path, required={"kind"}, exact=False)
@@ -3091,13 +3089,6 @@ def _decode_comparisons(
                     resource_paths=resource_paths,
                 ),
                 context=path,
-            )
-            has_orthogroup_metadata |= (
-                any(
-                    str(value).strip().lower() not in {"", "nan"}
-                    for value in table.get("orthogroup_id", ())
-                )
-                or "orthogroup" in set(table.get("group_kind", ()))
             )
             if schema >= 2:
                 query_index = _non_negative_index(
@@ -3159,12 +3150,6 @@ def _decode_comparisons(
             raise CanonicalRequestDecodingError(
                 f"Unsupported comparison kind at {path}: {kind!r}."
             )
-    if (
-        result.get("protein_blastp_mode") != "orthogroup"
-        and not has_orthogroup_metadata
-        and not result.get("orthogroups")
-    ):
-        result.pop("align_orthogroup_feature", None)
     if blast_files:
         result["blast_files"] = tuple(blast_files)
     if protein_tables:
@@ -3205,12 +3190,7 @@ def _decode_pipeline(
     settings = _object(item["settings"], path=f"{path}.settings")
     setting_fields = tuple(name for name in _PIPELINE_FIELDS if name != "protein_blastp_mode")
     field_map = {_camel(name): name for name in setting_fields}
-    _require_exact_fields(
-        settings,
-        path=f"{path}.settings",
-        required=set() if schema == CANONICAL_REQUEST_SCHEMA else set(field_map),
-        optional=set(field_map) if schema == CANONICAL_REQUEST_SCHEMA else set(),
-    )
+    _require_exact_fields(settings, path=f"{path}.settings", required=set(field_map))
     mode = item["mode"]
     result = {"protein_blastp_mode": mode}
     legacy_max_paralog_links: int | None = None
@@ -3241,8 +3221,6 @@ def _decode_pipeline(
             tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
         )
     for key, name in field_map.items():
-        if key not in settings:
-            continue
         raw = settings[key]
         if name == "collinearity_params":
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
@@ -3256,88 +3234,12 @@ def _decode_pipeline(
     if (
         mode == "collinear"
         and legacy_max_paralog_links is not None
-        and result.get("collinear_max_paralog_links_per_orthogroup", 2) == 2
+        and result["collinear_max_paralog_links_per_orthogroup"] == 2
     ):
         result["collinear_max_paralog_links_per_orthogroup"] = (
             legacy_max_paralog_links
         )
     return result
-
-
-def decode_canonical_protein_comparison_intent(
-    comparison: Mapping[str, Any],
-    *,
-    diagram_options: Mapping[str, Any] | None = None,
-) -> LinearDiagramOptions:
-    """Decode the canonical generated-protein fields used by a Worker helper."""
-
-    canonical_comparison = _object(
-        comparison,
-        path="generatedProteinComparison",
-    )
-    mode = canonical_comparison.get("mode")
-    common_fields = {"proteinBlastpCandidateLimit"}
-    mode_fields = {
-        "pairwise": {"proteinBlastpMaxHits"},
-        "orthogroup": {
-            "orthogroupMembershipMode",
-            "orthogroupMemberMaxHits",
-            "collinearMaxParalogLinksPerOrthogroup",
-        },
-        "collinear": {
-            "orthogroupMembershipMode",
-            "orthogroupMemberMaxHits",
-            "collinearMaxParalogLinksPerOrthogroup",
-            "collinearityParams",
-            "collinearityUnitMode",
-            "collinearityAnchorMode",
-            "collinearitySearchScope",
-            "collinearityColorMode",
-        },
-    }
-    active_fields = common_fields | mode_fields.get(str(mode), set())
-    raw_settings = _object(
-        canonical_comparison.get("settings"),
-        path="generatedProteinComparison.settings",
-    )
-    active_comparison = {
-        **canonical_comparison,
-        "settings": {
-            key: value
-            for key, value in raw_settings.items()
-            if key in active_fields
-        },
-    }
-    decoded = _decode_pipeline(
-        active_comparison,
-        path="generatedProteinComparison",
-        schema=CANONICAL_REQUEST_SCHEMA,
-    )
-    canonical_options = (
-        _object(diagram_options, path="diagramOptions")
-        if diagram_options is not None
-        else {}
-    )
-    option_fields = {
-        "evalue": "evalue",
-        "bitscore": "bitscore",
-        "identity": "identity",
-        "alignmentLength": "alignment_length",
-    }
-    _require_exact_fields(
-        canonical_options,
-        path="diagramOptions",
-        required=set(),
-        optional=set(option_fields),
-    )
-    decoded.update(
-        {
-            name: canonical_options[key]
-            for key, name in option_fields.items()
-            if key in canonical_options
-        }
-    )
-    return resolve_linear_diagram_options(LinearDiagramOptions(**decoded))
 
 
 def _decode_collinearity_params(
@@ -3348,11 +3250,8 @@ def _decode_collinearity_params(
 ) -> tuple[LosslessCollinearityParameters | None, int | None]:
     if value is None:
         return None, None
-    required = {"kind", "parameters"} if allow_standard else {"parameters"}
-    payload = _object(value, path=path, required=required, exact=allow_standard)
-    if not allow_standard:
-        _require_exact_fields(payload, path=path, required=required, optional={"kind"})
-    kind = payload.get("kind", "lossless")
+    payload = _object(value, path=path, required={"kind", "parameters"})
+    kind = payload["kind"]
     supported_kinds = {"standard", "lossless"} if allow_standard else {"lossless"}
     if kind not in supported_kinds:
         raise CanonicalRequestDecodingError(
@@ -3365,20 +3264,10 @@ def _decode_collinearity_params(
     )
     parameters = _object(payload["parameters"], path=f"{path}.parameters")
     field_map = {_camel(item.name): item.name for item in fields(cls)}
-    allow_omission = kind == "lossless" and not allow_standard
     _require_exact_fields(
-        parameters,
-        path=f"{path}.parameters",
-        required=set() if allow_omission else set(field_map),
-        optional=set(field_map) if allow_omission else set(),
+        parameters, path=f"{path}.parameters", required=set(field_map)
     )
-    result = cls(
-        **{
-            name: parameters[key]
-            for key, name in field_map.items()
-            if key in parameters
-        }
-    )
+    result = cls(**{name: parameters[key] for key, name in field_map.items()})
     _validate_dataclass_contract(result, path=path, error="decode")
     result.validate()
     if isinstance(result, _LegacyStandardCollinearityPayload):

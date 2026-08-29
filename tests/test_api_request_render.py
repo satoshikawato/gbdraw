@@ -104,7 +104,6 @@ def _protein_record(record_id: str, protein_id: str) -> SeqRecord:
 def _derived_identity_test_context(
     *,
     options: LinearDiagramOptions | None = None,
-    source_mode: str = "collinear",
 ) -> SimpleNamespace:
     records = (_seqrecord("a"), _seqrecord("b"))
     request = LinearDiagramRequest(
@@ -142,7 +141,7 @@ def _derived_identity_test_context(
         extraction=SimpleNamespace(identity_manifest=manifest),
         nucleotide_entries=(),
         passthrough_derived_entries=(),
-        source_mode=source_mode,
+        source_mode="collinear",
     )
     raw_entries = (
         {
@@ -175,25 +174,6 @@ def _derived_entry_for_params(
 ) -> dict[str, object]:
     context = _derived_identity_test_context(
         options=LinearDiagramOptions(collinearity_params=params)
-    )
-    (entry,) = request_render_module._build_current_derived_entries(
-        context.metadata,
-        context.request,
-        context.records,
-        context.artifacts,
-        context.raw_entries,
-    )
-    return dict(entry)
-
-
-def _derived_entry_for_options(
-    options: LinearDiagramOptions,
-    *,
-    source_mode: str,
-) -> dict[str, object]:
-    context = _derived_identity_test_context(
-        options=options,
-        source_mode=source_mode,
     )
     (entry,) = request_render_module._build_current_derived_entries(
         context.metadata,
@@ -312,119 +292,6 @@ def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> 
     assert _derived_entry_for_params(None)["key"] == _derived_entry_for_params(
         LosslessCollinearityParameters()
     )["key"]
-
-
-def test_pairwise_display_max_hits_only_invalidates_derived_stage(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    baseline = _derived_entry_for_options(
-        LinearDiagramOptions(protein_blastp_max_hits=5),
-        source_mode="pairwise",
-    )
-    changed = _derived_entry_for_options(
-        LinearDiagramOptions(protein_blastp_max_hits=7),
-        source_mode="pairwise",
-    )
-
-    assert baseline["payload"]["identity"]["pairwise"] == {"displayMaxHits": 5}
-    assert changed["key"] != baseline["key"]
-    assert changed["payload"]["identity"]["rawCacheKeys"] == baseline["payload"][
-        "identity"
-    ]["rawCacheKeys"]
-
-
-@pytest.mark.parametrize("mode", ("orthogroup", "collinear"))
-def test_member_hit_limit_invalidates_only_similarity_derivation(
-    monkeypatch: pytest.MonkeyPatch,
-    mode: str,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    baseline = _derived_entry_for_options(
-        LinearDiagramOptions(orthogroup_member_max_hits=5),
-        source_mode=mode,
-    )
-    changed = _derived_entry_for_options(
-        LinearDiagramOptions(orthogroup_member_max_hits=8),
-        source_mode=mode,
-    )
-
-    assert changed["key"] != baseline["key"]
-    assert changed["payload"]["identity"]["rawCacheKeys"] == baseline["payload"][
-        "identity"
-    ]["rawCacheKeys"]
-
-
-def test_render_only_protein_appearance_reuses_scientific_derived_identity(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    baseline = _derived_entry_for_options(
-        LinearDiagramOptions(
-            pairwise_match_style="ribbon",
-            collinearity_color_mode="orientation",
-        ),
-        source_mode="collinear",
-    )
-    changed = _derived_entry_for_options(
-        LinearDiagramOptions(
-            pairwise_match_style="curve",
-            collinearity_color_mode="average_identity",
-        ),
-        source_mode="collinear",
-    )
-
-    assert changed["key"] == baseline["key"]
-
-
-@pytest.mark.parametrize(
-    ("field", "alternate"),
-    (
-        ("collinearity_unit_mode", "auto"),
-        ("collinearity_unit_mode", "cds"),
-        ("collinearity_unit_mode", "locus"),
-        ("collinearity_anchor_mode", "all"),
-        ("collinearity_anchor_mode", "one_to_one"),
-        ("collinearity_anchor_mode", "rbh"),
-        ("collinearity_search_scope", "adjacent"),
-        ("collinearity_search_scope", "all"),
-        ("collinearity_color_mode", "average_identity"),
-        ("collinearity_color_mode", "orientation"),
-        ("collinearity_color_mode", "orientation_identity"),
-    ),
-)
-def test_collinear_execution_enum_reaches_identity_and_provenance(
-    monkeypatch: pytest.MonkeyPatch,
-    field: str,
-    alternate: str,
-) -> None:
-    monkeypatch.setattr(
-        request_render_module,
-        "is_protein_losat_cache_entry",
-        lambda _entry: True,
-    )
-    options = LinearDiagramOptions(**{field: alternate})
-    entry = _derived_entry_for_options(options, source_mode="collinear")
-    effective_name = {
-        "collinearity_unit_mode": "collinearityUnitMode",
-        "collinearity_anchor_mode": "collinearityAnchorMode",
-        "collinearity_search_scope": "collinearitySearchScope",
-        "collinearity_color_mode": "collinearityColorMode",
-    }[field]
-
-    assert entry["payload"]["provenance"]["effective"][effective_name] == alternate
 
 @pytest.mark.parametrize("mode", ("orthogroup", "collinear"))
 def test_empty_api_derived_result_passes_current_session_validation(

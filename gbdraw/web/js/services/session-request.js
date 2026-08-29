@@ -77,6 +77,11 @@ import {
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  normalizeCollinearAnchorMode,
+  normalizeCollinearSearchScope,
+  normalizeOrthogroupMembershipMode
+} from '../app/losat-normalization.js';
+import {
   canonicalComparisonResourceKind,
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
@@ -1202,105 +1207,70 @@ const buildTrackPlan = ({
 
 const generatedProteinSettings = (state, baseline = {}) => {
   const blastp = state.losat.blastp || {};
-  const settings = { ...baseline };
-  const assignPresent = (target, key, source, sourceKey) => {
-    if (!Object.prototype.hasOwnProperty.call(source, sourceKey)) return;
-    const value = source[sourceKey];
-    if (value === undefined || value === '') return;
-    target[key] = value;
+  const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
+  const nonNegativeInteger = (value, fallback) => {
+    const numeric = optionalNumber(value);
+    return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
   };
-  const baselineCollinearity = baseline.collinearityParams;
-  const collinearityParams = (
-    baselineCollinearity &&
-    typeof baselineCollinearity === 'object' &&
-    !Array.isArray(baselineCollinearity)
-  ) ? { ...baselineCollinearity } : null;
-  const parameters = (
-    collinearityParams?.parameters &&
-    typeof collinearityParams.parameters === 'object' &&
-    !Array.isArray(collinearityParams.parameters)
-  ) ? { ...collinearityParams.parameters } : {};
-  assignPresent(parameters, 'minAnchors', blastp, 'collinearMinAnchors');
-  assignPresent(parameters, 'maxUnitGap', blastp, 'collinearMaxUnitGap');
-  assignPresent(parameters, 'maxDiagonalDrift', blastp, 'collinearMaxDiagonalDrift');
-  assignPresent(parameters, 'maxConflicts', blastp, 'collinearMaxConflictsInMergeGap');
-  if (Object.keys(parameters).length > 0) {
-    settings.collinearityParams = {
-      ...(collinearityParams || {}),
-      parameters
-    };
-  }
-  assignPresent(settings, 'collinearityUnitMode', blastp, 'collinearUnitMode');
-  assignPresent(settings, 'collinearityAnchorMode', blastp, 'collinearAnchorMode');
-  assignPresent(settings, 'collinearitySearchScope', blastp, 'collinearSearchScope');
-  assignPresent(settings, 'collinearityColorMode', blastp, 'collinearColorMode');
-  assignPresent(settings, 'proteinBlastpMaxHits', blastp, 'maxHits');
-  assignPresent(settings, 'proteinBlastpCandidateLimit', blastp, 'candidateLimit');
-  assignPresent(settings, 'orthogroupMembershipMode', blastp, 'orthogroupMembershipMode');
-  assignPresent(settings, 'orthogroupMemberMaxHits', blastp, 'orthogroupMemberMaxHits');
-  assignPresent(
-    settings,
-    'collinearMaxParalogLinksPerOrthogroup',
-    blastp,
-    'collinearMaxParalogLinksPerOrthogroup'
-  );
-  const alignmentFeature = state.selectedOrthogroupAlignmentFeature?.value;
-  if (alignmentFeature !== undefined && alignmentFeature !== '') {
-    settings.alignOrthogroupFeature = alignmentFeature;
-  }
-  return settings;
-};
-
-const generatedProteinComparisonDescriptor = ({
-  state,
-  mode,
-  edges,
-  baselineSettings = {}
-}) => ({
-  kind: 'generatedProteinComparison',
-  mode,
-  pairs: mode === 'pairwise'
-    ? edges.map((edge) => ({
-        queryRecordIndex: edge.queryIndex,
-        subjectRecordIndex: edge.subjectIndex
-      }))
-    : [],
-  settings: generatedProteinSettings(state, baselineSettings)
-});
-
-export const buildCanonicalProteinAnalysisIntent = ({
-  state,
-  comparisonPlanSnapshot
-}) => {
-  const snapshot = requireLinearComparisonPlanSnapshot(comparisonPlanSnapshot);
-  const edges = orderedComparisonPlanEdges(snapshot).filter(
-    (edge) => edge.source === 'losat'
-  );
-  if (
-    edges.length === 0 ||
-    snapshot.hasLosatIntent !== true ||
-    state.losatProgram?.value !== 'blastp'
-  ) {
-    throw new Error('A current protein comparison plan is required.');
-  }
-  const mode = state.losat?.blastp?.mode;
-  if (!mode) throw new Error('Protein comparison mode is required.');
-  const diagramOptions = {};
-  const assignPresent = (key, value) => {
-    if (value === undefined || value === '') return;
-    diagramOptions[key] = Number(value);
-  };
-  assignPresent('bitscore', state.adv?.min_bitscore);
-  assignPresent('evalue', state.adv?.evalue);
-  assignPresent('identity', state.adv?.identity);
-  assignPresent('alignmentLength', state.adv?.alignment_length);
+  const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
+  const collinearityUnitMode = ['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
+    ? rawCollinearityUnitMode
+    : 'auto';
+  const rawCollinearityColorMode = String(
+    blastp.collinearColorMode || ''
+  ).trim().toLowerCase().replace(/-/g, '_');
+  const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
+    ? 'average_identity'
+    : rawCollinearityColorMode;
+  const collinearityColorMode = [
+    'average_identity',
+    'orientation',
+    'orientation_identity'
+  ].includes(resolvedCollinearityColorMode)
+    ? resolvedCollinearityColorMode
+    : 'orientation';
+  const baselineCollinearity = baseline.collinearityParams &&
+    typeof baseline.collinearityParams === 'object' &&
+    !Array.isArray(baseline.collinearityParams)
+    ? baseline.collinearityParams
+    : {};
+  const baselineParameters = baselineCollinearity.parameters &&
+    typeof baselineCollinearity.parameters === 'object' &&
+    !Array.isArray(baselineCollinearity.parameters)
+    ? baselineCollinearity.parameters
+    : {};
   return {
-    generatedProteinComparison: generatedProteinComparisonDescriptor({
-      state,
-      mode,
-      edges
-    }),
-    diagramOptions
+    ...baseline,
+    collinearityParams: {
+      ...baselineCollinearity,
+      kind: baselineCollinearity.kind || 'lossless',
+      parameters: {
+        ...baselineParameters,
+        minAnchors: positiveInteger(blastp.collinearMinAnchors, 1),
+        maxUnitGap: nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
+        maxDiagonalDrift: nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
+        maxConflicts: nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
+        mergeOrientation: baselineParameters.mergeOrientation || 'either'
+      }
+    },
+    collinearityUnitMode,
+    collinearityAnchorMode: normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+    collinearitySearchScope: normalizeCollinearSearchScope(blastp.collinearSearchScope),
+    collinearityColorMode,
+    losatpBin: baseline.losatpBin || 'losat',
+    ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
+    losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
+    proteinBlastpMaxHits: positiveInteger(blastp.maxHits, 5),
+    proteinBlastpCandidateLimit:
+      baseline.proteinBlastpCandidateLimit ?? optionalPositiveInteger(blastp.candidateLimit),
+    orthogroupMembershipMode: normalizeOrthogroupMembershipMode(
+      blastp.orthogroupMembershipMode
+    ),
+    orthogroupMemberMaxHits: positiveInteger(blastp.orthogroupMemberMaxHits, 5),
+    collinearMaxParalogLinksPerOrthogroup:
+      positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
+    alignOrthogroupFeature:
+      String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
   };
 };
 
@@ -1617,7 +1587,7 @@ const buildComparisons = ({
   const selectedPairwiseLosat = (
     snapshot.mode === 'selected' &&
     activeProteinPipeline &&
-    state.losat?.blastp?.mode === 'pairwise'
+    String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'pairwise'
   );
   const shouldEmitResolvedProteinMarker = (
     activeProteinPipeline &&
@@ -1641,16 +1611,21 @@ const buildComparisons = ({
       ? 'none'
       : selectedPairwiseLosat
         ? 'pairwise'
-        : state.losat?.blastp?.mode ?? persistedGeneratedComparison?.mode;
-    if (!mode) {
-      throw new Error('Protein comparison mode is required.');
-    }
-    comparisons.push(generatedProteinComparisonDescriptor({
-      state,
+        : String(state.losat?.blastp?.mode || persistedGeneratedComparison?.mode || 'orthogroup');
+    comparisons.push({
+      kind: 'generatedProteinComparison',
       mode,
-      edges: activeLosatEdges,
-      baselineSettings: persistedGeneratedComparison?.settings || {}
-    }));
+      pairs: mode === 'pairwise'
+        ? activeLosatEdges.map((edge) => ({
+            queryRecordIndex: edge.queryIndex,
+            subjectRecordIndex: edge.subjectIndex
+          }))
+        : [],
+      settings: generatedProteinSettings(
+        state,
+        persistedGeneratedComparison?.settings || {}
+      )
+    });
   }
   return comparisons;
 };
