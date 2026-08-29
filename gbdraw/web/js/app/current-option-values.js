@@ -83,6 +83,92 @@ export const requireCurrentProteinBlastpCandidateLimit = (value) => {
   return numeric;
 };
 
+const requireCurrentInteger = (value, fallback, minimum, label) => {
+  if (value === null || value === undefined || value === '') return fallback;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < minimum) {
+    const domain = minimum === 0 ? 'a non-negative integer' : 'a positive integer';
+    throw new Error(`${label} must be ${domain}.`);
+  }
+  return numeric;
+};
+
+export const requireCurrentProteinBlastpMaxHits = (value) => (
+  requireCurrentInteger(value, 5, 1, 'Protein BLASTP Pairwise max hits')
+);
+
+export const requireCurrentOrthogroupMemberMaxHits = (value) => (
+  requireCurrentInteger(value, 5, 1, 'Protein BLASTP member hits per protein')
+);
+
+export const requireCurrentCollinearMinAnchors = (value) => (
+  requireCurrentInteger(value, 1, 1, 'Collinear minimum anchors')
+);
+
+export const requireCurrentCollinearMaxUnitGap = (value) => (
+  requireCurrentInteger(value, 0, 0, 'Collinear maximum unit gap')
+);
+
+export const requireCurrentCollinearMaxDiagonalDrift = (value) => (
+  requireCurrentInteger(value, 0, 0, 'Collinear maximum diagonal drift')
+);
+
+export const requireCurrentCollinearMaxConflicts = (value) => (
+  requireCurrentInteger(value, 1, 0, 'Collinear maximum conflicts in merge gap')
+);
+
+export const requireCurrentCollinearMaxParalogLinks = (value) => (
+  requireCurrentInteger(value, 2, 1, 'Collinear maximum paralog links per orthogroup')
+);
+
+export const requireCurrentCollinearUnitMode = (value) => (
+  requireCurrentValue(
+    value,
+    'auto',
+    ['auto', 'cds', 'locus'],
+    'Collinear unit mode'
+  )
+);
+
+export const requireCurrentCollinearAnchorMode = (value) => (
+  requireCurrentValue(
+    value,
+    'rbh',
+    ['all', 'one_to_one', 'rbh'],
+    'Collinear anchor mode'
+  )
+);
+
+export const requireCurrentCollinearMergeOrientation = (value) => (
+  requireCurrentValue(
+    value,
+    'either',
+    ['strand', 'order', 'either'],
+    'Collinear merge orientation'
+  )
+);
+
+export const requireCurrentCollinearColorMode = (value) => {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/-/g, '_');
+  const resolved = normalized === 'identity' ? 'average_identity' : normalized;
+  if (!resolved) return 'orientation';
+  if (!['average_identity', 'orientation', 'orientation_identity'].includes(resolved)) {
+    throw new Error(
+      'Collinear color mode must be one of: average_identity, orientation, orientation_identity.'
+    );
+  }
+  return resolved;
+};
+
+export const requireCurrentOrthogroupMembershipMode = (value) => (
+  requireCurrentValue(
+    value,
+    'anchor_core_v1',
+    ['anchor_core_v1'],
+    'Protein BLASTP orthogroup membership mode'
+  )
+);
+
 export const migratePersistedCircularMultiRecordSizeMode = (value) => {
   const normalized = normalizedValue(value, 'auto');
   return requireCurrentCircularMultiRecordSizeMode(

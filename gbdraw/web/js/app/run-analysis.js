@@ -42,9 +42,7 @@ import {
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
-  normalizeCollinearAnchorMode,
-  normalizeCollinearSearchScope,
-  normalizeOrthogroupMembershipMode
+  normalizeCollinearSearchScope
 } from './losat-normalization.js';
 import { buildRunInfo } from './run-info.js';
 import {
@@ -70,10 +68,22 @@ import {
 } from './plot-title-position.js';
 import {
   requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentCollinearAnchorMode,
+  requireCurrentCollinearColorMode,
+  requireCurrentCollinearMaxConflicts,
+  requireCurrentCollinearMaxDiagonalDrift,
+  requireCurrentCollinearMaxParalogLinks,
+  requireCurrentCollinearMaxUnitGap,
+  requireCurrentCollinearMergeOrientation,
+  requireCurrentCollinearMinAnchors,
   requireCurrentCollinearSearchScope,
+  requireCurrentCollinearUnitMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
+  requireCurrentOrthogroupMemberMaxHits,
+  requireCurrentOrthogroupMembershipMode,
   requireCurrentProteinBlastpCandidateLimit,
+  requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode
 } from './current-option-values.js';
 import {
@@ -288,6 +298,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   collinearUnitMode,
   collinearColorMode,
   collinearAnchorMode,
+  collinearMergeOrientation,
   collinearMaxDiagonalDrift,
   collinearMaxConflictsInMergeGap,
   collinearMaxParalogLinksPerOrthogroup,
@@ -296,55 +307,67 @@ export const buildLosatDerivedPayloadCachePayload = ({
   orthogroupMemberMaxHits,
   recordPayloads,
   pairPayloads
-}) => ({
-  cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
-  idEncoding: 'runtime-handle-v1',
-  converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
-  featureIdentity: 'stable-source-rendered-display-v1',
-  mode: String(mode || 'pairwise'),
-  maxHits: Number(maxHits) || 5,
-  thresholds: {
-    bitscore: String(bitscore),
-    evalue: String(evalue),
-    identity: String(identity),
-    alignmentLength: String(alignmentLength)
-  },
-  orthogroup: {
-    membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
-    memberMaxHits: Number(orthogroupMemberMaxHits) || 5
-  },
-  collinear: {
-    minAnchors: String(collinearMinAnchors),
-    // Persisted LOSAT derived-cache schema 3 uses this historical identity key.
-    maxGeneGap: String(collinearMaxUnitGap),
-    unitMode: String(collinearUnitMode || 'auto'),
-    colorMode: String(collinearColorMode || 'orientation'),
-    anchorMode: String(collinearAnchorMode || 'rbh'),
-    maxDiagonalDrift: String(collinearMaxDiagonalDrift),
-    maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
-    maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
-    searchScope: String(collinearSearchScope || 'adjacent')
-  },
-  records: (Array.isArray(recordPayloads) ? recordPayloads : [])
-    .map((record) => ({
-      recordIndex: Number(record?.recordIndex),
-      proteinCacheKey: String(record?.proteinCacheKey || ''),
-      runtimeBindingHash: String(record?.runtimeBindingHash || ''),
-      displayBindingHash: String(record?.displayBindingHash || ''),
-      viewTransform: {
-        length: Number(record?.viewTransform?.length || 0),
-        reverse: Boolean(record?.viewTransform?.reverse)
-      }
-    }))
-    .sort((left, right) => left.recordIndex - right.recordIndex),
-  pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
-    .map((pair) => ({
-      pairIndex: Number(pair?.pairIndex),
-      queryIndex: Number(pair?.queryIndex),
-      subjectIndex: Number(pair?.subjectIndex),
-      cacheKey: String(pair?.cacheKey || '')
-    }))
-});
+}) => {
+  const normalizedMode = String(mode || 'pairwise');
+  const payload = {
+    cacheSchema: LOSAT_DERIVED_CACHE_SCHEMA,
+    semantics: 'derived-option-conformance-v1',
+    idEncoding: 'runtime-handle-v1',
+    converter: 'convert_losatp_blastp_pairs_to_genomic_payload',
+    featureIdentity: 'stable-source-rendered-display-v1',
+    mode: normalizedMode,
+    thresholds: {
+      bitscore: String(bitscore),
+      evalue: String(evalue),
+      identity: String(identity),
+      alignmentLength: String(alignmentLength)
+    },
+    records: (Array.isArray(recordPayloads) ? recordPayloads : [])
+      .map((record) => ({
+        recordIndex: Number(record?.recordIndex),
+        proteinCacheKey: String(record?.proteinCacheKey || ''),
+        runtimeBindingHash: String(record?.runtimeBindingHash || ''),
+        displayBindingHash: String(record?.displayBindingHash || ''),
+        viewTransform: {
+          length: Number(record?.viewTransform?.length || 0),
+          reverse: Boolean(record?.viewTransform?.reverse)
+        }
+      }))
+      .sort((left, right) => left.recordIndex - right.recordIndex),
+    pairs: (Array.isArray(pairPayloads) ? pairPayloads : [])
+      .map((pair) => ({
+        pairIndex: Number(pair?.pairIndex),
+        queryIndex: Number(pair?.queryIndex),
+        subjectIndex: Number(pair?.subjectIndex),
+        cacheKey: String(pair?.cacheKey || '')
+      }))
+  };
+  if (normalizedMode === 'pairwise') {
+    payload.pairwise = { maxHits: Number(maxHits) || 5 };
+  }
+  if (['orthogroup', 'collinear'].includes(normalizedMode)) {
+    payload.orthogroup = {
+      membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
+      memberMaxHits: Number(orthogroupMemberMaxHits) || 5
+    };
+  }
+  if (normalizedMode === 'collinear') {
+    payload.collinear = {
+      minAnchors: String(collinearMinAnchors),
+      // Persisted LOSAT derived-cache schema 3 uses this historical identity key.
+      maxGeneGap: String(collinearMaxUnitGap),
+      unitMode: String(collinearUnitMode || 'auto'),
+      colorMode: String(collinearColorMode || 'orientation'),
+      anchorMode: String(collinearAnchorMode || 'rbh'),
+      mergeOrientation: String(collinearMergeOrientation || 'either'),
+      maxDiagonalDrift: String(collinearMaxDiagonalDrift),
+      maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
+      maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
+      searchScope: String(collinearSearchScope || 'adjacent')
+    };
+  }
+  return payload;
+};
 
 const getLosatDerivedCacheEntry = (cacheMap, key, manifest) => {
   if (!cacheMap || !key) return null;
@@ -383,6 +406,90 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
 export const resolveProteinBlastpCandidateLimit = (candidateLimit) => (
   requireCurrentProteinBlastpCandidateLimit(candidateLimit)
 );
+
+const inferredResolvedProteinMode = (comparisons) => {
+  const values = Array.isArray(comparisons) ? comparisons : [];
+  if (values.some((comparison) => comparison?.kind === 'collinearityResult')) {
+    return 'collinear';
+  }
+  if (values.some((comparison) => comparison?.kind === 'orthogroupResult')) {
+    return 'orthogroup';
+  }
+  if (values.some((comparison) => comparison?.kind === 'precomputedProteinComparison')) {
+    return 'pairwise';
+  }
+  return '';
+};
+
+const sameNumber = (left, right) => Number(left) === Number(right);
+
+const canReuseResolvedProteinArtifacts = ({
+  canonicalComparisons,
+  committedRequest,
+  active
+}) => {
+  const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
+  const committed = Array.isArray(committedRequest?.comparisons)
+    ? committedRequest.comparisons
+    : [];
+  const persistedMarker = persisted.find((comparison) => (
+    comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+  ));
+  const committedMarker = committed.find((comparison) => (
+    comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+  ));
+  if (!persistedMarker || !committedMarker || !active) return false;
+
+  const persistedMode = inferredResolvedProteinMode(persisted);
+  const committedMode = inferredResolvedProteinMode(committed);
+  if (!persistedMode || persistedMode !== committedMode || committedMode !== active.mode) {
+    return false;
+  }
+
+  const settings = committedMarker.settings || {};
+  const filters = committedRequest.diagramOptions || {};
+  if (
+    !sameNumber(filters.bitscore ?? DEFAULT_LINEAR_BLAST_FILTERS.bitscore, active.bitscore)
+    || !sameNumber(filters.evalue ?? DEFAULT_LINEAR_BLAST_FILTERS.evalue, active.evalue)
+    || !sameNumber(filters.identity ?? DEFAULT_LINEAR_BLAST_FILTERS.identity, active.identity)
+    || !sameNumber(
+      filters.alignmentLength ?? DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
+      active.alignmentLength
+    )
+    || (settings.proteinBlastpCandidateLimit ?? null) !== active.candidateLimit
+  ) {
+    return false;
+  }
+
+  if (active.mode === 'pairwise') {
+    return sameNumber(settings.proteinBlastpMaxHits ?? 5, active.maxHits);
+  }
+  if (
+    String(settings.orthogroupMembershipMode || 'anchor_core_v1')
+      !== active.orthogroupMembershipMode
+    || !sameNumber(settings.orthogroupMemberMaxHits ?? 5, active.memberMaxHits)
+  ) {
+    return false;
+  }
+  if (active.mode === 'orthogroup') return true;
+
+  const parameters = settings.collinearityParams?.parameters || {};
+  return (
+    sameNumber(parameters.minAnchors ?? 1, active.minAnchors)
+    && sameNumber(parameters.maxUnitGap ?? 0, active.maxUnitGap)
+    && sameNumber(parameters.maxDiagonalDrift ?? 0, active.maxDiagonalDrift)
+    && sameNumber(parameters.maxConflicts ?? 1, active.maxConflicts)
+    && String(parameters.mergeOrientation || 'either') === active.mergeOrientation
+    && String(settings.collinearityUnitMode || 'auto') === active.unitMode
+    && String(settings.collinearityAnchorMode || 'rbh') === active.anchorMode
+    && String(settings.collinearitySearchScope || 'adjacent') === active.searchScope
+    && String(settings.collinearityColorMode || 'orientation') === active.colorMode
+    && sameNumber(
+      settings.collinearMaxParalogLinksPerOrthogroup ?? 2,
+      active.maxParalogLinks
+    )
+  );
+};
 
 const stripRuntimeCacheStats = (payload) => {
   const cloned = cloneJsonData(payload);
@@ -807,6 +914,7 @@ export const createRunAnalysis = ({
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
+  getCommittedCanonicalRenderRequest = null,
   captureGeneratedArtifactHandle,
   restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity = null,
@@ -2543,13 +2651,6 @@ export const createRunAnalysis = ({
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
         const useProteinBlastp = hasLosatIntent && losatProgram.value === 'blastp';
-        const reuseResolvedProteinArtifacts = useProteinBlastp
-          && !legacyProteinRawCandidates.value?.entries?.length
-          && files.linearCanonicalComparisons?.some((comparison) => (
-            comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
-          ));
-        const useLosat = hasLosatIntent && !reuseResolvedProteinArtifacts;
-        if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
         const blastpMode = useProteinBlastp
           ? requireCurrentProteinBlastpMode(losat.blastp?.mode)
           : String(losat.blastp?.mode ?? '');
@@ -2575,78 +2676,91 @@ export const createRunAnalysis = ({
         }
 
         const blastpMaxHits = usePairwiseBlastp
-          ? Math.max(1, normalizeBlastThresholdNumber(losat.blastp?.maxHits, 5, { integer: true }))
+          ? requireCurrentProteinBlastpMaxHits(losat.blastp?.maxHits)
           : 5;
         const blastpCandidateLimit = useProteinBlastp
           ? resolveProteinBlastpCandidateLimit(losat.blastp?.candidateLimit)
           : null;
-        const orthogroupMembershipMode = useOrthogroupBlastp
-          ? normalizeOrthogroupMembershipMode(losat.blastp?.orthogroupMembershipMode)
+        const orthogroupMembershipMode = useOrthogroupBlastp || useCollinearBlastp
+          ? requireCurrentOrthogroupMembershipMode(
+              losat.blastp?.orthogroupMembershipMode
+            )
           : 'anchor_core_v1';
-        const orthogroupMemberMaxHits = useOrthogroupBlastp
-          ? Math.max(
-              1,
-              normalizeBlastThresholdNumber(losat.blastp?.orthogroupMemberMaxHits, 5, { integer: true })
+        const orthogroupMemberMaxHits = useOrthogroupBlastp || useCollinearBlastp
+          ? requireCurrentOrthogroupMemberMaxHits(
+              losat.blastp?.orthogroupMemberMaxHits
             )
           : 5;
         const collinearMinAnchors = useCollinearBlastp
-          ? Math.max(
-              1,
-              normalizeBlastThresholdNumber(losat.blastp?.collinearMinAnchors, 1, { integer: true })
-            )
+          ? requireCurrentCollinearMinAnchors(losat.blastp?.collinearMinAnchors)
           : 1;
         const collinearMaxUnitGap = useCollinearBlastp
-          ? Math.max(
-              0,
-              normalizeBlastThresholdNumber(losat.blastp?.collinearMaxUnitGap, 0, { integer: true })
-            )
+          ? requireCurrentCollinearMaxUnitGap(losat.blastp?.collinearMaxUnitGap)
           : 0;
         const collinearMaxDiagonalDrift = useCollinearBlastp
-          ? Math.max(
-              0,
-              normalizeBlastThresholdNumber(
-                losat.blastp?.collinearMaxDiagonalDrift,
-                0,
-                { integer: true }
-              )
+          ? requireCurrentCollinearMaxDiagonalDrift(
+              losat.blastp?.collinearMaxDiagonalDrift
             )
           : 0;
         const collinearMaxConflictsInMergeGap = useCollinearBlastp
-          ? Math.max(
-              0,
-              normalizeBlastThresholdNumber(
-                losat.blastp?.collinearMaxConflictsInMergeGap,
-                1,
-                { integer: true }
-              )
+          ? requireCurrentCollinearMaxConflicts(
+              losat.blastp?.collinearMaxConflictsInMergeGap
             )
           : 1;
         const collinearMaxParalogLinksPerOrthogroup = useCollinearBlastp
-          ? Math.max(
-              1,
-              normalizeBlastThresholdNumber(
-                losat.blastp?.collinearMaxParalogLinksPerOrthogroup,
-                2,
-                { integer: true }
-              )
+          ? requireCurrentCollinearMaxParalogLinks(
+              losat.blastp?.collinearMaxParalogLinksPerOrthogroup
             )
           : 2;
         const collinearColorMode = useCollinearBlastp
-          ? normalizeCollinearColorMode(losat.blastp?.collinearColorMode)
+          ? requireCurrentCollinearColorMode(losat.blastp?.collinearColorMode)
           : 'orientation';
-        const rawCollinearUnitMode = String(
-          losat.blastp?.collinearUnitMode || ''
-        ).trim().toLowerCase();
-        const collinearUnitMode = useCollinearBlastp &&
-          ['auto', 'cds', 'locus'].includes(rawCollinearUnitMode)
-          ? rawCollinearUnitMode
+        const collinearUnitMode = useCollinearBlastp
+          ? requireCurrentCollinearUnitMode(losat.blastp?.collinearUnitMode)
           : 'auto';
         const collinearAnchorMode = useCollinearBlastp
-          ? normalizeCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
+          ? requireCurrentCollinearAnchorMode(losat.blastp?.collinearAnchorMode)
           : 'rbh';
+        const collinearMergeOrientation = useCollinearBlastp
+          ? requireCurrentCollinearMergeOrientation(
+              losat.blastp?.collinearMergeOrientation
+            )
+          : 'either';
         const collinearSearchScope = useCollinearBlastp
           ? requireCurrentCollinearSearchScope(losat.blastp?.collinearSearchScope)
           : 'adjacent';
+
+        const reuseResolvedProteinArtifacts = useProteinBlastp
+          && !legacyProteinRawCandidates.value?.entries?.length
+          && canReuseResolvedProteinArtifacts({
+            canonicalComparisons: files.linearCanonicalComparisons,
+            committedRequest: typeof getCommittedCanonicalRenderRequest === 'function'
+              ? getCommittedCanonicalRenderRequest()
+              : null,
+            active: {
+              mode: blastpMode,
+              candidateLimit: blastpCandidateLimit,
+              bitscore: adv.min_bitscore,
+              evalue: adv.evalue,
+              identity: adv.identity,
+              alignmentLength: adv.alignment_length,
+              maxHits: blastpMaxHits,
+              orthogroupMembershipMode,
+              memberMaxHits: orthogroupMemberMaxHits,
+              minAnchors: collinearMinAnchors,
+              maxUnitGap: collinearMaxUnitGap,
+              maxDiagonalDrift: collinearMaxDiagonalDrift,
+              maxConflicts: collinearMaxConflictsInMergeGap,
+              maxParalogLinks: collinearMaxParalogLinksPerOrthogroup,
+              colorMode: collinearColorMode,
+              unitMode: collinearUnitMode,
+              anchorMode: collinearAnchorMode,
+              mergeOrientation: collinearMergeOrientation,
+              searchScope: collinearSearchScope
+            }
+          });
+        const useLosat = hasLosatIntent && !reuseResolvedProteinArtifacts;
+        if (useLosat) recordSessionLifecycleEvent('losat-cache-preparation-start');
 
         if (useProteinBlastp) {
           losat.blastp.mode = blastpMode;
@@ -2658,6 +2772,8 @@ export const createRunAnalysis = ({
           losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
           losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
         } else if (useCollinearBlastp) {
+          losat.blastp.orthogroupMembershipMode = orthogroupMembershipMode;
+          losat.blastp.orthogroupMemberMaxHits = orthogroupMemberMaxHits;
           losat.blastp.collinearMinAnchors = collinearMinAnchors;
           losat.blastp.collinearMaxUnitGap = collinearMaxUnitGap;
           losat.blastp.collinearMaxDiagonalDrift = collinearMaxDiagonalDrift;
@@ -2667,6 +2783,7 @@ export const createRunAnalysis = ({
           losat.blastp.collinearColorMode = collinearColorMode;
           losat.blastp.collinearUnitMode = collinearUnitMode;
           losat.blastp.collinearAnchorMode = collinearAnchorMode;
+          losat.blastp.collinearMergeOrientation = collinearMergeOrientation;
           losat.blastp.collinearSearchScope = collinearSearchScope;
         }
 
@@ -3632,9 +3749,10 @@ export const createRunAnalysis = ({
                 alignmentLength: adv.alignment_length,
                 collinearMinAnchors,
                 collinearMaxUnitGap,
-                collinearUnitMode: 'cds',
+                collinearUnitMode,
                 collinearColorMode,
-                collinearAnchorMode: 'rbh',
+                collinearAnchorMode,
+                collinearMergeOrientation,
                 collinearMaxDiagonalDrift,
                 collinearMaxConflictsInMergeGap,
                 collinearMaxParalogLinksPerOrthogroup,
@@ -3689,9 +3807,10 @@ export const createRunAnalysis = ({
                   alignmentLength: adv.alignment_length,
                   collinearMinAnchors,
                   collinearMaxUnitGap,
-                  collinearUnitMode: 'cds',
+                  collinearUnitMode,
                   collinearColorMode,
-                  collinearAnchorMode: 'rbh',
+                  collinearAnchorMode,
+                  collinearMergeOrientation,
                   collinearMaxDiagonalDrift,
                   collinearMaxConflictsInMergeGap,
                   collinearMaxParalogLinksPerOrthogroup,

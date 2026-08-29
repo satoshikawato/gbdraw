@@ -1943,6 +1943,14 @@ export const applyConfigData = (data) => {
       const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
       state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
       state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
+      const mergeOrientation = String(
+        state.losat.blastp?.collinearMergeOrientation || ''
+      ).trim().toLowerCase();
+      state.losat.blastp.collinearMergeOrientation = [
+        'strand',
+        'order',
+        'either'
+      ].includes(mergeOrientation) ? mergeOrientation : 'either';
       state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
     }
     delete state.losat.blastp.collinearBlockMergeGap;
@@ -2724,6 +2732,10 @@ export const adoptCanonicalRenderArtifacts = (
   }
   committedCanonicalSession = nextCommittedCanonicalSession;
 };
+
+export const getCommittedCanonicalRenderRequest = () => (
+  committedCanonicalSession?.renderRequest || null
+);
 
 const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.matchSequenceRegistry?.reset?.();

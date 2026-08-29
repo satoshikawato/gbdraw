@@ -72,10 +72,22 @@ import {
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentCollinearAnchorMode,
+  requireCurrentCollinearColorMode,
+  requireCurrentCollinearMaxConflicts,
+  requireCurrentCollinearMaxDiagonalDrift,
+  requireCurrentCollinearMaxParalogLinks,
+  requireCurrentCollinearMaxUnitGap,
+  requireCurrentCollinearMergeOrientation,
+  requireCurrentCollinearMinAnchors,
   requireCurrentCollinearSearchScope,
+  requireCurrentCollinearUnitMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
+  requireCurrentOrthogroupMemberMaxHits,
+  requireCurrentOrthogroupMembershipMode,
   requireCurrentProteinBlastpCandidateLimit,
+  requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
@@ -1217,22 +1229,26 @@ const generatedProteinSettings = (state, baseline = {}) => {
     return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
   };
   const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
-  const collinearityUnitMode = ['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
-    ? rawCollinearityUnitMode
-    : 'auto';
+  const collinearityUnitMode = blastpMode === 'collinear'
+    ? requireCurrentCollinearUnitMode(rawCollinearityUnitMode)
+    : (['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
+        ? rawCollinearityUnitMode
+        : 'auto');
   const rawCollinearityColorMode = String(
     blastp.collinearColorMode || ''
   ).trim().toLowerCase().replace(/-/g, '_');
   const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
     ? 'average_identity'
     : rawCollinearityColorMode;
-  const collinearityColorMode = [
-    'average_identity',
-    'orientation',
-    'orientation_identity'
-  ].includes(resolvedCollinearityColorMode)
-    ? resolvedCollinearityColorMode
-    : 'orientation';
+  const collinearityColorMode = blastpMode === 'collinear'
+    ? requireCurrentCollinearColorMode(resolvedCollinearityColorMode)
+    : ([
+        'average_identity',
+        'orientation',
+        'orientation_identity'
+      ].includes(resolvedCollinearityColorMode)
+        ? resolvedCollinearityColorMode
+        : 'orientation');
   const baselineCollinearity = baseline.collinearityParams &&
     typeof baseline.collinearityParams === 'object' &&
     !Array.isArray(baseline.collinearityParams)
@@ -1250,15 +1266,27 @@ const generatedProteinSettings = (state, baseline = {}) => {
       kind: baselineCollinearity.kind || 'lossless',
       parameters: {
         ...baselineParameters,
-        minAnchors: positiveInteger(blastp.collinearMinAnchors, 1),
-        maxUnitGap: nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
-        maxDiagonalDrift: nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
-        maxConflicts: nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
-        mergeOrientation: baselineParameters.mergeOrientation || 'either'
+        minAnchors: blastpMode === 'collinear'
+          ? requireCurrentCollinearMinAnchors(blastp.collinearMinAnchors)
+          : positiveInteger(blastp.collinearMinAnchors, 1),
+        maxUnitGap: blastpMode === 'collinear'
+          ? requireCurrentCollinearMaxUnitGap(blastp.collinearMaxUnitGap)
+          : nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
+        maxDiagonalDrift: blastpMode === 'collinear'
+          ? requireCurrentCollinearMaxDiagonalDrift(blastp.collinearMaxDiagonalDrift)
+          : nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
+        maxConflicts: blastpMode === 'collinear'
+          ? requireCurrentCollinearMaxConflicts(blastp.collinearMaxConflictsInMergeGap)
+          : nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
+        mergeOrientation: blastpMode === 'collinear'
+          ? requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation)
+          : (baselineParameters.mergeOrientation || 'either')
       }
     },
     collinearityUnitMode,
-    collinearityAnchorMode: normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+    collinearityAnchorMode: blastpMode === 'collinear'
+      ? requireCurrentCollinearAnchorMode(blastp.collinearAnchorMode)
+      : normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
     collinearitySearchScope: blastpMode === 'collinear'
       ? requireCurrentCollinearSearchScope(blastp.collinearSearchScope)
       : normalizeCollinearSearchScope(blastp.collinearSearchScope),
@@ -1266,16 +1294,24 @@ const generatedProteinSettings = (state, baseline = {}) => {
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
     losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
-    proteinBlastpMaxHits: positiveInteger(blastp.maxHits, 5),
+    proteinBlastpMaxHits: blastpMode === 'pairwise'
+      ? requireCurrentProteinBlastpMaxHits(blastp.maxHits)
+      : positiveInteger(blastp.maxHits, 5),
     proteinBlastpCandidateLimit: requireCurrentProteinBlastpCandidateLimit(
       blastp.candidateLimit
     ),
-    orthogroupMembershipMode: normalizeOrthogroupMembershipMode(
-      blastp.orthogroupMembershipMode
-    ),
-    orthogroupMemberMaxHits: positiveInteger(blastp.orthogroupMemberMaxHits, 5),
+    orthogroupMembershipMode: ['orthogroup', 'collinear'].includes(blastpMode)
+      ? requireCurrentOrthogroupMembershipMode(blastp.orthogroupMembershipMode)
+      : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
+    orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
+      ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
+      : positiveInteger(blastp.orthogroupMemberMaxHits, 5),
     collinearMaxParalogLinksPerOrthogroup:
-      positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
+      blastpMode === 'collinear'
+        ? requireCurrentCollinearMaxParalogLinks(
+            blastp.collinearMaxParalogLinksPerOrthogroup
+          )
+        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
     alignOrthogroupFeature:
       String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
   };
@@ -1441,8 +1477,13 @@ const buildComparisons = ({
   );
   const persistedMetadata = persistedCanonicalComparisons.filter((comparison) => (
     (
-      comparison?.kind === 'orthogroupResult' ||
-      comparison?.kind === 'collinearityResult'
+      (
+        comparison?.kind === 'orthogroupResult'
+        && String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'orthogroup'
+      ) || (
+        comparison?.kind === 'collinearityResult'
+        && String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'collinear'
+      )
     ) && activeProteinPipeline && comparison.canonicalInput !== true
   ));
   let hasResolvedProteinAnalysis = false;
@@ -2289,6 +2330,7 @@ const projectGeneratedProteinPipeline = (
           collinearColorMode: settings.collinearityColorMode,
           collinearUnitMode: settings.collinearityUnitMode,
           collinearAnchorMode: settings.collinearityAnchorMode,
+          collinearMergeOrientation: parameters.mergeOrientation,
           collinearSearchScope: settings.collinearitySearchScope
         }
       }

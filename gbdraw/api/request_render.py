@@ -1654,6 +1654,29 @@ def _collinearity_parameter_identity(
     return snapshot, effective
 
 
+def _effective_collinearity_unit_kinds(
+    result: CollinearityResult | None,
+) -> list[str]:
+    if result is None:
+        return []
+    anchors = [
+        anchor
+        for block in result.blocks
+        for anchor in block.anchors
+    ]
+    anchors.extend(result.unblocked_anchors)
+    return sorted(
+        {
+            str(unit_kind)
+            for anchor in anchors
+            for unit_kind in (
+                anchor.query_unit_kind,
+                anchor.subject_unit_kind,
+            )
+        }
+    )
+
+
 def _build_current_derived_entries(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
@@ -1697,13 +1720,9 @@ def _build_current_derived_entries(
             if str(entry.get("key") or "")
         }
     )
-    parameter_identity, effective_collinearity_params = (
-        _collinearity_parameter_identity(
-            request.options.collinearity_params
-        )
-    )
     identity = {
         "cacheSchema": 3,
+        "semantics": "derived-option-conformance-v1",
         "idEncoding": "runtime-handle-v1",
         "converter": "convert_losatp_blastp_pairs_to_genomic_payload",
         "mode": mode,
@@ -1712,7 +1731,6 @@ def _build_current_derived_entries(
         # displayed pair payloads below.  Bind the derived key to every raw
         # schema-4 entry available to that inference run.
         "rawCacheKeys": raw_cache_keys,
-        "maxHits": int(request.options.protein_blastp_max_hits),
         "thresholds": {
             "bitscore": str(request.options.bitscore),
             "evalue": str(request.options.evalue),
@@ -1722,17 +1740,6 @@ def _build_current_derived_entries(
         "orthogroup": {
             "membershipMode": str(request.options.orthogroup_membership_mode),
             "memberMaxHits": int(request.options.orthogroup_member_max_hits),
-        },
-        "collinear": {
-            **effective_collinearity_params,
-            "unitMode": str(request.options.collinearity_unit_mode),
-            "colorMode": str(request.options.collinearity_color_mode),
-            "anchorMode": str(request.options.collinearity_anchor_mode),
-            "searchScope": str(request.options.collinearity_search_scope),
-            "maxParalogLinksPerOrthogroup": int(
-                request.options.collinear_max_paralog_links_per_orthogroup
-            ),
-            "parameterIdentity": parameter_identity,
         },
         "records": [
             {
@@ -1780,6 +1787,23 @@ def _build_current_derived_entries(
             for pair in pair_payloads
         ],
     }
+    if mode == "collinear":
+        parameter_identity, effective_collinearity_params = (
+            _collinearity_parameter_identity(
+                request.options.collinearity_params
+            )
+        )
+        identity["collinear"] = {
+            **effective_collinearity_params,
+            "unitMode": str(request.options.collinearity_unit_mode),
+            "colorMode": str(request.options.collinearity_color_mode),
+            "anchorMode": str(request.options.collinearity_anchor_mode),
+            "searchScope": str(request.options.collinearity_search_scope),
+            "maxParalogLinksPerOrthogroup": int(
+                request.options.collinear_max_paralog_links_per_orthogroup
+            ),
+            "parameterIdentity": parameter_identity,
+        }
     key = hashlib.sha256(
         json.dumps(
             identity,
@@ -1797,6 +1821,33 @@ def _build_current_derived_entries(
         "mode": mode,
         "payload": {
             "identity": identity,
+            "provenance": {
+                "schema": 1,
+                "upstreamRawKeys": raw_cache_keys,
+                "thresholds": copy.deepcopy(identity["thresholds"]),
+                "orthogroup": copy.deepcopy(identity["orthogroup"]),
+                **(
+                    {
+                        "collinear": {
+                            **copy.deepcopy(identity["collinear"]),
+                            "unitMode": {
+                                "requested": str(
+                                    request.options.collinearity_unit_mode
+                                ),
+                                "effectiveKinds": (
+                                    _effective_collinearity_unit_kinds(
+                                        metadata.collinearity_result
+                                        if metadata is not None
+                                        else None
+                                    )
+                                ),
+                            },
+                        }
+                    }
+                    if mode == "collinear"
+                    else {}
+                ),
+            },
             "pairs": pair_payloads,
             "orthogroups": orthogroup_payload,
         },

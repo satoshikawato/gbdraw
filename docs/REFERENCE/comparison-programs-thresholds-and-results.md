@@ -40,9 +40,9 @@ then select the final LOSATP mode.
 
 Similarity groups always uses all-vs-all search evidence across the loaded
 records and does not read the Collinear evidence-scope field. For Collinear
-blocks, fresh state and **Reset Settings** use **All records**; an explicitly
-saved **Adjacent pairs** value is restored from a session. Search evidence and
-display topology are separate, so an all-vs-all search can still draw links
+blocks, fresh state and **Reset Settings** use **Adjacent pairs**. A saved
+**All records** value is restored from a session. Search evidence and display
+topology are separate, so all-record search evidence can still produce links
 only between adjacent display rows.
 
 ## Filters and direction
@@ -51,9 +51,11 @@ Display filters are e-value, bit score, identity, and alignment length. Values
 must be finite and non-negative; identity is limited to 0 through 100, and
 alignment length is an integer. Protein modes can also limit candidates or
 hits per query. Collinear mode adds anchor, unit-gap, diagonal-drift, scope,
-and conflict rules. `max_conflicts` limits how many retained singleton anchors
-may lie inside both order intervals when two compatible clusters merge. Those
-singleton anchors remain in the result.
+and conflict rules. Its unit mode is `auto`, `cds`, or `locus`; anchor mode is
+`all`, `one_to_one`, or `rbh`; and merge orientation is `strand`, `order`, or
+`either`. `max_conflicts` defaults to `1` and limits how many retained singleton
+anchors may lie inside both order intervals when two compatible clusters
+merge. Those singleton anchors remain in the result.
 
 Filters apply to display or derived results after raw search rows exist. A raw
 TSV can therefore contain more rows than the finished diagram. Record the
@@ -63,7 +65,11 @@ scheduling, and thread count when an exact result must be reproduced.
 LOSATP Pairwise search keeps at most one HSP for each query-subject protein
 combination in its raw result. The display-stage `max_hits` setting
 (`--protein_blastp_max_hits` on the command line) is a separate limit: it
-retains the strongest distinct subject proteins for each query protein.
+defaults to `5` and retains the strongest distinct subject proteins for each
+query protein after the display thresholds are applied. Similarity-group and
+Collinear construction use a separate member-hits limit, also `5` by default,
+for the directional rows considered during grouping. Changing either derived
+limit does not change raw search jobs or raw cache keys.
 
 Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
 `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`.

@@ -2208,31 +2208,9 @@ assert.deepEqual(
   ),
   [
     'precomputedProteinComparison',
-    'orthogroupResult',
-    'collinearityResult',
     'generatedProteinComparison'
-  ]
-);
-const rebuiltOrthogroups = resolvedWithFreshTable.renderRequest.comparisons.find(
-  (comparison) => comparison.kind === 'orthogroupResult'
-);
-const rebuiltCollinearity = resolvedWithFreshTable.renderRequest.comparisons.find(
-  (comparison) => comparison.kind === 'collinearityResult'
-);
-assert.equal(
-  Buffer.from(
-    resolvedWithFreshTable.resources[rebuiltOrthogroups.resourceId].data,
-    'base64'
-  ).toString('utf8'),
-  orthogroupResourceText
-);
-assert.equal(rebuiltCollinearity.valueKind, 'blocks');
-assert.equal(
-  Buffer.from(
-    resolvedWithFreshTable.resources[rebuiltCollinearity.resourceId].data,
-    'base64'
-  ).toString('utf8'),
-  collinearityResourceText
+  ],
+  'fresh Pairwise materialization must not retain resolved metadata from another mode'
 );
 const typedCanonicalFiles = structuredClone(resolvedWithMetadataProjection.files);
 typedCanonicalFiles.linearCanonicalComparisons =
@@ -3882,6 +3860,7 @@ const inactiveProteinDefaults = {
   collinearMaxConflicts: 1,
   collinearityUnitMode: 'auto',
   collinearityAnchorMode: 'rbh',
+  collinearityMergeOrientation: 'either',
   collinearitySearchScope: 'adjacent',
   collinearityColorMode: 'orientation'
 };
@@ -3895,6 +3874,7 @@ const invalidDormantProteinSettings = {
   collinearMaxConflictsInMergeGap: -1,
   collinearUnitMode: 'invalid-dormant-unit',
   collinearAnchorMode: 'invalid-dormant-anchor',
+  collinearMergeOrientation: 'invalid-dormant-merge',
   collinearSearchScope: 'invalid-dormant-scope',
   collinearColorMode: 'invalid-dormant-color'
 };
@@ -3924,23 +3904,28 @@ for (const { mode, activeSettings, expected } of [
   {
     mode: 'collinear',
     activeSettings: {
+      orthogroupMembershipMode: 'anchor_core_v1',
+      orthogroupMemberMaxHits: 9,
       collinearMinAnchors: 4,
       collinearMaxUnitGap: 3,
       collinearMaxDiagonalDrift: 2,
       collinearMaxConflictsInMergeGap: 0,
       collinearUnitMode: 'locus',
       collinearAnchorMode: 'rbh',
+      collinearMergeOrientation: 'strand',
       collinearSearchScope: 'all',
       collinearColorMode: 'orientation_identity',
       candidateLimit: 11
     },
     expected: {
       ...inactiveProteinDefaults,
+      orthogroupMemberMaxHits: 9,
       collinearMinAnchors: 4,
       collinearMaxUnitGap: 3,
       collinearMaxDiagonalDrift: 2,
       collinearMaxConflicts: 0,
       collinearityUnitMode: 'locus',
+      collinearityMergeOrientation: 'strand',
       collinearitySearchScope: 'all',
       collinearityColorMode: 'orientation_identity',
       proteinBlastpCandidateLimit: 11
@@ -3986,6 +3971,8 @@ for (const { mode, activeSettings, expected } of [
     collinearMaxConflicts: generated.settings.collinearityParams.parameters.maxConflicts,
     collinearityUnitMode: generated.settings.collinearityUnitMode,
     collinearityAnchorMode: generated.settings.collinearityAnchorMode,
+    collinearityMergeOrientation:
+      generated.settings.collinearityParams.parameters.mergeOrientation,
     collinearitySearchScope: generated.settings.collinearitySearchScope,
     collinearityColorMode: generated.settings.collinearityColorMode
   }, expected, `${mode} must canonicalize only the request copy of dormant settings`);

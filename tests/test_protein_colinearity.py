@@ -3362,7 +3362,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert repeated_result["cache"]["simultaneousParsedTables"] == 0
     assert repeated_result["pairs"] == result["pairs"]
 
-    filter_cached_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+    inactive_pairwise_limit_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
         str(raw_tsv_path),
         "orthogroup",
@@ -3373,8 +3373,8 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
         0,
         orthogroup_membership_mode="rbh",
     )))
-    assert filter_cached_result["cache"]["convertedPayloadHit"] is False
-    assert filter_cached_result["cache"]["filteredHitCacheHits"] == 2
+    assert inactive_pairwise_limit_result["cache"]["convertedPayloadHit"] is True
+    assert inactive_pairwise_limit_result["pairs"] == result["pairs"]
 
 
 @pytest.mark.linear

@@ -823,16 +823,19 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   state.losatDerivedCache.value = new Map();
 
   let failLateArtifactAdoption = false;
+  let committedRenderRequest = null;
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
-    adoptCanonicalRenderArtifacts: () => {
+    adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
         throw new Error('injected LOSAT late artifact adoption failure');
       }
+      committedRenderRequest = canonical.renderRequest;
     },
+    getCommittedCanonicalRenderRequest: () => committedRenderRequest,
     prepareLinearRecordCatalog: async () => ({
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''
@@ -1081,9 +1084,38 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.losatCacheInfo.value = structuredClone(warmCacheInfo);
     state.losatProgram.value = 'blastp';
     state.losat.blastp.mode = 'pairwise';
+    state.losat.blastp.maxHits = 5;
+    state.losat.blastp.candidateLimit = null;
+    const warmSettings = {
+      proteinBlastpMaxHits: 5,
+      proteinBlastpCandidateLimit: null
+    };
     state.files.linearCanonicalComparisons = [{
-      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: {}
+      kind: 'precomputedProteinComparison',
+      edgeKey: 'multi->third',
+      ordinal: 0,
+      queryRecordIndex: 0,
+      subjectRecordIndex: 1,
+      encoding: 'canonicalTsv',
+      file: new AuditFile([
+        'query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\n'
+      ], 'warm.tsv')
+    }, {
+      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
     }];
+    committedRenderRequest = {
+      diagramOptions: {
+        bitscore: Number(state.adv.min_bitscore),
+        evalue: Number(state.adv.evalue),
+        identity: Number(state.adv.identity),
+        alignmentLength: Number(state.adv.alignment_length)
+      },
+      comparisons: [{
+        kind: 'precomputedProteinComparison'
+      }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }]
+    };
     const warmComparisonPlan = resolveLinearComparisonPlan({
       plan: state.linearComparisonPlan,
       sequences: state.linearSeqs,
