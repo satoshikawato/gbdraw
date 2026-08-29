@@ -812,14 +812,6 @@ const cloneCanonicalSession = (canonical) => {
   };
 };
 
-const cloneLosatForConfig = () => {
-  const cloned = cloneJsonData(state.losat || {});
-  if (cloned.blastp && typeof cloned.blastp === 'object' && !Array.isArray(cloned.blastp)) {
-    delete cloned.blastp.collinearAnchorMode;
-  }
-  return cloned;
-};
-
 const normalizedArrowGeometryState = (adv = {}) => ({
   arrow_head_length_ratio: arrowHeadLengthRatioForState(
     adv?.arrow_head_length_ratio
@@ -880,7 +872,7 @@ export const buildConfigData = () => ({
       ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
     }
   },
-  losat: cloneLosatForConfig(),
+  losat: cloneJsonData(state.losat || {}),
   cliOptions: preservedCliOptions ? cloneJsonData(preservedCliOptions) : undefined,
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
@@ -1359,9 +1351,9 @@ export const restoreCurrentWriterActiveConfig = ({
   }
   if (isPlainObject(restored.adv)) delete restored.adv.losatProgram;
 
-  // The current writer deliberately omits this generated-pipeline authority
-  // from config.losat. Preserve the committed projection only when the active
-  // config has no value of its own.
+  // Current sessions written before the anchor control became editable omitted
+  // this value. Preserve their committed projection only when active config has
+  // no value of its own; new sessions store the explicit editor value above.
   const projectedAnchorMode = projectedConfig?.losat?.blastp?.collinearAnchorMode;
   if (
     projectedAnchorMode !== undefined &&

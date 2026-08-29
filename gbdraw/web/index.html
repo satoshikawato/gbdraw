@@ -1688,13 +1688,13 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
-                                        <label class="linear-primary-label mb-1">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode."></help-tip></label>
-                                        <input type="number" min="1" v-model.number="losat.blastp.maxHits" aria-label="LOSATP max hits per protein" class="form-input px-2 py-1.5 text-xs">
+                                        <label class="linear-primary-label mb-1">Pairwise display max hits <help-tip text="Maximum filtered matches displayed per query protein in Pairwise mode. This does not limit LOSATP candidates or Similarity/Collinear member evidence."></help-tip></label>
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" aria-label="Pairwise display max hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
-                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('similarity-grouping')">
-                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum subject hits considered when assigning proteins to a similarity group."></help-tip></label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Similarity group member hits per protein" class="form-input px-2 py-1.5 text-xs">
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
+                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1754,7 +1754,7 @@
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
                                                 <label class="linear-primary-label mb-1">Match style</label>
-                                                <select v-model="adv.pairwise_match_style" aria-label="Pairwise Match Style" class="form-input px-2 py-1.5 text-xs">
+                                                <select v-model="adv.pairwise_match_style" aria-label="Comparison match style" class="form-input px-2 py-1.5 text-xs">
                                                     <option value="ribbon">Ribbon</option>
                                                     <option value="curve">Curve</option>
                                                 </select>
@@ -1762,7 +1762,7 @@
                                             <div>
                                                 <label class="linear-primary-label mb-1">Match height</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
-                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" aria-label="Pairwise Match Height" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input">
+                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" aria-label="Comparison match height" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input">
                                                 </auto-value-field>
                                                 <p v-if="comparisonHeightValidationError" class="mt-1 text-[10px] text-red-600">{{ comparisonHeightValidationError }}</p>
                                             </div>
@@ -1971,6 +1971,15 @@
                                 <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
                             </section>
 
+                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losatp-candidate')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                <div class="linear-primary-label">LOSATP Advanced</div>
+                                <div>
+                                    <label class="linear-primary-label mb-1">Candidate limit <help-tip text="Maximum raw LOSATP candidate hits retained per query protein before Pairwise display or Similarity/Collinear construction. Leave blank for an unbounded search."></help-tip></label>
+                                    <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Candidate limit" class="form-input px-2 py-1.5 text-xs">
+                                    <p class="mt-1 text-[10px] leading-snug text-slate-500">Shared by Pairwise, Similarity groups, and Collinear blocks. Blank keeps the candidate search unbounded.</p>
+                                </div>
+                            </section>
+
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">LOSAT cache</div>
                                 <p class="text-[10px] leading-snug text-slate-500">{{ losatCacheInfo.length }} cached raw result{{ losatCacheInfo.length === 1 ? '' : 's' }}. Matching canonical inputs and settings reuse cached TSV data.</p>
@@ -2042,6 +2051,30 @@
                                 <div class="linear-primary-label">Advanced collinear search</div>
                                 <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div>
+                                        <label class="linear-primary-label mb-1">Unit mode <help-tip text="Auto resolves the current Collinear unit type; CDS and locus require that exact unit type."></help-tip></label>
+                                        <select v-model="losat.blastp.collinearUnitMode" aria-label="Collinear unit mode" class="form-input px-2 py-1.5 text-xs">
+                                            <option value="auto">Auto</option>
+                                            <option value="cds">CDS</option>
+                                            <option value="locus">Locus</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="linear-primary-label mb-1">Anchor mode <help-tip text="Choose all directional hits, one-to-one hits, or reciprocal best hits as Collinear anchors."></help-tip></label>
+                                        <select v-model="losat.blastp.collinearAnchorMode" aria-label="Collinear anchor mode" class="form-input px-2 py-1.5 text-xs">
+                                            <option value="all">All hits</option>
+                                            <option value="one_to_one">One-to-one</option>
+                                            <option value="rbh">Reciprocal best hits</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="linear-primary-label mb-1">Merge orientation <help-tip text="Require compatible strand, gene order, or either orientation when merging Collinear anchors."></help-tip></label>
+                                        <select v-model="losat.blastp.collinearMergeOrientation" aria-label="Collinear merge orientation" class="form-input px-2 py-1.5 text-xs">
+                                            <option value="strand">Strand</option>
+                                            <option value="order">Gene order</option>
+                                            <option value="either">Either</option>
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label class="linear-primary-label mb-1">Diagonal drift</label>
                                         <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" aria-label="Collinear diagonal drift" class="form-input px-2 py-1.5 text-xs">
                                     </div>
@@ -2049,7 +2082,7 @@
                                         <label class="linear-primary-label mb-1">Merge conflicts</label>
                                         <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" aria-label="Collinear merge conflicts" class="form-input px-2 py-1.5 text-xs">
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <label class="linear-primary-label mb-1">Paralog links per group</label>
                                         <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" aria-label="Collinear paralog links per group" class="form-input px-2 py-1.5 text-xs">
                                     </div>

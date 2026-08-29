@@ -336,8 +336,12 @@ Object.assign(divergentSession.config.losat.blastp, {
   mode: 'collinear',
   maxHits: 17,
   candidateLimit: 11,
+  orthogroupMemberMaxHits: 19,
   collinearMinAnchors: 4,
   collinearMaxUnitGap: 9,
+  collinearUnitMode: 'locus',
+  collinearAnchorMode: 'all',
+  collinearMergeOrientation: 'strand',
   collinearSearchScope: 'adjacent',
   collinearColorMode: 'orientation_identity'
 });
@@ -355,10 +359,18 @@ const dormantComparisonDraft = structuredClone({
     mode: divergentSession.config.losat.blastp.mode,
     maxHits: divergentSession.config.losat.blastp.maxHits,
     candidateLimit: divergentSession.config.losat.blastp.candidateLimit,
+    orthogroupMemberMaxHits:
+      divergentSession.config.losat.blastp.orthogroupMemberMaxHits,
     collinearMinAnchors:
       divergentSession.config.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap:
       divergentSession.config.losat.blastp.collinearMaxUnitGap,
+    collinearUnitMode:
+      divergentSession.config.losat.blastp.collinearUnitMode,
+    collinearAnchorMode:
+      divergentSession.config.losat.blastp.collinearAnchorMode,
+    collinearMergeOrientation:
+      divergentSession.config.losat.blastp.collinearMergeOrientation,
     collinearSearchScope:
       divergentSession.config.losat.blastp.collinearSearchScope,
     collinearColorMode:
@@ -406,12 +418,21 @@ assert.deepEqual({
     mode: state.losat.blastp.mode,
     maxHits: state.losat.blastp.maxHits,
     candidateLimit: state.losat.blastp.candidateLimit,
+    orthogroupMemberMaxHits: state.losat.blastp.orthogroupMemberMaxHits,
     collinearMinAnchors: state.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap: state.losat.blastp.collinearMaxUnitGap,
+    collinearUnitMode: state.losat.blastp.collinearUnitMode,
+    collinearAnchorMode: state.losat.blastp.collinearAnchorMode,
+    collinearMergeOrientation: state.losat.blastp.collinearMergeOrientation,
     collinearSearchScope: state.losat.blastp.collinearSearchScope,
     collinearColorMode: state.losat.blastp.collinearColorMode
   }
 }, dormantComparisonDraft);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(buildConfigData().losat.blastp)),
+  JSON.parse(JSON.stringify(state.losat.blastp)),
+  'the current Session writer must retain every editable LOSATP value'
+);
 assert.equal(
   state.form.legend,
   'bottom',

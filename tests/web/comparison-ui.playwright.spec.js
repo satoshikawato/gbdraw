@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const { readFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 
 const makeGenbank = (recordId, base = 'atg') => {
   const sequence = base.repeat(100);
@@ -348,19 +350,26 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       'input[aria-label^="TLOSATX gencode for sequence"]'
     ).count(),
     pairwiseHits: await page.getByRole('spinbutton', {
-      name: 'LOSATP max hits per protein'
+      name: 'Pairwise display max hits per protein'
     }).count(),
     groupHits: await page.getByRole('spinbutton', {
-      name: 'Similarity group member hits per protein'
+      name: 'Member hits per protein'
     }).count(),
     collinearGap: await page.getByRole('spinbutton', {
       name: 'Collinear max unit gap'
+    }).count(),
+    matchStyle: await page.getByRole('combobox', {
+      name: 'Comparison match style'
+    }).count(),
+    matchHeight: await page.getByRole('spinbutton', {
+      name: 'Comparison match height'
     }).count()
   });
   await chooseLosatMode('LOSATN');
   await expect(losatpMode).toHaveCount(0);
   expect(await controlCounts()).toEqual({
-    blastnTask: 1, gencode: 0, pairwiseHits: 0, groupHits: 0, collinearGap: 0
+    blastnTask: 1, gencode: 0, pairwiseHits: 0, groupHits: 0, collinearGap: 0,
+    matchStyle: 1, matchHeight: 1
   });
   await expect(page.getByRole('combobox', {
     name: 'LOSATN task'
@@ -369,7 +378,8 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
   await chooseLosatMode('TLOSATX');
   await expect(losatpMode).toHaveCount(0);
   expect(await controlCounts()).toEqual({
-    blastnTask: 0, gencode: 3, pairwiseHits: 0, groupHits: 0, collinearGap: 0
+    blastnTask: 0, gencode: 3, pairwiseHits: 0, groupHits: 0, collinearGap: 0,
+    matchStyle: 1, matchHeight: 1
   });
   const recordOptions = page.locator('details[data-linear-record-options]').first();
   const recordSummary = recordOptions.locator(':scope > summary');
@@ -391,9 +401,18 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     'Similarity groups', 'Collinear blocks', 'Pairwise matches'
   ]);
   const proteinCases = [
-    ['orthogroup', { blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 0 }],
-    ['collinear', { blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 0, collinearGap: 1 }],
-    ['pairwise', { blastnTask: 0, gencode: 0, pairwiseHits: 1, groupHits: 0, collinearGap: 0 }]
+    ['orthogroup', {
+      blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 0,
+      matchStyle: 1, matchHeight: 1
+    }],
+    ['collinear', {
+      blastnTask: 0, gencode: 0, pairwiseHits: 0, groupHits: 1, collinearGap: 1,
+      matchStyle: 1, matchHeight: 1
+    }],
+    ['pairwise', {
+      blastnTask: 0, gencode: 0, pairwiseHits: 1, groupHits: 0, collinearGap: 0,
+      matchStyle: 1, matchHeight: 1
+    }]
   ];
   for (const [value, expected] of proteinCases) {
     await losatpMode.selectOption(value);
@@ -410,8 +429,8 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
       const scope = page.getByRole('combobox', {
         name: 'Collinear evidence scope'
       });
-      await expect(scope).toHaveValue('all');
-      await expect(scope.locator('option:checked')).toHaveText('All records');
+      await expect(scope).toHaveValue('adjacent');
+      await expect(scope.locator('option:checked')).toHaveText('Adjacent pairs');
     }
   }
 
@@ -473,10 +492,14 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
     app.setLinearComparisonLosatMode('blastn');
     app.losat.blastn.task = 'dc-megablast';
     Object.assign(app.losat.blastp, {
+      candidateLimit: 37,
       maxHits: 41,
       orthogroupMemberMaxHits: 43,
       collinearMinAnchors: 7,
       collinearMaxUnitGap: 11,
+      collinearUnitMode: 'locus',
+      collinearAnchorMode: 'all',
+      collinearMergeOrientation: 'strand',
       collinearSearchScope: 'adjacent',
       collinearColorMode: 'orientation_identity'
     });
@@ -485,7 +508,8 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
       evalue: '1e-45',
       identity: 76,
       alignment_length: 321,
-      pairwise_match_style: 'ribbon'
+      pairwise_match_style: 'ribbon',
+      comparison_height: 73
     });
     const snapshot = () => JSON.parse(JSON.stringify({
       program: app.losatProgram,
@@ -494,10 +518,14 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
       blastnTask: app.losat.blastn.task,
       blastpMode: app.losat.blastp.mode,
       blastpDraft: {
+        candidateLimit: app.losat.blastp.candidateLimit,
         maxHits: app.losat.blastp.maxHits,
         orthogroupMemberMaxHits: app.losat.blastp.orthogroupMemberMaxHits,
         collinearMinAnchors: app.losat.blastp.collinearMinAnchors,
         collinearMaxUnitGap: app.losat.blastp.collinearMaxUnitGap,
+        collinearUnitMode: app.losat.blastp.collinearUnitMode,
+        collinearAnchorMode: app.losat.blastp.collinearAnchorMode,
+        collinearMergeOrientation: app.losat.blastp.collinearMergeOrientation,
         collinearSearchScope: app.losat.blastp.collinearSearchScope,
         collinearColorMode: app.losat.blastp.collinearColorMode
       },
@@ -507,7 +535,10 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
         identity: app.adv.identity,
         length: app.adv.alignment_length
       },
-      style: app.adv.pairwise_match_style
+      appearance: {
+        style: app.adv.pairwise_match_style,
+        height: app.adv.comparison_height
+      }
     }));
     const losatn = snapshot();
     const selectedLosatp = app.setLinearComparisonLosatMode('blastp');
@@ -551,11 +582,220 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
     activeLosatpMode: 'collinear',
     blastpMode: 'collinear'
   });
-  for (const key of ['blastnTask', 'blastpDraft', 'filters', 'style']) {
+  for (const key of ['blastnTask', 'blastpDraft', 'filters', 'appearance']) {
     expect(transitions.collinear[key]).toEqual(transitions.losatn[key]);
     expect(transitions.restoredLosatn[key]).toEqual(transitions.losatn[key]);
     expect(transitions.restoredCollinear[key]).toEqual(transitions.losatn[key]);
   }
+});
+
+test('comparison controls drive appearance and current Session round trips', async ({ page }) => {
+  test.setTimeout(600000);
+  await openLinear(page);
+  await page.evaluate((records) => {
+    const app = window.__GBDRAW_APP__;
+    if (app.linearSeqs.length < 2) app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+      index,
+      'gb',
+      new File([content], `ui04-record-${index + 1}.gbk`, {
+        type: 'text/plain',
+        lastModified: index + 1
+      })
+    ));
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('pairwise');
+  }, [makeGenbank('Ui04A', 'atg'), makeGenbank('Ui04B', 'gct')]);
+
+  await comparisonSettings(page).locator('summary').click();
+  const advanced = page.locator(
+    'details[data-linear-comparison-disclosure="advanced"]'
+  );
+  await advanced.locator('summary').click();
+
+  const candidate = page.getByRole('spinbutton', { name: 'LOSATP Candidate limit' });
+  const pairwiseMax = page.getByRole('spinbutton', {
+    name: 'Pairwise display max hits per protein'
+  });
+  const memberHits = page.getByRole('spinbutton', { name: 'Member hits per protein' });
+  const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });
+  const matchStyle = page.getByRole('combobox', { name: 'Comparison match style' });
+  const matchHeight = page.getByRole('spinbutton', { name: 'Comparison match height' });
+
+  await expect(candidate).toBeVisible();
+  await expect(candidate).toHaveAttribute('placeholder', 'Unbounded');
+  await candidate.fill('17');
+  await candidate.focus();
+  await expectKeyboardFocusIndicator(candidate);
+  await pairwiseMax.fill('3');
+  await matchHeight.fill('45');
+  await matchStyle.focus();
+  await page.keyboard.press('Home');
+  await expect(matchStyle).toHaveValue('ribbon');
+  await page.keyboard.press('ArrowDown');
+  await expect(matchStyle).toHaveValue('curve');
+
+  await losatpMode.selectOption('orthogroup');
+  await expect(candidate).toBeVisible();
+  await expect(memberHits).toBeVisible();
+  await memberHits.fill('7');
+  await expect(matchStyle).toHaveValue('curve');
+  await expect(matchHeight).toHaveValue('45');
+
+  await losatpMode.selectOption('collinear');
+  await expect(candidate).toBeVisible();
+  await expect(memberHits).toHaveValue('7');
+  await page.getByRole('combobox', { name: 'Collinear evidence scope' }).selectOption('all');
+  await page.getByRole('combobox', { name: 'Collinear color mode' })
+    .selectOption('orientation_identity');
+  await page.getByRole('combobox', { name: 'Collinear unit mode' }).selectOption('locus');
+  await page.getByRole('combobox', { name: 'Collinear anchor mode' }).selectOption('all');
+  await page.getByRole('combobox', { name: 'Collinear merge orientation' })
+    .selectOption('strand');
+
+  await losatpMode.selectOption('pairwise');
+  await expect(pairwiseMax).toHaveValue('3');
+  await expect(candidate).toHaveValue('17');
+  await losatpMode.selectOption('collinear');
+  await expect(memberHits).toHaveValue('7');
+  await expect(page.getByRole('combobox', { name: 'Collinear unit mode' })).toHaveValue('locus');
+  await expect(page.getByRole('combobox', { name: 'Collinear anchor mode' })).toHaveValue('all');
+  await expect(page.getByRole('combobox', {
+    name: 'Collinear merge orientation'
+  })).toHaveValue('strand');
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const edge = app.linearComparisonResolution.edges[0];
+    app.setLinearComparisonCardFile(edge.edgeKey, new File([
+      'Ui04A\tUi04B\t95\t80\t4\t0\t1\t80\t5\t84\t1e-40\t160\n'
+    ], 'ui04-comparison.tsv', {
+      type: 'text/tab-separated-values',
+      lastModified: 80
+    }));
+  });
+  await expect(candidate).toHaveCount(0);
+  await expect(matchStyle).toBeVisible();
+
+  const renderAppearance = async (style, height) => page.evaluate(async ({ style_, height_ }) => {
+    const app = window.__GBDRAW_APP__;
+    app.adv.pairwise_match_style = style_;
+    app.adv.comparison_height = height_;
+    const result = await app.runAnalysis();
+    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
+    const match = svg.querySelector('[data-gbdraw-pairwise-match-id]');
+    return {
+      result,
+      error: app.errorLog,
+      style: match?.getAttribute('data-pairwise-match-style') || '',
+      path: match?.getAttribute('d') || '',
+      matchCount: svg.querySelectorAll('[data-gbdraw-pairwise-match-id]').length
+    };
+  }, { style_: style, height_: height });
+
+  const ribbon = await renderAppearance('ribbon', 35);
+  expect(ribbon.result, JSON.stringify(ribbon.error, null, 2)).toEqual({ status: 'ok' });
+  expect(ribbon.style).toBe('ribbon');
+  expect(ribbon.matchCount).toBeGreaterThan(0);
+
+  const curve = await renderAppearance('curve', 35);
+  expect(curve.result, JSON.stringify(curve.error, null, 2)).toEqual({ status: 'ok' });
+  expect(curve.style).toBe('curve');
+  expect(curve.path).not.toBe(ribbon.path);
+  expect(curve.path).toContain('C');
+
+  const taller = await renderAppearance('curve', 85);
+  expect(taller.result, JSON.stringify(taller.error, null, 2)).toEqual({ status: 'ok' });
+  expect(taller.style).toBe('curve');
+  expect(taller.path).not.toBe(curve.path);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.sessionTitle = 'ui04-comparison-controls';
+  });
+  const sessionDownloadPromise = page.waitForEvent('download', { timeout: 180000 });
+  const saveResult = await page.evaluate(() => (
+    window.__GBDRAW_APP__.saveSessionWithTitle()
+  ));
+  expect(saveResult).toMatchObject({ status: 'saved' });
+  const sessionDownload = await sessionDownloadPromise;
+  const sessionPath = await sessionDownload.path();
+  const sessionBuffer = readFileSync(sessionPath);
+  const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
+  expect(session.config.losat.blastp).toMatchObject({
+    mode: 'collinear',
+    candidateLimit: 17,
+    maxHits: 3,
+    orthogroupMemberMaxHits: 7,
+    collinearUnitMode: 'locus',
+    collinearAnchorMode: 'all',
+    collinearMergeOrientation: 'strand',
+    collinearSearchScope: 'all',
+    collinearColorMode: 'orientation_identity'
+  });
+  expect(session.config.adv).toMatchObject({
+    pairwise_match_style: 'curve',
+    comparison_height: 85
+  });
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles({
+    name: sessionDownload.suggestedFilename(),
+    mimeType: 'application/gzip',
+    buffer: sessionBuffer
+  });
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await page.waitForFunction(() => {
+    const app = window.__GBDRAW_APP__;
+    return app?.mode === 'linear'
+      && app?.losatProgram === 'blastp'
+      && app?.losat?.blastp?.mode === 'collinear'
+      && app?.losat?.blastp?.collinearAnchorMode === 'all';
+  }, null, { timeout: 180000 });
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      candidate: app.losat.blastp.candidateLimit,
+      pairwise: app.losat.blastp.maxHits,
+      member: app.losat.blastp.orthogroupMemberMaxHits,
+      unit: app.losat.blastp.collinearUnitMode,
+      anchor: app.losat.blastp.collinearAnchorMode,
+      merge: app.losat.blastp.collinearMergeOrientation,
+      scope: app.losat.blastp.collinearSearchScope,
+      color: app.losat.blastp.collinearColorMode,
+      style: app.adv.pairwise_match_style,
+      height: app.adv.comparison_height
+    };
+  })).toEqual({
+    candidate: 17,
+    pairwise: 3,
+    member: 7,
+    unit: 'locus',
+    anchor: 'all',
+    merge: 'strand',
+    scope: 'all',
+    color: 'orientation_identity',
+    style: 'curve',
+    height: 85
+  });
 });
 
 test('structured comparison errors open and focus their owning disclosure', async ({ page }) => {

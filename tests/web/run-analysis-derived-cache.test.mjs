@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import {
   buildLosatDerivedPayloadCachePayload,
@@ -13,6 +17,46 @@ assert.equal(resolveProteinBlastpCandidateLimit(null), null);
 assert.equal(resolveProteinBlastpCandidateLimit(undefined), null);
 assert.throws(() => resolveProteinBlastpCandidateLimit(0), /Candidate limit/);
 assert.throws(() => resolveProteinBlastpCandidateLimit('invalid'), /Candidate limit/);
+
+const runAnalysisPath = resolve('gbdraw/web/js/app/run-analysis.js');
+const runAnalysisUrl = pathToFileURL(runAnalysisPath);
+const identityProbeDir = await mkdtemp(join(tmpdir(), 'gbdraw-raw-identity-'));
+const identityProbePath = join(identityProbeDir, 'run-analysis-identity-probe.mjs');
+const identityProbeSource = (await readFile(runAnalysisPath, 'utf8'))
+  .replace(
+    'const buildLosatCachePayload = ({',
+    'export const buildLosatCachePayload = ({'
+  )
+  .replace(/from '(\.\.?(?:\/[^']+)+)'/g, (_match, specifier) => (
+    `from '${new URL(specifier, runAnalysisUrl).href}'`
+  ));
+await writeFile(identityProbePath, identityProbeSource, 'utf8');
+const { buildLosatCachePayload } = await import(pathToFileURL(identityProbePath));
+
+const rawIdentityInput = {
+  identityKind: 'protein',
+  program: 'blastp',
+  outfmt: '6',
+  args: ['--max-target-seqs', '9'],
+  queryProteinSetHash: 'query-proteins',
+  subjectProteinSetHash: 'subject-proteins',
+  queryRuntimeBindingHash: 'query-runtime',
+  subjectRuntimeBindingHash: 'subject-runtime',
+  queryRecordInstanceKey: 'query-record',
+  subjectRecordInstanceKey: 'subject-record'
+};
+const rawIdentity = buildLosatCachePayload(rawIdentityInput);
+for (const appearanceOnly of [
+  { pairwiseMatchStyle: 'curve' },
+  { comparisonHeight: 90 },
+  { comparisonDisclosureOpen: true }
+]) {
+  assert.deepEqual(
+    buildLosatCachePayload({ ...rawIdentityInput, ...appearanceOnly }),
+    rawIdentity,
+    'render appearance and disclosure state must not change raw scientific identity'
+  );
+}
 
 const baselineInput = {
   mode: 'collinear',
@@ -142,10 +186,21 @@ for (const [inputName, identityName, changedValue, section = 'collinear'] of inv
 }
 
 assert.deepEqual(
-  buildIdentity({ maxHits: 99, renderOnlyPresentation: 'changed' }),
+  buildIdentity({ maxHits: 99, pairwiseMatchStyle: 'curve' }),
   baselineIdentity,
-  'Collinear derived identity must ignore Pairwise-only and render-only settings'
+  'Collinear derived identity must ignore Pairwise-only and match-style settings'
 );
+for (const appearanceOnly of [
+  { pairwiseMatchStyle: 'curve' },
+  { comparisonHeight: 90 },
+  { comparisonDisclosureOpen: true }
+]) {
+  assert.deepEqual(
+    buildIdentity(appearanceOnly),
+    baselineIdentity,
+    'render appearance and disclosure state must not change derived scientific identity'
+  );
+}
 
 const orthogroupIdentity = buildIdentity({ mode: 'orthogroup' });
 assert.equal(Object.hasOwn(orthogroupIdentity, 'pairwise'), false);
