@@ -613,7 +613,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'collinearMaxParalogLinksPerOrthogroup',
       'collinearSearchScope',
       'orthogroupMembershipMode',
-      'orthogroupMemberMaxHits'
+      'orthogroupMemberMaxHits',
+      'collinearMergeOrientation'
     ],
     fileRoles: ['pairs', 'rawTsv'],
     run: (pyodide, payload, paths, operation) => callJsonHelper(
@@ -638,7 +639,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearMaxParalogLinksPerOrthogroup ?? 2,
         payload.collinearSearchScope ?? 'adjacent',
         payload.orthogroupMembershipMode ?? 'anchor_core_v1',
-        payload.orthogroupMemberMaxHits ?? 5
+        payload.orthogroupMemberMaxHits ?? 5,
+        payload.collinearMergeOrientation ?? 'either'
       ]
     )
   },

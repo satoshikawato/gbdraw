@@ -973,17 +973,23 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_search_scope="adjacent",
     orthogroup_membership_mode="anchor_core_v1",
     orthogroup_member_max_hits=5,
+    collinear_merge_orientation="either",
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
         from io import StringIO
+        import math
         import pandas as pd
         from gbdraw.analysis.collinearity import (
             LosslessCollinearityParameters,
             build_orthogroup_collinearity_blocks_from_hits,
             convert_collinearity_blocks_to_comparisons,
             convert_collinearity_blocks_to_pair_comparisons,
+            normalize_collinearity_anchor_mode,
+            normalize_collinearity_color_mode,
+            normalize_collinearity_search_scope,
         )
+        from gbdraw.analysis.collinearity_units import normalize_collinearity_unit_mode
         from gbdraw.analysis.protein_colinearity import (
             convert_pair_protein_hits_to_genomic_links,
             filter_protein_hits_by_thresholds,
@@ -1005,25 +1011,95 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         normalized_mode = str(mode or "pairwise").strip().lower()
         if normalized_mode not in {"pairwise", "orthogroup", "collinear"}:
             raise ValueError(f"Unsupported LOSATP blastp mode: {mode!r}")
-        normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode or "anchor_core_v1"))
-        try:
-            normalized_member_max_hits = int(orthogroup_member_max_hits or 5)
-        except Exception:
-            normalized_member_max_hits = 5
-        if normalized_member_max_hits <= 0:
-            normalized_member_max_hits = 5
-        try:
-            normalized_max_paralog_links = int(collinear_max_paralog_links_per_orthogroup or 2)
-        except Exception:
-            normalized_max_paralog_links = 2
-        if normalized_max_paralog_links <= 0:
-            normalized_max_paralog_links = 2
-        normalized_collinear_anchor_mode = "rbh"
-        normalized_collinear_search_scope = str(collinear_search_scope or "adjacent").strip().lower()
-        if normalized_collinear_search_scope not in {"adjacent", "all"}:
-            raise ValueError(
-                f"Unsupported Collinear search scope: {collinear_search_scope!r}"
+        normalized_max_hits = 5
+        if normalized_mode == "pairwise":
+            normalized_max_hits = int(5 if _is_blank_or_js_nullish(max_hits) else max_hits)
+            if normalized_max_hits <= 0:
+                raise ValueError("protein_blastp_max_hits must be > 0")
+
+        normalized_membership_mode = "anchor_core_v1"
+        normalized_member_max_hits = 5
+        if normalized_mode in {"orthogroup", "collinear"}:
+            normalized_membership_mode = normalize_orthogroup_membership_mode(
+                str(orthogroup_membership_mode or "anchor_core_v1")
             )
+            normalized_member_max_hits = int(
+                5
+                if _is_blank_or_js_nullish(orthogroup_member_max_hits)
+                else orthogroup_member_max_hits
+            )
+            if normalized_member_max_hits <= 0:
+                raise ValueError("orthogroup_member_max_hits must be > 0")
+
+        normalized_collinear_unit_mode = "auto"
+        normalized_collinear_color_mode = "orientation"
+        normalized_collinear_anchor_mode = "rbh"
+        normalized_collinear_search_scope = "adjacent"
+        normalized_max_paralog_links = 2
+        normalized_collinearity_params = LosslessCollinearityParameters()
+        if normalized_mode == "collinear":
+            normalized_collinear_unit_mode = normalize_collinearity_unit_mode(
+                str(collinear_unit_mode or "auto")
+            )
+            normalized_collinear_color_mode = normalize_collinearity_color_mode(
+                str(collinear_color_mode or "orientation")
+            )
+            normalized_collinear_anchor_mode = normalize_collinearity_anchor_mode(
+                str(collinear_anchor_mode or "rbh")
+            )
+            normalized_collinear_search_scope = normalize_collinearity_search_scope(
+                str(collinear_search_scope or "adjacent")
+            )
+            normalized_max_paralog_links = int(
+                2
+                if _is_blank_or_js_nullish(collinear_max_paralog_links_per_orthogroup)
+                else collinear_max_paralog_links_per_orthogroup
+            )
+            if normalized_max_paralog_links <= 0:
+                raise ValueError(
+                    "collinear_max_paralog_links_per_orthogroup must be > 0"
+                )
+            normalized_collinearity_params = LosslessCollinearityParameters(
+                min_anchors=int(
+                    1
+                    if _is_blank_or_js_nullish(collinear_min_anchors)
+                    else collinear_min_anchors
+                ),
+                max_unit_gap=int(
+                    0
+                    if _is_blank_or_js_nullish(collinear_max_unit_gap)
+                    else collinear_max_unit_gap
+                ),
+                max_diagonal_drift=int(
+                    0
+                    if _is_blank_or_js_nullish(collinear_max_diagonal_drift)
+                    else collinear_max_diagonal_drift
+                ),
+                max_conflicts=int(
+                    1
+                    if _is_blank_or_js_nullish(collinear_max_conflicts_in_merge_gap)
+                    else collinear_max_conflicts_in_merge_gap
+                ),
+                merge_orientation=str(collinear_merge_orientation or "either").strip().lower(),
+            )
+            normalized_collinearity_params.validate()
+
+        normalized_bitscore = float(bitscore)
+        normalized_evalue = float(evalue)
+        normalized_identity = float(identity)
+        normalized_alignment_length = int(alignment_length)
+        if not math.isfinite(normalized_bitscore) or normalized_bitscore < 0:
+            raise ValueError("bitscore must be a finite value >= 0")
+        if not math.isfinite(normalized_evalue) or normalized_evalue < 0:
+            raise ValueError("evalue must be a finite value >= 0")
+        if (
+            not math.isfinite(normalized_identity)
+            or normalized_identity < 0
+            or normalized_identity > 100
+        ):
+            raise ValueError("identity must be a finite value between 0 and 100")
+        if normalized_alignment_length < 0:
+            raise ValueError("alignment_length must be >= 0")
 
         record_payloads = []
         for idx, record in enumerate(raw_records):
@@ -1089,25 +1165,74 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 default=0,
             ),
         }
+        derived_provenance = {
+            "schema": 1,
+            "upstreamRawKeys": sorted(
+                {str(item["cache_key"]) for item in pair_payloads}
+            ),
+            "thresholds": {
+                "bitscore": normalized_bitscore,
+                "evalue": normalized_evalue,
+                "identity": normalized_identity,
+                "alignmentLength": normalized_alignment_length,
+            },
+        }
+        if normalized_mode == "pairwise":
+            derived_provenance["pairwise"] = {
+                "maxHits": normalized_max_hits,
+            }
+        if normalized_mode in {"orthogroup", "collinear"}:
+            derived_provenance["orthogroup"] = {
+                "membershipMode": normalized_membership_mode,
+                "memberMaxHits": normalized_member_max_hits,
+            }
+        if normalized_mode == "collinear":
+            derived_provenance["collinear"] = {
+                "unitMode": {
+                    "requested": normalized_collinear_unit_mode,
+                    "effectiveKinds": [],
+                },
+                "anchorMode": normalized_collinear_anchor_mode,
+                "searchScope": normalized_collinear_search_scope,
+                "colorMode": normalized_collinear_color_mode,
+                "parameters": {
+                    "minAnchors": int(normalized_collinearity_params.min_anchors),
+                    "maxUnitGap": int(normalized_collinearity_params.max_unit_gap),
+                    "maxDiagonalDrift": int(
+                        normalized_collinearity_params.max_diagonal_drift
+                    ),
+                    "maxConflicts": int(normalized_collinearity_params.max_conflicts),
+                    "mergeOrientation": str(
+                        normalized_collinearity_params.merge_orientation
+                    ),
+                    "maxParalogLinksPerOrthogroup": normalized_max_paralog_links,
+                },
+            }
 
         conversion_cache_key = (
+            "derived-option-conformance-v1",
             normalized_mode,
-            int(max_hits or 5),
-            str(bitscore),
-            str(evalue),
-            str(identity),
-            str(alignment_length),
-            str(normalized_membership_mode),
-            str(normalized_member_max_hits),
-            str(collinear_min_anchors),
-            str(collinear_max_unit_gap),
-            str(collinear_unit_mode),
-            str(collinear_color_mode),
-            normalized_collinear_anchor_mode,
-            str(collinear_max_diagonal_drift),
-            str(collinear_max_conflicts_in_merge_gap),
-            str(collinear_max_paralog_links_per_orthogroup),
-            normalized_collinear_search_scope,
+            normalized_max_hits if normalized_mode == "pairwise" else None,
+            str(normalized_bitscore),
+            str(normalized_evalue),
+            str(normalized_identity),
+            str(normalized_alignment_length),
+            (
+                str(normalized_membership_mode),
+                int(normalized_member_max_hits),
+            ) if normalized_mode in {"orthogroup", "collinear"} else None,
+            (
+                int(normalized_collinearity_params.min_anchors),
+                int(normalized_collinearity_params.max_unit_gap),
+                normalized_collinear_unit_mode,
+                normalized_collinear_color_mode,
+                normalized_collinear_anchor_mode,
+                str(normalized_collinearity_params.merge_orientation),
+                int(normalized_collinearity_params.max_diagonal_drift),
+                int(normalized_collinearity_params.max_conflicts),
+                int(normalized_max_paralog_links),
+                normalized_collinear_search_scope,
+            ) if normalized_mode == "collinear" else None,
             tuple(
                 (
                     item["record_index"],
@@ -1165,10 +1290,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 raise ValueError(f"LOSATP pair payload #{idx + 1} references missing subjectIndex {subject_index}.")
             filter_cache_key = (
                 item["cache_key"],
-                str(bitscore),
-                str(evalue),
-                str(identity),
-                str(alignment_length),
+                str(normalized_bitscore),
+                str(normalized_evalue),
+                str(normalized_identity),
+                str(normalized_alignment_length),
             )
             filtered = _web_losatp_cache_get("filtered", filter_cache_key)
             if filtered is None:
@@ -1178,10 +1303,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 hits = parse_losatp_outfmt6(blast_text)
                 filtered = filter_protein_hits_by_thresholds(
                     hits,
-                    evalue=evalue,
-                    bitscore=bitscore,
-                    identity=identity,
-                    alignment_length=alignment_length,
+                    evalue=normalized_evalue,
+                    bitscore=normalized_bitscore,
+                    identity=normalized_identity,
+                    alignment_length=normalized_alignment_length,
                 )
                 _web_losatp_cache_set("filtered", filter_cache_key, filtered.copy())
                 filtered_cache_misses += 1
@@ -1207,7 +1332,23 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             **raw_tsv_stats,
         }
 
-        def _finalize_losatp_payload(payload):
+        def _finalize_losatp_payload(payload, *, collinearity_result=None):
+            if collinearity_result is not None:
+                anchors = [
+                    anchor
+                    for block in collinearity_result.blocks
+                    for anchor in block.anchors
+                ]
+                anchors.extend(collinearity_result.unblocked_anchors)
+                derived_provenance["collinear"]["unitMode"]["effectiveKinds"] = sorted({
+                    str(unit_kind)
+                    for anchor in anchors
+                    for unit_kind in (
+                        anchor.query_unit_kind,
+                        anchor.subject_unit_kind,
+                    )
+                })
+            payload["provenance"] = derived_provenance
             payload["cache"] = cache_stats
             result_json = json.dumps(payload)
             _web_losatp_cache_set("converted", conversion_cache_key, result_json)
@@ -1220,18 +1361,6 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     record_ids.append(str(record_proteins[0].record_id))
                 else:
                     record_ids.append("")
-            def _collinear_int(value, default):
-                if _is_blank_or_js_nullish(value):
-                    return int(default)
-                return int(value)
-            def _collinear_float(value, default):
-                if _is_blank_or_js_nullish(value):
-                    return float(default)
-                return float(value)
-            def _collinear_text(value, default):
-                if _is_blank_or_js_nullish(value):
-                    return default
-                return str(value).strip()
             anchor_mode = normalized_collinear_anchor_mode
             search_scope = normalized_collinear_search_scope
             max_paralog_links = normalized_max_paralog_links
@@ -1249,17 +1378,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 if item["display_pair"]
                 and int(item["query_index"]) != int(item["subject_index"])
             }))
-            params = LosslessCollinearityParameters(
-                min_anchors=_collinear_int(collinear_min_anchors, 1),
-                max_unit_gap=_collinear_int(collinear_max_unit_gap, 0),
-                max_diagonal_drift=_collinear_int(collinear_max_diagonal_drift, 0),
-                max_conflicts=_collinear_int(collinear_max_conflicts_in_merge_gap, 1),
-            )
             collinearity_result = build_orthogroup_collinearity_blocks_from_hits(
                 directional_tables,
                 extraction,
-                params=params,
-                unit_mode="cds",
+                params=normalized_collinearity_params,
+                unit_mode=normalized_collinear_unit_mode,
                 edge_mode=anchor_mode,
                 search_scope=search_scope,
                 orthogroup_membership_mode=normalized_membership_mode,
@@ -1271,7 +1394,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     else None
                 ),
             )
-            color_mode = _collinear_text(collinear_color_mode, "orientation")
+            color_mode = normalized_collinear_color_mode
             if search_scope == "adjacent" and display_pairs:
                 display_pair_indices = {
                     tuple(sorted((
@@ -1325,14 +1448,14 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                         collinearity_result,
                     ).decode("utf-8")
                 ),
-            })
+            }, collinearity_result=collinearity_result)
 
         if normalized_mode == "pairwise":
             converted_pairs = []
             for item in pair_items:
                 display_hits = select_top_hits_per_query(
                     item["hits"],
-                    max_hits=int(max_hits or 5),
+                    max_hits=normalized_max_hits,
                 )
                 converted = convert_pair_protein_hits_to_genomic_links(
                     display_hits,

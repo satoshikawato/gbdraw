@@ -401,7 +401,7 @@ const isStrictEmptyDerivedResult = (entry) => {
     return false;
   }
   const payload = entry.payload;
-  const allowedKeys = new Set(['identity', 'pairs', 'orthogroups']);
+  const allowedKeys = new Set(['identity', 'provenance', 'pairs', 'orthogroups']);
   if (mode === 'collinear') {
     [
       'collinearGroups',

@@ -32,6 +32,7 @@ assert.deepEqual(CURRENT_WRITER_ADV_FIELDS, [
 ]);
 assert.equal(createDefaultLosat().blastp.candidateLimit, null);
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
+assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
 
 for (const [candidateLimit, collinearSearchScope] of [[null, 'adjacent'], [9, 'all']]) {
   assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
@@ -53,6 +54,18 @@ for (const [candidateLimit, collinearSearchScope] of [[null, 'adjacent'], [9, 'a
 for (const blastp of [
   { mode: 'unsupported' },
   { candidateLimit: 0 },
+  { maxHits: 0 },
+  { orthogroupMembershipMode: 'legacy' },
+  { orthogroupMemberMaxHits: 0 },
+  { collinearMinAnchors: 0 },
+  { collinearMaxUnitGap: -1 },
+  { collinearMaxDiagonalDrift: -1 },
+  { collinearMaxConflictsInMergeGap: -1 },
+  { collinearMaxParalogLinksPerOrthogroup: 0 },
+  { collinearUnitMode: 'gene' },
+  { collinearAnchorMode: 'top1' },
+  { collinearMergeOrientation: 'both' },
+  { collinearColorMode: 'score' },
   { collinearSearchScope: 'global' }
 ]) {
   assert.throws(() => validateCurrentWriterActiveConfig({

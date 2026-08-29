@@ -727,8 +727,14 @@ def test_lossless_max_conflicts_threshold_controls(
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize(
+    ("unit_mode", "expected_unit_kind"),
+    (("auto", "locus"), ("cds", "cds"), ("locus", "locus")),
+)
 def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
     monkeypatch: pytest.MonkeyPatch,
+    unit_mode: str,
+    expected_unit_kind: str,
 ) -> None:
     records = [
         _record(
@@ -786,13 +792,13 @@ def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
             ),
             options=LinearDiagramOptions(
                 protein_blastp_mode="collinear",
-                collinearity_unit_mode="auto",
+                collinearity_unit_mode=unit_mode,
                 collinearity_params=params,
             ),
         )
         prepared = request_render_module.build_request_diagram(request)
         assert prepared.request.options.collinearity_params is params
-        assert prepared.request.options.collinearity_unit_mode == "auto"
+        assert prepared.request.options.collinearity_unit_mode == unit_mode
         assert prepared.linear_metadata is not None
         result = prepared.linear_metadata.collinearity_result
         assert result is not None
@@ -800,7 +806,7 @@ def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
             anchor.query_unit_kind
             for block in result.blocks
             for anchor in block.anchors
-        } == {"cds"}
+        } == {expected_unit_kind}
         results[case] = result
 
     assert [
@@ -2299,13 +2305,34 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     assert rows[0]["query_view_feature_svg_id"] == rows[0][
         "query_feature_svg_id"
     ]
-    assert set(result) == {"pairs", "collinearityResult", "cache"}
+    assert set(result) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert result["provenance"]["upstreamRawKeys"] == ["pair-a-b", "pair-b-a"]
+    assert result["provenance"]["orthogroup"] == {
+        "membershipMode": "anchor_core_v1",
+        "memberMaxHits": 5,
+    }
+    assert result["provenance"]["collinear"]["unitMode"] == {
+        "requested": "cds",
+        "effectiveKinds": ["cds"],
+    }
+    assert result["provenance"]["collinear"]["anchorMode"] == "one_to_one"
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
+@pytest.mark.parametrize(
+    ("anchor_mode", "merge_orientation", "expected_anchor_count"),
+    (
+        ("all", "strand", 2),
+        ("one_to_one", "order", 2),
+        ("rbh", "either", 1),
+    ),
+)
+def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
     tmp_path: Path,
     stage_web_losatp_transport,
+    anchor_mode: str,
+    merge_orientation: str,
+    expected_anchor_count: int,
 ) -> None:
     class JsNull:
         def __str__(self) -> str:
@@ -2393,43 +2420,50 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
         0,
         "cds",
         "orientation",
-        "rbh",
+        anchor_mode,
         25,
         1,
         2,
+        "adjacent",
+        "anchor_core_v1",
+        5,
+        merge_orientation,
     )
     result = json.loads(str(raw_result))
 
     assert "error" not in result
     rows = result["pairs"][0]["rows"]
     assert len(rows) == 1
-    assert rows[0]["collinearity_anchor_count"] == 1
-    assert rows[0]["collinearity_block_kind"] == "singleton"
-    assert rows[0]["query_protein_id"] == "qa0"
-    assert rows[0]["subject_protein_id"] == "sb0"
-
-    raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
-        str(raw_tsv_path),
-        "collinear",
-        5,
-        50,
-        "1e-5",
-        0,
-        0,
-        2,
-        0,
-        "cds",
-        "orientation",
-        "rbh",
-        25,
-        1,
-        2,
+    assert rows[0]["collinearity_anchor_count"] == expected_anchor_count
+    assert result["provenance"]["collinear"]["anchorMode"] == anchor_mode
+    assert (
+        result["provenance"]["collinear"]["parameters"]["mergeOrientation"]
+        == merge_orientation
     )
-    min_two = json.loads(str(raw_min_two))
 
-    assert "error" not in min_two
-    assert min_two["pairs"][0]["rows"] == []
+    if anchor_mode == "rbh":
+        raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+            str(pairs_path),
+            str(raw_tsv_path),
+            "collinear",
+            5,
+            50,
+            "1e-5",
+            0,
+            0,
+            2,
+            0,
+            "cds",
+            "orientation",
+            "rbh",
+            25,
+            1,
+            2,
+        )
+        min_two = json.loads(str(raw_min_two))
+
+        assert "error" not in min_two
+        assert min_two["pairs"][0]["rows"] == []
 
 
 @pytest.mark.linear
@@ -2589,7 +2623,7 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
     assert "error" not in adjacent
     assert "error" not in all_records
     assert "error" not in multi_row_adjacent
-    assert "Unsupported Collinear search scope" in invalid_scope["error"]
+    assert "collinear_search_scope must be one of: adjacent, all" in invalid_scope["error"]
     assert "Unsupported LOSATP blastp mode" in invalid_mode["error"]
 
     def member_sets(result: dict[str, object]) -> list[set[str]]:
@@ -2603,8 +2637,8 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
 
     adjacent_member_sets = member_sets(adjacent)
     all_member_sets = member_sets(all_records)
-    assert set(adjacent) == {"pairs", "collinearityResult", "cache"}
-    assert set(all_records) == {"pairs", "collinearityResult", "cache"}
+    assert set(adjacent) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert set(all_records) == {"pairs", "collinearityResult", "provenance", "cache"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
     assert {

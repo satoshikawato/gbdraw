@@ -64,6 +64,12 @@ record and feature bindings, query/subject direction, program, and meaningful
 search arguments. Filenames and display labels do not define cache identity.
 Only affected record pairs rerun when one valid cache key changes.
 
+Pairwise hit limits, Similarity-group member limits, and Collinear block
+settings are derived options. Changing one recomputes the affected derived
+result while retaining eligible raw search rows. Current derived artifacts
+record their upstream raw keys and requested settings. Collinear provenance
+also records the effective `cds` or `locus` unit kinds produced by `auto`.
+
 **Save Raw LOSAT TSV** resolves generated protein handles to stable readable
 aliases. Uploaded comparison TSV is never rewritten. Export raw results for a
 durable evidence record; the cache exists to avoid repeated work.

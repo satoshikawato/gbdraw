@@ -6,10 +6,22 @@ import {
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames,
   requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentCollinearAnchorMode,
+  requireCurrentCollinearColorMode,
+  requireCurrentCollinearMaxConflicts,
+  requireCurrentCollinearMaxDiagonalDrift,
+  requireCurrentCollinearMaxParalogLinks,
+  requireCurrentCollinearMaxUnitGap,
+  requireCurrentCollinearMergeOrientation,
+  requireCurrentCollinearMinAnchors,
   requireCurrentCollinearSearchScope,
+  requireCurrentCollinearUnitMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
+  requireCurrentOrthogroupMemberMaxHits,
+  requireCurrentOrthogroupMembershipMode,
   requireCurrentProteinBlastpCandidateLimit,
+  requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
 } from '../../gbdraw/web/js/app/current-option-values.js';
@@ -49,6 +61,34 @@ assert.equal(requireCurrentCollinearSearchScope(), 'adjacent');
 assert.equal(requireCurrentCollinearSearchScope('adjacent'), 'adjacent');
 assert.equal(requireCurrentCollinearSearchScope('all'), 'all');
 assert.throws(() => requireCurrentCollinearSearchScope('all-records'), /search scope/i);
+
+for (const [validator, validValues, invalidValue] of [
+  [requireCurrentCollinearUnitMode, ['auto', 'cds', 'locus'], 'gene'],
+  [requireCurrentCollinearAnchorMode, ['all', 'one_to_one', 'rbh'], 'top1'],
+  [requireCurrentCollinearMergeOrientation, ['strand', 'order', 'either'], 'both'],
+  [requireCurrentCollinearColorMode,
+    ['average_identity', 'orientation', 'orientation_identity'], 'score'],
+  [requireCurrentOrthogroupMembershipMode, ['anchor_core_v1'], 'legacy']
+]) {
+  for (const value of validValues) assert.equal(validator(value), value);
+  assert.throws(() => validator(invalidValue));
+}
+assert.equal(requireCurrentCollinearColorMode('identity'), 'average_identity');
+
+for (const [validator, defaultValue, minimum] of [
+  [requireCurrentProteinBlastpMaxHits, 5, 1],
+  [requireCurrentOrthogroupMemberMaxHits, 5, 1],
+  [requireCurrentCollinearMinAnchors, 1, 1],
+  [requireCurrentCollinearMaxUnitGap, 0, 0],
+  [requireCurrentCollinearMaxDiagonalDrift, 0, 0],
+  [requireCurrentCollinearMaxConflicts, 1, 0],
+  [requireCurrentCollinearMaxParalogLinks, 2, 1]
+]) {
+  assert.equal(validator(), defaultValue);
+  assert.equal(validator(minimum), minimum);
+  assert.throws(() => validator(minimum - 1));
+  assert.throws(() => validator(1.5));
+}
 
 for (const omitted of [undefined, null, '']) {
   assert.equal(requireCurrentProteinBlastpCandidateLimit(omitted), null);
