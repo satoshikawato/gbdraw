@@ -46,12 +46,13 @@ export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
   'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
   'annotationSets', 'modeProfiles',
-  'linearRecordLayout', 'linearComparisonPlan', 'webEdits'
+  'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
 export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
 export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram']);
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
+  importedComparisonResolution: 'object',
   rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 const ROW_FIELDS = { rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
@@ -169,5 +170,18 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   }
   if (has(config, 'filterMode') && !['None', 'Whitelist', 'Blacklist'].includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
   if (has(config, 'palette') && !config.palette.trim()) throw new Error('Current session active configuration config.palette cannot be empty.');
+  if (isObject(config.importedComparisonResolution)) {
+    assertFields(
+      config.importedComparisonResolution,
+      new Set(['action']),
+      'config.importedComparisonResolution'
+    );
+    if (
+      config.importedComparisonResolution.action !== null
+      && !['INHERIT', 'REPLACE', 'CLEAR'].includes(config.importedComparisonResolution.action)
+    ) {
+      throw new Error('Current session active configuration config.importedComparisonResolution.action is invalid.');
+    }
+  }
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };

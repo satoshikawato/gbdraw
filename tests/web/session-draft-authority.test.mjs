@@ -241,12 +241,36 @@ assert.deepEqual(CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, [
   'modeProfiles',
   'linearRecordLayout',
   'linearComparisonPlan',
+  'importedComparisonResolution',
   'webEdits'
 ]);
 assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
   mode: 'circular',
   storedConfig
 }));
+assert.throws(
+  () => validateCurrentWriterActiveConfig({
+    mode: 'linear',
+    storedConfig: {
+      ...storedConfig,
+      importedComparisonResolution: { action: 'AUTOMATIC' }
+    }
+  }),
+  /importedComparisonResolution\.action is invalid/
+);
+Object.assign(state.importedComparisonIntent, {
+  disposition: 'PRESERVED_READ_ONLY',
+  action: 'INHERIT',
+  message: 'Preserved for the current Session.',
+  hasCommittedComparison: true
+});
+assert.deepEqual(buildConfigData().importedComparisonResolution, { action: 'INHERIT' });
+Object.assign(state.importedComparisonIntent, {
+  disposition: 'EDITABLE',
+  action: null,
+  message: '',
+  hasCommittedComparison: false
+});
 const restored = restoreCurrentWriterActiveConfig({
   mode: 'circular',
   projectedConfig,
@@ -402,6 +426,13 @@ const importEvent = {
 const imported = await importSession(importEvent);
 
 assert.equal(imported.status, 'ok', imported.error?.message);
+assert.equal(imported.comparisonDisposition, 'EDITABLE');
+assert.deepEqual(state.importedComparisonIntent, {
+  disposition: 'EDITABLE',
+  action: null,
+  message: 'The saved comparison is represented by the current controls.',
+  hasCommittedComparison: true
+});
 assert.equal(state.linearComparisonPlan.mode, 'none');
 assert.deepEqual(state.linearComparisonPlan.edges, []);
 assert.deepEqual({
@@ -478,6 +509,31 @@ const importPayload = async (payload) => importSession({
     value: 'selected'
   }
 });
+
+const decisionRequiredSession = structuredClone(divergentSession);
+decisionRequiredSession.renderRequest.comparisons = [{
+  kind: 'nucleotideBlast',
+  resourceId: 'missing-comparison-resource',
+  queryRecordIndex: 0,
+  subjectRecordIndex: 1
+}];
+decisionRequiredSession.losatCache = { entries: [] };
+decisionRequiredSession.losatDerivedCache = { entries: [] };
+const decisionRequiredImport = await importPayload(decisionRequiredSession);
+assert.equal(
+  decisionRequiredImport.status,
+  'ok',
+  decisionRequiredImport.error?.message
+);
+assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
+assert.deepEqual(state.importedComparisonIntent, {
+  disposition: 'DECISION_REQUIRED',
+  action: null,
+  message: 'The saved comparison is missing a required resource.',
+  hasCommittedComparison: true
+});
+assert.equal(state.results.value.length, divergentSession.results.length);
+assert.deepEqual(state.files.linearCanonicalComparisons, []);
 
 for (const savedPlan of [{
   mode: 'adjacent',

@@ -857,7 +857,12 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     return {
       originalPreview: String(selected?.content || ''),
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
-      resultCount: Array.isArray(app.results) ? app.results.length : 0
+      resultCount: Array.isArray(app.results) ? app.results.length : 0,
+      undoCount: window.__GBDRAW_HISTORY__?.getUndoCount?.() ?? -1,
+      importedComparisonIntent: {
+        disposition: app.importedComparisonIntent?.disposition,
+        action: app.importedComparisonIntent?.action
+      }
     };
   });
   const loadedPreviewIdentity = svgSourceIdentity(loaded.originalPreview);
@@ -877,6 +882,11 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   };
   expect(loaded.previewVisible).toBe(true);
   expect(loaded.resultCount).toBe(1);
+  expect(loaded.undoCount).toBe(0);
+  expect(loaded.importedComparisonIntent).toEqual({
+    disposition: 'EDITABLE',
+    action: null
+  });
   expect(ready).toMatchObject({ status: 'success', degradedRecovery: false });
   expect(previewMetrics).toEqual(Object.fromEntries(
     PREVIEW_ZERO_METRICS.map((name) => [name, 0])

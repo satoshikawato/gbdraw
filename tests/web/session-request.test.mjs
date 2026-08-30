@@ -14,6 +14,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   linearRecordLayoutHasSharedRow,
+  normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } = await import(
@@ -44,6 +45,23 @@ assert.equal(linearRecordLayoutHasSharedRow(
   [{ uid: 'a' }, { uid: 'b' }],
   [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }]
 ), false);
+const normalizedGridOrdering = normalizeWebGridColumnOrdering([
+  { recordKey: 'later-row', presentation: { gridRow: 2, gridColumn: 1 } },
+  { recordKey: 'right', presentation: { gridRow: 1, gridColumn: 2 } },
+  { recordKey: 'left', presentation: { gridRow: 1, gridColumn: 1 } }
+]);
+assert.deepEqual(
+  normalizedGridOrdering.records.map((record) => [
+    record.recordKey,
+    record.presentation.gridRow,
+    record.presentation.gridColumn
+  ]),
+  [
+    ['left', 1, null],
+    ['right', 1, null],
+    ['later-row', 2, null]
+  ]
+);
 
 const buildCanonicalRenderRequest = (args) => buildCanonicalRenderRequestRaw({
   ...args,
@@ -1922,6 +1940,70 @@ assert.deepEqual(
     ['all', 1, null],
     ['exactly_one', 1, null],
     ['exactly_one', 2, null]
+  ]
+);
+const numericColumnCanonical = structuredClone(arrangedCanonical);
+numericColumnCanonical.renderRequest.records[0].cardinality = 'exactly_one';
+numericColumnCanonical.renderRequest.records[0].presentation.gridColumn = 2;
+numericColumnCanonical.renderRequest.records[1].presentation.gridColumn = 1;
+numericColumnCanonical.renderRequest.records[2].presentation.gridColumn = 1;
+numericColumnCanonical.resources['grid-column-comparison'] = {
+  kind: 'nucleotide-blast',
+  name: 'grid-column-comparison.tsv',
+  encoding: 'base64',
+  data: btoa('match')
+};
+['first', 'second', 'third'].forEach((name) => {
+  numericColumnCanonical.resources[`grid-column-depth-${name}`] = {
+    kind: 'depth',
+    name: `${name}.depth.tsv`,
+    type: 'text/tab-separated-values',
+    size: 1,
+    lastModified: 0,
+    encoding: 'base64',
+    data: btoa(name.slice(0, 1))
+  };
+});
+numericColumnCanonical.renderRequest.diagramOptions.depthTracks = [{
+  source: ['first', 'second', 'third'].map((name) => ({
+    resourceId: `grid-column-depth-${name}`,
+    representation: 'file'
+  })),
+  label: 'Depth',
+  color: '#4A90E2',
+  height: null,
+  largeTickInterval: null,
+  smallTickInterval: null,
+  tickFontSize: null
+}];
+numericColumnCanonical.renderRequest.comparisons = [{
+  kind: 'nucleotideBlast',
+  resourceId: 'grid-column-comparison',
+  queryRecordIndex: 0,
+  subjectRecordIndex: 2
+}];
+const numericColumnProjection = projectCanonicalSessionRequest(numericColumnCanonical);
+assert.deepEqual(
+  numericColumnProjection.files.linearSeqs.map((sequence) => sequence.uid),
+  ['second', 'first', 'third']
+);
+assert.deepEqual(
+  numericColumnProjection.files.linearComparisons.map((comparison) => [
+    comparison.queryUid,
+    comparison.subjectUid
+  ]),
+  [['first', 'third']]
+);
+assert.deepEqual(
+  numericColumnProjection.files.linearSeqs.map((sequence) => sequence.depth?.name),
+  ['second.depth.tsv', 'first.depth.tsv', 'third.depth.tsv']
+);
+assert.deepEqual(
+  numericColumnProjection.config.linearRecordLayout.rows,
+  [
+    { uid: 'second', row: 1 },
+    { uid: 'first', row: 1 },
+    { uid: 'third', row: 2 }
   ]
 );
 const schema5Arranged = structuredClone(arrangedCanonical.renderRequest);

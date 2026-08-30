@@ -15,6 +15,7 @@ import {
   buildRunStateData,
   buildUiStateData,
   exportSession,
+  getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
   importSession as importSessionFromFile,
   SESSION_VERSION,
@@ -116,6 +117,12 @@ import {
 } from './depth-tracks.js';
 import { comparisonProfileDefault } from '../mode-profiles.js';
 import {
+  IMPORTED_COMPARISON_ACTIONS,
+  IMPORTED_COMPARISON_DISPOSITIONS,
+  importedComparisonExecution,
+  resolveImportedComparisonAction
+} from '../services/imported-comparison-intent.js';
+import {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
   compactDepthFileSlots,
@@ -183,6 +190,7 @@ export const createAppSetup = () => {
     generationCancelRequested,
     errorLog,
     sessionTitle,
+    importedComparisonIntent,
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
@@ -1849,6 +1857,7 @@ export const createAppSetup = () => {
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalRenderRequest,
+    getCommittedCanonicalSession,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
@@ -2220,30 +2229,82 @@ export const createAppSetup = () => {
         : {}
     });
   };
-  const runAnalysis = async () => history.runUndoableArtifactReplacement(
-    'Generate diagram',
-    async (generatedArtifactHandle) => {
-      cancelDefinitionUpdate();
-      const comparisonPlanSnapshot = mode.value === 'linear'
-        ? linearComparisonResolution.value
-        : null;
+  const runAnalysis = async () => {
+    const comparisonPlanSnapshot = mode.value === 'linear'
+      ? linearComparisonResolution.value
+      : null;
+    const comparisonExecution = importedComparisonExecution({
+      intent: importedComparisonIntent,
+      draftResolution: comparisonPlanSnapshot
+    });
+    if (!comparisonExecution.ok) {
+      errorLog.value = new Error(comparisonExecution.message);
+      failedGeneratePreservedResult.value = results.value.length > 0;
+      if (mode.value === 'linear') await focusLinearComparisonIssue();
+      return { status: 'error' };
+    }
+    return history.runUndoableArtifactReplacement(
+      'Generate diagram',
+      async (generatedArtifactHandle) => {
+        cancelDefinitionUpdate();
+        const result = await runGeneratedDiagramAnalysis(
+          comparisonPlanSnapshot,
+          generatedArtifactHandle,
+          comparisonExecution
+        );
+        if (result?.status === 'error' && mode.value === 'linear') {
+          await focusLinearComparisonIssue();
+        }
+        if (result?.status === 'ok') {
+          featureSelection.clearFeatureSelection({ clearStatus: true });
+        }
+        return result;
+      }, {
+        shouldCommit: (result) => result?.status === 'ok',
+        onCheckpointCapture: recordGenerateHistoryCapture
+      }
+    );
+  };
 
-      const result = await runGeneratedDiagramAnalysis(
-        comparisonPlanSnapshot,
-        generatedArtifactHandle
-      );
-      if (result?.status === 'error' && mode.value === 'linear') {
-        await focusLinearComparisonIssue();
+  const chooseImportedComparisonAction = (action) => history.runUndoable(
+    `${String(action || '').toLowerCase()} imported comparison`,
+    () => {
+      const outcome = resolveImportedComparisonAction({
+        intent: importedComparisonIntent,
+        action,
+        draftResolution: linearComparisonResolution.value
+      });
+      if (!outcome.ok) {
+        errorLog.value = new Error(outcome.message);
+        return false;
       }
-      if (result?.status === 'ok') {
-        featureSelection.clearFeatureSelection({ clearStatus: true });
+      if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
+        replaceLinearComparisonPlan({ mode: 'none', defaultSource: 'losat', edges: [] });
       }
-      return result;
-    }, {
-      shouldCommit: (result) => result?.status === 'ok',
-      onCheckpointCapture: recordGenerateHistoryCapture
+      errorLog.value = null;
+      return true;
     }
   );
+  const inheritImportedComparison = () => chooseImportedComparisonAction(
+    IMPORTED_COMPARISON_ACTIONS.INHERIT
+  );
+  const replaceImportedComparison = () => chooseImportedComparisonAction(
+    IMPORTED_COMPARISON_ACTIONS.REPLACE
+  );
+  const clearImportedComparison = () => chooseImportedComparisonAction(
+    IMPORTED_COMPARISON_ACTIONS.CLEAR
+  );
+  const importedComparisonNeedsResolution = computed(() => (
+    importedComparisonIntent.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+  ));
+  const importedComparisonCanInherit = computed(() => (
+    importedComparisonIntent.disposition
+      === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY
+  ));
+  const importedComparisonCanReplace = computed(() => (
+    linearComparisonResolution.value.valid
+    && linearComparisonResolution.value.hasComparisonIntent
+  ));
 
   const cancelGeneration = () => {
     cancelRunAnalysis();
@@ -3022,6 +3083,13 @@ export const createAppSetup = () => {
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    importedComparisonIntent,
+    importedComparisonNeedsResolution,
+    importedComparisonCanInherit,
+    importedComparisonCanReplace,
+    inheritImportedComparison,
+    replaceImportedComparison,
+    clearImportedComparison,
     selectResult,
     resultPanelTab,
     lastRunInfo,
