@@ -39,6 +39,7 @@ const semanticFileWatchersSuppressed = ref(false);
 const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
 const importedComparisonIntent = reactive(createImportedComparisonIntentState());
+const unmanagedConfigOverrides = reactive({});
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -763,6 +764,7 @@ export const state = {
   sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
   importedComparisonIntent,
+  unmanagedConfigOverrides,
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,

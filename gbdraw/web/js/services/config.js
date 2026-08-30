@@ -73,6 +73,7 @@ import {
 } from '../app/match-sequences.js';
 import {
   buildCanonicalRenderRequest,
+  managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } from './session-request.js';
@@ -164,6 +165,7 @@ import {
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
+import { assertSafeObjectKeys } from './safe-object-keys.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -906,6 +908,7 @@ export const buildConfigData = () => ({
   importedComparisonResolution: serializeImportedComparisonResolution(
     state.importedComparisonIntent
   ),
+  unmanagedConfigOverrides: cloneJsonData(state.unmanagedConfigOverrides || {}),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
@@ -998,6 +1001,57 @@ const replacePlainObject = (target, source) => {
   Object.entries(source || {}).forEach(([key, value]) => {
     target[key] = value;
   });
+};
+
+let unmanagedConfigOverrideValidator = null;
+
+export const setUnmanagedConfigOverrideValidator = (validator) => {
+  unmanagedConfigOverrideValidator = typeof validator === 'function'
+    ? validator
+    : null;
+};
+
+const validateUnmanagedConfigOverrides = async ({
+  mode,
+  config = null,
+  configOverrides = {},
+  requireUnmanagedOnly = false
+}) => {
+  const managedPaths = managedConfigOverridePathsForMode(mode);
+  const overrides = isPlainObject(configOverrides)
+    ? cloneJsonData(configOverrides)
+    : configOverrides;
+  const overridePaths = isPlainObject(overrides) ? Object.keys(overrides) : [];
+  if (
+    config === null
+    && overridePaths.length === 0
+  ) {
+    return {};
+  }
+  if (
+    config === null
+    && !requireUnmanagedOnly
+    && overridePaths.every((path) => managedPaths.includes(path))
+  ) {
+    return {};
+  }
+  if (!unmanagedConfigOverrideValidator) {
+    throw new Error('Configuration validation service is unavailable.');
+  }
+  const result = await unmanagedConfigOverrideValidator({
+    mode,
+    config,
+    configOverrides: overrides,
+    managedPaths,
+    requireUnmanagedOnly
+  });
+  if (typeof result?.result?.error === 'string' && result.result.error.trim()) {
+    throw new Error(result.result.error.trim());
+  }
+  if (!isPlainObject(result?.result?.overrides)) {
+    throw new Error('Configuration validation returned an invalid preserved-settings result.');
+  }
+  return cloneJsonData(result.result.overrides);
 };
 
 export const applyEditorStateData = (
@@ -1532,6 +1586,26 @@ const preflightSessionImport = (rawData) => {
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
   }
+  const hasCurrentStoredUnmanagedOverrides = currentSession
+    && isPlainObject(runtimeStoredConfig)
+    && Object.prototype.hasOwnProperty.call(
+      runtimeStoredConfig,
+      'unmanagedConfigOverrides'
+    );
+  const unmanagedConfigValidation = canonicalProjection
+    ? hasCurrentStoredUnmanagedOverrides
+      ? {
+          mode: canonicalProjection.mode,
+          configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
+          requireUnmanagedOnly: true
+        }
+      : {
+          mode: canonicalProjection.mode,
+          config: projectionRenderRequest?.diagramOptions?.config ?? null,
+          configOverrides:
+            projectionRenderRequest?.diagramOptions?.configOverrides ?? {}
+        }
+    : null;
   if (restoredConfig) {
     const activeDepthTrackCount = Array.isArray(restoredConfig?.adv?.depth_tracks)
       ? restoredConfig.adv.depth_tracks.length
@@ -1585,7 +1659,8 @@ const preflightSessionImport = (rawData) => {
     projectionResult,
     adoptedCanonicalSession: adoptedSession?.canonical || null,
     currentResourceTable,
-    comparisonClassification
+    comparisonClassification,
+    unmanagedConfigValidation
   };
 };
 
@@ -1667,6 +1742,12 @@ export const applyConfigData = (data) => {
   }
   if (data.form) safeDeepMerge(state.form, data.form);
   if (data.adv) safeDeepMerge(state.adv, data.adv);
+  replacePlainObject(
+    state.unmanagedConfigOverrides,
+    isPlainObject(data.unmanagedConfigOverrides)
+      ? cloneJsonData(data.unmanagedConfigOverrides)
+      : {}
+  );
   state.annotationSets.splice(
     0,
     state.annotationSets.length,
@@ -3643,6 +3724,11 @@ export const exportSession = async (
     storedConfig.adv,
     normalizedArrowGeometryState(storedConfig.adv)
   );
+  storedConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
+    mode: state.mode.value,
+    configOverrides: storedConfig.unmanagedConfigOverrides,
+    requireUnmanagedOnly: true
+  });
   let committed = isAdoptedCanonicalSession(committedCanonicalSession)
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession);
@@ -3816,13 +3902,9 @@ export const importSession = async (e, options = {}) => {
     const text = await readSessionText(file);
     recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
     recordSessionLifecycleEvent('json-parse-start');
-    let data = JSON.parse(text, (key, value) => {
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-        return undefined;
-      }
-      return value;
-    });
+    let data = JSON.parse(text);
     recordSessionLifecycleEvent('json-parse-end');
+    assertSafeObjectKeys(data, 'Session');
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
@@ -3840,8 +3922,14 @@ export const importSession = async (e, options = {}) => {
       projectionResult,
       adoptedCanonicalSession,
       currentResourceTable,
-      comparisonClassification
+      comparisonClassification,
+      unmanagedConfigValidation
     } = preflight;
+    if (restoredConfig && unmanagedConfigValidation) {
+      restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(
+        unmanagedConfigValidation
+      );
+    }
     const canonicalSession = Boolean(projectionResult);
     const currentSchemaSession = sourceSessionVersion === SESSION_VERSION;
     rollbackSnapshot = captureSessionImportSnapshot();

@@ -144,6 +144,7 @@ export const resetSettings = (state) => {
   state.modeProfileStateManager?.reset?.(state.mode.value, state.adv);
   replaceReactiveObject(state.losat, createDefaultLosat());
   replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
+  clearReactiveObject(state.unmanagedConfigOverrides);
   replaceReactiveArray(state.annotationSets);
   state.selectedAnnotation.value = null;
   resetLinearComparisonPlan(state);

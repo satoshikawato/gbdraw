@@ -492,6 +492,27 @@ const callJsonHelper = (pyodide, helperName, args) => {
 const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
+  [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
+    keys: [
+      'mode',
+      'config',
+      'configOverrides',
+      'managedPaths',
+      'requireUnmanagedOnly'
+    ],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide,
+      'validate_web_config_overrides_json',
+      [
+        String(payload.mode || ''),
+        jsonArgument(payload.config, null),
+        jsonArgument(payload.configOverrides, {}),
+        jsonArgument(payload.managedPaths, []),
+        Boolean(payload.requireUnmanagedOnly)
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA]: {
     keys: ['files', 'format', 'regionSpec', 'recordSelector', 'reverseFlag'],
     fileRoles: ['source'],

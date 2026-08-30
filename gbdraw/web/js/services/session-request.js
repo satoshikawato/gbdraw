@@ -252,6 +252,82 @@ const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
 );
 const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
 
+const CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
+  CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor,
+  CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize,
+  CONFIG_OVERRIDE_PATHS.circularDefinitionInterval,
+  CONFIG_OVERRIDE_PATHS.plotTitleFontSize,
+  CONFIG_OVERRIDE_PATHS.circularLabelSpacing,
+  CONFIG_OVERRIDE_PATHS.circularLabelPlacement,
+  CONFIG_OVERRIDE_PATHS.trackType,
+  CONFIG_OVERRIDE_PATHS.tickLabelFontSize,
+  CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset,
+  CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset,
+  CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset,
+  CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset
+]);
+const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
+  CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor,
+  CONFIG_OVERRIDE_PATHS.linearDefinitionShowReplicon,
+  CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession,
+  CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength,
+  CONFIG_OVERRIDE_PATHS.linearLabelSpacing,
+  CONFIG_OVERRIDE_PATHS.labelPlacement,
+  CONFIG_OVERRIDE_PATHS.labelRotation,
+  CONFIG_OVERRIDE_PATHS.alignCenter,
+  CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned,
+  CONFIG_OVERRIDE_PATHS.linearTrackLayout,
+  CONFIG_OVERRIDE_PATHS.linearTrackAxisGap,
+  CONFIG_OVERRIDE_PATHS.linearRulerOnAxis,
+  CONFIG_OVERRIDE_PATHS.comparisonHeight,
+  CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle,
+  CONFIG_OVERRIDE_PATHS.gcHeight,
+  CONFIG_OVERRIDE_PATHS.depthHeight,
+  CONFIG_OVERRIDE_PATHS.scaleStyle,
+  CONFIG_OVERRIDE_PATHS.scaleStrokeColor,
+  CONFIG_OVERRIDE_PATHS.scaleLabelColor,
+  CONFIG_OVERRIDE_PATHS.scaleStrokeWidth,
+  CONFIG_OVERRIDE_PATHS.normalizeLength
+]);
+
+export const managedConfigOverridePathsForMode = (mode) => {
+  if (!['circular', 'linear'].includes(mode)) {
+    throw new Error(`Unsupported config override mode: ${String(mode)}.`);
+  }
+  const excluded = mode === 'circular'
+    ? LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS
+    : CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS;
+  const paths = new Set(
+    Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
+  );
+  paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
+  for (const path of [
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth,
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth,
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize,
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize,
+    ...(mode === 'circular'
+      ? [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth, 'labels.font_size']
+      : [
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize,
+          'labels.font_size.linear'
+        ])
+  ]) {
+    paths.add(`${path}.short`);
+    paths.add(`${path}.long`);
+  }
+  if (mode === 'linear') {
+    Object.values(LINEAR_DEFINITION_STYLE_PATHS).forEach((prefix) => {
+      LINEAR_DEFINITION_STYLE_FIELDS.forEach((field) => paths.add(`${prefix}.${field}`));
+    });
+  }
+  return Object.freeze([...paths].sort());
+};
+
 const legacyFlatConfigKey = (semanticName) => (
   semanticName
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
@@ -806,9 +882,18 @@ const buildConfigOverrides = (
       }
     }
   }
-  return Object.fromEntries(
+  const managedOverrides = Object.fromEntries(
     Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined)
   );
+  const preservedOverrides = state.unmanagedConfigOverrides;
+  return {
+    ...(
+      preservedOverrides && typeof preservedOverrides === 'object' && !Array.isArray(preservedOverrides)
+        ? preservedOverrides
+        : {}
+    ),
+    ...managedOverrides
+  };
 };
 
 const addGeneratedTableResources = (state, resources, diagramOptions) => {
