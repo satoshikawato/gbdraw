@@ -55,6 +55,7 @@ import {
   migrateLegacyLayoutPreferences,
   replaceLayoutPreferences
 } from '../app/layout-preferences.js';
+import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
@@ -1416,6 +1417,15 @@ export const restoreCurrentWriterActiveConfig = ({
   }
   if (isPlainObject(restored.adv)) delete restored.adv.losatProgram;
 
+  const projectedRulerLabelFontSize = projectedConfig?.adv?.ruler_label_font_size;
+  if (
+    projectedRulerLabelFontSize !== undefined
+    && isPlainObject(restored.adv)
+    && !Object.prototype.hasOwnProperty.call(restored.adv, 'ruler_label_font_size')
+  ) {
+    restored.adv.ruler_label_font_size = cloneJsonData(projectedRulerLabelFontSize);
+  }
+
   // Current sessions written before the anchor control became editable omitted
   // this value. Preserve their committed projection only when active config has
   // no value of its own; new sessions store the explicit editor value above.
@@ -1741,7 +1751,14 @@ export const applyConfigData = (data) => {
     requireCurrentCircularMultiRecordSizeMode(data.adv.multi_record_size_mode);
   }
   if (data.form) safeDeepMerge(state.form, data.form);
-  if (data.adv) safeDeepMerge(state.adv, data.adv);
+  if (data.adv) {
+    safeDeepMerge(state.adv, data.adv);
+    ['scale_font_size', 'ruler_label_font_size'].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(data.adv, field)) {
+        state.adv[field] = cloneJsonData(data.adv[field]);
+      }
+    });
+  }
   replacePlainObject(
     state.unmanagedConfigOverrides,
     isPlainObject(data.unmanagedConfigOverrides)
@@ -3385,6 +3402,7 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     losatProgram: state.losatProgram.value,
     downloadDpi: state.downloadDpi.value,
     autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+    linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
     paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
@@ -3415,6 +3433,11 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   }
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
   state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+  reconcileImportedLinearTypographyLink({
+    adv: state.adv,
+    linked: state.linearTypographyLinked,
+    ui
+  });
   state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
   if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
     state.featurePanelTab.value = ui.featurePanelTab;
@@ -3815,6 +3838,7 @@ export const exportSession = async (
       lInputType: state.lInputType.value,
       downloadDpi: state.downloadDpi.value,
       autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
       appliedPaletteName: state.appliedPaletteName.value,
       appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
@@ -3996,6 +4020,11 @@ export const importSession = async (e, options = {}) => {
       );
       applyConfigData(restoredConfig);
     }
+    reconcileImportedLinearTypographyLink({
+      adv: state.adv,
+      linked: state.linearTypographyLinked,
+      ui
+    });
     restorePaletteStateFromSession(ui);
     restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
 

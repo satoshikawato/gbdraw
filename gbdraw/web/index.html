@@ -4075,11 +4075,42 @@
                                         :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
                                     <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
                                 </label>
+                                <div class="space-y-1">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            :checked="linearTypographyLinked"
+                                            @change="setLinearTypographyLinked($event.target.checked)"
+                                            class="form-checkbox"
+                                            aria-label="Link Linear scale and ruler label font sizes">
+                                        <span>Link Scale and Ruler Label Font Sizes</span>
+                                    </label>
+                                    <p class="text-[10px] text-slate-500">
+                                        Relinking copies the current Scale Font Size to Ruler Label Font Size once.
+                                    </p>
+                                </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for scale label text. Used by bar style and ruler labels."></help-tip></label>
+                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the simple bar scale label."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
-                                            <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input" aria-label="Linear scale font size">
+                                            <input
+                                                type="number"
+                                                :value="optionalNumberInputValue(adv.scale_font_size)"
+                                                @input="setLinearScaleFontSize($event.target.value)"
+                                                class="form-input form-input-compact auto-value-input"
+                                                aria-label="Linear scale font size">
+                                        </auto-value-field>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Ruler Label Font Size <help-tip text="Font size for ruler tick labels, including rulers drawn on record axes."></help-tip></label>
+                                        <auto-value-field :visible="autoValueVisible(adv.ruler_label_font_size, 'rulerLabelFontSize')" :text="autoValueText('rulerLabelFontSize')">
+                                            <input
+                                                type="number"
+                                                :value="optionalNumberInputValue(adv.ruler_label_font_size)"
+                                                @input="setLinearRulerLabelFontSize($event.target.value)"
+                                                :disabled="linearTypographyLinked"
+                                                class="form-input form-input-compact auto-value-input disabled:opacity-50 disabled:cursor-not-allowed"
+                                                aria-label="Linear ruler label font size">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">

@@ -49,7 +49,9 @@ const rawIdentity = buildLosatCachePayload(rawIdentityInput);
 for (const appearanceOnly of [
   { pairwiseMatchStyle: 'curve' },
   { comparisonHeight: 90 },
-  { comparisonDisclosureOpen: true }
+  { comparisonDisclosureOpen: true },
+  { scaleFontSize: 27 },
+  { rulerLabelFontSize: 11 }
 ]) {
   assert.deepEqual(
     buildLosatCachePayload({ ...rawIdentityInput, ...appearanceOnly }),
@@ -193,7 +195,9 @@ assert.deepEqual(
 for (const appearanceOnly of [
   { pairwiseMatchStyle: 'curve' },
   { comparisonHeight: 90 },
-  { comparisonDisclosureOpen: true }
+  { comparisonDisclosureOpen: true },
+  { scaleFontSize: 27 },
+  { rulerLabelFontSize: 11 }
 ]) {
   assert.deepEqual(
     buildIdentity(appearanceOnly),

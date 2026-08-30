@@ -409,10 +409,8 @@ const autoTextByKey = (state, key, context = null) => {
         ? lengthDependentPx(state, DEFAULTS.circular.axisStrokeWidthPx)
         : lengthDependentPx(state, DEFAULTS.linear.axisStrokeWidthPx);
     case 'scaleStrokeWidth': return withAuto(formatPx(DEFAULTS.scale.strokeWidthPx));
-    case 'scaleFontSize':
-      return String(state?.form?.scale_style || 'bar') === 'ruler'
-        ? lengthDependentPx(state, DEFAULTS.linear.rulerLabelFontSizePx)
-        : lengthDependentPx(state, DEFAULTS.linear.scaleFontSizePx);
+    case 'scaleFontSize': return lengthDependentPx(state, DEFAULTS.linear.scaleFontSizePx);
+    case 'rulerLabelFontSize': return lengthDependentPx(state, DEFAULTS.linear.rulerLabelFontSizePx);
     case 'scaleInterval': return scaleIntervalText(state);
     case 'tickLabelFontSize': return withAuto(formatPx(DEFAULTS.circular.tickLabelFontSizePx));
     case 'dinucleotideWindow': return dinucleotideWindowText(state, 'window');
