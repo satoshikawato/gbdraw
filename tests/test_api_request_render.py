@@ -1465,6 +1465,38 @@ def test_render_request_circular_smoke_creates_svg(tmp_path: Path) -> None:
 
 
 @pytest.mark.circular
+def test_render_request_circular_consumes_record_title_presentation(
+    tmp_path: Path,
+) -> None:
+    record = _seqrecord("record-title", "ATGCGC" * 200)
+    record.annotations["topology"] = "circular"
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                presentation=RecordPresentation(
+                    label="長い <i>環状ゲノム</i> ラベル",
+                    subtitle="Selected record subtitle",
+                ),
+            ),
+        ),
+        output=RenderOutputRequest(
+            output_prefix="record-title",
+            output_directory=tmp_path,
+            formats=("svg",),
+        ),
+    )
+
+    result = render_request(request)
+    svg = result.output_paths[0].read_text(encoding="utf-8")
+
+    assert "長い " in svg
+    assert "環状ゲノム" in svg
+    assert "Selected record subtitle" in svg
+    assert 'font-style="italic"' in svg
+
+
+@pytest.mark.circular
 def test_render_request_preserves_dotted_output_prefix(tmp_path: Path) -> None:
     record = _seqrecord("dotted-prefix", "ATGCGC" * 200)
     record.annotations["topology"] = "circular"

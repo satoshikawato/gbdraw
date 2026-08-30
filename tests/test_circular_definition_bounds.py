@@ -19,10 +19,16 @@ def _definition(
     *,
     plot_title: str | None = None,
     profile: str = "full",
+    record_label: str = "",
+    record_subtitle: str = "",
 ) -> DefinitionGroup:
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
     render_profile = CircularRenderProfile(cfg)
     record = SeqRecord(Seq("ATGC" * 250), id="NC_TEST.1")
+    if record_label:
+        record.annotations["gbdraw_record_label"] = record_label
+    if record_subtitle:
+        record.annotations["gbdraw_record_subtitle"] = record_subtitle
     canvas = CircularCanvasConfigurator("test", render_profile, "none", record)
     return DefinitionGroup(
         record,
@@ -74,3 +80,28 @@ def test_circular_definition_local_bounds_center_on_record_axis() -> None:
     translate_x, translate_y = getattr(group, "_gbdraw_plot_translation")
     assert translate_x + 0.5 * (local_bounds.min_x + local_bounds.max_x) == pytest.approx(400.0)
     assert translate_y + 0.5 * (local_bounds.min_y + local_bounds.max_y) == pytest.approx(300.0)
+
+
+def test_circular_record_label_and_subtitle_override_inferred_title_lines() -> None:
+    definition = _definition(
+        record_label="長い <i>環状ゲノム</i> ラベル",
+        record_subtitle="Selected record subtitle",
+    )
+
+    svg = definition.get_group().tostring()
+
+    assert "長い " in svg
+    assert "環状ゲノム" in svg
+    assert 'font-style="italic"' in svg
+    assert "Selected record subtitle" in svg
+    assert "Testus boundsii" not in svg
+    assert "strain A" not in svg
+    assert definition.local_bounds.width > 100.0
+
+
+def test_empty_circular_record_title_values_preserve_inference() -> None:
+    definition = _definition()
+    svg = definition.get_group().tostring()
+
+    assert "Testus boundsii" in svg
+    assert "strain A" in svg

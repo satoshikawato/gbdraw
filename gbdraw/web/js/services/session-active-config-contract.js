@@ -9,6 +9,8 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
 export const createDefaultForm = () => ({
   prefix: '', species: '', strain: '', plot_title: '', track_type: 'tuckin', linear_track_layout: 'middle', show_scale: true, scale_style: 'bar',
   linear_ruler_on_axis: false, labels_mode: 'none', show_labels_linear: 'none', multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
+  circular_record_selector: '', circular_region_start: null, circular_region_end: null, circular_reverse: false,
+  circular_record_label: '', circular_record_subtitle: '',
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: false, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
 });

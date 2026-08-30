@@ -1176,6 +1176,76 @@
                             <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
+                        <details data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
+                            <summary aria-label="Circular record presentation">
+                                <i class="ph ph-selection"></i>
+                                Single-record presentation
+                            </summary>
+                            <div class="pt-2 space-y-2">
+                                <div>
+                                    <label class="input-label text-[10px]">Record <help-tip text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></label>
+                                    <select
+                                        :value="form.circular_record_selector"
+                                        @change="setCircularRecordPresentationSelector($event.target.value)"
+                                        :disabled="form.multi_record_canvas"
+                                        aria-label="Circular record"
+                                        class="form-select w-full px-1 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500"
+                                    >
+                                        <option
+                                            v-for="option in circularRecordPresentationOptions"
+                                            :key="`${option.value}:${option.synthetic ? 'synthetic' : 'record'}`"
+                                            :value="option.value"
+                                        >{{ option.label }}</option>
+                                    </select>
+                                    <p v-if="form.multi_record_canvas" class="mt-1 text-[9px] text-slate-500">Turn off Multi-Record Canvas to edit one record.</p>
+                                    <p v-else-if="circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
+                                    <p v-else-if="!circularSingleRecordPresentationEnabled" class="mt-1 text-[9px] text-slate-500">Select one record to edit crop, orientation, and title lines.</p>
+                                </div>
+                                <div class="grid grid-cols-1 gap-2" :class="circularSingleRecordPresentationEnabled ? '' : 'opacity-60'">
+                                    <div>
+                                        <label class="input-label text-[10px]">Record label <help-tip text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></label>
+                                        <input
+                                            type="text"
+                                            v-model="form.circular_record_label"
+                                            :disabled="!circularSingleRecordPresentationEnabled"
+                                            aria-label="Circular record label"
+                                            placeholder="e.g. Streptomyces fradiae"
+                                            class="form-input px-1 py-1 text-xs"
+                                        >
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Subtitle <help-tip text="Overrides the inferred strain line for this Circular record. Leave empty to keep inference."></help-tip></label>
+                                        <input
+                                            type="text"
+                                            v-model="form.circular_record_subtitle"
+                                            :disabled="!circularSingleRecordPresentationEnabled"
+                                            aria-label="Circular record subtitle"
+                                            placeholder="e.g. Neomycin biosynthetic gene cluster"
+                                            class="form-input px-1 py-1 text-xs"
+                                        >
+                                    </div>
+                                    <div class="pt-1 border-t border-slate-200 border-dashed">
+                                        <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+                                            <i class="ph ph-crop"></i> Region (optional)
+                                            <help-tip text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label class="text-[9px] block">Start</label>
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!circularSingleRecordPresentationEnabled" aria-label="Circular region start" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">End</label>
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!circularSingleRecordPresentationEnabled" aria-label="Circular region end" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <label class="flex items-center gap-2 text-[10px] text-slate-600">
+                                        <input type="checkbox" v-model="form.circular_reverse" :disabled="!circularSingleRecordPresentationEnabled" aria-label="Circular reverse complement" class="form-checkbox"> Reverse complement
+                                    </label>
+                                </div>
+                            </div>
+                        </details>
                         <details class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Depth TSV tracks">
                                 <i class="ph ph-chart-bar"></i>
