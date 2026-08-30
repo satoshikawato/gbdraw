@@ -2029,7 +2029,10 @@ ${origin}
   expect(staleResponse).toEqual({
     firstResult: { status: 'stale' },
     secondResult: { status: 'error' },
-    errorLog: null,
+    errorLog: {
+      summary: 'A diagram generation request is already running.',
+      details: []
+    },
     snapshotPreserved: true,
     changedFields: []
   });
