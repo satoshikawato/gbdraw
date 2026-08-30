@@ -34,9 +34,9 @@ LOSAT edges. Similarity groups
 and Collinear blocks require an all-adjacent LOSAT plan because they expand
 evidence across the record set. Changing either mode control preserves inactive
 program, presentation, and appearance drafts. It does not set **Match style**
-as a side effect. When a Similarity-group or Collinear recipe requires
-**Curve** from fresh state, select LOSATP Pairwise matches, set that style,
-then select the final LOSATP mode.
+as a side effect. **Comparison appearance** remains reachable for every active
+Linear comparison, so set **Curve** directly after selecting the intended
+LOSATP mode.
 
 Similarity groups always uses all-vs-all search evidence across the loaded
 records and does not read the Collinear evidence-scope field. For Collinear

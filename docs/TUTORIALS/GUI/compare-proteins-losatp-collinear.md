@@ -98,23 +98,19 @@ connects sequence 4 (`AP027132.gb`) to sequence 5 (`NZ_CP006932.gb`), then
 close the disclosure.
 
 Open **Settings**, choose the **LOSATP** button in **LOSAT Mode**, and choose
-**Pairwise matches** from the **LOSATP mode** menu. Under **Comparison appearance**, set **Match
-style** to **Curve**, then change **LOSATP mode** to **Collinear blocks** and
-set the primary search and filter values. The presentation switch preserves
-the Curve draft while hiding the appearance controls. Continue past
-**Generate Diagram**, open **Advanced comparison and layout**, and set the
-runtime and advanced Collinear values.
+**Collinear blocks** from the **LOSATP mode** menu. Under **Comparison
+appearance**, set **Match style** to **Curve**, then set the primary search and
+filter values. Continue past **Generate Diagram**, open **Advanced comparison
+and layout**, and set the runtime and advanced Collinear values.
 
-Fresh and Reset Collinear settings default **Evidence scope** to **All
-records**. This Gallery reproduction intentionally changes it to **Adjacent
-pairs** to preserve the checked recipe and output.
+Fresh and Reset Collinear settings default **Evidence scope** to **Adjacent
+pairs**, which is also the value used by this checked recipe and output.
 
 | Section | Control | Value |
 | --- | --- | --- |
 | Settings | LOSAT Mode | LOSATP |
-| Settings | LOSATP mode (appearance step) | Pairwise matches |
+| Settings | LOSATP mode | Collinear blocks |
 | Settings / Comparison appearance | Match style | Curve |
-| Settings | LOSATP mode (final) | Collinear blocks |
 | Settings | Max unit gap | `0` |
 | Settings | Min block genes | `1` |
 | Settings | Color mode | Orientation + identity |
