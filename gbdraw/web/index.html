@@ -2358,6 +2358,46 @@
                     </details>
                 </div>
 
+                <div
+                    v-if="unmanagedConfigOverrideEntries.length"
+                    data-unmanaged-config-overrides
+                    class="card border-blue-200 bg-blue-50/60"
+                >
+                    <div class="flex items-start gap-2">
+                        <i class="ph ph-shield-check mt-0.5 text-blue-600"></i>
+                        <div class="min-w-0 flex-1">
+                            <div class="text-xs font-bold text-slate-700">Preserved session settings</div>
+                            <p class="mt-0.5 text-[10px] leading-snug text-slate-600">
+                                These validated settings are not editable in the Web UI. They remain active until reset.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                        <div
+                            v-for="entry in unmanagedConfigOverrideEntries"
+                            :key="entry.path"
+                            data-unmanaged-config-override
+                            class="rounded border border-blue-200 bg-white px-2 py-1.5"
+                        >
+                            <div class="flex items-start gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <code class="block break-all text-[10px] font-semibold text-slate-700">{{ entry.path }}</code>
+                                    <code class="mt-0.5 block break-all text-[10px] text-slate-500">{{ entry.displayValue }}</code>
+                                </div>
+                                <button
+                                    type="button"
+                                    data-history-managed
+                                    class="btn btn-secondary shrink-0 px-2 py-1 text-[10px]"
+                                    :aria-label="`Reset preserved setting ${entry.path}`"
+                                    @click="resetUnmanagedConfigOverride(entry.path)"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
 
                 <div class="card bg-slate-50/50">
                     <details open>

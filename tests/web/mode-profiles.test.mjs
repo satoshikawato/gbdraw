@@ -409,6 +409,7 @@ assert.deepEqual(
     }
   );
   state.losat.blastp.collinearSearchScope = 'adjacent';
+  state.unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
   resetSettings(state);
 
@@ -427,6 +428,7 @@ assert.deepEqual(
   assert.equal(state.adv.circular_track_slots_enabled, false);
   assert.equal(state.adv.linear_track_slots_enabled, false);
   assert.equal(state.form.show_scale, true);
+  assert.deepEqual(state.unmanagedConfigOverrides, {});
   assert.equal(
     state.losat.blastp.collinearSearchScope,
     'adjacent',
@@ -480,6 +482,7 @@ assert.deepEqual(
   state.adv.identity = 77;
   state.form.show_scale = false;
   state.losat.blastp.collinearSearchScope = 'adjacent';
+  state.unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
   const savedConfig = structuredClone(buildConfigData());
 
   assert.equal(savedConfig.form.show_scale, false);
@@ -488,13 +491,20 @@ assert.deepEqual(
   assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
   assert.equal(savedConfig.modeProfiles.profiles.linear.managed.identity, false);
   assert.equal(savedConfig.losat.blastp.collinearSearchScope, 'adjacent');
+  assert.deepEqual(savedConfig.unmanagedConfigOverrides, {
+    'objects.blast_match.curve_tension': 0.25
+  });
 
   Object.assign(state.adv, createDefaultAdv('linear'));
   state.modeProfileStateManager.reset('linear', state.adv);
   state.form.show_scale = true;
+  state.unmanagedConfigOverrides.stale = true;
   applyConfigData(savedConfig);
   assert.equal(state.form.show_scale, false);
   assert.equal(state.adv.identity, 77);
+  assert.deepEqual(state.unmanagedConfigOverrides, {
+    'objects.blast_match.curve_tension': 0.25
+  });
   assert.equal(
     state.losat.blastp.collinearSearchScope,
     'adjacent',
@@ -530,6 +540,9 @@ assert.deepEqual(
     migratedProfiles.profiles.circular.values,
     managedAdvStateForMode('circular')
   );
+  Object.keys(state.unmanagedConfigOverrides).forEach((path) => {
+    delete state.unmanagedConfigOverrides[path];
+  });
 
 }
 

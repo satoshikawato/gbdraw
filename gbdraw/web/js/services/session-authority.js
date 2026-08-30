@@ -1,3 +1,5 @@
+import { assertSafeObjectKeys } from './safe-object-keys.js';
+
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
   version: 'document',
@@ -275,6 +277,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
   }
+  assertSafeObjectKeys(sessionData, 'Session');
   if (Number(version) < 31) return;
   if (
     Number(version) >= 40 &&

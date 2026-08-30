@@ -18,6 +18,35 @@ from gbdraw.exceptions import ValidationError
 from .models import GbdrawConfig  # type: ignore[reportMissingImports]
 
 
+_UNSAFE_CONFIG_KEYS = frozenset({"__proto__", "constructor", "prototype"})
+
+
+def _assert_safe_config_value(value: object, *, path: str) -> None:
+    pending = [value]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if not isinstance(current, (MappingABC, SequenceABC)) or isinstance(
+            current,
+            (str, bytes),
+        ):
+            continue
+        identity = id(current)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if isinstance(current, MappingABC):
+            entries = current.items()
+        else:
+            entries = ((None, item) for item in current)
+        for key, item in entries:
+            if isinstance(key, str) and key in _UNSAFE_CONFIG_KEYS:
+                raise ValidationError(
+                    f"Config override {path!r} contains unsafe key {key!r}."
+                )
+            pending.append(item)
+
+
 def _nested_dataclass_type(annotation: object) -> type | None:
     if isinstance(annotation, type) and is_dataclass(annotation):
         return annotation
@@ -181,6 +210,14 @@ def _validate_override_path(path: object) -> tuple[str, object]:
     leaves, branches = _config_override_schema()
     if not isinstance(path, str) or not path:
         raise ValidationError("Config override paths must be non-empty strings.")
+    unsafe = next(
+        (key for key in path.split(".") if key in _UNSAFE_CONFIG_KEYS),
+        None,
+    )
+    if unsafe is not None:
+        raise ValidationError(
+            f"Config override path {path!r} contains unsafe key {unsafe!r}."
+        )
     if path in branches:
         raise ValidationError(
             f"Config override path {path!r} is not a leaf field."
@@ -229,6 +266,7 @@ def validate_config_overrides(
     validated: list[tuple[str, object]] = []
     for raw_path, value in dict(overrides or {}).items():
         path, annotation = _validate_override_path(raw_path)
+        _assert_safe_config_value(value, path=path)
         if _has_literal_domain(annotation) and not _matches_literal_domain(
             annotation,
             value,
@@ -238,12 +276,12 @@ def validate_config_overrides(
                 for candidate in _literal_domain_values(annotation)
             )
             raise ValidationError(
-                f"Invalid value {value!r} for config override {path!r}; "
+                f"Invalid value for config override {path!r}; "
                 f"allowed literal values: {allowed}."
             )
         if not _matches_annotation(annotation, value):
             raise ValidationError(
-                f"Invalid value {value!r} for config override {path!r}; "
+                f"Invalid value for config override {path!r}; "
                 f"expected {annotation!r}."
             )
         validated.append((path, value))

@@ -14,6 +14,7 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   linearRecordLayoutHasSharedRow,
+  managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
@@ -396,7 +397,8 @@ const state = {
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
-  annotationSets: []
+  annotationSets: [],
+  unmanagedConfigOverrides: {}
 };
 
 const stateForCanonicalProjection = (projection) => {
@@ -555,6 +557,11 @@ assert.equal(
 const circularConfigOverrides = canonical.renderRequest.diagramOptions.configOverrides;
 assert.ok(Object.keys(circularConfigOverrides).every((path) => path.includes('.')));
 assert.ok(Object.values(circularConfigOverrides).every((value) => value !== null));
+assert.ok(
+  Object.keys(circularConfigOverrides).every((path) => (
+    managedConfigOverridePathsForMode('circular').includes(path)
+  ))
+);
 assert.equal(circularConfigOverrides['objects.scale.show'], true);
 assert.equal(
   circularConfigOverrides['objects.features.arrow_geometry.head_length_ratio'],
@@ -568,6 +575,41 @@ assert.equal(projectCanonicalSessionRequest(canonical).config.form.show_scale, t
 assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
 assert.equal(circularConfigOverrides['labels.circular.placement'], 'horizontal');
 assert.deepEqual(circularConfigOverrides['labels.filtering.blacklist_keywords'], []);
+assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.scale.show'));
+assert.ok(
+  managedConfigOverridePathsForMode('circular').includes(
+    'objects.axis.circular.stroke_width.short'
+  )
+);
+assert.ok(
+  !managedConfigOverridePathsForMode('circular').includes(
+    'objects.blast_match.curve_tension'
+  )
+);
+assert.ok(
+  managedConfigOverridePathsForMode('linear').includes(
+    'objects.definition.linear.line_styles.name.font_weight'
+  )
+);
+state.unmanagedConfigOverrides = {
+  'objects.gc_content.percent_background_opacity': 0.42,
+  'objects.scale.show': false
+};
+const canonicalWithPreservedConfig = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(
+  canonicalWithPreservedConfig.renderRequest.diagramOptions.configOverrides[
+    'objects.gc_content.percent_background_opacity'
+  ],
+  0.42
+);
+assert.equal(
+  canonicalWithPreservedConfig.renderRequest.diagramOptions.configOverrides[
+    'objects.scale.show'
+  ],
+  true,
+  'the GUI-managed value must win over a preserved value at the same path'
+);
+state.unmanagedConfigOverrides = {};
 state.adv.circular_definition_interval = 30;
 assert.equal(
   buildCanonicalRenderRequest({ state, filesData })
@@ -1752,6 +1794,10 @@ const linearCanonical = buildCanonicalRenderRequest({ state, filesData: linearFi
 assert.ok(
   Object.keys(linearCanonical.renderRequest.diagramOptions.configOverrides)
     .every((path) => path.includes('.'))
+);
+assert.ok(
+  Object.keys(linearCanonical.renderRequest.diagramOptions.configOverrides)
+    .every((path) => managedConfigOverridePathsForMode('linear').includes(path))
 );
 assert.ok(
   Object.values(linearCanonical.renderRequest.diagramOptions.configOverrides)

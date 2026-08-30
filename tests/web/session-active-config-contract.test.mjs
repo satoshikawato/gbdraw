@@ -34,6 +34,36 @@ assert.equal(createDefaultLosat().blastp.candidateLimit, null);
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
 assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
 
+assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
+  mode: 'circular',
+  storedConfig: {
+    ...storedConfig,
+    unmanagedConfigOverrides: {
+      'objects.gc_content.percent_background_opacity': 0.42
+    }
+  }
+}));
+assert.throws(
+  () => validateCurrentWriterActiveConfig({
+    mode: 'circular',
+    storedConfig: { ...storedConfig, unmanagedConfigOverrides: [] }
+  }),
+  /config\.unmanagedConfigOverrides must be object/
+);
+const unsafeStoredConfig = JSON.parse(JSON.stringify({
+  ...storedConfig,
+  unmanagedConfigOverrides: {
+    'labels.filtering.raw': JSON.parse('{"__proto__":{"polluted":true}}')
+  }
+}));
+assert.throws(
+  () => validateCurrentWriterActiveConfig({
+    mode: 'circular',
+    storedConfig: unsafeStoredConfig
+  }),
+  /unsafe key __proto__/
+);
+
 for (const [candidateLimit, collinearSearchScope] of [[null, 'adjacent'], [9, 'all']]) {
   assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
     mode: 'linear',

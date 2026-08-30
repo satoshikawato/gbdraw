@@ -21,6 +21,7 @@ import {
   SESSION_VERSION,
   serializeActiveRenderFiles,
   serializeResults,
+  setUnmanagedConfigOverrideValidator,
   setPreviewRuntime
 } from '../services/config.js';
 import { createHistoryManager } from '../services/history.js';
@@ -32,7 +33,11 @@ import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  disposeDiagramGenerationWorker,
+  runDiagramHelperOperation
+} from '../services/diagram-generation.js';
 import { recordSessionLifecycleEvent } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
@@ -184,6 +189,10 @@ export const createSessionImportRollbackState = ({
 });
 
 export const createAppSetup = () => {
+  setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
+    payload
+  ));
   const {
     processing,
     processingStatus,
@@ -224,6 +233,7 @@ export const createAppSetup = () => {
     hasActiveLinearUploadIntent,
     form,
     adv,
+    unmanagedConfigOverrides,
     losat,
     losatCacheInfo,
     losatThreadingStatus,
@@ -1012,6 +1022,31 @@ export const createAppSetup = () => {
   });
   const undoHistory = () => history.undo();
   const redoHistory = () => history.redo();
+  const displayPreservedConfigValue = (value) => {
+    const serialized = JSON.stringify(value) ?? String(value);
+    return serialized.length <= 240
+      ? serialized
+      : `${serialized.slice(0, 237)}...`;
+  };
+  const unmanagedConfigOverrideEntries = computed(() => (
+    Object.entries(unmanagedConfigOverrides)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([path, value]) => ({
+        path,
+        value,
+        displayValue: displayPreservedConfigValue(value)
+      }))
+  ));
+  const resetUnmanagedConfigOverride = (path) => history.runUndoable(
+    `Reset preserved setting ${path}`,
+    () => {
+      if (!Object.prototype.hasOwnProperty.call(unmanagedConfigOverrides, path)) {
+        return false;
+      }
+      delete unmanagedConfigOverrides[path];
+      return true;
+    }
+  );
   const selectResult = (index) => previewRuntime.selectResult(index);
 
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
@@ -1111,6 +1146,7 @@ export const createAppSetup = () => {
     if (typeof disposeHistoryInputs === 'function') disposeHistoryInputs();
     if (window.__GBDRAW_HISTORY__ === history) delete window.__GBDRAW_HISTORY__;
     previewFeatureSearch.dispose();
+    setUnmanagedConfigOverrideValidator(null);
     disposeDiagramGenerationWorker();
   });
 
@@ -3224,6 +3260,8 @@ export const createAppSetup = () => {
     linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
+    unmanagedConfigOverrideEntries,
+    resetUnmanagedConfigOverride,
     comparisonProfileDefault,
     comparisonHeightValidationError,
     optionalNumberInputValue,

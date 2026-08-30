@@ -201,6 +201,9 @@ const projectedConfig = {
 };
 const storedConfig = {
   form: { track_type: 'tuckin' },
+  unmanagedConfigOverrides: {
+    'objects.gc_content.percent_background_opacity': 0.42
+  },
   adv: {
     ...projectedConfig.adv,
     circular_track_slots: [disabledDraft, canonicalFeature],
@@ -239,6 +242,7 @@ assert.deepEqual(CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, [
   'circularConservation',
   'annotationSets',
   'modeProfiles',
+  'unmanagedConfigOverrides',
   'linearRecordLayout',
   'linearComparisonPlan',
   'importedComparisonResolution',
@@ -281,6 +285,9 @@ assert.deepEqual(restored.adv.linear_track_slots, storedConfig.adv.linear_track_
 assert.equal(restored.adv.circular_track_slots_axis_index, 2);
 assert.equal(restored.adv.feature_width_circular, 19);
 assert.equal(restored.adv.depth_width_circular, 23);
+assert.deepEqual(restored.unmanagedConfigOverrides, {
+  'objects.gc_content.percent_background_opacity': 0.42
+});
 
 const galleryCompatibilityConfig = structuredClone(storedConfig);
 galleryCompatibilityConfig.colors = { CDS: '#123456' };

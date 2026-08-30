@@ -12,6 +12,11 @@ await writeFile(
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'session-authority.js'), 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempRoot, 'safe-object-keys.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'safe-object-keys.js'), 'utf8'),
+  'utf8'
+);
 
 const {
   SESSION_TOP_LEVEL_AUTHORITY,
