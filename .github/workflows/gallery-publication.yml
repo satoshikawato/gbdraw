@@ -53,21 +53,13 @@ jobs:
         run: node tools/ci-impact.mjs plan
 
   browser:
-    name: Gallery browser (${{ matrix.example }})
+    name: Gallery browser (common 9)
     needs: ci-impact
     if: >-
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'browser')
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - example: common 9
-            command: test:web:gallery-publication
-          - example: Vibrio
-            command: test:web:vibrio-generate
     steps:
       - name: Checkout exact test SHA
         uses: actions/checkout@v4
@@ -87,7 +79,7 @@ jobs:
           npx playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py
       - name: Verify first-Generate parity
-        run: npm run ${{ matrix.command }}
+        run: npm run test:web:gallery-publication
 
   performance:
     name: Gallery publication performance (projection)

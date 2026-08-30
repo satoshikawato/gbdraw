@@ -1115,13 +1115,18 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
   assert.doesNotMatch(planner, /node --test/);
 
   const browser = workflowJob('browser', GALLERY_PUBLICATION_WORKFLOW);
+  assert.match(browser, /\n    name: Gallery browser \(common 9\)\n/);
   assert.match(browser, /needs: ci-impact/);
   assert.match(browser, /needs\.ci-impact\.result == 'success'/);
   assert.match(browser, /requiredJobs, 'browser'/);
-  assert.match(browser, /example: common 9\n            command: test:web:gallery-publication/);
-  assert.match(browser, /example: Vibrio\n            command: test:web:vibrio-generate/);
   assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
-  assert.match(browser, /npm run \$\{\{ matrix\.command \}\}/);
+  assert.match(browser, /npm run test:web:gallery-publication/);
+  assert.doesNotMatch(browser, /matrix|Vibrio|test:web:vibrio-generate/);
+  assert.equal(
+    PACKAGE_SCRIPTS['test:web:vibrio-generate'],
+    'playwright test --config=playwright.vibrio.config.js'
+  );
+  assert.match(DEPLOY_WORKFLOW, /npm run test:web:vibrio-generate/);
 
   const performance = workflowJob('performance', GALLERY_PUBLICATION_WORKFLOW);
   assert.match(performance, /\n    name: Gallery publication performance \(projection\)\n/);
