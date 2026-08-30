@@ -2865,6 +2865,14 @@ export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
 const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.matchSequenceRegistry?.reset?.();
+  state.circularRecordList.value = [];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle',
+    error: '',
+    inputType: '',
+    primaryFile: null,
+    pairedFile: null
+  });
   state.files.c_gb = null;
   state.files.c_gff = null;
   state.files.c_fasta = null;
@@ -2916,6 +2924,37 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.files.blacklist = deserializeFile(filesData.blacklist);
   state.files.whitelist = deserializeFile(filesData.whitelist);
   state.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
+
+  const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
+    ? filesData.circularRecords
+    : [];
+  if (canonicalCircularRecords.length > 0) {
+    state.circularRecordList.value = canonicalCircularRecords.map((record, index) => {
+      const selector = record?.region?.selector || record?.selector;
+      const selectorValue = selector?.kind === 'recordId'
+        ? String(selector.value || '')
+        : selector?.kind === 'recordIndex'
+          ? `#${Number(selector.index) + 1}`
+          : `#${index + 1}`;
+      return {
+        selector: selectorValue,
+        record_id: selector?.kind === 'recordId' ? selectorValue : '',
+        record_length: null,
+        recordKey: String(record?.recordKey || '')
+      };
+    });
+    Object.assign(state.circularRecordDiscovery, {
+      status: 'loading',
+      error: '',
+      inputType: state.cInputType.value,
+      primaryFile: state.cInputType.value === 'gff'
+        ? state.files.c_gff
+        : state.files.c_gb,
+      pairedFile: state.cInputType.value === 'gff'
+        ? state.files.c_fasta
+        : null
+    });
+  }
 
   if (Array.isArray(filesData.linearSeqs)) {
     const loadedLinearSeqs = filesData.linearSeqs.map((seq) => ({
@@ -3085,6 +3124,8 @@ const cloneLiveFileState = () => ({
         : cloneJsonData(comparison)
     ))
   },
+  circularRecordList: cloneJsonData(state.circularRecordList.value),
+  circularRecordDiscovery: { ...state.circularRecordDiscovery },
   linearSeqs: state.linearSeqs.map((seq) => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
@@ -3102,6 +3143,8 @@ const restoreLiveFileState = (snapshot) => {
   Object.keys(state.files).forEach((key) => {
     state.files[key] = snapshot.files[key] ?? null;
   });
+  state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
+  Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);
   state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
   state.linearRecordRows.splice(0, state.linearRecordRows.length, ...snapshot.linearRecordRows);
   replaceLinearComparisonPlan(state.linearComparisonPlan, snapshot.linearComparisonPlan);

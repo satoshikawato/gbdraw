@@ -644,6 +644,8 @@ const circularRegionPayload = (form, record) => {
 };
 
 const circularRecordKey = (record) => {
+  const preserved = String(record?.recordKey || '').trim();
+  if (preserved) return preserved;
   const recordId = safePrefix(record?.recordId, 'record');
   const selector = safePrefix(record?.selector, '1');
   return `circular-${recordId}-${selector}`;
