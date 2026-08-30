@@ -692,11 +692,16 @@ assert.equal(
 );
 state.form.labels_mode = 'none';
 
-state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
+state.circularRecordList.value = [{
+  selector: '#1',
+  record_id: 'single.id',
+  recordKey: 'record-1'
+}];
 state.form.prefix = '';
 const implicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(implicitSingleCanonical.renderRequest.grouping, 'single');
 assert.equal(implicitSingleCanonical.webFiles.circularOutputPrefixExplicit, false);
+assert.equal(implicitSingleCanonical.renderRequest.records[0].recordKey, 'record-1');
 assert.deepEqual(
   implicitSingleCanonical.renderRequest.records[0].selector,
   { kind: 'recordId', value: 'single.id' }

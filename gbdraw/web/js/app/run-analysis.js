@@ -1533,6 +1533,19 @@ export const createRunAnalysis = ({
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
     const hasActiveInput = mode.value === 'circular' && hasCompleteInput;
+    const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput();
+    const preservedRecordKeys = new Map();
+    if (preserveCanonicalRecordKeys) {
+      (Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+        .forEach((record) => {
+          const recordKey = String(record?.recordKey || '').trim();
+          if (!recordKey) return;
+          [record?.selector, record?.record_id, record?.recordId]
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+            .forEach((value) => preservedRecordKeys.set(value, recordKey));
+        });
+    }
     Object.assign(circularRecordDiscovery, {
       status: hasActiveInput ? 'loading' : 'idle',
       error: '',
@@ -1576,11 +1589,17 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
-      const nextRecords = records.map((entry) => ({
-        selector: entry.selector,
-        record_id: entry.recordId,
-        record_length: entry.recordLength
-      }));
+      const nextRecords = records.map((entry) => {
+        const recordKey = preservedRecordKeys.get(String(entry.selector || '').trim())
+          || preservedRecordKeys.get(String(entry.recordId || '').trim())
+          || '';
+        return {
+          selector: entry.selector,
+          record_id: entry.recordId,
+          record_length: entry.recordLength,
+          ...(recordKey ? { recordKey } : {})
+        };
+      });
       circularRecordList.value = nextRecords;
       circularRecordDiscovery.status = 'ready';
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
