@@ -42,6 +42,7 @@ const session = {
   ui: {
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
     canvasPan: { x: 3, y: 4 }, generatedLegendPosition: 'right', downloadDpi: 300,
+    linearTypographyLinked: false,
     appliedPaletteName: 'orchid', appliedPaletteColors: { CDS: '#123456' },
     pendingPaletteName: 'mint', pendingPaletteColors: { CDS: '#abcdef' }
   },
@@ -312,6 +313,7 @@ assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
   zoom: 1.5,
   canvasPan: { x: 3, y: 4 },
   downloadDpi: 300,
+  linearTypographyLinked: false,
   appliedPaletteName: 'orchid',
   appliedPaletteColors: { CDS: '#123456' },
   pendingPaletteName: 'mint',

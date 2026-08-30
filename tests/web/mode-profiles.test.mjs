@@ -332,6 +332,9 @@ assert.deepEqual(
   state.mode.value = 'linear';
   state.adv.identity = 77;
   state.form.show_scale = false;
+  state.linearTypographyLinked.value = false;
+  state.adv.scale_font_size = 18;
+  state.adv.ruler_label_font_size = 11;
   state.adv.circular_track_slots_enabled = true;
   state.adv.circular_track_slots_axis_index = 1;
   state.adv.circular_track_slots.splice(
@@ -428,6 +431,9 @@ assert.deepEqual(
   assert.equal(state.adv.circular_track_slots_enabled, false);
   assert.equal(state.adv.linear_track_slots_enabled, false);
   assert.equal(state.form.show_scale, true);
+  assert.equal(state.linearTypographyLinked.value, true);
+  assert.equal(state.adv.scale_font_size, null);
+  assert.equal(state.adv.ruler_label_font_size, null);
   assert.deepEqual(state.unmanagedConfigOverrides, {});
   assert.equal(
     state.losat.blastp.collinearSearchScope,

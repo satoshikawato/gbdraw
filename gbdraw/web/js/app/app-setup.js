@@ -81,6 +81,7 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
+import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
   formatRecordLength,
@@ -238,6 +239,7 @@ export const createAppSetup = () => {
     hasActiveLinearUploadIntent,
     form,
     adv,
+    linearTypographyLinked,
     unmanagedConfigOverrides,
     losat,
     losatCacheInfo,
@@ -388,6 +390,10 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  const linearTypography = createLinearTypographyController({
+    adv,
+    linked: linearTypographyLinked
+  });
   const rightDrawerActions = createRightDrawerController({ state, watch });
 
   const comparisonHeightValidationError = computed(() => {
@@ -3331,6 +3337,10 @@ export const createAppSetup = () => {
     linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
+    linearTypographyLinked,
+    setLinearTypographyLinked: linearTypography.setLinked,
+    setLinearRulerLabelFontSize: linearTypography.setRulerLabelFontSize,
+    setLinearScaleFontSize: linearTypography.setScaleFontSize,
     unmanagedConfigOverrideEntries,
     resetUnmanagedConfigOverride,
     comparisonProfileDefault,

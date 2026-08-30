@@ -1007,7 +1007,7 @@ const buildConfigOverrides = (
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]:
             optionalNumber(adv.scale_font_size),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]:
-            optionalNumber(adv.scale_font_size),
+            optionalNumber(adv.ruler_label_font_size),
           'labels.font_size.linear': optionalNumber(adv.label_font_size)
         })
   };
@@ -4043,9 +4043,8 @@ export const projectCanonicalSessionRequest = ({
     scale_stroke_color: overrides.scale_stroke_color ?? null,
     ruler_label_color: overrides.scale_label_color ?? null,
     scale_stroke_width: overrides.scale_stroke_width ?? null,
-    scale_font_size: form.scale_style === 'ruler'
-      ? (overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null)
-      : (overrides.scale_font_size ?? overrides.ruler_label_font_size ?? null),
+    scale_font_size: overrides.scale_font_size ?? null,
+    ruler_label_font_size: overrides.ruler_label_font_size ?? null,
     scale_interval: overrides.scale_interval ?? null,
     tick_label_font_size: overrides.tick_label_font_size ?? null,
     outer_label_x_offset: renderRequest.mode === 'circular'

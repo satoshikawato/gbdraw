@@ -189,6 +189,7 @@ const projectedConfig = {
   form: { track_type: 'tuckin' },
   adv: {
     nt: 'GC',
+    ruler_label_font_size: 13,
     circular_track_slots_enabled: true,
     circular_track_slots_schema_version: 4,
     circular_track_slots: [canonicalFeature],
@@ -288,6 +289,17 @@ assert.equal(restored.adv.depth_width_circular, 23);
 assert.deepEqual(restored.unmanagedConfigOverrides, {
   'objects.gc_content.percent_background_opacity': 0.42
 });
+
+const storedBeforeIndependentRulerFont = structuredClone(storedConfig);
+delete storedBeforeIndependentRulerFont.adv.ruler_label_font_size;
+assert.equal(
+  restoreCurrentWriterActiveConfig({
+    mode: 'linear',
+    projectedConfig,
+    storedConfig: storedBeforeIndependentRulerFont
+  }).adv.ruler_label_font_size,
+  13
+);
 
 const galleryCompatibilityConfig = structuredClone(storedConfig);
 galleryCompatibilityConfig.colors = { CDS: '#123456' };

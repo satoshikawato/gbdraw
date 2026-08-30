@@ -1930,6 +1930,8 @@ assert.equal(projectCanonicalSessionRequest(linearCanonical).config.form.show_sc
 state.adv.block_stroke_width = 2;
 state.adv.def_font_size = 16;
 state.adv.label_font_size = 14;
+state.adv.scale_font_size = 21;
+state.adv.ruler_label_font_size = 12;
 state.adv.linear_definition_line_styles = {
   name: { font_size: 13, font_weight: 'bold', fill: '#112233' }
 };
@@ -1944,6 +1946,13 @@ assert.equal(styledLinearOverrides['objects.definition.linear.font_size.short'],
 assert.equal(styledLinearOverrides['objects.definition.linear.font_size.long'], 16);
 assert.equal(styledLinearOverrides['labels.font_size.linear.short'], 14);
 assert.equal(styledLinearOverrides['labels.font_size.linear.long'], 14);
+assert.equal(styledLinearOverrides['objects.scale.font_size.short'], 21);
+assert.equal(styledLinearOverrides['objects.scale.font_size.long'], 21);
+assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.short'], 12);
+assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.long'], 12);
+const styledLinearProjection = projectCanonicalSessionRequest(styledLinearCanonical);
+assert.equal(styledLinearProjection.config.adv.scale_font_size, 21);
+assert.equal(styledLinearProjection.config.adv.ruler_label_font_size, 12);
 assert.equal(
   styledLinearOverrides['objects.definition.linear.line_styles.name.font_size'],
   13
@@ -1966,6 +1975,8 @@ assert.equal(
 delete state.adv.block_stroke_width;
 delete state.adv.def_font_size;
 delete state.adv.label_font_size;
+delete state.adv.scale_font_size;
+delete state.adv.ruler_label_font_size;
 delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 2;
@@ -2748,6 +2759,7 @@ assert.equal(pythonConfigProjection.config.adv.label_placement, 'above_feature')
 assert.equal(pythonConfigProjection.config.adv.legend_box_size, 17);
 assert.equal(pythonConfigProjection.config.adv.legend_font_size, 19);
 assert.equal(pythonConfigProjection.config.adv.scale_font_size, 21);
+assert.equal(pythonConfigProjection.config.adv.ruler_label_font_size, 22);
 assert.deepEqual(
   pythonConfigProjection.config.adv.linear_definition_line_styles,
   { name: { font_weight: 'bold', fill: '#112233' } }
@@ -2757,7 +2769,8 @@ assert.equal(pythonConfigProjection.config.blacklistText, 'hypothetical');
 
 const rulerFontCanonical = structuredClone(pythonConfigCanonical);
 rulerFontCanonical.renderRequest.diagramOptions.config.objects.scale.style = 'ruler';
-assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 22);
+assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 21);
+assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.ruler_label_font_size, 22);
 
 const sparsePythonScaleCanonical = structuredClone(pythonConfigCanonical);
 delete sparsePythonScaleCanonical.renderRequest.diagramOptions.config.objects.scale.show;

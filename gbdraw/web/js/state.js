@@ -208,6 +208,7 @@ const form = reactive(createDefaultForm());
 
 // Extended Advanced Config
 const adv = reactive(createDefaultAdv(mode.value));
+const linearTypographyLinked = ref(true);
 const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
 const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
   layoutPreferences,
@@ -802,6 +803,7 @@ export const state = {
   hasActiveLinearUploadIntent,
   form,
   adv,
+  linearTypographyLinked,
   modeProfileStateManager,
   losat,
   losatCacheInfo,
