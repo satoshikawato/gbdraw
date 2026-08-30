@@ -128,6 +128,11 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
+import {
+  IMPORTED_COMPARISON_DISPOSITIONS,
+  createImportedComparisonIntentState,
+  inheritCommittedComparisonIntent
+} from '../services/imported-comparison-intent.js';
 
 const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('circular')
@@ -915,6 +920,7 @@ export const createRunAnalysis = ({
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
   getCommittedCanonicalRenderRequest = null,
+  getCommittedCanonicalSession = null,
   captureGeneratedArtifactHandle,
   restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity = null,
@@ -991,6 +997,7 @@ export const createRunAnalysis = ({
     linearRecordRows,
     linearComparisonPlan,
     linearComparisonResolution,
+    importedComparisonIntent,
     generatedLegendPosition,
     generatedMode,
     generatedMultiRecordCanvas,
@@ -1625,28 +1632,40 @@ export const createRunAnalysis = ({
     runMode = 'manual',
     requestId = 0,
     comparisonPlanSnapshot = null,
-    generatedArtifactHandle = null
+    generatedArtifactHandle = null,
+    comparisonExecution = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
       recordSessionLifecycleEvent('generate-start');
       recordSessionLifecycleEvent('generation-input-resolution-start');
     }
+    const useCommittedComparison = comparisonExecution?.mode === 'inherit';
+    const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
       ? (
-          comparisonPlanSnapshot || resolveLinearComparisonPlan({
-            plan: linearComparisonPlan,
-            sequences: linearSeqs,
-            layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
-            losatProgram: losatProgram.value,
-            blastpMode: normalizeBlastpMode(losat.blastp?.mode)
-          })
+          forceEmptyComparison
+            ? resolveLinearComparisonPlan({
+                plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+                sequences: linearSeqs,
+                layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+                losatProgram: losatProgram.value,
+                blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+              })
+            : comparisonPlanSnapshot || resolveLinearComparisonPlan({
+                plan: linearComparisonPlan,
+                sequences: linearSeqs,
+                layout: linearRecordLayoutEnabled.value ? linearRecordRows : [],
+                losatProgram: losatProgram.value,
+                blastpMode: normalizeBlastpMode(losat.blastp?.mode)
+              })
         )
       : null;
     let linearRecordCatalog = null;
 
     const generationToken = ++latestGenerationToken;
     let keepProcessingStatus = false;
+    let canceledAttemptOwnsPresentation = false;
     let generationAbortController = null;
     let generationAbortSignal = null;
     const committedArtifactHandle = isReflow
@@ -1657,14 +1676,22 @@ export const createRunAnalysis = ({
       await restoreGeneratedArtifactHandle(committedArtifactHandle);
     };
     const finishCanceledManualRun = async () => {
+      if (latestGenerationToken !== generationToken + 1) {
+        return { status: 'stale' };
+      }
+      canceledAttemptOwnsPresentation = true;
       await restoreCommittedArtifact();
       errorLog.value = null;
       processingStatus.value = 'Canceled.';
+      generationCancelRequested.value = false;
+      processing.value = false;
       keepProcessingStatus = true;
       return { status: 'canceled' };
     };
     const setProcessingStatus = (message) => {
-      if (!isReflow) processingStatus.value = String(message || '');
+      if (!isReflow && generationToken === latestGenerationToken) {
+        processingStatus.value = String(message || '');
+      }
     };
     const throwIfGenerationCanceled = () => {
       if (!isReflow && generationCancelRequested.value) {
@@ -1694,23 +1721,18 @@ export const createRunAnalysis = ({
           error: error?.message || 'Could not read records from the Linear input file(s).'
         };
       } finally {
-        if (!isReflow) {
+        if (!isReflow && generationToken === latestGenerationToken) {
           processing.value = false;
           processingStatus.value = '';
         }
       }
-      if (
-        !isReflow && (
-          generationAbortSignal?.aborted ||
-          generationCancelRequested.value ||
-          generationToken !== latestGenerationToken
-        )
-      ) {
+      if (!isReflow && generationToken !== latestGenerationToken) {
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
-        generationCancelRequested.value = false;
-        return finishCanceledManualRun();
+        return generationAbortSignal?.aborted
+          ? finishCanceledManualRun()
+          : { status: 'stale' };
       }
       if (prepared?.error) {
         const message = String(prepared.error);
@@ -1740,19 +1762,18 @@ export const createRunAnalysis = ({
         try {
           await refreshCircularRecordOrder();
         } finally {
-          processing.value = false;
-          processingStatus.value = '';
+          if (generationToken === latestGenerationToken) {
+            processing.value = false;
+            processingStatus.value = '';
+          }
         }
-        if (
-          generationAbortSignal?.aborted ||
-          generationCancelRequested.value ||
-          generationToken !== latestGenerationToken
-        ) {
+        if (generationToken !== latestGenerationToken) {
           if (activeLosatAbortController === generationAbortController) {
             activeLosatAbortController = null;
           }
-          generationCancelRequested.value = false;
-          return finishCanceledManualRun();
+          return generationAbortSignal?.aborted
+            ? finishCanceledManualRun()
+            : { status: 'stale' };
         }
         if (!circularDiscoveryMatchesCurrentInput()) {
           const message = circularRecordDiscovery.error || 'Could not read records from the circular input file(s).';
@@ -4083,18 +4104,30 @@ export const createRunAnalysis = ({
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
+      const candidateFiles = forceEmptyComparison
+        ? { ...serializedFiles, linearCanonicalComparisons: [] }
+        : serializedFiles;
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
-        fasta: serializedFiles.c_conservation_fastas?.[entry.sourceIndex] || null
+        fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
         state,
-        filesData: serializedFiles,
+        filesData: candidateFiles,
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation
       });
+      if (useCommittedComparison) {
+        if (typeof getCommittedCanonicalSession !== 'function') {
+          throw new Error('The preserved comparison owner is unavailable.');
+        }
+        inheritCommittedComparisonIntent({
+          candidate: canonical,
+          committed: getCommittedCanonicalSession()
+        });
+      }
       recordSessionLifecycleEvent('canonical-request-construction-end');
       const canonicalResourceEntries = Object.values(canonical.resources || {});
       const canonicalResourceCount = canonicalResourceEntries.length;
@@ -4180,6 +4213,12 @@ export const createRunAnalysis = ({
       )
         ? generationResponse.metadata
         : {};
+      if (generationToken !== latestGenerationToken) {
+        if (!isReflow && generationAbortSignal?.aborted) {
+          return finishCanceledManualRun();
+        }
+        return { status: 'stale' };
+      }
       if (res?.error) {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
@@ -4192,14 +4231,6 @@ export const createRunAnalysis = ({
       }
       if (!Array.isArray(res)) {
         throw new Error('The diagram engine returned an invalid Result list.');
-      }
-
-      if (generationToken !== latestGenerationToken) {
-        if (!isReflow && generationCancelRequested.value) {
-          return finishCanceledManualRun();
-        }
-        if (!isReflow) await restoreCommittedArtifact();
-        return { status: 'stale' };
       }
 
       if (isReflow && requestId !== pendingReflowRequestId) {
@@ -4252,13 +4283,9 @@ export const createRunAnalysis = ({
       recordSessionLifecycleEvent('result-admission-end');
 
       if (generationToken !== latestGenerationToken) {
-        if (
-          !isReflow
-          && (generationCancelRequested.value || generationAbortSignal?.aborted)
-        ) {
+        if (!isReflow && generationAbortSignal?.aborted) {
           return finishCanceledManualRun();
         }
-        if (!isReflow) await restoreCommittedArtifact();
         return { status: 'stale' };
       }
 
@@ -4367,9 +4394,6 @@ export const createRunAnalysis = ({
         pendingPaletteColors.value = {};
       }
       commitProteinMigration?.();
-      if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
-      }
       if (!isReflow && typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -4387,6 +4411,16 @@ export const createRunAnalysis = ({
           structuredLosatTelemetry
         );
       }
+      if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      if (!isReflow && !useCommittedComparison && importedComparisonIntent) {
+        Object.assign(
+          importedComparisonIntent,
+          createImportedComparisonIntentState(),
+          { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
+        );
+      }
       return { status: 'ok' };
     } catch (e) {
       if (!legacyPromotionCommitted) {
@@ -4402,6 +4436,9 @@ export const createRunAnalysis = ({
         }
         return { status: 'canceled' };
       }
+      if (!isReflow && generationToken !== latestGenerationToken) {
+        return { status: 'stale' };
+      }
       if (isReflow) {
         labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
         return { status: 'error' };
@@ -4416,23 +4453,27 @@ export const createRunAnalysis = ({
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
-        if (!keepProcessingStatus) processingStatus.value = '';
-        generationCancelRequested.value = false;
-        processing.value = false;
+        if (generationToken === latestGenerationToken || canceledAttemptOwnsPresentation) {
+          if (!keepProcessingStatus) processingStatus.value = '';
+          generationCancelRequested.value = false;
+          processing.value = false;
+        }
       }
     }
   };
 
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
-    generatedArtifactHandle = null
+    generatedArtifactHandle = null,
+    comparisonExecution = null
   ) => {
     const outcome = await runAnalysisInternal({
       runMode: 'manual',
       comparisonPlanSnapshot,
-      generatedArtifactHandle
+      generatedArtifactHandle,
+      comparisonExecution
     });
-    if (outcome?.status === 'error') {
+    if (['error', 'canceled'].includes(outcome?.status)) {
       failedGeneratePreservedResult.value = results.value.length > 0;
     } else if (outcome?.status === 'ok') {
       failedGeneratePreservedResult.value = false;

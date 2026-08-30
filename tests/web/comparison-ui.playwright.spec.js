@@ -2,6 +2,49 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 
+const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
+
+const preservedComparisonSession = () => {
+  const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+  const comparisonText = 'unmatched-query\tunmatched-subject\t99\t10\t0\t0\t1\t10\t1\t10\t1e-5\t50\n';
+  session.resources['imported-repeated-comparison'] = {
+    kind: 'nucleotide-blast',
+    name: 'imported-repeated-comparison.tsv',
+    type: 'text/tab-separated-values',
+    size: Buffer.byteLength(comparisonText),
+    lastModified: 0,
+    encoding: 'base64',
+    data: Buffer.from(comparisonText).toString('base64')
+  };
+  session.renderRequest.comparisons = Array.from({ length: 2 }, () => ({
+    kind: 'nucleotideBlast',
+    resourceId: 'imported-repeated-comparison',
+    queryRecordIndex: 0,
+    subjectRecordIndex: 1
+  }));
+  session.config.linearComparisonPlan = {
+    mode: 'none',
+    defaultSource: 'losat',
+    edges: []
+  };
+  session.losatCache = { entries: [] };
+  session.losatDerivedCache = { entries: [] };
+  return session;
+};
+
+const decisionRequiredComparisonSession = () => {
+  const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+  session.renderRequest.comparisons = [{
+    kind: 'nucleotideBlast',
+    resourceId: 'missing-comparison-resource',
+    queryRecordIndex: 0,
+    subjectRecordIndex: 1
+  }];
+  session.losatCache = { entries: [] };
+  session.losatDerivedCache = { entries: [] };
+  return session;
+};
+
 const makeGenbank = (recordId, base = 'atg') => {
   const sequence = base.repeat(100);
   const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
@@ -322,6 +365,154 @@ test('uploader, comparison commands, and native summaries work from the keyboard
   }
   const afterDisclosures = await serializedComparisonState();
   expect(afterDisclosures).toEqual(beforeDisclosures);
+});
+
+test('imported comparison resolutions are explicit and create one History entry each', async ({ page }) => {
+  await openLinear(page);
+  await inputHeaderAdd(page).click();
+  await comparisonCommands(page).getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs'
+  }).click();
+
+  const setIntent = (disposition, message) => page.evaluate(async ({ next, explanation }) => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    Object.assign(state.importedComparisonIntent, {
+      disposition: next,
+      action: null,
+      message: explanation,
+      hasCommittedComparison: true
+    });
+    await window.Vue.nextTick();
+  }, { next: disposition, explanation: message });
+  const resolution = page.locator('[data-imported-comparison-resolution]');
+
+  await setIntent(
+    'PRESERVED_READ_ONLY',
+    'The saved comparison cannot be represented losslessly by current controls.'
+  );
+  await expect(resolution).toContainText('Saved comparison preserved as read-only');
+  const historyBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+  await expect(resolution).toContainText('Selected action: INHERIT');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(historyBefore + 1);
+
+  const dialogPromise = page.waitForEvent('dialog');
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles({
+    name: 'decision-required-comparison.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(decisionRequiredComparisonSession()))
+  });
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await expect(resolution).toContainText('Saved comparison needs a decision');
+  await expect(resolution).toContainText('missing a required resource');
+  await expect(resolution.getByRole('button', { name: 'Inherit saved comparison' }))
+    .toHaveCount(0);
+  const historyBeforeBlockedGenerate = await page.evaluate(() => (
+    window.__GBDRAW_HISTORY__.getUndoCount()
+  ));
+  await page.getByRole('button', { name: 'Generate Diagram' }).click();
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText(
+    'missing a required resource'
+  );
+  await expect(page.getByRole('region', { name: 'Result Preview' }))
+    .toContainText('Last Successful Result');
+  await expect(page.getByRole('button', { name: 'SVG', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(historyBeforeBlockedGenerate);
+  const beforeReplace = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await resolution.getByRole('button', { name: 'Replace with current controls' }).click();
+  await expect(resolution).toContainText('Selected action: REPLACE');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(beforeReplace + 1);
+
+  await setIntent(
+    'DECISION_REQUIRED',
+    'The saved comparison is incomplete and needs an explicit replacement or clear action.'
+  );
+  const beforeClear = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await resolution.getByRole('button', { name: 'Clear comparison' }).click();
+  await expect(resolution).toContainText('Selected action: CLEAR');
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
+    .toBe(beforeClear + 1);
+  await expect(comparisonCard(page).locator('[role="status"][aria-live="polite"]'))
+    .toContainText(
+    'Current: No comparison'
+    );
+});
+
+test('preserved imported comparison generates only after explicit inheritance', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const dialogPromise = page.waitForEvent('dialog');
+  await page.locator(
+    'input[type="file"][accept*="application/json"][accept*="application/gzip"]'
+  ).setInputFiles({
+    name: 'preserved-comparison.gbdraw-session.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(preservedComparisonSession()))
+  });
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+
+  const resolution = page.locator('[data-imported-comparison-resolution]');
+  await expect(resolution).toContainText('Saved comparison preserved as read-only');
+  const imported = await page.evaluate(() => ({
+    intent: JSON.parse(JSON.stringify(window.__GBDRAW_APP__.importedComparisonIntent)),
+    result: window.__GBDRAW_APP__.results[window.__GBDRAW_APP__.selectedResultIndex]?.content,
+    undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
+  }));
+  expect(imported.intent).toMatchObject({
+    disposition: 'PRESERVED_READ_ONLY',
+    action: null,
+    hasCommittedComparison: true
+  });
+  expect(imported.undoCount).toBe(0);
+
+  await resolution.getByRole('button', { name: 'Inherit saved comparison' }).click();
+  const generated = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const outcome = await app.runAnalysis();
+    const committed = getCommittedCanonicalSession();
+    return {
+      outcome,
+      error: app.errorLog,
+      action: app.importedComparisonIntent.action,
+      result: app.results[app.selectedResultIndex]?.content,
+      comparisons: committed?.renderRequest?.comparisons,
+      undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  expect(generated.outcome, JSON.stringify(generated.error, null, 2)).toEqual({ status: 'ok' });
+  expect(generated.action).toBe('INHERIT');
+  expect(generated.result).not.toBe(imported.result);
+  expect(generated.comparisons).toHaveLength(2);
+  expect(generated.comparisons).toEqual(Array.from({ length: 2 }, () => ({
+    kind: 'nucleotideBlast',
+    resourceId: 'imported-repeated-comparison',
+    queryRecordIndex: 0,
+    subjectRecordIndex: 1
+  })));
+  expect(generated.undoCount).toBe(imported.undoCount + 2);
+
+  const downloadPromise = page.waitForEvent('download');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle()))
+    .toMatchObject({ status: 'saved' });
+  const download = await downloadPromise;
+  const savedSession = JSON.parse(
+    gunzipSync(readFileSync(await download.path())).toString('utf8')
+  );
+  expect(savedSession.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
+  expect(savedSession.renderRequest.comparisons).toEqual(generated.comparisons);
+  expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
+    .toBe(generated.result);
 });
 
 test('LOSAT and LOSATP modes own their controls and mixed plans require explicit topology change', async ({ page }) => {

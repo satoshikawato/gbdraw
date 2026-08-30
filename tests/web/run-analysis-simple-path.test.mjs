@@ -1480,4 +1480,26 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const retryResult = result('linear-none-retry.svg', 'linear-none-retry');
   workerResponses.push(response(retryResult, validCatalog(retryResult.name)));
   assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
+
+  let releaseSupersededCatalog;
+  prepareLinearRecordCatalogImpl = () => new Promise((resolve) => {
+    releaseSupersededCatalog = resolve;
+  });
+  const supersededRun = runner.runAnalysis(comparisonPlanSnapshot);
+  while (!releaseSupersededCatalog) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  prepareLinearRecordCatalogImpl = async () => ({
+    catalog: preparedRecordCatalog,
+    error: ''
+  });
+  const newestResult = result('linear-none-newest.svg', 'linear-none-newest');
+  workerResponses.push(response(newestResult, validCatalog(newestResult.name)));
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
+  assert.deepEqual(state.results.value, [newestResult]);
+  releaseSupersededCatalog({ catalog: preparedRecordCatalog, error: '' });
+  assert.deepEqual(await supersededRun, { status: 'stale' });
+  assert.deepEqual(state.results.value, [newestResult]);
+  assert.equal(state.failedGeneratePreservedResult.value, false);
+  assert.equal(state.processing.value, false);
 });

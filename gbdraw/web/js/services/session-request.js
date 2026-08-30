@@ -2286,6 +2286,52 @@ const cloneCanonicalJsonValue = (value) => (
   value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 );
 
+// Web controls own row membership and record order, not a distinct numeric
+// column value. Preserve the engine's row/column render order in the projected
+// record sequence, then retire the unsupported numeric column in the draft.
+export const normalizeWebGridColumnOrdering = (records = []) => {
+  const source = Array.isArray(records) ? records : [];
+  const entries = source.map((record, sourceIndex) => {
+    const rawRow = record?.presentation?.gridRow;
+    const rawColumn = record?.presentation?.gridColumn;
+    const row = Number(rawRow);
+    const column = Number(rawColumn);
+    return {
+      record,
+      sourceIndex,
+      row: rawRow !== null && rawRow !== undefined && Number.isInteger(row) ? row : sourceIndex + 1,
+      column: rawColumn !== null && rawColumn !== undefined && Number.isInteger(column)
+        ? column
+        : sourceIndex + 1
+    };
+  });
+  const hasColumns = source.some((record) => (
+    record?.presentation?.gridColumn !== null
+    && record?.presentation?.gridColumn !== undefined
+  ));
+  const ordered = hasColumns
+    ? entries.slice().sort((left, right) => (
+        left.row - right.row
+        || left.column - right.column
+        || left.sourceIndex - right.sourceIndex
+      ))
+    : entries;
+  const projectedIndexBySourceIndex = new Map(
+    ordered.map((entry, projectedIndex) => [entry.sourceIndex, projectedIndex])
+  );
+  return {
+    records: ordered.map(({ record }) => ({
+      ...record,
+      presentation: {
+        ...(record?.presentation || {}),
+        gridColumn: null
+      }
+    })),
+    sourceIndexByProjectedIndex: ordered.map((entry) => entry.sourceIndex),
+    projectedIndexBySourceIndex
+  };
+};
+
 const projectGeneratedProteinPipeline = (
   comparison,
   { adoptCanonicalPayloads = false } = {}
@@ -2967,10 +3013,23 @@ export const projectCanonicalSessionRequest = ({
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
     throw new Error('Unsupported canonical renderRequest mode.');
   }
-  const records = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
+  const records = normalizedRecordOrdering.records;
+  const reorderRecordIndexedValues = (values) => (
+    normalizedRecordOrdering.sourceIndexByProjectedIndex
+      .map((sourceIndex) => values?.[sourceIndex])
+  );
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
   const grouping = canonicalGrouping(renderRequest, records);
-  const outputPrefixes = canonicalOutputPrefixes(renderRequest, grouping, records.length);
+  const sourceOutputPrefixes = canonicalOutputPrefixes(
+    renderRequest,
+    grouping,
+    records.length
+  );
+  const outputPrefixes = grouping === 'batch'
+    ? reorderRecordIndexedValues(sourceOutputPrefixes)
+    : sourceOutputPrefixes;
   const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
@@ -3077,8 +3136,9 @@ export const projectCanonicalSessionRequest = ({
       const source = record.source || {};
       const region = record.region || null;
       const selector = region?.selector || record.selector;
+      const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index];
       const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
-        savedLinearRecordMetadata[index] || legacyLinearSequences[index] || {};
+        savedLinearRecordMetadata[sourceIndex] || legacyLinearSequences[sourceIndex] || {};
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank'
@@ -3117,12 +3177,16 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || [])
       .filter((comparison) => comparison?.kind === 'nucleotideBlast')
       .forEach((comparison, index) => {
-        const queryIndex = Number.isInteger(Number(comparison.queryRecordIndex))
+        const sourceQueryIndex = Number.isInteger(Number(comparison.queryRecordIndex))
           ? Number(comparison.queryRecordIndex)
           : index;
-        const subjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
+        const sourceSubjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
           ? Number(comparison.subjectRecordIndex)
           : index + 1;
+        const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceQueryIndex);
+        const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceSubjectIndex);
         const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId)
           : resourceAsLegacyFile(resources, comparison.resourceId);
@@ -3140,8 +3204,12 @@ export const projectCanonicalSessionRequest = ({
       });
     (renderRequest.comparisons || []).forEach((comparison) => {
       if (isResourceBackedCanonicalComparison(comparison)) {
-        const queryRecordIndex = Number(comparison.queryRecordIndex);
-        const subjectRecordIndex = Number(comparison.subjectRecordIndex);
+        const sourceQueryRecordIndex = Number(comparison.queryRecordIndex);
+        const sourceSubjectRecordIndex = Number(comparison.subjectRecordIndex);
+        const queryRecordIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceQueryRecordIndex);
+        const subjectRecordIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceSubjectRecordIndex);
         if (
           comparison.kind === 'precomputedProteinComparison' &&
           (
@@ -3159,6 +3227,9 @@ export const projectCanonicalSessionRequest = ({
                 ? resolveResourceFile(comparison.resourceId)
                 : resourceAsLegacyFile(resources, comparison.resourceId)
             ),
+            ...(comparison.kind === 'precomputedProteinComparison'
+              ? { queryRecordIndex, subjectRecordIndex }
+              : {}),
             // This is in-memory projection provenance, not a canonical-schema
             // field. Direct CLI/Python comparison options have no Web pipeline
             // marker and must survive a projection/rebuild unchanged.
@@ -3172,13 +3243,25 @@ export const projectCanonicalSessionRequest = ({
         return;
       }
       if (comparison?.kind === 'generatedProteinComparison') {
+        const projectedComparison = adoptCanonicalPayloads
+          ? { ...comparison }
+          : cloneCanonicalJsonValue(comparison);
+        projectedComparison.pairs = (Array.isArray(comparison.pairs) ? comparison.pairs : [])
+          .map((pair) => ({
+            queryRecordIndex: normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.queryRecordIndex)),
+            subjectRecordIndex: normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.subjectRecordIndex))
+          }));
         files.linearCanonicalComparisons.push(
-          adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)
+          projectedComparison
         );
         (Array.isArray(comparison.pairs) ? comparison.pairs : [])
           .forEach((pair, index) => {
-            const queryIndex = Number(pair?.queryRecordIndex);
-            const subjectIndex = Number(pair?.subjectRecordIndex);
+            const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.queryRecordIndex));
+            const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.subjectRecordIndex));
             if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
             files.linearComparisons.push({
               id: `linear-comparison-canonical-losat-${index + 1}`,
@@ -3212,9 +3295,15 @@ export const projectCanonicalSessionRequest = ({
             )
       )
     : 'auto';
-  const depthRows = canonicalDepth?.sourceRows || (
+  const sourceDepthRows = canonicalDepth?.sourceRows || (
     Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : []
   );
+  const depthRows = sourceDepthRows.length > 0
+    ? reorderRecordIndexedValues(sourceDepthRows)
+    : sourceDepthRows;
+  const depthFileRows = canonicalDepth?.fileRows
+    ? reorderRecordIndexedValues(canonicalDepth.fileRows)
+    : null;
   if (depthRows.length > 0) {
     if (depthRows.length !== records.length || depthRows.some((row) => !Array.isArray(row))) {
       throw new Error(
@@ -3224,7 +3313,7 @@ export const projectCanonicalSessionRequest = ({
   }
   if (renderRequest.mode === 'circular' && depthRows.length > 0) {
     files.c_depth = normalizeRecordMajorDepthFileRows(
-      canonicalDepth?.fileRows || depthRows.map((row) => row.map((ref) => (
+      depthFileRows || depthRows.map((row) => row.map((ref) => (
         ref?.resourceId
           ? (resolveResourceFile
               ? resolveResourceFile(ref.resourceId)
@@ -3237,7 +3326,7 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'linear') {
     depthRows.forEach((row, index) => {
       if (!files.linearSeqs[index] || !Array.isArray(row)) return;
-      const depth = canonicalDepth?.fileRows[index] || row
+      const depth = depthFileRows?.[index] || row
         .map((ref) => ref?.resourceId
           ? (resolveResourceFile
               ? resolveResourceFile(ref.resourceId)

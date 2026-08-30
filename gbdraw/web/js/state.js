@@ -19,6 +19,7 @@ import {
 import { createModeProfileStateManager } from './mode-profiles.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
+import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import {
   createDefaultAdv,
   createDefaultCircularConservation,
@@ -37,6 +38,7 @@ const sessionTitle = ref('');
 const semanticFileWatchersSuppressed = ref(false);
 const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
+const importedComparisonIntent = reactive(createImportedComparisonIntentState());
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -760,6 +762,7 @@ export const state = {
   semanticFileWatchersSuppressed,
   sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
+  importedComparisonIntent,
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,

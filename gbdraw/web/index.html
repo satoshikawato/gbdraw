@@ -1604,6 +1604,45 @@
                                 <i class="ph ph-arrows-left-right text-lg text-blue-600"></i>
                                 <span class="min-w-0 flex-1">Comparison</span>
                             </div>
+                            <div
+                                v-if="importedComparisonNeedsResolution"
+                                data-imported-comparison-resolution
+                                role="status"
+                                class="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-[10px] leading-snug text-amber-950 space-y-2"
+                            >
+                                <div class="font-bold text-xs">
+                                    {{ importedComparisonIntent.disposition === 'PRESERVED_READ_ONLY'
+                                        ? 'Saved comparison preserved as read-only'
+                                        : 'Saved comparison needs a decision' }}
+                                </div>
+                                <p>{{ importedComparisonIntent.message }}</p>
+                                <p>The controls below are a replacement draft. The saved comparison and last successful Result remain unchanged until Generate succeeds.</p>
+                                <p v-if="importedComparisonIntent.action" class="font-semibold">
+                                    Selected action: {{ importedComparisonIntent.action }}
+                                </p>
+                                <div class="flex flex-wrap gap-1.5" role="group" aria-label="Resolve saved comparison">
+                                    <button
+                                        v-if="importedComparisonCanInherit"
+                                        type="button"
+                                        data-history-ignore
+                                        @click="inheritImportedComparison"
+                                        class="btn btn-secondary text-[10px]"
+                                    >Inherit saved comparison</button>
+                                    <button
+                                        type="button"
+                                        data-history-ignore
+                                        :disabled="!importedComparisonCanReplace"
+                                        @click="replaceImportedComparison"
+                                        class="btn btn-secondary text-[10px] disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >Replace with current controls</button>
+                                    <button
+                                        type="button"
+                                        data-history-ignore
+                                        @click="clearImportedComparison"
+                                        class="btn btn-secondary text-[10px]"
+                                    >Clear comparison</button>
+                                </div>
+                            </div>
                             <div role="group" aria-label="Set all adjacent comparisons" data-capture="linear-blast-source" class="linear-comparison-actions">
                                 <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
