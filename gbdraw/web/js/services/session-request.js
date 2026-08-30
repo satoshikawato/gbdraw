@@ -39,7 +39,10 @@ import {
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
 } from '../app/depth-track-state.js';
-import { buildDisambiguatedRecordEntries } from '../app/record-options.js';
+import {
+  buildDisambiguatedRecordEntries,
+  resolveDisambiguatedRecordSelection
+} from '../app/record-options.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -589,13 +592,61 @@ const selectorPayload = (rawValue) => {
   return { kind: 'recordId', value: raw };
 };
 
-const presentationPayload = ({ label = null, subtitle = null, gridRow = null } = {}) => ({
+const presentationPayload = ({
+  label = null,
+  subtitle = null,
+  reverseComplement = false,
+  gridRow = null
+} = {}) => ({
   label: String(label || '').trim() || null,
   subtitle: String(subtitle || '').trim() || null,
-  reverseComplement: false,
+  reverseComplement: Boolean(reverseComplement),
   gridRow,
   gridColumn: null
 });
+
+const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
+  presentationPayload({
+    label: form.circular_record_label,
+    subtitle: form.circular_record_subtitle,
+    reverseComplement: !hasRegion && form.circular_reverse
+  })
+);
+
+const circularRegionPayload = (form, record) => {
+  const rawStart = form.circular_region_start;
+  const rawEnd = form.circular_region_end;
+  const hasStart = rawStart !== null && rawStart !== undefined && String(rawStart).trim() !== '';
+  const hasEnd = rawEnd !== null && rawEnd !== undefined && String(rawEnd).trim() !== '';
+  if (!hasStart && !hasEnd) return null;
+  if (hasStart !== hasEnd) {
+    throw new Error('Circular region requires both Start and End coordinates.');
+  }
+  const start = Number(rawStart);
+  const end = Number(rawEnd);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) {
+    throw new Error('Circular region Start and End must be positive integers.');
+  }
+  if (start > end) {
+    throw new Error('Circular region Start must not exceed End. Use Reverse complement to change display orientation.');
+  }
+  const recordLength = Number(record?.recordLength ?? record?.record_length);
+  if (Number.isInteger(recordLength) && recordLength > 0 && end > recordLength) {
+    throw new Error(`Circular region End (${end}) exceeds the selected record length (${recordLength}).`);
+  }
+  return {
+    selector: selectorPayload(record.value),
+    start,
+    end,
+    reverseComplement: Boolean(form.circular_reverse)
+  };
+};
+
+const circularRecordKey = (record) => {
+  const recordId = safePrefix(record?.recordId, 'record');
+  const selector = safePrefix(record?.selector, '1');
+  return `circular-${recordId}-${selector}`;
+};
 
 const linearRegionPayload = (seq) => {
   const start = optionalPositiveInteger(seq?.region_start);
@@ -617,7 +668,7 @@ const buildRecords = ({ state, filesData, resources }) => {
     const resolvedRows = state.linearRecordLayoutEnabled?.value
       ? resolvedLinearRecordRows(filesData.linearSeqs, state.linearRecordRows)
       : [];
-    return (filesData.linearSeqs || []).map((seq, index) => {
+    const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
             kind: 'gffFasta',
@@ -646,10 +697,11 @@ const buildRecords = ({ state, filesData, resources }) => {
         }
       };
     });
+    return { records, circularSourceIndexes: null, circularSourceCount: null };
   }
 
   if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
-    return filesData.circularRecords.map((record, index) => {
+    const records = filesData.circularRecords.map((record, index) => {
       const source = record.sourceKind === 'gffFasta'
         ? { kind: 'gffFasta',
             gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', record.gff),
@@ -665,6 +717,58 @@ const buildRecords = ({ state, filesData, resources }) => {
         presentation: publicationClone(record.presentation) || presentationPayload()
       };
     });
+    const singleJourney = (
+      records.length === 1 &&
+      !state.form.multi_record_canvas &&
+      state.adv.circular_grouping_intent !== 'batch'
+    );
+    if (singleJourney) {
+      const record = records[0];
+      const savedSelector = canonicalRecordSelector(record);
+      const requestedSelector = String(
+        state.form.circular_record_selector || savedSelector || ''
+      ).trim();
+      const knownRecords = (Array.isArray(state.circularRecordList.value)
+        ? state.circularRecordList.value
+        : []).map((entry) => ({
+          ...entry,
+          recordId: entry?.record_id ?? entry?.recordId
+        }));
+      const selection = resolveDisambiguatedRecordSelection(
+        knownRecords,
+        requestedSelector
+      );
+      const selectedKnownRecord = selection.record || (
+        !requestedSelector && selection.entries.length === 1
+          ? selection.entries[0]
+          : null
+      );
+      if (knownRecords.length > 0 && !selectedKnownRecord) {
+        const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
+        const label = requestedSelector || '(automatic)';
+        throw new Error(`Circular record selector '${label}' ${reason} in the current input.`);
+      }
+      const selected = selectedKnownRecord || {
+        value: requestedSelector,
+        selector: requestedSelector,
+        recordId: requestedSelector
+      };
+      const region = circularRegionPayload(state.form, selected);
+      records[0] = {
+        ...record,
+        recordKey: record.recordKey || circularRecordKey(selected),
+        selector: region ? null : selectorPayload(selected.value),
+        region,
+        presentation: circularPresentationPayload(state.form, {
+          hasRegion: Boolean(region)
+        })
+      };
+    }
+    return {
+      records,
+      circularSourceIndexes: records.map((_, index) => index),
+      circularSourceCount: records.length
+    };
   }
   const source = state.cInputType.value === 'gff'
     ? {
@@ -679,21 +783,63 @@ const buildRecords = ({ state, filesData, resources }) => {
   const knownRecords = Array.isArray(state.circularRecordList.value)
     ? state.circularRecordList.value
     : [];
-  const selectedRecords = knownRecords.length > 0 ? knownRecords : [null];
   const recordSelectors = buildDisambiguatedRecordEntries(
     knownRecords.map((record) => ({
       ...record,
       recordId: record?.record_id ?? record?.recordId
     }))
   );
-  return selectedRecords.map((record, index) => ({
-    recordKey: `record-${index + 1}`,
-    cardinality: 'exactly_one',
-    source,
-    selector: selectorPayload(recordSelectors[index]?.value ?? record?.selector),
-    region: null,
-    presentation: presentationPayload()
-  }));
+  const requestedSelector = String(state.form.circular_record_selector || '').trim();
+  const selection = resolveDisambiguatedRecordSelection(
+    recordSelectors,
+    requestedSelector
+  );
+  const singlePresentationRequested = (
+    !state.form.multi_record_canvas &&
+    state.adv.circular_grouping_intent !== 'batch'
+  );
+  if (
+    singlePresentationRequested &&
+    requestedSelector &&
+    selection.status !== 'resolved'
+  ) {
+    const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
+    throw new Error(`Circular record selector '${requestedSelector}' ${reason} in the current input.`);
+  }
+  const selectedRecords = singlePresentationRequested && selection.record
+    ? [selection.record]
+    : (recordSelectors.length > 0 ? recordSelectors : [null]);
+  const singleJourney = (
+    selectedRecords.length === 1 &&
+    singlePresentationRequested
+  );
+  const records = selectedRecords.map((record, index) => {
+    const region = singleJourney
+      ? circularRegionPayload(state.form, record)
+      : null;
+    return {
+      recordKey: singleJourney && record
+        ? circularRecordKey(record)
+        : `record-${index + 1}`,
+      cardinality: 'exactly_one',
+      source,
+      selector: region
+        ? null
+        : selectorPayload(record?.value ?? record?.selector),
+      region,
+      presentation: singleJourney
+        ? circularPresentationPayload(state.form, { hasRegion: Boolean(region) })
+        : presentationPayload()
+    };
+  });
+  const circularSourceIndexes = selectedRecords.map((record, index) => (
+    record && Number.isInteger(record.sourceIndex) ? record.sourceIndex : index
+  ));
+  return {
+    records,
+    circularSourceIndexes,
+    circularSourceCount: recordSelectors.length || records.length
+  };
 };
 
 const buildConfigOverrides = (
@@ -1895,11 +2041,26 @@ export const buildCanonicalRenderRequest = ({
   );
   const resources = createResourceBuilder();
   const webFiles = {};
-  const records = buildRecords({ state, filesData, resources });
+  const recordPlan = buildRecords({ state, filesData, resources });
+  const records = recordPlan.records;
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
+  const selectedCircularFilesData = (
+    state.mode.value === 'circular' &&
+    isRecordMajorDepthFileMatrix(filesData.c_depth) &&
+    Array.isArray(recordPlan.circularSourceIndexes) &&
+    recordPlan.circularSourceIndexes.length < recordPlan.circularSourceCount &&
+    filesData.c_depth.length === recordPlan.circularSourceCount
+  )
+    ? {
+        ...filesData,
+        c_depth: recordPlan.circularSourceIndexes.map((sourceIndex) => (
+          filesData.c_depth[sourceIndex] || []
+        ))
+      }
+    : filesData;
   const trackPlan = buildTrackPlan({
     state,
-    filesData,
+    filesData: selectedCircularFilesData,
     recordCount: records.length,
     resolvedCircularConservation
   });
@@ -1929,9 +2090,22 @@ export const buildCanonicalRenderRequest = ({
   const knownCircularRecords = Array.isArray(state.circularRecordList.value)
     ? state.circularRecordList.value
     : [];
-  const circularOutputRecords = knownCircularRecords.length > 0
-    ? knownCircularRecords
-    : records.map(() => ({ record_id: 'out' }));
+  const knownCircularEntries = buildDisambiguatedRecordEntries(
+    knownCircularRecords.map((record) => ({
+      ...record,
+      recordId: record?.record_id ?? record?.recordId
+    }))
+  );
+  const circularOutputRecords = records.map((record, index) => {
+    const selector = canonicalRecordSelector(record);
+    const resolved = resolveDisambiguatedRecordSelection(
+      knownCircularEntries,
+      selector
+    );
+    return {
+      record_id: resolved.record?.recordId || selector || `Record_${index + 1}`
+    };
+  });
   const defaultCircularPrefix = safePrefix(circularRecordId(circularOutputRecords[0], 0));
   const output = grouping === 'batch'
     ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
@@ -2096,7 +2270,7 @@ export const buildCanonicalRenderRequest = ({
   if (trackPlan.depthRequested) {
     buildDepthResources({
       state,
-      filesData,
+      filesData: selectedCircularFilesData,
       resources,
       diagramOptions,
       recordCount: records.length
@@ -3700,6 +3874,10 @@ export const projectCanonicalSessionRequest = ({
       tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
     })
   );
+  const circularPresentationRecord = (
+    renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
+  ) ? records[0] : null;
+  const circularPresentationRegion = circularPresentationRecord?.region || null;
   const form = {
     prefix: projectedOutputPrefix(
       renderRequest,
@@ -3711,6 +3889,17 @@ export const projectCanonicalSessionRequest = ({
     plot_title: options.plotTitle || '',
     legend: options.output?.legend || 'right',
     multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
+    circular_record_selector: circularPresentationRecord
+      ? (canonicalRecordSelector(circularPresentationRecord) || '')
+      : '',
+    circular_region_start: circularPresentationRegion?.start ?? null,
+    circular_region_end: circularPresentationRegion?.end ?? null,
+    circular_reverse: Boolean(
+      circularPresentationRegion?.reverseComplement ||
+      circularPresentationRecord?.presentation?.reverseComplement
+    ),
+    circular_record_label: circularPresentationRecord?.presentation?.label || '',
+    circular_record_subtitle: circularPresentationRecord?.presentation?.subtitle || '',
     suppress_gc: renderRequest.mode === 'circular' ? overrides.show_gc === false : false,
     suppress_skew: renderRequest.mode === 'circular' ? overrides.show_skew === false : false,
     show_gc: renderRequest.mode === 'linear' ? Boolean(overrides.show_gc) : false,

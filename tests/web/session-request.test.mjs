@@ -686,6 +686,116 @@ assert.deepEqual(
 assert.equal(implicitSingleCanonical.renderRequest.output.prefix, 'single.id');
 assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
 
+state.circularRecordList.value = [
+  { selector: '#1', record_id: 'first-record', record_length: 12 },
+  { selector: '#2', record_id: 'second-record', record_length: 18 }
+];
+Object.assign(state.form, {
+  circular_record_selector: 'second-record',
+  circular_region_start: 3,
+  circular_region_end: 14,
+  circular_reverse: true,
+  circular_record_label: '長い <i>環状ゲノム</i> ラベル',
+  circular_record_subtitle: 'Selected second record'
+});
+const selectedCircularCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(selectedCircularCanonical.renderRequest.grouping, 'single');
+assert.equal(selectedCircularCanonical.renderRequest.records.length, 1);
+assert.match(selectedCircularCanonical.renderRequest.records[0].recordKey, /second-record/);
+assert.equal(selectedCircularCanonical.renderRequest.records[0].selector, null);
+assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].region, {
+  selector: { kind: 'recordId', value: 'second-record' },
+  start: 3,
+  end: 14,
+  reverseComplement: true
+});
+assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].presentation, {
+  label: '長い <i>環状ゲノム</i> ラベル',
+  subtitle: 'Selected second record',
+  reverseComplement: false,
+  gridRow: null,
+  gridColumn: null
+});
+assert.equal(selectedCircularCanonical.renderRequest.output.prefix, 'second-record');
+
+const selectedCircularProjection = projectCanonicalSessionRequest(selectedCircularCanonical);
+assert.deepEqual(
+  {
+    selector: selectedCircularProjection.config.form.circular_record_selector,
+    start: selectedCircularProjection.config.form.circular_region_start,
+    end: selectedCircularProjection.config.form.circular_region_end,
+    reverse: selectedCircularProjection.config.form.circular_reverse,
+    label: selectedCircularProjection.config.form.circular_record_label,
+    subtitle: selectedCircularProjection.config.form.circular_record_subtitle
+  },
+  {
+    selector: 'second-record',
+    start: 3,
+    end: 14,
+    reverse: true,
+    label: '長い <i>環状ゲノム</i> ラベル',
+    subtitle: 'Selected second record'
+  }
+);
+Object.assign(state.form, selectedCircularProjection.config.form);
+Object.assign(state.adv, selectedCircularProjection.config.adv);
+const selectedCircularRebuilt = buildCanonicalRenderRequest({
+  state,
+  filesData: selectedCircularProjection.files
+});
+assert.deepEqual(
+  selectedCircularRebuilt.renderRequest.records[0].region,
+  selectedCircularCanonical.renderRequest.records[0].region
+);
+assert.equal(
+  selectedCircularRebuilt.renderRequest.records[0].presentation.reverseComplement,
+  false
+);
+assert.equal(
+  selectedCircularRebuilt.renderRequest.records[0].presentation.label,
+  '長い <i>環状ゲノム</i> ラベル'
+);
+
+const invalidCircularCases = [
+  [{ circular_region_start: 3, circular_region_end: null }, /requires both Start and End/],
+  [{ circular_region_start: 8, circular_region_end: 3 }, /must not exceed End/],
+  [{ circular_region_start: 3, circular_region_end: 19 }, /exceeds the selected record length/],
+  [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, /was not found/]
+];
+for (const [overrides, message] of invalidCircularCases) {
+  Object.assign(state.form, {
+    circular_record_selector: 'second-record',
+    circular_region_start: null,
+    circular_region_end: null,
+    ...overrides
+  });
+  assert.throws(() => buildCanonicalRenderRequest({ state, filesData }), message);
+}
+state.circularRecordList.value = [
+  { selector: '#1', record_id: 'duplicate-record', record_length: 18 },
+  { selector: '#2', record_id: 'duplicate-record', record_length: 18 }
+];
+Object.assign(state.form, {
+  circular_record_selector: 'duplicate-record',
+  circular_region_start: null,
+  circular_region_end: null
+});
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /is ambiguous/
+);
+
+Object.assign(state.form, {
+  circular_record_selector: '',
+  circular_region_start: null,
+  circular_region_end: null,
+  circular_reverse: false,
+  circular_record_label: '',
+  circular_record_subtitle: ''
+});
+state.adv.circular_grouping_intent = 'auto';
+state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
+
 state.form.prefix = 'release.v1';
 const explicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(explicitSingleCanonical.renderRequest.output.prefix, 'release.v1');
@@ -762,6 +872,11 @@ const gridCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(gridCanonical.renderRequest.grouping, 'grid');
 assert.equal(gridCanonical.renderRequest.output.prefix, 'dup');
 assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_record_canvas, true);
+state.form.circular_record_selector = 'dup_2';
+const gridWithRetainedSingleSelector = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(gridWithRetainedSingleSelector.renderRequest.grouping, 'grid');
+assert.equal(gridWithRetainedSingleSelector.renderRequest.records.length, 3);
+state.form.circular_record_selector = '';
 
 for (const schema of [3, 4]) {
   const branchOnlyCanonical = structuredClone(implicitBatchCanonical);

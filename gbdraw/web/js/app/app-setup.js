@@ -82,6 +82,11 @@ import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
 import {
+  buildDisambiguatedRecordEntries,
+  formatRecordLength,
+  resolveDisambiguatedRecordSelection
+} from './record-options.js';
+import {
   linearRecordPositionTokens,
   moveLinearRecordInRow,
   reconcileLinearRecordLayout,
@@ -2916,6 +2921,72 @@ export const createAppSetup = () => {
     return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
   };
 
+  const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
+    (Array.isArray(circularRecordList.value) ? circularRecordList.value : []).map(
+      (record) => ({
+        ...record,
+        recordId: record?.record_id ?? record?.recordId,
+        recordLength: record?.record_length ?? record?.recordLength
+      })
+    )
+  );
+
+  const circularRecordPresentationOptions = computed(() => {
+    const entries = circularRecordPresentationEntries();
+    const current = String(form.circular_record_selector || '').trim();
+    const selection = resolveDisambiguatedRecordSelection(entries, current);
+    const automaticLabel = entries.length > 1
+      ? 'All records (separate diagrams)'
+      : 'Automatic (only record)';
+    return [
+      { value: '', label: automaticLabel, synthetic: false },
+      ...(current && selection.status !== 'resolved'
+        ? [{
+            value: current,
+            label: `${current} (${selection.status === 'ambiguous' ? 'ambiguous' : 'not found'})`,
+            synthetic: true
+          }]
+        : []),
+      ...entries.map((record) => ({
+        value: record.value,
+        label: `${record.recordId} (${formatRecordLength(record.recordLength)})${record.usesIndex ? ` [${record.selector}]` : ''}`,
+        synthetic: false
+      }))
+    ];
+  });
+
+  const circularRecordPresentationError = computed(() => {
+    const current = String(form.circular_record_selector || '').trim();
+    if (!current) return '';
+    const selection = resolveDisambiguatedRecordSelection(
+      circularRecordPresentationEntries(),
+      current
+    );
+    if (selection.status === 'ambiguous') {
+      return `Record selector '${current}' is ambiguous in the current input.`;
+    }
+    if (selection.status === 'missing') {
+      return `Record selector '${current}' was not found in the current input.`;
+    }
+    return '';
+  });
+
+  const circularSingleRecordPresentationEnabled = computed(() => {
+    if (form.multi_record_canvas) return false;
+    const entries = circularRecordPresentationEntries();
+    if (entries.length === 1) return true;
+    const current = String(form.circular_record_selector || '').trim();
+    if (!current && entries.length !== 1) return false;
+    if (entries.length === 0) return Boolean(current);
+    return resolveDisambiguatedRecordSelection(entries, current).status === 'resolved';
+  });
+
+  const setCircularRecordPresentationSelector = (value) => {
+    const normalized = String(value || '').trim();
+    form.circular_record_selector = normalized;
+    adv.circular_grouping_intent = normalized ? 'single' : 'auto';
+  };
+
   const buildDefaultCircularRecordPositions = () => {
     const selectors = Array.isArray(circularRecordList.value)
       ? circularRecordList.value
@@ -3431,6 +3502,10 @@ export const createAppSetup = () => {
     closeRightDrawer: rightDrawerActions.closeRightDrawer,
     openOrthogroupInDrawer,
     circularRecordList,
+    circularRecordPresentationOptions,
+    circularRecordPresentationError,
+    circularSingleRecordPresentationEnabled,
+    setCircularRecordPresentationSelector,
     paletteDefinitions,
     paletteNames,
     selectedPalette,

@@ -146,16 +146,25 @@ class DefinitionGroup:
         metadata = infer_record_source_metadata(self.gb_record)
         strain_name = metadata.strain
         record_name = metadata.organism
+        annotations = getattr(self.gb_record, "annotations", {}) or {}
+        explicit_label = str(annotations.get("gbdraw_record_label") or "").strip()
+        explicit_subtitle = str(
+            annotations.get("gbdraw_record_subtitle") or ""
+        ).strip()
         self.replicon = metadata.replicon
         self.organelle = metadata.organelle
 
-        if self.species:
+        if explicit_label:
+            self.species_parts = parse_mixed_content_text(explicit_label)
+        elif self.species:
             self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.species)
         else:
             self.species_parts = parse_mixed_content_text(record_name)
-        self.record_name = str(record_name).strip() or str(self.gb_record.id)
+        self.record_name = explicit_label or str(record_name).strip() or str(self.gb_record.id)
 
-        if self.strain:
+        if explicit_subtitle:
+            self.strain_parts = parse_mixed_content_text(explicit_subtitle)
+        elif self.strain:
             self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.strain)
         else:
             self.strain_parts = parse_mixed_content_text(strain_name)
