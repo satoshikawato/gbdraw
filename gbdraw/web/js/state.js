@@ -286,7 +286,8 @@ const circularRecordDiscovery = reactive({
   error: '',
   inputType: '',
   primaryFile: null,
-  pairedFile: null
+  pairedFile: null,
+  canonicalRecordIdentities: []
 });
 
 // Color & Filter State

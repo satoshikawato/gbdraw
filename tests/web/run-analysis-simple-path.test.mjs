@@ -608,18 +608,18 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       }
     });
   }));
-  state.circularRecordList.value = [{
-    selector: '#1',
-    record_id: 'audit',
-    record_length: 10,
-    recordKey: 'record-1'
-  }];
+  state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
-    status: 'ready',
+    status: 'loading',
     error: '',
     inputType: 'gb',
     primaryFile: fallbackPrimary,
-    pairedFile: null
+    pairedFile: null,
+    canonicalRecordIdentities: [{
+      selector: '#1',
+      record_id: 'audit',
+      recordKey: 'record-1'
+    }]
   });
   const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
   const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
@@ -628,6 +628,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
   assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
 
   state.form.multi_record_canvas = true;
   state.files.c_depth = null;
