@@ -1536,7 +1536,12 @@ export const createRunAnalysis = ({
     const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput();
     const preservedRecordKeys = new Map();
     if (preserveCanonicalRecordKeys) {
-      (Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+      [
+        ...(Array.isArray(circularRecordDiscovery.canonicalRecordIdentities)
+          ? circularRecordDiscovery.canonicalRecordIdentities
+          : []),
+        ...(Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+      ]
         .forEach((record) => {
           const recordKey = String(record?.recordKey || '').trim();
           if (!recordKey) return;
@@ -1551,7 +1556,10 @@ export const createRunAnalysis = ({
       error: '',
       inputType,
       primaryFile: primaryFile || null,
-      pairedFile: pairedFile || null
+      pairedFile: pairedFile || null,
+      canonicalRecordIdentities: preserveCanonicalRecordKeys
+        ? circularRecordDiscovery.canonicalRecordIdentities
+        : []
     });
     if (
       !hasActiveInput
@@ -1602,6 +1610,7 @@ export const createRunAnalysis = ({
       });
       circularRecordList.value = nextRecords;
       circularRecordDiscovery.status = 'ready';
+      circularRecordDiscovery.canonicalRecordIdentities = [];
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {

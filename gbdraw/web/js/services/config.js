@@ -2871,7 +2871,8 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
     error: '',
     inputType: '',
     primaryFile: null,
-    pairedFile: null
+    pairedFile: null,
+    canonicalRecordIdentities: []
   });
   state.files.c_gb = null;
   state.files.c_gff = null;
@@ -2929,20 +2930,20 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
     ? filesData.circularRecords
     : [];
   if (canonicalCircularRecords.length > 0) {
-    state.circularRecordList.value = canonicalCircularRecords.map((record, index) => {
-      const selector = record?.region?.selector || record?.selector;
-      const selectorValue = selector?.kind === 'recordId'
-        ? String(selector.value || '')
-        : selector?.kind === 'recordIndex'
-          ? `#${Number(selector.index) + 1}`
-          : `#${index + 1}`;
-      return {
-        selector: selectorValue,
-        record_id: selector?.kind === 'recordId' ? selectorValue : '',
-        record_length: null,
-        recordKey: String(record?.recordKey || '')
-      };
-    });
+    state.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
+      .map((record, index) => {
+        const selector = record?.region?.selector || record?.selector;
+        const selectorValue = selector?.kind === 'recordId'
+          ? String(selector.value || '')
+          : selector?.kind === 'recordIndex'
+            ? `#${Number(selector.index) + 1}`
+            : `#${index + 1}`;
+        return {
+          selector: selectorValue,
+          record_id: selector?.kind === 'recordId' ? selectorValue : '',
+          recordKey: String(record?.recordKey || '')
+        };
+      });
     Object.assign(state.circularRecordDiscovery, {
       status: 'loading',
       error: '',
