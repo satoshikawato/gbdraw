@@ -609,6 +609,24 @@ assert.equal(
   true,
   'the GUI-managed value must win over a preserved value at the same path'
 );
+state.unmanagedConfigOverrides = new Proxy({
+  'labels.filtering.raw': new Proxy({
+    priority_map: { CDS: ['gene', 'old_locus_tag'] }
+  }, {})
+}, {});
+const canonicalWithReactivePreservedConfig = buildCanonicalRenderRequest({
+  state,
+  filesData
+});
+assert.doesNotThrow(() => structuredClone(
+  canonicalWithReactivePreservedConfig.renderRequest.diagramOptions.configOverrides
+));
+assert.deepEqual(
+  canonicalWithReactivePreservedConfig.renderRequest.diagramOptions.configOverrides[
+    'labels.filtering.raw'
+  ],
+  { priority_map: { CDS: ['gene', 'old_locus_tag'] } }
+);
 state.unmanagedConfigOverrides = {};
 state.adv.circular_definition_interval = 30;
 assert.equal(

@@ -123,6 +123,7 @@ import {
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
+import { cloneJsonData } from './json-clone.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 6;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -1032,12 +1033,13 @@ const buildConfigOverrides = (
     Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined)
   );
   const preservedOverrides = state.unmanagedConfigOverrides;
+  const plainPreservedOverrides = (
+    preservedOverrides && typeof preservedOverrides === 'object' && !Array.isArray(preservedOverrides)
+  )
+    ? cloneJsonData(preservedOverrides)
+    : {};
   return {
-    ...(
-      preservedOverrides && typeof preservedOverrides === 'object' && !Array.isArray(preservedOverrides)
-        ? preservedOverrides
-        : {}
-    ),
+    ...plainPreservedOverrides,
     ...managedOverrides
   };
 };
