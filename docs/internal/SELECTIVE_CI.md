@@ -123,17 +123,20 @@ evidence, the `gallery` profile selects these jobs:
 | --- | --- |
 | `metadata` | `CI impact plan`, `Gallery readiness / gate` |
 | `documentation` | `CI impact plan`, `Gallery readiness / gate` |
-| `full` | `CI impact plan`, both `Gallery browser` matrix entries, `Gallery publication performance (projection)`, `Gallery readiness / gate` |
+| `full` | `CI impact plan`, `Gallery browser (common 9)`, `Gallery publication performance (projection)`, `Gallery readiness / gate` |
 
 Documentation tests remain in the `Tests` workflow's recipe suite. Public Markdown and
 files under `docs/` do not change the packaged Gallery sessions, Web bundle, browser
 generation path, or performance projection, so the Gallery profile does not rerun
 either Gallery test job for those changes.
 
-The `browser` and `performance` job IDs retain their existing commands, matrices,
-timeouts, and performance baseline. Every `workflow_dispatch` run is full. When
-`complete_refresh=true`, the full performance job still runs its three-trial projection
-and complete-refresh gates.
+The blocking `browser` job runs the common 9 Gallery parity suite. The heavyweight
+Vibrio Generate test remains available as `test:web:vibrio-generate` and continues to
+run in the separate exact-SHA main deployment workflow as stress and health evidence;
+it is not part of Gallery promotion readiness. The `browser` and `performance` job IDs
+retain their timeouts and performance baseline. Every `workflow_dispatch` run is full.
+When `complete_refresh=true`, the full performance job still runs its three-trial
+projection and complete-refresh gates.
 
 `Gallery readiness / gate` validates the Gallery plan and current-run job results with
 the protected branch's shared gate validator. A selective run therefore still creates
