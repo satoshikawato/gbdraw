@@ -27,7 +27,7 @@ const identityProbeSource = (await readFile(runAnalysisPath, 'utf8'))
     'const buildLosatCachePayload = ({',
     'export const buildLosatCachePayload = ({'
   )
-  .replace(/from '(\.\.?(?:\/[^']+)+)'/g, (_match, specifier) => (
+  .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => (
     `from '${new URL(specifier, runAnalysisUrl).href}'`
   ));
 await writeFile(identityProbePath, identityProbeSource, 'utf8');
