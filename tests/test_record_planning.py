@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.options import LinearDiagramOptions
@@ -158,6 +159,36 @@ def test_selection_reverse_region_order_and_provenance(tmp_path: Path) -> None:
     assert provenance.record_key == "chosen-row"
     assert provenance.selector is not None
     assert provenance.region is not None
+
+
+def test_region_reverse_crops_once_and_flips_boundary_crossing_feature(
+    tmp_path: Path,
+) -> None:
+    source_record = _record("chosen", "AAACCGTT")
+    source_record.features = [
+        SeqFeature(FeatureLocation(1, 7, strand=1), type="CDS")
+    ]
+
+    resolved = _resolve(
+        (
+            RecordInput(
+                source=GenBankInputSource(tmp_path / "records.gb"),
+                selector=parse_record_selector("chosen"),
+                region=parse_region_spec("3-6:rc"),
+                record_key="chosen-crop",
+            ),
+        ),
+        lambda _paths: [source_record],
+    )
+
+    record = resolved.records[0]
+    assert str(record.seq) == "CGGT"
+    assert len(record.features) == 1
+    assert int(record.features[0].location.start) == 0
+    assert int(record.features[0].location.end) == 4
+    assert record.features[0].location.strand == -1
+    assert str(source_record.seq) == "AAACCGTT"
+    assert source_record.features[0].location.strand == 1
 
 
 def test_batch_output_policy_disambiguates_duplicate_record_ids() -> None:

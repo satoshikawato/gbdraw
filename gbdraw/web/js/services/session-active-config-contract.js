@@ -1,13 +1,16 @@
 import { createDefaultLinearDefinitionLineStyles } from '../app/definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from '../app/circular-track-slots.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from '../app/linear-track-slots.js'; import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import { assertSafeObjectKeys } from './safe-object-keys.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 export const createDefaultForm = () => ({
   prefix: '', species: '', strain: '', plot_title: '', track_type: 'tuckin', linear_track_layout: 'middle', show_scale: true, scale_style: 'bar',
   linear_ruler_on_axis: false, labels_mode: 'none', show_labels_linear: 'none', multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
+  circular_record_selector: '', circular_region_start: null, circular_region_end: null, circular_reverse: false,
+  circular_record_label: '', circular_record_subtitle: '',
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: false, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
 });
@@ -25,7 +28,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,
   gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
   gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: 'ribbon', ...comparisonStateForMode(mode), scale_interval: null,
-  scale_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
+  scale_font_size: null, ruler_label_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto', multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10, multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [], tick_label_font_size: null, plot_title_font_size: null, keep_full_definition_with_plot_title: false,
   center_reserved_radius: null, feature_width_circular: null, depth_width_circular: null, gc_content_width_circular: null, gc_content_radius_circular: null,
@@ -38,40 +41,33 @@ export const createDefaultLosat = () => ({
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: 5, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
-    collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearSearchScope: 'all' }
+    collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'either', collinearSearchScope: 'adjacent' }
 });
 export const createDefaultCircularConservation = () => ({ enabled: false, source: 'losat', losat_program: 'blastn',
   subject_gencode: 1, reference: 'auto', labels: '', series: [], ring_width: null, ring_gap: null });
 export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'form', 'adv', 'losat', 'cliOptions', 'colors', 'palette', 'paletteInstantPreviewEnabled', 'rules',
   'qualifierPriorityRules', 'filterMode', 'whitelist', 'blacklistText', 'losatProgram', 'circularConservation',
-  'annotationSets', 'modeProfiles',
-  'linearRecordLayout', 'linearComparisonPlan', 'webEdits'
+  'annotationSets', 'modeProfiles', 'unmanagedConfigOverrides',
+  'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
 export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
 export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram']);
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
+  importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
   rules: 'array', qualifierPriorityRules: 'array', whitelist: 'array', annotationSets: 'array', palette: 'string', filterMode: 'string', blacklistText: 'string',
   losatProgram: 'string', paletteInstantPreviewEnabled: 'boolean' });
 const ROW_FIELDS = { rules: ['feat', 'qual', 'val', 'color', 'cap', 'fromFile'],
   qualifierPriorityRules: ['feat', 'order'], whitelist: ['feat', 'qual', 'key'],
   annotationSets: ['id', 'annotations', 'defaultStyle', 'legendLabel'] };
 const ANNOTATION_FIELDS = ['id', 'target', 'label', 'mark', 'lane', 'style', 'legendLabel', 'metadata'];
-const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const OBSOLETE_SLOT_KEYS = new Set(['gapAfter', 'gap_after', 'innerRadius', 'inner_radius', 'outerRadius',
   'outer_radius', 'placement', 'spacing', 'strict', 'compress', 'reserve']);
 const OBSOLETE_SLOT_PARAM_KEYS = new Set(['side', 'radius', 'width', 'spacing', 'inner_gap_px', 'outer_gap_px', 'strict', 'compress', 'reserve']);
 const assertFields = (value, fields, path) => {
   const unknown = Object.keys(value).filter((key) => !fields.has(key));
   if (unknown.length) throw new Error(`Current session active configuration contains unknown ${path} field(s): ${unknown.join(', ')}.`);
-};
-const assertSafeKeys = (value, path = 'config') => {
-  if (!value || typeof value !== 'object') return;
-  for (const key of Object.keys(value)) {
-    if (UNSAFE_KEYS.has(key)) throw new Error(`Current session active configuration contains unsafe key ${path}.${key}.`);
-    assertSafeKeys(value[key], `${path}.${key}`);
-  }
 };
 const validateDomainShapes = (config) => {
   for (const [domain, shape] of Object.entries(DOMAIN_SHAPES)) {
@@ -130,7 +126,7 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
 export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }) => {
   if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
-  assertSafeKeys(config);
+  assertSafeObjectKeys(config, 'Current session active configuration');
   const domains = new Set([...CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, 'colorsAreOverrides']);
   const unknownDomains = Object.keys(config).filter((domain) => !domains.has(domain));
   if (unknownDomains.length)
@@ -145,7 +141,42 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
     if (value !== undefined && !['blastn', 'tblastx', 'blastp'].includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
   }
+  if (isObject(config.losat?.blastp)) {
+    const blastp = config.losat.blastp;
+    if (has(blastp, 'mode')) requireCurrentProteinBlastpMode(blastp.mode);
+    if (has(blastp, 'candidateLimit')) {
+      requireCurrentProteinBlastpCandidateLimit(blastp.candidateLimit);
+    }
+    requireCurrentProteinBlastpMaxHits(blastp.maxHits);
+    requireCurrentOrthogroupMembershipMode(blastp.orthogroupMembershipMode);
+    requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits);
+    requireCurrentCollinearMinAnchors(blastp.collinearMinAnchors);
+    requireCurrentCollinearMaxUnitGap(blastp.collinearMaxUnitGap);
+    requireCurrentCollinearMaxDiagonalDrift(blastp.collinearMaxDiagonalDrift);
+    requireCurrentCollinearMaxConflicts(blastp.collinearMaxConflictsInMergeGap);
+    requireCurrentCollinearMaxParalogLinks(
+      blastp.collinearMaxParalogLinksPerOrthogroup
+    );
+    requireCurrentCollinearUnitMode(blastp.collinearUnitMode);
+    requireCurrentCollinearAnchorMode(blastp.collinearAnchorMode);
+    requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation);
+    requireCurrentCollinearColorMode(blastp.collinearColorMode);
+    requireCurrentCollinearSearchScope(blastp.collinearSearchScope);
+  }
   if (has(config, 'filterMode') && !['None', 'Whitelist', 'Blacklist'].includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
   if (has(config, 'palette') && !config.palette.trim()) throw new Error('Current session active configuration config.palette cannot be empty.');
+  if (isObject(config.importedComparisonResolution)) {
+    assertFields(
+      config.importedComparisonResolution,
+      new Set(['action']),
+      'config.importedComparisonResolution'
+    );
+    if (
+      config.importedComparisonResolution.action !== null
+      && !['INHERIT', 'REPLACE', 'CLEAR'].includes(config.importedComparisonResolution.action)
+    ) {
+      throw new Error('Current session active configuration config.importedComparisonResolution.action is invalid.');
+    }
+  }
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };

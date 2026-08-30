@@ -55,6 +55,7 @@ import {
   migrateLegacyLayoutPreferences,
   replaceLayoutPreferences
 } from '../app/layout-preferences.js';
+import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
@@ -73,6 +74,7 @@ import {
 } from '../app/match-sequences.js';
 import {
   buildCanonicalRenderRequest,
+  managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } from './session-request.js';
@@ -164,6 +166,7 @@ import {
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
+import { assertSafeObjectKeys } from './safe-object-keys.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -187,6 +190,14 @@ import {
   validateImportedCircularTrackSlots,
   validateImportedLinearTrackSlots
 } from './session-active-config-contract.js';
+import {
+  IMPORTED_COMPARISON_ACTIONS,
+  IMPORTED_COMPARISON_DISPOSITIONS,
+  classifyImportedComparisonIntent,
+  createImportedComparisonIntentState,
+  restoreImportedComparisonIntent,
+  serializeImportedComparisonResolution
+} from './imported-comparison-intent.js';
 
 const { nextTick } = window.Vue;
 
@@ -812,14 +823,6 @@ const cloneCanonicalSession = (canonical) => {
   };
 };
 
-const cloneLosatForConfig = () => {
-  const cloned = cloneJsonData(state.losat || {});
-  if (cloned.blastp && typeof cloned.blastp === 'object' && !Array.isArray(cloned.blastp)) {
-    delete cloned.blastp.collinearAnchorMode;
-  }
-  return cloned;
-};
-
 const normalizedArrowGeometryState = (adv = {}) => ({
   arrow_head_length_ratio: arrowHeadLengthRatioForState(
     adv?.arrow_head_length_ratio
@@ -880,7 +883,7 @@ export const buildConfigData = () => ({
       ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
     }
   },
-  losat: cloneLosatForConfig(),
+  losat: cloneJsonData(state.losat || {}),
   cliOptions: preservedCliOptions ? cloneJsonData(preservedCliOptions) : undefined,
   colors: state.currentColors.value,
   palette: state.selectedPalette.value,
@@ -903,6 +906,10 @@ export const buildConfigData = () => ({
     }))
   },
   linearComparisonPlan: serializeLinearComparisonPlan(state.linearComparisonPlan),
+  importedComparisonResolution: serializeImportedComparisonResolution(
+    state.importedComparisonIntent
+  ),
+  unmanagedConfigOverrides: cloneJsonData(state.unmanagedConfigOverrides || {}),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
     orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
@@ -995,6 +1002,57 @@ const replacePlainObject = (target, source) => {
   Object.entries(source || {}).forEach(([key, value]) => {
     target[key] = value;
   });
+};
+
+let unmanagedConfigOverrideValidator = null;
+
+export const setUnmanagedConfigOverrideValidator = (validator) => {
+  unmanagedConfigOverrideValidator = typeof validator === 'function'
+    ? validator
+    : null;
+};
+
+const validateUnmanagedConfigOverrides = async ({
+  mode,
+  config = null,
+  configOverrides = {},
+  requireUnmanagedOnly = false
+}) => {
+  const managedPaths = managedConfigOverridePathsForMode(mode);
+  const overrides = isPlainObject(configOverrides)
+    ? cloneJsonData(configOverrides)
+    : configOverrides;
+  const overridePaths = isPlainObject(overrides) ? Object.keys(overrides) : [];
+  if (
+    config === null
+    && overridePaths.length === 0
+  ) {
+    return {};
+  }
+  if (
+    config === null
+    && !requireUnmanagedOnly
+    && overridePaths.every((path) => managedPaths.includes(path))
+  ) {
+    return {};
+  }
+  if (!unmanagedConfigOverrideValidator) {
+    throw new Error('Configuration validation service is unavailable.');
+  }
+  const result = await unmanagedConfigOverrideValidator({
+    mode,
+    config,
+    configOverrides: overrides,
+    managedPaths,
+    requireUnmanagedOnly
+  });
+  if (typeof result?.result?.error === 'string' && result.result.error.trim()) {
+    throw new Error(result.result.error.trim());
+  }
+  if (!isPlainObject(result?.result?.overrides)) {
+    throw new Error('Configuration validation returned an invalid preserved-settings result.');
+  }
+  return cloneJsonData(result.result.overrides);
 };
 
 export const applyEditorStateData = (
@@ -1359,9 +1417,18 @@ export const restoreCurrentWriterActiveConfig = ({
   }
   if (isPlainObject(restored.adv)) delete restored.adv.losatProgram;
 
-  // The current writer deliberately omits this generated-pipeline authority
-  // from config.losat. Preserve the committed projection only when the active
-  // config has no value of its own.
+  const projectedRulerLabelFontSize = projectedConfig?.adv?.ruler_label_font_size;
+  if (
+    projectedRulerLabelFontSize !== undefined
+    && isPlainObject(restored.adv)
+    && !Object.prototype.hasOwnProperty.call(restored.adv, 'ruler_label_font_size')
+  ) {
+    restored.adv.ruler_label_font_size = cloneJsonData(projectedRulerLabelFontSize);
+  }
+
+  // Current sessions written before the anchor control became editable omitted
+  // this value. Preserve their committed projection only when active config has
+  // no value of its own; new sessions store the explicit editor value above.
   const projectedAnchorMode = projectedConfig?.losat?.blastp?.collinearAnchorMode;
   if (
     projectedAnchorMode !== undefined &&
@@ -1441,6 +1508,17 @@ const preflightSessionImport = (rawData) => {
   const data = currentSession
     ? promotedData
     : migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
+  const comparisonClassification = classifyImportedComparisonIntent({
+    renderRequest: data.renderRequest,
+    resources: data.resources
+  });
+  const projectionRenderRequest = (
+    data.renderRequest?.mode === 'linear'
+    && comparisonClassification.disposition
+      !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+  )
+    ? { ...data.renderRequest, comparisons: [] }
+    : data.renderRequest;
   const runtimeStoredConfig = currentSession
     ? migrateImportedLinearTrackSlots(
         migrateImportedCircularTrackSlots(data.config),
@@ -1450,7 +1528,7 @@ const preflightSessionImport = (rawData) => {
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   const canonicalProjection = sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
-        renderRequest: data.renderRequest,
+        renderRequest: projectionRenderRequest,
         resources: data.resources,
         webFiles: data.webFiles,
         legacyFiles: data.files,
@@ -1518,6 +1596,26 @@ const preflightSessionImport = (rawData) => {
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
   }
+  const hasCurrentStoredUnmanagedOverrides = currentSession
+    && isPlainObject(runtimeStoredConfig)
+    && Object.prototype.hasOwnProperty.call(
+      runtimeStoredConfig,
+      'unmanagedConfigOverrides'
+    );
+  const unmanagedConfigValidation = canonicalProjection
+    ? hasCurrentStoredUnmanagedOverrides
+      ? {
+          mode: canonicalProjection.mode,
+          configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
+          requireUnmanagedOnly: true
+        }
+      : {
+          mode: canonicalProjection.mode,
+          config: projectionRenderRequest?.diagramOptions?.config ?? null,
+          configOverrides:
+            projectionRenderRequest?.diagramOptions?.configOverrides ?? {}
+        }
+    : null;
   if (restoredConfig) {
     const activeDepthTrackCount = Array.isArray(restoredConfig?.adv?.depth_tracks)
       ? restoredConfig.adv.depth_tracks.length
@@ -1570,7 +1668,9 @@ const preflightSessionImport = (rawData) => {
     restoredConfig,
     projectionResult,
     adoptedCanonicalSession: adoptedSession?.canonical || null,
-    currentResourceTable
+    currentResourceTable,
+    comparisonClassification,
+    unmanagedConfigValidation
   };
 };
 
@@ -1651,7 +1751,20 @@ export const applyConfigData = (data) => {
     requireCurrentCircularMultiRecordSizeMode(data.adv.multi_record_size_mode);
   }
   if (data.form) safeDeepMerge(state.form, data.form);
-  if (data.adv) safeDeepMerge(state.adv, data.adv);
+  if (data.adv) {
+    safeDeepMerge(state.adv, data.adv);
+    ['scale_font_size', 'ruler_label_font_size'].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(data.adv, field)) {
+        state.adv[field] = cloneJsonData(data.adv[field]);
+      }
+    });
+  }
+  replacePlainObject(
+    state.unmanagedConfigOverrides,
+    isPlainObject(data.unmanagedConfigOverrides)
+      ? cloneJsonData(data.unmanagedConfigOverrides)
+      : {}
+  );
   state.annotationSets.splice(
     0,
     state.annotationSets.length,
@@ -1676,6 +1789,10 @@ export const applyConfigData = (data) => {
     state.linearComparisonPlan,
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
   );
+  state.importedComparisonIntent.action = Object.values(IMPORTED_COMPARISON_ACTIONS)
+    .includes(data.importedComparisonResolution?.action)
+    ? data.importedComparisonResolution.action
+    : null;
   state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
   state.adv.label_placement = requireCurrentLinearLabelPlacement(
     state.adv.label_placement
@@ -1943,6 +2060,14 @@ export const applyConfigData = (data) => {
       const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
       state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
       state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
+      const mergeOrientation = String(
+        state.losat.blastp?.collinearMergeOrientation || ''
+      ).trim().toLowerCase();
+      state.losat.blastp.collinearMergeOrientation = [
+        'strand',
+        'order',
+        'either'
+      ].includes(mergeOrientation) ? mergeOrientation : 'either';
       state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
     }
     delete state.losat.blastp.collinearBlockMergeGap;
@@ -2668,65 +2793,87 @@ export const adoptCanonicalRenderArtifacts = (
   const nextCommittedCanonicalSession = preserveAdoptedResources
     ? adoptRuntimeCanonicalSession(ownedCanonical)
     : cloneCanonicalSession(ownedCanonical);
-  activeSessionResourceTable = sessionResourceTable;
+  let nextLinearComparisons = null;
+  let nextCircularState = null;
   if (projection.mode === 'linear') {
-    const nextComparisons = deserializeCanonicalComparisons(
+    nextLinearComparisons = deserializeCanonicalComparisons(
       projection.files.linearCanonicalComparisons,
       { adoptCanonicalPayloads: preserveAdoptedResources }
     );
-    state.files.linearCanonicalComparisons = nextComparisons;
-    committedCanonicalSession = nextCommittedCanonicalSession;
-    return;
-  }
-  if (projection.files.c_conservation_blasts_source !== 'losat-cache') {
-    committedCanonicalSession = nextCommittedCanonicalSession;
-    return;
+  } else if (projection.files.c_conservation_blasts_source === 'losat-cache') {
+    const projectedConservation = projection.config.circularConservation;
+    const currentSeries = Array.isArray(state.circularConservation.series)
+      ? state.circularConservation.series.map((entry) => cloneJsonData(entry))
+      : [];
+    const nextSeries = Array.isArray(projectedConservation?.series)
+      ? projectedConservation.series.map((entry, index) => ({
+          ...entry,
+          ...(currentSeries[index] || {}),
+          sourceIndex: index,
+          fileName: entry.fileName,
+          label: entry.label,
+          color: entry.color
+        }))
+      : [];
+    nextCircularState = {
+      blasts: (projection.files.c_conservation_blasts || [])
+        .map((entry) => deserializeFile(entry))
+        .filter(Boolean),
+      fastas: (projection.files.c_conservation_fastas || [])
+        .map((entry) => deserializeFile(entry)),
+      sequenceSources: (projection.files.c_conservation_sequence_sources || [])
+        .map((entry) => deserializeFile(entry)),
+      projectedConservation,
+      series: nextSeries
+    };
   }
 
-  const nextBlastFiles = (projection.files.c_conservation_blasts || [])
-    .map((entry) => deserializeFile(entry))
-    .filter(Boolean);
-  const nextFastaFiles = (projection.files.c_conservation_fastas || [])
-    .map((entry) => deserializeFile(entry));
-  const nextSequenceSources = (projection.files.c_conservation_sequence_sources || [])
-    .map((entry) => deserializeFile(entry));
-  const projectedConservation = projection.config.circularConservation;
-  const currentSeries = Array.isArray(state.circularConservation.series)
-    ? state.circularConservation.series.map((entry) => cloneJsonData(entry))
-    : [];
-  const nextSeries = Array.isArray(projectedConservation?.series)
-    ? projectedConservation.series.map((entry, index) => ({
-        ...entry,
-        ...(currentSeries[index] || {}),
-        sourceIndex: index,
-        fileName: entry.fileName,
-        label: entry.label,
-        color: entry.color
-      }))
-    : [];
-
-  state.files.c_conservation_blasts = nextBlastFiles;
-  state.files.c_conservation_blasts_source = 'losat-cache';
-  state.files.c_conservation_fastas = nextFastaFiles;
-  state.files.c_conservation_sequence_sources = nextSequenceSources;
-  if (projectedConservation) {
-    state.circularConservation.enabled = true;
-    state.circularConservation.source = 'losat';
-    state.circularConservation.reference = projectedConservation.reference;
-    state.circularConservation.labels = nextSeries.map((entry) => entry.label).join(',');
-    state.circularConservation.ring_width = projectedConservation.ring_width;
-    state.circularConservation.ring_gap = projectedConservation.ring_gap;
-    state.circularConservation.series.splice(
-      0,
-      state.circularConservation.series.length,
-      ...nextSeries
-    );
-  }
+  // Everything that can validate, project, or deserialize finishes before the
+  // committed request and its comparison-backed draft resources are replaced.
+  activeSessionResourceTable = sessionResourceTable;
   committedCanonicalSession = nextCommittedCanonicalSession;
+  if (nextLinearComparisons) {
+    state.files.linearCanonicalComparisons = nextLinearComparisons;
+  }
+  if (nextCircularState) {
+    state.files.c_conservation_blasts = nextCircularState.blasts;
+    state.files.c_conservation_blasts_source = 'losat-cache';
+    state.files.c_conservation_fastas = nextCircularState.fastas;
+    state.files.c_conservation_sequence_sources = nextCircularState.sequenceSources;
+    if (nextCircularState.projectedConservation) {
+      state.circularConservation.enabled = true;
+      state.circularConservation.source = 'losat';
+      state.circularConservation.reference = nextCircularState.projectedConservation.reference;
+      state.circularConservation.labels = nextCircularState.series
+        .map((entry) => entry.label).join(',');
+      state.circularConservation.ring_width = nextCircularState.projectedConservation.ring_width;
+      state.circularConservation.ring_gap = nextCircularState.projectedConservation.ring_gap;
+      state.circularConservation.series.splice(
+        0,
+        state.circularConservation.series.length,
+        ...nextCircularState.series
+      );
+    }
+  }
 };
+
+export const getCommittedCanonicalRenderRequest = () => (
+  committedCanonicalSession?.renderRequest || null
+);
+
+export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
 const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.matchSequenceRegistry?.reset?.();
+  state.circularRecordList.value = [];
+  Object.assign(state.circularRecordDiscovery, {
+    status: 'idle',
+    error: '',
+    inputType: '',
+    primaryFile: null,
+    pairedFile: null,
+    canonicalRecordIdentities: []
+  });
   state.files.c_gb = null;
   state.files.c_gff = null;
   state.files.c_fasta = null;
@@ -2778,6 +2925,37 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.files.blacklist = deserializeFile(filesData.blacklist);
   state.files.whitelist = deserializeFile(filesData.whitelist);
   state.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
+
+  const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
+    ? filesData.circularRecords
+    : [];
+  if (canonicalCircularRecords.length > 0) {
+    state.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
+      .map((record, index) => {
+        const selector = record?.region?.selector || record?.selector;
+        const selectorValue = selector?.kind === 'recordId'
+          ? String(selector.value || '')
+          : selector?.kind === 'recordIndex'
+            ? `#${Number(selector.index) + 1}`
+            : `#${index + 1}`;
+        return {
+          selector: selectorValue,
+          record_id: selector?.kind === 'recordId' ? selectorValue : '',
+          recordKey: String(record?.recordKey || '')
+        };
+      });
+    Object.assign(state.circularRecordDiscovery, {
+      status: 'loading',
+      error: '',
+      inputType: state.cInputType.value,
+      primaryFile: state.cInputType.value === 'gff'
+        ? state.files.c_gff
+        : state.files.c_gb,
+      pairedFile: state.cInputType.value === 'gff'
+        ? state.files.c_fasta
+        : null
+    });
+  }
 
   if (Array.isArray(filesData.linearSeqs)) {
     const loadedLinearSeqs = filesData.linearSeqs.map((seq) => ({
@@ -2947,6 +3125,8 @@ const cloneLiveFileState = () => ({
         : cloneJsonData(comparison)
     ))
   },
+  circularRecordList: cloneJsonData(state.circularRecordList.value),
+  circularRecordDiscovery: { ...state.circularRecordDiscovery },
   linearSeqs: state.linearSeqs.map((seq) => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
@@ -2964,6 +3144,8 @@ const restoreLiveFileState = (snapshot) => {
   Object.keys(state.files).forEach((key) => {
     state.files[key] = snapshot.files[key] ?? null;
   });
+  state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
+  Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);
   state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
   state.linearRecordRows.splice(0, state.linearRecordRows.length, ...snapshot.linearRecordRows);
   replaceLinearComparisonPlan(state.linearComparisonPlan, snapshot.linearComparisonPlan);
@@ -3127,6 +3309,7 @@ const captureSessionImportSnapshot = () => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
+  importedComparisonIntent: cloneJsonData(state.importedComparisonIntent),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
   transients: captureSessionImportTransientState()
@@ -3155,6 +3338,11 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       ? snapshot.committedCanonicalSession
       : cloneCanonicalSession(snapshot.committedCanonicalSession);
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
+    Object.assign(
+      state.importedComparisonIntent,
+      createImportedComparisonIntentState(),
+      cloneJsonData(snapshot.importedComparisonIntent)
+    );
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
     applyResultsData(snapshot.results, snapshot.ui);
@@ -3183,6 +3371,10 @@ const resetSessionBaseline = () => {
   preservedCliOptions = null;
   committedCanonicalSession = null;
   activeSessionResourceTable = null;
+  Object.assign(
+    state.importedComparisonIntent,
+    createImportedComparisonIntentState()
+  );
   adoptedProteinIdentityManifest = null;
   state.sessionResourceDiscoveryDeferred.value = false;
   resetSettingsState(state);
@@ -3254,6 +3446,7 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     losatProgram: state.losatProgram.value,
     downloadDpi: state.downloadDpi.value,
     autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+    linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
     paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
@@ -3284,6 +3477,11 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   }
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
   state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
+  reconcileImportedLinearTypographyLink({
+    adv: state.adv,
+    linked: state.linearTypographyLinked,
+    ui
+  });
   state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
   if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
     state.featurePanelTab.value = ui.featurePanelTab;
@@ -3593,6 +3791,11 @@ export const exportSession = async (
     storedConfig.adv,
     normalizedArrowGeometryState(storedConfig.adv)
   );
+  storedConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
+    mode: state.mode.value,
+    configOverrides: storedConfig.unmanagedConfigOverrides,
+    requireUnmanagedOnly: true
+  });
   let committed = isAdoptedCanonicalSession(committedCanonicalSession)
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession);
@@ -3679,6 +3882,7 @@ export const exportSession = async (
       lInputType: state.lInputType.value,
       downloadDpi: state.downloadDpi.value,
       autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
       appliedPaletteName: state.appliedPaletteName.value,
       appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
@@ -3766,13 +3970,9 @@ export const importSession = async (e, options = {}) => {
     const text = await readSessionText(file);
     recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
     recordSessionLifecycleEvent('json-parse-start');
-    let data = JSON.parse(text, (key, value) => {
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-        return undefined;
-      }
-      return value;
-    });
+    let data = JSON.parse(text);
     recordSessionLifecycleEvent('json-parse-end');
+    assertSafeObjectKeys(data, 'Session');
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
@@ -3789,8 +3989,15 @@ export const importSession = async (e, options = {}) => {
       restoredConfig,
       projectionResult,
       adoptedCanonicalSession,
-      currentResourceTable
+      currentResourceTable,
+      comparisonClassification,
+      unmanagedConfigValidation
     } = preflight;
+    if (restoredConfig && unmanagedConfigValidation) {
+      restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(
+        unmanagedConfigValidation
+      );
+    }
     const canonicalSession = Boolean(projectionResult);
     const currentSchemaSession = sourceSessionVersion === SESSION_VERSION;
     rollbackSnapshot = captureSessionImportSnapshot();
@@ -3857,12 +4064,22 @@ export const importSession = async (e, options = {}) => {
       );
       applyConfigData(restoredConfig);
     }
+    reconcileImportedLinearTypographyLink({
+      adv: state.adv,
+      linked: state.linearTypographyLinked,
+      ui
+    });
     restorePaletteStateFromSession(ui);
     restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
 
     const { collapsedLinearSeqs } = applyFiles(
       canonicalSession ? projectionResult.restoredFiles : data.files,
       { adoptCanonicalPayloads: currentSchemaSession }
+    );
+    restoreImportedComparisonIntent(
+      state.importedComparisonIntent,
+      comparisonClassification,
+      restoredConfig?.importedComparisonResolution
     );
     reconcileDepthTrackStateAfterSessionFiles();
     if (canonicalSession) {
@@ -4154,7 +4371,8 @@ export const importSession = async (e, options = {}) => {
       status: 'ok',
       data,
       decompressedCharacters: text.length,
-      degradedRecovery: Boolean(currentRecoveryError)
+      degradedRecovery: Boolean(currentRecoveryError),
+      comparisonDisposition: state.importedComparisonIntent.disposition
     };
   } catch (err) {
     console.error(err);

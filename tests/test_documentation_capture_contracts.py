@@ -605,7 +605,7 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
     shared_source = WEB_CAPTURE_PATH.read_text(encoding="utf-8")
     index_source = WEB_INDEX_PATH.read_text(encoding="utf-8")
 
-    assert 'aria-label="Pairwise Match Height"' in index_source
+    assert 'aria-label="Comparison match height"' in index_source
 
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
@@ -629,7 +629,7 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
         'name="LOSAT threads per run", exact=True',
         'name="LOSATN task", exact=True',
         'name="Raw LOSAT filename for #1 to #2", exact=True',
-        '"Pairwise Match Height", exact=True',
+        '"Comparison match height", exact=True',
         'pairwise_match_height.fill("120")',
         'select_option("serial")',
         'select_option("1")',

@@ -318,6 +318,9 @@ ConservationTrackOptions = ComparisonRingTrackOptions
 ConservationOptions = ComparisonRingOptions
 
 
+_LINEAR_DIAGRAM_DEFAULTS = _LinearDiagramOptions()
+
+
 @dataclass(frozen=True)
 class LinearComparisonOptions:
     """Precomputed or in-process comparison inputs for a linear diagram."""
@@ -326,23 +329,41 @@ class LinearComparisonOptions:
     comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | None = None
-    protein_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = "none"
+    protein_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = (
+        _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_mode
+    )
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
     collinearity_params: LosslessCollinearityParameters | None = None
-    collinearity_unit: CollinearityUnitMode | str = "auto"
-    collinearity_anchor: CollinearityAnchorMode | str = "rbh"
-    collinearity_scope: CollinearitySearchScope | str = "adjacent"
-    collinearity_color: CollinearityColorMode | str = "orientation"
-    losat_executable: str = "losat"
-    blastp_executable: str | None = None
-    threads: int | None = None
-    max_hits: int = 5
-    candidate_limit: int | None = None
-    orthogroup_membership: OrthogroupMembershipMode | str = "anchor_core_v1"
-    orthogroup_member_max_hits: int = 5
-    max_paralog_links: int = 2
+    collinearity_unit: CollinearityUnitMode | str = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinearity_unit_mode
+    )
+    collinearity_anchor: CollinearityAnchorMode | str = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinearity_anchor_mode
+    )
+    collinearity_scope: CollinearitySearchScope | str = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinearity_search_scope
+    )
+    collinearity_color: CollinearityColorMode | str = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinearity_color_mode
+    )
+    losat_executable: str = _LINEAR_DIAGRAM_DEFAULTS.losatp_bin
+    blastp_executable: str | None = _LINEAR_DIAGRAM_DEFAULTS.ncbi_blastp_bin
+    threads: int | None = _LINEAR_DIAGRAM_DEFAULTS.losatp_threads
+    max_hits: int = _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_max_hits
+    candidate_limit: int | None = (
+        _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_candidate_limit
+    )
+    orthogroup_membership: OrthogroupMembershipMode | str = (
+        _LINEAR_DIAGRAM_DEFAULTS.orthogroup_membership_mode
+    )
+    orthogroup_member_max_hits: int = (
+        _LINEAR_DIAGRAM_DEFAULTS.orthogroup_member_max_hits
+    )
+    max_paralog_links: int = (
+        _LINEAR_DIAGRAM_DEFAULTS.collinear_max_paralog_links_per_orthogroup
+    )
     align_feature: str | None = None
 
 

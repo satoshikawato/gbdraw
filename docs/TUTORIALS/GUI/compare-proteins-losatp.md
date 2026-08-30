@@ -69,19 +69,17 @@ comparison ribbons.
 ## Step 3: Configure Similarity groups
 
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings** and choose
-the **LOSATP** button in **LOSAT Mode**, then choose **Pairwise matches** from
-the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style** to **Curve**, then
-change **LOSATP mode** to **Similarity groups** and enter the filter values.
-The presentation switch preserves the Curve draft even though Similarity
-groups hides the appearance controls. Continue past **Generate Diagram**, open
-**Advanced comparison and layout**, and set the deterministic runtime values.
+the **LOSATP** button in **LOSAT Mode**, then choose **Similarity groups** from
+the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style**
+to **Curve**, then enter the filter values. Continue past **Generate Diagram**,
+open **Advanced comparison and layout**, and set the deterministic runtime
+values.
 
 | Section | Control | Value |
 |---|---|---|
 | Settings | LOSAT Mode | LOSATP |
-| Settings | LOSATP mode (appearance step) | Pairwise matches |
+| Settings | LOSATP mode | Similarity groups |
 | Settings / Comparison appearance | Match style | Curve |
-| Settings | LOSATP mode (final) | Similarity groups |
 | Settings / Result filters | Bitscore | `50` |
 | Settings / Result filters | E-value | `0.01` |
 | Settings / Result filters | Minimum identity | `30` |

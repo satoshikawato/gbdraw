@@ -14,7 +14,12 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
-from gbdraw.analysis.collinearity_units import CollinearityUnitMode
+from gbdraw.analysis.collinearity_units import (
+    CollinearityUnit,
+    CollinearityUnitIndex,
+    CollinearityUnitMode,
+    build_collinearity_unit_index,
+)
 from gbdraw.analysis.protein_colinearity import (
     CdsProtein,
     LosatpCacheManager,
@@ -22,8 +27,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupMembershipMode,
     OrthogroupResult,
     ProteinExtractionResult,
-    _cache_runner_for_search,
-    _run_losatp_search,
+    _execute_losatp_search,
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
@@ -151,7 +155,7 @@ class LosslessCollinearityParameters:
     min_anchors: int = 1
     max_unit_gap: int = 0
     max_diagonal_drift: int = 0
-    max_conflicts: int = 0
+    max_conflicts: int = 1
     merge_orientation: Literal["strand", "order", "either"] = "either"
 
     def validate(self) -> None:
@@ -256,6 +260,12 @@ def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
     if protein.strand == -1:
         return int(protein.end), int(protein.start) + 1
     return int(protein.start) + 1, int(protein.end)
+
+
+def _unit_genomic_link_coordinates(unit: CollinearityUnit) -> tuple[int, int]:
+    if unit.strand == -1:
+        return int(unit.end), int(unit.start) + 1
+    return int(unit.start) + 1, int(unit.end)
 
 
 def _normalized_strand(value: object) -> int | None:
@@ -488,6 +498,7 @@ def _lossless_anchor_from_edge_row(
     subject_record_index: int,
     protein_map: Mapping[str, CdsProtein],
     order_by_id: Mapping[str, int],
+    unit_index: CollinearityUnitIndex | None,
     orthogroups: OrthogroupResult,
     member_counts_by_record: Mapping[tuple[str, int], int],
 ) -> CollinearityAnchor | None:
@@ -497,6 +508,26 @@ def _lossless_anchor_from_edge_row(
     subject_protein = protein_map.get(subject_id)
     if query_protein is None or subject_protein is None:
         return None
+    query_unit = (
+        unit_index.unit_by_protein_id.get(query_id)
+        if unit_index is not None
+        else None
+    )
+    subject_unit = (
+        unit_index.unit_by_protein_id.get(subject_id)
+        if unit_index is not None
+        else None
+    )
+    query_representative = (
+        protein_map.get(query_unit.representative_protein_id, query_protein)
+        if query_unit is not None
+        else query_protein
+    )
+    subject_representative = (
+        protein_map.get(subject_unit.representative_protein_id, subject_protein)
+        if subject_unit is not None
+        else subject_protein
+    )
     orthogroup_id = _orthogroup_id_for_edge(query_id, subject_id, orthogroups)
     edge_metadata = _orthogroup_edge_metadata_for_anchor(
         query_id,
@@ -504,40 +535,76 @@ def _lossless_anchor_from_edge_row(
         orthogroup_id,
         orthogroups,
     )
-    qstart, qend = _genomic_link_coordinates(query_protein)
-    sstart, send = _genomic_link_coordinates(subject_protein)
+    qstart, qend = (
+        _unit_genomic_link_coordinates(query_unit)
+        if query_unit is not None
+        else _genomic_link_coordinates(query_protein)
+    )
+    sstart, send = (
+        _unit_genomic_link_coordinates(subject_unit)
+        if subject_unit is not None
+        else _genomic_link_coordinates(subject_protein)
+    )
     return CollinearityAnchor(
         query_protein_id=query_id,
         subject_protein_id=subject_id,
         query_record_index=int(query_record_index),
         subject_record_index=int(subject_record_index),
-        query_order=int(order_by_id.get(query_id, query_protein.feature_index)),
-        subject_order=int(order_by_id.get(subject_id, subject_protein.feature_index)),
+        query_order=int(
+            query_unit.order
+            if query_unit is not None
+            else order_by_id.get(query_id, query_protein.feature_index)
+        ),
+        subject_order=int(
+            subject_unit.order
+            if subject_unit is not None
+            else order_by_id.get(subject_id, subject_protein.feature_index)
+        ),
         query_start=qstart,
         query_end=qend,
         subject_start=sstart,
         subject_end=send,
-        query_strand=_normalized_strand(query_protein.strand),
-        subject_strand=_normalized_strand(subject_protein.strand),
+        query_strand=_normalized_strand(
+            query_unit.strand if query_unit is not None else query_protein.strand
+        ),
+        subject_strand=_normalized_strand(
+            subject_unit.strand if subject_unit is not None else subject_protein.strand
+        ),
         identity=_float_from_row(row, "identity", 0.0),
         evalue=_float_from_row(row, "evalue", 1.0),
         bitscore=_float_from_row(row, "bitscore", 0.0),
         alignment_length=_int_from_row(row, "alignment_length", 0),
-        query_feature_svg_id=str(query_protein.feature_svg_id or ""),
-        subject_feature_svg_id=str(subject_protein.feature_svg_id or ""),
-        query_view_feature_svg_id=_view_feature_svg_id(query_protein),
-        subject_view_feature_svg_id=_view_feature_svg_id(subject_protein),
-        query_feature_index=query_protein.feature_index,
-        subject_feature_index=subject_protein.feature_index,
+        query_feature_svg_id=str(query_representative.feature_svg_id or ""),
+        subject_feature_svg_id=str(subject_representative.feature_svg_id or ""),
+        query_view_feature_svg_id=_view_feature_svg_id(query_representative),
+        subject_view_feature_svg_id=_view_feature_svg_id(subject_representative),
+        query_feature_index=query_representative.feature_index,
+        subject_feature_index=subject_representative.feature_index,
         source="orthogroup_display_edge",
-        query_unit_id=query_id,
-        subject_unit_id=subject_id,
-        query_unit_kind="cds",
-        subject_unit_kind="cds",
-        query_locus_id=_protein_locus_metadata(query_protein),
-        subject_locus_id=_protein_locus_metadata(subject_protein),
-        query_display_name=str(query_protein.label or query_id),
-        subject_display_name=str(subject_protein.label or subject_id),
+        query_unit_id=query_unit.unit_id if query_unit is not None else query_id,
+        subject_unit_id=subject_unit.unit_id if subject_unit is not None else subject_id,
+        query_unit_kind=query_unit.unit_kind if query_unit is not None else "cds",
+        subject_unit_kind=subject_unit.unit_kind if subject_unit is not None else "cds",
+        query_locus_id=(
+            query_unit.locus_id
+            if query_unit is not None
+            else _protein_locus_metadata(query_protein)
+        ),
+        subject_locus_id=(
+            subject_unit.locus_id
+            if subject_unit is not None
+            else _protein_locus_metadata(subject_protein)
+        ),
+        query_display_name=(
+            query_unit.display_name
+            if query_unit is not None
+            else str(query_protein.label or query_id)
+        ),
+        subject_display_name=(
+            subject_unit.display_name
+            if subject_unit is not None
+            else str(subject_protein.label or subject_id)
+        ),
         orthogroup_id=orthogroup_id,
         rbh_orthogroup_id=str(edge_metadata["rbh_orthogroup_id"]),
         ortholog_path_id=str(edge_metadata["ortholog_path_id"]),
@@ -558,6 +625,8 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
     adjacent_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     protein_map: Mapping[str, CdsProtein],
     orthogroups: OrthogroupResult,
+    *,
+    unit_index: CollinearityUnitIndex | None = None,
 ) -> tuple[CollinearityAnchor, ...]:
     """Convert adjacent Orthogroup display edges one-to-one into anchors."""
 
@@ -582,6 +651,7 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
                 subject_record_index=int(subject_record_index),
                 protein_map=protein_map,
                 order_by_id=order_by_id,
+                unit_index=unit_index,
                 orthogroups=orthogroups,
                 member_counts_by_record=member_counts_by_record,
             )
@@ -592,6 +662,41 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
             "Orthogroup display edge contains unknown protein IDs: "
             + ", ".join(sorted(missing_ids))
         )
+    if unit_index is not None:
+        strongest_by_unit_pair: dict[
+            tuple[int, int, str, str], CollinearityAnchor
+        ] = {}
+        for anchor in anchors:
+            key = (
+                int(anchor.query_record_index),
+                int(anchor.subject_record_index),
+                str(anchor.query_unit_id),
+                str(anchor.subject_unit_id),
+            )
+            current = strongest_by_unit_pair.get(key)
+            rank = (
+                -float(anchor.bitscore),
+                float(anchor.evalue),
+                -float(anchor.identity),
+                -int(anchor.alignment_length),
+                str(anchor.query_protein_id),
+                str(anchor.subject_protein_id),
+            )
+            current_rank = (
+                (
+                    -float(current.bitscore),
+                    float(current.evalue),
+                    -float(current.identity),
+                    -int(current.alignment_length),
+                    str(current.query_protein_id),
+                    str(current.subject_protein_id),
+                )
+                if current is not None
+                else None
+            )
+            if current_rank is None or rank < current_rank:
+                strongest_by_unit_pair[key] = anchor
+        anchors = list(strongest_by_unit_pair.values())
     return tuple(sorted(anchors, key=_anchor_sort_key))
 
 
@@ -738,12 +843,39 @@ def _lossless_initial_clusters_for_pair(
     return blocks
 
 
+def _lossless_conflicts_between_clusters(
+    left: CollinearityBlock,
+    right: CollinearityBlock,
+    anchors: Sequence[CollinearityAnchor],
+) -> int:
+    left_path = _path_sorted_anchors(left.anchors, left.orientation)
+    right_path = _path_sorted_anchors(right.anchors, right.orientation)
+    if not left_path or not right_path:
+        return 0
+    left_end = left_path[-1]
+    right_start = right_path[0]
+    query_min = min(int(left_end.query_order), int(right_start.query_order))
+    query_max = max(int(left_end.query_order), int(right_start.query_order))
+    subject_min = min(int(left_end.subject_order), int(right_start.subject_order))
+    subject_max = max(int(left_end.subject_order), int(right_start.subject_order))
+    cluster_anchors = {*left.anchors, *right.anchors}
+    return sum(
+        1
+        for anchor in anchors
+        if anchor not in cluster_anchors
+        and query_min < int(anchor.query_order) < query_max
+        and subject_min < int(anchor.subject_order) < subject_max
+    )
+
+
 def _lossless_clusters_can_merge(
     left: CollinearityBlock,
     right: CollinearityBlock,
+    *,
+    anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> bool:
-    if left.kind == "singleton" and right.kind == "singleton":
+    if left.kind != "cluster" or right.kind != "cluster":
         return False
     if left.orientation != right.orientation:
         return False
@@ -751,21 +883,34 @@ def _lossless_clusters_can_merge(
     right_path = _path_sorted_anchors(right.anchors, right.orientation)
     if not left_path or not right_path:
         return False
-    return _lossless_anchors_are_compatible(
+    if not _lossless_anchors_are_compatible(
         left_path[-1],
         right_path[0],
         orientation=left.orientation,
         params=params,
+    ):
+        return False
+    return _lossless_conflicts_between_clusters(left, right, anchors) <= int(
+        params.max_conflicts
     )
 
 
 def _merge_lossless_clusters(
     blocks: Sequence[CollinearityBlock],
+    *,
+    anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> tuple[CollinearityBlock, ...]:
     merged: list[CollinearityBlock] = []
-    for block in sorted(blocks, key=_final_block_sort_key):
-        if not merged or not _lossless_clusters_can_merge(merged[-1], block, params):
+    singleton_blocks = [block for block in blocks if block.kind == "singleton"]
+    cluster_blocks = [block for block in blocks if block.kind == "cluster"]
+    for block in sorted(cluster_blocks, key=_final_block_sort_key):
+        if not merged or not _lossless_clusters_can_merge(
+            merged[-1],
+            block,
+            anchors=anchors,
+            params=params,
+        ):
             merged.append(block)
             continue
         previous = merged[-1]
@@ -775,7 +920,7 @@ def _merge_lossless_clusters(
             orientation=previous.orientation,
             anchors=(*previous.anchors, *block.anchors),
         )
-    return tuple(merged)
+    return tuple(sorted((*merged, *singleton_blocks), key=_final_block_sort_key))
 
 
 def _filter_blocks_by_min_anchors(
@@ -847,7 +992,13 @@ def cluster_lossless_collinearity_anchors(
             anchors_by_pair[pair],
             resolved_params,
         )
-        blocks.extend(_merge_lossless_clusters(pair_blocks, resolved_params))
+        blocks.extend(
+            _merge_lossless_clusters(
+                pair_blocks,
+                anchors=anchors_by_pair[pair],
+                params=resolved_params,
+            )
+        )
     filtered_blocks, unblocked_anchors = _filter_blocks_by_min_anchors(
         blocks,
         min_anchors=resolved_params.min_anchors,
@@ -1082,6 +1233,11 @@ def build_orthogroup_collinearity_blocks_from_hits(
     """Call lossless Orthogroup-sourced collinearity blocks from filtered hits."""
 
     lossless_params = _resolve_lossless_params(params)
+    unit_index = build_collinearity_unit_index(
+        extraction,
+        records=records,
+        mode=unit_mode,
+    )
     directional_tables = _normalize_hit_tables(hits_by_pair, reverse_hits_by_pair)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
@@ -1152,6 +1308,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
         comparison_edges_by_pair,
         extraction.protein_map,
         orthogroups,
+        unit_index=unit_index,
     )
     result = cluster_lossless_collinearity_anchors(anchors, params=lossless_params)
     return CollinearityResult(
@@ -1228,7 +1385,7 @@ def build_orthogroup_collinearity_blocks(
     directional_tables: dict[tuple[int, int], DataFrame] = {}
     for record_index in range(len(records)):
         record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
-        same_record_hits = _run_losatp_search(
+        same_record_hits = _execute_losatp_search(
             record_fasta,
             record_fasta,
             losatp_bin=losatp_bin,
@@ -1236,16 +1393,9 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                display=False,
-            ),
+            runner=runner,
+            losatp_cache=losatp_cache,
+            display=False,
         )
         directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
             same_record_hits,
@@ -1265,7 +1415,7 @@ def build_orthogroup_collinearity_blocks(
     for query_index, subject_index in search_pairs:
         query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
         subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
-        forward_hits = _run_losatp_search(
+        forward_hits = _execute_losatp_search(
             query_fasta,
             subject_fasta,
             losatp_bin=losatp_bin,
@@ -1273,21 +1423,14 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                filename=(
-                    str(cache_filenames[query_index])
-                    if cache_filenames is not None and query_index < len(cache_filenames)
-                    else ""
-                ),
-                display=subject_index == query_index + 1,
+            runner=runner,
+            losatp_cache=losatp_cache,
+            filename=(
+                str(cache_filenames[query_index])
+                if cache_filenames is not None and query_index < len(cache_filenames)
+                else ""
             ),
+            display=subject_index == query_index + 1,
         )
         directional_tables[(query_index, subject_index)] = filter_protein_hits_by_thresholds(
             forward_hits,
@@ -1296,7 +1439,7 @@ def build_orthogroup_collinearity_blocks(
             identity=identity,
             alignment_length=alignment_length,
         )
-        reverse_hits = _run_losatp_search(
+        reverse_hits = _execute_losatp_search(
             subject_fasta,
             query_fasta,
             losatp_bin=losatp_bin,
@@ -1304,16 +1447,9 @@ def build_orthogroup_collinearity_blocks(
             losatp_threads=losatp_threads,
             candidate_limit=search_candidate_limit,
             max_hsps_per_subject=None,
-            runner=_cache_runner_for_search(
-                losatp_cache,
-                runner=runner,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                display=False,
-            ),
+            runner=runner,
+            losatp_cache=losatp_cache,
+            display=False,
         )
         directional_tables[(subject_index, query_index)] = filter_protein_hits_by_thresholds(
             reverse_hits,

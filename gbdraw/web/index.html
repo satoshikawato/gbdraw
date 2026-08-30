@@ -1176,6 +1176,76 @@
                             <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
+                        <details data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
+                            <summary aria-label="Circular record presentation">
+                                <i class="ph ph-selection"></i>
+                                Single-record presentation
+                            </summary>
+                            <div class="pt-2 space-y-2">
+                                <div>
+                                    <label class="input-label text-[10px]">Record <help-tip text="Select one stable record identity for a single Circular diagram. Leave this on All records to keep separate-diagram batch output."></help-tip></label>
+                                    <select
+                                        :value="form.circular_record_selector"
+                                        @change="setCircularRecordPresentationSelector($event.target.value)"
+                                        :disabled="form.multi_record_canvas"
+                                        aria-label="Circular record"
+                                        class="form-select w-full px-1 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500"
+                                    >
+                                        <option
+                                            v-for="option in circularRecordPresentationOptions"
+                                            :key="`${option.value}:${option.synthetic ? 'synthetic' : 'record'}`"
+                                            :value="option.value"
+                                        >{{ option.label }}</option>
+                                    </select>
+                                    <p v-if="form.multi_record_canvas" class="mt-1 text-[9px] text-slate-500">Turn off Multi-Record Canvas to edit one record.</p>
+                                    <p v-else-if="circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
+                                    <p v-else-if="!circularSingleRecordPresentationEnabled" class="mt-1 text-[9px] text-slate-500">Select one record to edit crop, orientation, and title lines.</p>
+                                </div>
+                                <div class="grid grid-cols-1 gap-2" :class="circularSingleRecordPresentationEnabled ? '' : 'opacity-60'">
+                                    <div>
+                                        <label class="input-label text-[10px]">Record label <help-tip text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></label>
+                                        <input
+                                            type="text"
+                                            v-model="form.circular_record_label"
+                                            :disabled="!circularSingleRecordPresentationEnabled"
+                                            aria-label="Circular record label"
+                                            placeholder="e.g. Streptomyces fradiae"
+                                            class="form-input px-1 py-1 text-xs"
+                                        >
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Subtitle <help-tip text="Overrides the inferred strain line for this Circular record. Leave empty to keep inference."></help-tip></label>
+                                        <input
+                                            type="text"
+                                            v-model="form.circular_record_subtitle"
+                                            :disabled="!circularSingleRecordPresentationEnabled"
+                                            aria-label="Circular record subtitle"
+                                            placeholder="e.g. Neomycin biosynthetic gene cluster"
+                                            class="form-input px-1 py-1 text-xs"
+                                        >
+                                    </div>
+                                    <div class="pt-1 border-t border-slate-200 border-dashed">
+                                        <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+                                            <i class="ph ph-crop"></i> Region (optional)
+                                            <help-tip text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label class="text-[9px] block">Start</label>
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!circularSingleRecordPresentationEnabled" aria-label="Circular region start" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="text-[9px] block">End</label>
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!circularSingleRecordPresentationEnabled" aria-label="Circular region end" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <label class="flex items-center gap-2 text-[10px] text-slate-600">
+                                        <input type="checkbox" v-model="form.circular_reverse" :disabled="!circularSingleRecordPresentationEnabled" aria-label="Circular reverse complement" class="form-checkbox"> Reverse complement
+                                    </label>
+                                </div>
+                            </div>
+                        </details>
                         <details class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Depth TSV tracks">
                                 <i class="ph ph-chart-bar"></i>
@@ -1604,6 +1674,45 @@
                                 <i class="ph ph-arrows-left-right text-lg text-blue-600"></i>
                                 <span class="min-w-0 flex-1">Comparison</span>
                             </div>
+                            <div
+                                v-if="importedComparisonNeedsResolution"
+                                data-imported-comparison-resolution
+                                role="status"
+                                class="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-[10px] leading-snug text-amber-950 space-y-2"
+                            >
+                                <div class="font-bold text-xs">
+                                    {{ importedComparisonIntent.disposition === 'PRESERVED_READ_ONLY'
+                                        ? 'Saved comparison preserved as read-only'
+                                        : 'Saved comparison needs a decision' }}
+                                </div>
+                                <p>{{ importedComparisonIntent.message }}</p>
+                                <p>The controls below are a replacement draft. The saved comparison and last successful Result remain unchanged until Generate succeeds.</p>
+                                <p v-if="importedComparisonIntent.action" class="font-semibold">
+                                    Selected action: {{ importedComparisonIntent.action }}
+                                </p>
+                                <div class="flex flex-wrap gap-1.5" role="group" aria-label="Resolve saved comparison">
+                                    <button
+                                        v-if="importedComparisonCanInherit"
+                                        type="button"
+                                        data-history-ignore
+                                        @click="inheritImportedComparison"
+                                        class="btn btn-secondary text-[10px]"
+                                    >Inherit saved comparison</button>
+                                    <button
+                                        type="button"
+                                        data-history-ignore
+                                        :disabled="!importedComparisonCanReplace"
+                                        @click="replaceImportedComparison"
+                                        class="btn btn-secondary text-[10px] disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >Replace with current controls</button>
+                                    <button
+                                        type="button"
+                                        data-history-ignore
+                                        @click="clearImportedComparison"
+                                        class="btn btn-secondary text-[10px]"
+                                    >Clear comparison</button>
+                                </div>
+                            </div>
                             <div role="group" aria-label="Set all adjacent comparisons" data-capture="linear-blast-source" class="linear-comparison-actions">
                                 <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
@@ -1688,13 +1797,13 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('blastp-max-hits')">
-                                        <label class="linear-primary-label mb-1">Max hits per protein <help-tip text="Maximum distinct subject proteins drawn for each query protein in Pairwise mode."></help-tip></label>
-                                        <input type="number" min="1" v-model.number="losat.blastp.maxHits" aria-label="LOSATP max hits per protein" class="form-input px-2 py-1.5 text-xs">
+                                        <label class="linear-primary-label mb-1">Pairwise display max hits <help-tip text="Maximum filtered matches displayed per query protein in Pairwise mode. This does not limit LOSATP candidates or Similarity/Collinear member evidence."></help-tip></label>
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" aria-label="Pairwise display max hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
-                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('similarity-grouping')">
-                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum subject hits considered when assigning proteins to a similarity group."></help-tip></label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Similarity group member hits per protein" class="form-input px-2 py-1.5 text-xs">
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
+                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
+                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1754,7 +1863,7 @@
                                         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                             <div>
                                                 <label class="linear-primary-label mb-1">Match style</label>
-                                                <select v-model="adv.pairwise_match_style" aria-label="Pairwise Match Style" class="form-input px-2 py-1.5 text-xs">
+                                                <select v-model="adv.pairwise_match_style" aria-label="Comparison match style" class="form-input px-2 py-1.5 text-xs">
                                                     <option value="ribbon">Ribbon</option>
                                                     <option value="curve">Curve</option>
                                                 </select>
@@ -1762,7 +1871,7 @@
                                             <div>
                                                 <label class="linear-primary-label mb-1">Match height</label>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
-                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" aria-label="Pairwise Match Height" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input">
+                                                    <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" aria-label="Comparison match height" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input">
                                                 </auto-value-field>
                                                 <p v-if="comparisonHeightValidationError" class="mt-1 text-[10px] text-red-600">{{ comparisonHeightValidationError }}</p>
                                             </div>
@@ -1971,6 +2080,15 @@
                                 <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
                             </section>
 
+                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losatp-candidate')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                <div class="linear-primary-label">LOSATP Advanced</div>
+                                <div>
+                                    <label class="linear-primary-label mb-1">Candidate limit <help-tip text="Maximum raw LOSATP candidate hits retained per query protein before Pairwise display or Similarity/Collinear construction. Leave blank for an unbounded search."></help-tip></label>
+                                    <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Candidate limit" class="form-input px-2 py-1.5 text-xs">
+                                    <p class="mt-1 text-[10px] leading-snug text-slate-500">Shared by Pairwise, Similarity groups, and Collinear blocks. Blank keeps the candidate search unbounded.</p>
+                                </div>
+                            </section>
+
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">LOSAT cache</div>
                                 <p class="text-[10px] leading-snug text-slate-500">{{ losatCacheInfo.length }} cached raw result{{ losatCacheInfo.length === 1 ? '' : 's' }}. Matching canonical inputs and settings reuse cached TSV data.</p>
@@ -2042,6 +2160,30 @@
                                 <div class="linear-primary-label">Advanced collinear search</div>
                                 <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div>
+                                        <label class="linear-primary-label mb-1">Unit mode <help-tip text="Auto resolves the current Collinear unit type; CDS and locus require that exact unit type."></help-tip></label>
+                                        <select v-model="losat.blastp.collinearUnitMode" aria-label="Collinear unit mode" class="form-input px-2 py-1.5 text-xs">
+                                            <option value="auto">Auto</option>
+                                            <option value="cds">CDS</option>
+                                            <option value="locus">Locus</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="linear-primary-label mb-1">Anchor mode <help-tip text="Choose all directional hits, one-to-one hits, or reciprocal best hits as Collinear anchors."></help-tip></label>
+                                        <select v-model="losat.blastp.collinearAnchorMode" aria-label="Collinear anchor mode" class="form-input px-2 py-1.5 text-xs">
+                                            <option value="all">All hits</option>
+                                            <option value="one_to_one">One-to-one</option>
+                                            <option value="rbh">Reciprocal best hits</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="linear-primary-label mb-1">Merge orientation <help-tip text="Require compatible strand, gene order, or either orientation when merging Collinear anchors."></help-tip></label>
+                                        <select v-model="losat.blastp.collinearMergeOrientation" aria-label="Collinear merge orientation" class="form-input px-2 py-1.5 text-xs">
+                                            <option value="strand">Strand</option>
+                                            <option value="order">Gene order</option>
+                                            <option value="either">Either</option>
+                                        </select>
+                                    </div>
+                                    <div>
                                         <label class="linear-primary-label mb-1">Diagonal drift</label>
                                         <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxDiagonalDrift" aria-label="Collinear diagonal drift" class="form-input px-2 py-1.5 text-xs">
                                     </div>
@@ -2049,7 +2191,7 @@
                                         <label class="linear-primary-label mb-1">Merge conflicts</label>
                                         <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" aria-label="Collinear merge conflicts" class="form-input px-2 py-1.5 text-xs">
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <label class="linear-primary-label mb-1">Paralog links per group</label>
                                         <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" aria-label="Collinear paralog links per group" class="form-input px-2 py-1.5 text-xs">
                                     </div>
@@ -2284,6 +2426,46 @@
                             </div>
                         </div>
                     </details>
+                </div>
+
+                <div
+                    v-if="unmanagedConfigOverrideEntries.length"
+                    data-unmanaged-config-overrides
+                    class="card border-blue-200 bg-blue-50/60"
+                >
+                    <div class="flex items-start gap-2">
+                        <i class="ph ph-shield-check mt-0.5 text-blue-600"></i>
+                        <div class="min-w-0 flex-1">
+                            <div class="text-xs font-bold text-slate-700">Preserved session settings</div>
+                            <p class="mt-0.5 text-[10px] leading-snug text-slate-600">
+                                These validated settings are not editable in the Web UI. They remain active until reset.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                        <div
+                            v-for="entry in unmanagedConfigOverrideEntries"
+                            :key="entry.path"
+                            data-unmanaged-config-override
+                            class="rounded border border-blue-200 bg-white px-2 py-1.5"
+                        >
+                            <div class="flex items-start gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <code class="block break-all text-[10px] font-semibold text-slate-700">{{ entry.path }}</code>
+                                    <code class="mt-0.5 block break-all text-[10px] text-slate-500">{{ entry.displayValue }}</code>
+                                </div>
+                                <button
+                                    type="button"
+                                    data-history-managed
+                                    class="btn btn-secondary shrink-0 px-2 py-1 text-[10px]"
+                                    :aria-label="`Reset preserved setting ${entry.path}`"
+                                    @click="resetUnmanagedConfigOverride(entry.path)"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
 
@@ -3893,11 +4075,42 @@
                                         :class="canUseLinearRulerOnAxis ? '' : 'opacity-50'">
                                     <span class="inline-flex items-center gap-1">Ruler on Axis <help-tip text="Use each record axis as the ruler and hide the bottom ruler. Effective when Track Layout is Above/Below and Scale Style is Ruler."></help-tip></span>
                                 </label>
+                                <div class="space-y-1">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            :checked="linearTypographyLinked"
+                                            @change="setLinearTypographyLinked($event.target.checked)"
+                                            class="form-checkbox"
+                                            aria-label="Link Linear scale and ruler label font sizes">
+                                        <span>Link Scale and Ruler Label Font Sizes</span>
+                                    </label>
+                                    <p class="text-[10px] text-slate-500">
+                                        Relinking copies the current Scale Font Size to Ruler Label Font Size once.
+                                    </p>
+                                </div>
                                 <div class="grid grid-cols-2 gap-1.5">
                                     <div>
-                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for scale label text. Used by bar style and ruler labels."></help-tip></label>
+                                        <label class="input-label text-[10px]">Scale Font Size <help-tip text="Font size for the simple bar scale label."></help-tip></label>
                                         <auto-value-field :visible="autoValueVisible(adv.scale_font_size, 'scaleFontSize')" :text="autoValueText('scaleFontSize')">
-                                            <input type="number" v-model.number="adv.scale_font_size" class="form-input form-input-compact auto-value-input" aria-label="Linear scale font size">
+                                            <input
+                                                type="number"
+                                                :value="optionalNumberInputValue(adv.scale_font_size)"
+                                                @input="setLinearScaleFontSize($event.target.value)"
+                                                class="form-input form-input-compact auto-value-input"
+                                                aria-label="Linear scale font size">
+                                        </auto-value-field>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px]">Ruler Label Font Size <help-tip text="Font size for ruler tick labels, including rulers drawn on record axes."></help-tip></label>
+                                        <auto-value-field :visible="autoValueVisible(adv.ruler_label_font_size, 'rulerLabelFontSize')" :text="autoValueText('rulerLabelFontSize')">
+                                            <input
+                                                type="number"
+                                                :value="optionalNumberInputValue(adv.ruler_label_font_size)"
+                                                @input="setLinearRulerLabelFontSize($event.target.value)"
+                                                :disabled="linearTypographyLinked"
+                                                class="form-input form-input-compact auto-value-input disabled:opacity-50 disabled:cursor-not-allowed"
+                                                aria-label="Linear ruler label font size">
                                         </auto-value-field>
                                     </div>
                                     <div v-if="form.scale_style === 'ruler'">

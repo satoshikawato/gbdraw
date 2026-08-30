@@ -22,6 +22,7 @@ export const formatRecordLength = (value) => {
 export const buildDisambiguatedRecordEntries = (records) => {
   const normalized = (Array.isArray(records) ? records : []).map((record, index) => ({
     ...record,
+    sourceIndex: Number.isInteger(record?.sourceIndex) ? record.sourceIndex : index,
     selector: cleanText(record?.selector) || `#${index + 1}`,
     recordId: cleanText(record?.recordId) || `Record_${index + 1}`
   }));
@@ -39,4 +40,21 @@ export const buildDisambiguatedRecordEntries = (records) => {
       value: usesIndex ? record.selector : record.recordId
     };
   });
+};
+
+export const resolveDisambiguatedRecordSelection = (records, requestedValue) => {
+  const entries = buildDisambiguatedRecordEntries(records);
+  const requested = cleanText(requestedValue);
+  if (!requested) return { status: 'unspecified', requested, entries, record: null };
+
+  for (const field of ['value', 'selector', 'recordId']) {
+    const matches = entries.filter((record) => record[field] === requested);
+    if (matches.length === 1) {
+      return { status: 'resolved', requested, entries, record: matches[0] };
+    }
+    if (matches.length > 1) {
+      return { status: 'ambiguous', requested, entries, record: null };
+    }
+  }
+  return { status: 'missing', requested, entries, record: null };
 };

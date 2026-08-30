@@ -61,6 +61,7 @@ globalThis.alert = (message) => alerts.push(String(message));
 
 const {
   adoptCanonicalRenderArtifacts,
+  getCommittedCanonicalSession,
   importSession,
   serializeActiveRenderFiles,
   validateSessionLosatArtifacts
@@ -313,7 +314,7 @@ const importSessionPayload = async (payload) => importSession({
   }
 });
 
-test('canonical protein comparisons rehydrate typed files and pipeline state', async () => {
+test('decision-required protein comparisons stay committed without projecting a partial draft', async () => {
   alerts.length = 0;
   const genbank = `LOCUS       TEST                        4 bp    DNA     linear   UNK 01-JAN-1980
 FEATURES             Location/Qualifiers
@@ -488,41 +489,23 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   const result = await importSession(event);
 
   assert.equal(result.status, 'ok');
-  assert.deepEqual(
-    state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
-    [
-      'precomputedProteinComparison',
-      'orthogroupResult',
-      'collinearityResult',
-      'generatedProteinComparison'
-    ]
-  );
+  assert.equal(result.comparisonDisposition, 'DECISION_REQUIRED');
+  assert.equal(state.importedComparisonIntent.disposition, 'DECISION_REQUIRED');
+  assert.equal(state.importedComparisonIntent.action, null);
+  assert.deepEqual(state.files.linearCanonicalComparisons, []);
   assert.equal(state.linearComparisonPlan.edges.length, 0);
-  assert.equal(
-    state.files.linearCanonicalComparisons[0].file.name,
-    'resolved-protein.tsv'
-  );
   assert.deepEqual(
-    state.files.linearCanonicalComparisons[3],
-    generatedProteinComparison
+    getCommittedCanonicalSession().renderRequest.comparisons,
+    renderRequest.comparisons
   );
-  assert.equal(
-    state.files.linearCanonicalComparisons[1].file.name,
-    'orthogroups.json'
-  );
-  assert.equal(
-    state.files.linearCanonicalComparisons[2].valueKind,
-    'blocks'
-  );
-  assert.equal(state.losatProgram.value, 'blastp');
+  assert.equal(state.losatProgram.value, 'blastn');
   assert.equal(state.losat.executionMode, 'threaded');
   assert.equal(state.losat.parallelWorkers, '3');
   assert.equal(state.losat.totalThreadBudget, '12');
   assert.equal(state.losat.blastn.task, 'dc-megablast');
   assert.equal(state.losat.blastp.mode, 'collinear');
-  assert.equal(state.losat.blastp.maxHits, 9);
-  assert.equal(state.losat.blastp.collinearSearchScope, 'all');
-  assert.equal(state.selectedOrthogroupAlignmentFeature.value, 'feature-anchor');
+  assert.equal(state.losat.blastp.maxHits, 1);
+  assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 
   state.files.linearCanonicalComparisons = [];
   adoptCanonicalRenderArtifacts({ renderRequest, resources });

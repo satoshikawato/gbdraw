@@ -189,6 +189,7 @@ const projectedConfig = {
   form: { track_type: 'tuckin' },
   adv: {
     nt: 'GC',
+    ruler_label_font_size: 13,
     circular_track_slots_enabled: true,
     circular_track_slots_schema_version: 4,
     circular_track_slots: [canonicalFeature],
@@ -201,6 +202,9 @@ const projectedConfig = {
 };
 const storedConfig = {
   form: { track_type: 'tuckin' },
+  unmanagedConfigOverrides: {
+    'objects.gc_content.percent_background_opacity': 0.42
+  },
   adv: {
     ...projectedConfig.adv,
     circular_track_slots: [disabledDraft, canonicalFeature],
@@ -239,14 +243,39 @@ assert.deepEqual(CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, [
   'circularConservation',
   'annotationSets',
   'modeProfiles',
+  'unmanagedConfigOverrides',
   'linearRecordLayout',
   'linearComparisonPlan',
+  'importedComparisonResolution',
   'webEdits'
 ]);
 assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
   mode: 'circular',
   storedConfig
 }));
+assert.throws(
+  () => validateCurrentWriterActiveConfig({
+    mode: 'linear',
+    storedConfig: {
+      ...storedConfig,
+      importedComparisonResolution: { action: 'AUTOMATIC' }
+    }
+  }),
+  /importedComparisonResolution\.action is invalid/
+);
+Object.assign(state.importedComparisonIntent, {
+  disposition: 'PRESERVED_READ_ONLY',
+  action: 'INHERIT',
+  message: 'Preserved for the current Session.',
+  hasCommittedComparison: true
+});
+assert.deepEqual(buildConfigData().importedComparisonResolution, { action: 'INHERIT' });
+Object.assign(state.importedComparisonIntent, {
+  disposition: 'EDITABLE',
+  action: null,
+  message: '',
+  hasCommittedComparison: false
+});
 const restored = restoreCurrentWriterActiveConfig({
   mode: 'circular',
   projectedConfig,
@@ -257,6 +286,20 @@ assert.deepEqual(restored.adv.linear_track_slots, storedConfig.adv.linear_track_
 assert.equal(restored.adv.circular_track_slots_axis_index, 2);
 assert.equal(restored.adv.feature_width_circular, 19);
 assert.equal(restored.adv.depth_width_circular, 23);
+assert.deepEqual(restored.unmanagedConfigOverrides, {
+  'objects.gc_content.percent_background_opacity': 0.42
+});
+
+const storedBeforeIndependentRulerFont = structuredClone(storedConfig);
+delete storedBeforeIndependentRulerFont.adv.ruler_label_font_size;
+assert.equal(
+  restoreCurrentWriterActiveConfig({
+    mode: 'linear',
+    projectedConfig,
+    storedConfig: storedBeforeIndependentRulerFont
+  }).adv.ruler_label_font_size,
+  13
+);
 
 const galleryCompatibilityConfig = structuredClone(storedConfig);
 galleryCompatibilityConfig.colors = { CDS: '#123456' };
@@ -336,8 +379,12 @@ Object.assign(divergentSession.config.losat.blastp, {
   mode: 'collinear',
   maxHits: 17,
   candidateLimit: 11,
+  orthogroupMemberMaxHits: 19,
   collinearMinAnchors: 4,
   collinearMaxUnitGap: 9,
+  collinearUnitMode: 'locus',
+  collinearAnchorMode: 'all',
+  collinearMergeOrientation: 'strand',
   collinearSearchScope: 'adjacent',
   collinearColorMode: 'orientation_identity'
 });
@@ -355,10 +402,18 @@ const dormantComparisonDraft = structuredClone({
     mode: divergentSession.config.losat.blastp.mode,
     maxHits: divergentSession.config.losat.blastp.maxHits,
     candidateLimit: divergentSession.config.losat.blastp.candidateLimit,
+    orthogroupMemberMaxHits:
+      divergentSession.config.losat.blastp.orthogroupMemberMaxHits,
     collinearMinAnchors:
       divergentSession.config.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap:
       divergentSession.config.losat.blastp.collinearMaxUnitGap,
+    collinearUnitMode:
+      divergentSession.config.losat.blastp.collinearUnitMode,
+    collinearAnchorMode:
+      divergentSession.config.losat.blastp.collinearAnchorMode,
+    collinearMergeOrientation:
+      divergentSession.config.losat.blastp.collinearMergeOrientation,
     collinearSearchScope:
       divergentSession.config.losat.blastp.collinearSearchScope,
     collinearColorMode:
@@ -390,6 +445,13 @@ const importEvent = {
 const imported = await importSession(importEvent);
 
 assert.equal(imported.status, 'ok', imported.error?.message);
+assert.equal(imported.comparisonDisposition, 'EDITABLE');
+assert.deepEqual(state.importedComparisonIntent, {
+  disposition: 'EDITABLE',
+  action: null,
+  message: 'The saved comparison is represented by the current controls.',
+  hasCommittedComparison: true
+});
 assert.equal(state.linearComparisonPlan.mode, 'none');
 assert.deepEqual(state.linearComparisonPlan.edges, []);
 assert.deepEqual({
@@ -406,12 +468,21 @@ assert.deepEqual({
     mode: state.losat.blastp.mode,
     maxHits: state.losat.blastp.maxHits,
     candidateLimit: state.losat.blastp.candidateLimit,
+    orthogroupMemberMaxHits: state.losat.blastp.orthogroupMemberMaxHits,
     collinearMinAnchors: state.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap: state.losat.blastp.collinearMaxUnitGap,
+    collinearUnitMode: state.losat.blastp.collinearUnitMode,
+    collinearAnchorMode: state.losat.blastp.collinearAnchorMode,
+    collinearMergeOrientation: state.losat.blastp.collinearMergeOrientation,
     collinearSearchScope: state.losat.blastp.collinearSearchScope,
     collinearColorMode: state.losat.blastp.collinearColorMode
   }
 }, dormantComparisonDraft);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(buildConfigData().losat.blastp)),
+  JSON.parse(JSON.stringify(state.losat.blastp)),
+  'the current Session writer must retain every editable LOSATP value'
+);
 assert.equal(
   state.form.legend,
   'bottom',
@@ -457,6 +528,31 @@ const importPayload = async (payload) => importSession({
     value: 'selected'
   }
 });
+
+const decisionRequiredSession = structuredClone(divergentSession);
+decisionRequiredSession.renderRequest.comparisons = [{
+  kind: 'nucleotideBlast',
+  resourceId: 'missing-comparison-resource',
+  queryRecordIndex: 0,
+  subjectRecordIndex: 1
+}];
+decisionRequiredSession.losatCache = { entries: [] };
+decisionRequiredSession.losatDerivedCache = { entries: [] };
+const decisionRequiredImport = await importPayload(decisionRequiredSession);
+assert.equal(
+  decisionRequiredImport.status,
+  'ok',
+  decisionRequiredImport.error?.message
+);
+assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
+assert.deepEqual(state.importedComparisonIntent, {
+  disposition: 'DECISION_REQUIRED',
+  action: null,
+  message: 'The saved comparison is missing a required resource.',
+  hasCommittedComparison: true
+});
+assert.equal(state.results.value.length, divergentSession.results.length);
+assert.deepEqual(state.files.linearCanonicalComparisons, []);
 
 for (const savedPlan of [{
   mode: 'adjacent',

@@ -39,7 +39,10 @@ import {
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
 } from '../app/depth-track-state.js';
-import { buildDisambiguatedRecordEntries } from '../app/record-options.js';
+import {
+  buildDisambiguatedRecordEntries,
+  resolveDisambiguatedRecordSelection
+} from '../app/record-options.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -72,8 +75,23 @@ import {
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   requireCurrentCircularMultiRecordSizeMode,
+  requireCurrentCollinearAnchorMode,
+  requireCurrentCollinearColorMode,
+  requireCurrentCollinearMaxConflicts,
+  requireCurrentCollinearMaxDiagonalDrift,
+  requireCurrentCollinearMaxParalogLinks,
+  requireCurrentCollinearMaxUnitGap,
+  requireCurrentCollinearMergeOrientation,
+  requireCurrentCollinearMinAnchors,
+  requireCurrentCollinearSearchScope,
+  requireCurrentCollinearUnitMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
+  requireCurrentOrthogroupMemberMaxHits,
+  requireCurrentOrthogroupMembershipMode,
+  requireCurrentProteinBlastpCandidateLimit,
+  requireCurrentProteinBlastpMaxHits,
+  requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
@@ -105,6 +123,7 @@ import {
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
+import { cloneJsonData } from './json-clone.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 6;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -236,6 +255,82 @@ const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   )
 );
 const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
+
+const CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
+  CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor,
+  CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize,
+  CONFIG_OVERRIDE_PATHS.circularDefinitionInterval,
+  CONFIG_OVERRIDE_PATHS.plotTitleFontSize,
+  CONFIG_OVERRIDE_PATHS.circularLabelSpacing,
+  CONFIG_OVERRIDE_PATHS.circularLabelPlacement,
+  CONFIG_OVERRIDE_PATHS.trackType,
+  CONFIG_OVERRIDE_PATHS.tickLabelFontSize,
+  CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset,
+  CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset,
+  CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset,
+  CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset
+]);
+const LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
+  CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor,
+  CONFIG_OVERRIDE_PATHS.linearDefinitionShowReplicon,
+  CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession,
+  CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength,
+  CONFIG_OVERRIDE_PATHS.linearLabelSpacing,
+  CONFIG_OVERRIDE_PATHS.labelPlacement,
+  CONFIG_OVERRIDE_PATHS.labelRotation,
+  CONFIG_OVERRIDE_PATHS.alignCenter,
+  CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned,
+  CONFIG_OVERRIDE_PATHS.linearTrackLayout,
+  CONFIG_OVERRIDE_PATHS.linearTrackAxisGap,
+  CONFIG_OVERRIDE_PATHS.linearRulerOnAxis,
+  CONFIG_OVERRIDE_PATHS.comparisonHeight,
+  CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle,
+  CONFIG_OVERRIDE_PATHS.gcHeight,
+  CONFIG_OVERRIDE_PATHS.depthHeight,
+  CONFIG_OVERRIDE_PATHS.scaleStyle,
+  CONFIG_OVERRIDE_PATHS.scaleStrokeColor,
+  CONFIG_OVERRIDE_PATHS.scaleLabelColor,
+  CONFIG_OVERRIDE_PATHS.scaleStrokeWidth,
+  CONFIG_OVERRIDE_PATHS.normalizeLength
+]);
+
+export const managedConfigOverridePathsForMode = (mode) => {
+  if (!['circular', 'linear'].includes(mode)) {
+    throw new Error(`Unsupported config override mode: ${String(mode)}.`);
+  }
+  const excluded = mode === 'circular'
+    ? LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS
+    : CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS;
+  const paths = new Set(
+    Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
+  );
+  paths.add(MODE_LABEL_SCOPE_PATHS[mode]);
+  for (const path of [
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth,
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth,
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize,
+    SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize,
+    ...(mode === 'circular'
+      ? [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth, 'labels.font_size']
+      : [
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize,
+          SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize,
+          'labels.font_size.linear'
+        ])
+  ]) {
+    paths.add(`${path}.short`);
+    paths.add(`${path}.long`);
+  }
+  if (mode === 'linear') {
+    Object.values(LINEAR_DEFINITION_STYLE_PATHS).forEach((prefix) => {
+      LINEAR_DEFINITION_STYLE_FIELDS.forEach((field) => paths.add(`${prefix}.${field}`));
+    });
+  }
+  return Object.freeze([...paths].sort());
+};
 
 const legacyFlatConfigKey = (semanticName) => (
   semanticName
@@ -498,13 +593,63 @@ const selectorPayload = (rawValue) => {
   return { kind: 'recordId', value: raw };
 };
 
-const presentationPayload = ({ label = null, subtitle = null, gridRow = null } = {}) => ({
+const presentationPayload = ({
+  label = null,
+  subtitle = null,
+  reverseComplement = false,
+  gridRow = null
+} = {}) => ({
   label: String(label || '').trim() || null,
   subtitle: String(subtitle || '').trim() || null,
-  reverseComplement: false,
+  reverseComplement: Boolean(reverseComplement),
   gridRow,
   gridColumn: null
 });
+
+const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
+  presentationPayload({
+    label: form.circular_record_label,
+    subtitle: form.circular_record_subtitle,
+    reverseComplement: !hasRegion && form.circular_reverse
+  })
+);
+
+const circularRegionPayload = (form, record) => {
+  const rawStart = form.circular_region_start;
+  const rawEnd = form.circular_region_end;
+  const hasStart = rawStart !== null && rawStart !== undefined && String(rawStart).trim() !== '';
+  const hasEnd = rawEnd !== null && rawEnd !== undefined && String(rawEnd).trim() !== '';
+  if (!hasStart && !hasEnd) return null;
+  if (hasStart !== hasEnd) {
+    throw new Error('Circular region requires both Start and End coordinates.');
+  }
+  const start = Number(rawStart);
+  const end = Number(rawEnd);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < 1) {
+    throw new Error('Circular region Start and End must be positive integers.');
+  }
+  if (start > end) {
+    throw new Error('Circular region Start must not exceed End. Use Reverse complement to change display orientation.');
+  }
+  const recordLength = Number(record?.recordLength ?? record?.record_length);
+  if (Number.isInteger(recordLength) && recordLength > 0 && end > recordLength) {
+    throw new Error(`Circular region End (${end}) exceeds the selected record length (${recordLength}).`);
+  }
+  return {
+    selector: selectorPayload(record.value),
+    start,
+    end,
+    reverseComplement: Boolean(form.circular_reverse)
+  };
+};
+
+const circularRecordKey = (record) => {
+  const preserved = String(record?.recordKey || '').trim();
+  if (preserved) return preserved;
+  const recordId = safePrefix(record?.recordId, 'record');
+  const selector = safePrefix(record?.selector, '1');
+  return `circular-${recordId}-${selector}`;
+};
 
 const linearRegionPayload = (seq) => {
   const start = optionalPositiveInteger(seq?.region_start);
@@ -526,7 +671,7 @@ const buildRecords = ({ state, filesData, resources }) => {
     const resolvedRows = state.linearRecordLayoutEnabled?.value
       ? resolvedLinearRecordRows(filesData.linearSeqs, state.linearRecordRows)
       : [];
-    return (filesData.linearSeqs || []).map((seq, index) => {
+    const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
             kind: 'gffFasta',
@@ -541,7 +686,7 @@ const buildRecords = ({ state, filesData, resources }) => {
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
         recordKey: String(seq.uid || `record-${index + 1}`),
-        cardinality: selector || region ? 'exactly_one' : 'all',
+        cardinality: seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
         source,
         selector,
         region,
@@ -555,10 +700,11 @@ const buildRecords = ({ state, filesData, resources }) => {
         }
       };
     });
+    return { records, circularSourceIndexes: null, circularSourceCount: null };
   }
 
   if (Array.isArray(filesData.circularRecords) && filesData.circularRecords.length > 0) {
-    return filesData.circularRecords.map((record, index) => {
+    const records = filesData.circularRecords.map((record, index) => {
       const source = record.sourceKind === 'gffFasta'
         ? { kind: 'gffFasta',
             gffResourceId: resources.addFile(`record-${index + 1}-gff3`, 'gff3', record.gff),
@@ -574,6 +720,58 @@ const buildRecords = ({ state, filesData, resources }) => {
         presentation: publicationClone(record.presentation) || presentationPayload()
       };
     });
+    const singleJourney = (
+      records.length === 1 &&
+      !state.form.multi_record_canvas &&
+      state.adv.circular_grouping_intent !== 'batch'
+    );
+    if (singleJourney) {
+      const record = records[0];
+      const savedSelector = canonicalRecordSelector(record);
+      const requestedSelector = String(
+        state.form.circular_record_selector || savedSelector || ''
+      ).trim();
+      const knownRecords = (Array.isArray(state.circularRecordList.value)
+        ? state.circularRecordList.value
+        : []).map((entry) => ({
+          ...entry,
+          recordId: entry?.record_id ?? entry?.recordId
+        }));
+      const selection = resolveDisambiguatedRecordSelection(
+        knownRecords,
+        requestedSelector
+      );
+      const selectedKnownRecord = selection.record || (
+        !requestedSelector && selection.entries.length === 1
+          ? selection.entries[0]
+          : null
+      );
+      if (knownRecords.length > 0 && !selectedKnownRecord) {
+        const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
+        const label = requestedSelector || '(automatic)';
+        throw new Error(`Circular record selector '${label}' ${reason} in the current input.`);
+      }
+      const selected = selectedKnownRecord || {
+        value: requestedSelector,
+        selector: requestedSelector,
+        recordId: requestedSelector
+      };
+      const region = circularRegionPayload(state.form, selected);
+      records[0] = {
+        ...record,
+        recordKey: record.recordKey || circularRecordKey(selected),
+        selector: region ? null : selectorPayload(selected.value),
+        region,
+        presentation: circularPresentationPayload(state.form, {
+          hasRegion: Boolean(region)
+        })
+      };
+    }
+    return {
+      records,
+      circularSourceIndexes: records.map((_, index) => index),
+      circularSourceCount: records.length
+    };
   }
   const source = state.cInputType.value === 'gff'
     ? {
@@ -588,21 +786,63 @@ const buildRecords = ({ state, filesData, resources }) => {
   const knownRecords = Array.isArray(state.circularRecordList.value)
     ? state.circularRecordList.value
     : [];
-  const selectedRecords = knownRecords.length > 0 ? knownRecords : [null];
   const recordSelectors = buildDisambiguatedRecordEntries(
     knownRecords.map((record) => ({
       ...record,
       recordId: record?.record_id ?? record?.recordId
     }))
   );
-  return selectedRecords.map((record, index) => ({
-    recordKey: `record-${index + 1}`,
-    cardinality: 'exactly_one',
-    source,
-    selector: selectorPayload(recordSelectors[index]?.value ?? record?.selector),
-    region: null,
-    presentation: presentationPayload()
-  }));
+  const requestedSelector = String(state.form.circular_record_selector || '').trim();
+  const selection = resolveDisambiguatedRecordSelection(
+    recordSelectors,
+    requestedSelector
+  );
+  const singlePresentationRequested = (
+    !state.form.multi_record_canvas &&
+    state.adv.circular_grouping_intent !== 'batch'
+  );
+  if (
+    singlePresentationRequested &&
+    requestedSelector &&
+    selection.status !== 'resolved'
+  ) {
+    const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
+    throw new Error(`Circular record selector '${requestedSelector}' ${reason} in the current input.`);
+  }
+  const selectedRecords = singlePresentationRequested && selection.record
+    ? [selection.record]
+    : (recordSelectors.length > 0 ? recordSelectors : [null]);
+  const singleJourney = (
+    selectedRecords.length === 1 &&
+    singlePresentationRequested
+  );
+  const records = selectedRecords.map((record, index) => {
+    const region = singleJourney
+      ? circularRegionPayload(state.form, record)
+      : null;
+    return {
+      recordKey: singleJourney && record
+        ? circularRecordKey(record)
+        : `record-${index + 1}`,
+      cardinality: 'exactly_one',
+      source,
+      selector: region
+        ? null
+        : selectorPayload(record?.value ?? record?.selector),
+      region,
+      presentation: singleJourney
+        ? circularPresentationPayload(state.form, { hasRegion: Boolean(region) })
+        : presentationPayload()
+    };
+  });
+  const circularSourceIndexes = selectedRecords.map((record, index) => (
+    record && Number.isInteger(record.sourceIndex) ? record.sourceIndex : index
+  ));
+  return {
+    records,
+    circularSourceIndexes,
+    circularSourceCount: recordSelectors.length || records.length
+  };
 };
 
 const buildConfigOverrides = (
@@ -770,7 +1010,7 @@ const buildConfigOverrides = (
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]:
             optionalNumber(adv.scale_font_size),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]:
-            optionalNumber(adv.scale_font_size),
+            optionalNumber(adv.ruler_label_font_size),
           'labels.font_size.linear': optionalNumber(adv.label_font_size)
         })
   };
@@ -791,9 +1031,19 @@ const buildConfigOverrides = (
       }
     }
   }
-  return Object.fromEntries(
+  const managedOverrides = Object.fromEntries(
     Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined)
   );
+  const preservedOverrides = state.unmanagedConfigOverrides;
+  const plainPreservedOverrides = (
+    preservedOverrides && typeof preservedOverrides === 'object' && !Array.isArray(preservedOverrides)
+  )
+    ? cloneJsonData(preservedOverrides)
+    : {};
+  return {
+    ...plainPreservedOverrides,
+    ...managedOverrides
+  };
 };
 
 const addGeneratedTableResources = (state, resources, diagramOptions) => {
@@ -1207,28 +1457,33 @@ const buildTrackPlan = ({
 
 const generatedProteinSettings = (state, baseline = {}) => {
   const blastp = state.losat.blastp || {};
+  const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
   const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
   const nonNegativeInteger = (value, fallback) => {
     const numeric = optionalNumber(value);
     return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
   };
   const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
-  const collinearityUnitMode = ['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
-    ? rawCollinearityUnitMode
-    : 'auto';
+  const collinearityUnitMode = blastpMode === 'collinear'
+    ? requireCurrentCollinearUnitMode(rawCollinearityUnitMode)
+    : (['auto', 'cds', 'locus'].includes(rawCollinearityUnitMode)
+        ? rawCollinearityUnitMode
+        : 'auto');
   const rawCollinearityColorMode = String(
     blastp.collinearColorMode || ''
   ).trim().toLowerCase().replace(/-/g, '_');
   const resolvedCollinearityColorMode = rawCollinearityColorMode === 'identity'
     ? 'average_identity'
     : rawCollinearityColorMode;
-  const collinearityColorMode = [
-    'average_identity',
-    'orientation',
-    'orientation_identity'
-  ].includes(resolvedCollinearityColorMode)
-    ? resolvedCollinearityColorMode
-    : 'orientation';
+  const collinearityColorMode = blastpMode === 'collinear'
+    ? requireCurrentCollinearColorMode(resolvedCollinearityColorMode)
+    : ([
+        'average_identity',
+        'orientation',
+        'orientation_identity'
+      ].includes(resolvedCollinearityColorMode)
+        ? resolvedCollinearityColorMode
+        : 'orientation');
   const baselineCollinearity = baseline.collinearityParams &&
     typeof baseline.collinearityParams === 'object' &&
     !Array.isArray(baseline.collinearityParams)
@@ -1246,29 +1501,52 @@ const generatedProteinSettings = (state, baseline = {}) => {
       kind: baselineCollinearity.kind || 'lossless',
       parameters: {
         ...baselineParameters,
-        minAnchors: positiveInteger(blastp.collinearMinAnchors, 1),
-        maxUnitGap: nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
-        maxDiagonalDrift: nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
-        maxConflicts: nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
-        mergeOrientation: baselineParameters.mergeOrientation || 'either'
+        minAnchors: blastpMode === 'collinear'
+          ? requireCurrentCollinearMinAnchors(blastp.collinearMinAnchors)
+          : positiveInteger(blastp.collinearMinAnchors, 1),
+        maxUnitGap: blastpMode === 'collinear'
+          ? requireCurrentCollinearMaxUnitGap(blastp.collinearMaxUnitGap)
+          : nonNegativeInteger(blastp.collinearMaxUnitGap, 0),
+        maxDiagonalDrift: blastpMode === 'collinear'
+          ? requireCurrentCollinearMaxDiagonalDrift(blastp.collinearMaxDiagonalDrift)
+          : nonNegativeInteger(blastp.collinearMaxDiagonalDrift, 0),
+        maxConflicts: blastpMode === 'collinear'
+          ? requireCurrentCollinearMaxConflicts(blastp.collinearMaxConflictsInMergeGap)
+          : nonNegativeInteger(blastp.collinearMaxConflictsInMergeGap, 1),
+        mergeOrientation: blastpMode === 'collinear'
+          ? requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation)
+          : (baselineParameters.mergeOrientation || 'either')
       }
     },
     collinearityUnitMode,
-    collinearityAnchorMode: normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
-    collinearitySearchScope: normalizeCollinearSearchScope(blastp.collinearSearchScope),
+    collinearityAnchorMode: blastpMode === 'collinear'
+      ? requireCurrentCollinearAnchorMode(blastp.collinearAnchorMode)
+      : normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
+    collinearitySearchScope: blastpMode === 'collinear'
+      ? requireCurrentCollinearSearchScope(blastp.collinearSearchScope)
+      : normalizeCollinearSearchScope(blastp.collinearSearchScope),
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
     losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
-    proteinBlastpMaxHits: positiveInteger(blastp.maxHits, 5),
-    proteinBlastpCandidateLimit:
-      baseline.proteinBlastpCandidateLimit ?? optionalPositiveInteger(blastp.candidateLimit),
-    orthogroupMembershipMode: normalizeOrthogroupMembershipMode(
-      blastp.orthogroupMembershipMode
+    proteinBlastpMaxHits: blastpMode === 'pairwise'
+      ? requireCurrentProteinBlastpMaxHits(blastp.maxHits)
+      : positiveInteger(blastp.maxHits, 5),
+    proteinBlastpCandidateLimit: requireCurrentProteinBlastpCandidateLimit(
+      blastp.candidateLimit
     ),
-    orthogroupMemberMaxHits: positiveInteger(blastp.orthogroupMemberMaxHits, 5),
+    orthogroupMembershipMode: ['orthogroup', 'collinear'].includes(blastpMode)
+      ? requireCurrentOrthogroupMembershipMode(blastp.orthogroupMembershipMode)
+      : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
+    orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
+      ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
+      : positiveInteger(blastp.orthogroupMemberMaxHits, 5),
     collinearMaxParalogLinksPerOrthogroup:
-      positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
+      blastpMode === 'collinear'
+        ? requireCurrentCollinearMaxParalogLinks(
+            blastp.collinearMaxParalogLinksPerOrthogroup
+          )
+        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
     alignOrthogroupFeature:
       String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
   };
@@ -1434,8 +1712,13 @@ const buildComparisons = ({
   );
   const persistedMetadata = persistedCanonicalComparisons.filter((comparison) => (
     (
-      comparison?.kind === 'orthogroupResult' ||
-      comparison?.kind === 'collinearityResult'
+      (
+        comparison?.kind === 'orthogroupResult'
+        && String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'orthogroup'
+      ) || (
+        comparison?.kind === 'collinearityResult'
+        && String(state.losat?.blastp?.mode || '').trim().toLowerCase() === 'collinear'
+      )
     ) && activeProteinPipeline && comparison.canonicalInput !== true
   ));
   let hasResolvedProteinAnalysis = false;
@@ -1762,11 +2045,26 @@ export const buildCanonicalRenderRequest = ({
   );
   const resources = createResourceBuilder();
   const webFiles = {};
-  const records = buildRecords({ state, filesData, resources });
+  const recordPlan = buildRecords({ state, filesData, resources });
+  const records = recordPlan.records;
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
+  const selectedCircularFilesData = (
+    state.mode.value === 'circular' &&
+    isRecordMajorDepthFileMatrix(filesData.c_depth) &&
+    Array.isArray(recordPlan.circularSourceIndexes) &&
+    recordPlan.circularSourceIndexes.length < recordPlan.circularSourceCount &&
+    filesData.c_depth.length === recordPlan.circularSourceCount
+  )
+    ? {
+        ...filesData,
+        c_depth: recordPlan.circularSourceIndexes.map((sourceIndex) => (
+          filesData.c_depth[sourceIndex] || []
+        ))
+      }
+    : filesData;
   const trackPlan = buildTrackPlan({
     state,
-    filesData,
+    filesData: selectedCircularFilesData,
     recordCount: records.length,
     resolvedCircularConservation
   });
@@ -1796,9 +2094,22 @@ export const buildCanonicalRenderRequest = ({
   const knownCircularRecords = Array.isArray(state.circularRecordList.value)
     ? state.circularRecordList.value
     : [];
-  const circularOutputRecords = knownCircularRecords.length > 0
-    ? knownCircularRecords
-    : records.map(() => ({ record_id: 'out' }));
+  const knownCircularEntries = buildDisambiguatedRecordEntries(
+    knownCircularRecords.map((record) => ({
+      ...record,
+      recordId: record?.record_id ?? record?.recordId
+    }))
+  );
+  const circularOutputRecords = records.map((record, index) => {
+    const selector = canonicalRecordSelector(record);
+    const resolved = resolveDisambiguatedRecordSelection(
+      knownCircularEntries,
+      selector
+    );
+    return {
+      record_id: resolved.record?.recordId || selector || `Record_${index + 1}`
+    };
+  });
   const defaultCircularPrefix = safePrefix(circularRecordId(circularOutputRecords[0], 0));
   const output = grouping === 'batch'
     ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
@@ -1963,7 +2274,7 @@ export const buildCanonicalRenderRequest = ({
   if (trackPlan.depthRequested) {
     buildDepthResources({
       state,
-      filesData,
+      filesData: selectedCircularFilesData,
       resources,
       diagramOptions,
       recordCount: records.length
@@ -2238,6 +2549,52 @@ const cloneCanonicalJsonValue = (value) => (
   value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 );
 
+// Web controls own row membership and record order, not a distinct numeric
+// column value. Preserve the engine's row/column render order in the projected
+// record sequence, then retire the unsupported numeric column in the draft.
+export const normalizeWebGridColumnOrdering = (records = []) => {
+  const source = Array.isArray(records) ? records : [];
+  const entries = source.map((record, sourceIndex) => {
+    const rawRow = record?.presentation?.gridRow;
+    const rawColumn = record?.presentation?.gridColumn;
+    const row = Number(rawRow);
+    const column = Number(rawColumn);
+    return {
+      record,
+      sourceIndex,
+      row: rawRow !== null && rawRow !== undefined && Number.isInteger(row) ? row : sourceIndex + 1,
+      column: rawColumn !== null && rawColumn !== undefined && Number.isInteger(column)
+        ? column
+        : sourceIndex + 1
+    };
+  });
+  const hasColumns = source.some((record) => (
+    record?.presentation?.gridColumn !== null
+    && record?.presentation?.gridColumn !== undefined
+  ));
+  const ordered = hasColumns
+    ? entries.slice().sort((left, right) => (
+        left.row - right.row
+        || left.column - right.column
+        || left.sourceIndex - right.sourceIndex
+      ))
+    : entries;
+  const projectedIndexBySourceIndex = new Map(
+    ordered.map((entry, projectedIndex) => [entry.sourceIndex, projectedIndex])
+  );
+  return {
+    records: ordered.map(({ record }) => ({
+      ...record,
+      presentation: {
+        ...(record?.presentation || {}),
+        gridColumn: null
+      }
+    })),
+    sourceIndexByProjectedIndex: ordered.map((entry) => entry.sourceIndex),
+    projectedIndexBySourceIndex
+  };
+};
+
 const projectGeneratedProteinPipeline = (
   comparison,
   { adoptCanonicalPayloads = false } = {}
@@ -2282,6 +2639,7 @@ const projectGeneratedProteinPipeline = (
           collinearColorMode: settings.collinearityColorMode,
           collinearUnitMode: settings.collinearityUnitMode,
           collinearAnchorMode: settings.collinearityAnchorMode,
+          collinearMergeOrientation: parameters.mergeOrientation,
           collinearSearchScope: settings.collinearitySearchScope
         }
       }
@@ -2918,10 +3276,23 @@ export const projectCanonicalSessionRequest = ({
   if (!['circular', 'linear'].includes(renderRequest.mode)) {
     throw new Error('Unsupported canonical renderRequest mode.');
   }
-  const records = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
+  const records = normalizedRecordOrdering.records;
+  const reorderRecordIndexedValues = (values) => (
+    normalizedRecordOrdering.sourceIndexByProjectedIndex
+      .map((sourceIndex) => values?.[sourceIndex])
+  );
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
   const grouping = canonicalGrouping(renderRequest, records);
-  const outputPrefixes = canonicalOutputPrefixes(renderRequest, grouping, records.length);
+  const sourceOutputPrefixes = canonicalOutputPrefixes(
+    renderRequest,
+    grouping,
+    records.length
+  );
+  const outputPrefixes = grouping === 'batch'
+    ? reorderRecordIndexedValues(sourceOutputPrefixes)
+    : sourceOutputPrefixes;
   const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
@@ -3028,8 +3399,9 @@ export const projectCanonicalSessionRequest = ({
       const source = record.source || {};
       const region = record.region || null;
       const selector = region?.selector || record.selector;
+      const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index];
       const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
-        savedLinearRecordMetadata[index] || legacyLinearSequences[index] || {};
+        savedLinearRecordMetadata[sourceIndex] || legacyLinearSequences[sourceIndex] || {};
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank'
@@ -3068,12 +3440,16 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || [])
       .filter((comparison) => comparison?.kind === 'nucleotideBlast')
       .forEach((comparison, index) => {
-        const queryIndex = Number.isInteger(Number(comparison.queryRecordIndex))
+        const sourceQueryIndex = Number.isInteger(Number(comparison.queryRecordIndex))
           ? Number(comparison.queryRecordIndex)
           : index;
-        const subjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
+        const sourceSubjectIndex = Number.isInteger(Number(comparison.subjectRecordIndex))
           ? Number(comparison.subjectRecordIndex)
           : index + 1;
+        const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceQueryIndex);
+        const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceSubjectIndex);
         const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId)
           : resourceAsLegacyFile(resources, comparison.resourceId);
@@ -3091,8 +3467,12 @@ export const projectCanonicalSessionRequest = ({
       });
     (renderRequest.comparisons || []).forEach((comparison) => {
       if (isResourceBackedCanonicalComparison(comparison)) {
-        const queryRecordIndex = Number(comparison.queryRecordIndex);
-        const subjectRecordIndex = Number(comparison.subjectRecordIndex);
+        const sourceQueryRecordIndex = Number(comparison.queryRecordIndex);
+        const sourceSubjectRecordIndex = Number(comparison.subjectRecordIndex);
+        const queryRecordIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceQueryRecordIndex);
+        const subjectRecordIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+          .get(sourceSubjectRecordIndex);
         if (
           comparison.kind === 'precomputedProteinComparison' &&
           (
@@ -3110,6 +3490,9 @@ export const projectCanonicalSessionRequest = ({
                 ? resolveResourceFile(comparison.resourceId)
                 : resourceAsLegacyFile(resources, comparison.resourceId)
             ),
+            ...(comparison.kind === 'precomputedProteinComparison'
+              ? { queryRecordIndex, subjectRecordIndex }
+              : {}),
             // This is in-memory projection provenance, not a canonical-schema
             // field. Direct CLI/Python comparison options have no Web pipeline
             // marker and must survive a projection/rebuild unchanged.
@@ -3123,13 +3506,25 @@ export const projectCanonicalSessionRequest = ({
         return;
       }
       if (comparison?.kind === 'generatedProteinComparison') {
+        const projectedComparison = adoptCanonicalPayloads
+          ? { ...comparison }
+          : cloneCanonicalJsonValue(comparison);
+        projectedComparison.pairs = (Array.isArray(comparison.pairs) ? comparison.pairs : [])
+          .map((pair) => ({
+            queryRecordIndex: normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.queryRecordIndex)),
+            subjectRecordIndex: normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.subjectRecordIndex))
+          }));
         files.linearCanonicalComparisons.push(
-          adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)
+          projectedComparison
         );
         (Array.isArray(comparison.pairs) ? comparison.pairs : [])
           .forEach((pair, index) => {
-            const queryIndex = Number(pair?.queryRecordIndex);
-            const subjectIndex = Number(pair?.subjectRecordIndex);
+            const queryIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.queryRecordIndex));
+            const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
+              .get(Number(pair?.subjectRecordIndex));
             if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
             files.linearComparisons.push({
               id: `linear-comparison-canonical-losat-${index + 1}`,
@@ -3163,9 +3558,15 @@ export const projectCanonicalSessionRequest = ({
             )
       )
     : 'auto';
-  const depthRows = canonicalDepth?.sourceRows || (
+  const sourceDepthRows = canonicalDepth?.sourceRows || (
     Array.isArray(options.depthTrackFiles) ? options.depthTrackFiles : []
   );
+  const depthRows = sourceDepthRows.length > 0
+    ? reorderRecordIndexedValues(sourceDepthRows)
+    : sourceDepthRows;
+  const depthFileRows = canonicalDepth?.fileRows
+    ? reorderRecordIndexedValues(canonicalDepth.fileRows)
+    : null;
   if (depthRows.length > 0) {
     if (depthRows.length !== records.length || depthRows.some((row) => !Array.isArray(row))) {
       throw new Error(
@@ -3175,7 +3576,7 @@ export const projectCanonicalSessionRequest = ({
   }
   if (renderRequest.mode === 'circular' && depthRows.length > 0) {
     files.c_depth = normalizeRecordMajorDepthFileRows(
-      canonicalDepth?.fileRows || depthRows.map((row) => row.map((ref) => (
+      depthFileRows || depthRows.map((row) => row.map((ref) => (
         ref?.resourceId
           ? (resolveResourceFile
               ? resolveResourceFile(ref.resourceId)
@@ -3188,7 +3589,7 @@ export const projectCanonicalSessionRequest = ({
   if (renderRequest.mode === 'linear') {
     depthRows.forEach((row, index) => {
       if (!files.linearSeqs[index] || !Array.isArray(row)) return;
-      const depth = canonicalDepth?.fileRows[index] || row
+      const depth = depthFileRows?.[index] || row
         .map((ref) => ref?.resourceId
           ? (resolveResourceFile
               ? resolveResourceFile(ref.resourceId)
@@ -3477,6 +3878,10 @@ export const projectCanonicalSessionRequest = ({
       tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
     })
   );
+  const circularPresentationRecord = (
+    renderRequest.mode === 'circular' && grouping === 'single' && records.length === 1
+  ) ? records[0] : null;
+  const circularPresentationRegion = circularPresentationRecord?.region || null;
   const form = {
     prefix: projectedOutputPrefix(
       renderRequest,
@@ -3488,6 +3893,17 @@ export const projectCanonicalSessionRequest = ({
     plot_title: options.plotTitle || '',
     legend: options.output?.legend || 'right',
     multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
+    circular_record_selector: circularPresentationRecord
+      ? (canonicalRecordSelector(circularPresentationRecord) || '')
+      : '',
+    circular_region_start: circularPresentationRegion?.start ?? null,
+    circular_region_end: circularPresentationRegion?.end ?? null,
+    circular_reverse: Boolean(
+      circularPresentationRegion?.reverseComplement ||
+      circularPresentationRecord?.presentation?.reverseComplement
+    ),
+    circular_record_label: circularPresentationRecord?.presentation?.label || '',
+    circular_record_subtitle: circularPresentationRecord?.presentation?.subtitle || '',
     suppress_gc: renderRequest.mode === 'circular' ? overrides.show_gc === false : false,
     suppress_skew: renderRequest.mode === 'circular' ? overrides.show_skew === false : false,
     show_gc: renderRequest.mode === 'linear' ? Boolean(overrides.show_gc) : false,
@@ -3631,9 +4047,8 @@ export const projectCanonicalSessionRequest = ({
     scale_stroke_color: overrides.scale_stroke_color ?? null,
     ruler_label_color: overrides.scale_label_color ?? null,
     scale_stroke_width: overrides.scale_stroke_width ?? null,
-    scale_font_size: form.scale_style === 'ruler'
-      ? (overrides.ruler_label_font_size ?? overrides.scale_font_size ?? null)
-      : (overrides.scale_font_size ?? overrides.ruler_label_font_size ?? null),
+    scale_font_size: overrides.scale_font_size ?? null,
+    ruler_label_font_size: overrides.ruler_label_font_size ?? null,
     scale_interval: overrides.scale_interval ?? null,
     tick_label_font_size: overrides.tick_label_font_size ?? null,
     outer_label_x_offset: renderRequest.mode === 'circular'

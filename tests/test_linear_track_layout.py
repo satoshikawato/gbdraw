@@ -1519,11 +1519,15 @@ def test_linear_bar_uses_scale_font_size_for_length_bar_label(tmp_path: Path) ->
             "bar",
             "--scale_font_size",
             "23",
+            "--ruler_label_font_size",
+            "9",
         ],
     )
     assert returncode == 0, f"stdout={stdout}\nstderr={stderr}"
     svg_content = output_svg.read_text(encoding="utf-8")
-    assert 'font-size="23.0"' in _extract_group_xml(svg_content, "length_bar")
+    length_bar = _extract_group_xml(svg_content, "length_bar")
+    assert 'font-size="23.0"' in length_bar
+    assert 'font-size="9.0"' not in length_bar
 
 
 @pytest.mark.linear
@@ -1540,6 +1544,8 @@ def test_linear_ruler_label_options_apply_to_axis_ruler(tmp_path: Path) -> None:
             "50000",
             "--ruler_label_font_size",
             "22",
+            "--scale_font_size",
+            "31",
             "--ruler_label_color",
             "tomato",
         ],
@@ -1548,6 +1554,7 @@ def test_linear_ruler_label_options_apply_to_axis_ruler(tmp_path: Path) -> None:
     svg_content = output_svg.read_text(encoding="utf-8")
     ruler_text_tags = _extract_ruler_text_tags(svg_content)
     assert any('fill="tomato"' in tag and 'font-size="22.0"' in tag for tag in ruler_text_tags)
+    assert all('font-size="31.0"' not in tag for tag in ruler_text_tags)
 
 
 @pytest.mark.linear

@@ -95,6 +95,11 @@ For changes affecting Web runtime or normative Web behavior contracts:
   domain rules, and accepted base-branch decisions. Current code and tests are
   evidence, not automatic product authority. Cite a `BD-###` only when it exists
   in the base branch.
+- Before implementation, use the same policy's developer preflight when a
+  proposed change may alter a material user effect but no registered concern is
+  triggered. Use
+  [`docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md`](docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md)
+  when evidence or Product judgment is required.
 - Compare option realization with AND-of-OR requirements. Matching option IDs do
   not prove that independent behavior contributions remain satisfied.
 - Keep the common path automatic for changes with no registered Product Impact
@@ -119,13 +124,12 @@ For changes affecting Web runtime or normative Web behavior contracts:
 
 ## Pull request communication
 
-- Before creating, editing, or reviewing a PR title or maintainer-facing body,
-  read `.agents/skills/write-clear-pull-request/SKILL.md`.
-- Write for a maintainer who has not read the implementation plan or earlier
-  PRs. Internal labels are metadata, not explanations.
-- Keep exact identifiers in backticks and explain their concrete role.
-- Prepare the complete body file first, then run `gh pr create` or a
-  wording-changing `gh pr edit` as a separate command so the hook can inspect it.
+- Before creating, changing, or reviewing PR wording,
+  read and apply `.agents/skills/write-clear-pull-request/SKILL.md`.
+- Prepare the title and body file. Run
+  `node tools/check-pr-language.mjs --title "<title>" --body-file <path>` once
+  before `gh pr create`, using the same wording.
+- Rerun only after a material rewrite before merge; never for ordinary shell commands.
 - Do not use `gh pr create --fill`, `--fill-first`, or `--fill-verbose`.
 
 ## Completion Handoff

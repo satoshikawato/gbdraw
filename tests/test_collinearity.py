@@ -14,6 +14,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.analysis.collinearity as collinearity_module
+import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.diagrams.linear.assemble as linear_assemble_module
 from gbdraw.analysis.collinearity import (
@@ -35,6 +36,12 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
+from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.requests import (
+    InMemoryRecordSource,
+    LinearDiagramRequest,
+    RecordInput,
+)
 import gbdraw.linear as linear_cli_module
 from gbdraw.analysis.protein_colinearity import (
     convert_protein_hits_to_genomic_links,
@@ -99,10 +106,20 @@ def _record(record_id: str, features: list[SeqFeature]) -> SeqRecord:
     return record
 
 
-def _cds(start: int, end: int, qualifiers: dict[str, list[str]]) -> SeqFeature:
+def _cds(
+    start: int,
+    end: int,
+    qualifiers: dict[str, list[str]],
+    *,
+    strand: int = 1,
+) -> SeqFeature:
     merged = {"translation": ["MKK"]}
     merged.update(qualifiers)
-    return SeqFeature(FeatureLocation(start, end, strand=1), type="CDS", qualifiers=merged)
+    return SeqFeature(
+        FeatureLocation(start, end, strand=strand),
+        type="CDS",
+        qualifiers=merged,
+    )
 
 
 def _hit_row(
@@ -137,6 +154,14 @@ def _first_fasta_id(fasta_text: str) -> str:
         if line.startswith(">"):
             return line[1:].split(None, 1)[0]
     return ""
+
+
+def _fasta_ids(fasta_text: str) -> list[str]:
+    return [
+        line[1:].split(None, 1)[0]
+        for line in str(fasta_text).splitlines()
+        if line.startswith(">")
+    ]
 
 
 def _hex_distance(color_a: str, color_b: str) -> float:
@@ -620,6 +645,178 @@ def test_lossless_collinearity_preserves_every_adjacent_orthogroup_edge() -> Non
     assert {(query_id, subject_id) for query_id, subject_id, *_ in expected_edge_ids} <= rendered_edge_ids
     assert any(block.kind == "singleton" for block in result.blocks)
     assert any(block.kind == "cluster" and len(block.anchors) > 1 for block in result.blocks)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("anchors", "max_unit_gap", "expected_zero", "expected_one"),
+    [
+        (
+            [
+                _anchor(0, 0),
+                _anchor(1, 1),
+                _anchor(2, 5, subject_strand=-1),
+                _anchor(3, 3),
+                _anchor(4, 4),
+            ],
+            1,
+            [[0, 1, 3, 4], [2]],
+            [[0, 1, 3, 4], [2]],
+        ),
+        (
+            [
+                _anchor(0, 0),
+                _anchor(1, 1),
+                _anchor(2, 2, subject_strand=-1),
+                _anchor(3, 3),
+                _anchor(4, 4),
+            ],
+            1,
+            [[0, 1], [2], [3, 4]],
+            [[0, 1, 3, 4], [2]],
+        ),
+        (
+            [
+                _anchor(0, 0),
+                _anchor(1, 1),
+                _anchor(2, 3, subject_strand=-1),
+                _anchor(3, 2),
+                _anchor(4, 4),
+                _anchor(5, 5),
+            ],
+            2,
+            [[0, 1], [2], [3], [4, 5]],
+            [[0, 1], [2], [3], [4, 5]],
+        ),
+    ],
+    ids=(
+        "zero-interior-conflicts",
+        "one-interior-conflict",
+        "two-interior-conflicts",
+    ),
+)
+def test_lossless_max_conflicts_threshold_controls(
+    anchors: list[CollinearityAnchor],
+    max_unit_gap: int,
+    expected_zero: list[list[int]],
+    expected_one: list[list[int]],
+) -> None:
+    input_members = {
+        (anchor.query_order, anchor.subject_order) for anchor in anchors
+    }
+    for max_conflicts, expected in enumerate((expected_zero, expected_one)):
+        result = cluster_lossless_collinearity_anchors(
+            anchors,
+            params=LosslessCollinearityParameters(
+                max_unit_gap=max_unit_gap,
+                max_conflicts=max_conflicts,
+                merge_orientation="strand",
+            ),
+        )
+
+        assert [
+            [anchor.query_order for anchor in block.anchors]
+            for block in result.blocks
+        ] == expected
+        assert sum(len(block.anchors) for block in result.blocks) == len(anchors)
+        assert {
+            (anchor.query_order, anchor.subject_order)
+            for block in result.blocks
+            for anchor in block.anchors
+        } == input_members
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("unit_mode", "expected_unit_kind"),
+    (("auto", "locus"), ("cds", "cds"), ("locus", "locus")),
+)
+def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
+    monkeypatch: pytest.MonkeyPatch,
+    unit_mode: str,
+    expected_unit_kind: str,
+) -> None:
+    records = [
+        _record(
+            "record_a",
+            [
+                _cds(
+                    index * 12,
+                    index * 12 + 9,
+                    {"locus_tag": [f"q{index}"], "protein_id": [f"q{index}"]},
+                )
+                for index in range(5)
+            ],
+        ),
+        _record(
+            "record_b",
+            [
+                _cds(
+                    index * 12,
+                    index * 12 + 9,
+                    {"locus_tag": [f"s{index}"], "protein_id": [f"s{index}"]},
+                    strand=-1 if index == 2 else 1,
+                )
+                for index in range(5)
+            ],
+        ),
+    ]
+
+    def fake_search(query_fasta, subject_fasta, **_kwargs):
+        query_ids = _fasta_ids(query_fasta)
+        subject_ids = _fasta_ids(subject_fasta)
+        rows = [
+            _hit_row(query_id, subject_id)
+            for query_id, subject_id in zip(query_ids, subject_ids, strict=True)
+        ]
+        return pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
+
+    params_by_case = {
+        "explicit-zero": LosslessCollinearityParameters(
+            max_unit_gap=1,
+            max_conflicts=0,
+            merge_orientation="strand",
+        ),
+        "default": LosslessCollinearityParameters(
+            max_unit_gap=1,
+            merge_orientation="strand",
+        ),
+    }
+    results: dict[str, CollinearityResult] = {}
+    for case, params in params_by_case.items():
+        request = LinearDiagramRequest(
+            records=tuple(
+                RecordInput(source=InMemoryRecordSource(record)) for record in records
+            ),
+            options=LinearDiagramOptions(
+                protein_blastp_mode="collinear",
+                collinearity_unit_mode=unit_mode,
+                collinearity_params=params,
+            ),
+        )
+        prepared = request_render_module.build_request_diagram(request)
+        assert prepared.request.options.collinearity_params is params
+        assert prepared.request.options.collinearity_unit_mode == unit_mode
+        assert prepared.linear_metadata is not None
+        result = prepared.linear_metadata.collinearity_result
+        assert result is not None
+        assert {
+            anchor.query_unit_kind
+            for block in result.blocks
+            for anchor in block.anchors
+        } == {expected_unit_kind}
+        results[case] = result
+
+    assert [
+        [anchor.query_order for anchor in block.anchors]
+        for block in results["explicit-zero"].blocks
+    ] == [[0, 1], [2], [3, 4]]
+    assert [
+        [anchor.query_order for anchor in block.anchors]
+        for block in results["default"].blocks
+    ] == [[0, 1, 3, 4], [2]]
 
 
 @pytest.mark.linear
@@ -1154,7 +1351,7 @@ def test_anchor_core_record_local_ids_are_deterministic_after_cross_record_group
 
 
 @pytest.mark.linear
-def test_anchor_core_record_local_member_hit_limit_does_not_change_membership() -> None:
+def test_anchor_core_record_local_membership_survives_when_hits_fit_limit() -> None:
     records = [
         _record(
             "record_a",
@@ -1270,7 +1467,7 @@ def test_anchor_core_record_local_edges_do_not_create_collinearity_anchors() -> 
 
 
 @pytest.mark.linear
-def test_anchor_core_member_hit_limit_does_not_change_inferred_membership() -> None:
+def test_anchor_core_membership_survives_reciprocal_candidates_within_limit() -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["a0"], "protein_id": ["a0"]})]),
         _record(
@@ -1553,7 +1750,7 @@ def test_build_blocks_from_hits_can_render_selected_non_adjacent_pairs() -> None
 
 
 @pytest.mark.linear
-def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatch) -> None:
+def test_orthogroup_collinearity_rbh_search_defaults_to_uncapped_candidates(monkeypatch) -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
         _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
@@ -1562,18 +1759,25 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatc
     observed_limits: list[int | None] = []
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hits,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
-        assert losatp_threads is None
         assert max_hsps_per_subject is None
-        observed_limits.append(candidate_limit)
+        observed_limits.append(max_hits)
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
         return pd.DataFrame.from_records(
             [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     result = collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1596,7 +1800,7 @@ def test_orthogroup_collinearity_rbh_search_defaults_to_top_candidate(monkeypatc
 
 
 @pytest.mark.linear
-def test_orthogroup_collinearity_anchor_core_ignores_member_hit_depth(monkeypatch) -> None:
+def test_orthogroup_collinearity_member_hit_depth_is_post_search(monkeypatch) -> None:
     records = [
         _record("record_a", [_cds(0, 9, {"locus_tag": ["qa0"], "protein_id": ["qa0"]})]),
         _record("record_b", [_cds(0, 9, {"locus_tag": ["sb0"], "protein_id": ["sb0"]})]),
@@ -1604,16 +1808,24 @@ def test_orthogroup_collinearity_anchor_core_ignores_member_hit_depth(monkeypatc
     ]
     observed_limits: list[int | None] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hits,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
         assert max_hsps_per_subject is None
-        observed_limits.append(candidate_limit)
+        observed_limits.append(max_hits)
         return pd.DataFrame.from_records(
             [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1636,18 +1848,25 @@ def test_orthogroup_collinearity_all_hits_keeps_uncapped_search(monkeypatch) -> 
     observed_limits: list[int | None] = []
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hits,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
-        assert losatp_threads is None
         assert max_hsps_per_subject is None
-        observed_limits.append(candidate_limit)
+        observed_limits.append(max_hits)
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
         return pd.DataFrame.from_records(
             [_hit_row(_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta))],
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     result = collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1683,9 +1902,15 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
     ]
     observed_pairs: list[tuple[str, str]] = []
 
-    def fake_search(query_fasta, subject_fasta, *, losatp_bin, ncbi_blastp_bin, losatp_threads, candidate_limit, max_hsps_per_subject, runner):
+    def fake_search(
+        query_fasta,
+        subject_fasta,
+        *,
+        ncbi_blastp_bin,
+        max_hsps_per_subject,
+        **_kwargs,
+    ):
         assert ncbi_blastp_bin is None
-        assert losatp_threads is None
         assert max_hsps_per_subject is None
         observed_pairs.append((_first_fasta_id(query_fasta), _first_fasta_id(subject_fasta)))
         return pd.DataFrame.from_records(
@@ -1693,7 +1918,7 @@ def test_orthogroup_collinearity_all_scope_rbh_searches_every_direction(monkeypa
             columns=COMPARISON_COLUMNS,
         )
 
-    monkeypatch.setattr(collinearity_module, "_run_losatp_search", fake_search)
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", fake_search)
 
     collinearity_module.build_orthogroup_collinearity_blocks(
         records,
@@ -1956,7 +2181,10 @@ def test_linear_cli_rejects_nonpositive_collinear_min_anchors() -> None:
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path) -> None:
+def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
     class JsNull:
         def __str__(self) -> str:
             return "null"
@@ -2029,10 +2257,10 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path)
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "collinear",
         5,
         50,
@@ -2077,12 +2305,34 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(tmp_path: Path)
     assert rows[0]["query_view_feature_svg_id"] == rows[0][
         "query_feature_svg_id"
     ]
-    assert set(result) == {"pairs", "collinearityResult", "cache"}
+    assert set(result) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert result["provenance"]["upstreamRawKeys"] == ["pair-a-b", "pair-b-a"]
+    assert result["provenance"]["orthogroup"] == {
+        "membershipMode": "anchor_core_v1",
+        "memberMaxHits": 5,
+    }
+    assert result["provenance"]["collinear"]["unitMode"] == {
+        "requested": "cds",
+        "effectiveKinds": ["cds"],
+    }
+    assert result["provenance"]["collinear"]["anchorMode"] == "one_to_one"
 
 
 @pytest.mark.linear
-def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
+@pytest.mark.parametrize(
+    ("anchor_mode", "merge_orientation", "expected_anchor_count"),
+    (
+        ("all", "strand", 2),
+        ("one_to_one", "order", 2),
+        ("rbh", "either", 1),
+    ),
+)
+def test_web_losatp_blastp_payload_helper_uses_collinear_option_domains(
     tmp_path: Path,
+    stage_web_losatp_transport,
+    anchor_mode: str,
+    merge_orientation: str,
+    expected_anchor_count: int,
 ) -> None:
     class JsNull:
         def __str__(self) -> str:
@@ -2156,10 +2406,10 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
     raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
         str(pairs_path),
+        str(raw_tsv_path),
         "collinear",
         5,
         50,
@@ -2170,47 +2420,56 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_collinear_anchor_mode(
         0,
         "cds",
         "orientation",
-        "rbh",
+        anchor_mode,
         25,
         1,
         2,
+        "adjacent",
+        "anchor_core_v1",
+        5,
+        merge_orientation,
     )
     result = json.loads(str(raw_result))
 
     assert "error" not in result
     rows = result["pairs"][0]["rows"]
     assert len(rows) == 1
-    assert rows[0]["collinearity_anchor_count"] == 1
-    assert rows[0]["collinearity_block_kind"] == "singleton"
-    assert rows[0]["query_protein_id"] == "qa0"
-    assert rows[0]["subject_protein_id"] == "sb0"
-
-    raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
-        str(pairs_path),
-        "collinear",
-        5,
-        50,
-        "1e-5",
-        0,
-        0,
-        2,
-        0,
-        "cds",
-        "orientation",
-        "rbh",
-        25,
-        1,
-        2,
+    assert rows[0]["collinearity_anchor_count"] == expected_anchor_count
+    assert result["provenance"]["collinear"]["anchorMode"] == anchor_mode
+    assert (
+        result["provenance"]["collinear"]["parameters"]["mergeOrientation"]
+        == merge_orientation
     )
-    min_two = json.loads(str(raw_min_two))
 
-    assert "error" not in min_two
-    assert min_two["pairs"][0]["rows"] == []
+    if anchor_mode == "rbh":
+        raw_min_two = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+            str(pairs_path),
+            str(raw_tsv_path),
+            "collinear",
+            5,
+            50,
+            "1e-5",
+            0,
+            0,
+            2,
+            0,
+            "cds",
+            "orientation",
+            "rbh",
+            25,
+            1,
+            2,
+        )
+        min_two = json.loads(str(raw_min_two))
+
+        assert "error" not in min_two
+        assert min_two["pairs"][0]["rows"] == []
 
 
 @pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
     tmp_path: Path,
+    stage_web_losatp_transport,
 ) -> None:
     helpers_js = Path("gbdraw/web/js/app/python-helpers.js").read_text(encoding="utf-8")
     helper_source = helpers_js.split("`", 1)[1].rsplit("`", 1)[0]
@@ -2304,12 +2563,16 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
         ],
     }
 
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(payload), encoding="utf-8")
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(tmp_path, payload)
 
-    def convert(scope: str, input_payload: Path = pairs_path) -> dict[str, object]:
+    def convert(
+        scope: str,
+        input_payload: Path = pairs_path,
+        input_raw_tsv: Path = raw_tsv_path,
+    ) -> dict[str, object]:
         raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
             str(input_payload),
+            str(input_raw_tsv),
             "collinear",
             5,
             50,
@@ -2331,18 +2594,38 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
 
     adjacent = convert("adjacent")
     all_records = convert("all")
+    invalid_scope = convert("global")
+    invalid_mode = json.loads(
+        str(
+            namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                str(pairs_path),
+                str(raw_tsv_path),
+                "similarity",
+            )
+        )
+    )
     multi_row_payload = json.loads(json.dumps(payload))
     for pair in multi_row_payload["pairs"]:
         pair["displayPair"] = (
             pair["queryIndex"] == 0 and pair["subjectIndex"] == 2
         )
-    pairs_path = tmp_path / "losatp-pairs.json"
-    pairs_path.write_text(json.dumps(multi_row_payload), encoding="utf-8")
-    multi_row_adjacent = convert("adjacent", pairs_path)
+    multi_row_pairs_path, multi_row_raw_tsv_path = stage_web_losatp_transport(
+        tmp_path,
+        multi_row_payload,
+        "losatp-multi-row-pairs",
+    )
+    multi_row_adjacent = convert(
+        "adjacent",
+        multi_row_pairs_path,
+        multi_row_raw_tsv_path,
+    )
 
     assert "error" not in adjacent
     assert "error" not in all_records
     assert "error" not in multi_row_adjacent
+    assert "collinear_search_scope must be one of: adjacent, all" in invalid_scope["error"]
+    assert "Unsupported LOSATP blastp mode" in invalid_mode["error"]
+
     def member_sets(result: dict[str, object]) -> list[set[str]]:
         groups = result["collinearityResult"]["value"]["fields"][
             "orthogroups"
@@ -2354,8 +2637,8 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
 
     adjacent_member_sets = member_sets(adjacent)
     all_member_sets = member_sets(all_records)
-    assert set(adjacent) == {"pairs", "collinearityResult", "cache"}
-    assert set(all_records) == {"pairs", "collinearityResult", "cache"}
+    assert set(adjacent) == {"pairs", "collinearityResult", "provenance", "cache"}
+    assert set(all_records) == {"pairs", "collinearityResult", "provenance", "cache"}
     assert {"a0", "b0"} in adjacent_member_sets
     assert {"a0", "b0", "c0"} in all_member_sets
     assert {

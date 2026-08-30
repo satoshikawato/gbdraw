@@ -36,7 +36,7 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
     BLASTN_TASK: 'blastn-task',
     RECORD_GENETIC_CODES: 'record-genetic-codes',
     BLASTP_MAX_HITS: 'blastp-max-hits',
-    SIMILARITY_GROUPING: 'similarity-grouping',
+    MEMBER_HITS: 'member-hits',
     COLLINEAR_PRIMARY: 'collinear-primary',
     UPLOAD_READINESS: 'upload-readiness',
     RESULT_FILTERS: 'result-filters',
@@ -49,6 +49,7 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   ADVANCED: Object.freeze({
     RECORD_LAYOUT: 'record-layout',
     LOSAT_RUNTIME: 'losat-runtime',
+    LOSATP_CANDIDATE: 'losatp-candidate',
     LOSAT_CACHE: 'losat-cache',
     RAW_RESULTS: 'raw-results',
     COLLINEAR_DETAILS: 'collinear-details'
@@ -311,24 +312,23 @@ const projectSettingsSectionKeys = ({
       keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.RECORD_GENETIC_CODES);
     } else if (losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.PAIRWISE) {
       keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.BLASTP_MAX_HITS);
-    } else if (!selectedTopology && losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS) {
-      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.SIMILARITY_GROUPING);
+    } else if (
+      !selectedTopology &&
+      losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS
+    ) {
+      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS);
     } else if (!selectedTopology && losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.COLLINEAR_BLOCKS) {
-      keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COLLINEAR_PRIMARY);
+      keys.push(
+        LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.MEMBER_HITS,
+        LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COLLINEAR_PRIMARY
+      );
     }
   }
   if (planned.hasUpload) {
     keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.UPLOAD_READINESS);
   }
   keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.RESULT_FILTERS);
-  if (
-    planned.hasUpload ||
-    losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATN ||
-    losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.TLOSATX ||
-    losatpModeKey === LINEAR_COMPARISON_LOSATP_MODE_KEYS.PAIRWISE
-  ) {
-    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COMPARISON_APPEARANCE);
-  }
+  keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.COMPARISON_APPEARANCE);
   return Object.freeze(keys);
 };
 
@@ -358,10 +358,11 @@ const projectSectionKeys = ({
 
   const advanced = [LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RECORD_LAYOUT];
   if (planned.hasLosat) {
-    advanced.push(
-      LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_RUNTIME,
-      LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE
-    );
+    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_RUNTIME);
+    if (losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP) {
+      advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSATP_CANDIDATE);
+    }
+    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE);
   }
   if (planned.hasLosat || dormantRawResultDraftCount > 0) {
     advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RAW_RESULTS);

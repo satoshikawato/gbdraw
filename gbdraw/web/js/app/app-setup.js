@@ -15,10 +15,13 @@ import {
   buildRunStateData,
   buildUiStateData,
   exportSession,
+  getCommittedCanonicalSession,
+  getCommittedCanonicalRenderRequest,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
   serializeResults,
+  setUnmanagedConfigOverrideValidator,
   setPreviewRuntime
 } from '../services/config.js';
 import { createHistoryManager } from '../services/history.js';
@@ -30,7 +33,11 @@ import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import { disposeDiagramGenerationWorker } from '../services/diagram-generation.js';
+import {
+  DIAGRAM_HELPER_OPERATIONS,
+  disposeDiagramGenerationWorker,
+  runDiagramHelperOperation
+} from '../services/diagram-generation.js';
 import { recordSessionLifecycleEvent } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
@@ -74,6 +81,12 @@ import { classifyOptionalPositiveNumber } from '../utils/optional-positive-numbe
 import { createLosatSettings } from './losat-settings.js';
 import { createAutoValueDisplay } from './auto-value-display.js';
 import { createLinearRecordSelector } from './linear-record-selector.js';
+import { createLinearTypographyController } from './linear-typography.js';
+import {
+  buildDisambiguatedRecordEntries,
+  formatRecordLength,
+  resolveDisambiguatedRecordSelection
+} from './record-options.js';
 import {
   linearRecordPositionTokens,
   moveLinearRecordInRow,
@@ -114,6 +127,12 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault } from '../mode-profiles.js';
+import {
+  IMPORTED_COMPARISON_ACTIONS,
+  IMPORTED_COMPARISON_DISPOSITIONS,
+  importedComparisonExecution,
+  resolveImportedComparisonAction
+} from '../services/imported-comparison-intent.js';
 import {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
@@ -176,12 +195,17 @@ export const createSessionImportRollbackState = ({
 });
 
 export const createAppSetup = () => {
+  setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
+    payload
+  ));
   const {
     processing,
     processingStatus,
     generationCancelRequested,
     errorLog,
     sessionTitle,
+    importedComparisonIntent,
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
@@ -215,6 +239,8 @@ export const createAppSetup = () => {
     hasActiveLinearUploadIntent,
     form,
     adv,
+    linearTypographyLinked,
+    unmanagedConfigOverrides,
     losat,
     losatCacheInfo,
     losatThreadingStatus,
@@ -364,6 +390,10 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  const linearTypography = createLinearTypographyController({
+    adv,
+    linked: linearTypographyLinked
+  });
   const rightDrawerActions = createRightDrawerController({ state, watch });
 
   const comparisonHeightValidationError = computed(() => {
@@ -1003,6 +1033,31 @@ export const createAppSetup = () => {
   });
   const undoHistory = () => history.undo();
   const redoHistory = () => history.redo();
+  const displayPreservedConfigValue = (value) => {
+    const serialized = JSON.stringify(value) ?? String(value);
+    return serialized.length <= 240
+      ? serialized
+      : `${serialized.slice(0, 237)}...`;
+  };
+  const unmanagedConfigOverrideEntries = computed(() => (
+    Object.entries(unmanagedConfigOverrides)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([path, value]) => ({
+        path,
+        value,
+        displayValue: displayPreservedConfigValue(value)
+      }))
+  ));
+  const resetUnmanagedConfigOverride = (path) => history.runUndoable(
+    `Reset preserved setting ${path}`,
+    () => {
+      if (!Object.prototype.hasOwnProperty.call(unmanagedConfigOverrides, path)) {
+        return false;
+      }
+      delete unmanagedConfigOverrides[path];
+      return true;
+    }
+  );
   const selectResult = (index) => previewRuntime.selectResult(index);
 
   const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
@@ -1102,6 +1157,7 @@ export const createAppSetup = () => {
     if (typeof disposeHistoryInputs === 'function') disposeHistoryInputs();
     if (window.__GBDRAW_HISTORY__ === history) delete window.__GBDRAW_HISTORY__;
     previewFeatureSearch.dispose();
+    setUnmanagedConfigOverrideValidator(null);
     disposeDiagramGenerationWorker();
   });
 
@@ -1847,6 +1903,8 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
+    getCommittedCanonicalRenderRequest,
+    getCommittedCanonicalSession,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
@@ -2218,30 +2276,82 @@ export const createAppSetup = () => {
         : {}
     });
   };
-  const runAnalysis = async () => history.runUndoableArtifactReplacement(
-    'Generate diagram',
-    async (generatedArtifactHandle) => {
-      cancelDefinitionUpdate();
-      const comparisonPlanSnapshot = mode.value === 'linear'
-        ? linearComparisonResolution.value
-        : null;
+  const runAnalysis = async () => {
+    const comparisonPlanSnapshot = mode.value === 'linear'
+      ? linearComparisonResolution.value
+      : null;
+    const comparisonExecution = importedComparisonExecution({
+      intent: importedComparisonIntent,
+      draftResolution: comparisonPlanSnapshot
+    });
+    if (!comparisonExecution.ok) {
+      errorLog.value = new Error(comparisonExecution.message);
+      failedGeneratePreservedResult.value = results.value.length > 0;
+      if (mode.value === 'linear') await focusLinearComparisonIssue();
+      return { status: 'error' };
+    }
+    return history.runUndoableArtifactReplacement(
+      'Generate diagram',
+      async (generatedArtifactHandle) => {
+        cancelDefinitionUpdate();
+        const result = await runGeneratedDiagramAnalysis(
+          comparisonPlanSnapshot,
+          generatedArtifactHandle,
+          comparisonExecution
+        );
+        if (result?.status === 'error' && mode.value === 'linear') {
+          await focusLinearComparisonIssue();
+        }
+        if (result?.status === 'ok') {
+          featureSelection.clearFeatureSelection({ clearStatus: true });
+        }
+        return result;
+      }, {
+        shouldCommit: (result) => result?.status === 'ok',
+        onCheckpointCapture: recordGenerateHistoryCapture
+      }
+    );
+  };
 
-      const result = await runGeneratedDiagramAnalysis(
-        comparisonPlanSnapshot,
-        generatedArtifactHandle
-      );
-      if (result?.status === 'error' && mode.value === 'linear') {
-        await focusLinearComparisonIssue();
+  const chooseImportedComparisonAction = (action) => history.runUndoable(
+    `${String(action || '').toLowerCase()} imported comparison`,
+    () => {
+      const outcome = resolveImportedComparisonAction({
+        intent: importedComparisonIntent,
+        action,
+        draftResolution: linearComparisonResolution.value
+      });
+      if (!outcome.ok) {
+        errorLog.value = new Error(outcome.message);
+        return false;
       }
-      if (result?.status === 'ok') {
-        featureSelection.clearFeatureSelection({ clearStatus: true });
+      if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
+        replaceLinearComparisonPlan({ mode: 'none', defaultSource: 'losat', edges: [] });
       }
-      return result;
-    }, {
-      shouldCommit: (result) => result?.status === 'ok',
-      onCheckpointCapture: recordGenerateHistoryCapture
+      errorLog.value = null;
+      return true;
     }
   );
+  const inheritImportedComparison = () => chooseImportedComparisonAction(
+    IMPORTED_COMPARISON_ACTIONS.INHERIT
+  );
+  const replaceImportedComparison = () => chooseImportedComparisonAction(
+    IMPORTED_COMPARISON_ACTIONS.REPLACE
+  );
+  const clearImportedComparison = () => chooseImportedComparisonAction(
+    IMPORTED_COMPARISON_ACTIONS.CLEAR
+  );
+  const importedComparisonNeedsResolution = computed(() => (
+    importedComparisonIntent.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+  ));
+  const importedComparisonCanInherit = computed(() => (
+    importedComparisonIntent.disposition
+      === IMPORTED_COMPARISON_DISPOSITIONS.PRESERVED_READ_ONLY
+  ));
+  const importedComparisonCanReplace = computed(() => (
+    linearComparisonResolution.value.valid
+    && linearComparisonResolution.value.hasComparisonIntent
+  ));
 
   const cancelGeneration = () => {
     cancelRunAnalysis();
@@ -2817,6 +2927,72 @@ export const createAppSetup = () => {
     return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
   };
 
+  const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
+    (Array.isArray(circularRecordList.value) ? circularRecordList.value : []).map(
+      (record) => ({
+        ...record,
+        recordId: record?.record_id ?? record?.recordId,
+        recordLength: record?.record_length ?? record?.recordLength
+      })
+    )
+  );
+
+  const circularRecordPresentationOptions = computed(() => {
+    const entries = circularRecordPresentationEntries();
+    const current = String(form.circular_record_selector || '').trim();
+    const selection = resolveDisambiguatedRecordSelection(entries, current);
+    const automaticLabel = entries.length > 1
+      ? 'All records (separate diagrams)'
+      : 'Automatic (only record)';
+    return [
+      { value: '', label: automaticLabel, synthetic: false },
+      ...(current && selection.status !== 'resolved'
+        ? [{
+            value: current,
+            label: `${current} (${selection.status === 'ambiguous' ? 'ambiguous' : 'not found'})`,
+            synthetic: true
+          }]
+        : []),
+      ...entries.map((record) => ({
+        value: record.value,
+        label: `${record.recordId} (${formatRecordLength(record.recordLength)})${record.usesIndex ? ` [${record.selector}]` : ''}`,
+        synthetic: false
+      }))
+    ];
+  });
+
+  const circularRecordPresentationError = computed(() => {
+    const current = String(form.circular_record_selector || '').trim();
+    if (!current) return '';
+    const selection = resolveDisambiguatedRecordSelection(
+      circularRecordPresentationEntries(),
+      current
+    );
+    if (selection.status === 'ambiguous') {
+      return `Record selector '${current}' is ambiguous in the current input.`;
+    }
+    if (selection.status === 'missing') {
+      return `Record selector '${current}' was not found in the current input.`;
+    }
+    return '';
+  });
+
+  const circularSingleRecordPresentationEnabled = computed(() => {
+    if (form.multi_record_canvas) return false;
+    const entries = circularRecordPresentationEntries();
+    if (entries.length === 1) return true;
+    const current = String(form.circular_record_selector || '').trim();
+    if (!current && entries.length !== 1) return false;
+    if (entries.length === 0) return Boolean(current);
+    return resolveDisambiguatedRecordSelection(entries, current).status === 'resolved';
+  });
+
+  const setCircularRecordPresentationSelector = (value) => {
+    const normalized = String(value || '').trim();
+    form.circular_record_selector = normalized;
+    adv.circular_grouping_intent = normalized ? 'single' : 'auto';
+  };
+
   const buildDefaultCircularRecordPositions = () => {
     const selectors = Array.isArray(circularRecordList.value)
       ? circularRecordList.value
@@ -3020,6 +3196,13 @@ export const createAppSetup = () => {
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    importedComparisonIntent,
+    importedComparisonNeedsResolution,
+    importedComparisonCanInherit,
+    importedComparisonCanReplace,
+    inheritImportedComparison,
+    replaceImportedComparison,
+    clearImportedComparison,
     selectResult,
     resultPanelTab,
     lastRunInfo,
@@ -3154,6 +3337,12 @@ export const createAppSetup = () => {
     linearRecordSelectorWarning: linearRecordSelector.warningFor,
     form,
     adv,
+    linearTypographyLinked,
+    setLinearTypographyLinked: linearTypography.setLinked,
+    setLinearRulerLabelFontSize: linearTypography.setRulerLabelFontSize,
+    setLinearScaleFontSize: linearTypography.setScaleFontSize,
+    unmanagedConfigOverrideEntries,
+    resetUnmanagedConfigOverride,
     comparisonProfileDefault,
     comparisonHeightValidationError,
     optionalNumberInputValue,
@@ -3323,6 +3512,10 @@ export const createAppSetup = () => {
     closeRightDrawer: rightDrawerActions.closeRightDrawer,
     openOrthogroupInDrawer,
     circularRecordList,
+    circularRecordPresentationOptions,
+    circularRecordPresentationError,
+    circularSingleRecordPresentationEnabled,
+    setCircularRecordPresentationSelector,
     paletteDefinitions,
     paletteNames,
     selectedPalette,

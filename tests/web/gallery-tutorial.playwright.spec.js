@@ -316,7 +316,7 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   expect(metadata.schema).toBe(3);
   expect(metadata.items).toHaveLength(1);
   expect(metadata.items[0].features).toHaveLength(24_945);
-  expect(metadata.items[0].comparisonMatches).toHaveLength(633);
+  expect(metadata.items[0].comparisonMatches).toHaveLength(579);
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.locator('#preview-note')).toContainText('JavaScript-enabled');
   await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Interactive gbdraw SVG/);

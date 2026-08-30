@@ -12,6 +12,7 @@ import {
   assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
+  promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } from '../gbdraw/web/js/services/session-request.js';
 
@@ -26,6 +27,7 @@ const {
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
+  promoteRequest: promoteCanonicalRenderRequestToCurrent,
   projectRequest: projectCanonicalSessionRequest,
   resolveComparisonPlan: resolveLinearComparisonPlan
 });

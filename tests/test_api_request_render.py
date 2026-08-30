@@ -104,6 +104,8 @@ def _protein_record(record_id: str, protein_id: str) -> SeqRecord:
 def _derived_identity_test_context(
     *,
     options: LinearDiagramOptions | None = None,
+    source_mode: str = "collinear",
+    effective_unit_kinds: tuple[str, str] | None = None,
 ) -> SimpleNamespace:
     records = (_seqrecord("a"), _seqrecord("b"))
     request = LinearDiagramRequest(
@@ -122,7 +124,24 @@ def _derived_identity_test_context(
     metadata = diagram_module.LinearDiagramMetadata(
         protein_comparisons=(
             DataFrame(columns=request_render_module.COMPARISON_COLUMNS),
-        )
+        ),
+        collinearity_result=(
+            SimpleNamespace(
+                blocks=(
+                    SimpleNamespace(
+                        anchors=(
+                            SimpleNamespace(
+                                query_unit_kind=effective_unit_kinds[0],
+                                subject_unit_kind=effective_unit_kinds[1],
+                            ),
+                        )
+                    ),
+                ),
+                unblocked_anchors=(),
+            )
+            if effective_unit_kinds is not None
+            else None
+        ),
     )
     manifest = SimpleNamespace(
         record_instances={
@@ -141,7 +160,7 @@ def _derived_identity_test_context(
         extraction=SimpleNamespace(identity_manifest=manifest),
         nucleotide_entries=(),
         passthrough_derived_entries=(),
-        source_mode="collinear",
+        source_mode=source_mode,
     )
     raw_entries = (
         {
@@ -233,7 +252,7 @@ def test_derived_identity_includes_hidden_reverse_and_self_raw_inputs(
         LosslessCollinearityParameters(min_anchors=2),
         LosslessCollinearityParameters(max_unit_gap=1),
         LosslessCollinearityParameters(max_diagonal_drift=1),
-        LosslessCollinearityParameters(max_conflicts=1),
+        LosslessCollinearityParameters(max_conflicts=0),
         LosslessCollinearityParameters(merge_orientation="strand"),
     ),
     ids=(
@@ -271,7 +290,7 @@ def test_derived_identity_changes_with_each_lossless_collinearity_parameter(
         "minAnchors": 1,
         "maxGeneGap": 0,
         "maxDiagonalDrift": 0,
-        "maxConflictsInMergeGap": 0,
+        "maxConflictsInMergeGap": 1,
         "mergeOrientation": "either",
     }
     assert collinear["parameterIdentity"] == {
@@ -280,12 +299,145 @@ def test_derived_identity_changes_with_each_lossless_collinearity_parameter(
             "minAnchors": 1,
             "maxUnitGap": 0,
             "maxDiagonalDrift": 0,
-            "maxConflicts": 0,
+            "maxConflicts": 1,
             "mergeOrientation": "either",
         },
     }
     assert unchanged["key"] == baseline["key"]
     assert changed["key"] != baseline["key"]
+
+
+def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> None:
+    assert _derived_entry_for_params(None)["key"] == _derived_entry_for_params(
+        LosslessCollinearityParameters()
+    )["key"]
+
+
+@pytest.mark.parametrize(
+    "changed_options",
+    (
+        LinearDiagramOptions(orthogroup_member_max_hits=6),
+        LinearDiagramOptions(collinearity_unit_mode="cds"),
+        LinearDiagramOptions(collinearity_anchor_mode="all"),
+        LinearDiagramOptions(collinearity_search_scope="all"),
+        LinearDiagramOptions(collinearity_color_mode="orientation_identity"),
+        LinearDiagramOptions(collinear_max_paralog_links_per_orthogroup=3),
+    ),
+    ids=(
+        "member-hits",
+        "unit-mode",
+        "anchor-mode",
+        "search-scope",
+        "color-mode",
+        "paralog-links",
+    ),
+)
+def test_collinear_derived_identity_changes_with_each_active_option(
+    monkeypatch: pytest.MonkeyPatch,
+    changed_options: LinearDiagramOptions,
+) -> None:
+    monkeypatch.setattr(
+        request_render_module,
+        "is_protein_losat_cache_entry",
+        lambda _entry: True,
+    )
+    baseline_context = _derived_identity_test_context()
+    changed_context = _derived_identity_test_context(options=changed_options)
+    (baseline,) = request_render_module._build_current_derived_entries(
+        baseline_context.metadata,
+        baseline_context.request,
+        baseline_context.records,
+        baseline_context.artifacts,
+        baseline_context.raw_entries,
+    )
+    (changed,) = request_render_module._build_current_derived_entries(
+        changed_context.metadata,
+        changed_context.request,
+        changed_context.records,
+        changed_context.artifacts,
+        changed_context.raw_entries,
+    )
+
+    assert changed["key"] != baseline["key"]
+
+
+def test_derived_identity_excludes_inactive_and_render_only_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_render_module,
+        "is_protein_losat_cache_entry",
+        lambda _entry: True,
+    )
+
+    def build_entry(options: LinearDiagramOptions, source_mode: str) -> dict[str, object]:
+        context = _derived_identity_test_context(
+            options=options,
+            source_mode=source_mode,
+        )
+        (entry,) = request_render_module._build_current_derived_entries(
+            context.metadata,
+            context.request,
+            context.records,
+            context.artifacts,
+            context.raw_entries,
+        )
+        return dict(entry)
+
+    collinear = build_entry(LinearDiagramOptions(), "collinear")
+    collinear_irrelevant = build_entry(
+        LinearDiagramOptions(
+            protein_blastp_max_hits=99,
+            pairwise_match_style="curve",
+        ),
+        "collinear",
+    )
+    assert collinear_irrelevant["key"] == collinear["key"]
+
+    orthogroup = build_entry(LinearDiagramOptions(), "orthogroup")
+    orthogroup_irrelevant = build_entry(
+        LinearDiagramOptions(
+            protein_blastp_max_hits=99,
+            collinearity_unit_mode="cds",
+            collinearity_anchor_mode="all",
+            collinearity_search_scope="all",
+        ),
+        "orthogroup",
+    )
+    assert orthogroup_irrelevant["key"] == orthogroup["key"]
+    assert "collinear" not in orthogroup["payload"]["identity"]
+
+
+def test_collinear_derived_provenance_records_requested_and_effective_units(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_render_module,
+        "is_protein_losat_cache_entry",
+        lambda _entry: True,
+    )
+    context = _derived_identity_test_context(
+        options=LinearDiagramOptions(collinearity_unit_mode="auto"),
+        effective_unit_kinds=("locus", "cds"),
+    )
+    (entry,) = request_render_module._build_current_derived_entries(
+        context.metadata,
+        context.request,
+        context.records,
+        context.artifacts,
+        context.raw_entries,
+    )
+
+    provenance = entry["payload"]["provenance"]
+    assert provenance["upstreamRawKeys"] == [
+        "reverse-hidden",
+        "self-hidden",
+        "visible",
+    ]
+    assert provenance["collinear"]["unitMode"] == {
+        "requested": "auto",
+        "effectiveKinds": ["cds", "locus"],
+    }
 
 @pytest.mark.parametrize("mode", ("orthogroup", "collinear"))
 def test_empty_api_derived_result_passes_current_session_validation(
@@ -1310,6 +1462,38 @@ def test_render_request_circular_smoke_creates_svg(tmp_path: Path) -> None:
     assert result.mode == "circular"
     assert result.output_paths == (tmp_path / "request-smoke.svg",)
     assert result.output_paths[0].is_file()
+
+
+@pytest.mark.circular
+def test_render_request_circular_consumes_record_title_presentation(
+    tmp_path: Path,
+) -> None:
+    record = _seqrecord("record-title", "ATGCGC" * 200)
+    record.annotations["topology"] = "circular"
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=InMemoryRecordSource(record),
+                presentation=RecordPresentation(
+                    label="長い <i>環状ゲノム</i> ラベル",
+                    subtitle="Selected record subtitle",
+                ),
+            ),
+        ),
+        output=RenderOutputRequest(
+            output_prefix="record-title",
+            output_directory=tmp_path,
+            formats=("svg",),
+        ),
+    )
+
+    result = render_request(request)
+    svg = result.output_paths[0].read_text(encoding="utf-8")
+
+    assert "長い " in svg
+    assert "環状ゲノム" in svg
+    assert "Selected record subtitle" in svg
+    assert 'font-style="italic"' in svg
 
 
 @pytest.mark.circular

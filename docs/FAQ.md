@@ -45,10 +45,10 @@ the three **LOSAT Mode** buttons choose LOSATN, LOSATP, or TLOSATX. When LOSATP 
 matches. Pairwise matches show individual protein matches, Similarity groups
 show search-derived membership, and Collinear blocks emphasize compatible
 ordered anchors. Similarity groups always searches all loaded record pairs.
-Fresh Collinear settings also default to **All records**, while a saved
-**Adjacent pairs** scope remains explicit. Circular rings place retained
-evidence around one reference. Linear comparisons connect selected query and
-subject record endpoints.
+Fresh Collinear settings and **Reset Settings** default to **Adjacent pairs**,
+while a saved **All records** scope remains explicit. Circular rings place
+retained evidence around one reference. Linear comparisons connect selected
+query and subject record endpoints.
 
 The [comparison capability
 matrix](./REFERENCE/comparison-programs-thresholds-and-results.md#capability-matrix)

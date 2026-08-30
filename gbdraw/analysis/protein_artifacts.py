@@ -93,7 +93,7 @@ def _is_strict_empty_result(entry: Mapping[str, object]) -> bool:
     if not isinstance(payload, Mapping):
         return False
 
-    allowed_keys = {"identity", "pairs", "orthogroups"}
+    allowed_keys = {"identity", "provenance", "pairs", "orthogroups"}
     if mode == "collinear":
         allowed_keys.update(
             {

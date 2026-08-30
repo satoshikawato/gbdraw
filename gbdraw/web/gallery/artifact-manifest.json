@@ -14,7 +14,7 @@
   "files": {
     "gallery/examples.json": {
       "bytes": 20758,
-      "sha256": "5b23718a22b35d0b0e500b8fdff9fc25feb1e59b1b17b0150373b764a4b8ecfa"
+      "sha256": "68f49350d6ace8a8f7048fe5bac2c4055d2f4a64a5104096ac463ce85134ee2a"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1090866,
@@ -53,8 +53,8 @@
       "sha256": "7818042f948f15decbed98e8ed8a1251cdf85517a3b99c7180cc102da5f4b987"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 41086462,
-      "sha256": "8ad4e59dde0d73344c110830ce47491867a18b36d9528243f338833b40723ae8"
+      "bytes": 40976898,
+      "sha256": "4696bf5e51251c768b3d82aecbe9486316509e49a54dfbca536dd5b85523a67c"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
       "bytes": 2848850,
@@ -93,8 +93,8 @@
       "sha256": "a6613223976c54348c21b49479f4a9e6f9e0246c43e9b251210802e48cddfca5"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 75803066,
-      "sha256": "12daa6638272d5524a1a17ea623e522730544b52fbdadd5930f9b70340b76afb"
+      "bytes": 75791493,
+      "sha256": "564e7a453497b2091bf63e12205c3a0334698a61c21716436639c148ef09e73d"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 242975,
@@ -133,8 +133,8 @@
       "sha256": "aeb12c56a80c8b706ca4d00850ff1349a14bc83e7dda56393989017682de9b00"
     },
     "gallery/sources/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 16079735,
-      "sha256": "60abf2c19b5335d05c845101a1009fd13817fe5b151baab6a4a324dc06574240"
+      "bytes": 15978457,
+      "sha256": "c1749b6068635c70072c112bb9df1e87c5fc123380ed48330ab57a1e03047b69"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
       "bytes": 17788,
@@ -173,8 +173,8 @@
       "sha256": "b3f651b8615d7a8ad9e1ff626bc50f2c2a1cbb8a4ea0cf1a93c2f44b519d344e"
     },
     "gallery/thumbnails/vibrio-harveyi-group-collinear.webp": {
-      "bytes": 21372,
-      "sha256": "49403ce08c6086dbb40a007c176d1d5ff5ac876a7aa9d6bfb563c747521935d1"
+      "bytes": 21332,
+      "sha256": "e578c9714f856b479a8b5f4bc5a716c8c514bfd3973d90eed790323badae4078"
     }
   },
   "inventory": "tools.prepare_interactive_gallery_assets.EXAMPLES",

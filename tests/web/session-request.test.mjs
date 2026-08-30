@@ -14,6 +14,8 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   linearRecordLayoutHasSharedRow,
+  managedConfigOverridePathsForMode,
+  normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } = await import(
@@ -44,6 +46,23 @@ assert.equal(linearRecordLayoutHasSharedRow(
   [{ uid: 'a' }, { uid: 'b' }],
   [{ uid: 'a', row: 1 }, { uid: 'b', row: 2 }]
 ), false);
+const normalizedGridOrdering = normalizeWebGridColumnOrdering([
+  { recordKey: 'later-row', presentation: { gridRow: 2, gridColumn: 1 } },
+  { recordKey: 'right', presentation: { gridRow: 1, gridColumn: 2 } },
+  { recordKey: 'left', presentation: { gridRow: 1, gridColumn: 1 } }
+]);
+assert.deepEqual(
+  normalizedGridOrdering.records.map((record) => [
+    record.recordKey,
+    record.presentation.gridRow,
+    record.presentation.gridColumn
+  ]),
+  [
+    ['left', 1, null],
+    ['right', 1, null],
+    ['later-row', 2, null]
+  ]
+);
 
 const buildCanonicalRenderRequest = (args) => buildCanonicalRenderRequestRaw({
   ...args,
@@ -378,7 +397,8 @@ const state = {
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
-  annotationSets: []
+  annotationSets: [],
+  unmanagedConfigOverrides: {}
 };
 
 const stateForCanonicalProjection = (projection) => {
@@ -537,6 +557,11 @@ assert.equal(
 const circularConfigOverrides = canonical.renderRequest.diagramOptions.configOverrides;
 assert.ok(Object.keys(circularConfigOverrides).every((path) => path.includes('.')));
 assert.ok(Object.values(circularConfigOverrides).every((value) => value !== null));
+assert.ok(
+  Object.keys(circularConfigOverrides).every((path) => (
+    managedConfigOverridePathsForMode('circular').includes(path)
+  ))
+);
 assert.equal(circularConfigOverrides['objects.scale.show'], true);
 assert.equal(
   circularConfigOverrides['objects.features.arrow_geometry.head_length_ratio'],
@@ -550,6 +575,59 @@ assert.equal(projectCanonicalSessionRequest(canonical).config.form.show_scale, t
 assert.equal(circularConfigOverrides['labels.circular.scope'], 'none');
 assert.equal(circularConfigOverrides['labels.circular.placement'], 'horizontal');
 assert.deepEqual(circularConfigOverrides['labels.filtering.blacklist_keywords'], []);
+assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.scale.show'));
+assert.ok(
+  managedConfigOverridePathsForMode('circular').includes(
+    'objects.axis.circular.stroke_width.short'
+  )
+);
+assert.ok(
+  !managedConfigOverridePathsForMode('circular').includes(
+    'objects.blast_match.curve_tension'
+  )
+);
+assert.ok(
+  managedConfigOverridePathsForMode('linear').includes(
+    'objects.definition.linear.line_styles.name.font_weight'
+  )
+);
+state.unmanagedConfigOverrides = {
+  'objects.gc_content.percent_background_opacity': 0.42,
+  'objects.scale.show': false
+};
+const canonicalWithPreservedConfig = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(
+  canonicalWithPreservedConfig.renderRequest.diagramOptions.configOverrides[
+    'objects.gc_content.percent_background_opacity'
+  ],
+  0.42
+);
+assert.equal(
+  canonicalWithPreservedConfig.renderRequest.diagramOptions.configOverrides[
+    'objects.scale.show'
+  ],
+  true,
+  'the GUI-managed value must win over a preserved value at the same path'
+);
+state.unmanagedConfigOverrides = new Proxy({
+  'labels.filtering.raw': new Proxy({
+    priority_map: { CDS: ['gene', 'old_locus_tag'] }
+  }, {})
+}, {});
+const canonicalWithReactivePreservedConfig = buildCanonicalRenderRequest({
+  state,
+  filesData
+});
+assert.doesNotThrow(() => structuredClone(
+  canonicalWithReactivePreservedConfig.renderRequest.diagramOptions.configOverrides
+));
+assert.deepEqual(
+  canonicalWithReactivePreservedConfig.renderRequest.diagramOptions.configOverrides[
+    'labels.filtering.raw'
+  ],
+  { priority_map: { CDS: ['gene', 'old_locus_tag'] } }
+);
+state.unmanagedConfigOverrides = {};
 state.adv.circular_definition_interval = 30;
 assert.equal(
   buildCanonicalRenderRequest({ state, filesData })
@@ -614,17 +692,132 @@ assert.equal(
 );
 state.form.labels_mode = 'none';
 
-state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
+state.circularRecordList.value = [{
+  selector: '#1',
+  record_id: 'single.id',
+  recordKey: 'record-1'
+}];
 state.form.prefix = '';
 const implicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(implicitSingleCanonical.renderRequest.grouping, 'single');
 assert.equal(implicitSingleCanonical.webFiles.circularOutputPrefixExplicit, false);
+assert.equal(implicitSingleCanonical.renderRequest.records[0].recordKey, 'record-1');
 assert.deepEqual(
   implicitSingleCanonical.renderRequest.records[0].selector,
   { kind: 'recordId', value: 'single.id' }
 );
 assert.equal(implicitSingleCanonical.renderRequest.output.prefix, 'single.id');
 assert.equal(projectCanonicalSessionRequest(implicitSingleCanonical).config.form.prefix, '');
+
+state.circularRecordList.value = [
+  { selector: '#1', record_id: 'first-record', record_length: 12 },
+  { selector: '#2', record_id: 'second-record', record_length: 18 }
+];
+Object.assign(state.form, {
+  circular_record_selector: 'second-record',
+  circular_region_start: 3,
+  circular_region_end: 14,
+  circular_reverse: true,
+  circular_record_label: '長い <i>環状ゲノム</i> ラベル',
+  circular_record_subtitle: 'Selected second record'
+});
+const selectedCircularCanonical = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(selectedCircularCanonical.renderRequest.grouping, 'single');
+assert.equal(selectedCircularCanonical.renderRequest.records.length, 1);
+assert.match(selectedCircularCanonical.renderRequest.records[0].recordKey, /second-record/);
+assert.equal(selectedCircularCanonical.renderRequest.records[0].selector, null);
+assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].region, {
+  selector: { kind: 'recordId', value: 'second-record' },
+  start: 3,
+  end: 14,
+  reverseComplement: true
+});
+assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].presentation, {
+  label: '長い <i>環状ゲノム</i> ラベル',
+  subtitle: 'Selected second record',
+  reverseComplement: false,
+  gridRow: null,
+  gridColumn: null
+});
+assert.equal(selectedCircularCanonical.renderRequest.output.prefix, 'second-record');
+
+const selectedCircularProjection = projectCanonicalSessionRequest(selectedCircularCanonical);
+assert.deepEqual(
+  {
+    selector: selectedCircularProjection.config.form.circular_record_selector,
+    start: selectedCircularProjection.config.form.circular_region_start,
+    end: selectedCircularProjection.config.form.circular_region_end,
+    reverse: selectedCircularProjection.config.form.circular_reverse,
+    label: selectedCircularProjection.config.form.circular_record_label,
+    subtitle: selectedCircularProjection.config.form.circular_record_subtitle
+  },
+  {
+    selector: 'second-record',
+    start: 3,
+    end: 14,
+    reverse: true,
+    label: '長い <i>環状ゲノム</i> ラベル',
+    subtitle: 'Selected second record'
+  }
+);
+Object.assign(state.form, selectedCircularProjection.config.form);
+Object.assign(state.adv, selectedCircularProjection.config.adv);
+const selectedCircularRebuilt = buildCanonicalRenderRequest({
+  state,
+  filesData: selectedCircularProjection.files
+});
+assert.deepEqual(
+  selectedCircularRebuilt.renderRequest.records[0].region,
+  selectedCircularCanonical.renderRequest.records[0].region
+);
+assert.equal(
+  selectedCircularRebuilt.renderRequest.records[0].presentation.reverseComplement,
+  false
+);
+assert.equal(
+  selectedCircularRebuilt.renderRequest.records[0].presentation.label,
+  '長い <i>環状ゲノム</i> ラベル'
+);
+
+const invalidCircularCases = [
+  [{ circular_region_start: 3, circular_region_end: null }, /requires both Start and End/],
+  [{ circular_region_start: 8, circular_region_end: 3 }, /must not exceed End/],
+  [{ circular_region_start: 3, circular_region_end: 19 }, /exceeds the selected record length/],
+  [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, /was not found/]
+];
+for (const [overrides, message] of invalidCircularCases) {
+  Object.assign(state.form, {
+    circular_record_selector: 'second-record',
+    circular_region_start: null,
+    circular_region_end: null,
+    ...overrides
+  });
+  assert.throws(() => buildCanonicalRenderRequest({ state, filesData }), message);
+}
+state.circularRecordList.value = [
+  { selector: '#1', record_id: 'duplicate-record', record_length: 18 },
+  { selector: '#2', record_id: 'duplicate-record', record_length: 18 }
+];
+Object.assign(state.form, {
+  circular_record_selector: 'duplicate-record',
+  circular_region_start: null,
+  circular_region_end: null
+});
+assert.throws(
+  () => buildCanonicalRenderRequest({ state, filesData }),
+  /is ambiguous/
+);
+
+Object.assign(state.form, {
+  circular_record_selector: '',
+  circular_region_start: null,
+  circular_region_end: null,
+  circular_reverse: false,
+  circular_record_label: '',
+  circular_record_subtitle: ''
+});
+state.adv.circular_grouping_intent = 'auto';
+state.circularRecordList.value = [{ selector: '#1', record_id: 'single.id' }];
 
 state.form.prefix = 'release.v1';
 const explicitSingleCanonical = buildCanonicalRenderRequest({ state, filesData });
@@ -702,6 +895,11 @@ const gridCanonical = buildCanonicalRenderRequest({ state, filesData });
 assert.equal(gridCanonical.renderRequest.grouping, 'grid');
 assert.equal(gridCanonical.renderRequest.output.prefix, 'dup');
 assert.equal(projectCanonicalSessionRequest(gridCanonical).config.form.multi_record_canvas, true);
+state.form.circular_record_selector = 'dup_2';
+const gridWithRetainedSingleSelector = buildCanonicalRenderRequest({ state, filesData });
+assert.equal(gridWithRetainedSingleSelector.renderRequest.grouping, 'grid');
+assert.equal(gridWithRetainedSingleSelector.renderRequest.records.length, 3);
+state.form.circular_record_selector = '';
 
 for (const schema of [3, 4]) {
   const branchOnlyCanonical = structuredClone(implicitBatchCanonical);
@@ -1736,6 +1934,10 @@ assert.ok(
     .every((path) => path.includes('.'))
 );
 assert.ok(
+  Object.keys(linearCanonical.renderRequest.diagramOptions.configOverrides)
+    .every((path) => managedConfigOverridePathsForMode('linear').includes(path))
+);
+assert.ok(
   Object.values(linearCanonical.renderRequest.diagramOptions.configOverrides)
     .every((value) => value !== null)
 );
@@ -1751,6 +1953,8 @@ assert.equal(projectCanonicalSessionRequest(linearCanonical).config.form.show_sc
 state.adv.block_stroke_width = 2;
 state.adv.def_font_size = 16;
 state.adv.label_font_size = 14;
+state.adv.scale_font_size = 21;
+state.adv.ruler_label_font_size = 12;
 state.adv.linear_definition_line_styles = {
   name: { font_size: 13, font_weight: 'bold', fill: '#112233' }
 };
@@ -1765,6 +1969,13 @@ assert.equal(styledLinearOverrides['objects.definition.linear.font_size.short'],
 assert.equal(styledLinearOverrides['objects.definition.linear.font_size.long'], 16);
 assert.equal(styledLinearOverrides['labels.font_size.linear.short'], 14);
 assert.equal(styledLinearOverrides['labels.font_size.linear.long'], 14);
+assert.equal(styledLinearOverrides['objects.scale.font_size.short'], 21);
+assert.equal(styledLinearOverrides['objects.scale.font_size.long'], 21);
+assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.short'], 12);
+assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.long'], 12);
+const styledLinearProjection = projectCanonicalSessionRequest(styledLinearCanonical);
+assert.equal(styledLinearProjection.config.adv.scale_font_size, 21);
+assert.equal(styledLinearProjection.config.adv.ruler_label_font_size, 12);
 assert.equal(
   styledLinearOverrides['objects.definition.linear.line_styles.name.font_size'],
   13
@@ -1787,6 +1998,8 @@ assert.equal(
 delete state.adv.block_stroke_width;
 delete state.adv.def_font_size;
 delete state.adv.label_font_size;
+delete state.adv.scale_font_size;
+delete state.adv.ruler_label_font_size;
 delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 2;
@@ -1922,6 +2135,70 @@ assert.deepEqual(
     ['all', 1, null],
     ['exactly_one', 1, null],
     ['exactly_one', 2, null]
+  ]
+);
+const numericColumnCanonical = structuredClone(arrangedCanonical);
+numericColumnCanonical.renderRequest.records[0].cardinality = 'exactly_one';
+numericColumnCanonical.renderRequest.records[0].presentation.gridColumn = 2;
+numericColumnCanonical.renderRequest.records[1].presentation.gridColumn = 1;
+numericColumnCanonical.renderRequest.records[2].presentation.gridColumn = 1;
+numericColumnCanonical.resources['grid-column-comparison'] = {
+  kind: 'nucleotide-blast',
+  name: 'grid-column-comparison.tsv',
+  encoding: 'base64',
+  data: btoa('match')
+};
+['first', 'second', 'third'].forEach((name) => {
+  numericColumnCanonical.resources[`grid-column-depth-${name}`] = {
+    kind: 'depth',
+    name: `${name}.depth.tsv`,
+    type: 'text/tab-separated-values',
+    size: 1,
+    lastModified: 0,
+    encoding: 'base64',
+    data: btoa(name.slice(0, 1))
+  };
+});
+numericColumnCanonical.renderRequest.diagramOptions.depthTracks = [{
+  source: ['first', 'second', 'third'].map((name) => ({
+    resourceId: `grid-column-depth-${name}`,
+    representation: 'file'
+  })),
+  label: 'Depth',
+  color: '#4A90E2',
+  height: null,
+  largeTickInterval: null,
+  smallTickInterval: null,
+  tickFontSize: null
+}];
+numericColumnCanonical.renderRequest.comparisons = [{
+  kind: 'nucleotideBlast',
+  resourceId: 'grid-column-comparison',
+  queryRecordIndex: 0,
+  subjectRecordIndex: 2
+}];
+const numericColumnProjection = projectCanonicalSessionRequest(numericColumnCanonical);
+assert.deepEqual(
+  numericColumnProjection.files.linearSeqs.map((sequence) => sequence.uid),
+  ['second', 'first', 'third']
+);
+assert.deepEqual(
+  numericColumnProjection.files.linearComparisons.map((comparison) => [
+    comparison.queryUid,
+    comparison.subjectUid
+  ]),
+  [['first', 'third']]
+);
+assert.deepEqual(
+  numericColumnProjection.files.linearSeqs.map((sequence) => sequence.depth?.name),
+  ['second.depth.tsv', 'first.depth.tsv', 'third.depth.tsv']
+);
+assert.deepEqual(
+  numericColumnProjection.config.linearRecordLayout.rows,
+  [
+    { uid: 'second', row: 1 },
+    { uid: 'first', row: 1 },
+    { uid: 'third', row: 2 }
   ]
 );
 const schema5Arranged = structuredClone(arrangedCanonical.renderRequest);
@@ -2208,31 +2485,9 @@ assert.deepEqual(
   ),
   [
     'precomputedProteinComparison',
-    'orthogroupResult',
-    'collinearityResult',
     'generatedProteinComparison'
-  ]
-);
-const rebuiltOrthogroups = resolvedWithFreshTable.renderRequest.comparisons.find(
-  (comparison) => comparison.kind === 'orthogroupResult'
-);
-const rebuiltCollinearity = resolvedWithFreshTable.renderRequest.comparisons.find(
-  (comparison) => comparison.kind === 'collinearityResult'
-);
-assert.equal(
-  Buffer.from(
-    resolvedWithFreshTable.resources[rebuiltOrthogroups.resourceId].data,
-    'base64'
-  ).toString('utf8'),
-  orthogroupResourceText
-);
-assert.equal(rebuiltCollinearity.valueKind, 'blocks');
-assert.equal(
-  Buffer.from(
-    resolvedWithFreshTable.resources[rebuiltCollinearity.resourceId].data,
-    'base64'
-  ).toString('utf8'),
-  collinearityResourceText
+  ],
+  'fresh Pairwise materialization must not retain resolved metadata from another mode'
 );
 const typedCanonicalFiles = structuredClone(resolvedWithMetadataProjection.files);
 typedCanonicalFiles.linearCanonicalComparisons =
@@ -2527,6 +2782,7 @@ assert.equal(pythonConfigProjection.config.adv.label_placement, 'above_feature')
 assert.equal(pythonConfigProjection.config.adv.legend_box_size, 17);
 assert.equal(pythonConfigProjection.config.adv.legend_font_size, 19);
 assert.equal(pythonConfigProjection.config.adv.scale_font_size, 21);
+assert.equal(pythonConfigProjection.config.adv.ruler_label_font_size, 22);
 assert.deepEqual(
   pythonConfigProjection.config.adv.linear_definition_line_styles,
   { name: { font_weight: 'bold', fill: '#112233' } }
@@ -2536,7 +2792,8 @@ assert.equal(pythonConfigProjection.config.blacklistText, 'hypothetical');
 
 const rulerFontCanonical = structuredClone(pythonConfigCanonical);
 rulerFontCanonical.renderRequest.diagramOptions.config.objects.scale.style = 'ruler';
-assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 22);
+assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.scale_font_size, 21);
+assert.equal(projectCanonicalSessionRequest(rulerFontCanonical).config.adv.ruler_label_font_size, 22);
 
 const sparsePythonScaleCanonical = structuredClone(pythonConfigCanonical);
 delete sparsePythonScaleCanonical.renderRequest.diagramOptions.config.objects.scale.show;
@@ -3873,6 +4130,7 @@ const activeProteinFiles = {
 };
 const inactiveProteinDefaults = {
   proteinBlastpMaxHits: 5,
+  proteinBlastpCandidateLimit: null,
   orthogroupMembershipMode: 'anchor_core_v1',
   orthogroupMemberMaxHits: 5,
   collinearMinAnchors: 1,
@@ -3881,6 +4139,7 @@ const inactiveProteinDefaults = {
   collinearMaxConflicts: 1,
   collinearityUnitMode: 'auto',
   collinearityAnchorMode: 'rbh',
+  collinearityMergeOrientation: 'either',
   collinearitySearchScope: 'adjacent',
   collinearityColorMode: 'orientation'
 };
@@ -3894,47 +4153,61 @@ const invalidDormantProteinSettings = {
   collinearMaxConflictsInMergeGap: -1,
   collinearUnitMode: 'invalid-dormant-unit',
   collinearAnchorMode: 'invalid-dormant-anchor',
+  collinearMergeOrientation: 'invalid-dormant-merge',
   collinearSearchScope: 'invalid-dormant-scope',
   collinearColorMode: 'invalid-dormant-color'
 };
 for (const { mode, activeSettings, expected } of [
   {
     mode: 'pairwise',
-    activeSettings: { maxHits: 13 },
-    expected: { ...inactiveProteinDefaults, proteinBlastpMaxHits: 13 }
+    activeSettings: { maxHits: 13, candidateLimit: 11 },
+    expected: {
+      ...inactiveProteinDefaults,
+      proteinBlastpMaxHits: 13,
+      proteinBlastpCandidateLimit: 11
+    }
   },
   {
     mode: 'orthogroup',
     activeSettings: {
       orthogroupMembershipMode: 'anchor_core_v1',
-      orthogroupMemberMaxHits: 9
+      orthogroupMemberMaxHits: 9,
+      candidateLimit: 11
     },
     expected: {
       ...inactiveProteinDefaults,
-      orthogroupMemberMaxHits: 9
+      orthogroupMemberMaxHits: 9,
+      proteinBlastpCandidateLimit: 11
     }
   },
   {
     mode: 'collinear',
     activeSettings: {
+      orthogroupMembershipMode: 'anchor_core_v1',
+      orthogroupMemberMaxHits: 9,
       collinearMinAnchors: 4,
       collinearMaxUnitGap: 3,
       collinearMaxDiagonalDrift: 2,
       collinearMaxConflictsInMergeGap: 0,
       collinearUnitMode: 'locus',
       collinearAnchorMode: 'rbh',
+      collinearMergeOrientation: 'strand',
       collinearSearchScope: 'all',
-      collinearColorMode: 'orientation_identity'
+      collinearColorMode: 'orientation_identity',
+      candidateLimit: 11
     },
     expected: {
       ...inactiveProteinDefaults,
+      orthogroupMemberMaxHits: 9,
       collinearMinAnchors: 4,
       collinearMaxUnitGap: 3,
       collinearMaxDiagonalDrift: 2,
       collinearMaxConflicts: 0,
       collinearityUnitMode: 'locus',
+      collinearityMergeOrientation: 'strand',
       collinearitySearchScope: 'all',
-      collinearityColorMode: 'orientation_identity'
+      collinearityColorMode: 'orientation_identity',
+      proteinBlastpCandidateLimit: 11
     }
   }
 ]) {
@@ -3967,6 +4240,7 @@ for (const { mode, activeSettings, expected } of [
   assert.deepEqual(activeProteinState.losat, activeProteinStateBefore);
   assert.deepEqual({
     proteinBlastpMaxHits: generated.settings.proteinBlastpMaxHits,
+    proteinBlastpCandidateLimit: generated.settings.proteinBlastpCandidateLimit,
     orthogroupMembershipMode: generated.settings.orthogroupMembershipMode,
     orthogroupMemberMaxHits: generated.settings.orthogroupMemberMaxHits,
     collinearMinAnchors: generated.settings.collinearityParams.parameters.minAnchors,
@@ -3976,9 +4250,74 @@ for (const { mode, activeSettings, expected } of [
     collinearMaxConflicts: generated.settings.collinearityParams.parameters.maxConflicts,
     collinearityUnitMode: generated.settings.collinearityUnitMode,
     collinearityAnchorMode: generated.settings.collinearityAnchorMode,
+    collinearityMergeOrientation:
+      generated.settings.collinearityParams.parameters.mergeOrientation,
     collinearitySearchScope: generated.settings.collinearitySearchScope,
     collinearityColorMode: generated.settings.collinearityColorMode
   }, expected, `${mode} must canonicalize only the request copy of dormant settings`);
+}
+
+const canonicalCandidateLimit = (candidateLimit, { omitted = false } = {}) => {
+  const blastp = {
+    ...structuredClone(comparisonContractState.losat.blastp),
+    mode: 'pairwise',
+    candidateLimit
+  };
+  if (omitted) delete blastp.candidateLimit;
+  const candidateState = {
+    ...comparisonContractState,
+    losatProgram: ref('blastp'),
+    losat: {
+      ...structuredClone(comparisonContractState.losat),
+      blastp
+    },
+    linearComparisonPlan: structuredClone(activeProteinPlan)
+  };
+  const request = buildCanonicalRenderRequestRaw({
+    state: candidateState,
+    filesData: activeProteinFiles,
+    comparisonPlanSnapshot: resolveLinearComparisonPlan({
+      plan: activeProteinPlan,
+      sequences: comparisonContractSequences,
+      losatProgram: 'blastp',
+      blastpMode: 'pairwise'
+    })
+  });
+  return request.renderRequest.comparisons.find(
+    (comparison) => comparison.kind === 'generatedProteinComparison'
+  ).settings.proteinBlastpCandidateLimit;
+};
+assert.equal(canonicalCandidateLimit(undefined, { omitted: true }), null);
+assert.equal(canonicalCandidateLimit(null), null);
+assert.equal(canonicalCandidateLimit(17), 17);
+
+for (const blastpOverride of [
+  { mode: 'pairwise', candidateLimit: 0 },
+  { mode: 'unsupported', candidateLimit: null },
+  { mode: 'collinear', candidateLimit: null, collinearSearchScope: 'global' }
+]) {
+  const invalidProteinState = {
+    ...comparisonContractState,
+    losatProgram: ref('blastp'),
+    losat: {
+      ...structuredClone(comparisonContractState.losat),
+      blastp: {
+        ...structuredClone(comparisonContractState.losat.blastp),
+        ...blastpOverride
+      }
+    },
+    linearComparisonPlan: structuredClone(activeProteinPlan)
+  };
+  assert.throws(() => buildCanonicalRenderRequestRaw({
+    state: invalidProteinState,
+    filesData: activeProteinFiles,
+    comparisonPlanSnapshot: resolveLinearComparisonPlan({
+      plan: activeProteinPlan,
+      sequences: comparisonContractSequences,
+      losatProgram: 'blastp',
+      blastpMode: blastpOverride.mode
+    })
+  }));
 }
 
 const emptySelectedSnapshot = resolveLinearComparisonPlan({

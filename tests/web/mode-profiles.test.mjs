@@ -257,8 +257,8 @@ const { createDefaultAdv, createDefaultForm, createDefaultLosat, state } = await
 );
 assert.equal(
   createDefaultLosat().blastp.collinearSearchScope,
-  'all',
-  'fresh Collinear LOSATP must search all record pairs by default'
+  'adjacent',
+  'fresh Collinear LOSATP must search adjacent record pairs by default'
 );
 assert.equal(Object.keys(state.form).includes('legend'), false);
 assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
@@ -332,6 +332,9 @@ assert.deepEqual(
   state.mode.value = 'linear';
   state.adv.identity = 77;
   state.form.show_scale = false;
+  state.linearTypographyLinked.value = false;
+  state.adv.scale_font_size = 18;
+  state.adv.ruler_label_font_size = 11;
   state.adv.circular_track_slots_enabled = true;
   state.adv.circular_track_slots_axis_index = 1;
   state.adv.circular_track_slots.splice(
@@ -409,6 +412,7 @@ assert.deepEqual(
     }
   );
   state.losat.blastp.collinearSearchScope = 'adjacent';
+  state.unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
   resetSettings(state);
 
@@ -427,10 +431,14 @@ assert.deepEqual(
   assert.equal(state.adv.circular_track_slots_enabled, false);
   assert.equal(state.adv.linear_track_slots_enabled, false);
   assert.equal(state.form.show_scale, true);
+  assert.equal(state.linearTypographyLinked.value, true);
+  assert.equal(state.adv.scale_font_size, null);
+  assert.equal(state.adv.ruler_label_font_size, null);
+  assert.deepEqual(state.unmanagedConfigOverrides, {});
   assert.equal(
     state.losat.blastp.collinearSearchScope,
-    'all',
-    'Reset must restore the fresh all-vs-all Collinear default'
+    'adjacent',
+    'Reset must restore the fresh adjacent Collinear default'
   );
   assert.deepEqual(
     state.adv.circular_track_slots,
@@ -480,6 +488,7 @@ assert.deepEqual(
   state.adv.identity = 77;
   state.form.show_scale = false;
   state.losat.blastp.collinearSearchScope = 'adjacent';
+  state.unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
   const savedConfig = structuredClone(buildConfigData());
 
   assert.equal(savedConfig.form.show_scale, false);
@@ -488,13 +497,20 @@ assert.deepEqual(
   assert.equal(savedConfig.modeProfiles.profiles.linear.values.identity, 77);
   assert.equal(savedConfig.modeProfiles.profiles.linear.managed.identity, false);
   assert.equal(savedConfig.losat.blastp.collinearSearchScope, 'adjacent');
+  assert.deepEqual(savedConfig.unmanagedConfigOverrides, {
+    'objects.blast_match.curve_tension': 0.25
+  });
 
   Object.assign(state.adv, createDefaultAdv('linear'));
   state.modeProfileStateManager.reset('linear', state.adv);
   state.form.show_scale = true;
+  state.unmanagedConfigOverrides.stale = true;
   applyConfigData(savedConfig);
   assert.equal(state.form.show_scale, false);
   assert.equal(state.adv.identity, 77);
+  assert.deepEqual(state.unmanagedConfigOverrides, {
+    'objects.blast_match.curve_tension': 0.25
+  });
   assert.equal(
     state.losat.blastp.collinearSearchScope,
     'adjacent',
@@ -530,6 +546,9 @@ assert.deepEqual(
     migratedProfiles.profiles.circular.values,
     managedAdvStateForMode('circular')
   );
+  Object.keys(state.unmanagedConfigOverrides).forEach((path) => {
+    delete state.unmanagedConfigOverrides[path];
+  });
 
 }
 
@@ -670,6 +689,6 @@ const defaultCollinearComparison = defaultCollinearRequest.comparisons.find(
 assert.equal(defaultCollinearComparison.mode, 'collinear');
 assert.equal(
   defaultCollinearComparison.settings.collinearitySearchScope,
-  'all',
-  'the fresh all-vs-all scope must reach the canonical Collinear request'
+  'adjacent',
+  'the fresh adjacent scope must reach the canonical Collinear request'
 );

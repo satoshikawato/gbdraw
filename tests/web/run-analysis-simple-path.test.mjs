@@ -608,8 +608,18 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       }
     });
   }));
+  state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
-    status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null
+    status: 'loading',
+    error: '',
+    inputType: 'gb',
+    primaryFile: fallbackPrimary,
+    pairedFile: null,
+    canonicalRecordIdentities: [{
+      selector: '#1',
+      record_id: 'audit',
+      recordKey: 'record-1'
+    }]
   });
   const firstCoalescedDiscovery = runner.refreshCircularRecordOrder();
   const secondCoalescedDiscovery = runner.refreshCircularRecordOrder();
@@ -617,6 +627,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   await Promise.resolve();
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
+  assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
 
   state.form.multi_record_canvas = true;
   state.files.c_depth = null;
@@ -822,12 +834,20 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   state.losatCache.value = new Map(cacheEntries);
   state.losatDerivedCache.value = new Map();
 
+  let failLateArtifactAdoption = false;
+  let committedRenderRequest = null;
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
-    adoptCanonicalRenderArtifacts: () => {},
+    adoptCanonicalRenderArtifacts: (canonical) => {
+      if (failLateArtifactAdoption) {
+        throw new Error('injected LOSAT late artifact adoption failure');
+      }
+      committedRenderRequest = canonical.renderRequest;
+    },
+    getCommittedCanonicalRenderRequest: () => committedRenderRequest,
     prepareLinearRecordCatalog: async () => ({
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''
@@ -1029,6 +1049,46 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       'the explicit staged text fast path must not materialize file text again'
     );
 
+    const committedLosatCache = state.losatCache.value;
+    const committedLosatCacheEntries = Array.from(committedLosatCache.entries());
+    const committedLosatCacheInfo = structuredClone(state.losatCacheInfo.value);
+    const committedLosatTelemetry = structuredClone(
+      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__
+    );
+    state.losat.blastn.task = 'blastn';
+    failLateArtifactAdoption = true;
+    workerHelperResponses.push({
+      ok: true,
+      result: {
+        tsv: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+      }
+    });
+    const failedLinearResult = result('lazy-linear-failed.svg', 'lazy-linear-failed');
+    workerResponses.push(response(
+      failedLinearResult,
+      validCatalog(failedLinearResult.name)
+    ));
+    assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+    failLateArtifactAdoption = false;
+    state.losat.blastn.task = 'megablast';
+    assert.match(
+      state.errorLog.value?.summary || '',
+      /injected LOSAT late artifact adoption failure/
+    );
+    assert.notEqual(state.losatCache.value, committedLosatCache);
+    assert.deepEqual(
+      Array.from(state.losatCache.value.entries()),
+      committedLosatCacheEntries,
+      'artifact rollback may restore a snapshot map but must not publish candidate entries'
+    );
+    assert.deepEqual(state.losatCacheInfo.value, committedLosatCacheInfo);
+    assert.deepEqual(
+      globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
+      committedLosatTelemetry,
+      'failed candidate provenance must roll back with the committed artifact'
+    );
+    assert.equal(losatCalls, 2, 'the failed candidate must execute without becoming committed evidence');
+
     const warmCacheInfo = [{
       key: 'warm-cache', edgeKey: 'multi->third', queryUid: 'multi', subjectUid: 'third',
       queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
@@ -1036,9 +1096,38 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.losatCacheInfo.value = structuredClone(warmCacheInfo);
     state.losatProgram.value = 'blastp';
     state.losat.blastp.mode = 'pairwise';
+    state.losat.blastp.maxHits = 5;
+    state.losat.blastp.candidateLimit = null;
+    const warmSettings = {
+      proteinBlastpMaxHits: 5,
+      proteinBlastpCandidateLimit: null
+    };
     state.files.linearCanonicalComparisons = [{
-      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: {}
+      kind: 'precomputedProteinComparison',
+      edgeKey: 'multi->third',
+      ordinal: 0,
+      queryRecordIndex: 0,
+      subjectRecordIndex: 1,
+      encoding: 'canonicalTsv',
+      file: new AuditFile([
+        'query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\n'
+      ], 'warm.tsv')
+    }, {
+      kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
     }];
+    committedRenderRequest = {
+      diagramOptions: {
+        bitscore: Number(state.adv.min_bitscore),
+        evalue: Number(state.adv.evalue),
+        identity: Number(state.adv.identity),
+        alignmentLength: Number(state.adv.alignment_length)
+      },
+      comparisons: [{
+        kind: 'precomputedProteinComparison'
+      }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }]
+    };
     const warmComparisonPlan = resolveLinearComparisonPlan({
       plan: state.linearComparisonPlan,
       sequences: state.linearSeqs,
@@ -1053,7 +1142,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
     );
-    assert.equal(losatCalls, 1, 'resolved protein artifacts must bypass LOSAT execution');
+    assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
   } finally {
     if (previousTestHooks === undefined) {
@@ -1403,4 +1492,26 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const retryResult = result('linear-none-retry.svg', 'linear-none-retry');
   workerResponses.push(response(retryResult, validCatalog(retryResult.name)));
   assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
+
+  let releaseSupersededCatalog;
+  prepareLinearRecordCatalogImpl = () => new Promise((resolve) => {
+    releaseSupersededCatalog = resolve;
+  });
+  const supersededRun = runner.runAnalysis(comparisonPlanSnapshot);
+  while (!releaseSupersededCatalog) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  prepareLinearRecordCatalogImpl = async () => ({
+    catalog: preparedRecordCatalog,
+    error: ''
+  });
+  const newestResult = result('linear-none-newest.svg', 'linear-none-newest');
+  workerResponses.push(response(newestResult, validCatalog(newestResult.name)));
+  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
+  assert.deepEqual(state.results.value, [newestResult]);
+  releaseSupersededCatalog({ catalog: preparedRecordCatalog, error: '' });
+  assert.deepEqual(await supersededRun, { status: 'stale' });
+  assert.deepEqual(state.results.value, [newestResult]);
+  assert.equal(state.failedGeneratePreservedResult.value, false);
+  assert.equal(state.processing.value, false);
 });

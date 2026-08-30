@@ -1,7 +1,4 @@
----
-name: maintain-python-api
-description: Maintain and extend gbdraw's public Python API while preserving contract snapshots, CLI behavior, rendering outputs, and error semantics. Use when modifying gbdraw/api, public exports or signatures, DiagramOptions or other public dataclasses, interactive SVG builders, table readers, render/export APIs, high-level diagram builders, Python API documentation, or related contract and regression tests.
----
+> Reference playbook. Use only when a user or task-specific instruction explicitly requests this playbook. Do not auto-route to it from file paths, changed modules, or task category.
 
 # Maintain the Python API
 

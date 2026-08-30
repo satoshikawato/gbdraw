@@ -19,6 +19,7 @@ import {
 import { createModeProfileStateManager } from './mode-profiles.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
+import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import {
   createDefaultAdv,
   createDefaultCircularConservation,
@@ -37,6 +38,8 @@ const sessionTitle = ref('');
 const semanticFileWatchersSuppressed = ref(false);
 const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
+const importedComparisonIntent = reactive(createImportedComparisonIntentState());
+const unmanagedConfigOverrides = reactive({});
 
 const results = ref([]);
 const selectedResultIndex = ref(0);
@@ -205,6 +208,7 @@ const form = reactive(createDefaultForm());
 
 // Extended Advanced Config
 const adv = reactive(createDefaultAdv(mode.value));
+const linearTypographyLinked = ref(true);
 const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
 const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
   layoutPreferences,
@@ -282,7 +286,8 @@ const circularRecordDiscovery = reactive({
   error: '',
   inputType: '',
   primaryFile: null,
-  pairedFile: null
+  pairedFile: null,
+  canonicalRecordIdentities: []
 });
 
 // Color & Filter State
@@ -760,6 +765,8 @@ export const state = {
   semanticFileWatchersSuppressed,
   sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
+  importedComparisonIntent,
+  unmanagedConfigOverrides,
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,
@@ -797,6 +804,7 @@ export const state = {
   hasActiveLinearUploadIntent,
   form,
   adv,
+  linearTypographyLinked,
   modeProfileStateManager,
   losat,
   losatCacheInfo,

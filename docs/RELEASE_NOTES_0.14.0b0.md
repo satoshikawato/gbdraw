@@ -461,14 +461,14 @@ versions 31–33 and 39–40.
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
 gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest` schema
-5. Version 39 introduced the canonical `ui.layoutPreferences` tree for
+6. Version 39 introduced the canonical `ui.layoutPreferences` tree for
 Circular-single, Circular-multi, and Linear legend/title preferences; version
-40 retains it, and supported older fields migrate on load. Schema 5 persists
-explicit Circular `single`, `grid`, or `batch` grouping; batch output is an
-array with one resolved entry per record, while other requests use one output
-object. `renderRequest.output.prefix` is the sole output-prefix owner; schema 1
-and 2 readers ignore the legacy nested prefix. Versions 27 through 30 can be
-regenerated with `gbdraw circular --session` or
+40 retains it, and supported older fields migrate on load. Schema 6 persists
+explicit Circular `single`, `grid`, or `batch` grouping and each input's
+cardinality; batch output is an array with one resolved entry per record, while
+other requests use one output object. `renderRequest.output.prefix` is the sole
+output-prefix owner; schema 1 and 2 readers ignore the legacy nested prefix.
+Versions 27 through 30 can be regenerated with `gbdraw circular --session` or
 `gbdraw linear --session`. Public typed conversion rejects them with
 `SessionVersionError` instead of reconstructing a request from `cliInvocation` or
 GUI state. Paths decoded by `materialize_session` remain valid only inside the

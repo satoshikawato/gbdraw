@@ -141,9 +141,11 @@ const resetLinearComparisonPlan = (state) => {
 export const resetSettings = (state) => {
   replaceReactiveObject(state.form, createDefaultForm());
   replaceReactiveObject(state.adv, createDefaultAdv(state.mode.value));
+  state.linearTypographyLinked.value = true;
   state.modeProfileStateManager?.reset?.(state.mode.value, state.adv);
   replaceReactiveObject(state.losat, createDefaultLosat());
   replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
+  clearReactiveObject(state.unmanagedConfigOverrides);
   replaceReactiveArray(state.annotationSets);
   state.selectedAnnotation.value = null;
   resetLinearComparisonPlan(state);

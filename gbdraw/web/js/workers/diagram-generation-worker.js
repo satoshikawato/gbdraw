@@ -272,7 +272,8 @@ const HELPER_FILE_NAMES = Object.freeze({
   gff: 'source.gff',
   fasta: 'source.fasta',
   pairs: 'pairs.json',
-  visibility: 'feature-visibility.tsv'
+  visibility: 'feature-visibility.tsv',
+  rawTsv: 'raw-losatp.tsv'
 });
 
 const requirePayloadObject = (payload, operation) => {
@@ -491,6 +492,27 @@ const callJsonHelper = (pyodide, helperName, args) => {
 const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
+  [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
+    keys: [
+      'mode',
+      'config',
+      'configOverrides',
+      'managedPaths',
+      'requireUnmanagedOnly'
+    ],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide,
+      'validate_web_config_overrides_json',
+      [
+        String(payload.mode || ''),
+        jsonArgument(payload.config, null),
+        jsonArgument(payload.configOverrides, {}),
+        jsonArgument(payload.managedPaths, []),
+        Boolean(payload.requireUnmanagedOnly)
+      ]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.EXTRACT_FIRST_FASTA]: {
     keys: ['files', 'format', 'regionSpec', 'recordSelector', 'reverseFlag'],
     fileRoles: ['source'],
@@ -612,14 +634,16 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'collinearMaxParalogLinksPerOrthogroup',
       'collinearSearchScope',
       'orthogroupMembershipMode',
-      'orthogroupMemberMaxHits'
+      'orthogroupMemberMaxHits',
+      'collinearMergeOrientation'
     ],
-    fileRoles: ['pairs'],
+    fileRoles: ['pairs', 'rawTsv'],
     run: (pyodide, payload, paths, operation) => callJsonHelper(
       pyodide,
       'convert_losatp_blastp_pairs_to_genomic_payload',
       [
         requireHelperFile(paths, 'pairs', operation),
+        requireHelperFile(paths, 'rawTsv', operation),
         payload.mode ?? 'pairwise',
         payload.maxHits ?? 5,
         payload.bitscore ?? 50,
@@ -636,7 +660,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearMaxParalogLinksPerOrthogroup ?? 2,
         payload.collinearSearchScope ?? 'adjacent',
         payload.orthogroupMembershipMode ?? 'anchor_core_v1',
-        payload.orthogroupMemberMaxHits ?? 5
+        payload.orthogroupMemberMaxHits ?? 5,
+        payload.collinearMergeOrientation ?? 'either'
       ]
     )
   },

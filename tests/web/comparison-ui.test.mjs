@@ -206,7 +206,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       settings: ['losat-mode', 'blastn-task', 'result-filters', 'comparison-appearance'],
       absent: [
         'losatp-mode', 'record-genetic-codes', 'blastp-max-hits',
-        'similarity-grouping', 'collinear-primary'
+        'member-hits', 'collinear-primary'
       ]
     },
     {
@@ -217,7 +217,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       settings: ['losat-mode', 'record-genetic-codes', 'result-filters', 'comparison-appearance'],
       absent: [
         'losatp-mode', 'blastn-task', 'blastp-max-hits',
-        'similarity-grouping', 'collinear-primary'
+        'member-hits', 'collinear-primary'
       ]
     },
     {
@@ -229,25 +229,30 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
         'losat-mode', 'losatp-mode', 'blastp-max-hits',
         'result-filters', 'comparison-appearance'
       ],
-      absent: ['blastn-task', 'record-genetic-codes', 'similarity-grouping', 'collinear-primary']
+      absent: ['blastn-task', 'record-genetic-codes', 'member-hits', 'collinear-primary']
     },
     {
       program: 'blastp',
       blastpMode: 'orthogroup',
       losatKey: 'blastp',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'losatp-mode', 'similarity-grouping', 'result-filters'],
-      absent: ['blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'collinear-primary', 'comparison-appearance']
+      settings: [
+        'losat-mode', 'losatp-mode', 'member-hits',
+        'result-filters', 'comparison-appearance'
+      ],
+      absent: ['blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'collinear-primary']
     },
     {
       program: 'blastp',
       blastpMode: 'collinear',
       losatKey: 'blastp',
       losatpKey: 'collinear',
-      settings: ['losat-mode', 'losatp-mode', 'collinear-primary', 'result-filters'],
+      settings: [
+        'losat-mode', 'losatp-mode', 'member-hits', 'collinear-primary',
+        'result-filters', 'comparison-appearance'
+      ],
       absent: [
-        'blastn-task', 'record-genetic-codes', 'blastp-max-hits',
-        'similarity-grouping', 'comparison-appearance'
+        'blastn-task', 'record-genetic-codes', 'blastp-max-hits'
       ],
       advanced: 'collinear-details'
     }
@@ -266,6 +271,10 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
     assert.equal(
       projection.sectionKeys.advanced.includes('collinear-details'),
       advanced === 'collinear-details'
+    );
+    assert.equal(
+      projection.sectionKeys.advanced.includes('losatp-candidate'),
+      program === 'blastp'
     );
   });
 
@@ -328,7 +337,9 @@ test('selected topology blocks only grouping and collinear LOSATP modes without 
   assert.equal(modeOption(grouping.losatpModes, 'collinear').selectable, false);
   assert.equal(modeOption(grouping.losatpModes, 'pairwise').selectable, true);
   assert(grouping.sectionKeys.settings.includes('losatp-mode'));
-  assert(!grouping.sectionKeys.settings.includes('similarity-grouping'));
+  assert(!grouping.sectionKeys.settings.includes('member-hits'));
+  assert(grouping.sectionKeys.settings.includes('comparison-appearance'));
+  assert(grouping.sectionKeys.advanced.includes('losatp-candidate'));
   assert.equal(grouping.errorDisclosureKey, 'settings');
 
   for (const modeKey of ['orthogroup', 'collinear']) {

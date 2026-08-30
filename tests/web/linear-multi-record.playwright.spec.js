@@ -31,6 +31,36 @@ ${origin}
 `;
 };
 
+const makeDerivedOptionGenbank = (recordId, base = 'atg') => {
+  const sequence = base.repeat(120);
+  const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
+    const groups = chunk.match(/.{1,10}/g).join(' ');
+    return `${String(index * 60 + 1).padStart(9)} ${groups}`;
+  }).join('\n');
+  const cds = [
+    [1, 90, 'a'],
+    [121, 210, 'b'],
+    [241, 330, 'c']
+  ].map(([start, end, suffix]) => `     CDS             ${start}..${end}
+                     /locus_tag="${recordId}_${suffix}"
+                     /protein_id="${recordId}_${suffix}"
+                     /translation="MKKKKKKKKK"`).join('\n');
+  return `LOCUS       ${recordId.padEnd(24)} 360 bp    DNA     linear   UNA 01-JAN-2000
+DEFINITION  derived option browser test.
+ACCESSION   ${recordId}
+VERSION     ${recordId}
+KEYWORDS    .
+SOURCE      synthetic construct
+  ORGANISM  synthetic construct
+            .
+FEATURES             Location/Qualifiers
+${cds}
+ORIGIN
+${origin}
+//
+`;
+};
+
 const linearRecordCard = (page, uid) => (
   page.locator(`[data-linear-record-card="${uid}"]`)
 );
@@ -1999,7 +2029,10 @@ ${origin}
   expect(staleResponse).toEqual({
     firstResult: { status: 'stale' },
     secondResult: { status: 'error' },
-    errorLog: null,
+    errorLog: {
+      summary: 'A diagram generation request is already running.',
+      details: []
+    },
     snapshotPreserved: true,
     changedFields: []
   });
@@ -2182,4 +2215,207 @@ AAAAAAAAAA
     '#1 · RecB · 12 bp',
     '#2 · RecA · 10 bp'
   ], { timeout: 60000 });
+});
+
+test('derived protein options reach Generate without changing raw search identity', async ({
+  page
+}) => {
+  test.setTimeout(420000);
+  await installDiagramRequestObserver(page);
+  await page.addInitScript(() => {
+    window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ = 0;
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ += 1;
+      const fastaIds = (text) => [...String(text || '').matchAll(/^>([^\s]+)/gm)]
+        .map((match) => match[1]);
+      return jobs.map((job) => {
+        const queryIds = fastaIds(options.sequences.get(job.querySequenceKey));
+        const subjectIds = fastaIds(options.sequences.get(job.subjectSequenceKey));
+        const rows = queryIds.flatMap((queryId) => subjectIds.map((subjectId, index) => [
+          queryId,
+          subjectId,
+          '90',
+          '10',
+          '0',
+          '0',
+          '1',
+          '10',
+          '1',
+          '10',
+          '1e-20',
+          String(300 - index)
+        ].join('\t')));
+        return { cacheKey: job.cacheKey, text: `${rows.join('\n')}\n` };
+      });
+    };
+  });
+  await openApp(page, { waitForPalette: false });
+
+  await page.evaluate((records) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.addLinearSeq();
+    records.forEach((content, index) => app.setLinearSeqPrimaryFile(
+      index,
+      'gb',
+      new File([content], `derived-${index + 1}.gbk`, {
+        type: 'text/plain',
+        lastModified: index + 1
+      })
+    ));
+    Object.assign(app.form, {
+      legend: 'bottom',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.losat.executionMode = 'serial';
+    for (const field of [
+      'orthogroupMembershipMode',
+      'orthogroupMemberMaxHits',
+      'collinearMinAnchors',
+      'collinearMaxUnitGap',
+      'collinearMaxDiagonalDrift',
+      'collinearMaxConflictsInMergeGap',
+      'collinearMaxParalogLinksPerOrthogroup',
+      'collinearUnitMode',
+      'collinearAnchorMode',
+      'collinearMergeOrientation',
+      'collinearColorMode',
+      'collinearSearchScope'
+    ]) delete app.losat.blastp[field];
+  }, [
+    makeDerivedOptionGenbank('DerivedA', 'atg'),
+    makeDerivedOptionGenbank('DerivedB', 'gct')
+  ]);
+
+  const runAndInspect = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
+    const result = await app.runAnalysis();
+    const selected = app.results?.[app.selectedResultIndex];
+    const svg = String(selected?.content || '');
+    const latestDerived = [...state.losatDerivedCache.value.values()].at(-1);
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      executorCalls: Number(window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ || 0),
+      rawKeys: [...state.losatCache.value.keys()].sort(),
+      derivedCacheSize: state.losatDerivedCache.value.size,
+      provenance: plain(latestDerived?.payload?.provenance),
+      telemetry: plain(app.lastRunInfo?.losatTelemetry),
+      svg,
+      matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length
+    };
+  });
+
+  const omittedDefaults = await runAndInspect();
+  expect(omittedDefaults.result).toEqual({ status: 'ok' });
+  expect(omittedDefaults.errorSummary).toBe('');
+  expect(omittedDefaults.executorCalls).toBeGreaterThan(0);
+  expect(omittedDefaults.provenance.collinear.unitMode).toEqual({
+    requested: 'auto',
+    effectiveKinds: ['locus']
+  });
+  const rawExecutorCalls = omittedDefaults.executorCalls;
+  const rawKeys = omittedDefaults.rawKeys;
+
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.losat.blastp, {
+    orthogroupMembershipMode: 'anchor_core_v1',
+    orthogroupMemberMaxHits: 5,
+    collinearMinAnchors: 1,
+    collinearMaxUnitGap: 0,
+    collinearMaxDiagonalDrift: 0,
+    collinearMaxConflictsInMergeGap: 1,
+    collinearMaxParalogLinksPerOrthogroup: 2,
+    collinearUnitMode: 'auto',
+    collinearAnchorMode: 'rbh',
+    collinearMergeOrientation: 'either',
+    collinearColorMode: 'orientation',
+    collinearSearchScope: 'adjacent'
+  }));
+  const explicitDefaults = await runAndInspect();
+  expect(explicitDefaults.result).toEqual({ status: 'ok' });
+  expect(explicitDefaults.svg).toBe(omittedDefaults.svg);
+  expect(explicitDefaults.executorCalls).toBe(rawExecutorCalls);
+  expect(explicitDefaults.rawKeys).toEqual(rawKeys);
+
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.losat.blastp, {
+    collinearUnitMode: 'cds',
+    collinearAnchorMode: 'all',
+    collinearMergeOrientation: 'strand'
+  }));
+  const nonDefaultCollinear = await runAndInspect();
+  expect(nonDefaultCollinear.result).toEqual({ status: 'ok' });
+  expect(nonDefaultCollinear.executorCalls).toBe(rawExecutorCalls);
+  expect(nonDefaultCollinear.rawKeys).toEqual(rawKeys);
+  expect(nonDefaultCollinear.telemetry).toMatchObject({
+    cacheMisses: 0,
+    proteinDerivedPayloadCacheHits: 0,
+    proteinDerivedPayloadCacheMisses: 1
+  });
+  expect(nonDefaultCollinear.provenance.collinear).toMatchObject({
+    unitMode: { requested: 'cds', effectiveKinds: ['cds'] },
+    anchorMode: 'all',
+    parameters: { mergeOrientation: 'strand' }
+  });
+
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits = 1;
+  });
+  const memberLimit = await runAndInspect();
+  expect(memberLimit.result).toEqual({ status: 'ok' });
+  expect(memberLimit.executorCalls).toBe(rawExecutorCalls);
+  expect(memberLimit.rawKeys).toEqual(rawKeys);
+  expect(memberLimit.provenance.orthogroup.memberMaxHits).toBe(1);
+  expect(memberLimit.telemetry).toMatchObject({
+    cacheMisses: 0,
+    proteinDerivedPayloadCacheMisses: 1
+  });
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatpMode('pairwise');
+    app.losat.blastp.maxHits = 1;
+  });
+  const pairwiseOne = await runAndInspect();
+  expect(pairwiseOne.result).toEqual({ status: 'ok' });
+  const pairwiseExecutorCalls = pairwiseOne.executorCalls;
+  const pairwiseRawKeys = pairwiseOne.rawKeys;
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.losat.blastp.maxHits = 2;
+  });
+  const pairwiseTwo = await runAndInspect();
+  expect(pairwiseTwo.result).toEqual({ status: 'ok' });
+  expect(pairwiseTwo.executorCalls).toBe(pairwiseExecutorCalls);
+  expect(pairwiseTwo.rawKeys).toEqual(pairwiseRawKeys);
+  expect(pairwiseTwo.matchCount).toBeGreaterThan(pairwiseOne.matchCount);
+
+  const rejected = await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const selectedBefore = String(app.results?.[app.selectedResultIndex]?.content || '');
+    app.losat.blastp.maxHits = 0;
+    const executorCallsBefore = window.__GBDRAW_DERIVED_EXECUTOR_CALLS__;
+    const result = await app.runAnalysis();
+    return {
+      result,
+      errorSummary: String(app.errorLog?.summary || ''),
+      executorCallsUnchanged:
+        window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ === executorCallsBefore,
+      committedResultPreserved:
+        String(app.results?.[app.selectedResultIndex]?.content || '') === selectedBefore
+    };
+  });
+  expect(rejected).toMatchObject({
+    result: { status: 'error' },
+    executorCallsUnchanged: true,
+    committedResultPreserved: true
+  });
+  expect(rejected.errorSummary).toMatch(/Pairwise max hits/i);
 });

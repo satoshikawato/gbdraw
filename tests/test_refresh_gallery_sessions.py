@@ -742,6 +742,32 @@ def test_refresh_records_resolved_track_geometry(
     assert geometry["records"][0]["axisRadiusPx"] > 0
 
 
+def test_linear_schema5_publication_preserves_materialized_cardinality_round_trip(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.gbdraw-session.json"
+    destination = tmp_path / "refreshed.gbdraw-session.json"
+    source.write_bytes(
+        _session_path("lambda_basic_linear").read_bytes()
+    )
+    committed = load_session(source)
+
+    assert committed["renderRequest"]["schema"] == 5
+    assert all(
+        "cardinality" not in record
+        for record in committed["renderRequest"]["records"]
+    )
+
+    _refresh_one_session(source, destination_path=destination)
+
+    refreshed = load_session(destination)
+    assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert [
+        record["cardinality"]
+        for record in refreshed["renderRequest"]["records"]
+    ] == ["exactly_one"]
+
+
 def test_staged_gallery_validator_accepts_current_artifact_schemas(
     tmp_path: Path,
 ) -> None:

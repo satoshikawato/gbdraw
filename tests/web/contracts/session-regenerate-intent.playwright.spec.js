@@ -50,8 +50,10 @@ const ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'circularConservation',
   'annotationSets',
   'modeProfiles',
+  'unmanagedConfigOverrides',
   'linearRecordLayout',
   'linearComparisonPlan',
+  'importedComparisonResolution',
   'webEdits'
 ]);
 
