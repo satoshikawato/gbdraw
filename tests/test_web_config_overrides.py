@@ -104,6 +104,30 @@ def test_full_typed_config_projects_only_changed_unmanaged_leaves() -> None:
     assert projected == {UNMANAGED_OPACITY_PATH: 0.42}
 
 
+def test_full_typed_circular_config_ignores_inactive_linear_leaf() -> None:
+    config = load_default_config()
+    config["labels"]["linear"]["scope"] = "all"
+    config["objects"]["gc_content"]["percent_background_opacity"] = 0.42
+
+    projected = validate_and_project_web_config_overrides(
+        mode="circular",
+        config=config,
+        managed_paths=["objects.scale.show"],
+    )
+
+    assert projected == {UNMANAGED_OPACITY_PATH: 0.42}
+
+
+def test_explicit_circular_unmanaged_override_rejects_linear_label_scope() -> None:
+    with pytest.raises(ValidationError, match="cannot target Linear label settings"):
+        validate_and_project_web_config_overrides(
+            mode="circular",
+            overrides={"labels.linear.scope": "all"},
+            managed_paths=[],
+            require_unmanaged_only=True,
+        )
+
+
 def test_json_boundary_returns_validated_overlay() -> None:
     result = json.loads(validate_web_config_overrides_json(
         "linear",

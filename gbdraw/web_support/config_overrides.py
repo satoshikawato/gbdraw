@@ -111,7 +111,14 @@ def validate_and_project_web_config_overrides(
         if path in validated:
             projected[path] = validated[path]
         else:
-            projected[path] = _raw_config_leaf(effective_raw, path)
+            value = _raw_config_leaf(effective_raw, path)
+            try:
+                options_type(config_overrides={path: value})
+            except ValidationError:
+                # Full configs contain both mode branches. Only derived leaves
+                # accepted by the active typed options become preserved overrides.
+                continue
+            projected[path] = value
 
     # Re-run mode validation against values originating from a full config.
     options_type(config_overrides=projected)
