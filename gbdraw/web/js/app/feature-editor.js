@@ -93,6 +93,8 @@ export const createFeatureEditor = ({
     applyStrokeToSelectedFeatures: colorActions.applyStrokeToSelectedFeatures,
     setFeatureColor: colorActions.setFeatureColor,
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
+    preparePairwiseInteractionAffordances:
+      featureSvgActions.preparePairwiseInteractionAffordances,
     openFeatureEditorForFeature,
     refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,

@@ -144,6 +144,11 @@ export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } =
   });
 };
 
+export const afterFrame = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
+  if (typeof requestFrame !== 'function') return Promise.resolve();
+  return new Promise((resolve) => requestFrame(resolve));
+};
+
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
     const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -925,8 +930,10 @@ export const createRunAnalysis = ({
   restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity = null,
   runGeneratedArtifactReplacement = null,
+  previewRuntime = null,
   nextTick = () => Promise.resolve(),
   waitForAfterPaint = afterPaint,
+  waitForPostBindFrame = afterFrame,
   onGeneratedArtifactCheckpointCapture = null,
   resetPreviewViewport,
   validateAnnotationTargets = null,
@@ -1039,6 +1046,13 @@ export const createRunAnalysis = ({
   ) {
     throw new Error('createRunAnalysis requires generated artifact transaction handlers.');
   }
+  if (
+    !previewRuntime
+    || typeof previewRuntime.registerReadinessExpectation !== 'function'
+    || typeof previewRuntime.restorePreviousSelectedResult !== 'function'
+  ) {
+    throw new Error('createRunAnalysis requires PreviewRuntime readiness handlers.');
+  }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     return (typeof override === 'function' ? override : losatExecutor)(...args);
@@ -1090,6 +1104,7 @@ export const createRunAnalysis = ({
   };
   const generatedArtifactTransactionOwner = Object.freeze({
     build(ownerSet, { finalizeResourcePromotion = null, runtimeState = null } = {}) {
+      recordSessionLifecycleEvent('artifact.candidate-completed');
       recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
       return Object.freeze({
         ownerSet: Object.freeze(ownerSet),
@@ -1099,6 +1114,7 @@ export const createRunAnalysis = ({
       });
     },
     activate(candidate, { selectedResultIndex = 0 } = {}) {
+      recordSessionLifecycleEvent('artifact.activation-started', { selectedResultIndex });
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
         selectedResultIndex,
         installResults(nextResults) {
@@ -1107,10 +1123,13 @@ export const createRunAnalysis = ({
       });
       publishGeneratedArtifactRuntimeState(candidate.runtimeState || {});
       recordStructuralMetric('generatedArtifactActivationCount', 1);
+      recordSessionLifecycleEvent('artifact.activation-completed', { selectedResultIndex });
     },
     finalize(candidate) {
+      recordSessionLifecycleEvent('artifact.finalization-started');
       candidate?.finalizeResourcePromotion?.();
       recordStructuralMetric('generatedArtifactFinalizeCount', 1);
+      recordSessionLifecycleEvent('artifact.finalization-completed');
     },
     async restore(handle) {
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
@@ -1705,6 +1724,8 @@ export const createRunAnalysis = ({
     const committedArtifactHandle = isReflow
       ? null
       : (generatedArtifactHandle || await captureGeneratedArtifactHandle());
+    let activatedGeneratedArtifactCandidate = null;
+    let acceptedCandidateReadyReceipt = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
       ?.proteinIdentityManifest ?? proteinIdentityManifest.value;
     let workingLegacyProteinRawCandidates = committedArtifactHandle?.ownerSet
@@ -1722,8 +1743,27 @@ export const createRunAnalysis = ({
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
-      if (!committedArtifactHandle) return;
-      await generatedArtifactTransactionOwner.restore(committedArtifactHandle);
+      if (!committedArtifactHandle || !activatedGeneratedArtifactCandidate) return false;
+      if (acceptedCandidateReadyReceipt) {
+        previewRuntime.invalidateReadyReceipt(
+          acceptedCandidateReadyReceipt,
+          'The activated candidate entered rollback.'
+        );
+      } else {
+        previewRuntime.invalidateReadinessExpectation(
+          String(generationToken),
+          new Error('The activated candidate entered rollback.')
+        );
+      }
+      recordSessionLifecycleEvent('artifact.rollback-started');
+      await previewRuntime.restorePreviousSelectedResult({
+        handle: committedArtifactHandle,
+        restore: () => generatedArtifactTransactionOwner.restore(committedArtifactHandle)
+      });
+      activatedGeneratedArtifactCandidate = null;
+      acceptedCandidateReadyReceipt = null;
+      recordSessionLifecycleEvent('artifact.rollback-completed');
+      return true;
     };
     const finishCanceledManualRun = async () => {
       if (latestGenerationToken !== generationToken + 1) {
@@ -1867,7 +1907,6 @@ export const createRunAnalysis = ({
     let legacyPromotionCommitted = false;
     let commitProteinMigration = null;
     let pendingLosatCacheCommit = null;
-    let activatedGeneratedArtifactCandidate = null;
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -1876,15 +1915,6 @@ export const createRunAnalysis = ({
       skipPositionReapply.value = true;
     } else {
       featureExtractionRequestId += 1;
-      featureExtractionPending.value = false;
-      featureExtractionError.value = null;
-      setFeatureEditorStatus({
-        status: 'idle',
-        generationId: featureExtractionRequestId,
-        error: null,
-        summaryCount: 0,
-        detailsCacheSize: 0
-      });
       processingStatus.value = 'Preparing input files...';
       resultPanelTab.value = 'preview';
       errorLog.value = null;
@@ -4473,10 +4503,28 @@ export const createRunAnalysis = ({
           0,
           Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
         );
+        const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex] || null;
+        if (!selectedCandidateResult) {
+          throw new Error('The generated artifact has no selected preview Result.');
+        }
+        const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
+          result: selectedCandidateResult,
+          resultIndex: nextSelectedResultIndex,
+          artifactIdentity: generationResponse.artifactIdentity,
+          generationToken: String(generationToken),
+          catalogState: candidateCatalogAdmission,
+          phase: 'generate',
+          bindingOptions: { isIncrementalEdit: false },
+          isCurrent: () => (
+            latestGenerationToken === generationToken
+            && !generationCancelRequested.value
+            && Number(selectedResultIndex.value) === nextSelectedResultIndex
+          )
+        });
+        activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
         generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
           selectedResultIndex: nextSelectedResultIndex
         });
-        activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
         if (resultGenerationKey) resultGenerationKey.value += 1;
         selectedFeatureRecordIdx.value = 0;
         selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
@@ -4517,21 +4565,42 @@ export const createRunAnalysis = ({
           zoom.value = 1.0;
         }
         recordSessionLifecycleEvent('preview-result-commit-end');
-      }
-      if (!isReflow && typeof setGeneratedArtifactIdentity === 'function') {
-        setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
-          results: candidateCommit.results
+        acceptedCandidateReadyReceipt = await candidatePreviewReadiness.promise;
+        if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+          if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+            return finishCanceledManualRun();
+          }
+          await restoreCommittedArtifact();
+          return { status: 'stale' };
+        }
+        await waitForPostBindFrame();
+        recordStructuralMetric('previewPostBindFrameCount', 1, { phase: 'generate' });
+        recordSessionLifecycleEvent('preview.post-bind-frame-completed', {
+          resultIndex: nextSelectedResultIndex,
+          rootGeneration: acceptedCandidateReadyReceipt.rootGeneration
         });
-      }
-      if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
-      }
-      if (!isReflow && !useCommittedComparison && importedComparisonIntent) {
-        Object.assign(
-          importedComparisonIntent,
-          createImportedComparisonIntentState(),
-          { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
-        );
+        if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+          if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+            return finishCanceledManualRun();
+          }
+          await restoreCommittedArtifact();
+          return { status: 'stale' };
+        }
+        if (typeof setGeneratedArtifactIdentity === 'function') {
+          setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
+            results: candidateCommit.results
+          });
+        }
+        if (typeof adoptCanonicalRenderArtifacts === 'function') {
+          adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+        }
+        if (!useCommittedComparison && importedComparisonIntent) {
+          Object.assign(
+            importedComparisonIntent,
+            createImportedComparisonIntentState(),
+            { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
+          );
+        }
       }
       if (isReflow) generationResponse.finalizeResourcePromotion?.();
       return {
@@ -4553,6 +4622,7 @@ export const createRunAnalysis = ({
         return { status: 'canceled' };
       }
       if (!isReflow && generationToken !== latestGenerationToken) {
+        await restoreCommittedArtifact();
         return { status: 'stale' };
       }
       if (isReflow) {
@@ -4608,12 +4678,33 @@ export const createRunAnalysis = ({
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
-              onCheckpointCapture: onGeneratedArtifactCheckpointCapture
+              onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
+              restoreAppliedArtifact: async (beforeHandle) => {
+                const activeReceipt = previewRuntime.getActiveRuntime?.()?.readyReceipt || null;
+                if (activeReceipt) {
+                  previewRuntime.invalidateReadyReceipt(
+                    activeReceipt,
+                    'History finalization failed.'
+                  );
+                }
+                recordSessionLifecycleEvent('artifact.rollback-started', {
+                  phase: 'history-finalization'
+                });
+                await previewRuntime.restorePreviousSelectedResult({
+                  handle: beforeHandle,
+                  phase: 'history-finalization-rollback',
+                  restore: () => generatedArtifactTransactionOwner.restore(beforeHandle)
+                });
+                recordSessionLifecycleEvent('artifact.rollback-completed', {
+                  phase: 'history-finalization'
+                });
+              }
             }
           )
         : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize(outcome.generatedArtifactCandidate);
+        recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
         outcome = { status: outcome.status };
@@ -4628,12 +4719,20 @@ export const createRunAnalysis = ({
       if (outcome?.status !== 'canceled') processingStatus.value = '';
       generationCancelRequested.value = false;
       processing.value = false;
+      recordSessionLifecycleEvent('generate.processing-cleared', {
+        status: outcome?.status || 'error'
+      });
     }
   };
 
   const cancelRunAnalysis = () => {
+    const canceledGenerationToken = latestGenerationToken;
     latestGenerationToken += 1;
     generationCancelRequested.value = true;
+    previewRuntime.invalidateReadinessExpectation(
+      String(canceledGenerationToken),
+      new DiagramGenerationCanceledError()
+    );
     if (activeLosatAbortController && !activeLosatAbortController.signal.aborted) {
       activeLosatAbortController.abort(new DiagramGenerationCanceledError());
     }

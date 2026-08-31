@@ -78,6 +78,7 @@ class FakeFeatureElement {
 
 const makeSvg = (elements) => ({
   elements,
+  isConnected: true,
   querySelectorAll: () => elements,
   getElementById: (id) => elements.find((element) => element.id === id) || null
 });
@@ -207,5 +208,258 @@ runtime.mountResultSvg(1, legacySvg);
 runtime.applyFeatureFillChanges([{ featureId: 'feature-c', color: '#fedcba' }]);
 assert.equal(legacyBlock.getAttribute('fill'), '#fedcba');
 assert.equal(legacyConnector.getAttribute('fill'), 'none');
+
+const structuralMetrics = [];
+const lifecycleEvents = [];
+globalThis.__GBDRAW_TEST_HOOKS__ = {
+  onStructuralMetric(metric) {
+    structuralMetrics.push(metric);
+  },
+  onSessionLifecycleEvent(event) {
+    lifecycleEvents.push(event);
+  }
+};
+const readinessResult = { name: 'ready.svg', content: '<svg></svg>' };
+const readinessRoot = makeSvg([]);
+const readinessState = {
+  results: ref([readinessResult]),
+  selectedResultIndex: ref(0),
+  featureCatalog: ref({ schema: 3, items: [] }),
+  svgContainer: ref({
+    querySelector: (selector) => (selector === 'svg' ? readinessRoot : null)
+  })
+};
+const readinessRuntime = createPreviewRuntime({
+  state: readinessState,
+  serializeSvg: () => '<svg></svg>'
+});
+const binderCalls = new Map();
+const countStep = (name) => {
+  binderCalls.set(name, Number(binderCalls.get(name) || 0) + 1);
+};
+readinessRuntime.configureMountedResultBinder({
+  adoptLegend: () => countStep('legend'),
+  bindComposition: () => countStep('composition'),
+  setupDragAffordances: () => countStep('drag'),
+  installDelegatedInteractions: () => countStep('interactions'),
+  synchronizeLabelEditor: () => countStep('label'),
+  initializeStrokeAndCanvas: () => countStep('stroke-canvas'),
+  reconcileSelection: () => countStep('selection')
+});
+const readyExpectation = readinessRuntime.registerReadinessExpectation({
+  result: readinessResult,
+  resultIndex: 0,
+  artifactIdentity: { fingerprint: 'artifact-ready' },
+  generationToken: 'generation-1',
+  catalogState: readinessState.featureCatalog.value,
+  phase: 'generate',
+  isCurrent: () => true
+});
+const readyContext = readinessRuntime.createMountedResultContext({
+  root: readinessRoot,
+  result: readinessResult,
+  resultIndex: 0
+});
+const readyReceipt = await readinessRuntime.bindMountedResult(readyContext);
+assert.equal(await readyExpectation.promise, readyReceipt);
+assert.deepEqual(Object.keys(readyReceipt).sort(), [
+  'artifactIdentity',
+  'bindSequence',
+  'generationToken',
+  'phase',
+  'readyTimestamp',
+  'requiredBindingFlags',
+  'resultIdentity',
+  'resultIndex',
+  'rootGeneration',
+  'rootIdentity'
+]);
+assert.deepEqual(readyReceipt.requiredBindingFlags, {
+  rootAdopted: true,
+  legendReady: true,
+  compositionReady: true,
+  dragReady: true,
+  interactionsReady: true,
+  labelEditorReady: true,
+  strokeCanvasReady: true,
+  selectionReady: true
+});
+assert.equal(readinessRuntime.isActiveResultReady(), true);
+for (const step of [
+  'legend',
+  'composition',
+  'drag',
+  'interactions',
+  'label',
+  'stroke-canvas',
+  'selection'
+]) {
+  assert.equal(binderCalls.get(step), 1, step);
+}
+
+const repeatedContext = readinessRuntime.createMountedResultContext({
+  root: readinessRoot,
+  result: readinessResult,
+  resultIndex: 0
+});
+assert.equal(await readinessRuntime.bindMountedResult(repeatedContext), readyReceipt);
+assert.equal(binderCalls.get('legend'), 1);
+
+const incompleteResult = { name: 'incomplete.svg', content: '<svg></svg>' };
+readinessState.results.value = [incompleteResult];
+const incompleteRoot = makeSvg([]);
+readinessState.svgContainer.value = {
+  querySelector: (selector) => (selector === 'svg' ? incompleteRoot : null)
+};
+const incompleteExpectation = readinessRuntime.registerReadinessExpectation({
+  result: incompleteResult,
+  resultIndex: 0,
+  artifactIdentity: 'artifact-incomplete',
+  generationToken: 'generation-incomplete',
+  phase: 'generate-incomplete',
+  isCurrent: () => true
+});
+const incompleteContext = readinessRuntime.createMountedResultContext({
+  root: incompleteRoot,
+  result: incompleteResult,
+  resultIndex: 0
+});
+assert.equal(readinessRuntime.acceptReadyReceipt(Object.freeze({
+  artifactIdentity: incompleteContext.artifactIdentity,
+  resultIdentity: incompleteContext.resultIdentity,
+  resultIndex: incompleteContext.resultIndex,
+  generationToken: incompleteContext.generationToken,
+  rootGeneration: incompleteContext.rootGeneration,
+  bindSequence: incompleteContext.bindSequence,
+  requiredBindingFlags: Object.freeze({ rootAdopted: true }),
+  phase: incompleteContext.phase
+})).accepted, false);
+await assert.rejects(incompleteExpectation.promise, /did not complete/);
+
+const canceledExpectation = readinessRuntime.registerReadinessExpectation({
+  result: incompleteResult,
+  resultIndex: 0,
+  artifactIdentity: 'artifact-canceled',
+  generationToken: 'generation-canceled',
+  phase: 'generate-canceled',
+  isCurrent: () => true
+});
+const canceledContext = readinessRuntime.createMountedResultContext({
+  root: incompleteRoot,
+  result: incompleteResult,
+  resultIndex: 0
+});
+assert.equal(
+  readinessRuntime.invalidateReadinessExpectation(
+    'generation-canceled',
+    new Error('canceled generation')
+  ),
+  true
+);
+await assert.rejects(canceledExpectation.promise, /canceled generation/);
+assert.equal(readinessRuntime.acceptReadyReceipt(Object.freeze({
+  artifactIdentity: canceledContext.artifactIdentity,
+  resultIdentity: canceledContext.resultIdentity,
+  resultIndex: canceledContext.resultIndex,
+  generationToken: canceledContext.generationToken,
+  rootIdentity: canceledContext.rootGeneration,
+  rootGeneration: canceledContext.rootGeneration,
+  bindSequence: canceledContext.bindSequence,
+  requiredBindingFlags: Object.freeze({
+    rootAdopted: true,
+    legendReady: true,
+    compositionReady: true,
+    dragReady: true,
+    interactionsReady: true,
+    labelEditorReady: true,
+    strokeCanvasReady: true,
+    selectionReady: true
+  }),
+  readyTimestamp: Date.now(),
+  phase: canceledContext.phase
+})).accepted, false);
+
+const staleResult = { name: 'stale.svg', content: '<svg></svg>' };
+const staleRoot = makeSvg([]);
+readinessState.results.value = [staleResult];
+readinessState.svgContainer.value = {
+  querySelector: (selector) => (selector === 'svg' ? staleRoot : null)
+};
+const staleExpectation = readinessRuntime.registerReadinessExpectation({
+  result: staleResult,
+  resultIndex: 0,
+  artifactIdentity: 'artifact-stale',
+  generationToken: 'generation-stale',
+  phase: 'generate-stale',
+  isCurrent: () => false
+});
+const staleContext = readinessRuntime.createMountedResultContext({
+  root: staleRoot,
+  result: staleResult,
+  resultIndex: 0
+});
+await assert.rejects(readinessRuntime.bindMountedResult(staleContext), /stale or canceled/);
+await assert.rejects(staleExpectation.promise, /stale or canceled/);
+
+const failedResult = { name: 'failed.svg', content: '<svg></svg>' };
+const failedRoot = makeSvg([]);
+readinessState.results.value = [failedResult];
+readinessState.svgContainer.value = {
+  querySelector: (selector) => (selector === 'svg' ? failedRoot : null)
+};
+readinessRuntime.configureMountedResultBinder({
+  adoptLegend: () => { throw new Error('forced binder failure'); }
+});
+const failedExpectation = readinessRuntime.registerReadinessExpectation({
+  result: failedResult,
+  resultIndex: 0,
+  artifactIdentity: 'artifact-failed',
+  generationToken: 'generation-failed',
+  phase: 'generate-failed',
+  isCurrent: () => true
+});
+const failedContext = readinessRuntime.createMountedResultContext({
+  root: failedRoot,
+  result: failedResult,
+  resultIndex: 0
+});
+await assert.rejects(
+  readinessRuntime.bindMountedResult(failedContext),
+  /forced binder failure/
+);
+await assert.rejects(failedExpectation.promise, /forced binder failure/);
+
+const selectedResult = { name: 'selected.svg', content: '<svg></svg>' };
+const selectedRoot = makeSvg([]);
+readinessState.results.value = [failedResult, selectedResult];
+readinessRuntime.configureMountedResultBinder({
+  adoptLegend: () => countStep('selection-flow-legend')
+});
+assert.equal(readinessRuntime.selectResult(1), true);
+readinessState.svgContainer.value = {
+  querySelector: (selector) => (selector === 'svg' ? selectedRoot : null)
+};
+const selectedContext = readinessRuntime.createMountedResultContext({
+  root: selectedRoot,
+  result: selectedResult,
+  resultIndex: 1
+});
+const selectedReceipt = await readinessRuntime.bindMountedResult(selectedContext);
+assert.equal(selectedReceipt.resultIndex, 1);
+assert.equal(binderCalls.get('selection-flow-legend'), 1);
+
+const metricTotal = (name, phase = null) => structuralMetrics
+  .filter((metric) => metric.name === name && (phase === null || metric.phase === phase))
+  .reduce((total, metric) => total + Number(metric.value || 0), 0);
+assert.equal(metricTotal('previewMaterializationObservedCount', 'generate'), 1);
+assert.equal(metricTotal('previewMountAdoptionCount', 'generate'), 1);
+assert.equal(metricTotal('previewBinderInvocationCount', 'generate'), 1);
+assert.equal(metricTotal('previewReadyReceiptEmittedCount', 'generate'), 1);
+assert.equal(metricTotal('previewReadyReceiptAcceptedCount', 'generate'), 1);
+assert.equal(metricTotal('previewDuplicateBindRejectedCount', 'generate'), 1);
+assert.equal(metricTotal('featureDomFullScanCount', 'generate'), 0);
+assert.equal(metricTotal('perFeatureListenerRegistrationCount', 'generate'), 0);
+assert.equal(metricTotal('featureSearchIndexBuildCount', 'generate'), 0);
+assert.ok(lifecycleEvents.some(({ name }) => name === 'preview.ready-receipt-accepted'));
 
 console.log('preview runtime tests passed');

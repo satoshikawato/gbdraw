@@ -17,10 +17,6 @@ import {
 } from './plot-title-position.js';
 import { resolveCircularLayoutPreference } from './layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
-import {
-  COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE
-} from './legend-layout/composition-actions.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 
 export const runRecordDiscoveryWatcher = async ({
@@ -136,20 +132,16 @@ export const setupWatchers = ({
     removeLegendEntry,
     addLegendEntry,
     extractLegendEntries,
-    setupLegendDrag,
     refreshLegendDragAffordances,
     syncFileLegendEntries
   } = legendActions;
 
   const { applyPaletteToSvg, applySpecificRulesToSvg } = svgActions;
-  const { attachSvgFeatureHandlers, refreshFeatureOverrides, syncLabelEditor } = featureActions;
+  const { refreshFeatureOverrides, syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
-    captureBaseConfig,
-    captureOriginalStroke,
     repositionForLegendChange,
-    refreshDiagramDragAffordances,
-    setupDiagramDrag
+    refreshDiagramDragAffordances
   } = legendLayout;
   const {
     applyPaletteDraftToPreview,
@@ -175,35 +167,6 @@ export const setupWatchers = ({
       singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
     layoutPreferences.circular.multi.plotTitlePosition =
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
-  };
-
-  const hasLabelOverrides = () =>
-    Object.keys(labelTextFeatureOverrides).length > 0 ||
-    Object.keys(labelTextBulkOverrides).length > 0 ||
-    Object.keys(labelVisibilityOverrides).length > 0;
-
-  const shouldSyncLabelEditor = () =>
-    isFeatureDrawerMounted.value ||
-    Boolean(clickedFeature.value) ||
-    labelTextScopeDialog.show ||
-    globalLabelModeDialog.show ||
-    hasLabelOverrides();
-
-  const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
-  const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
-  const measureTiming = (entries, label, fn) => {
-    const startedAt = getNow();
-    const result = fn();
-    entries.push({ label, ms: getNow() - startedAt });
-    return result;
-  };
-  const logPostGbdrawTimings = (entries) => {
-    if (!entries || entries.length === 0) return;
-    console.groupCollapsed('post-gbdraw timing');
-    entries.forEach(({ label, ms, details }) => {
-      console.info(`${label}: ${formatDuration(ms)}${details ? ` (${details})` : ''}`);
-    });
-    console.groupEnd();
   };
 
   const replacePlainObject = (target, source = {}) => {
@@ -342,60 +305,44 @@ export const setupWatchers = ({
     }
   );
 
-  watch(svgContent, () => {
+  watch([svgContent, () => results.value[selectedResultIndex.value]], () => {
     const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
     skipCaptureBaseConfig.value = false;
     skipPositionReapply.value = false;
 
-    nextTick(() => {
-      const timingEntries = [];
-      const svg = svgContainer.value?.querySelector('svg') || null;
-      if (svg) {
-        previewRuntime?.mountResultSvg?.(selectedResultIndex.value, svg);
-      } else {
+    nextTick(async () => {
+      const root = svgContainer.value?.querySelector('svg') || null;
+      if (!root) {
         previewRuntime?.clearActiveRuntime?.();
+        return;
       }
-
-      if (!skipExtractOnSvgChange.value && !trustedArtifactRestoreInProgress.value) {
-        measureTiming(timingEntries, 'watch(svgContent) extractLegendEntries', extractLegendEntries);
+      const resultIndex = Number(selectedResultIndex.value) || 0;
+      const result = results.value[resultIndex] || null;
+      try {
+        const context = previewRuntime.createMountedResultContext({
+          root,
+          result,
+          resultIndex,
+          catalogState: state.featureCatalog?.value || null,
+          bindingOptions: {
+            isIncrementalEdit,
+            skipLegendExtraction: Boolean(skipExtractOnSvgChange.value),
+            trustedRestore: Boolean(trustedArtifactRestoreInProgress.value)
+          }
+        });
+        await previewRuntime.bindMountedResult(context);
+      } catch (error) {
+        if ([
+          'PREVIEW_BIND_STALE',
+          'PREVIEW_BIND_SUPERSEDED',
+          'PREVIEW_ROOT_MISMATCH'
+        ].includes(error?.code)) return;
+        errorLog.value = {
+          summary: error?.message || 'The mounted preview could not be prepared.',
+          details: []
+        };
+        console.error('Could not bind the mounted SVG Result.', error);
       }
-      const shouldBindComposition = Boolean(
-        !trustedArtifactRestoreInProgress.value &&
-        svg && (
-          !isIncrementalEdit ||
-          svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null ||
-          svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-        )
-      );
-      if (shouldBindComposition) {
-        try {
-          measureTiming(timingEntries, 'watch(svgContent) bind composition metadata', captureBaseConfig);
-        } catch (error) {
-          errorLog.value = {
-            summary: error?.message || 'The SVG composition metadata is invalid.',
-            details: []
-          };
-          console.error('Could not bind SVG composition metadata.', error);
-          return;
-        }
-      }
-      measureTiming(timingEntries, 'watch(svgContent) setupLegendDrag', setupLegendDrag);
-      measureTiming(timingEntries, 'watch(svgContent) setupDiagramDrag', () => setupDiagramDrag(isIncrementalEdit));
-      measureTiming(timingEntries, 'watch(svgContent) attachSvgFeatureHandlers', attachSvgFeatureHandlers);
-      if (!trustedArtifactRestoreInProgress.value && shouldSyncLabelEditor()) {
-        measureTiming(timingEntries, 'watch(svgContent) syncLabelEditor', syncLabelEditor);
-      }
-
-      if (!isIncrementalEdit) {
-        measureTiming(timingEntries, 'watch(svgContent) captureOriginalStroke', captureOriginalStroke);
-        canvasPadding.top = 0;
-        canvasPadding.right = 0;
-        canvasPadding.bottom = 0;
-        canvasPadding.left = 0;
-
-      }
-
-      logPostGbdrawTimings(timingEntries);
     });
   });
 
@@ -414,15 +361,6 @@ export const setupWatchers = ({
   watch(extractedFeatures, () => {
     if (semanticFileWatchersSuppressed.value || trustedArtifactRestoreInProgress.value) return;
     refreshFeatureVisibilitySelectorCache();
-    if (!svgContent.value) return;
-    nextTick(() => {
-      if (semanticFileWatchersSuppressed.value) return;
-      const timingEntries = [];
-      measureTiming(timingEntries, 'watch(extractedFeatures) apply palette colors', applyPaletteToSvg);
-      measureTiming(timingEntries, 'watch(extractedFeatures) apply specific rules', applySpecificRulesToSvg);
-      measureTiming(timingEntries, 'watch(extractedFeatures) refresh delegated feature handlers', attachSvgFeatureHandlers);
-      logPostGbdrawTimings(timingEntries);
-    });
   });
 
   watch(featureSelectorSafetyScope, () => {

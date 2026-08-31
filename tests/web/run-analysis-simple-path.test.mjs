@@ -144,7 +144,7 @@ class AuditSimplePathWorker {
 
 globalThis.Worker = AuditSimplePathWorker;
 
-const { afterPaint, createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
+const { afterFrame, afterPaint, createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
@@ -198,12 +198,82 @@ const artifactSnapshots = createHistorySnapshotService({
   buildRunStateData,
   applyRunStateData
 });
+const createImmediatePreviewRuntime = ({ onEvent = () => {} } = {}) => {
+  let activeExpectation = null;
+  let activeReceipt = null;
+  let nextBindSequence = 1;
+  return {
+    registerReadinessExpectation(options) {
+      const bindSequence = nextBindSequence++;
+      const receipt = Object.freeze({
+        artifactIdentity: options.artifactIdentity?.fingerprint || String(options.artifactIdentity || ''),
+        resultIdentity: `test-result:${bindSequence}`,
+        resultIndex: options.resultIndex,
+        generationToken: String(options.generationToken),
+        rootIdentity: bindSequence,
+        rootGeneration: bindSequence,
+        bindSequence,
+        requiredBindingFlags: Object.freeze({ ready: true }),
+        readyTimestamp: bindSequence,
+        phase: options.phase
+      });
+      let rejectPromise;
+      const promise = new Promise((resolve, reject) => {
+        rejectPromise = reject;
+        queueMicrotask(() => {
+          if (activeExpectation?.receipt !== receipt) return;
+          onEvent('test.preview-mounted');
+          if (activeExpectation?.receipt !== receipt) return;
+          onEvent('test.preview-bound');
+          if (activeExpectation?.receipt !== receipt) return;
+          activeReceipt = receipt;
+          activeExpectation = null;
+          onEvent('test.preview-ready');
+          resolve(receipt);
+        });
+      });
+      void promise.catch(() => {});
+      activeExpectation = {
+        generationToken: String(options.generationToken),
+        receipt,
+        reject: rejectPromise
+      };
+      return { promise };
+    },
+    invalidateReadinessExpectation(target, reason) {
+      if (!activeExpectation || String(target) !== activeExpectation.generationToken) return false;
+      const expectation = activeExpectation;
+      activeExpectation = null;
+      expectation.reject(reason || new Error('invalidated'));
+      return true;
+    },
+    invalidateReadyReceipt(receipt) {
+      if (activeReceipt === receipt) activeReceipt = null;
+      return true;
+    },
+    getActiveRuntime() {
+      return activeReceipt ? { readyReceipt: activeReceipt } : null;
+    },
+    async restorePreviousSelectedResult({ restore }) {
+      onEvent('test.preview-restore-started');
+      await restore();
+      activeReceipt = Object.freeze({
+        rootGeneration: nextBindSequence++,
+        phase: 'rollback-restoration'
+      });
+      onEvent('test.preview-restore-ready');
+      return activeReceipt;
+    }
+  };
+};
+const immediatePreviewRuntime = createImmediatePreviewRuntime();
 const generatedArtifactHandleOptions = {
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
   restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity,
+  previewRuntime: immediatePreviewRuntime,
   nextTick: window.Vue.nextTick,
   waitForAfterPaint: async () => {}
 };
@@ -336,6 +406,17 @@ test('afterPaint crosses one completed frame before resolving', async () => {
   assert.equal(resolved, true);
 });
 
+test('afterFrame crosses one post-bind frame before resolving', async () => {
+  const frames = [];
+  let resolved = false;
+  const framed = afterFrame({ requestFrame: (callback) => frames.push(callback) })
+    .then(() => { resolved = true; });
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  await framed;
+  assert.equal(resolved, true);
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
   const lifecycleEvents = [];
@@ -407,7 +488,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
-  let cancelDuringCandidate = false;
+  let cancelDuringPreview = false;
   let failCandidateAdmission = false;
   const activationOwnerSets = [];
   const captureForHistory = (...args) => {
@@ -430,6 +511,15 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     compareGeneratedArtifactHandles: artifactSnapshots.compareGeneratedArtifactHandles
   });
   await generationHistory.initializeIntentBaseline('Generated artifact baseline');
+  const readinessRuntime = createImmediatePreviewRuntime({
+    onEvent(name) {
+      assert.equal(state.processing.value, true, name);
+      lifecycleEvents.push(name);
+      if (cancelDuringPreview && name === 'test.preview-mounted') {
+        runner.cancelRunAnalysis();
+      }
+    }
+  });
   let runner;
   runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
@@ -445,6 +535,11 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     waitForAfterPaint: async () => {
       lifecycleEvents.push('test.after-paint-returned');
     },
+    waitForPostBindFrame: async () => {
+      assert.equal(state.processing.value, true);
+      lifecycleEvents.push('test.post-bind-frame-returned');
+    },
+    previewRuntime: readinessRuntime,
     runGeneratedArtifactReplacement: (...args) => (
       generationHistory.runUndoableArtifactReplacement(...args)
     ),
@@ -472,7 +567,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         featureColorOverrides: structuredClone(featureColorOverrides),
         featureStrokeOverrides: structuredClone(featureStrokeOverrides)
       };
-      if (cancelDuringCandidate) runner.cancelRunAnalysis();
       return candidate;
     },
     resetPreviewViewport: ({ pan = null } = {}) => {
@@ -508,6 +602,29 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     lifecycleEvents.indexOf('test.before-handle-capture')
       < lifecycleEvents.indexOf('history.before-capture-completed')
   );
+  const orderedSuccessEvents = [
+    'generate.processing-published',
+    'generate.paint-opportunity-completed',
+    'history.before-capture-completed',
+    'result-admission-end',
+    'artifact.activation-completed',
+    'test.preview-mounted',
+    'test.preview-bound',
+    'test.preview-ready',
+    'test.post-bind-frame-returned',
+    'preview.post-bind-frame-completed',
+    'history.finalization-completed',
+    'artifact.finalization-completed',
+    'generate.completed',
+    'generate.processing-cleared'
+  ];
+  orderedSuccessEvents.slice(1).forEach((eventName, index) => {
+    assert.ok(
+      lifecycleEvents.indexOf(orderedSuccessEvents[index])
+        < lifecycleEvents.indexOf(eventName),
+      `${orderedSuccessEvents[index]} before ${eventName}`
+    );
+  });
   assert.equal(activationOwnerSets.length, 1);
   assert.equal(structuralMetrics.generatedArtifactCandidateBuildCount, 1);
   assert.equal(structuralMetrics.generatedArtifactActivationCount, 1);
@@ -556,6 +673,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     structuralMetrics.generatedArtifactFinalizeCount,
     metricsBeforePreActivationFailure.generatedArtifactFinalizeCount
   );
+  assert.equal(
+    structuralMetrics.generatedArtifactRollbackCount || 0,
+    metricsBeforePreActivationFailure.generatedArtifactRollbackCount || 0
+  );
 
   const admissionFailureState = committedFeatureState();
   const metricsBeforeAdmissionFailure = { ...structuralMetrics };
@@ -575,6 +696,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   for (const metric of [
     'generatedArtifactCandidateBuildCount',
     'generatedArtifactActivationCount',
+    'generatedArtifactRollbackCount',
     'generatedArtifactFinalizeCount',
     'historyReplacementCount'
   ]) {
@@ -625,20 +747,29 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
   assert.equal(
     structuralMetrics.generatedArtifactRollbackCount,
-    metricsBeforeLateFailure.generatedArtifactRollbackCount + 1
+    (metricsBeforeLateFailure.generatedArtifactRollbackCount || 0) + 1
   );
   assert.equal(
     structuralMetrics.generatedArtifactFinalizeCount,
     metricsBeforeLateFailure.generatedArtifactFinalizeCount
   );
+  const lateFailureEvents = lifecycleEvents.slice(
+    lifecycleEvents.lastIndexOf('generate.processing-published')
+  );
+  assert.ok(
+    lateFailureEvents.indexOf('artifact.rollback-started')
+      < lateFailureEvents.indexOf('test.preview-restore-ready')
+  );
+  assert.equal(lateFailureEvents.includes('artifact.finalization-completed'), false);
 
   const canceledState = committedFeatureState();
   const canceledResultIdentity = state.results.value;
+  const metricsBeforePreviewCancel = { ...structuralMetrics };
   const canceledResult = result('canceled.svg', 'canceled');
   workerResponses.push(response(canceledResult, validCatalog(canceledResult.name)));
-  cancelDuringCandidate = true;
+  cancelDuringPreview = true;
   assert.deepEqual(await runner.runAnalysis(), { status: 'canceled' });
-  cancelDuringCandidate = false;
+  cancelDuringPreview = false;
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.deepEqual(committedFeatureState(), canceledState);
   assert.equal(state.results.value, canceledResultIdentity);
@@ -647,6 +778,18 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.processingStatus.value, 'Canceled.');
+  assert.equal(
+    structuralMetrics.generatedArtifactActivationCount,
+    metricsBeforePreviewCancel.generatedArtifactActivationCount + 1
+  );
+  assert.equal(
+    structuralMetrics.generatedArtifactRollbackCount,
+    metricsBeforePreviewCancel.generatedArtifactRollbackCount + 1
+  );
+  assert.equal(
+    structuralMetrics.generatedArtifactFinalizeCount,
+    metricsBeforePreviewCancel.generatedArtifactFinalizeCount
+  );
 
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);

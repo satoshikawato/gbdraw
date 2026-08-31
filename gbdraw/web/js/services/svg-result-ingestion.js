@@ -178,6 +178,10 @@ export const getCommittedSvgResultMetadata = (result) => (
   committedState(result)?.metadata || null
 );
 
+export const getCommittedSvgResultRuntimeIdentity = (result) => (
+  committedState(result)?.identity ?? null
+);
+
 export const markCommittedSvgResultMounted = (result) => {
   const runtime = committedState(result);
   if (!runtime) return false;

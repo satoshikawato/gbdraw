@@ -4303,16 +4303,31 @@ export const importSession = async (e, options = {}) => {
         );
     recordSessionLifecycleEvent('svg-admission-end');
 
+    const desiredResultIndex = (
+      Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
+    )
+      ? Math.min(ui.selectedResultIndex, Math.max(0, committedImportedResults.length - 1))
+      : 0;
     await nextTick();
     state.skipCaptureBaseConfig.value = true;
     state.skipPositionReapply.value = true;
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    const previewReadiness = typeof options?.beforePreviewMount === 'function'
+      ? options.beforePreviewMount({
+          results: state.results.value,
+          resultIndex: desiredResultIndex,
+          data,
+          ui
+        })
+      : null;
     recordSessionLifecycleEvent('firstCommittedPreview', {
       resultCount: state.results.value.length
     });
     await nextTick();
     recordSessionLifecycleEvent('preview-mount-end');
+    if (previewReadiness?.promise) await previewReadiness.promise;
+    else if (previewReadiness?.then) await previewReadiness;
 
     let currentRecoveryError = null;
     if (currentSchemaSession && missingCatalogSequenceSources) {

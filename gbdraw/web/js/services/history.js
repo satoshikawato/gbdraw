@@ -751,13 +751,25 @@ export const createHistoryManager = ({
         touch();
         return result;
       }
+      recordSessionLifecycleEvent('history.finalization-started', { label });
       await commitAppliedArtifactReplacement(transaction, options);
+      recordSessionLifecycleEvent('history.finalization-completed', { label });
       return result;
     } catch (error) {
       if (transaction) {
         transaction.closed = true;
-        recordStructuralMetric('generatedArtifactRollbackCount', 1);
-        await restoreArtifactHandle(transaction.before, { refreshIntent: false });
+        if (typeof options.restoreAppliedArtifact === 'function') {
+          restoring.value = true;
+          try {
+            await options.restoreAppliedArtifact(transaction.before);
+          } finally {
+            restoring.value = false;
+          }
+          clearCurrentCheckpoint();
+        } else {
+          recordStructuralMetric('generatedArtifactRollbackCount', 1);
+          await restoreArtifactHandle(transaction.before, { refreshIntent: false });
+        }
       }
       releaseUnreferencedFiles();
       throw error;

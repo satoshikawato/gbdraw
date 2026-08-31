@@ -16,6 +16,7 @@ import {
   resolvePreviewSvg,
   schedulePreviewFeatureSearchClasses
 } from './preview-svg.js';
+import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 
 export const createPreviewFeatureSearch = ({
   state,
@@ -23,7 +24,8 @@ export const createPreviewFeatureSearch = ({
   nextTick,
   computed,
   reactive,
-  openFeatureEditorForFeature
+  openFeatureEditorForFeature,
+  previewRuntime = null
 }) => {
   const {
     svgContainer,
@@ -55,11 +57,9 @@ export const createPreviewFeatureSearch = ({
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
   let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
   let appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
-  let searchIndex = buildFeatureSearchIndex({
-    features: extractedFeatures.value,
-    popupMode: getPopupMode(),
-    orthogroups: orthogroups.value
-  });
+  let searchIndex = null;
+  let featureElementIndex = null;
+  let featureElementIndexSvg = null;
   const appliedSearchDomState = createPreviewFeatureSearchDomState();
   const dragOffset = reactive({ x: 0, y: 0 });
   let activeDrag = null;
@@ -70,6 +70,32 @@ export const createPreviewFeatureSearch = ({
       : ''
   );
   const queryIsActive = () => Boolean(String(previewFeatureSearchQuery.value || '').trim()) && !previewFeatureSearchError.value;
+  const invalidateSearchIndex = () => {
+    searchIndex = null;
+  };
+  const invalidateFeatureElementIndex = () => {
+    featureElementIndex = null;
+    featureElementIndexSvg = null;
+  };
+  const ensureSearchIndex = () => {
+    if (!searchIndex) {
+      searchIndex = buildFeatureSearchIndex({
+        features: extractedFeatures.value,
+        popupMode: getPopupMode(),
+        orthogroups: orthogroups.value
+      });
+      recordStructuralMetric('featureSearchIndexBuildCount', 1, { phase: 'feature-search' });
+    }
+    return searchIndex;
+  };
+  const ensureFeatureElementIndex = (svg = getSvg()) => {
+    if (featureElementIndexSvg !== svg || !featureElementIndex) {
+      featureElementIndexSvg = svg;
+      featureElementIndex = getPreviewFeatureElementIndex(svg);
+      recordStructuralMetric('featureDomFullScanCount', 1, { phase: 'feature-search' });
+    }
+    return featureElementIndex;
+  };
   const previewFeatureSearchX = computed(() => (
     showRightDrawer?.value ? Math.min(dragOffset.x, -RIGHT_DRAWER_WIDTH_PX) : dragOffset.x
   ));
@@ -117,7 +143,18 @@ export const createPreviewFeatureSearch = ({
 
     const previousActiveId = preserveActive ? getActiveMatchId() : '';
     const svg = getSvg();
-    const featureIndex = getPreviewFeatureElementIndex(svg);
+    if (!String(previewFeatureSearchQuery.value || '').trim()) {
+      previewFeatureSearchRenderedCount.value = Array.isArray(extractedFeatures.value)
+        ? extractedFeatures.value.length
+        : 0;
+      previewFeatureSearchError.value = '';
+      previewFeatureSearchMatches.value = [];
+      previewFeatureSearchMatchDetails.value = {};
+      previewFeatureSearchActiveIndex.value = -1;
+      clearPreviewClasses();
+      return;
+    }
+    const featureIndex = ensureFeatureElementIndex(svg);
     const renderedFeatureIds = new Set(featureIndex.keys());
     const searchResult = runFeatureSearch({
       features: extractedFeatures.value,
@@ -128,7 +165,7 @@ export const createPreviewFeatureSearch = ({
       useRegex: appliedUseRegex,
       popupMode,
       orthogroups: orthogroups.value,
-      searchIndex,
+      searchIndex: ensureSearchIndex(),
       previousActiveId
     });
 
@@ -239,7 +276,7 @@ export const createPreviewFeatureSearch = ({
     if (!feature) return;
 
     const svg = getSvg();
-    const featureIndex = getPreviewFeatureElementIndex(svg);
+    const featureIndex = ensureFeatureElementIndex(svg);
     if (center) {
       centerPreviewFeature({
         svg,
@@ -264,7 +301,7 @@ export const createPreviewFeatureSearch = ({
     const count = previewFeatureSearchMatches.value.length;
     if (!count) {
       const svg = getSvg();
-      const featureIndex = getPreviewFeatureElementIndex(svg);
+      const featureIndex = ensureFeatureElementIndex(svg);
       previewFeatureSearchActiveIndex.value = -1;
       applyPreviewActiveSearchMatch({ featureIndex, appliedState: appliedSearchDomState, activeId: '' });
       return;
@@ -273,7 +310,7 @@ export const createPreviewFeatureSearch = ({
     previewFeatureSearchActiveIndex.value = ((Number(index) || 0) % count + count) % count;
     const activeId = getActiveMatchId();
     const svg = getSvg();
-    const featureIndex = getPreviewFeatureElementIndex(svg);
+    const featureIndex = ensureFeatureElementIndex(svg);
     if (!appliedSearchDomState.queryActive || !appliedSearchDomState.matchedIds.has(activeId)) {
       schedulePreviewFeatureSearchClasses({
         svg,
@@ -330,25 +367,27 @@ export const createPreviewFeatureSearch = ({
       if (getPopupMode() === 'simple' && isRichFeatureSearchField(appliedSearchField)) {
         appliedSearchField = 'all';
       }
-      searchIndex = buildFeatureSearchIndex({
-        features: extractedFeatures.value,
-        popupMode: getPopupMode(),
-        orthogroups: orthogroups.value
-      });
-      scheduleRefreshSearch();
+      invalidateSearchIndex();
+      if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
     }
   );
   watch([extractedFeatures, orthogroups], () => {
-    searchIndex = buildFeatureSearchIndex({
-      features: extractedFeatures.value,
-      popupMode: getPopupMode(),
-      orthogroups: orthogroups.value
-    });
-    scheduleRefreshSearch();
+    invalidateSearchIndex();
+    if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
   });
-  watch([selectedResultIndex, svgContent], () => scheduleRefreshSearch());
+  watch([selectedResultIndex, svgContent], () => {
+    invalidateFeatureElementIndex();
+  });
 
-  scheduleRefreshSearch({ preserveActive: false });
+  previewFeatureSearchRenderedCount.value = Array.isArray(extractedFeatures.value)
+    ? extractedFeatures.value.length
+    : 0;
+
+  const handleMountedResultReady = () => {
+    invalidateFeatureElementIndex();
+    clearPreviewClasses();
+    if (queryIsActive()) scheduleRefreshSearch({ preserveActive: false });
+  };
 
   const dispose = () => {
     refreshRequestId += 1;
@@ -372,6 +411,7 @@ export const createPreviewFeatureSearch = ({
     goToNext,
     goToPrevious,
     clearSearch,
+    handleMountedResultReady,
     openActiveMatch,
     refreshSearch: scheduleRefreshSearch,
     dispose
