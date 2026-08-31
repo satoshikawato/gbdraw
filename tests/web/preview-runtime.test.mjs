@@ -71,17 +71,19 @@ const featureBConnector = new FakeFeatureElement('feature-b__line1', {
 });
 const svg = makeSvg([featureA, featureBConnector, featureBBlock]);
 let resultReplacementCount = 0;
-const trackedResults = new Proxy([
+let trackedResults = [
   { name: 'one.svg', content: '<svg id="old-one"></svg>' },
   { name: 'two.svg', content: '<svg id="old-two"></svg>' }
-], {
-  set(target, property, value) {
-    if (/^\d+$/.test(String(property))) resultReplacementCount += 1;
-    return Reflect.set(target, property, value);
+];
+const resultsRef = {
+  get value() { return trackedResults; },
+  set value(nextResults) {
+    resultReplacementCount += 1;
+    trackedResults = nextResults;
   }
-});
+};
 const state = {
-  results: ref(trackedResults),
+  results: resultsRef,
   selectedResultIndex: ref(0),
   skipCaptureBaseConfig: ref(false),
   svgContainer: ref({

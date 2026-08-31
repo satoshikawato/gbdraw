@@ -23,6 +23,7 @@ for (const filename of [
   'history-files.js',
   'history-snapshot.js',
   'json-clone.js',
+  'runtime-test-hooks.js',
   'svg-serialization.js'
 ]) {
   await writeFile(
@@ -382,6 +383,7 @@ const createLayoutPreferences = () => ({
   assert.equal(afterFirst.artifactReplacementHistoryEntryCount - beforeFirst.artifactReplacementHistoryEntryCount, 1);
   assert.equal(afterFirst.artifactCheckpointBuilds - beforeFirst.artifactCheckpointBuilds, 0);
   assert.equal(afterFirst.artifactCheckpointSignatureComputations - beforeFirst.artifactCheckpointSignatureComputations, 0);
+  assert.equal(afterFirst.intentBuilds - beforeFirst.intentBuilds, 0);
   assert.equal(afterFirst.historySvgBytes - beforeFirst.historySvgBytes, 0);
   assert.equal(afterFirst.checkpointEstimatedBytes - beforeFirst.checkpointEstimatedBytes, 0);
   assert.equal(afterFirst.generatedArtifactFullCloneCount - beforeFirst.generatedArtifactFullCloneCount, 0);
@@ -1687,6 +1689,8 @@ const createLayoutPreferences = () => ({
     trackSlotResolvedGeometry: ref({ schema: 1 }),
     resultGenerationKey: ref(1),
     resultPanelTab: ref('preview'),
+    zoom: ref(1),
+    canvasPan: { x: 0, y: 0 },
     errorLog: ref(null),
     editableLabels: ref([]),
     labelTextScopeDialog: {},
@@ -1700,12 +1704,19 @@ const createLayoutPreferences = () => ({
     losatCache: ref(new Map([['raw-a', rawCacheValueA]])),
     losatDerivedCache: ref(new Map([['derived-a', derivedCacheValueA]])),
     losatCacheInfo: ref(losatCacheInfoA),
-    matchSequenceRegistry: {
-      current: [{ key: 'record-a', recordId: 'record-a', aliases: [], sequence: 'ACGT' }],
-      values() { return this.current; },
-      reset(sources) { this.current = sources.map((source) => ({ ...source })); },
-      resetTrusted(sources) { this.current = [...sources]; }
-    },
+    matchSequenceRegistry: (() => {
+      let owner = Object.freeze({
+        sources: new Map([['record-a', {
+          key: 'record-a', recordId: 'record-a', aliases: [], sequence: 'ACGT'
+        }]]),
+        ambiguousKeys: new Set()
+      });
+      return {
+        captureTrustedOwner: () => owner,
+        replaceTrustedOwner: (nextOwner) => { owner = nextOwner; },
+        values: () => Array.from(owner.sources.values())
+      };
+    })(),
     skipCaptureBaseConfig: ref(false),
     skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false),
@@ -1716,8 +1727,8 @@ const createLayoutPreferences = () => ({
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
     legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
-    losatCache: Array.from(state.losatCache.value.entries()),
-    losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
+    losatCache: state.losatCache.value,
+    losatDerivedCache: state.losatDerivedCache.value,
     losatCacheInfo: state.losatCacheInfo.value
   });
   const assertAuthorityOwners = (expected) => {
@@ -1727,14 +1738,8 @@ const createLayoutPreferences = () => ({
       state.legacyProteinDerivedEvidence.value,
       expected.legacyProteinDerivedEvidence
     );
-    assert.equal(state.losatCache.value.size, expected.losatCache.length);
-    expected.losatCache.forEach(([key, value]) => {
-      assert.equal(state.losatCache.value.get(key), value);
-    });
-    assert.equal(state.losatDerivedCache.value.size, expected.losatDerivedCache.length);
-    expected.losatDerivedCache.forEach(([key, value]) => {
-      assert.equal(state.losatDerivedCache.value.get(key), value);
-    });
+    assert.equal(state.losatCache.value, expected.losatCache);
+    assert.equal(state.losatDerivedCache.value, expected.losatDerivedCache);
     assert.equal(state.losatCacheInfo.value, expected.losatCacheInfo);
   };
   const authorityOwnersA = captureAuthorityOwners();
@@ -1748,6 +1753,8 @@ const createLayoutPreferences = () => ({
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
       selectedResultIndex: state.selectedResultIndex.value,
+      zoom: state.zoom.value,
+      canvasPan: { ...state.canvasPan },
       appliedPaletteName: 'default',
       appliedPaletteColors: {}
     }),
@@ -1794,33 +1801,133 @@ const createLayoutPreferences = () => ({
 
   const handleA = snapshots.captureGeneratedArtifactHandle();
   assert.equal(Object.isFrozen(handleA), true);
-  assert.equal(Object.isFrozen(handleA.results), true);
-  assert.notEqual(handleA.results, state.results.value);
-  assert.equal(handleA.results[0], resultA);
-  assert.equal(handleA.features.extractedFeatures, extractedA);
-  assert.equal(handleA.features.biologicalFeatures, biologicalA);
-  assert.equal(handleA.editorState.featureCatalog, catalogA);
-  assert.equal(handleA.orthogroupState.groups, groupsA);
-  assert.equal(handleA.proteinIdentityManifest, proteinIdentityManifestA);
-  assert.equal(handleA.legacyProteinRawCandidates, legacyProteinRawCandidatesA);
-  assert.equal(handleA.legacyProteinDerivedEvidence, legacyProteinDerivedEvidenceA);
-  assert.equal(handleA.losatCache[0][1], rawCacheValueA);
-  assert.equal(handleA.losatDerivedCache[0][1], derivedCacheValueA);
-  assert.equal(handleA.losatCacheInfo, losatCacheInfoA);
+  assert.equal(handleA.ownerSet.results, state.results.value);
+  assert.equal(handleA.ownerSet.results[0], resultA);
+  assert.equal(handleA.ownerSet.extractedFeatures, extractedA);
+  assert.equal(handleA.ownerSet.biologicalFeatures, biologicalA);
+  assert.equal(handleA.ownerSet.featureCatalog, catalogA);
+  assert.equal(handleA.ownerSet.orthogroups, groupsA);
+  assert.equal(handleA.ownerSet.proteinIdentityManifest, proteinIdentityManifestA);
+  assert.equal(handleA.ownerSet.legacyProteinRawCandidates, legacyProteinRawCandidatesA);
+  assert.equal(handleA.ownerSet.legacyProteinDerivedEvidence, legacyProteinDerivedEvidenceA);
+  assert.equal(handleA.ownerSet.losatCache, authorityOwnersA.losatCache);
+  assert.equal(handleA.ownerSet.losatDerivedCache, authorityOwnersA.losatDerivedCache);
+  assert.equal(handleA.ownerSet.losatCacheInfo, losatCacheInfoA);
   assert.equal(
-    Object.fromEntries(handleA.features.featureVisibilitySelectorCache)['feature-a'].value,
+    Object.fromEntries(handleA.mutableIntent.features.featureVisibilitySelectorCache)['feature-a'].value,
     'feature-a'
   );
   assert.ok(handleA.retainedBytes >= 400_000);
 
-  state.results.value[0] = { name: 'a.svg', content: '<svg id="b" />' };
+  state.resultGenerationKey.value += 1;
+  state.zoom.value = 2;
+  state.canvasPan.x = 120;
+  const transientOnlyHandle = snapshots.captureGeneratedArtifactHandle();
+  assert.equal(
+    snapshots.compareGeneratedArtifactHandles(handleA, transientOnlyHandle),
+    true,
+    'Generation counters and preview viewport state must not create artifact History.'
+  );
+  state.resultGenerationKey.value = 1;
+  state.zoom.value = 1;
+  state.canvasPan.x = 0;
+
+  const originalOwnerSet = snapshots.captureGeneratedArtifactOwnerSet();
+  const poisonResult = { name: 'poison.svg' };
+  Object.defineProperty(poisonResult, 'content', {
+    get() { throw new Error('Result content must not be read during capture.'); }
+  });
+  const poisonCatalog = {};
+  Object.defineProperty(poisonCatalog, 'items', {
+    get() { throw new Error('Catalog rows must not be read during capture.'); }
+  });
+  const poisonCache = new Proxy(new Map(), {
+    get() { throw new Error('Cache properties and iterators must not be read during capture.'); }
+  });
+  const poisonSequenceOwner = {};
+  Object.defineProperty(poisonSequenceOwner, 'sources', {
+    get() { throw new Error('Sequence owners must not be traversed during capture.'); }
+  });
+  const poisonResource = { name: 'poison.gb', size: 123, type: 'text/plain' };
+  Object.defineProperty(poisonResource, 'data', {
+    get() { throw new Error('Resource payloads must not be read during capture.'); }
+  });
+  const structuralMetrics = [];
+  const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => structuralMetrics.push(metric)
+  };
+  state.results.value = [poisonResult];
+  state.featureCatalog.value = poisonCatalog;
+  state.losatCache.value = poisonCache;
+  state.losatDerivedCache.value = poisonCache;
+  state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
+  state.files.c_gb = poisonResource;
+  snapshots.setGeneratedArtifactRuntimeOwner({
+    capture: () => ({ retainedBytes: 999, payload: poisonResource }),
+    restore: async () => {}
+  });
+  snapshots.setGeneratedArtifactIdentity({
+    schema: 1,
+    algorithm: 'SHA-256',
+    fingerprint: 'c'.repeat(64),
+    retainedBytes: 123_456,
+    resultBytes: 654_321
+  }, { results: state.results.value });
+  const poisonHandle = snapshots.captureGeneratedArtifactHandle();
+  assert.equal(poisonHandle.ownerSet.results[0], poisonResult);
+  assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
+  assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
+  assert.equal(poisonHandle.ownerSet.matchSequenceOwner, poisonSequenceOwner);
+  assert.equal(
+    poisonHandle.retainedBytes,
+    123_456 + 654_321 + 999 + poisonHandle.identity.compactSignature.length * 2
+  );
+  assert.deepEqual(
+    structuralMetrics.filter(({ name }) => name === 'generatedArtifactFullSignatureCount')
+      .map(({ value }) => value),
+    [0]
+  );
+  assert.deepEqual(
+    structuralMetrics.filter(({ name }) => name === 'generatedArtifactHeavyTraversalCount')
+      .map(({ value }) => value),
+    [0]
+  );
+  assert.deepEqual(
+    structuralMetrics.filter(({ name }) => name === 'generatedArtifactMutableIntentSnapshotCount')
+      .map(({ value }) => value),
+    [1]
+  );
+  let installedResults = null;
+  snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
+    installResults: (nextResults) => {
+      installedResults = nextResults;
+      state.results.value = nextResults;
+    }
+  });
+  assert.equal(installedResults, originalOwnerSet.results);
+  assert.equal(state.results.value, originalOwnerSet.results);
+  state.files.c_gb = null;
+  snapshots.setGeneratedArtifactRuntimeOwner({
+    capture: () => null,
+    restore: async () => {}
+  });
+  snapshots.setGeneratedArtifactIdentity({
+    schema: 1,
+    algorithm: 'SHA-256',
+    fingerprint: 'a'.repeat(64),
+    retainedBytes: 400_000
+  }, { results: state.results.value });
+  globalThis.__GBDRAW_TEST_HOOKS__ = previousHooks;
+
+  state.results.value = [{ name: 'a.svg', content: '<svg id="b" />' }];
   const invalidatedIdentityHandle = snapshots.captureGeneratedArtifactHandle();
   assert.equal(
     invalidatedIdentityHandle.identity.fingerprint,
     '',
     'Replacing a Result object must invalidate its Worker-byte identity even at equal length.'
   );
-  state.results.value[0] = { name: 'edited.svg', content: '<svg id="edited" />' };
+  state.results.value = [{ name: 'edited.svg', content: '<svg id="edited" />' }];
   state.featureColorOverrides['feature-a'] = '#abcdef';
   state.featureVisibilitySelectorCache['feature-a'] = {
     qualifier: 'hash',
@@ -1855,20 +1962,20 @@ const createLayoutPreferences = () => ({
   }, { results: state.results.value });
   const handleB = snapshots.captureGeneratedArtifactHandle();
 
-  assert.equal(handleA.results[0], resultA);
-  assert.equal(handleA.features.featureColorOverrides['feature-a'], '#112233');
-  assert.equal(handleA.editorState.legend.entries[0].caption, 'A');
+  assert.equal(handleA.ownerSet.results[0], resultA);
+  assert.equal(handleA.mutableIntent.features.featureColorOverrides['feature-a'], '#112233');
+  assert.equal(handleA.mutableIntent.editorState.legend.entries[0].caption, 'A');
   assert.equal(
-    Object.fromEntries(handleA.features.featureVisibilitySelectorCache)['feature-a'].value,
+    Object.fromEntries(handleA.mutableIntent.features.featureVisibilitySelectorCache)['feature-a'].value,
     'feature-a'
   );
-  assert.equal(handleB.results[0].name, 'edited.svg');
-  assert.equal(handleB.proteinIdentityManifest, proteinIdentityManifestB);
-  assert.equal(handleB.legacyProteinRawCandidates, legacyProteinRawCandidatesB);
-  assert.equal(handleB.legacyProteinDerivedEvidence, legacyProteinDerivedEvidenceB);
-  assert.equal(handleB.losatCache[0][1], rawCacheValueB);
-  assert.equal(handleB.losatDerivedCache[0][1], derivedCacheValueB);
-  assert.equal(handleB.losatCacheInfo, losatCacheInfoB);
+  assert.equal(handleB.ownerSet.results[0].name, 'edited.svg');
+  assert.equal(handleB.ownerSet.proteinIdentityManifest, proteinIdentityManifestB);
+  assert.equal(handleB.ownerSet.legacyProteinRawCandidates, legacyProteinRawCandidatesB);
+  assert.equal(handleB.ownerSet.legacyProteinDerivedEvidence, legacyProteinDerivedEvidenceB);
+  assert.equal(handleB.ownerSet.losatCache, authorityOwnersB.losatCache);
+  assert.equal(handleB.ownerSet.losatDerivedCache, authorityOwnersB.losatDerivedCache);
+  assert.equal(handleB.ownerSet.losatCacheInfo, losatCacheInfoB);
 
   state.proteinIdentityManifest.value = { schema: 2, records: [{ id: 'replacement' }] };
   state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
@@ -1891,12 +1998,12 @@ const createLayoutPreferences = () => ({
   assert.equal(recapturedA.identity.fingerprint, 'a'.repeat(64));
   assert.equal(recapturedA.retainedBytes, handleA.retainedBytes);
 
-  state.results.value[0] = { ...state.results.value[0], content: '<svg id="normal-edit" />' };
+  state.results.value = [{ ...state.results.value[0], content: '<svg id="normal-edit" />' }];
   state.featureColorOverrides['feature-a'] = '#ffffff';
   state.legendEntries.value[0].caption = 'Normal supported edit';
-  assert.equal(handleA.results[0].content, '<svg id="a" />');
-  assert.equal(handleA.features.featureColorOverrides['feature-a'], '#112233');
-  assert.equal(handleA.editorState.legend.entries[0].caption, 'A');
+  assert.equal(handleA.ownerSet.results[0].content, '<svg id="a" />');
+  assert.equal(handleA.mutableIntent.features.featureColorOverrides['feature-a'], '#112233');
+  assert.equal(handleA.mutableIntent.editorState.legend.entries[0].caption, 'A');
 
   await snapshots.restoreGeneratedArtifactHandle(handleB);
   assert.equal(state.results.value[0].name, 'edited.svg');
@@ -1912,14 +2019,9 @@ const createLayoutPreferences = () => ({
 
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   const installAuthorityOwnersB = () => {
-    state.results.value = [...handleB.results];
-    state.proteinIdentityManifest.value = authorityOwnersB.proteinIdentityManifest;
-    state.legacyProteinRawCandidates.value = authorityOwnersB.legacyProteinRawCandidates;
-    state.legacyProteinDerivedEvidence.value =
-      authorityOwnersB.legacyProteinDerivedEvidence;
-    state.losatCache.value = new Map(authorityOwnersB.losatCache);
-    state.losatDerivedCache.value = new Map(authorityOwnersB.losatDerivedCache);
-    state.losatCacheInfo.value = authorityOwnersB.losatCacheInfo;
+    snapshots.installGeneratedArtifactOwnerSet(handleB.ownerSet, {
+      selectedResultIndex: handleB.mutableIntent.ui.selectedResultIndex
+    });
     snapshots.setGeneratedArtifactIdentity({
       schema: 1,
       algorithm: 'SHA-256',
@@ -1942,6 +2044,13 @@ const createLayoutPreferences = () => ({
     compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
   });
   await ownerHistory.initializeIntentBaseline('LOSAT authority baseline');
+  const replacementLifecycle = [];
+  const replacementMetrics = [];
+  const hooksBeforeReplacement = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onSessionLifecycleEvent: ({ name }) => replacementLifecycle.push(name),
+    onStructuralMetric: (metric) => replacementMetrics.push(metric)
+  };
   let successfulGenerateCalls = 0;
   await ownerHistory.runUndoableArtifactReplacement('Generate LOSAT owners B', async () => {
     successfulGenerateCalls += 1;
@@ -1950,6 +2059,27 @@ const createLayoutPreferences = () => ({
   }, { shouldCommit: (result) => result.status === 'ok' });
   assertAuthorityOwners(authorityOwnersB);
   assert.equal(ownerHistory.getUndoCount(), 1);
+  assert.deepEqual(replacementLifecycle.slice(0, 2), [
+    'history.before-capture-started',
+    'history.before-capture-completed'
+  ]);
+  assert.equal(
+    replacementMetrics.filter(({ name }) => name === 'historyReplacementCount')
+      .reduce((total, { value }) => total + value, 0),
+    1
+  );
+  await ownerHistory.runUndoableArtifactReplacement(
+    'No-op Generate',
+    async () => ({ status: 'ok' }),
+    { shouldCommit: (result) => result.status === 'ok' }
+  );
+  assert.equal(ownerHistory.getUndoCount(), 1);
+  assert.equal(
+    replacementMetrics.filter(({ name }) => name === 'historyReplacementCount')
+      .reduce((total, { value }) => total + value, 0),
+    1
+  );
+  globalThis.__GBDRAW_TEST_HOOKS__ = hooksBeforeReplacement;
 
   await ownerHistory.undo();
   assertAuthorityOwners(authorityOwnersA);

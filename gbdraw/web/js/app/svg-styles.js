@@ -71,7 +71,9 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     if (previewRuntime?.markActiveResultDirty?.(reason)) return;
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      const nextResults = [...results.value];
+      nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      results.value = nextResults;
     }
   };
 
@@ -193,6 +195,15 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       && colors.pairwise_match_min
       && colors.pairwise_match_max
     ) {
+      const committedPairwiseFactors = pairwiseMatchFactors.value || {};
+      let nextPairwiseFactors = committedPairwiseFactors;
+      const retainPairwiseFactor = (pathKey, factor) => {
+        if (committedPairwiseFactors[pathKey] === factor) return;
+        if (nextPairwiseFactors === committedPairwiseFactors) {
+          nextPairwiseFactors = { ...committedPairwiseFactors };
+        }
+        nextPairwiseFactors[pathKey] = factor;
+      };
       let compIdx = 1;
       let compGroup = svg.getElementById(`comparison${compIdx}`);
       while (compGroup) {
@@ -227,14 +238,14 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
             let factor;
             if (Number.isFinite(metadataFactor)) {
               factor = metadataFactor;
-              pairwiseMatchFactors.value[pathKey] = factor;
-            } else if (pairwiseMatchFactors.value[pathKey] !== undefined) {
-              factor = pairwiseMatchFactors.value[pathKey];
+              retainPairwiseFactor(pathKey, factor);
+            } else if (committedPairwiseFactors[pathKey] !== undefined) {
+              factor = committedPairwiseFactors[pathKey];
             } else {
               const origMin = window._origPairwiseMin || '#FFE7E7';
               const origMax = window._origPairwiseMax || '#FF7272';
               factor = estimateColorFactor(currentFill, origMin, origMax);
-              pairwiseMatchFactors.value[pathKey] = factor;
+              retainPairwiseFactor(pathKey, factor);
             }
             const newColor = interpolateColor(colors.pairwise_match_min, colors.pairwise_match_max, factor);
             if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
@@ -242,6 +253,9 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
         });
         compIdx++;
         compGroup = svg.getElementById(`comparison${compIdx}`);
+      }
+      if (nextPairwiseFactors !== committedPairwiseFactors) {
+        pairwiseMatchFactors.value = nextPairwiseFactors;
       }
     }
 

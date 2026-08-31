@@ -129,10 +129,12 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       return false;
     }
     if (markIncremental && state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    state.results.value[resultIndex] = {
+    const nextResults = [...state.results.value];
+    nextResults[resultIndex] = {
       ...state.results.value[resultIndex],
       content
     };
+    state.results.value = nextResults;
     runtime.dirty = false;
     runtime.dirtyReasons.clear();
     return true;

@@ -144,7 +144,7 @@ class AuditSimplePathWorker {
 
 globalThis.Worker = AuditSimplePathWorker;
 
-const { createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
+const { afterPaint, createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
@@ -167,6 +167,7 @@ const {
 const { createHistoryFileStore } = await import(
   '../../gbdraw/web/js/services/history-files.js'
 );
+const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 const { createHistorySnapshotService } = await import(
   '../../gbdraw/web/js/services/history-snapshot.js'
 );
@@ -199,8 +200,12 @@ const artifactSnapshots = createHistorySnapshotService({
 });
 const generatedArtifactHandleOptions = {
   captureGeneratedArtifactHandle: artifactSnapshots.captureGeneratedArtifactHandle,
+  captureGeneratedArtifactOwnerSet: artifactSnapshots.captureGeneratedArtifactOwnerSet,
+  installGeneratedArtifactOwnerSet: artifactSnapshots.installGeneratedArtifactOwnerSet,
   restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
-  setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity
+  setGeneratedArtifactIdentity: artifactSnapshots.setGeneratedArtifactIdentity,
+  nextTick: window.Vue.nextTick,
+  waitForAfterPaint: async () => {}
 };
 const wireGeneratedArtifactRuntimeOwner = (runner) => {
   artifactSnapshots.setGeneratedArtifactRuntimeOwner({
@@ -317,13 +322,31 @@ const sha256Text = async (text) => {
   return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 };
 
+test('afterPaint crosses one completed frame before resolving', async () => {
+  const frames = [];
+  let resolved = false;
+  const painted = afterPaint({ requestFrame: (callback) => frames.push(callback) })
+    .then(() => { resolved = true; });
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  assert.equal(resolved, false);
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  await painted;
+  assert.equal(resolved, true);
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
+  const lifecycleEvents = [];
   globalThis.__GBDRAW_TEST_HOOKS__ = {
     onStructuralMetric(metric) {
       structuralMetrics[metric.name] = (
         Number(structuralMetrics[metric.name] || 0) + Number(metric.value || 0)
       );
+    },
+    onSessionLifecycleEvent({ name }) {
+      lifecycleEvents.push(name);
     }
   };
   const primary = new AuditFile(['LOCUS audit\nORIGIN\n//\n'], 'active.gb', {
@@ -385,9 +408,45 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
   let cancelDuringCandidate = false;
+  const activationOwnerSets = [];
+  const captureForHistory = (...args) => {
+    assert.equal(state.processing.value, true);
+    assert.notEqual(state.processingStatus.value, '');
+    lifecycleEvents.push('test.before-handle-capture');
+    return artifactSnapshots.captureGeneratedArtifactHandle(...args);
+  };
+  const generationHistory = createHistoryManager({
+    buildIntent: async () => ({}),
+    applyIntent: async () => {},
+    buildCheckpoint: () => {
+      throw new Error('Generate must not build a full artifact checkpoint.');
+    },
+    applyCheckpoint: async () => {
+      throw new Error('Generate must not apply a full artifact checkpoint.');
+    },
+    captureGeneratedArtifactHandle: captureForHistory,
+    restoreGeneratedArtifactHandle: artifactSnapshots.restoreGeneratedArtifactHandle,
+    compareGeneratedArtifactHandles: artifactSnapshots.compareGeneratedArtifactHandles
+  });
+  await generationHistory.initializeIntentBaseline('Generated artifact baseline');
   let runner;
   runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
+    captureGeneratedArtifactHandle: captureForHistory,
+    installGeneratedArtifactOwnerSet: (ownerSet, options) => {
+      activationOwnerSets.push(ownerSet);
+      artifactSnapshots.installGeneratedArtifactOwnerSet(ownerSet, options);
+      assert.equal(state.results.value, ownerSet.results);
+      assert.equal(state.featureCatalog.value, ownerSet.featureCatalog);
+      assert.equal(state.losatCache.value, ownerSet.losatCache);
+      assert.equal(state.matchSequenceRegistry.captureTrustedOwner(), ownerSet.matchSequenceOwner);
+    },
+    waitForAfterPaint: async () => {
+      lifecycleEvents.push('test.after-paint-returned');
+    },
+    runGeneratedArtifactReplacement: (...args) => (
+      generationHistory.runUndoableArtifactReplacement(...args)
+    ),
     state,
     serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
     canonicalSessionVersion: SESSION_VERSION,
@@ -433,6 +492,23 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
   assert.equal(state.extractedFeatures.value.length, 1);
   assert.equal(state.biologicalFeatures.value.length, 1);
+  assert.ok(
+    lifecycleEvents.indexOf('generate.processing-published')
+      < lifecycleEvents.indexOf('test.after-paint-returned')
+  );
+  assert.ok(
+    lifecycleEvents.indexOf('generate.paint-opportunity-completed')
+      < lifecycleEvents.indexOf('history.before-capture-started')
+  );
+  assert.ok(
+    lifecycleEvents.indexOf('test.before-handle-capture')
+      < lifecycleEvents.indexOf('history.before-capture-completed')
+  );
+  assert.equal(activationOwnerSets.length, 1);
+  assert.equal(structuralMetrics.generatedArtifactCandidateBuildCount, 1);
+  assert.equal(structuralMetrics.generatedArtifactActivationCount, 1);
+  assert.equal(structuralMetrics.generatedArtifactFinalizeCount, 1);
+  assert.equal(structuralMetrics.historyReplacementCount, 1);
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount || 0, 0);
   runner.downloadCliHelperFiles();
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount, 1);
@@ -456,6 +532,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
+  const metricsBeforePreActivationFailure = { ...structuralMetrics };
   assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
@@ -463,6 +540,18 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     /incompatible feature metadata/
   );
   assert.deepEqual(committedFeatureState(), committedState);
+  assert.equal(
+    structuralMetrics.generatedArtifactCandidateBuildCount,
+    metricsBeforePreActivationFailure.generatedArtifactCandidateBuildCount
+  );
+  assert.equal(
+    structuralMetrics.generatedArtifactActivationCount,
+    metricsBeforePreActivationFailure.generatedArtifactActivationCount
+  );
+  assert.equal(
+    structuralMetrics.generatedArtifactFinalizeCount,
+    metricsBeforePreActivationFailure.generatedArtifactFinalizeCount
+  );
 
   workerResponses.push(response(
     result('malformed.svg', 'malformed'),
@@ -480,6 +569,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.canvasPan.x = 31;
   state.canvasPan.y = -12;
   const lateFailureState = committedFeatureState();
+  const metricsBeforeLateFailure = { ...structuralMetrics };
   failArtifactAdoption = true;
   const lateFailureResult = result('late-failure.svg', 'late-failure');
   workerResponses.push(response(
@@ -497,6 +587,18 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
   assert.equal(state.zoom.value, 1.7);
   assert.deepEqual(state.canvasPan, { x: 31, y: -12 });
+  assert.equal(
+    structuralMetrics.generatedArtifactActivationCount,
+    metricsBeforeLateFailure.generatedArtifactActivationCount + 1
+  );
+  assert.equal(
+    structuralMetrics.generatedArtifactRollbackCount,
+    metricsBeforeLateFailure.generatedArtifactRollbackCount + 1
+  );
+  assert.equal(
+    structuralMetrics.generatedArtifactFinalizeCount,
+    metricsBeforeLateFailure.generatedArtifactFinalizeCount
+  );
 
   const canceledState = committedFeatureState();
   const canceledResultIdentity = state.results.value;
@@ -507,7 +609,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   cancelDuringCandidate = false;
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.deepEqual(committedFeatureState(), canceledState);
-  assert.notEqual(state.results.value, canceledResultIdentity);
+  assert.equal(state.results.value, canceledResultIdentity);
   assert.deepEqual(state.results.value, canceledResultIdentity);
   assert.equal(state.results.value[0], canceledResultIdentity[0]);
   assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
@@ -651,8 +753,15 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       }
     });
   }));
+  const helperRequestsBeforeCancel = workerMessages.filter(({ type }) => type === 'helper').length;
   const canceledRun = runner.runAnalysis();
-  await Promise.resolve();
+  for (
+    let turn = 0;
+    turn < 12 && workerMessages.filter(({ type }) => type === 'helper').length === helperRequestsBeforeCancel;
+    turn += 1
+  ) {
+    await Promise.resolve();
+  }
   await runner.cancelRunAnalysis();
   releaseDiscovery();
   assert.deepEqual(await canceledRun, { status: 'canceled' });
@@ -1075,11 +1184,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       state.errorLog.value?.summary || '',
       /injected LOSAT late artifact adoption failure/
     );
-    assert.notEqual(state.losatCache.value, committedLosatCache);
+    assert.equal(state.losatCache.value, committedLosatCache);
     assert.deepEqual(
       Array.from(state.losatCache.value.entries()),
       committedLosatCacheEntries,
-      'artifact rollback may restore a snapshot map but must not publish candidate entries'
+      'artifact rollback must reinstall the exact committed cache owner'
     );
     assert.deepEqual(state.losatCacheInfo.value, committedLosatCacheInfo);
     assert.deepEqual(
@@ -1463,11 +1572,13 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const committedResults = state.results.value;
   const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
   const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
-  await Promise.resolve();
+  for (let turn = 0; turn < 4 && typeof releaseRecordCatalog !== 'function'; turn += 1) {
+    await Promise.resolve();
+  }
   await runner.cancelRunAnalysis();
   releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await canceledRun, { status: 'canceled' });
-  assert.notEqual(state.results.value, committedResults);
+  assert.equal(state.results.value, committedResults);
   assert.deepEqual(state.results.value, committedResults);
   assert.equal(state.results.value[0], committedResults[0]);
   assert.equal(state.processing.value, false);

@@ -388,9 +388,15 @@ export const runDiagramGeneration = (payload = {}) => {
             failWorker(error);
             return;
           }
-          preparedResources.commit();
+          let resourcePromotionFinalized = false;
+          const finalizeResourcePromotion = () => {
+            if (resourcePromotionFinalized) return false;
+            preparedResources.commit();
+            resourcePromotionFinalized = true;
+            return true;
+          };
           settleActiveRequest(request, () => {
-            resolveRequest({ requestId, ...normalized });
+            resolveRequest({ requestId, ...normalized, finalizeResourcePromotion });
           });
           return;
         }

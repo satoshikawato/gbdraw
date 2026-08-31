@@ -634,7 +634,9 @@ export const createFeatureSvgActions = ({
         skipCaptureBaseConfig.value = true;
         const idx = selectedResultIndex.value;
         if (idx >= 0 && results.value.length > idx) {
-          results.value[idx] = { ...results.value[idx], content: newContent };
+          const nextResults = [...results.value];
+          nextResults[idx] = { ...results.value[idx], content: newContent };
+          results.value = nextResults;
         }
         console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
       } else {
@@ -712,7 +714,9 @@ export const createFeatureSvgActions = ({
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: newContent };
+        const nextResults = [...results.value];
+        nextResults[idx] = { ...results.value[idx], content: newContent };
+        results.value = nextResults;
       }
       return true;
     } catch (e) {

@@ -400,7 +400,9 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const serialized = serializeCleanSvg(svg);
     if (results.value[index]?.content === serialized) return;
     skipCaptureBaseConfig.value = true;
-    results.value[index] = { ...results.value[index], content: serialized };
+    const nextResults = [...results.value];
+    nextResults[index] = { ...results.value[index], content: serialized };
+    results.value = nextResults;
   };
 
   const queueLabelReflow = (reason, force = false) => {

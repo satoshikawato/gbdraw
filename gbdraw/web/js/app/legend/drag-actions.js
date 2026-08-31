@@ -128,7 +128,9 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
       const idx = selectedResultIndex.value;
       if (svg && idx >= 0 && results.value.length > idx) {
         skipCaptureBaseConfig.value = true;
-        results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+        const nextResults = [...results.value];
+        nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+        results.value = nextResults;
       }
     }
 
@@ -169,7 +171,9 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     skipCaptureBaseConfig.value = true;
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      const nextResults = [...results.value];
+      nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      results.value = nextResults;
     }
   };
 

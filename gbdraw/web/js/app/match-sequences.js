@@ -100,11 +100,17 @@ export const extractMatchedSpan = (sequence, startRaw, endRaw) => {
 };
 
 export const createSequenceSourceRegistry = (initialSources = []) => {
-  const sources = new Map();
-  const ambiguousKeys = new Set();
+  let owner = Object.freeze({
+    sources: new Map(),
+    ambiguousKeys: new Set()
+  });
 
-  const register = (source) => {
+  const registerInto = (targetOwner, source, { trusted = false } = {}) => {
     const key = text(source?.key);
+    if (trusted) {
+      if (key) targetOwner.sources.set(key, source);
+      return key ? source : null;
+    }
     const sequence = normalizedSequence(source?.sequence);
     const recordIndex = optionalNonnegativeIntegerStatus(source?.recordIndex);
     const sourceIndex = optionalNonnegativeIntegerStatus(source?.sourceIndex);
@@ -118,34 +124,55 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
       recordIndex: recordIndex.value,
       sourceIndex: sourceIndex.value
     };
-    if (ambiguousKeys.has(key)) return null;
-    const existing = sources.get(key);
+    if (targetOwner.ambiguousKeys.has(key)) return null;
+    const existing = targetOwner.sources.get(key);
     if (existing) {
       if (sequenceSourcesAgree(existing, entry)) return existing;
-      sources.delete(key);
-      ambiguousKeys.add(key);
+      targetOwner.sources.delete(key);
+      targetOwner.ambiguousKeys.add(key);
       return null;
     }
-    sources.set(key, entry);
+    targetOwner.sources.set(key, entry);
     return entry;
   };
 
+  const register = (source) => {
+    const nextOwner = Object.freeze({
+      sources: new Map(owner.sources),
+      ambiguousKeys: new Set(owner.ambiguousKeys)
+    });
+    const registered = registerInto(nextOwner, source);
+    owner = nextOwner;
+    return registered;
+  };
+
+  const buildOwner = (nextSources = [], { trusted = false } = {}) => {
+    const nextOwner = Object.freeze({
+      sources: new Map(),
+      ambiguousKeys: new Set()
+    });
+    (Array.isArray(nextSources) ? nextSources : []).forEach((source) => {
+      registerInto(nextOwner, source, { trusted });
+    });
+    return nextOwner;
+  };
+
   const reset = (nextSources = []) => {
-    sources.clear();
-    ambiguousKeys.clear();
-    (Array.isArray(nextSources) ? nextSources : []).forEach(register);
+    owner = buildOwner(nextSources);
   };
 
   // Artifact History only supplies entries previously produced by this registry.
   // Re-adopt those immutable entries without normalizing or copying large sequence
   // strings a second time.
   const resetTrusted = (nextSources = []) => {
-    sources.clear();
-    ambiguousKeys.clear();
-    (Array.isArray(nextSources) ? nextSources : []).forEach((source) => {
-      const key = text(source?.key);
-      if (key) sources.set(key, source);
-    });
+    owner = buildOwner(nextSources, { trusted: true });
+  };
+
+  const replaceTrustedOwner = (nextOwner) => {
+    if (!(nextOwner?.sources instanceof Map) || !(nextOwner?.ambiguousKeys instanceof Set)) {
+      throw new Error('A trusted sequence source owner is required.');
+    }
+    owner = nextOwner;
   };
 
   const resolve = (sourceKey, recordId, context = {}) => {
@@ -164,10 +191,10 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     );
     const explicitKey = text(sourceKey);
     if (explicitKey) {
-      if (ambiguousKeys.has(explicitKey)) {
+      if (owner.ambiguousKeys.has(explicitKey)) {
         return { source: null, reason: 'The sequence source key for this match is ambiguous.' };
       }
-      const direct = sources.get(explicitKey);
+      const direct = owner.sources.get(explicitKey);
       if (!direct) {
         return { source: null, reason: 'The sequence source for this match is unavailable.' };
       }
@@ -176,7 +203,7 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
         : { source: null, reason: 'The sequence source key conflicts with the match identity.' };
     }
 
-    let candidates = Array.from(sources.values()).filter((source) => {
+    let candidates = Array.from(owner.sources.values()).filter((source) => {
       if (expectedOrigin && source.origin !== expectedOrigin) return false;
       if (expectedSourceIndex.supplied && source.sourceIndex !== expectedSourceIndex.value) return false;
       if (expectedRecordIndex.supplied && source.recordIndex !== expectedRecordIndex.value) return false;
@@ -200,14 +227,17 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
     return { source: null, reason: `No sequence source matched record “${wanted}”.` };
   };
 
-  (Array.isArray(initialSources) ? initialSources : []).forEach(register);
+  owner = buildOwner(initialSources);
   return {
-    sources,
+    get sources() { return owner.sources; },
+    buildTrustedOwner: (nextSources = []) => buildOwner(nextSources, { trusted: true }),
+    captureTrustedOwner: () => owner,
     register,
+    replaceTrustedOwner,
     reset,
     resetTrusted,
     resolve,
-    values: () => Array.from(sources.values())
+    values: () => Array.from(owner.sources.values())
   };
 };
 

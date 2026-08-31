@@ -1906,8 +1906,21 @@ export const createAppSetup = () => {
     getCommittedCanonicalRenderRequest,
     getCommittedCanonicalSession,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
+    captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
+    installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
     restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
+    runGeneratedArtifactReplacement: (...args) => (
+      history.runUndoableArtifactReplacement(...args)
+    ),
+    nextTick,
+    onGeneratedArtifactCheckpointCapture: ({ phase, diagnostics } = {}) => {
+      recordSessionLifecycleEvent(`generate-history-${String(phase || '')}`, {
+        diagnostics: diagnostics && typeof diagnostics === 'object'
+          ? diagnostics
+          : {}
+      });
+    },
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
@@ -2269,13 +2282,6 @@ export const createAppSetup = () => {
         };
   }
 
-  const recordGenerateHistoryCapture = ({ phase, diagnostics } = {}) => {
-    recordSessionLifecycleEvent(`generate-history-${String(phase || '')}`, {
-      diagnostics: diagnostics && typeof diagnostics === 'object'
-        ? diagnostics
-        : {}
-    });
-  };
   const runAnalysis = async () => {
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
@@ -2290,27 +2296,19 @@ export const createAppSetup = () => {
       if (mode.value === 'linear') await focusLinearComparisonIssue();
       return { status: 'error' };
     }
-    return history.runUndoableArtifactReplacement(
-      'Generate diagram',
-      async (generatedArtifactHandle) => {
-        cancelDefinitionUpdate();
-        const result = await runGeneratedDiagramAnalysis(
-          comparisonPlanSnapshot,
-          generatedArtifactHandle,
-          comparisonExecution
-        );
-        if (result?.status === 'error' && mode.value === 'linear') {
-          await focusLinearComparisonIssue();
-        }
-        if (result?.status === 'ok') {
-          featureSelection.clearFeatureSelection({ clearStatus: true });
-        }
-        return result;
-      }, {
-        shouldCommit: (result) => result?.status === 'ok',
-        onCheckpointCapture: recordGenerateHistoryCapture
-      }
+    cancelDefinitionUpdate();
+    const result = await runGeneratedDiagramAnalysis(
+      comparisonPlanSnapshot,
+      null,
+      comparisonExecution
     );
+    if (result?.status === 'error' && mode.value === 'linear') {
+      await focusLinearComparisonIssue();
+    }
+    if (result?.status === 'ok') {
+      featureSelection.clearFeatureSelection({ clearStatus: true });
+    }
+    return result;
   };
 
   const chooseImportedComparisonAction = (action) => history.runUndoable(

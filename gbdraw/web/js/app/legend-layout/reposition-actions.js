@@ -52,10 +52,12 @@ export const createLegendRepositionActions = ({
     skipPositionReapply.value = true;
     const index = selectedResultIndex.value;
     if (index >= 0 && index < results.value.length) {
-      results.value[index] = {
+      const nextResults = [...results.value];
+      nextResults[index] = {
         ...results.value[index],
         content: serializeCleanSvg(svg)
       };
+      results.value = nextResults;
     }
   };
 

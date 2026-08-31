@@ -141,6 +141,13 @@ const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
 
+export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
+  if (typeof requestFrame !== 'function') return Promise.resolve();
+  return new Promise((resolve) => {
+    requestFrame(() => requestFrame(resolve));
+  });
+};
+
 const hashText = async (text) => {
   if (globalThis.crypto?.subtle) {
     const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -922,8 +929,14 @@ export const createRunAnalysis = ({
   getCommittedCanonicalRenderRequest = null,
   getCommittedCanonicalSession = null,
   captureGeneratedArtifactHandle,
+  captureGeneratedArtifactOwnerSet,
+  installGeneratedArtifactOwnerSet,
   restoreGeneratedArtifactHandle,
   setGeneratedArtifactIdentity = null,
+  runGeneratedArtifactReplacement = null,
+  nextTick = () => Promise.resolve(),
+  waitForAfterPaint = afterPaint,
+  onGeneratedArtifactCheckpointCapture = null,
   resetPreviewViewport,
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
@@ -941,6 +954,7 @@ export const createRunAnalysis = ({
     resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
+    pairwiseMatchFactors,
     trackSlotResolvedGeometry,
     errorLog,
     semanticFileWatchersSuppressed,
@@ -983,8 +997,6 @@ export const createRunAnalysis = ({
     circularConservation,
     annotationSets,
     orthogroups,
-    collinearGroups,
-    featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
@@ -1025,9 +1037,11 @@ export const createRunAnalysis = ({
   } = state;
   if (
     typeof captureGeneratedArtifactHandle !== 'function'
+    || typeof captureGeneratedArtifactOwnerSet !== 'function'
+    || typeof installGeneratedArtifactOwnerSet !== 'function'
     || typeof restoreGeneratedArtifactHandle !== 'function'
   ) {
-    throw new Error('createRunAnalysis requires generated artifact handle handlers.');
+    throw new Error('createRunAnalysis requires generated artifact transaction handlers.');
   }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
@@ -1041,39 +1055,72 @@ export const createRunAnalysis = ({
   let circularRecordRefreshGeneration = 0;
   let activeCircularRecordRefresh = null;
   let activeLosatAbortController = null;
-  let latestCliHelperFiles = [];
+  let latestCliHelperFiles = Object.freeze([]);
   let latestCliHelperArchiveName = 'out-cli-files.zip';
+  let latestCliHelperRetainedBytes = 0;
   const cloneCliHelperFiles = (files) => (
     (Array.isArray(files) ? files : []).map((file) => ({ ...file }))
   );
-  const captureGeneratedArtifactRuntimeState = () => {
-    const helperFiles = cloneCliHelperFiles(latestCliHelperFiles);
-    return {
-      latestCliHelperFiles: helperFiles,
-      latestCliHelperArchiveName,
-      losatTelemetry: cloneJsonValue(globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__, null),
-      retainedBytes: helperFiles.reduce((total, file) => (
-        total
-        + String(file?.name || '').length * 2
-        + String(file?.data || '').length * 2
-        + Math.max(0, Number(file?.retainedBytes) || 0)
-        + 256
-      ), String(latestCliHelperArchiveName || '').length * 2 + 16_384)
-    };
+  const publishGeneratedArtifactRuntimeState = ({ files, archiveName, losatTelemetry }) => {
+    latestCliHelperFiles = Object.freeze(cloneCliHelperFiles(files));
+    latestCliHelperArchiveName = String(archiveName || 'out-cli-files.zip');
+    latestCliHelperRetainedBytes = latestCliHelperFiles.reduce((total, file) => (
+      total
+      + String(file?.name || '').length * 2
+      + String(file?.data || '').length * 2
+      + Math.max(0, Number(file?.retainedBytes) || 0)
+      + 256
+    ), latestCliHelperArchiveName.length * 2 + 16_384);
+    globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = losatTelemetry;
   };
+  const captureGeneratedArtifactRuntimeState = () => (
+    Object.freeze({
+      latestCliHelperFiles,
+      latestCliHelperArchiveName,
+      losatTelemetry: globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__,
+      retainedBytes: latestCliHelperRetainedBytes
+    })
+  );
   const restoreGeneratedArtifactRuntimeState = (runtimeState = {}, { ui = {} } = {}) => {
-    latestCliHelperFiles = cloneCliHelperFiles(runtimeState?.latestCliHelperFiles);
+    latestCliHelperFiles = runtimeState?.latestCliHelperFiles || Object.freeze([]);
     latestCliHelperArchiveName = String(
       runtimeState?.latestCliHelperArchiveName || 'out-cli-files.zip'
     );
-    globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonValue(
-      runtimeState?.losatTelemetry,
-      null
-    );
+    latestCliHelperRetainedBytes = Math.max(0, Number(runtimeState?.retainedBytes) || 0);
+    globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = runtimeState?.losatTelemetry ?? null;
     if (typeof resetPreviewViewport === 'function') {
       resetPreviewViewport({ pan: ui?.canvasPan });
     }
   };
+  const generatedArtifactTransactionOwner = Object.freeze({
+    build(ownerSet, { finalizeResourcePromotion = null, runtimeState = null } = {}) {
+      recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
+      return Object.freeze({
+        ownerSet: Object.freeze(ownerSet),
+        runtimeState,
+        finalizeResourcePromotion:
+          typeof finalizeResourcePromotion === 'function' ? finalizeResourcePromotion : null
+      });
+    },
+    activate(candidate, { selectedResultIndex = 0 } = {}) {
+      installGeneratedArtifactOwnerSet(candidate.ownerSet, {
+        selectedResultIndex,
+        installResults(nextResults) {
+          results.value = nextResults;
+        }
+      });
+      publishGeneratedArtifactRuntimeState(candidate.runtimeState || {});
+      recordStructuralMetric('generatedArtifactActivationCount', 1);
+    },
+    finalize(candidate) {
+      candidate?.finalizeResourcePromotion?.();
+      recordStructuralMetric('generatedArtifactFinalizeCount', 1);
+    },
+    async restore(handle) {
+      recordStructuralMetric('generatedArtifactRollbackCount', 1);
+      await restoreGeneratedArtifactHandle(handle);
+    }
+  });
   const recordDiscoverySuppressed = () => Boolean(
     semanticFileWatchersSuppressed?.value ||
     sessionImportRollbackInProgress?.value
@@ -1207,37 +1254,6 @@ export const createRunAnalysis = ({
     };
     pruneMap(orthogroupNameOverrides);
     pruneMap(orthogroupDescriptionOverrides);
-  };
-
-  const setOrthogroupMetadata = (orthogroupPayload) => {
-    const groups = Array.isArray(orthogroupPayload) ? orthogroupPayload : [];
-    const index = buildOrthogroupFeatureIndex(groups);
-    const groupIds = groups
-      .map((group) => String(group?.id || '').trim())
-      .filter(Boolean);
-    orthogroups.value = groups;
-    featureOrthogroupIndex.value = index;
-    extractedFeatures.value = enrichFeaturesWithOrthogroups(extractedFeatures.value, index);
-    if (biologicalFeatures) {
-      biologicalFeatures.value = enrichFeaturesWithOrthogroups(
-        biologicalFeatures.value,
-        index
-      );
-    }
-    pruneOrthogroupOverrides(groupIds);
-    if (!selectedOrthogroupId.value || !groupIds.includes(String(selectedOrthogroupId.value || '').trim())) {
-      selectedOrthogroupId.value = groupIds[0] || '';
-    }
-  };
-
-  const clearOrthogroupMetadata = ({ clearSelection = false, clearOverrides = clearSelection } = {}) => {
-    orthogroups.value = [];
-    featureOrthogroupIndex.value = new Map();
-    if (clearSelection) {
-      selectedOrthogroupId.value = '';
-      selectedOrthogroupAlignmentFeature.value = '';
-    }
-    if (clearOverrides) pruneOrthogroupOverrides([], { clearAll: true });
   };
 
   const setFeatureEditorStatus = (updates = {}) => {
@@ -1407,7 +1423,9 @@ export const createRunAnalysis = ({
       customName,
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
-    entry.filename = filename;
+    losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+      candidate === entry ? { ...candidate, filename } : candidate
+    ));
     const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
       filename || 'losat.tsv',
@@ -1423,10 +1441,13 @@ export const createRunAnalysis = ({
     const fallbackOrdinal = Number.isInteger(Number(entry.ordinal))
       ? Number(entry.ordinal)
       : 0;
-    entry.filename = normalizeLosatFilename(
+    const filename = normalizeLosatFilename(
       customName,
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
+    losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+      candidate === entry ? { ...candidate, filename } : candidate
+    ));
   };
 
   const resetLabelScopeDialogState = () => {
@@ -1692,16 +1713,31 @@ export const createRunAnalysis = ({
     let linearRecordCatalog = null;
 
     const generationToken = ++latestGenerationToken;
-    let keepProcessingStatus = false;
     let canceledAttemptOwnsPresentation = false;
     let generationAbortController = null;
     let generationAbortSignal = null;
     const committedArtifactHandle = isReflow
       ? null
       : (generatedArtifactHandle || await captureGeneratedArtifactHandle());
+    let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
+      ?.proteinIdentityManifest ?? proteinIdentityManifest.value;
+    let workingLegacyProteinRawCandidates = committedArtifactHandle?.ownerSet
+      ?.legacyProteinRawCandidates ?? legacyProteinRawCandidates.value;
+    let workingLegacyProteinDerivedEvidence = committedArtifactHandle?.ownerSet
+      ?.legacyProteinDerivedEvidence ?? legacyProteinDerivedEvidence.value;
+    let workingOrthogroups = committedArtifactHandle?.ownerSet?.orthogroups
+      ?? orthogroups.value;
+    let workingExtractedFeatures = committedArtifactHandle?.ownerSet?.extractedFeatures
+      ?? extractedFeatures.value;
+    let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
+      ?? biologicalFeatures?.value;
+    let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
+      ?? losatCacheInfo.value;
+    let workingSelectedOrthogroupId = selectedOrthogroupId.value;
+    let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
       if (!committedArtifactHandle) return;
-      await restoreGeneratedArtifactHandle(committedArtifactHandle);
+      await generatedArtifactTransactionOwner.restore(committedArtifactHandle);
     };
     const finishCanceledManualRun = async () => {
       if (latestGenerationToken !== generationToken + 1) {
@@ -1712,8 +1748,6 @@ export const createRunAnalysis = ({
       errorLog.value = null;
       processingStatus.value = 'Canceled.';
       generationCancelRequested.value = false;
-      processing.value = false;
-      keepProcessingStatus = true;
       return { status: 'canceled' };
     };
     const setProcessingStatus = (message) => {
@@ -1735,7 +1769,6 @@ export const createRunAnalysis = ({
     if (!isReflow) activeLosatAbortController = generationAbortController;
     if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
       if (!isReflow) {
-        processing.value = true;
         processingStatus.value = 'Reading input records...';
       }
       let prepared;
@@ -1750,8 +1783,7 @@ export const createRunAnalysis = ({
         };
       } finally {
         if (!isReflow && generationToken === latestGenerationToken) {
-          processing.value = false;
-          processingStatus.value = '';
+          processingStatus.value = 'Preparing input files...';
         }
       }
       if (!isReflow && generationToken !== latestGenerationToken) {
@@ -1785,14 +1817,12 @@ export const createRunAnalysis = ({
         hasCompleteInput &&
         !circularDiscoveryMatchesCurrentInput()
       ) {
-        processing.value = true;
         processingStatus.value = 'Reading input records...';
         try {
           await refreshCircularRecordOrder();
         } finally {
           if (generationToken === latestGenerationToken) {
-            processing.value = false;
-            processingStatus.value = '';
+            processingStatus.value = 'Preparing input files...';
           }
         }
         if (generationToken !== latestGenerationToken) {
@@ -1847,11 +1877,11 @@ export const createRunAnalysis = ({
     const manualRunStartedAt = isReflow ? null : getNow();
     const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
     let structuredLosatTelemetry = null;
-    if (!isReflow) globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = null;
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
     let commitProteinMigration = null;
     let pendingLosatCacheCommit = null;
+    let activatedGeneratedArtifactCandidate = null;
 
     if (isReflow) {
       labelReflowProcessing.value = true;
@@ -1860,7 +1890,6 @@ export const createRunAnalysis = ({
       skipPositionReapply.value = true;
     } else {
       featureExtractionRequestId += 1;
-      generationCancelRequested.value = false;
       featureExtractionPending.value = false;
       featureExtractionError.value = null;
       setFeatureEditorStatus({
@@ -1870,7 +1899,6 @@ export const createRunAnalysis = ({
         summaryCount: 0,
         detailsCacheSize: 0
       });
-      processing.value = true;
       processingStatus.value = 'Preparing input files...';
       resultPanelTab.value = 'preview';
       errorLog.value = null;
@@ -2059,7 +2087,7 @@ export const createRunAnalysis = ({
 
       const labelOverride = buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
         editableLabels: editableLabelsSnapshot,
-        extractedFeatures: extractedFeatures.value,
+        extractedFeatures: workingExtractedFeatures,
         featureOverrideSources: featureOverrideSourcesSnapshot,
         visibilityOverrides: visibilityOverridesSnapshot
       });
@@ -2616,7 +2644,7 @@ export const createRunAnalysis = ({
             circularConservation.reference = ['query', 'subject'].includes(rawReference)
               ? rawReference
               : 'auto';
-            losatCacheInfo.value = [];
+            workingLosatCacheInfo = [];
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
@@ -2639,7 +2667,7 @@ export const createRunAnalysis = ({
             });
           }
         } else {
-          losatCacheInfo.value = [];
+          workingLosatCacheInfo = [];
         }
       } else {
         requireCurrentLinearTrackLayout(form.linear_track_layout);
@@ -2780,7 +2808,7 @@ export const createRunAnalysis = ({
           : 'adjacent';
 
         const reuseResolvedProteinArtifacts = useProteinBlastp
-          && !legacyProteinRawCandidates.value?.entries?.length
+          && !workingLegacyProteinRawCandidates?.entries?.length
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: files.linearCanonicalComparisons,
             committedRequest: typeof getCommittedCanonicalRenderRequest === 'function'
@@ -2919,11 +2947,12 @@ export const createRunAnalysis = ({
         const sequenceEntriesByKey = new Map();
         const linearFileTextCache = new WeakMap();
         if (!reuseResolvedProteinArtifacts) {
-          collinearGroups.value = [];
           if (useOrthogroupBlastp) {
-            clearOrthogroupMetadata();
+            workingOrthogroups = [];
           } else {
-            clearOrthogroupMetadata({ clearSelection: true });
+            workingOrthogroups = [];
+            workingSelectedOrthogroupId = '';
+            workingSelectedOrthogroupAlignmentFeature = '';
           }
         }
         let cacheInfo = [];
@@ -2983,7 +3012,7 @@ export const createRunAnalysis = ({
           : null;
 
         if (!hasLosatIntent) {
-          losatCacheInfo.value = [];
+          workingLosatCacheInfo = [];
         }
 
         let proteinRecordInstanceKeys = [];
@@ -3221,7 +3250,7 @@ export const createRunAnalysis = ({
             const response = await runDiagramHelperOperation(
               DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY,
               {
-                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                identityManifest: cloneJsonData(workingProteinIdentityManifest),
                 queryRecordInstanceKey: metadata.queryRecordInstanceKey,
                 subjectRecordInstanceKey: metadata.subjectRecordInstanceKey,
                 expectedOptions: {
@@ -3248,9 +3277,9 @@ export const createRunAnalysis = ({
         }) => {
           if (
             metadata?.identityKind !== 'protein' ||
-            !legacyProteinRawCandidates?.value
+            !workingLegacyProteinRawCandidates
           ) return null;
-          const envelope = legacyProteinRawCandidates.value;
+          const envelope = workingLegacyProteinRawCandidates;
           const pending = (Array.isArray(envelope?.entries) ? envelope.entries : [])
             .map((candidate, index) => ({ candidate, index }))
             .filter(({ candidate }) => candidate?.state === 'pending' && candidate?.originalEntry)
@@ -3268,7 +3297,7 @@ export const createRunAnalysis = ({
               subjectFasta: String(subjectEntry?.fasta || ''),
               queryProteinMap: cloneJsonData(queryEntry?.proteinMap || {}),
               subjectProteinMap: cloneJsonData(subjectEntry?.proteinMap || {}),
-              identityManifest: cloneJsonData(proteinIdentityManifest.value),
+              identityManifest: cloneJsonData(workingProteinIdentityManifest),
               expectedOptions: {
                 program: metadata.program,
                 outfmt: metadata.outfmt,
@@ -3290,7 +3319,7 @@ export const createRunAnalysis = ({
             typeof result.entry !== 'object'
           ) return null;
           if (String(result.entry.key || '') !== cacheKey) {
-            legacyProteinRawCandidates.value = transitionLegacyProteinCandidate(
+            workingLegacyProteinRawCandidates = transitionLegacyProteinCandidate(
               envelope,
               candidateIndex,
               'rejected',
@@ -3312,11 +3341,11 @@ export const createRunAnalysis = ({
             cacheMap,
             cacheKey,
             metadata,
-            proteinIdentityManifest.value
+            workingProteinIdentityManifest
           );
           if (!verified) {
             cacheMap.delete(cacheKey);
-            legacyProteinRawCandidates.value = transitionLegacyProteinCandidate(
+            workingLegacyProteinRawCandidates = transitionLegacyProteinCandidate(
               envelope,
               candidateIndex,
               'rejected',
@@ -3440,12 +3469,12 @@ export const createRunAnalysis = ({
               'Protein comparison metadata could not be validated. Reload the page and try again.'
             );
           }
-          proteinIdentityManifest.value = mergeProteinIdentityManifests(manifests);
+          workingProteinIdentityManifest = mergeProteinIdentityManifests(manifests);
           const legacyReferenceIds = collectLegacyProteinReferences(
-            orthogroups.value,
-            selectedOrthogroupAlignmentFeature.value,
-            extractedFeatures.value,
-            biologicalFeatures?.value
+            workingOrthogroups,
+            workingSelectedOrthogroupAlignmentFeature,
+            workingExtractedFeatures,
+            workingBiologicalFeatures
           );
           if (legacyReferenceIds.length > 0) {
             const response = await runDiagramHelperOperation(
@@ -3455,7 +3484,7 @@ export const createRunAnalysis = ({
                   proteinMap: entry.proteinMap || {},
                   fasta: entry.fasta || ''
                 }))),
-                identityManifest: cloneJsonData(proteinIdentityManifest.value),
+                identityManifest: cloneJsonData(workingProteinIdentityManifest),
                 referenceIds: cloneJsonData(legacyReferenceIds)
               }
             );
@@ -3466,29 +3495,29 @@ export const createRunAnalysis = ({
               );
             }
             const proteinIdMap = result.proteinIdMap;
-            orthogroups.value = rewriteMappedProteinReferences(
-              orthogroups.value,
+            workingOrthogroups = rewriteMappedProteinReferences(
+              workingOrthogroups,
               proteinIdMap
             );
-            selectedOrthogroupAlignmentFeature.value = rewriteMappedProteinReferences(
-              selectedOrthogroupAlignmentFeature.value,
+            workingSelectedOrthogroupAlignmentFeature = rewriteMappedProteinReferences(
+              workingSelectedOrthogroupAlignmentFeature,
               proteinIdMap
             );
-            extractedFeatures.value = rewriteMappedProteinReferences(
-              extractedFeatures.value,
+            workingExtractedFeatures = rewriteMappedProteinReferences(
+              workingExtractedFeatures,
               proteinIdMap
             );
-            if (biologicalFeatures) {
-              biologicalFeatures.value = rewriteMappedProteinReferences(
-                biologicalFeatures.value,
+            if (workingBiologicalFeatures) {
+              workingBiologicalFeatures = rewriteMappedProteinReferences(
+                workingBiologicalFeatures,
                 proteinIdMap
               );
             }
             if (collectLegacyProteinReferences(
-              orthogroups.value,
-              selectedOrthogroupAlignmentFeature.value,
-              extractedFeatures.value,
-              biologicalFeatures?.value
+              workingOrthogroups,
+              workingSelectedOrthogroupAlignmentFeature,
+              workingExtractedFeatures,
+              workingBiologicalFeatures
             ).length > 0) {
               throw new Error('Legacy protein UI references remain after migration.');
             }
@@ -3581,7 +3610,7 @@ export const createRunAnalysis = ({
               cacheMap,
               cacheKey,
               cacheMetadata,
-              proteinIdentityManifest.value
+              workingProteinIdentityManifest
             );
             if (!cached && useProteinBlastp) {
               cached = await tryPromoteLegacyProteinEntry({
@@ -3815,7 +3844,7 @@ export const createRunAnalysis = ({
               convertedPayload = getLosatDerivedCacheEntry(
                 derivedCacheMap,
                 derivedCacheKey,
-                proteinIdentityManifest.value
+                workingProteinIdentityManifest
               );
               if (convertedPayload) {
                 convertedPayload = {
@@ -3873,7 +3902,7 @@ export const createRunAnalysis = ({
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
                   mode: blastpMode,
                   payload: convertedPayload,
-                  manifest: proteinIdentityManifest.value
+                  manifest: workingProteinIdentityManifest
                 });
               }
             }
@@ -3970,8 +3999,8 @@ export const createRunAnalysis = ({
           }
           losatTiming.blastWriteMs += getNow() - blastWriteStartedAt;
           if (legacyPromotionTransaction.length > 0) {
-            commitProteinMigration = () => {
-              let nextLegacyEnvelope = legacyProteinRawCandidates.value;
+            commitProteinMigration = (candidateOwnerSet) => {
+              let nextLegacyEnvelope = candidateOwnerSet.legacyProteinRawCandidates;
               const promotedProteinIdMap = {};
               legacyPromotionTransaction.forEach(({
                 candidateIndex,
@@ -3990,31 +4019,46 @@ export const createRunAnalysis = ({
                   promotedProteinIdMap[oldId] = runtimeHandle;
                 });
               });
-              legacyProteinRawCandidates.value = nextLegacyEnvelope;
+              let nextLegacyEvidence = candidateOwnerSet.legacyProteinDerivedEvidence;
               if (!nextLegacyEnvelope.entries.some((candidate) => candidate.state === 'pending')) {
-                legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
+                nextLegacyEvidence = { schema: 1, entries: [] };
               }
+              let nextOrthogroups = candidateOwnerSet.orthogroups;
+              let nextExtractedFeatures = candidateOwnerSet.extractedFeatures;
+              let nextBiologicalFeatures = candidateOwnerSet.biologicalFeatures;
+              let nextSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
               if (Object.keys(promotedProteinIdMap).length > 0) {
-                orthogroups.value = rewriteMappedProteinReferences(
-                  orthogroups.value,
+                nextOrthogroups = rewriteMappedProteinReferences(
+                  nextOrthogroups,
                   promotedProteinIdMap
                 );
-                selectedOrthogroupAlignmentFeature.value = rewriteMappedProteinReferences(
-                  selectedOrthogroupAlignmentFeature.value,
+                nextSelectedAlignmentFeature = rewriteMappedProteinReferences(
+                  nextSelectedAlignmentFeature,
                   promotedProteinIdMap
                 );
-                extractedFeatures.value = rewriteMappedProteinReferences(
-                  extractedFeatures.value,
+                nextExtractedFeatures = rewriteMappedProteinReferences(
+                  nextExtractedFeatures,
                   promotedProteinIdMap
                 );
-                if (biologicalFeatures) {
-                  biologicalFeatures.value = rewriteMappedProteinReferences(
-                    biologicalFeatures.value,
+                if (nextBiologicalFeatures) {
+                  nextBiologicalFeatures = rewriteMappedProteinReferences(
+                    nextBiologicalFeatures,
                     promotedProteinIdMap
                   );
                 }
               }
               legacyPromotionCommitted = true;
+              return {
+                ownerSet: {
+                  ...candidateOwnerSet,
+                  legacyProteinRawCandidates: nextLegacyEnvelope,
+                  legacyProteinDerivedEvidence: nextLegacyEvidence,
+                  orthogroups: nextOrthogroups,
+                  extractedFeatures: nextExtractedFeatures,
+                  biologicalFeatures: nextBiologicalFeatures
+                },
+                selectedOrthogroupAlignmentFeature: nextSelectedAlignmentFeature
+              };
             };
           }
           structuredLosatTelemetry = {
@@ -4232,6 +4276,10 @@ export const createRunAnalysis = ({
         resources: canonical.resources
       });
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
+      setProcessingStatus('Preparing generated diagram...');
+      await nextTick();
+      await waitForAfterPaint();
+      throwIfGenerationCanceled();
       const postGbdrawTimingEntries = [];
       const res = generationResponse.results;
       const generationMetadata = (
@@ -4286,7 +4334,7 @@ export const createRunAnalysis = ({
             () => prepareReflowCommit({
               results: res,
               suppressPairwiseIdentityLegend,
-              features: extractedFeatures.value,
+              features: workingExtractedFeatures,
               featureStrokeOverrides,
               legendColorOverrides,
               legendStrokeOverrides
@@ -4304,7 +4352,7 @@ export const createRunAnalysis = ({
               legendColorOverrides,
               legendStrokeOverrides,
               manualSpecificRules,
-              legacyFeatures: committedArtifactHandle?.features?.extractedFeatures || [],
+              legacyFeatures: committedArtifactHandle?.ownerSet?.extractedFeatures || [],
               suppressPairwiseIdentityLegend
             })
           );
@@ -4354,28 +4402,99 @@ export const createRunAnalysis = ({
 
       if (!isReflow) {
         recordSessionLifecycleEvent('preview-result-commit-start');
-        results.value = candidateCommit.results;
-        trackSlotResolvedGeometry.value = generationMetadata.trackSlotGeometry || null;
-        if (resultGenerationKey) resultGenerationKey.value += 1;
-        selectedResultIndex.value = Math.max(
+        const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
+          ? candidateCommit.featureState.orthogroups
+          : [];
+        const candidateOrthogroupIndex = buildOrthogroupFeatureIndex(candidateGroups);
+        const candidateExtractedFeatures = enrichFeaturesWithOrthogroups(
+          candidateCommit.featureState.extractedFeatures,
+          candidateOrthogroupIndex
+        );
+        const candidateBiologicalFeatures = enrichFeaturesWithOrthogroups(
+          candidateCommit.featureState.biologicalFeatures,
+          candidateOrthogroupIndex
+        );
+        const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+        let candidateOwnerSet = {
+          ...currentOwnerSet,
+          results: candidateCommit.results,
+          featureCatalog: candidateCatalog,
+          extractedFeatures: candidateExtractedFeatures,
+          biologicalFeatures: candidateBiologicalFeatures,
+          featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
+          featureRecordIds: candidateCommit.featureState.featureRecordIds,
+          orthogroups: candidateGroups,
+          featureOrthogroupIndex: candidateOrthogroupIndex,
+          collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
+            ? candidateCommit.featureState.collinearGroups
+            : [],
+          trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
+          proteinIdentityManifest: workingProteinIdentityManifest,
+          legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
+          legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
+          losatCache: pendingLosatCacheCommit?.cacheMap || losatCache.value,
+          losatDerivedCache:
+            pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
+          losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+          matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
+            candidateCommit.featureState.sequenceSources
+          ) || currentOwnerSet.matchSequenceOwner,
+          lastRunInfo: candidateRunInfo,
+          pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
+          editableLabels: [],
+          generatedLegendPosition: form.legend,
+          generatedMode: mode.value,
+          generatedMultiRecordCanvas:
+            mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
+          generatedCircularPlotTitlePosition: mode.value === 'circular'
+            ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
+            : currentOwnerSet.generatedCircularPlotTitlePosition,
+          appliedPaletteName: String(
+            selectedPalette?.value || appliedPaletteName.value || 'default'
+          ),
+          appliedPaletteColors: { ...currentColors.value },
+          pendingPaletteName: '',
+          pendingPaletteColors: {}
+        };
+        let migratedSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
+        if (commitProteinMigration) {
+          const migrated = commitProteinMigration(candidateOwnerSet);
+          candidateOwnerSet = migrated.ownerSet;
+          migratedSelectedAlignmentFeature = migrated.selectedOrthogroupAlignmentFeature;
+        }
+        const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
+          candidateOwnerSet,
+          {
+            finalizeResourcePromotion: generationResponse.finalizeResourcePromotion,
+            runtimeState: {
+              files: candidateCliHelpers?.files,
+              archiveName: candidateCliHelpers?.archiveName,
+              losatTelemetry: cloneJsonData(structuredLosatTelemetry)
+            }
+          }
+        );
+        const nextSelectedResultIndex = Math.max(
           0,
           Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
         );
-        featureCatalog.value = candidateCatalog;
-        extractedFeatures.value = candidateCommit.featureState.extractedFeatures;
-        if (biologicalFeatures) {
-          biologicalFeatures.value = candidateCommit.featureState.biologicalFeatures;
-        }
-        featureSelectorSafetyScope.value =
-          candidateCommit.featureState.featureSelectorSafetyScope;
-        featureRecordIds.value = candidateCommit.featureState.featureRecordIds;
+        generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
+          selectedResultIndex: nextSelectedResultIndex
+        });
+        activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
+        if (resultGenerationKey) resultGenerationKey.value += 1;
         selectedFeatureRecordIdx.value = 0;
-        editableLabels.value = [];
-        setOrthogroupMetadata(candidateCommit.featureState.orthogroups);
-        collinearGroups.value = Array.isArray(candidateCommit.featureState.collinearGroups)
-          ? candidateCommit.featureState.collinearGroups
-          : [];
-        matchSequenceRegistry?.reset?.(candidateCommit.featureState.sequenceSources);
+        selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
+        const candidateGroupIds = candidateGroups
+          .map((group) => String(group?.id || '').trim())
+          .filter(Boolean);
+        pruneOrthogroupOverrides(candidateGroupIds);
+        if (
+          !workingSelectedOrthogroupId
+          || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
+        ) {
+          workingSelectedOrthogroupId = candidateGroupIds[0] || '';
+        }
+        selectedOrthogroupId.value = workingSelectedOrthogroupId;
         featureExtractionPending.value = false;
         featureExtractionError.value = null;
         Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
@@ -4389,24 +4508,12 @@ export const createRunAnalysis = ({
           cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
         );
         setFeatureEditorStatus({
-          status: extractedFeatures.value.length ? 'summary-ready' : 'idle',
+          status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
           generationId: featureExtractionRequestId,
           error: null,
-          summaryCount: extractedFeatures.value.length,
+          summaryCount: candidateExtractedFeatures.length,
           detailsCacheSize: 0
         });
-        generatedLegendPosition.value = form.legend;
-        generatedMode.value = mode.value;
-        generatedMultiRecordCanvas.value =
-          mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false;
-        if (mode.value === 'circular') {
-          generatedCircularPlotTitlePosition.value =
-            normalizeCircularPlotTitlePosition(adv.plot_title_position);
-        }
-        lastRunInfo.value = candidateRunInfo;
-        latestCliHelperFiles = cloneCliHelperFiles(candidateCliHelpers?.files);
-        latestCliHelperArchiveName =
-          candidateCliHelpers?.archiveName || 'out-cli-files.zip';
         resultPanelTab.value = 'preview';
         if (typeof resetPreviewViewport === 'function') {
           resetPreviewViewport({ resetZoom: true });
@@ -4415,29 +4522,10 @@ export const createRunAnalysis = ({
         }
         recordSessionLifecycleEvent('preview-result-commit-end');
       }
-      if (!isReflow) {
-        appliedPaletteName.value = String(selectedPalette?.value || appliedPaletteName.value || 'default');
-        appliedPaletteColors.value = { ...currentColors.value };
-        pendingPaletteName.value = '';
-        pendingPaletteColors.value = {};
-      }
-      commitProteinMigration?.();
       if (!isReflow && typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
         });
-      }
-      if (!isReflow && pendingLosatCacheCommit) {
-        losatCacheInfo.value = pendingLosatCacheCommit.cacheInfo;
-        losatCache.value = pendingLosatCacheCommit.cacheMap;
-        if (pendingLosatCacheCommit.derivedCacheMap) {
-          losatDerivedCache.value = pendingLosatCacheCommit.derivedCacheMap;
-        }
-      }
-      if (!isReflow) {
-        globalThis.__GBDRAW_LAST_LOSAT_TELEMETRY__ = cloneJsonData(
-          structuredLosatTelemetry
-        );
       }
       if (!isReflow && typeof adoptCanonicalRenderArtifacts === 'function') {
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
@@ -4449,7 +4537,11 @@ export const createRunAnalysis = ({
           { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
         );
       }
-      return { status: 'ok' };
+      if (isReflow) generationResponse.finalizeResourcePromotion?.();
+      return {
+        status: 'ok',
+        generatedArtifactCandidate: activatedGeneratedArtifactCandidate
+      };
     } catch (e) {
       if (!legacyPromotionCommitted) {
         legacyPromotionTransaction.forEach(({ cacheMap, cacheKey }) => {
@@ -4482,9 +4574,7 @@ export const createRunAnalysis = ({
           activeLosatAbortController = null;
         }
         if (generationToken === latestGenerationToken || canceledAttemptOwnsPresentation) {
-          if (!keepProcessingStatus) processingStatus.value = '';
           generationCancelRequested.value = false;
-          processing.value = false;
         }
       }
     }
@@ -4495,18 +4585,54 @@ export const createRunAnalysis = ({
     generatedArtifactHandle = null,
     comparisonExecution = null
   ) => {
-    const outcome = await runAnalysisInternal({
-      runMode: 'manual',
-      comparisonPlanSnapshot,
-      generatedArtifactHandle,
-      comparisonExecution
-    });
-    if (['error', 'canceled'].includes(outcome?.status)) {
-      failedGeneratePreservedResult.value = results.value.length > 0;
-    } else if (outcome?.status === 'ok') {
-      failedGeneratePreservedResult.value = false;
+    let outcome = null;
+    processing.value = true;
+    processingStatus.value = 'Preparing input files...';
+    generationCancelRequested.value = false;
+    recordSessionLifecycleEvent('generate.processing-published');
+    try {
+      await nextTick();
+      await waitForAfterPaint();
+      recordSessionLifecycleEvent('generate.paint-opportunity-completed');
+      if (generationCancelRequested.value) {
+        processingStatus.value = 'Canceled.';
+        outcome = { status: 'canceled' };
+        failedGeneratePreservedResult.value = results.value.length > 0;
+        return outcome;
+      }
+      const execute = (beforeHandle) => runAnalysisInternal({
+        runMode: 'manual',
+        comparisonPlanSnapshot,
+        generatedArtifactHandle: beforeHandle || generatedArtifactHandle,
+        comparisonExecution
+      });
+      outcome = typeof runGeneratedArtifactReplacement === 'function'
+        ? await runGeneratedArtifactReplacement(
+            'Generate diagram',
+            execute,
+            {
+              shouldCommit: (result) => result?.status === 'ok',
+              onCheckpointCapture: onGeneratedArtifactCheckpointCapture
+            }
+          )
+        : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
+      if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
+        generatedArtifactTransactionOwner.finalize(outcome.generatedArtifactCandidate);
+      }
+      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+        outcome = { status: outcome.status };
+      }
+      if (['error', 'canceled'].includes(outcome?.status)) {
+        failedGeneratePreservedResult.value = results.value.length > 0;
+      } else if (outcome?.status === 'ok') {
+        failedGeneratePreservedResult.value = false;
+      }
+      return outcome;
+    } finally {
+      if (outcome?.status !== 'canceled') processingStatus.value = '';
+      generationCancelRequested.value = false;
+      processing.value = false;
     }
-    return outcome;
   };
 
   const cancelRunAnalysis = () => {
@@ -4570,12 +4696,8 @@ export const createRunAnalysis = ({
   };
 
   const clearLosatCache = () => {
-    if (losatCache.value) {
-      losatCache.value.clear();
-    }
-    if (losatDerivedCache.value) {
-      losatDerivedCache.value.clear();
-    }
+    losatCache.value = new Map();
+    losatDerivedCache.value = new Map();
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
     legacyProteinRawCandidates.value = { schema: 1, entries: [] };
     legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
