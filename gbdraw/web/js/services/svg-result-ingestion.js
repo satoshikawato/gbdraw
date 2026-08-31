@@ -219,6 +219,21 @@ const hasOperations = (operations) => Boolean(
   )
 );
 
+const hasDetachedOperations = (operations) => Boolean(
+  operations
+  && (
+    operations.featureFills.length
+    || operations.featureStrokes.length
+    || operations.featureVisibility.length
+    || operations.legendFills.length
+    || operations.legendStrokes.length
+    || operations.legendRenames.length
+    || operations.legendDeletes.length
+    || operations.legendAdds.length
+    || operations.callerTransforms.length
+  )
+);
+
 const requireCurrentMutationPlan = (plan, resultCount) => {
   if (
     !plan
@@ -284,7 +299,6 @@ const legendSwatch = (entryGroup) => Array.from(
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   const state = {
     featureElements: null,
-    labelElements: null,
     legendEntries: null,
     legendGroups: null
   };
@@ -307,18 +321,6 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
       });
       recordStructuralMetric('featureDomFullScanCount', 1, { phase, resultIndex });
       return state.featureElements;
-    },
-    labels() {
-      announce();
-      if (state.labelElements) return state.labelElements;
-      state.labelElements = new Map();
-      Array.from(svg.querySelectorAll('text[data-label-feature-id]')).forEach((element) => {
-        const renderedId = text(element.getAttribute('data-label-feature-id'));
-        if (!renderedId) return;
-        if (!state.labelElements.has(renderedId)) state.labelElements.set(renderedId, []);
-        state.labelElements.get(renderedId).push(element);
-      });
-      return state.labelElements;
     },
     legends() {
       announce();
@@ -354,17 +356,9 @@ const requireFeatureElements = (index, renderedId) => {
   return elements;
 };
 
-const requireLabelElement = (index, renderedId) => {
-  const elements = index.labels().get(renderedId) || [];
-  if (elements.length !== 1) {
-    throw new Error('Sanitized SVG content is missing or ambiguously binds an editable Label.');
-  }
-  return elements[0];
-};
-
-const requireLegendEntries = (index, caption) => {
+const requireLegendEntries = (index, caption, { allowMissing = false } = {}) => {
   const entries = index.legends().entries.get(caption) || [];
-  if (entries.length === 0) {
+  if (entries.length === 0 && !allowMissing) {
     throw new Error('Sanitized SVG content is missing a Legend binding.');
   }
   return entries;
@@ -389,28 +383,6 @@ const applyFeatureOperations = (index, operations) => {
       if (mode === 'off') setAttributeIfDifferent(element, 'display', 'none');
       else removeAttributeIfPresent(element, 'display');
     });
-  });
-};
-
-const setLabelText = (element, value) => {
-  const textPath = element.querySelector?.('textPath');
-  if (textPath) textPath.textContent = value;
-  else element.textContent = value;
-};
-
-const applyLabelOperations = (index, operations) => {
-  operations.labelText.forEach(({ renderedId, value }) => {
-    setLabelText(requireLabelElement(index, renderedId), value);
-  });
-  operations.labelVisibility.forEach(({ renderedId, mode }) => {
-    const element = requireLabelElement(index, renderedId);
-    if (mode === 'off') {
-      setAttributeIfDifferent(element, 'data-gbdraw-label-visibility-preview', 'off');
-      setAttributeIfDifferent(element, 'display', 'none');
-    } else {
-      removeAttributeIfPresent(element, 'data-gbdraw-label-visibility-preview');
-      removeAttributeIfPresent(element, 'display');
-    }
   });
 };
 
@@ -453,21 +425,27 @@ const moveLegendEntryToAnchor = (entry, xPos, yPos) => {
 };
 
 const applyLegendOperations = (index, operations) => {
-  operations.legendFills.forEach(({ caption, color }) => {
-    requireLegendEntries(index, caption).forEach((entry) => {
+  operations.legendFills.forEach(({ caption, color, allowMissing }) => {
+    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
       setAttributeIfDifferent(swatch, 'fill', color);
     });
   });
-  operations.legendStrokes.forEach(({ caption, strokeColor, strokeWidth, renderedIds }) => {
+  operations.legendStrokes.forEach(({
+    caption,
+    strokeColor,
+    strokeWidth,
+    allowMissing,
+    renderedIds
+  }) => {
     (Array.isArray(renderedIds) ? renderedIds : []).forEach((renderedId) => {
       requireFeatureElements(index, renderedId).forEach((element) => {
         if (strokeColor) setAttributeIfDifferent(element, 'stroke', strokeColor);
         if (strokeWidth !== null) setAttributeIfDifferent(element, 'stroke-width', strokeWidth);
       });
     });
-    requireLegendEntries(index, caption).forEach((entry) => {
+    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
       if (strokeColor) setAttributeIfDifferent(swatch, 'stroke', strokeColor);
@@ -485,7 +463,17 @@ const applyLegendOperations = (index, operations) => {
   });
   operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
     const { entries, groups } = index.legends();
-    if (entries.has(caption) || groups.length === 0) {
+    const existingEntries = entries.get(caption) || [];
+    if (existingEntries.length > 0) {
+      existingEntries.forEach((entry) => {
+        const swatch = legendSwatch(entry);
+        if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
+        setAttributeIfDifferent(swatch, 'fill', color);
+        moveLegendEntryToAnchor(entry, xPos, yPos);
+      });
+      return;
+    }
+    if (groups.length === 0) {
       throw new Error('Current SVG cannot admit the requested Legend addition.');
     }
     groups.forEach((group) => {
@@ -519,7 +507,10 @@ const admitCurrentResult = (
   if (!hasSanitizedSvgEnvelope(sanitized)) {
     throw new Error('The diagram engine returned malformed SVG content.');
   }
-  if (!hasOperations(operations)) {
+  // Label DOM identity is reconstructed by the one mounted-preview Label binder.
+  // Keep its intent in the plan, but do not require transient mounted hooks on a
+  // detached Worker SVG before PreviewRuntime has installed the candidate.
+  if (!hasDetachedOperations(operations)) {
     return commitCatalogBackedResult({ ...result, content: sanitized }, metadata);
   }
 
@@ -527,7 +518,6 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  applyLabelOperations(index, operations);
   applyLegendOperations(index, operations);
   operations.callerTransforms.forEach((transform) => transform(svg, { result, resultIndex }));
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });

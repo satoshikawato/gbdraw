@@ -1941,7 +1941,10 @@ export const createAppSetup = () => {
     },
     synchronizeLabelEditor(context) {
       if (!context.bindingOptions.trustedRestore && shouldSyncMountedLabelEditor()) {
-        featureActions.syncLabelEditor();
+        featureActions.syncLabelEditor({
+          requiredFeatureIds: context.bindingOptions.requiredLabelFeatureIds,
+          optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds
+        });
       }
     },
     initializeStrokeAndCanvas(context) {

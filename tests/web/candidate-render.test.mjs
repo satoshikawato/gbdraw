@@ -126,6 +126,14 @@ test('each direct editor domain and their combination compile to MUTATING', () =
   Object.values(combined.operationsByResult[0]).forEach((entries) => {
     assert.equal(Object.isFrozen(entries), true);
   });
+  assert.deepEqual(combined.operationsByResult[0].labelText, [{
+    renderedId: 'f0001',
+    value: 'renamed'
+  }]);
+  assert.deepEqual(combined.operationsByResult[0].labelVisibility, [{
+    renderedId: 'f0001',
+    mode: 'off'
+  }]);
 });
 
 test('plan construction uses admission indexes and never enumerates catalog Features', () => {

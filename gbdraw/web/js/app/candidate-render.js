@@ -205,6 +205,22 @@ const compilePlanBundle = ({
   const rendererDerivedCaptions = new Set(
     Array.from(addedLegendCaptions || []).map(text).filter(Boolean)
   );
+  const hiddenRenderedIds = new Set(
+    Object.entries(featureVisibilityOverrides || {})
+      .filter(([, mode]) => text(mode).toLowerCase() === 'off')
+      .map(([renderedId]) => text(renderedId))
+      .filter(Boolean)
+  );
+  const renderedIdsByDirectCaption = new Map();
+  Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
+    const caption = text(override?.caption);
+    if (!caption) return;
+    const renderedIds = renderedIdsByDirectCaption.get(caption) || new Set();
+    resolvedStableTargets(catalogAdmission, key).forEach(({ renderedId }) => {
+      if (renderedId) renderedIds.add(renderedId);
+    });
+    renderedIdsByDirectCaption.set(caption, renderedIds);
+  });
   const allResultIndexes = operationsByResult.map((_, index) => index);
 
   currentEntries.forEach((entry) => {
@@ -222,6 +238,14 @@ const compilePlanBundle = ({
       });
     }
     const targetCaption = isOriginal ? entry.originalCaption : entry.caption;
+    const legendRenderedIds = entry.featureIds.length > 0
+      ? entry.featureIds
+      : [...(renderedIdsByDirectCaption.get(entry.caption) || [])];
+    const allowMissing = rendererDerivedCaptions.has(entry.caption)
+      && (
+        legendRenderedIds.length === 0
+        || legendRenderedIds.every((renderedId) => hiddenRenderedIds.has(renderedId))
+      );
     if (
       hasOwn(legendColorOverrides, entry.caption)
       && !deletedCaptions.has(entry.originalCaption)
@@ -230,7 +254,8 @@ const compilePlanBundle = ({
       if (color) {
         addToResults(operationsByResult, allResultIndexes, 'legendFills', {
           caption: targetCaption,
-          color
+          color,
+          allowMissing
         });
       }
     }
@@ -247,7 +272,8 @@ const compilePlanBundle = ({
           caption: targetCaption,
           strokeColor,
           strokeWidth,
-          renderedIds: entry.featureIds.filter((renderedId) => (
+          allowMissing,
+          renderedIds: legendRenderedIds.filter((renderedId) => (
             renderedResultIndexes(catalogAdmission, renderedId).size > 0
           ))
         });

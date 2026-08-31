@@ -4507,6 +4507,24 @@ export const createRunAnalysis = ({
         if (!selectedCandidateResult) {
           throw new Error('The generated artifact has no selected preview Result.');
         }
+        const selectedMutationOperations = (
+          candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
+          || null
+        );
+        const optionalLabelFeatureIds = new Set(
+          (selectedMutationOperations?.labelVisibility || [])
+            .filter((operation) => operation?.mode === 'off')
+            .map((operation) => String(operation?.renderedId || '').trim())
+            .filter(Boolean)
+        );
+        const requiredLabelFeatureIds = Object.freeze([
+          ...new Set([
+            ...(selectedMutationOperations?.labelText || []),
+            ...(selectedMutationOperations?.labelVisibility || [])
+          ].map((operation) => String(operation?.renderedId || '').trim()).filter(
+            (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
+          ))
+        ]);
         const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
           result: selectedCandidateResult,
           resultIndex: nextSelectedResultIndex,
@@ -4514,7 +4532,11 @@ export const createRunAnalysis = ({
           generationToken: String(generationToken),
           catalogState: candidateCatalogAdmission,
           phase: 'generate',
-          bindingOptions: { isIncrementalEdit: false },
+          bindingOptions: {
+            isIncrementalEdit: false,
+            requiredLabelFeatureIds,
+            optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
+          },
           isCurrent: () => (
             latestGenerationToken === generationToken
             && !generationCancelRequested.value

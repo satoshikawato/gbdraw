@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import {
+  requireUniqueEditableLabelBindings
+} from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 import {
   admitFeatureCatalog,
@@ -93,7 +96,11 @@ globalThis.XMLSerializer = class {
   serializeToString(node) { return serializeNode(node); }
 };
 
-const buildSvgRoot = ({ missingFeature = false, missingLabel = false } = {}) => {
+const buildSvgRoot = ({
+  missingFeature = false,
+  missingLabel = false,
+  missingLegend = false
+} = {}) => {
   const root = new FakeElement('svg', { xmlns: 'http://www.w3.org/2000/svg' });
   if (!missingFeature) {
     root.appendChild(new FakeElement('path', {
@@ -111,16 +118,18 @@ const buildSvgRoot = ({ missingFeature = false, missingLabel = false } = {}) => 
     label.textContent = 'old label';
     root.appendChild(label);
   }
-  const legend = new FakeElement('g', { id: 'legend' });
-  const featureLegend = new FakeElement('g', { id: 'feature_legend' });
-  const entry = new FakeElement('g', { 'data-legend-key': 'CDS' });
-  entry.appendChild(new FakeElement('path', { fill: '#aaaaaa' }));
-  const caption = new FakeElement('text');
-  caption.textContent = 'CDS';
-  entry.appendChild(caption);
-  featureLegend.appendChild(entry);
-  legend.appendChild(featureLegend);
-  root.appendChild(legend);
+  if (!missingLegend) {
+    const legend = new FakeElement('g', { id: 'legend' });
+    const featureLegend = new FakeElement('g', { id: 'feature_legend' });
+    const entry = new FakeElement('g', { 'data-legend-key': 'CDS' });
+    entry.appendChild(new FakeElement('path', { fill: '#aaaaaa' }));
+    const caption = new FakeElement('text');
+    caption.textContent = 'CDS';
+    entry.appendChild(caption);
+    featureLegend.appendChild(entry);
+    legend.appendChild(featureLegend);
+    root.appendChild(legend);
+  }
   return root;
 };
 
@@ -135,7 +144,8 @@ class FakeDomParser {
       documentElement: isSvg
         ? buildSvgRoot({
             missingFeature: content.includes('missing-feature'),
-            missingLabel: content.includes('missing-label')
+            missingLabel: content.includes('missing-label'),
+            missingLegend: content.includes('missing-legend')
           })
         : new FakeElement('html'),
       querySelector: () => null
@@ -339,10 +349,11 @@ for (const [domain, makeOptions] of Object.entries(planOptions)) {
       sanitizer: { sanitize: (value) => value },
       parser: FakeDomParser
     }));
-    assert.equal(FakeDomParser.calls, 1);
-    assert.equal(metricTotal(metrics, 'applicationSvgParseCount'), 1);
-    assert.equal(metricTotal(metrics, 'svgMutationIndexBuildCount'), 1);
-    assert.equal(metricTotal(metrics, 'svgSerializationCount'), 1);
+    const detachedSvgWork = domain === 'Label' ? 0 : 1;
+    assert.equal(FakeDomParser.calls, detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'applicationSvgParseCount'), detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'svgMutationIndexBuildCount'), detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'svgSerializationCount'), detachedSvgWork);
     assert.equal(metricTotal(metrics, 'svgIdentityScanCount'), 0);
     assert.equal(metricTotal(metrics, 'currentLegacyNormalizationCount'), 0);
   });
@@ -372,8 +383,8 @@ test('combined current mutations share one root/index and serialize once', () =>
   assert.equal(metricTotal(metrics, 'svgSerializationCount'), 1);
   assert.match(results[0].content, /fill="#112233"/);
   assert.match(results[0].content, /display="none"/);
-  assert.match(results[0].content, /data-gbdraw-label-visibility-preview="off"/);
-  assert.match(results[0].content, />new label<\/text>/);
+  assert.doesNotMatch(results[0].content, /data-gbdraw-label-visibility-preview="off"/);
+  assert.match(results[0].content, />old label<\/text>/);
   assert.match(results[0].content, /fill="#334455"/);
 });
 
@@ -427,9 +438,62 @@ test('direct Legend rename, deletion, and addition are applied through catalog-b
   });
 });
 
-test('missing requested target rejects current admission before commit', () => {
-  const { response, admission } = currentFixture('<svg>missing-label</svg>');
-  const plan = compileDirectEditorMutationPlan(planOptions.Label(admission));
+test('a requested Legend addition reuses an exact renderer-produced caption', () => {
+  const { response, admission } = currentFixture();
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [{
+      caption: 'CDS',
+      originalCaption: 'CDS',
+      color: '#556677',
+      xPos: 40,
+      yPos: 50
+    }],
+    originalLegendOrder: ['other proteins']
+  });
+  const results = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  assert.equal((results[0].content.match(/data-legend-key="CDS"/g) || []).length, 1);
+  assert.match(results[0].content, /fill="#556677"/);
+});
+
+test('a renderer-derived Legend style may be absent when no current binding remains', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    featureColorOverrides: {
+      [biologicalFeatureKey('record-a', 'retired-feature')]: {
+        color: '#334455',
+        caption: 'CDS'
+      }
+    },
+    legendEntries: [{
+      caption: 'CDS',
+      originalCaption: 'CDS',
+      color: '#334455'
+    }],
+    originalLegendOrder: ['CDS'],
+    addedLegendCaptions: new Set(['CDS']),
+    legendColorOverrides: { CDS: '#334455' },
+    legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+  });
+  assert.equal(plan.operationsByResult[0].legendFills[0].allowMissing, true);
+  assert.equal(plan.operationsByResult[0].legendStrokes[0].allowMissing, true);
+  assert.doesNotThrow(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  }));
+});
+
+test('an unexplained missing Legend binding remains rejected', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan(planOptions.Legend(admission));
   assert.throws(
     () => admitCurrentGeneratedResults(response, {
       catalogAdmission: admission,
@@ -437,9 +501,47 @@ test('missing requested target rejects current admission before commit', () => {
       sanitizer: { sanitize: (value) => value },
       parser: FakeDomParser
     }),
+    /missing a Legend binding/
+  );
+});
+
+test('Label replay is deferred until mounted identity binding', () => {
+  const { response, admission } = currentFixture('<svg>missing-label</svg>');
+  const plan = compileDirectEditorMutationPlan(planOptions.Label(admission));
+  const admitted = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  assert.equal(isCommittedSvgResult(admitted[0]), true);
+  assert.equal(isCommittedSvgResult(response.results[0]), false);
+});
+
+test('mounted Label binding accepts one target and rejects missing or ambiguous identity', () => {
+  const label = (featureId) => new FakeElement('text', {
+    'data-label-feature-id': featureId
+  });
+  assert.doesNotThrow(() => requireUniqueEditableLabelBindings(
+    [label('f0001')],
+    ['f0001']
+  ));
+  assert.throws(
+    () => requireUniqueEditableLabelBindings([], ['f0001']),
     /missing or ambiguously binds an editable Label/
   );
-  assert.equal(isCommittedSvgResult(response.results[0]), false);
+  assert.throws(
+    () => requireUniqueEditableLabelBindings(
+      [label('f0001'), label('f0001')],
+      ['f0001']
+    ),
+    /missing or ambiguously binds an editable Label/
+  );
+  assert.doesNotThrow(() => requireUniqueEditableLabelBindings(
+    [],
+    ['f0001'],
+    { allowMissing: true }
+  ));
 });
 
 test('current-session and legacy-import remain explicit, incompatible boundaries', () => {
