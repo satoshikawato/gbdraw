@@ -114,12 +114,8 @@ import {
   readFileText
 } from '../services/file-content-cache.js';
 import {
-  validateFeatureCatalog
+  admitFeatureCatalog
 } from '../services/feature-catalog.js';
-import {
-  buildOrthogroupFeatureIndex,
-  enrichFeaturesWithOrthogroups
-} from '../services/orthogroup-feature-metadata.js';
 import {
   prepareCandidateRenderCommit,
   prepareReflowResultCommit
@@ -828,11 +824,6 @@ const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 };
-const normalizeCollinearColorMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
-  if (normalized === 'identity') return 'average_identity';
-  return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
-};
 const normalizePairwiseMatchStyle = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
@@ -965,6 +956,7 @@ export const createRunAnalysis = ({
     skipPositionReapply,
     matchSequenceRegistry,
     featureColorOverrides,
+    featureVisibilityOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
     legendColorOverrides,
@@ -1033,7 +1025,11 @@ export const createRunAnalysis = ({
     labelVisibilityOverrides,
     labelOverrideBuildWarning,
     labelReflowProcessing,
-    labelReflowLastError
+    labelReflowLastError,
+    legendEntries,
+    deletedLegendEntries,
+    originalLegendOrder,
+    addedLegendCaptions
   } = state;
   if (
     typeof captureGeneratedArtifactHandle !== 'function'
@@ -1531,16 +1527,6 @@ export const createRunAnalysis = ({
       return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
     }
     return '';
-  };
-
-  const shouldSuppressPairwiseIdentityLegend = (comparisonPlanSnapshot = null) => {
-    return (
-      mode.value === 'linear' &&
-      comparisonPlanSnapshot?.hasLosatIntent === true &&
-      losatProgram.value === 'blastp' &&
-      normalizeBlastpMode(losat.blastp?.mode) === 'collinear' &&
-      normalizeCollinearColorMode(losat.blastp?.collinearColorMode) === 'orientation'
-    );
   };
 
   const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
@@ -4318,42 +4304,58 @@ export const createRunAnalysis = ({
         skipPositionReapply.value = true;
       }
 
-      const suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend(
-        activeComparisonPlanSnapshot
+      recordSessionLifecycleEvent('candidate-result-validation-start');
+      const candidateCatalogAdmission = admitFeatureCatalog(
+        generationMetadata.featureCatalog,
+        res,
+        { adopt: true, mode: mode.value }
       );
-      if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-start');
-      const candidateCatalog = isReflow
-        ? null
-        : validateFeatureCatalog(generationMetadata.featureCatalog, res, { adopt: true });
-      if (!isReflow) recordSessionLifecycleEvent('candidate-result-validation-end');
+      const candidateCatalog = candidateCatalogAdmission.catalog;
+      recordSessionLifecycleEvent('candidate-result-validation-end');
       recordSessionLifecycleEvent('result-admission-start');
       const candidateCommit = isReflow
         ? measureTiming(
             postGbdrawTimingEntries,
             'run-analysis commit sanitized reflow results',
             () => prepareReflowCommit({
+              generationResponse,
+              catalogAdmission: candidateCatalogAdmission,
               results: res,
-              suppressPairwiseIdentityLegend,
-              features: workingExtractedFeatures,
+              featureColorOverrides,
               featureStrokeOverrides,
+              featureVisibilityOverrides,
+              labelTextFeatureOverrides,
+              labelVisibilityOverrides,
+              legendEntries: legendEntries.value,
+              deletedLegendEntries: deletedLegendEntries.value,
+              originalLegendOrder: originalLegendOrder.value,
+              addedLegendCaptions: addedLegendCaptions.value,
               legendColorOverrides,
-              legendStrokeOverrides
+              legendStrokeOverrides,
+              manualSpecificRules
             })
           )
         : measureTiming(
             postGbdrawTimingEntries,
             'run-analysis sanitize and reapply editor overrides',
             () => prepareCandidateCommit({
+              generationResponse,
+              catalogAdmission: candidateCatalogAdmission,
               results: res,
               catalog: candidateCatalog,
               mode: mode.value,
               featureColorOverrides,
               featureStrokeOverrides,
+              featureVisibilityOverrides,
+              labelTextFeatureOverrides,
+              labelVisibilityOverrides,
+              legendEntries: legendEntries.value,
+              deletedLegendEntries: deletedLegendEntries.value,
+              originalLegendOrder: originalLegendOrder.value,
+              addedLegendCaptions: addedLegendCaptions.value,
               legendColorOverrides,
               legendStrokeOverrides,
-              manualSpecificRules,
-              legacyFeatures: committedArtifactHandle?.ownerSet?.extractedFeatures || [],
-              suppressPairwiseIdentityLegend
+              manualSpecificRules
             })
           );
       recordSessionLifecycleEvent('result-admission-end');
@@ -4405,15 +4407,9 @@ export const createRunAnalysis = ({
         const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
           ? candidateCommit.featureState.orthogroups
           : [];
-        const candidateOrthogroupIndex = buildOrthogroupFeatureIndex(candidateGroups);
-        const candidateExtractedFeatures = enrichFeaturesWithOrthogroups(
-          candidateCommit.featureState.extractedFeatures,
-          candidateOrthogroupIndex
-        );
-        const candidateBiologicalFeatures = enrichFeaturesWithOrthogroups(
-          candidateCommit.featureState.biologicalFeatures,
-          candidateOrthogroupIndex
-        );
+        const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
+        const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
+        const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
         const currentOwnerSet = captureGeneratedArtifactOwnerSet();
         let candidateOwnerSet = {
           ...currentOwnerSet,

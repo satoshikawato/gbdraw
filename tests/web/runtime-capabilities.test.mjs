@@ -136,6 +136,9 @@ const {
   getDiagramGenerationWorkerCapabilities,
   runDiagramGeneration
 } = generationModule;
+const { isCurrentWorkerGenerationResponse } = await import(
+  '../../gbdraw/web/js/services/current-worker-result-source.js'
+);
 
 {
   assert.equal(FakeWorker.instances.length, 0);
@@ -146,6 +149,8 @@ const {
     1
   );
   assert.deepEqual(first.results, [{ name: 'diagram.svg', content: '<svg></svg>' }]);
+  assert.equal(isCurrentWorkerGenerationResponse(first), true);
+  assert.equal(isCurrentWorkerGenerationResponse(JSON.parse(JSON.stringify(first))), false);
   assert.equal(Object.isFrozen(getDiagramGenerationWorkerCapabilities()), true);
 
   const second = await runDiagramGeneration({ request: {}, resources: {} });

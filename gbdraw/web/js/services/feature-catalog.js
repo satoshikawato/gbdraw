@@ -2,12 +2,21 @@ import {
   SOURCE_FEATURE_INDEX_KEYS,
   nonnegativeIntegerAliasStatus
 } from './feature-identity.js';
+import {
+  buildOrthogroupFeatureIndex,
+  enrichFeaturesWithOrthogroups
+} from './orthogroup-feature-metadata.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric
+} from './runtime-test-hooks.js';
 
 const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
 export const FEATURE_CATALOG_SCHEMA = 3;
 const adoptedFeatureCatalogs = new WeakSet();
+const featureCatalogAdmissions = new WeakMap();
 
 const isObject = (value) => (
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -25,6 +34,45 @@ const catalogError = () => new Error(FEATURE_CATALOG_RELOAD_MESSAGE);
 const requireArray = (value) => {
   if (!Array.isArray(value)) throw catalogError();
   return value;
+};
+
+const normalizeRenderedId = (value) => text(value).replace(/__(?:part|line)\d+$/, '');
+
+const createCatalogRenderedIdentityCollection = () => ({
+  byRenderedId: new Map(),
+  renderedIds: new Set(),
+  ambiguousRenderedIds: new Set(),
+  byStableId: new Map(),
+  byStableRecordKey: new Map(),
+  totalRenderedCount: 0
+});
+
+const addToIdentityList = (target, key, identity) => {
+  if (!key) return;
+  if (!target.has(key)) target.set(key, []);
+  target.get(key).push(identity);
+};
+
+const addCatalogRenderedIdentity = (collection, identity) => {
+  const renderedId = normalizeRenderedId(identity.renderedId);
+  const stableId = normalizeRenderedId(identity.stableId) || renderedId;
+  if (!renderedId || collection.byRenderedId.has(renderedId)) throw catalogError();
+  const normalized = {
+    renderedId,
+    stableId,
+    recordIndex: identity.recordIndex,
+    recordId: text(identity.recordId),
+    elementId: text(identity.elementId) || renderedId
+  };
+  collection.byRenderedId.set(renderedId, normalized);
+  collection.renderedIds.add(renderedId);
+  addToIdentityList(collection.byStableId, stableId, normalized);
+  addToIdentityList(
+    collection.byStableRecordKey,
+    `${stableId}\u001f${identity.recordIndex}`,
+    normalized
+  );
+  collection.totalRenderedCount = collection.renderedIds.size;
 };
 
 export const biologicalFeatureKey = (recordKey, biologicalFeatureId) => {
@@ -68,7 +116,24 @@ const canonicalSequenceSourceStrings = (sequenceSources) => (
   })
 );
 
-const validateCatalogItem = (item, result, resultIndex) => {
+const rememberRenderedTarget = (target, key, value) => {
+  if (!key) return;
+  if (!target.has(key)) target.set(key, []);
+  target.get(key).push(value);
+};
+
+const rememberRenderedResultIndex = (target, renderedId, resultIndex) => {
+  if (!target.has(renderedId)) target.set(renderedId, new Set());
+  target.get(renderedId).add(resultIndex);
+};
+
+const displayRecordId = (context, recordKey) => {
+  const recordIndex = context.recordIndexByKey.get(recordKey) ?? 0;
+  const recordId = context.publicRecordIdByKey.get(recordKey) || recordKey;
+  return context.mode === 'linear' ? `File ${recordIndex + 1}: ${recordId}` : recordId;
+};
+
+const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
   if (
     !isObject(item)
     || item.resultIndex !== resultIndex
@@ -81,14 +146,30 @@ const validateCatalogItem = (item, result, resultIndex) => {
   if (recordKeys.some((recordKey) => !recordKey) || new Set(recordKeys).size !== recordKeys.length) {
     throw catalogError();
   }
+  recordKeys.forEach((recordKey) => {
+    if (!context.recordIndexByKey.has(recordKey)) {
+      context.recordIndexByKey.set(recordKey, context.recordKeys.length);
+      context.recordKeys.push(recordKey);
+    }
+  });
   const knownRecordKeys = new Set(recordKeys);
+  const itemRecordIndexByKey = new Map(
+    recordKeys.map((recordKey, recordIndex) => [recordKey, recordIndex])
+  );
   const sequenceSources = item.sequenceSources === undefined
     ? []
     : requireArray(item.sequenceSources);
   const sourceSequences = canonicalSequenceSourceStrings(sequenceSources);
+  context.scalarMetrics.sequenceSourceCount += sequenceSources.length;
+  context.scalarMetrics.sequenceCharacters += sourceSequences.reduce(
+    (total, sequence) => total + sequence.length,
+    0
+  );
   const biologicalFeatures = requireArray(item.biologicalFeatures);
   const knownFeatures = new Set();
   const sourceIndexesByStableIdentity = new Map();
+  const biologicalByKey = new Map();
+  const expandedBiological = [];
   biologicalFeatures.forEach((feature) => {
     if (!isObject(feature)) throw catalogError();
     const sourceFeatureIndex = nonnegativeIntegerAliasStatus(
@@ -143,7 +224,7 @@ const validateCatalogItem = (item, result, resultIndex) => {
     if (feature.sequenceSourceIndex !== undefined) {
       const sourceIndex = feature.sequenceSourceIndex;
       const source = sequenceSources[sourceIndex];
-      const expectedRecordIndex = recordKeys.indexOf(recordKey);
+      const expectedRecordIndex = itemRecordIndexByKey.get(recordKey);
       if (
         !Number.isInteger(sourceIndex)
         || sourceIndex < 0
@@ -161,6 +242,20 @@ const validateCatalogItem = (item, result, resultIndex) => {
       }
     }
     knownFeatures.add(key);
+    const recordId = text(feature.record_id ?? feature.recordId);
+    if (recordId && !context.publicRecordIdByKey.has(recordKey)) {
+      context.publicRecordIdByKey.set(recordKey, recordId);
+    }
+    const expanded = expandBiologicalFeature(
+      feature,
+      context.recordIndexByKey.get(recordKey) ?? 0,
+      recordKey,
+      sequenceSources,
+      sourceSequences,
+      itemRecordIndexByKey.get(recordKey) ?? -1
+    );
+    biologicalByKey.set(key, expanded);
+    expandedBiological.push(expanded);
   });
   sourceIndexesByStableIdentity.forEach((sourceIndexes) => {
     if (
@@ -173,9 +268,16 @@ const validateCatalogItem = (item, result, resultIndex) => {
       throw catalogError();
     }
   });
+  expandedBiological.forEach((feature) => {
+    feature.displayRecordId = displayRecordId(context, text(feature.recordKey));
+  });
+  context.biologicalFeatures.push(...expandedBiological);
+  context.scalarMetrics.biologicalFeatureCount += expandedBiological.length;
 
   const svgIds = new Set();
   const features = requireArray(item.features);
+  const renderedByKey = new Map();
+  const renderedIdentities = createCatalogRenderedIdentityCollection();
   features.forEach((feature) => {
     if (!isObject(feature)) throw catalogError();
     const svgId = text(feature.svgId);
@@ -187,7 +289,38 @@ const validateCatalogItem = (item, result, resultIndex) => {
       throw catalogError();
     }
     svgIds.add(svgId);
+    if (!renderedByKey.has(key)) renderedByKey.set(key, []);
+    renderedByKey.get(key).push(feature);
+    const biological = biologicalByKey.get(key);
+    if (!biological) throw catalogError();
+    context.extractedFeatures.push({
+      ...cloneJson(biological),
+      ...cloneJson(feature),
+      id: key,
+      record_key: text(feature.recordKey),
+      biological_feature_id: text(feature.biologicalFeatureId),
+      stable_override_key: key,
+      stable_feature_id: biological.stable_feature_id,
+      stable_svg_id: biological.stable_svg_id,
+      rendered_feature_svg_id: svgId,
+      svg_id: svgId,
+      fill_color: text(feature.fillColor)
+    });
+    addCatalogRenderedIdentity(renderedIdentities, {
+      renderedId: svgId,
+      stableId: biological.stable_feature_id || feature.biologicalFeatureId || svgId,
+      recordIndex: itemRecordIndexByKey.get(text(feature.recordKey)),
+      recordId: biological.record_id || feature.recordKey,
+      elementId: svgId
+    });
+    rememberRenderedTarget(context.renderedTargetsByOverrideKey, key, {
+      resultIndex,
+      renderedId: svgId
+    });
+    rememberRenderedResultIndex(context.resultIndexesByRenderedId, svgId, resultIndex);
   });
+  context.renderedIdentitiesByResult[resultIndex] = renderedIdentities;
+  context.scalarMetrics.renderedFeatureCount += features.length;
 
   const orthogroups = requireArray(item.orthogroups);
   const knownGroupIds = new Set();
@@ -234,7 +367,14 @@ const validateCatalogItem = (item, result, resultIndex) => {
       knownFeatures,
       [['recordKey', 'biologicalFeatureId']]
     );
+    const expanded = expandOrthogroup(group, biologicalByKey, renderedByKey);
+    if (text(expanded.presentationScope) === 'adjacent_local') {
+      context.collinearGroups.push(expanded);
+    } else {
+      context.orthogroups.push(expanded);
+    }
   });
+  context.scalarMetrics.orthogroupRecordCount += orthogroups.length;
   const comparisonMatches = requireArray(item.comparisonMatches);
   const knownMatchIds = new Set();
   comparisonMatches.forEach((match) => {
@@ -332,23 +472,138 @@ const validateCatalogItem = (item, result, resultIndex) => {
     ['queryRecordKey', 'queryBiologicalFeatureId'],
     ['subjectRecordKey', 'subjectBiologicalFeatureId']
   ]);
-  requireArray(item.annotations);
+  const annotations = requireArray(item.annotations);
+  context.annotations.push(...cloneJson(annotations));
+  context.comparisonMatches.push(...cloneJson(comparisonMatches));
+  context.sequenceSources.push(...cloneJson(sequenceSources));
+  context.scalarMetrics.annotationCount += annotations.length;
+  context.scalarMetrics.comparisonMatchCount += comparisonMatches.length;
 };
 
-export const validateFeatureCatalog = (catalog, results, { adopt = false } = {}) => {
+const cachedAdmissionMatches = (admission, results, mode) => {
+  if (!admission || !Array.isArray(results)) return false;
+  const normalizedMode = text(mode).toLowerCase();
+  if (normalizedMode && normalizedMode !== admission.mode) return false;
+  return admission.resultNames.length === results.length
+    && admission.resultNames.every((name, index) => name === text(results[index]?.name));
+};
+
+/**
+ * Validate and project one schema-3 catalog in one admission traversal.
+ *
+ * The returned runtime object is never persisted. Its catalog-derived indexes
+ * bind current Results to editor projections without rescanning catalog rows.
+ */
+export const admitFeatureCatalog = (
+  catalog,
+  results,
+  { adopt = false, mode = '' } = {}
+) => {
   const logicalResults = requireArray(results);
   if (!isObject(catalog) || catalog.schema !== FEATURE_CATALOG_SCHEMA) {
     throw catalogError();
   }
+  const cached = featureCatalogAdmissions.get(catalog);
+  if (cachedAdmissionMatches(cached, logicalResults, mode)) {
+    if (adopt) adoptedFeatureCatalogs.add(catalog);
+    return cached;
+  }
+
   const validated = adopt ? catalog : cloneJson(catalog);
   const items = requireArray(validated.items);
   if (items.length !== logicalResults.length) throw catalogError();
-  items.forEach((item, resultIndex) => {
-    validateCatalogItem(item, logicalResults[resultIndex], resultIndex);
+
+  const normalizedMode = text(mode).toLowerCase();
+  const context = {
+    mode: normalizedMode,
+    recordKeys: [],
+    recordIndexByKey: new Map(),
+    publicRecordIdByKey: new Map(),
+    extractedFeatures: [],
+    biologicalFeatures: [],
+    orthogroups: [],
+    collinearGroups: [],
+    annotations: [],
+    comparisonMatches: [],
+    sequenceSources: [],
+    renderedIdentitiesByResult: [],
+    renderedTargetsByOverrideKey: new Map(),
+    resultIndexesByRenderedId: new Map(),
+    scalarMetrics: {
+      resultCount: logicalResults.length,
+      itemCount: items.length,
+      recordCount: 0,
+      renderedFeatureCount: 0,
+      biologicalFeatureCount: 0,
+      orthogroupRecordCount: 0,
+      comparisonMatchCount: 0,
+      annotationCount: 0,
+      sequenceSourceCount: 0,
+      sequenceCharacters: 0
+    }
+  };
+  recordSessionLifecycleEvent('catalog.admission-started', {
+    resultCount: logicalResults.length
   });
+  recordStructuralMetric('featureCatalogAdmissionCount', 1);
+  items.forEach((item, resultIndex) => {
+    validateAndProjectCatalogItem(item, logicalResults[resultIndex], resultIndex, context);
+  });
+
+  context.scalarMetrics.recordCount = context.recordKeys.length;
+  const featureRecordIds = context.recordKeys.map((recordKey) => (
+    displayRecordId(context, recordKey)
+  ));
+  const featureOrthogroupIndex = buildOrthogroupFeatureIndex(context.orthogroups);
+  const extractedFeatures = enrichFeaturesWithOrthogroups(
+    context.extractedFeatures,
+    featureOrthogroupIndex
+  );
+  const biologicalFeatures = enrichFeaturesWithOrthogroups(
+    context.biologicalFeatures,
+    featureOrthogroupIndex
+  );
+  const scalarMetrics = Object.freeze({ ...context.scalarMetrics });
+  const featureState = {
+    extractedFeatures,
+    biologicalFeatures,
+    featureRecordIds,
+    featureSelectorSafetyScope: [],
+    selectedFeatureRecordIdx: 0,
+    orthogroups: context.orthogroups,
+    collinearGroups: context.collinearGroups,
+    featureOrthogroupIndex,
+    annotations: context.annotations,
+    comparisonMatches: context.comparisonMatches,
+    sequenceSources: context.sequenceSources,
+    renderedIdentitiesByResult: context.renderedIdentitiesByResult,
+    renderedTargetsByOverrideKey: context.renderedTargetsByOverrideKey,
+    resultIndexesByRenderedId: context.resultIndexesByRenderedId,
+    scalarMetrics
+  };
+  const admission = Object.freeze({
+    catalog: validated,
+    mode: normalizedMode,
+    resultNames: Object.freeze(logicalResults.map((result) => text(result?.name))),
+    ...featureState,
+    featureState
+  });
+  featureCatalogAdmissions.set(validated, admission);
   if (adopt) adoptedFeatureCatalogs.add(validated);
-  return validated;
+  recordStructuralMetric('featureCatalogSecondaryTraversalCount', 0);
+  recordSessionLifecycleEvent('catalog.admission-completed', {
+    resultCount: scalarMetrics.resultCount,
+    itemCount: scalarMetrics.itemCount,
+    recordCount: scalarMetrics.recordCount,
+    renderedFeatureCount: scalarMetrics.renderedFeatureCount,
+    biologicalFeatureCount: scalarMetrics.biologicalFeatureCount
+  });
+  return admission;
 };
+
+export const validateFeatureCatalog = (catalog, results, options = {}) => (
+  admitFeatureCatalog(catalog, results, options).catalog
+);
 
 export const isAdoptedFeatureCatalog = (catalog) => (
   Boolean(catalog) && adoptedFeatureCatalogs.has(catalog)
@@ -570,19 +825,6 @@ const expandBiologicalFeature = (
   return expanded;
 };
 
-const renderedFeaturesByBiologicalKey = (features) => {
-  const index = new Map();
-  features.forEach((feature) => {
-    const key = biologicalFeatureKey(
-      feature.recordKey,
-      feature.biologicalFeatureId
-    );
-    if (!index.has(key)) index.set(key, []);
-    index.get(key).push(feature);
-  });
-  return index;
-};
-
 const expandOrthogroup = (group, biologicalByKey, renderedByKey) => ({
   ...cloneJson(group),
   members: group.members.map((member) => {
@@ -627,121 +869,15 @@ const expandOrthogroup = (group, biologicalByKey, renderedByKey) => ({
 });
 
 export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
-  if (!isObject(catalog) || catalog.schema !== FEATURE_CATALOG_SCHEMA) {
+  const admission = featureCatalogAdmissions.get(catalog);
+  const normalizedMode = text(mode).toLowerCase();
+  if (
+    !admission
+    || (normalizedMode && normalizedMode !== admission.mode)
+  ) {
     throw catalogError();
   }
-
-  const recordKeys = [];
-  const recordIndexByKey = new Map();
-  catalog.items.forEach((item) => {
-    item.recordKeys.forEach((rawRecordKey) => {
-      const recordKey = text(rawRecordKey);
-      if (recordIndexByKey.has(recordKey)) return;
-      recordIndexByKey.set(recordKey, recordKeys.length);
-      recordKeys.push(recordKey);
-    });
-  });
-  const publicRecordIdByKey = new Map();
-  catalog.items.forEach((item) => {
-    item.biologicalFeatures.forEach((feature) => {
-      const recordKey = text(feature.recordKey);
-      const recordId = text(feature.record_id ?? feature.recordId);
-      if (recordKey && recordId && !publicRecordIdByKey.has(recordKey)) {
-        publicRecordIdByKey.set(recordKey, recordId);
-      }
-    });
-  });
-  const normalizedMode = text(mode).toLowerCase();
-  const featureRecordIds = recordKeys.map((recordKey, index) => {
-    const recordId = publicRecordIdByKey.get(recordKey) || recordKey;
-    return normalizedMode === 'linear'
-      ? `File ${index + 1}: ${recordId}`
-      : recordId;
-  });
-  const displayRecordIdByKey = new Map(
-    recordKeys.map((recordKey, index) => [recordKey, featureRecordIds[index]])
-  );
-
-  const extractedFeatures = [];
-  const biologicalFeatures = [];
-  const orthogroups = [];
-  const collinearGroups = [];
-  const annotations = [];
-  const comparisonMatches = [];
-  const sequenceSources = [];
-
-  catalog.items.forEach((item) => {
-    const itemSequenceSources = cloneJson(item.sequenceSources || []);
-    const itemSourceSequences = canonicalSequenceSourceStrings(
-      itemSequenceSources
-    );
-    const itemRecordIndexByKey = new Map(
-      item.recordKeys.map((recordKey, recordIndex) => [
-        text(recordKey),
-        recordIndex
-      ])
-    );
-    const expandedBiological = item.biologicalFeatures.map((feature) => (
-      expandBiologicalFeature(
-        feature,
-        recordIndexByKey.get(text(feature.recordKey)) ?? 0,
-        displayRecordIdByKey.get(text(feature.recordKey)) || text(feature.recordKey),
-        itemSequenceSources,
-        itemSourceSequences,
-        itemRecordIndexByKey.get(text(feature.recordKey)) ?? -1
-      )
-    ));
-    const biologicalByKey = new Map(
-      expandedBiological.map((feature) => [stableFeatureOverrideKey(feature), feature])
-    );
-    const renderedByKey = renderedFeaturesByBiologicalKey(item.features);
-    biologicalFeatures.push(...expandedBiological);
-    item.features.forEach((rendered) => {
-      const key = biologicalFeatureKey(
-        rendered.recordKey,
-        rendered.biologicalFeatureId
-      );
-      const biological = biologicalByKey.get(key);
-      if (!biological) throw catalogError();
-      extractedFeatures.push({
-        ...cloneJson(biological),
-        ...cloneJson(rendered),
-        id: key,
-        record_key: text(rendered.recordKey),
-        biological_feature_id: text(rendered.biologicalFeatureId),
-        stable_override_key: key,
-        stable_feature_id: biological.stable_feature_id,
-        stable_svg_id: biological.stable_svg_id,
-        rendered_feature_svg_id: text(rendered.svgId),
-        svg_id: text(rendered.svgId),
-        fill_color: text(rendered.fillColor)
-      });
-    });
-    item.orthogroups.forEach((group) => {
-      const expanded = expandOrthogroup(group, biologicalByKey, renderedByKey);
-      if (text(expanded.presentationScope) === 'adjacent_local') {
-        collinearGroups.push(expanded);
-      } else {
-        orthogroups.push(expanded);
-      }
-    });
-    annotations.push(...cloneJson(item.annotations));
-    comparisonMatches.push(...cloneJson(item.comparisonMatches));
-    sequenceSources.push(...itemSequenceSources);
-  });
-
-  return {
-    extractedFeatures,
-    biologicalFeatures,
-    featureRecordIds,
-    featureSelectorSafetyScope: [],
-    selectedFeatureRecordIdx: 0,
-    orthogroups,
-    collinearGroups,
-    annotations,
-    comparisonMatches,
-    sequenceSources
-  };
+  return admission.featureState;
 };
 
 export const featureCatalogReloadMessage = FEATURE_CATALOG_RELOAD_MESSAGE;

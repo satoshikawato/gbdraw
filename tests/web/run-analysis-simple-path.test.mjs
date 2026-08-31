@@ -408,6 +408,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   let adoptedArtifacts = 0;
   let failArtifactAdoption = false;
   let cancelDuringCandidate = false;
+  let failCandidateAdmission = false;
   const activationOwnerSets = [];
   const captureForHistory = (...args) => {
     assert.equal(state.processing.value, true);
@@ -462,6 +463,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       featureColorOverrides,
       featureStrokeOverrides
     }) => {
+      if (failCandidateAdmission) {
+        throw new Error('forced current Result admission failure');
+      }
       const candidate = {
         results: structuredClone(results),
         featureState: featureStateFromCatalog(catalog),
@@ -553,6 +557,34 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     metricsBeforePreActivationFailure.generatedArtifactFinalizeCount
   );
 
+  const admissionFailureState = committedFeatureState();
+  const metricsBeforeAdmissionFailure = { ...structuralMetrics };
+  failCandidateAdmission = true;
+  const rejectedAdmissionResult = result('rejected-admission.svg', 'rejected');
+  workerResponses.push(response(
+    rejectedAdmissionResult,
+    validCatalog(rejectedAdmissionResult.name)
+  ));
+  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  failCandidateAdmission = false;
+  assert.match(
+    state.errorLog.value?.summary || '',
+    /forced current Result admission failure/
+  );
+  assert.deepEqual(committedFeatureState(), admissionFailureState);
+  for (const metric of [
+    'generatedArtifactCandidateBuildCount',
+    'generatedArtifactActivationCount',
+    'generatedArtifactFinalizeCount',
+    'historyReplacementCount'
+  ]) {
+    assert.equal(
+      structuralMetrics[metric] || 0,
+      metricsBeforeAdmissionFailure[metric] || 0,
+      metric
+    );
+  }
+
   workerResponses.push(response(
     result('malformed.svg', 'malformed'),
     { schema: 2, items: [] }
@@ -619,7 +651,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
   assert.equal(adoptedArtifacts, 1);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 5);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 6);
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;

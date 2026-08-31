@@ -99,11 +99,15 @@ import {
 } from './session-resource-backing.js';
 import { normalizeLogicalResults } from './result-normalization.js';
 import {
-  ingestCatalogBackedSvgResults,
-  ingestSvgResults,
+  admitCurrentSessionResults,
+  admitLegacyImportedResults,
+  createCurrentSessionResultSource,
+  createEmptySvgMutationPlan,
+  createLegacyImportResultSource,
   isCommittedSvgResult
 } from './svg-result-ingestion.js';
 import {
+  admitFeatureCatalog,
   featureStateFromCatalog,
   isAdoptedFeatureCatalog,
   validateFeatureCatalog
@@ -128,7 +132,6 @@ import {
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
-import { prepareCandidateRenderCommit } from '../app/candidate-render.js';
 import { applyStrokeOverridesToSvg } from '../app/legend/stroke-actions.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
@@ -1457,7 +1460,10 @@ const validateCurrentWriterFeatureCatalog = (data, { adopt = false } = {}) => {
   );
   const catalog = data.editorState?.featureCatalog ?? null;
   if (catalog === null) return null;
-  return validateFeatureCatalog(catalog, results, { adopt });
+  return validateFeatureCatalog(catalog, results, {
+    adopt,
+    mode: data.renderRequest?.mode || ''
+  });
 };
 
 const preflightSessionImport = (rawData) => {
@@ -3550,7 +3556,13 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
             content: res?.content || ''
           }
     )));
-    state.results.value = ingestSvgResults(logicalResults);
+    const committedCount = logicalResults.filter(isCommittedSvgResult).length;
+    if (committedCount !== 0 && committedCount !== logicalResults.length) {
+      throw new Error('Committed and imported SVG Results cannot be mixed.');
+    }
+    state.results.value = committedCount === logicalResults.length
+      ? logicalResults
+      : admitLegacyImportedResults(createLegacyImportResultSource(logicalResults));
   } else {
     state.results.value = [];
   }
@@ -3771,7 +3783,7 @@ export const exportSession = async (
       editorState.featureCatalog = validateFeatureCatalog(
         editorState.featureCatalog,
         logicalResults,
-        { adopt: adoptedCatalog }
+        { adopt: adoptedCatalog, mode: state.mode.value }
       );
     } catch (error) {
       console.warn('Session feature catalog validation failed.', error);
@@ -4274,25 +4286,21 @@ export const importSession = async (e, options = {}) => {
 
     recordSessionLifecycleEvent('svg-admission-start');
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
-      ? ingestCatalogBackedSvgResults(logicalImportedResults, {
-          catalogItems: validatedSessionCatalog.items
-        })
-      : validatedSessionCatalog
-      ? prepareCandidateRenderCommit({
-          results: logicalImportedResults,
-          catalog: validatedSessionCatalog,
-          mode: state.mode.value,
-          featureColorOverrides: state.featureColorOverrides,
-          featureStrokeOverrides: state.featureStrokeOverrides,
-          legendStrokeOverrides: state.legendStrokeOverrides,
-          manualSpecificRules: state.manualSpecificRules,
-          legacyFeatures: features?.extractedFeatures || [],
-          preparedFeatureState: currentCatalogFeatureState,
-          transformSvg: (svg) => transformRestoredSessionSvg(svg, { applyStrokes: false })
-        }).results
-      : ingestSvgResults(logicalImportedResults, {
-          transformSvg: transformRestoredSessionSvg
-        });
+      ? (() => {
+          const catalogAdmission = admitFeatureCatalog(
+            validatedSessionCatalog,
+            logicalImportedResults,
+            { adopt: true, mode: state.mode.value }
+          );
+          return admitCurrentSessionResults(
+            createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
+            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length) }
+          );
+        })()
+      : admitLegacyImportedResults(
+          createLegacyImportResultSource(logicalImportedResults),
+          { transformSvg: transformRestoredSessionSvg }
+        );
     recordSessionLifecycleEvent('svg-admission-end');
 
     await nextTick();
