@@ -1641,6 +1641,8 @@ const createLayoutPreferences = () => ({
   const rawCacheValueA = { text: 'raw-a\n' };
   const derivedCacheValueA = { payload: { id: 'derived-a' } };
   const losatCacheInfoA = [{ key: 'raw-a' }];
+  const appliedPaletteColorsA = { CDS: '#54bcf8' };
+  const pendingPaletteColorsA = {};
   const state = {
     files: {},
     linearSeqs: [],
@@ -1687,6 +1689,10 @@ const createLayoutPreferences = () => ({
     lastRunInfo: ref({ resultCount: 1 }),
     pairwiseMatchFactors: ref({}),
     trackSlotResolvedGeometry: ref({ schema: 1 }),
+    appliedPaletteName: ref('default'),
+    appliedPaletteColors: ref(appliedPaletteColorsA),
+    pendingPaletteName: ref(''),
+    pendingPaletteColors: ref(pendingPaletteColorsA),
     resultGenerationKey: ref(1),
     resultPanelTab: ref('preview'),
     zoom: ref(1),
@@ -1755,8 +1761,10 @@ const createLayoutPreferences = () => ({
       selectedResultIndex: state.selectedResultIndex.value,
       zoom: state.zoom.value,
       canvasPan: { ...state.canvasPan },
-      appliedPaletteName: 'default',
-      appliedPaletteColors: {}
+      appliedPaletteName: state.appliedPaletteName.value,
+      appliedPaletteColors: { ...state.appliedPaletteColors.value },
+      pendingPaletteName: state.pendingPaletteName.value,
+      pendingPaletteColors: { ...state.pendingPaletteColors.value }
     }),
     applyUiStateData: (ui) => {
       state.mode.value = ui.mode;
@@ -1813,6 +1821,8 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.ownerSet.losatCache, authorityOwnersA.losatCache);
   assert.equal(handleA.ownerSet.losatDerivedCache, authorityOwnersA.losatDerivedCache);
   assert.equal(handleA.ownerSet.losatCacheInfo, losatCacheInfoA);
+  assert.equal(handleA.ownerSet.appliedPaletteColors, appliedPaletteColorsA);
+  assert.equal(handleA.ownerSet.pendingPaletteColors, pendingPaletteColorsA);
   assert.equal(
     Object.fromEntries(handleA.mutableIntent.features.featureVisibilitySelectorCache)['feature-a'].value,
     'feature-a'
@@ -1953,6 +1963,10 @@ const createLayoutPreferences = () => ({
   state.losatCache.value = new Map([['raw-b', rawCacheValueB]]);
   state.losatDerivedCache.value = new Map([['derived-b', derivedCacheValueB]]);
   state.losatCacheInfo.value = losatCacheInfoB;
+  const appliedPaletteColorsB = { ...appliedPaletteColorsA };
+  const pendingPaletteColorsB = { ...pendingPaletteColorsA };
+  state.appliedPaletteColors.value = appliedPaletteColorsB;
+  state.pendingPaletteColors.value = pendingPaletteColorsB;
   const authorityOwnersB = captureAuthorityOwners();
   snapshots.setGeneratedArtifactIdentity({
     schema: 1,
@@ -1976,6 +1990,8 @@ const createLayoutPreferences = () => ({
   assert.equal(handleB.ownerSet.losatCache, authorityOwnersB.losatCache);
   assert.equal(handleB.ownerSet.losatDerivedCache, authorityOwnersB.losatDerivedCache);
   assert.equal(handleB.ownerSet.losatCacheInfo, losatCacheInfoB);
+  assert.equal(handleB.ownerSet.appliedPaletteColors, appliedPaletteColorsB);
+  assert.equal(handleB.ownerSet.pendingPaletteColors, pendingPaletteColorsB);
 
   state.proteinIdentityManifest.value = { schema: 2, records: [{ id: 'replacement' }] };
   state.legacyProteinRawCandidates.value = { schema: 1, entries: [] };
@@ -1994,6 +2010,8 @@ const createLayoutPreferences = () => ({
   assert.equal(state.legendEntries.value[0].caption, 'A');
   assert.equal(state.featureVisibilitySelectorCache['feature-a'].value, 'feature-a');
   assertAuthorityOwners(authorityOwnersA);
+  assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
+  assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);
   const recapturedA = snapshots.captureGeneratedArtifactHandle();
   assert.equal(recapturedA.identity.fingerprint, 'a'.repeat(64));
   assert.equal(recapturedA.retainedBytes, handleA.retainedBytes);
@@ -2009,6 +2027,8 @@ const createLayoutPreferences = () => ({
   assert.equal(state.results.value[0].name, 'edited.svg');
   assert.equal(state.extractedFeatures.value[0].svg_id, 'feature-b');
   assertAuthorityOwners(authorityOwnersB);
+  assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsB);
+  assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsB);
 
   await Promise.all([
     snapshots.restoreGeneratedArtifactHandle(handleA),
@@ -2079,13 +2099,68 @@ const createLayoutPreferences = () => ({
       .reduce((total, { value }) => total + value, 0),
     1
   );
-  globalThis.__GBDRAW_TEST_HOOKS__ = hooksBeforeReplacement;
-
   await ownerHistory.undo();
   assertAuthorityOwners(authorityOwnersA);
   await ownerHistory.redo();
   assertAuthorityOwners(authorityOwnersB);
   assert.equal(successfulGenerateCalls, 1, 'Undo/Redo must not rerun Generate.');
+
+  const restoredHandleBeforePaletteReplacement = snapshots.captureGeneratedArtifactHandle();
+  const equivalentAppliedPaletteColors = { ...state.appliedPaletteColors.value };
+  const equivalentPendingPaletteColors = { ...state.pendingPaletteColors.value };
+  state.appliedPaletteColors.value = equivalentAppliedPaletteColors;
+  state.pendingPaletteColors.value = equivalentPendingPaletteColors;
+  const equivalentPaletteHandle = snapshots.captureGeneratedArtifactHandle();
+  assert.notEqual(equivalentAppliedPaletteColors, handleB.ownerSet.appliedPaletteColors);
+  assert.notEqual(equivalentPendingPaletteColors, handleB.ownerSet.pendingPaletteColors);
+  assert.equal(equivalentPaletteHandle.identity.fingerprint, 'b'.repeat(64));
+  assert.equal(
+    snapshots.compareGeneratedArtifactHandles(
+      restoredHandleBeforePaletteReplacement,
+      equivalentPaletteHandle
+    ),
+    true,
+    'Equivalent palette owner replacements must not change semantic artifact identity.'
+  );
+  await ownerHistory.runUndoableArtifactReplacement(
+    'No-op Generate after Undo/Redo',
+    async () => ({ status: 'ok' }),
+    { shouldCommit: (result) => result.status === 'ok' }
+  );
+  assert.equal(ownerHistory.getUndoCount(), 1);
+  assert.equal(
+    replacementMetrics.filter(({ name }) => name === 'historyReplacementCount')
+      .reduce((total, { value }) => total + value, 0),
+    1
+  );
+
+  const changedAppliedPaletteColors = {
+    ...equivalentAppliedPaletteColors,
+    CDS: '#abcdef'
+  };
+  await ownerHistory.runUndoableArtifactReplacement(
+    'Change applied palette intent',
+    async () => {
+      state.appliedPaletteName.value = 'custom';
+      state.appliedPaletteColors.value = changedAppliedPaletteColors;
+      return { status: 'ok' };
+    },
+    { shouldCommit: (result) => result.status === 'ok' }
+  );
+  assert.equal(ownerHistory.getUndoCount(), 2);
+  assert.equal(
+    replacementMetrics.filter(({ name }) => name === 'historyReplacementCount')
+      .reduce((total, { value }) => total + value, 0),
+    2,
+    'A real bounded palette intent change must create History replacement.'
+  );
+  await ownerHistory.undo();
+  assert.equal(state.appliedPaletteName.value, 'default');
+  assert.equal(state.appliedPaletteColors.value, equivalentAppliedPaletteColors);
+  await ownerHistory.redo();
+  assert.equal(state.appliedPaletteName.value, 'custom');
+  assert.equal(state.appliedPaletteColors.value, changedAppliedPaletteColors);
+  globalThis.__GBDRAW_TEST_HOOKS__ = hooksBeforeReplacement;
 
   const installDiscardedAuthorityOwners = (status) => {
     state.proteinIdentityManifest.value = { schema: 2, records: [{ id: status }] };

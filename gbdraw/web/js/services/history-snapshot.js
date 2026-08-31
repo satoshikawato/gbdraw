@@ -864,11 +864,7 @@ export const createHistorySnapshotService = ({
       'generatedLegendPosition',
       'generatedMode',
       'generatedMultiRecordCanvas',
-      'generatedCircularPlotTitlePosition',
-      'appliedPaletteName',
-      'appliedPaletteColors',
-      'pendingPaletteName',
-      'pendingPaletteColors'
+      'generatedCircularPlotTitlePosition'
     ].every((key) => expected[key] === ownerSet[key]);
   };
 
@@ -886,10 +882,6 @@ export const createHistorySnapshotService = ({
       generatedMode: _generatedMode,
       generatedMultiRecordCanvas: _generatedMultiRecordCanvas,
       generatedCircularPlotTitlePosition: _generatedCircularPlotTitlePosition,
-      appliedPaletteName: _appliedPaletteName,
-      appliedPaletteColors: _appliedPaletteColors,
-      pendingPaletteName: _pendingPaletteName,
-      pendingPaletteColors: _pendingPaletteColors,
       ...ui
     } = mutableIntent.ui || {};
     return JSON.stringify({
