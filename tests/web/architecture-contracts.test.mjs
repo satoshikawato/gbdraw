@@ -607,7 +607,9 @@ test('versioned architecture detectors expose stable normalized subjects', () =>
   const canonical = WEB_ARCHITECTURE_DETECTORS['canonical-path.render-request.v1'];
 
   assert.deepEqual(Object.keys(WEB_ARCHITECTURE_DETECTORS).sort(), [
+    'canonical-path.current-result-admission.v1',
     'canonical-path.render-request.v1',
+    'semantic-owner.current-result-admission.v1',
     'semantic-owner.render-request.v1'
   ]);
   assert.equal(semantic.subjectCategory, 'definition-path');
@@ -641,6 +643,33 @@ test('versioned architecture detectors expose stable normalized subjects', () =>
     }),
     'app/run-analysis.js -> services/session-request.js'
   );
+});
+
+test('current Result admission detectors characterize the merged runtime source facts', () => {
+  const semantic = WEB_ARCHITECTURE_DETECTORS[
+    'semantic-owner.current-result-admission.v1'
+  ];
+  const canonical = WEB_ARCHITECTURE_DETECTORS[
+    'canonical-path.current-result-admission.v1'
+  ];
+
+  assert.deepEqual(semantic.detect(productionSources), {
+    definitionCount: 1,
+    observedDefinitions: [{
+      path: 'services/svg-result-ingestion.js',
+      count: 1,
+      subject: 'services/svg-result-ingestion.js'
+    }],
+    subjects: ['services/svg-result-ingestion.js']
+  });
+  assert.deepEqual(canonical.detect(productionSources), {
+    observedEdges: [{
+      from: 'app/candidate-render.js',
+      to: 'services/svg-result-ingestion.js',
+      subject: 'app/candidate-render.js -> services/svg-result-ingestion.js'
+    }],
+    subjects: ['app/candidate-render.js -> services/svg-result-ingestion.js']
+  });
 });
 
 test('declared architecture rules actively govern the current source tree', () => {

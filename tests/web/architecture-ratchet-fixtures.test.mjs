@@ -49,6 +49,229 @@ const validationCodes = (value, catalog = WEB_ARCHITECTURE_DETECTORS, options = 
   validateArchitectureRuleRegistry(value, catalog, options).errors.map(({ code }) => code)
 );
 
+const currentResultSemantic = WEB_ARCHITECTURE_DETECTORS[
+  'semantic-owner.current-result-admission.v1'
+];
+const currentResultCanonical = WEB_ARCHITECTURE_DETECTORS[
+  'canonical-path.current-result-admission.v1'
+];
+const currentResultOwner = (
+  'export const admitCurrentGeneratedResults = (generationResponse) => generationResponse.results;\n'
+);
+const currentResultCaller = (
+  "import { admitCurrentGeneratedResults } from '../services/svg-result-ingestion.js';\n"
+  + 'export const prepare = (response) => admitCurrentGeneratedResults(response);\n'
+);
+const noCurrentResultDefinitions = Object.freeze({
+  definitionCount: 0,
+  observedDefinitions: Object.freeze([]),
+  subjects: Object.freeze([])
+});
+const noCurrentResultEdges = Object.freeze({
+  observedEdges: Object.freeze([]),
+  subjects: Object.freeze([])
+});
+
+test('current Result semantic-owner detector characterizes exact executable definitions', () => {
+  const conforming = new Map([
+    ['services/svg-result-ingestion.js', currentResultOwner],
+    ['app/candidate-render.js', currentResultCaller]
+  ]);
+  const expected = {
+    definitionCount: 1,
+    observedDefinitions: [{
+      path: 'services/svg-result-ingestion.js',
+      count: 1,
+      subject: 'services/svg-result-ingestion.js'
+    }],
+    subjects: ['services/svg-result-ingestion.js']
+  };
+  assert.deepEqual(currentResultSemantic.detect(conforming), expected);
+  assert.deepEqual(currentResultSemantic.detect(new Map([...conforming].reverse())), expected);
+  assert.equal(currentResultSemantic.subjectCategory, 'definition-path');
+  assert.equal(
+    currentResultSemantic.encodeSubject({
+      path: 'gbdraw/web/js/services/svg-result-ingestion.js'
+    }),
+    'services/svg-result-ingestion.js'
+  );
+
+  assert.deepEqual(currentResultSemantic.detect({
+    'app/candidate-render.js': currentResultCaller
+  }), noCurrentResultDefinitions);
+  assert.deepEqual(currentResultSemantic.detect({
+    'services/svg-result-ingestion.js': currentResultOwner,
+    'services/alternate-ingestion.js': currentResultOwner
+  }), {
+    definitionCount: 2,
+    observedDefinitions: [
+      {
+        path: 'services/alternate-ingestion.js',
+        count: 1,
+        subject: 'services/alternate-ingestion.js'
+      },
+      {
+        path: 'services/svg-result-ingestion.js',
+        count: 1,
+        subject: 'services/svg-result-ingestion.js'
+      }
+    ],
+    subjects: [
+      'services/alternate-ingestion.js',
+      'services/svg-result-ingestion.js'
+    ]
+  });
+  assert.deepEqual(currentResultSemantic.detect({
+    'services/alternate-ingestion.js': currentResultOwner
+  }), {
+    definitionCount: 1,
+    observedDefinitions: [{
+      path: 'services/alternate-ingestion.js',
+      count: 1,
+      subject: 'services/alternate-ingestion.js'
+    }],
+    subjects: ['services/alternate-ingestion.js']
+  });
+  assert.deepEqual(currentResultSemantic.detect({
+    'services/duplicate-ingestion.js': currentResultOwner + currentResultOwner
+  }), {
+    definitionCount: 2,
+    observedDefinitions: [{
+      path: 'services/duplicate-ingestion.js',
+      count: 2,
+      subject: 'services/duplicate-ingestion.js'
+    }],
+    subjects: ['services/duplicate-ingestion.js']
+  });
+
+  const maskedAndUnrelated = {
+    'services/ignored.js': [
+      '// export const admitCurrentGeneratedResults = () => fake();',
+      'const quoted = "export const admitCurrentGeneratedResults = () => fake();";',
+      'const templated = `export const admitCurrentGeneratedResults = () => fake();`;',
+      'export const admitCurrentGeneratedResult = () => null;',
+      'export const admitCurrentGeneratedResultsWrapper = () => null;'
+    ].join('\n')
+  };
+  assert.deepEqual(
+    currentResultSemantic.detect(maskedAndUnrelated),
+    noCurrentResultDefinitions
+  );
+  assert.deepEqual(currentResultSemantic.detect({
+    'services/malformed.js': 'export const admitCurrentGeneratedResults = (value) value;\n'
+  }), noCurrentResultDefinitions);
+});
+
+test('current Result canonical-path detector characterizes named-import call edges', () => {
+  const conforming = new Map([
+    ['services/svg-result-ingestion.js', currentResultOwner],
+    ['app/candidate-render.js', currentResultCaller]
+  ]);
+  const expected = {
+    observedEdges: [{
+      from: 'app/candidate-render.js',
+      to: 'services/svg-result-ingestion.js',
+      subject: 'app/candidate-render.js -> services/svg-result-ingestion.js'
+    }],
+    subjects: ['app/candidate-render.js -> services/svg-result-ingestion.js']
+  };
+  assert.deepEqual(currentResultCanonical.detect(conforming), expected);
+  assert.deepEqual(currentResultCanonical.detect(new Map([...conforming].reverse())), expected);
+  assert.equal(currentResultCanonical.subjectCategory, 'canonical-entry-edge');
+  assert.equal(
+    currentResultCanonical.encodeSubject({
+      from: 'gbdraw/web/js/app/candidate-render.js',
+      to: 'gbdraw/web/js/services/svg-result-ingestion.js'
+    }),
+    'app/candidate-render.js -> services/svg-result-ingestion.js'
+  );
+
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/svg-result-ingestion.js': currentResultOwner
+  }), noCurrentResultEdges);
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/svg-result-ingestion.js': currentResultOwner,
+    'app/unused.js': (
+      "import { admitCurrentGeneratedResults } from '../services/svg-result-ingestion.js';\n"
+      + 'export const prepare = (object, response) => '
+      + 'object.admitCurrentGeneratedResults(response);\n'
+    )
+  }), noCurrentResultEdges);
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/svg-result-ingestion.js': currentResultOwner,
+    'app/a.js': currentResultCaller,
+    'app/b.js': currentResultCaller
+  }), {
+    observedEdges: [
+      {
+        from: 'app/a.js',
+        to: 'services/svg-result-ingestion.js',
+        subject: 'app/a.js -> services/svg-result-ingestion.js'
+      },
+      {
+        from: 'app/b.js',
+        to: 'services/svg-result-ingestion.js',
+        subject: 'app/b.js -> services/svg-result-ingestion.js'
+      }
+    ],
+    subjects: [
+      'app/a.js -> services/svg-result-ingestion.js',
+      'app/b.js -> services/svg-result-ingestion.js'
+    ]
+  });
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/alternate-ingestion.js': currentResultOwner,
+    'app/alternate.js': (
+      "import { admitCurrentGeneratedResults } from '../services/alternate-ingestion.js';\n"
+      + 'export const prepare = (response) => admitCurrentGeneratedResults(response);\n'
+    )
+  }), {
+    observedEdges: [{
+      from: 'app/alternate.js',
+      to: 'services/alternate-ingestion.js',
+      subject: 'app/alternate.js -> services/alternate-ingestion.js'
+    }],
+    subjects: ['app/alternate.js -> services/alternate-ingestion.js']
+  });
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/svg-result-ingestion.js': currentResultOwner,
+    'app/aliased.js': (
+      'import { admitCurrentGeneratedResults as admitResults } '
+      + "from '../services/svg-result-ingestion.js';\n"
+      + 'export const prepare = (response) => admitResults(response);\n'
+    )
+  }), {
+    observedEdges: [{
+      from: 'app/aliased.js',
+      to: 'services/svg-result-ingestion.js',
+      subject: 'app/aliased.js -> services/svg-result-ingestion.js'
+    }],
+    subjects: ['app/aliased.js -> services/svg-result-ingestion.js']
+  });
+
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/svg-result-ingestion.js': currentResultOwner,
+    'app/ignored.js': [
+      '// import { admitCurrentGeneratedResults } from "../services/svg-result-ingestion.js";',
+      '// admitCurrentGeneratedResults(response);',
+      'const quoted = "import admitCurrentGeneratedResults; admitCurrentGeneratedResults(response)";',
+      'const templated = `',
+      'import { admitCurrentGeneratedResults } from "../services/svg-result-ingestion.js";',
+      'admitCurrentGeneratedResults(response);',
+      '`;',
+      'export const admitCurrentGeneratedResultsWrapper = (response) => response;'
+    ].join('\n')
+  }), noCurrentResultEdges);
+  assert.deepEqual(currentResultCanonical.detect({
+    'services/svg-result-ingestion.js': currentResultOwner,
+    'app/malformed.js': (
+      'import { admitCurrentGeneratedResults } '
+      + "'../services/svg-result-ingestion.js';\n"
+      + 'admitCurrentGeneratedResults(response);\n'
+    )
+  }), noCurrentResultEdges);
+});
+
 test('stable inventory deltas expose additions, removals, totals, and signed change', () => {
   assert.deepEqual(
     summarizeArchitectureInventory(['beta', 'alpha', 'alpha'], ['gamma', 'beta']),
@@ -131,7 +354,7 @@ test('acyclic graph evaluation passes with duplicate edges normalized away', () 
 test('schema version 1 accepts only the two discriminated initial rule kinds', () => {
   assert.deepEqual(WEB_ARCHITECTURE_RULE_SCHEMA, {
     schemaVersion: 1,
-    maximumRuleCount: 3,
+    maximumRuleCount: 4,
     kinds: ['single-canonical-entry-edge', 'single-semantic-owner'],
     enforcementModes: ['frozen', 'hard', 'report-only']
   });
@@ -143,6 +366,25 @@ test('schema version 1 accepts only the two discriminated initial rule kinds', (
     ),
     { valid: true, errors: [] }
   );
+});
+
+test('schema version 1 accepts four bounded rules and rejects a fifth', () => {
+  const boundedRules = ['alpha', 'beta', 'delta', 'gamma'].map((key) => semanticRule({
+    key: `semantic-owner.${key}`,
+    allowedDefinitionPaths: [`services/${key}.js`]
+  }));
+  assert.deepEqual(validateArchitectureRuleRegistry(
+    registry(boundedRules),
+    WEB_ARCHITECTURE_DETECTORS,
+    AVAILABLE_ENFORCEMENTS
+  ), { valid: true, errors: [] });
+  assert.ok(validationCodes(registry([
+    ...boundedRules,
+    semanticRule({
+      key: 'semantic-owner.epsilon',
+      allowedDefinitionPaths: ['services/epsilon.js']
+    })
+  ])).includes('too-many-rules'));
 });
 
 test('strict schema rejects unknown, executable-looking, duplicate, and unsorted data', () => {
@@ -210,12 +452,13 @@ test('strict schema rejects unknown, executable-looking, duplicate, and unsorted
       code: 'unsorted-rules'
     },
     {
-      name: 'more than three rules',
+      name: 'more than four rules',
       value: registry([
         canonicalRule(),
         semanticRule({ key: 'semantic-owner.alpha' }),
         semanticRule({ key: 'semantic-owner.beta' }),
-        semanticRule({ key: 'semantic-owner.gamma' })
+        semanticRule({ key: 'semantic-owner.gamma' }),
+        semanticRule({ key: 'semantic-owner.zeta' })
       ]),
       code: 'too-many-rules'
     }
