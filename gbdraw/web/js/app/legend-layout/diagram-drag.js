@@ -90,7 +90,9 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     const idx = selectedResultIndex.value;
     if (!svg || idx < 0 || results.value.length <= idx) return;
     skipCaptureBaseConfig.value = true;
-    results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+    const nextResults = [...results.value];
+    nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+    results.value = nextResults;
   };
 
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';

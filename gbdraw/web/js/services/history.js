@@ -1,4 +1,8 @@
 import { collectHistoryFileIds } from './history-files.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric
+} from './runtime-test-hooks.js';
 
 const DEFAULT_MAX_ACTIONS = 30;
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
@@ -627,7 +631,9 @@ export const createHistoryManager = ({
       }
     }
     notifyCheckpointCapture(options, 'before-start');
+    recordSessionLifecycleEvent('history.before-capture-started');
     const before = await captureArtifactHandle('before');
+    recordSessionLifecycleEvent('history.before-capture-completed');
     notifyCheckpointCapture(options, 'before-end');
     emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-replacement', label });
     return {
@@ -661,9 +667,8 @@ export const createHistoryManager = ({
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
     const after = await captureArtifactHandle('after');
-    const intent = await captureIntent();
     transaction.closed = true;
-    setCurrentIntent(intent);
+    currentFileIds = artifactHandleFileIds(after);
     clearCurrentCheckpoint();
 
     if (sameArtifactHandles(transaction.before, after)) {
@@ -694,6 +699,7 @@ export const createHistoryManager = ({
     };
     diagnostics.byteEstimateComputations += 1;
     diagnostics.artifactReplacementHistoryEntryCount += 1;
+    recordStructuralMetric('historyReplacementCount', 1);
     emitHistoryDiagnostic({
       type: 'size',
       scope: 'artifact-replacement',
@@ -714,7 +720,7 @@ export const createHistoryManager = ({
     return true;
   };
 
-  const restoreArtifactHandle = async (handle) => {
+  const restoreArtifactHandle = async (handle, { refreshIntent = true } = {}) => {
     if (typeof restoreGeneratedArtifactHandle !== 'function') {
       throw new Error('Generated artifact replacement requires a restore owner.');
     }
@@ -727,7 +733,7 @@ export const createHistoryManager = ({
       restoring.value = false;
     }
     clearCurrentCheckpoint();
-    await refreshCurrentIntent();
+    if (refreshIntent) await refreshCurrentIntent();
   };
 
   const runUndoableArtifactReplacement = async (label, fn, options = {}) => {
@@ -741,17 +747,29 @@ export const createHistoryManager = ({
         && !options.shouldCommit(result)
       ) {
         if (transaction) transaction.closed = true;
-        await refreshCurrentIntent();
         releaseUnreferencedFiles();
         touch();
         return result;
       }
+      recordSessionLifecycleEvent('history.finalization-started', { label });
       await commitAppliedArtifactReplacement(transaction, options);
+      recordSessionLifecycleEvent('history.finalization-completed', { label });
       return result;
     } catch (error) {
       if (transaction) {
         transaction.closed = true;
-        await restoreArtifactHandle(transaction.before);
+        if (typeof options.restoreAppliedArtifact === 'function') {
+          restoring.value = true;
+          try {
+            await options.restoreAppliedArtifact(transaction.before);
+          } finally {
+            restoring.value = false;
+          }
+          clearCurrentCheckpoint();
+        } else {
+          recordStructuralMetric('generatedArtifactRollbackCount', 1);
+          await restoreArtifactHandle(transaction.before, { refreshIntent: false });
+        }
       }
       releaseUnreferencedFiles();
       throw error;

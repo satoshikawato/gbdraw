@@ -161,7 +161,12 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     }
     const resultIdx = selectedResultIndex.value;
     if (resultIdx >= 0 && results.value.length > resultIdx) {
-      results.value[resultIdx] = { ...results.value[resultIdx], content: serializeCleanSvg(svg) };
+      const nextResults = [...results.value];
+      nextResults[resultIdx] = {
+        ...results.value[resultIdx],
+        content: serializeCleanSvg(svg)
+      };
+      results.value = nextResults;
     }
   };
 

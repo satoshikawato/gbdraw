@@ -162,9 +162,11 @@ test('Similarity-group popup selects every OG match without a focus outline', as
 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    const { ingestSvgResult } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+    const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
+      '/gbdraw/web/js/services/svg-result-ingestion.js'
+    );
     app.mode = 'linear';
-    app.results.splice(0, app.results.length, ingestSvgResult({
+    const committed = admitLegacyImportedResults(createLegacyImportResultSource([{
       name: 'pairwise-selection.svg',
       content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
         <path data-gbdraw-pairwise-match-id="match-1" data-match-kind="orthogroup"
@@ -182,7 +184,8 @@ test('Similarity-group popup selects every OG match without a focus outline', as
           data-orthogroup-id="og-1"
           fill="#94a3b8" d="M 82 20 L 95 20 L 95 60 L 82 60 Z" />
       </svg>`
-    }));
+    }]));
+    app.results.splice(0, app.results.length, committed[0]);
     app.selectedResultIndex = 0;
   });
 
@@ -1628,7 +1631,15 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
   await openApp(page, { waitForPalette: false });
 
   const outcome = await page.evaluate(async () => {
-    const { prepareCandidateRenderCommit } = await import('./js/app/candidate-render.js');
+    const [
+      { prepareCandidateRenderCommit },
+      { admitFeatureCatalog },
+      { markCurrentWorkerGenerationResponse }
+    ] = await Promise.all([
+      import('./js/app/candidate-render.js'),
+      import('./js/services/feature-catalog.js'),
+      import('./js/services/current-worker-result-source.js')
+    ]);
     const stableKey = `record-1\u0000feature-1`;
     const sourceResult = {
       name: 'candidate.svg',
@@ -1688,9 +1699,17 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
         comparisonMatches: []
       }]
     };
-    const prepared = prepareCandidateRenderCommit({
+    const catalogAdmission = admitFeatureCatalog(catalog, [sourceResult], {
+      adopt: true,
+      mode: 'linear'
+    });
+    const generationResponse = markCurrentWorkerGenerationResponse({
       results: [sourceResult],
-      catalog,
+      metadata: { featureCatalog: catalog }
+    });
+    const prepared = prepareCandidateRenderCommit({
+      generationResponse,
+      catalogAdmission,
       featureColorOverrides: {
         [stableKey]: { color: '#ff00ff', caption: 'Candidate style' }
       },

@@ -3,6 +3,9 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+from gbdraw.legend.table import configure_pairwise_identity_legend_from_comparisons
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -75,14 +78,14 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source
     assert "state.modeProfileStateManager?.isManaged?." in request_source
-    assert (
-        "suppressPairwiseIdentityLegend = shouldSuppressPairwiseIdentityLegend("
-        in run_source
+    blast_config = SimpleNamespace()
+    color_modes = configure_pairwise_identity_legend_from_comparisons(
+        blast_config,
+        None,
+        additional_color_modes=("orientation",),
     )
-    assert "import { PAIRWISE_LEGEND_SELECTOR }" in candidate_source
-    assert "querySelectorAll(PAIRWISE_LEGEND_SELECTOR)" in candidate_source
-    assert (
-        """querySelectorAll(
-      '[data-gbdraw-role="comparison-legend"]"""
-        not in candidate_source
-    )
+    assert color_modes == {"orientation"}
+    assert blast_config.hide_pairwise_identity_legend is True
+    assert "shouldSuppressPairwiseIdentityLegend" not in run_source
+    assert "suppressPairwiseIdentityLegend" not in candidate_source
+    assert "PAIRWISE_LEGEND_SELECTOR" not in candidate_source

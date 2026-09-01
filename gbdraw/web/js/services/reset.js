@@ -89,7 +89,11 @@ const resetEditorDraftState = (state) => {
   clearReactiveObject(state.featureColorOverrides);
   replaceReactiveArray(state.featureVisibilityManualRules);
   clearReactiveObject(state.featureVisibilityOverrides);
-  clearReactiveObject(state.featureVisibilitySelectorCache);
+  if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
+    state.replaceFeatureVisibilitySelectorCacheOwner({});
+  } else {
+    clearReactiveObject(state.featureVisibilitySelectorCache);
+  }
   clearReactiveObject(state.featureStrokeOverrides);
   clearReactiveObject(state.legendColorOverrides);
   clearReactiveObject(state.legendStrokeOverrides);

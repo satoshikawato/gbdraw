@@ -25,6 +25,28 @@ export const EXCLUDED_GROUP_SELECTOR = [
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
 
+export const requireUniqueEditableLabelBindings = (
+  labelElements,
+  requiredFeatureIds,
+  { allowMissing = false } = {}
+) => {
+  const required = new Set(
+    Array.from(requiredFeatureIds || []).map(normalizeKeyToken).filter(Boolean)
+  );
+  if (required.size === 0) return;
+  const counts = new Map(Array.from(required, (featureId) => [featureId, 0]));
+  Array.from(labelElements || []).forEach((element) => {
+    const featureId = normalizeKeyToken(element?.getAttribute?.('data-label-feature-id'));
+    if (counts.has(featureId)) counts.set(featureId, counts.get(featureId) + 1);
+  });
+  const invalid = Array.from(counts.values()).some(
+    (count) => count > 1 || (!allowMissing && count !== 1)
+  );
+  if (invalid) {
+    throw new Error('Sanitized SVG content is missing or ambiguously binds an editable Label.');
+  }
+};
+
 const toNumber = (value, fallback = 0) => {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -400,7 +422,9 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const serialized = serializeCleanSvg(svg);
     if (results.value[index]?.content === serialized) return;
     skipCaptureBaseConfig.value = true;
-    results.value[index] = { ...results.value[index], content: serialized };
+    const nextResults = [...results.value];
+    nextResults[index] = { ...results.value[index], content: serialized };
+    results.value = nextResults;
   };
 
   const queueLabelReflow = (reason, force = false) => {
@@ -637,7 +661,10 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       : 'No editable feature label for this feature in current diagram.';
   };
 
-  const syncLabelEditor = () => {
+  const syncLabelEditor = ({
+    requiredFeatureIds = [],
+    optionalFeatureIds = []
+  } = {}) => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -660,6 +687,11 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
 
     const featureGeometry = collectFeatureGeometry(svg);
     const labelElements = collectEditableLabelElements(svg, mode.value);
+    requireUniqueEditableLabelBindings(
+      labelElements,
+      [...requiredFeatureIds, ...optionalFeatureIds],
+      { allowMissing: true }
+    );
     const featureAssignments = assignFeatureIdsToLabels(svg, labelElements, featureGeometry, mode.value);
     labelElements.forEach((textEl, index) => {
       textEl.style.cursor = 'text';
@@ -676,6 +708,12 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
         textEl.removeAttribute('data-label-feature-id');
       }
     });
+    requireUniqueEditableLabelBindings(labelElements, requiredFeatureIds);
+    requireUniqueEditableLabelBindings(
+      labelElements,
+      optionalFeatureIds,
+      { allowMissing: true }
+    );
 
     const textChanged = applyStoredOverridesToSvg(svg);
     const visibilityChanged = applyStoredVisibilityOverridesToSvg(svg);

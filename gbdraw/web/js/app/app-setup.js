@@ -38,7 +38,10 @@ import {
   disposeDiagramGenerationWorker,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { recordSessionLifecycleEvent } from '../services/runtime-test-hooks.js';
+import {
+  recordSessionLifecycleEvent,
+  recordStructuralMetric
+} from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
 import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
@@ -52,7 +55,11 @@ import { createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
-import { compositionUserDeltas } from './legend-layout/composition-actions.js';
+import {
+  COMPOSITION_METADATA_ATTRIBUTE,
+  COMPOSITION_SCHEMA_ATTRIBUTE,
+  compositionUserDeltas
+} from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
@@ -326,7 +333,6 @@ export const createAppSetup = () => {
     featureVisibilityManualRules,
     featureVisibilityRules,
     featureVisibilityOverrides,
-    featureVisibilitySelectorCache,
     featureStrokeOverrides,
     labelLayoutDirtyReason,
     resultGenerationKey,
@@ -1090,19 +1096,20 @@ export const createAppSetup = () => {
     nextTick,
     computed,
     reactive,
+    previewRuntime,
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
   watch(selectedResultIndex, (newIndex, oldIndex) => {
     if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
-    featureSelection.clearFeatureSelection({ clearStatus: true });
+    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
   watch(mode, () => {
-    featureSelection.clearFeatureSelection({ clearStatus: true });
+    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
   watch(svgContent, () => {
     if (!skipCaptureBaseConfig.value) {
-      featureSelection.clearFeatureSelection({ clearStatus: true });
+      featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     }
   });
 
@@ -1879,6 +1886,89 @@ export const createAppSetup = () => {
   );
   const legendLayout = createLegendLayout({ state, legendActions, history });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
+  const shouldSyncMountedLabelEditor = () => (
+    isFeatureDrawerMounted.value
+    || Boolean(clickedFeature.value)
+    || labelTextScopeDialog.show
+    || globalLabelModeDialog.show
+    || Object.keys(labelTextFeatureOverrides).length > 0
+    || Object.keys(labelTextBulkOverrides).length > 0
+    || Object.keys(labelVisibilityOverrides).length > 0
+  );
+  previewRuntime.configureMountedResultBinder({
+    adoptLegend(context) {
+      if (
+        context.bindingOptions.skipLegendExtraction
+        || context.bindingOptions.trustedRestore
+      ) return;
+      recordStructuralMetric('legendDomFullScanCount', 1, {
+        phase: context.phase,
+        rootGeneration: context.rootGeneration
+      });
+      legendActions.extractLegendEntries();
+    },
+    bindComposition(context) {
+      if (context.bindingOptions.trustedRestore) return;
+      const hasCompositionMetadata = (
+        context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
+        || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+      );
+      const shouldBind = (
+        hasCompositionMetadata
+        || (
+          !context.bindingOptions.isIncrementalEdit
+          && context.sourceClass !== 'legacy-import'
+        )
+      );
+      if (shouldBind) legendLayout.captureBaseConfig();
+    },
+    setupDragAffordances(context) {
+      legendActions.setupLegendDrag();
+      legendLayout.setupDiagramDrag(Boolean(context.bindingOptions.isIncrementalEdit));
+    },
+    installDelegatedInteractions(context) {
+      featureActions.attachSvgFeatureHandlers({
+        root: context.root,
+        phase: context.phase,
+        rootGeneration: context.rootGeneration
+      });
+      featureActions.preparePairwiseInteractionAffordances({
+        root: context.root,
+        phase: context.phase,
+        rootGeneration: context.rootGeneration
+      });
+    },
+    synchronizeLabelEditor(context) {
+      if (!context.bindingOptions.trustedRestore && shouldSyncMountedLabelEditor()) {
+        featureActions.syncLabelEditor({
+          requiredFeatureIds: context.bindingOptions.requiredLabelFeatureIds,
+          optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds
+        });
+      }
+    },
+    initializeStrokeAndCanvas(context) {
+      if (
+        context.bindingOptions.trustedRestore
+        || context.bindingOptions.isIncrementalEdit
+      ) return;
+      legendLayout.captureOriginalStroke();
+      canvasPadding.top = 0;
+      canvasPadding.right = 0;
+      canvasPadding.bottom = 0;
+      canvasPadding.left = 0;
+    },
+    reconcileSelection(context) {
+      if (
+        !context.bindingOptions.trustedRestore
+        && !context.bindingOptions.isIncrementalEdit
+      ) {
+        featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+      }
+    },
+    afterReady(context) {
+      previewFeatureSearch.handleMountedResultReady(context);
+    }
+  });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
     cancelRunAnalysis,
@@ -1906,8 +1996,22 @@ export const createAppSetup = () => {
     getCommittedCanonicalRenderRequest,
     getCommittedCanonicalSession,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
+    captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
+    installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
     restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
+    runGeneratedArtifactReplacement: (...args) => (
+      history.runUndoableArtifactReplacement(...args)
+    ),
+    previewRuntime,
+    nextTick,
+    onGeneratedArtifactCheckpointCapture: ({ phase, diagnostics } = {}) => {
+      recordSessionLifecycleEvent(`generate-history-${String(phase || '')}`, {
+        diagnostics: diagnostics && typeof diagnostics === 'object'
+          ? diagnostics
+          : {}
+      });
+    },
     resetPreviewViewport,
     validateAnnotationTargets: ({ loadComparison }) => {
       const catalog = getAnnotationRecordCatalog(loadComparison);
@@ -1944,53 +2048,27 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
-  const refreshLoadedSessionSvgLayout = async () => {
-    await nextTick();
-    await new Promise((resolve) => {
-      if (typeof window.requestAnimationFrame === 'function') {
-        window.requestAnimationFrame(() => resolve());
-      } else {
-        setTimeout(resolve, 0);
-      }
-    });
-
-    const svg = svgContainer.value?.querySelector?.('svg');
-    if (!svg) return;
-    try {
-      legendLayout.captureBaseConfig();
-      legendActions.setupLegendDrag();
-      legendLayout.setupDiagramDrag(false);
-    } catch (error) {
-      errorLog.value = {
-        summary: error?.message || 'The saved SVG composition metadata is invalid.',
-        details: []
-      };
-      throw error;
-    }
-  };
-
-  const synchronizeLoadedSessionLegendEntries = async () => {
-    if (!svgContent.value) return;
-
-    let svgReady = false;
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      await nextTick();
-      if (svgContainer.value?.querySelector?.('svg')) {
-        svgReady = true;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (!svgReady) return;
-
-    // The admitted, sanitized Result is the sole visual authority. Extraction
-    // only carries nonvisual metadata when both its caption and color match.
-    legendActions.extractLegendEntries();
-  };
-
+  let nextSessionPreviewToken = 1;
   const importSession = async (event) => {
     const result = await importSessionFromFile(event, {
-      afterLoad: refreshLoadedSessionSvgLayout,
+      beforePreviewMount: ({ results: importedResults, resultIndex }) => {
+        const selectedResult = importedResults[resultIndex] || null;
+        if (!selectedResult) return null;
+        const token = `session-load:${nextSessionPreviewToken++}`;
+        return previewRuntime.registerReadinessExpectation({
+          result: selectedResult,
+          resultIndex,
+          artifactIdentity: token,
+          generationToken: token,
+          catalogState: state.featureCatalog?.value || null,
+          phase: 'session-load',
+          bindingOptions: { isIncrementalEdit: true },
+          isCurrent: () => (
+            results.value[resultIndex] === selectedResult
+            && Number(selectedResultIndex.value) === resultIndex
+          )
+        });
+      },
       rollbackState: createSessionImportRollbackState({
         depthTrackUiCounts,
         depthTracks: adv.depth_tracks,
@@ -2006,9 +2084,6 @@ export const createAppSetup = () => {
           : 0
       });
       await nextTick();
-      if (result?.status === 'ok') {
-        await synchronizeLoadedSessionLegendEntries();
-      }
       recordSessionLifecycleEvent('history-baseline-start');
       await history.initializeIntentBaseline('Loaded session');
       recordSessionLifecycleEvent('history-baseline-end');
@@ -2269,13 +2344,6 @@ export const createAppSetup = () => {
         };
   }
 
-  const recordGenerateHistoryCapture = ({ phase, diagnostics } = {}) => {
-    recordSessionLifecycleEvent(`generate-history-${String(phase || '')}`, {
-      diagnostics: diagnostics && typeof diagnostics === 'object'
-        ? diagnostics
-        : {}
-    });
-  };
   const runAnalysis = async () => {
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
@@ -2290,27 +2358,19 @@ export const createAppSetup = () => {
       if (mode.value === 'linear') await focusLinearComparisonIssue();
       return { status: 'error' };
     }
-    return history.runUndoableArtifactReplacement(
-      'Generate diagram',
-      async (generatedArtifactHandle) => {
-        cancelDefinitionUpdate();
-        const result = await runGeneratedDiagramAnalysis(
-          comparisonPlanSnapshot,
-          generatedArtifactHandle,
-          comparisonExecution
-        );
-        if (result?.status === 'error' && mode.value === 'linear') {
-          await focusLinearComparisonIssue();
-        }
-        if (result?.status === 'ok') {
-          featureSelection.clearFeatureSelection({ clearStatus: true });
-        }
-        return result;
-      }, {
-        shouldCommit: (result) => result?.status === 'ok',
-        onCheckpointCapture: recordGenerateHistoryCapture
-      }
+    cancelDefinitionUpdate();
+    const result = await runGeneratedDiagramAnalysis(
+      comparisonPlanSnapshot,
+      null,
+      comparisonExecution
     );
+    if (result?.status === 'error' && mode.value === 'linear') {
+      await focusLinearComparisonIssue();
+    }
+    if (result?.status === 'ok') {
+      featureSelection.clearFeatureSelection({ clearStatus: true });
+    }
+    return result;
   };
 
   const chooseImportedComparisonAction = (action) => history.runUndoable(
@@ -3647,7 +3707,6 @@ export const createAppSetup = () => {
     featureVisibilityManualRules,
     featureVisibilityRules,
     featureVisibilityOverrides,
-    featureVisibilitySelectorCache,
     featureStrokeOverrides,
     labelLayoutDirtyReason,
     addFeatureVisibilityRule: addFeatureVisibilityRuleWithHistory,

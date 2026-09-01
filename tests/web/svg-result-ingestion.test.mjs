@@ -1,191 +1,574 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
 import {
+  requireUniqueEditableLabelBindings
+} from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
+import {
+  admitFeatureCatalog,
+  biologicalFeatureKey
+} from '../../gbdraw/web/js/services/feature-catalog.js';
+import { normalizeLogicalResults } from '../../gbdraw/web/js/services/result-normalization.js';
+import {
+  admitCurrentGeneratedResults,
+  admitCurrentSessionResults,
+  admitLegacyImportedResults,
+  createCurrentSessionResultSource,
+  createEmptySvgMutationPlan,
+  createLegacyImportResultSource,
   getCommittedSvgContent,
   getCommittedSvgResultMetadata,
-  ingestCatalogBackedSvgResults,
-  ingestSvgResult,
-  ingestSvgResults,
   isCommittedSvgResult,
   markCommittedSvgResultMounted,
   markCommittedSvgResultUnmounted
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
-import { normalizeLogicalResults } from '../../gbdraw/web/js/services/result-normalization.js';
+
+class FakeElement {
+  constructor(tagName, attributes = {}, children = []) {
+    this.tagName = tagName;
+    this.localName = tagName;
+    this.attributes = new Map(Object.entries(attributes));
+    this.children = [];
+    this.parentElement = null;
+    this.textContent = '';
+    this.style = { removeProperty() {} };
+    children.forEach((child) => this.appendChild(child));
+  }
+
+  get id() { return this.getAttribute('id') || ''; }
+  getAttribute(name) { return this.attributes.has(name) ? this.attributes.get(name) : null; }
+  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  removeAttribute(name) { this.attributes.delete(name); }
+  hasAttribute(name) { return this.attributes.has(name); }
+  appendChild(child) { child.parentElement = this; this.children.push(child); return child; }
+  remove() {
+    if (!this.parentElement) return;
+    this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+    this.parentElement = null;
+  }
+  cloneNode(deep = false) {
+    const clone = new FakeElement(this.tagName, Object.fromEntries(this.attributes));
+    clone.textContent = this.textContent;
+    if (deep) this.children.forEach((child) => clone.appendChild(child.cloneNode(true)));
+    return clone;
+  }
+  getElementById(id) {
+    return this.walk().find((element) => element.id === id) || null;
+  }
+  walk() {
+    return [this, ...this.children.flatMap((child) => child.walk())];
+  }
+  matches(selector) {
+    if (selector === '[style]') return this.hasAttribute('style');
+    if (selector.startsWith('.')) return false;
+    if (selector === 'path') return this.tagName === 'path';
+    if (selector === 'text') return this.tagName === 'text';
+    if (selector === 'textPath') return this.tagName === 'textPath';
+    if (selector === 'g[data-legend-key]') {
+      return this.tagName === 'g' && this.hasAttribute('data-legend-key');
+    }
+    if (selector === 'text[data-label-feature-id]') {
+      return this.tagName === 'text' && this.hasAttribute('data-label-feature-id');
+    }
+    if (selector.includes('data-gbdraw-feature-id') || selector.includes('id^="f"')) {
+      return ['path', 'polygon', 'rect'].includes(this.tagName)
+        && (this.hasAttribute('data-gbdraw-feature-id') || this.id.startsWith('f'));
+    }
+    if (selector.startsWith('#')) return this.id === selector.slice(1);
+    return false;
+  }
+  querySelectorAll(selector) {
+    return this.walk().slice(1).filter((element) => element.matches(selector));
+  }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+}
+
+const serializeNode = (node) => {
+  const attributes = Array.from(node.attributes.entries())
+    .map(([name, value]) => ` ${name}="${value}"`).join('');
+  const content = `${node.textContent || ''}${node.children.map(serializeNode).join('')}`;
+  return `<${node.tagName}${attributes}>${content}</${node.tagName}>`;
+};
+
+globalThis.XMLSerializer = class {
+  serializeToString(node) { return serializeNode(node); }
+};
+
+const buildSvgRoot = ({
+  missingFeature = false,
+  missingLabel = false,
+  missingLegend = false
+} = {}) => {
+  const root = new FakeElement('svg', { xmlns: 'http://www.w3.org/2000/svg' });
+  if (!missingFeature) {
+    root.appendChild(new FakeElement('path', {
+      id: 'f0001',
+      'data-gbdraw-feature-id': 'f0001',
+      'data-gbdraw-feature-part': 'block',
+      'data-gbdraw-stable-feature-id': 'stable-a',
+      'data-gbdraw-record-index': '0',
+      'data-gbdraw-record-id': 'record-a',
+      fill: '#aaaaaa'
+    }));
+  }
+  if (!missingLabel) {
+    const label = new FakeElement('text', { 'data-label-feature-id': 'f0001' });
+    label.textContent = 'old label';
+    root.appendChild(label);
+  }
+  if (!missingLegend) {
+    const legend = new FakeElement('g', { id: 'legend' });
+    const featureLegend = new FakeElement('g', { id: 'feature_legend' });
+    const entry = new FakeElement('g', { 'data-legend-key': 'CDS' });
+    entry.appendChild(new FakeElement('path', { fill: '#aaaaaa' }));
+    const caption = new FakeElement('text');
+    caption.textContent = 'CDS';
+    entry.appendChild(caption);
+    featureLegend.appendChild(entry);
+    legend.appendChild(featureLegend);
+    root.appendChild(legend);
+  }
+  return root;
+};
+
 class FakeDomParser {
   static calls = 0;
 
   parseFromString(content, mediaType) {
     FakeDomParser.calls += 1;
     assert.equal(mediaType, 'image/svg+xml');
-    const feature = {
-      getAttribute(name) {
-        const attributes = {
-          id: 'rendered-a',
-          'data-gbdraw-feature-id': 'rendered-a',
-          'data-gbdraw-stable-feature-id': 'stable-a',
-          'data-gbdraw-record-index': '2',
-          'data-gbdraw-record-id': 'record-a'
-        };
-        return attributes[name] ?? null;
-      }
-    };
+    const isSvg = content.includes('<svg');
     return {
-      documentElement: {
-        localName: content.includes('<svg') ? 'svg' : 'html',
-        content,
-        cloneNode() { return this; },
-        getAttribute(name) {
-          return name === 'xmlns' || name === 'xmlns:xlink' ? 'present' : null;
-        },
-        setAttribute() {},
-        removeAttribute() {},
-        querySelectorAll(selector) {
-          return selector.includes('data-gbdraw-feature-id') ? [feature] : [];
-        }
-      },
+      documentElement: isSvg
+        ? buildSvgRoot({
+            missingFeature: content.includes('missing-feature'),
+            missingLabel: content.includes('missing-label'),
+            missingLegend: content.includes('missing-legend')
+          })
+        : new FakeElement('html'),
       querySelector: () => null
     };
   }
 }
 
-globalThis.XMLSerializer = class {
-  serializeToString(node) {
-    return node.content;
+const catalog = () => ({
+  schema: 3,
+  items: [{
+    resultIndex: 0,
+    resultName: 'diagram.svg',
+    recordKeys: ['record-a'],
+    features: [{
+      svgId: 'f0001',
+      recordKey: 'record-a',
+      biologicalFeatureId: 'feature-a',
+      fillColor: '#aaaaaa'
+    }],
+    biologicalFeatures: [{
+      recordKey: 'record-a',
+      biologicalFeatureId: 'feature-a',
+      stableFeatureId: 'stable-a',
+      record_id: 'record-a',
+      type: 'CDS',
+      start: 0,
+      end: 3,
+      strand: 1
+    }],
+    orthogroups: [],
+    annotations: [],
+    comparisonMatches: [],
+    sequenceSources: []
+  }]
+});
+
+const sanitizer = (counter) => ({
+  sanitize(content) {
+    counter.calls += 1;
+    return String(content).replace(/<script>[\s\S]*?<\/script>/gi, '');
+  }
+});
+
+const currentFixture = (content = '<svg><path id="f0001"/></svg>') => {
+  const featureCatalog = catalog();
+  const response = normalizeGenerationResponse({
+    results: [{ name: 'diagram.svg', content }],
+    metadata: { featureCatalog }
+  });
+  const admission = admitFeatureCatalog(featureCatalog, response.results, {
+    adopt: true,
+    mode: 'linear'
+  });
+  return { response, admission };
+};
+
+const metricTotal = (metrics, name) => metrics
+  .filter((metric) => metric.name === name)
+  .reduce((total, metric) => total + metric.value, 0);
+
+const captureMetrics = (run) => {
+  const metrics = [];
+  const events = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => metrics.push(metric),
+    onSessionLifecycleEvent: (event) => events.push(event)
+  };
+  try {
+    return { value: run(), metrics, events };
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
   }
 };
 
-test('one ingestion transaction owns sanitization, parsing, and runtime trust', () => {
-  let sanitizeCalls = 0;
-  const sanitizer = {
-    sanitize(content) {
-      sanitizeCalls += 1;
-      return content.replace(/<script>[\s\S]*?<\/script>/gi, '');
+test('current-worker EMPTY admission sanitizes once and performs zero application SVG work', () => {
+  FakeDomParser.calls = 0;
+  const calls = { calls: 0 };
+  const { response, admission } = currentFixture(
+    '<svg><script>bad()</script><path id="f0001"/></svg>'
+  );
+  const { value: results, metrics, events } = captureMetrics(() => admitCurrentGeneratedResults(
+    response,
+    {
+      catalogAdmission: admission,
+      mutationPlan: createEmptySvgMutationPlan(1),
+      sanitizer: sanitizer(calls),
+      parser: FakeDomParser
     }
-  };
-  const raw = {
-    name: 'unsafe.svg',
-    content: '<svg><script>unsafe()</script><path data-gbdraw-feature-id="rendered-a"/></svg>',
-    trusted: true
-  };
+  ));
+  const committed = results[0];
 
-  const committed = ingestSvgResult(raw, {
-    sanitizer,
-    parser: FakeDomParser
-  });
-
-  assert.equal(sanitizeCalls, 1);
-  assert.equal(FakeDomParser.calls, 1);
-  assert.equal(isCommittedSvgResult(raw), false);
+  assert.equal(calls.calls, 1);
+  assert.equal(FakeDomParser.calls, 0);
+  assert.equal(committed.content, '<svg><path id="f0001"/></svg>');
   assert.equal(isCommittedSvgResult(committed), true);
-  assert.equal(committed.content, '<svg><path data-gbdraw-feature-id="rendered-a"/></svg>');
-  assert.equal(getCommittedSvgContent(committed), committed.content);
-  const identities = getCommittedSvgResultMetadata(committed).renderedFeatureIdentities;
-  assert.deepEqual(identities.byRenderedId.get('rendered-a'), {
-    renderedId: 'rendered-a',
-    stableId: 'stable-a',
-    recordIndex: 2,
-    recordId: 'record-a',
-    elementId: 'rendered-a'
-  });
+  assert.equal(
+    getCommittedSvgResultMetadata(committed).renderedFeatureIdentities
+      .byRenderedId.get('f0001').stableId,
+    'stable-a'
+  );
+  assert.equal(metricTotal(metrics, 'svgSanitizationCount'), 1);
+  for (const name of [
+    'applicationSvgParseCount',
+    'svgMutationIndexBuildCount',
+    'featureDomFullScanCount',
+    'legendDomFullScanCount',
+    'svgIdentityScanCount',
+    'svgSerializationCount',
+    'currentLegacyNormalizationCount'
+  ]) assert.equal(metricTotal(metrics, name), 0, name);
+  const completedCandidate = events.find(({ name }) => name === 'artifact.candidate-completed');
+  assert.deepEqual(completedCandidate.catalogFootprint, admission.scalarMetrics);
 
   assert.equal(markCommittedSvgResultMounted(committed), true);
   const persistedEdit = { ...committed, content: '<svg><path fill="#abcdef"/></svg>' };
   assert.equal(getCommittedSvgResultMetadata(persistedEdit), getCommittedSvgResultMetadata(committed));
-  const normalizedCommitted = normalizeLogicalResults([committed])[0];
-  assert.equal(getCommittedSvgResultMetadata(normalizedCommitted), getCommittedSvgResultMetadata(committed));
-  assert.equal(
-    getCommittedSvgContent(persistedEdit),
-    '<svg><path data-gbdraw-feature-id="rendered-a"/></svg>',
-    'persisting an active live-DOM edit must not replace the mounted root'
-  );
+  assert.equal(getCommittedSvgResultMetadata(normalizeLogicalResults([committed])[0]), getCommittedSvgResultMetadata(committed));
+  assert.equal(getCommittedSvgContent(persistedEdit), committed.content);
   assert.equal(markCommittedSvgResultUnmounted(persistedEdit), true);
   assert.equal(getCommittedSvgContent(persistedEdit), persistedEdit.content);
-
   const persistedRoundTrip = JSON.parse(JSON.stringify(committed));
   assert.equal(isCommittedSvgResult(persistedRoundTrip), false);
-  assert.equal(getCommittedSvgContent(persistedRoundTrip), null);
   assert.equal(getCommittedSvgResultMetadata(persistedRoundTrip), null);
+});
 
-  assert.equal(ingestSvgResults([committed], { sanitizer, parser: FakeDomParser })[0], committed);
-  assert.equal(sanitizeCalls, 1);
+test('JSON cannot forge current-worker provenance and malformed envelopes fail closed', () => {
+  const { response, admission } = currentFixture();
+  assert.throws(
+    () => admitCurrentGeneratedResults(JSON.parse(JSON.stringify(response)), {
+      catalogAdmission: admission,
+      mutationPlan: createEmptySvgMutationPlan(1),
+      sanitizer: { sanitize: (value) => value }
+    }),
+    /runtime Worker provenance/
+  );
+
+  const malformed = currentFixture('not svg');
+  assert.throws(
+    () => admitCurrentGeneratedResults(malformed.response, {
+      catalogAdmission: malformed.admission,
+      mutationPlan: createEmptySvgMutationPlan(1),
+      sanitizer: { sanitize: (value) => value }
+    }),
+    /malformed SVG/
+  );
+
+  const unrelated = currentFixture();
+  assert.throws(
+    () => admitCurrentGeneratedResults(response, {
+      catalogAdmission: unrelated.admission,
+      mutationPlan: createEmptySvgMutationPlan(1),
+      sanitizer: { sanitize: (value) => value }
+    }),
+    /do not own the admitted feature catalog/
+  );
+});
+
+const planOptions = {
+  fill: (admission) => ({
+    catalogAdmission: admission,
+    featureColorOverrides: {
+      [biologicalFeatureKey('record-a', 'feature-a')]: '#112233'
+    }
+  }),
+  stroke: (admission) => ({
+    catalogAdmission: admission,
+    featureStrokeOverrides: {
+      [biologicalFeatureKey('record-a', 'feature-a')]: {
+        strokeColor: '#223344',
+        strokeWidth: 2
+      }
+    }
+  }),
+  visibility: (admission) => ({
+    catalogAdmission: admission,
+    featureVisibilityOverrides: { f0001: 'off' }
+  }),
+  Label: (admission) => ({
+    catalogAdmission: admission,
+    labelTextFeatureOverrides: { f0001: 'new label' },
+    labelVisibilityOverrides: { f0001: 'off' }
+  }),
+  Legend: (admission) => ({
+    catalogAdmission: admission,
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#334455' }],
+    originalLegendOrder: ['CDS'],
+    legendColorOverrides: { CDS: '#334455' },
+    legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+  })
+};
+
+for (const [domain, makeOptions] of Object.entries(planOptions)) {
+  test(`${domain}-only current mutation uses one admitted root and shared lazy index`, () => {
+    FakeDomParser.calls = 0;
+    const { response, admission } = currentFixture();
+    const plan = compileDirectEditorMutationPlan(makeOptions(admission));
+    assert.equal(plan.kind, 'MUTATING');
+    const { metrics } = captureMetrics(() => admitCurrentGeneratedResults(response, {
+      catalogAdmission: admission,
+      mutationPlan: plan,
+      sanitizer: { sanitize: (value) => value },
+      parser: FakeDomParser
+    }));
+    const detachedSvgWork = domain === 'Label' ? 0 : 1;
+    assert.equal(FakeDomParser.calls, detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'applicationSvgParseCount'), detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'svgMutationIndexBuildCount'), detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'svgSerializationCount'), detachedSvgWork);
+    assert.equal(metricTotal(metrics, 'svgIdentityScanCount'), 0);
+    assert.equal(metricTotal(metrics, 'currentLegacyNormalizationCount'), 0);
+  });
+}
+
+test('combined current mutations share one root/index and serialize once', () => {
+  FakeDomParser.calls = 0;
+  const { response, admission } = currentFixture();
+  const plan = compileDirectEditorMutationPlan({
+    ...planOptions.fill(admission),
+    ...planOptions.stroke(admission),
+    ...planOptions.visibility(admission),
+    ...planOptions.Label(admission),
+    ...planOptions.Legend(admission)
+  });
+  const { value: results, metrics } = captureMetrics(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  }));
   assert.equal(FakeDomParser.calls, 1);
+  assert.equal(metricTotal(metrics, 'applicationSvgParseCount'), 1);
+  assert.equal(metricTotal(metrics, 'svgMutationIndexBuildCount'), 1);
+  assert.equal(metricTotal(metrics, 'featureDomFullScanCount'), 1);
+  assert.equal(metricTotal(metrics, 'legendDomFullScanCount'), 1);
+  assert.equal(metricTotal(metrics, 'svgSerializationCount'), 1);
+  assert.match(results[0].content, /fill="#112233"/);
+  assert.match(results[0].content, /display="none"/);
+  assert.doesNotMatch(results[0].content, /data-gbdraw-label-visibility-preview="off"/);
+  assert.match(results[0].content, />old label<\/text>/);
+  assert.match(results[0].content, /fill="#334455"/);
 });
 
-test('a malformed sanitized document never becomes committed', () => {
-  assert.throws(
-    () => ingestSvgResult(
-      { name: 'bad.svg', content: 'not svg' },
-      {
-        sanitizer: { sanitize: (content) => content },
-        parser: FakeDomParser
-      }
-    ),
-    /malformed SVG/
-  );
-});
-
-test('a validated catalog commits sanitized saved SVG without a detached parse or scan', () => {
-  const catalogItem = {
-    recordKeys: ['record-a'],
-    biologicalFeatures: [{
-      recordKey: 'record-a',
-      biologicalFeatureId: 'stable-a',
-      record_id: 'public-record-a'
-    }],
-    features: [{
-      recordKey: 'record-a',
-      biologicalFeatureId: 'stable-a',
-      svgId: 'rendered-a'
-    }]
-  };
-  let sanitizeCalls = 0;
-  const beforeParserCalls = FakeDomParser.calls;
-  const committed = ingestCatalogBackedSvgResults([{
-    name: 'saved.svg',
-    content: '<?xml version="1.0"?><svg><script>bad()</script><path id="rendered-a"/></svg>'
-  }], {
-    catalogItems: [catalogItem],
-    sanitizer: {
-      sanitize(content) {
-        sanitizeCalls += 1;
-        let sanitized = content;
-        let previous;
-        do {
-          previous = sanitized;
-          sanitized = sanitized
-            .replace(/^<\?xml[^>]*>/, '')
-            .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '');
-        } while (sanitized !== previous);
-        return sanitized;
-      }
-    }
-  })[0];
-
-  assert.equal(sanitizeCalls, 1);
-  assert.equal(FakeDomParser.calls, beforeParserCalls);
-  assert.equal(isCommittedSvgResult(committed), true);
-  assert.equal(committed.content, '<svg><path id="rendered-a"/></svg>');
-  assert.deepEqual(
-    getCommittedSvgResultMetadata(committed).renderedFeatureIdentities.byRenderedId
-      .get('rendered-a'),
+test('direct Legend rename, deletion, and addition are applied through catalog-backed admission', () => {
+  const cases = [
     {
-      renderedId: 'rendered-a',
-      stableId: 'stable-a',
-      recordIndex: 0,
-      recordId: 'public-record-a',
-      elementId: 'rendered-a'
+      editor: {
+        legendEntries: [{
+          caption: 'Genes', originalCaption: 'CDS', color: '#aaaaaa', xPos: 20, yPos: 30
+        }],
+        originalLegendOrder: ['CDS']
+      },
+      assertContent: (content) => {
+        assert.match(content, /data-legend-key="Genes"/);
+        assert.match(content, /transform="translate\(20, 30\)"/);
+      }
+    },
+    {
+      editor: {
+        legendEntries: [],
+        deletedLegendEntries: [{ caption: 'CDS', originalCaption: 'CDS' }],
+        originalLegendOrder: ['CDS']
+      },
+      assertContent: (content) => assert.doesNotMatch(content, /data-legend-key="CDS"/)
+    },
+    {
+      editor: {
+        legendEntries: [{
+          caption: 'New', originalCaption: 'New', color: '#556677', xPos: 40, yPos: 50
+        }],
+        originalLegendOrder: ['CDS']
+      },
+      assertContent: (content) => {
+        assert.match(content, /data-legend-key="New"/);
+        assert.match(content, /data-legend-owner="direct-editor"/);
+        assert.match(content, /transform="translate\(40, 50\)"/);
+      }
     }
+  ];
+
+  cases.forEach(({ editor, assertContent }) => {
+    const { response, admission } = currentFixture();
+    const plan = compileDirectEditorMutationPlan({ catalogAdmission: admission, ...editor });
+    const results = admitCurrentGeneratedResults(response, {
+      catalogAdmission: admission,
+      mutationPlan: plan,
+      sanitizer: { sanitize: (value) => value },
+      parser: FakeDomParser
+    });
+    assertContent(results[0].content);
+  });
+});
+
+test('a requested Legend addition reuses an exact renderer-produced caption', () => {
+  const { response, admission } = currentFixture();
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [{
+      caption: 'CDS',
+      originalCaption: 'CDS',
+      color: '#556677',
+      xPos: 40,
+      yPos: 50
+    }],
+    originalLegendOrder: ['other proteins']
+  });
+  const results = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  assert.equal((results[0].content.match(/data-legend-key="CDS"/g) || []).length, 1);
+  assert.match(results[0].content, /fill="#556677"/);
+});
+
+test('a renderer-derived Legend style may be absent when no current binding remains', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    featureColorOverrides: {
+      [biologicalFeatureKey('record-a', 'retired-feature')]: {
+        color: '#334455',
+        caption: 'CDS'
+      }
+    },
+    legendEntries: [{
+      caption: 'CDS',
+      originalCaption: 'CDS',
+      color: '#334455'
+    }],
+    originalLegendOrder: ['CDS'],
+    addedLegendCaptions: new Set(['CDS']),
+    legendColorOverrides: { CDS: '#334455' },
+    legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+  });
+  assert.equal(plan.operationsByResult[0].legendFills[0].allowMissing, true);
+  assert.equal(plan.operationsByResult[0].legendStrokes[0].allowMissing, true);
+  assert.doesNotThrow(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  }));
+});
+
+test('an unexplained missing Legend binding remains rejected', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan(planOptions.Legend(admission));
+  assert.throws(
+    () => admitCurrentGeneratedResults(response, {
+      catalogAdmission: admission,
+      mutationPlan: plan,
+      sanitizer: { sanitize: (value) => value },
+      parser: FakeDomParser
+    }),
+    /missing a Legend binding/
+  );
+});
+
+test('Label replay is deferred until mounted identity binding', () => {
+  const { response, admission } = currentFixture('<svg>missing-label</svg>');
+  const plan = compileDirectEditorMutationPlan(planOptions.Label(admission));
+  const admitted = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  assert.equal(isCommittedSvgResult(admitted[0]), true);
+  assert.equal(isCommittedSvgResult(response.results[0]), false);
+});
+
+test('mounted Label binding accepts one target and rejects missing or ambiguous identity', () => {
+  const label = (featureId) => new FakeElement('text', {
+    'data-label-feature-id': featureId
+  });
+  assert.doesNotThrow(() => requireUniqueEditableLabelBindings(
+    [label('f0001')],
+    ['f0001']
+  ));
+  assert.throws(
+    () => requireUniqueEditableLabelBindings([], ['f0001']),
+    /missing or ambiguously binds an editable Label/
+  );
+  assert.throws(
+    () => requireUniqueEditableLabelBindings(
+      [label('f0001'), label('f0001')],
+      ['f0001']
+    ),
+    /missing or ambiguously binds an editable Label/
+  );
+  assert.doesNotThrow(() => requireUniqueEditableLabelBindings(
+    [],
+    ['f0001'],
+    { allowMissing: true }
+  ));
+});
+
+test('current-session and legacy-import remain explicit, incompatible boundaries', () => {
+  FakeDomParser.calls = 0;
+  const calls = { calls: 0 };
+  const persistedResults = [{
+    name: 'diagram.svg',
+    content: '<svg><script>bad()</script><path id="f0001"/></svg>'
+  }];
+  const admission = admitFeatureCatalog(catalog(), persistedResults, { mode: 'linear' });
+  const currentSource = createCurrentSessionResultSource(persistedResults, admission);
+  const current = admitCurrentSessionResults(currentSource, {
+    mutationPlan: createEmptySvgMutationPlan(1),
+    sanitizer: sanitizer(calls),
+    parser: FakeDomParser
+  });
+  assert.equal(FakeDomParser.calls, 0);
+  assert.equal(current[0].content.includes('<script>'), false);
+  assert.throws(
+    () => admitLegacyImportedResults(currentSource),
+    /legacy-import/
   );
 
-  assert.throws(
-    () => ingestCatalogBackedSvgResults(
-      [{ name: 'bad.svg', content: 'not svg' }],
-      {
-        catalogItems: [catalogItem],
-        sanitizer: { sanitize: (content) => content }
-      }
-    ),
-    /malformed SVG/
+  const legacy = admitLegacyImportedResults(
+    createLegacyImportResultSource([{ name: 'legacy.svg', content: '<svg></svg>' }]),
+    { sanitizer: { sanitize: (value) => value }, parser: FakeDomParser }
   );
+  assert.equal(FakeDomParser.calls, 1);
+  assert.equal(getCommittedSvgResultMetadata(legacy[0]).sourceClass, 'legacy-import');
 });

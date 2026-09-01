@@ -19,9 +19,12 @@ await writeFile(
 await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'app', 'feature-utils.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'app', 'feature-selector.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'app', 'losat-normalization.js'), await readFile(join(sourceDir, 'app', 'losat-normalization.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-catalog.js'), await readFile(join(sourceDir, 'services', 'feature-catalog.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-identity.js'), await readFile(join(sourceDir, 'services', 'feature-identity.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'orthogroup-feature-metadata.js'), await readFile(join(sourceDir, 'services', 'orthogroup-feature-metadata.js'), 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'runtime-test-hooks.js'), await readFile(join(sourceDir, 'services', 'runtime-test-hooks.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'services', 'feature-override-identity.js'), await readFile(join(sourceDir, 'services', 'feature-override-identity.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
