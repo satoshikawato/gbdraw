@@ -337,14 +337,44 @@ const semanticSnapshot = (page) => page.evaluate(async () => {
 
   const ids = [...svg.querySelectorAll('[id]')].map((element) => element.id);
   const unsafeElements = svg.querySelectorAll('script, foreignObject, iframe, object, embed').length;
+  // DOMPurify 3.2.7's default allowed-URI contract, used by SVG_SANITIZE_OPTIONS.
+  const sanitizerAllowedUri = /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i;
+  const sanitizerUriWhitespace = /[\u0000-\u0020\u00a0\u1680\u180e\u2000-\u2029\u205f\u3000]/g;
+  const urlValues = (name, value) => {
+    const candidates = ['href', 'xlink:href'].includes(name) ? [value] : [];
+    for (const match of value.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)) {
+      candidates.push(match[2]);
+    }
+    return candidates;
+  };
+  const sanitizerAllowsUri = (value) => {
+    const normalized = value.replace(sanitizerUriWhitespace, '');
+    return normalized === '' || sanitizerAllowedUri.test(normalized);
+  };
+  const isUnsafeAttribute = (name, value) => (
+    name.startsWith('on')
+    || urlValues(name, value).some((candidate) => (
+      !sanitizerAllowsUri(candidate)
+    ))
+  );
   let unsafeAttributes = 0;
-  for (const element of svg.querySelectorAll('*')) {
+  for (const element of [svg, ...svg.querySelectorAll('*')]) {
     for (const attribute of element.attributes) {
       const name = attribute.name.toLowerCase();
-      const value = attribute.value.trim().toLowerCase();
-      if (name.startsWith('on') || value.startsWith('javascript:')) unsafeAttributes += 1;
+      if (isUnsafeAttribute(name, attribute.value)) unsafeAttributes += 1;
     }
   }
+  const urlSafetyControls = {
+    emptyUrl: isUnsafeAttribute('href', ''),
+    localFragment: isUnsafeAttribute('href', '#local-definition'),
+    localPaint: isUnsafeAttribute('fill', 'url(#local-gradient)'),
+    relativeUrl: isUnsafeAttribute('href', './local-resource.svg#shape'),
+    httpsUrl: isUnsafeAttribute('href', 'https://example.test/resource.svg#shape'),
+    javascriptUrl: isUnsafeAttribute('href', 'javascript:alert(1)'),
+    dataUrl: isUnsafeAttribute('href', 'data:image/svg+xml,<svg/>'),
+    vbscriptUrl: isUnsafeAttribute('href', 'vbscript:msgbox(1)'),
+    arbitrarySchemeUrl: isUnsafeAttribute('href', 'custom-danger:payload')
+  };
   const relationships = [...new Set((item.comparisonMatches || []).map((match) => (
     `${match.query_record_id}->${match.subject_record_id}`
   )))];
@@ -377,7 +407,8 @@ const semanticSnapshot = (page) => page.evaluate(async () => {
     comparisonLegendCount: svg.querySelectorAll('[data-gbdraw-role="comparison-legend"]').length,
     legendGroupCount: svg.querySelectorAll('[data-gbdraw-composition-role="legend"]').length,
     unsafeElements,
-    unsafeAttributes
+    unsafeAttributes,
+    urlSafetyControls
   };
 });
 
@@ -404,7 +435,18 @@ const assertSemanticSnapshot = (snapshot) => {
     comparisonLegendCount: 2,
     legendGroupCount: 1,
     unsafeElements: 0,
-    unsafeAttributes: 0
+    unsafeAttributes: 0,
+    urlSafetyControls: {
+      emptyUrl: false,
+      localFragment: false,
+      localPaint: false,
+      relativeUrl: false,
+      httpsUrl: false,
+      javascriptUrl: true,
+      dataUrl: true,
+      vbscriptUrl: true,
+      arbitrarySchemeUrl: true
+    }
   });
   expect(snapshot.svgIdCount).toBeGreaterThan(0);
   expect(snapshot.uniqueSvgIdCount).toBe(snapshot.svgIdCount);

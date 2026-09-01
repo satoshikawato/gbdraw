@@ -46,7 +46,10 @@ GALLERY_SVG_PATH = (
 )
 APP_SETUP_PATH = WEB_ROOT / "js" / "app" / "app-setup.js"
 RUN_ANALYSIS_PATH = WEB_ROOT / "js" / "app" / "run-analysis.js"
+CANDIDATE_RENDER_PATH = WEB_ROOT / "js" / "app" / "candidate-render.js"
 SVG_ACTIONS_PATH = WEB_ROOT / "js" / "app" / "feature-editor" / "svg-actions.js"
+FEATURE_CATALOG_PATH = WEB_ROOT / "js" / "services" / "feature-catalog.js"
+HISTORY_SNAPSHOT_PATH = WEB_ROOT / "js" / "services" / "history-snapshot.js"
 
 FIXTURES = (
     (
@@ -868,7 +871,10 @@ def test_protein_comparison_screenshots_are_full_pinned_viewports() -> None:
 def test_protein_popup_state_uses_catalog_commit_path() -> None:
     app_setup = APP_SETUP_PATH.read_text(encoding="utf-8")
     run_analysis = RUN_ANALYSIS_PATH.read_text(encoding="utf-8")
+    candidate_render = CANDIDATE_RENDER_PATH.read_text(encoding="utf-8")
     svg_actions = SVG_ACTIONS_PATH.read_text(encoding="utf-8")
+    feature_catalog = FEATURE_CATALOG_PATH.read_text(encoding="utf-8")
+    history_snapshot = HISTORY_SNAPSHOT_PATH.read_text(encoding="utf-8")
 
     for fragment in (
         "const setLinearComparisonLosatFilename = (id, value) => {",
@@ -880,16 +886,29 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
         assert "replaceLinearComparisonPlan(next, { invalidate: false });" in body
 
     for fragment in (
-        "collinearGroups,",
-        "collinearGroups.value = [];",
         "kind: 'collinearityResult'",
         "typedResource: convertedPayload.collinearityResult",
-        "setOrthogroupMetadata(candidateCommit.featureState.orthogroups);",
-        "collinearGroups.value = Array.isArray(candidateCommit.featureState.collinearGroups)",
+        "const candidateCatalogAdmission = admitFeatureCatalog(",
+        "catalogAdmission: candidateCatalogAdmission,",
+        "collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)",
+        "generatedArtifactTransactionOwner.activate(generatedArtifactCandidate,",
     ):
         assert fragment in run_analysis
     assert "Array.isArray(convertedPayload.collinearGroups)" not in run_analysis
     assert "const committedOrthogroups" not in run_analysis
+    assert "setOrthogroupMetadata(" not in run_analysis
+    assert "collinearGroups.value =" not in run_analysis
+
+    assert "featureState: catalogAdmission.featureState" in candidate_render
+    for fragment in (
+        "context.collinearGroups.push(expanded);",
+        "collinearGroups: context.collinearGroups,",
+    ):
+        assert fragment in feature_catalog
+    assert (
+        "setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);"
+        in history_snapshot
+    )
 
     for fragment in (
         "collinearGroups,",
