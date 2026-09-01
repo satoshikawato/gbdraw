@@ -3245,10 +3245,16 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.fileLegendCaptions.value = new Set(snapshot.fileLegendCaptions);
   state.featureSearch.value = snapshot.featureSearch;
   state.labelSearch.value = snapshot.labelSearch;
-  replacePlainObject(
-    state.featureVisibilitySelectorCache,
-    cloneJsonData(snapshot.featureVisibilitySelectorCache)
-  );
+  if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
+    state.replaceFeatureVisibilitySelectorCacheOwner(
+      cloneJsonData(snapshot.featureVisibilitySelectorCache)
+    );
+  } else {
+    replacePlainObject(
+      state.featureVisibilitySelectorCache,
+      cloneJsonData(snapshot.featureVisibilitySelectorCache)
+    );
+  }
   state.selectedFeatureIds.value = new Set(snapshot.selectedFeatureIds);
   state.selectedFeatureAnchorId.value = snapshot.selectedFeatureAnchorId;
   state.featureSelectionStatus.value = snapshot.featureSelectionStatus;
@@ -3417,7 +3423,11 @@ const resetSessionBaseline = () => {
   clearObject(state.featureColorOverrides);
   state.featureVisibilityManualRules.splice(0);
   clearObject(state.featureVisibilityOverrides);
-  clearObject(state.featureVisibilitySelectorCache);
+  if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
+    state.replaceFeatureVisibilitySelectorCacheOwner({});
+  } else {
+    clearObject(state.featureVisibilitySelectorCache);
+  }
   clearObject(state.featureStrokeOverrides);
   clearObject(state.labelTextFeatureOverrides);
   state.canonicalLabelOverrideRows.value = [];

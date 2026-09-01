@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -10,6 +11,10 @@ import {
 } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 const results = [{ name: 'diagram.svg', content: '<svg />' }];
+const featureCatalogSource = await readFile(
+  new URL('../../gbdraw/web/js/services/feature-catalog.js', import.meta.url),
+  'utf8'
+);
 const fullNote = `${'x'.repeat(49)}😀tail`;
 const compactNote = `${'x'.repeat(49)}😀`;
 const catalog = {
@@ -745,4 +750,11 @@ test('one catalog admission produces identities, indexes, scalar footprint, and 
   } finally {
     delete globalThis.__GBDRAW_TEST_HOOKS__;
   }
+});
+
+test('catalog admission cannot hide bulk post-admission orthogroup enrichment behind a zero metric', () => {
+  assert.doesNotMatch(featureCatalogSource, /\bbuildOrthogroupFeatureIndex\b/);
+  assert.doesNotMatch(featureCatalogSource, /\benrichFeaturesWithOrthogroups\b/);
+  assert.match(featureCatalogSource, /orthogroupProjection\.registerFeature\(/);
+  assert.match(featureCatalogSource, /orthogroupProjection\.addGroup\(/);
 });

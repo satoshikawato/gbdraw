@@ -98,6 +98,7 @@ const { runFeatureSearch } = await import(
 );
 const {
   buildOrthogroupFeatureIndex,
+  createOrthogroupFeatureProjection,
   enrichFeatureWithOrthogroup,
   enrichFeaturesWithOrthogroups
 } = await import(
@@ -758,6 +759,37 @@ assert.deepEqual(
   enrichFeatureWithOrthogroup(canonicalIndex, conflictingCanonicalFeature),
   conflictingCanonicalFeature
 );
+
+const incrementalProjection = createOrthogroupFeatureProjection();
+const incrementalCanonicalFeature = {
+  fileIdx: 0,
+  recordKey: 'record-key-a',
+  biologicalFeatureId: 'incremental-canonical',
+  renderedFeatureSvgId: 'incremental-rendered-canonical',
+  proteinId: 'original-protein'
+};
+incrementalProjection.registerFeature(incrementalCanonicalFeature);
+incrementalProjection.addGroup({
+  id: 'og_incremental_canonical',
+  members: [{
+    recordIndex: 0,
+    recordKey: 'record-key-a',
+    biologicalFeatureId: 'incremental-canonical',
+    proteinId: 'projected-protein'
+  }]
+});
+assert.equal(incrementalCanonicalFeature.orthogroupId, 'og_incremental_canonical');
+assert.equal(incrementalCanonicalFeature.proteinId, 'projected-protein');
+incrementalProjection.addGroup({
+  id: 'og_incremental_rendered',
+  members: [{
+    recordIndex: 0,
+    renderedFeatureSvgId: 'rendered-feature',
+    proteinId: 'other-protein'
+  }]
+});
+assert.equal('orthogroupId' in incrementalCanonicalFeature, false);
+assert.equal(incrementalCanonicalFeature.proteinId, 'original-protein');
 
 const aliasedGroupFeature = { fileIdx: 4, stable_svg_id: 'aliased-group-feature' };
 const aliasedGroupIndex = buildOrthogroupFeatureIndex([{

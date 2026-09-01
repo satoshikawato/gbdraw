@@ -75,12 +75,13 @@ assert.match(
   /setLegendGeometryChangedHandler\(legendLayout\.refreshLegendGeometry\)/
 );
 assert.match(
-  watchersSource,
-  /bind composition metadata[\s\S]+captureBaseConfig/
+  appSetupSource,
+  /bindComposition\(context\)[\s\S]+captureBaseConfig\(\)/
 );
+assert.doesNotMatch(watchersSource, /captureBaseConfig/);
 assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+state\.skipPositionReapply\.value = true;\s+applyResultsData/);
 const sessionLegendSyncSource = appSetupSource.match(
-  /const synchronizeLoadedSessionLegendEntries[\s\S]*?\n  const importSession/
+  /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
 assert.match(sessionLegendSyncSource, /extractLegendEntries\(\)/);
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);

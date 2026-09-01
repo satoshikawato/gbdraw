@@ -1729,6 +1729,14 @@ const createLayoutPreferences = () => ({
     trustedArtifactRestoreInProgress: ref(false),
     semanticFileWatchersSuppressed: ref(false)
   };
+  let featureVisibilitySelectorCacheOwner = state.featureVisibilitySelectorCache;
+  state.captureFeatureVisibilitySelectorCacheOwner = () => (
+    featureVisibilitySelectorCacheOwner
+  );
+  state.replaceFeatureVisibilitySelectorCacheOwner = (nextOwner) => {
+    featureVisibilitySelectorCacheOwner = nextOwner;
+    state.featureVisibilitySelectorCache = nextOwner;
+  };
   const captureAuthorityOwners = () => ({
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
@@ -1824,7 +1832,7 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.ownerSet.appliedPaletteColors, appliedPaletteColorsA);
   assert.equal(handleA.ownerSet.pendingPaletteColors, pendingPaletteColorsA);
   assert.equal(
-    Object.fromEntries(handleA.mutableIntent.features.featureVisibilitySelectorCache)['feature-a'].value,
+    handleA.ownerSet.featureVisibilitySelectorCache['feature-a'].value,
     'feature-a'
   );
   assert.ok(handleA.retainedBytes >= 400_000);
@@ -1862,6 +1870,11 @@ const createLayoutPreferences = () => ({
   Object.defineProperty(poisonResource, 'data', {
     get() { throw new Error('Resource payloads must not be read during capture.'); }
   });
+  const poisonSelectorCache = new Proxy({}, {
+    ownKeys() {
+      throw new Error('Selector cache entries must not be traversed during capture.');
+    }
+  });
   const structuralMetrics = [];
   const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
   globalThis.__GBDRAW_TEST_HOOKS__ = {
@@ -1872,6 +1885,7 @@ const createLayoutPreferences = () => ({
   state.losatCache.value = poisonCache;
   state.losatDerivedCache.value = poisonCache;
   state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
+  state.replaceFeatureVisibilitySelectorCacheOwner(poisonSelectorCache);
   state.files.c_gb = poisonResource;
   snapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({ retainedBytes: 999, payload: poisonResource }),
@@ -1889,6 +1903,7 @@ const createLayoutPreferences = () => ({
   assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
   assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
   assert.equal(poisonHandle.ownerSet.matchSequenceOwner, poisonSequenceOwner);
+  assert.equal(poisonHandle.ownerSet.featureVisibilitySelectorCache, poisonSelectorCache);
   assert.equal(
     poisonHandle.retainedBytes,
     123_456 + 654_321 + 999 + poisonHandle.identity.compactSignature.length * 2
@@ -1939,10 +1954,9 @@ const createLayoutPreferences = () => ({
   );
   state.results.value = [{ name: 'edited.svg', content: '<svg id="edited" />' }];
   state.featureColorOverrides['feature-a'] = '#abcdef';
-  state.featureVisibilitySelectorCache['feature-a'] = {
-    qualifier: 'hash',
-    value: 'edited-feature'
-  };
+  state.replaceFeatureVisibilitySelectorCacheOwner({
+    'feature-a': { qualifier: 'hash', value: 'edited-feature' }
+  });
   state.legendEntries.value[0].caption = 'Edited current legend';
   state.extractedFeatures.value = [{ svg_id: 'feature-b' }];
   state.biologicalFeatures.value = [{ biological_feature_id: 'bio-b' }];
@@ -1980,7 +1994,7 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.mutableIntent.features.featureColorOverrides['feature-a'], '#112233');
   assert.equal(handleA.mutableIntent.editorState.legend.entries[0].caption, 'A');
   assert.equal(
-    Object.fromEntries(handleA.mutableIntent.features.featureVisibilitySelectorCache)['feature-a'].value,
+    handleA.ownerSet.featureVisibilitySelectorCache['feature-a'].value,
     'feature-a'
   );
   assert.equal(handleB.ownerSet.results[0].name, 'edited.svg');

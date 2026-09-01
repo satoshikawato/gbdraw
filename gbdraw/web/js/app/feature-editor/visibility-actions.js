@@ -28,7 +28,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
     featureVisibilityManualRules,
     featureVisibilityRules,
     featureVisibilityOverrides,
-    featureVisibilitySelectorCache,
     featureVisibilityScopeDialog,
     labelLayoutDirtyReason,
     resultGenerationKey,
@@ -189,7 +188,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, previ
       : deriveFeatureVisibilityRulesForBoundary(
           featureVisibilityManualRules,
           featureVisibilityOverrides,
-          featureVisibilitySelectorCache
+          state.featureVisibilitySelectorCache
         )
   );
 

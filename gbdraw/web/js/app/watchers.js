@@ -82,7 +82,7 @@ export const setupWatchers = ({
     selectedFeatureRecordIdx,
     featureVisibilityManualRules,
     featureVisibilityOverrides,
-    featureVisibilitySelectorCache,
+    replaceFeatureVisibilitySelectorCacheOwner,
     featurePanelTab,
     labelSearch,
     orthogroups,
@@ -179,13 +179,14 @@ export const setupWatchers = ({
   const refreshFeatureVisibilitySelectorCache = () => {
     const nextCache = preserveFeatureVisibilitySelectorCacheForOverrides(
       buildFeatureVisibilitySelectorCache(extractedFeatures.value, featureSelectorSafetyScope.value),
-      featureVisibilitySelectorCache,
+      state.featureVisibilitySelectorCache,
       featureVisibilityOverrides
     );
-    replacePlainObject(
-      featureVisibilitySelectorCache,
-      nextCache
-    );
+    if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
+      replaceFeatureVisibilitySelectorCacheOwner(nextCache);
+    } else {
+      replacePlainObject(state.featureVisibilitySelectorCache, nextCache);
+    }
   };
 
   const scheduleCircularDefinitionUpdate = () => {
@@ -415,7 +416,11 @@ export const setupWatchers = ({
       selectedFeatureRecordIdx.value = 0;
       featureVisibilityManualRules.splice(0);
       Object.keys(featureVisibilityOverrides).forEach((k) => delete featureVisibilityOverrides[k]);
-      Object.keys(featureVisibilitySelectorCache).forEach((k) => delete featureVisibilitySelectorCache[k]);
+      if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
+        replaceFeatureVisibilitySelectorCacheOwner({});
+      } else {
+        replacePlainObject(state.featureVisibilitySelectorCache, {});
+      }
       editableLabels.value = [];
       Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
       Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);

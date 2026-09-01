@@ -3,8 +3,7 @@ import {
   nonnegativeIntegerAliasStatus
 } from './feature-identity.js';
 import {
-  buildOrthogroupFeatureIndex,
-  enrichFeaturesWithOrthogroups
+  createOrthogroupFeatureProjection
 } from './orthogroup-feature-metadata.js';
 import {
   recordSessionLifecycleEvent,
@@ -254,6 +253,7 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
       sourceSequences,
       itemRecordIndexByKey.get(recordKey) ?? -1
     );
+    context.orthogroupProjection.registerFeature(expanded);
     biologicalByKey.set(key, expanded);
     expandedBiological.push(expanded);
   });
@@ -293,7 +293,7 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
     renderedByKey.get(key).push(feature);
     const biological = biologicalByKey.get(key);
     if (!biological) throw catalogError();
-    context.extractedFeatures.push({
+    const projectedFeature = {
       ...cloneJson(biological),
       ...cloneJson(feature),
       id: key,
@@ -305,7 +305,9 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
       rendered_feature_svg_id: svgId,
       svg_id: svgId,
       fill_color: text(feature.fillColor)
-    });
+    };
+    context.orthogroupProjection.registerFeature(projectedFeature);
+    context.extractedFeatures.push(projectedFeature);
     addCatalogRenderedIdentity(renderedIdentities, {
       renderedId: svgId,
       stableId: biological.stable_feature_id || feature.biologicalFeatureId || svgId,
@@ -371,6 +373,7 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
     if (text(expanded.presentationScope) === 'adjacent_local') {
       context.collinearGroups.push(expanded);
     } else {
+      context.orthogroupProjection.addGroup(expanded);
       context.orthogroups.push(expanded);
     }
   });
@@ -514,6 +517,7 @@ export const admitFeatureCatalog = (
   if (items.length !== logicalResults.length) throw catalogError();
 
   const normalizedMode = text(mode).toLowerCase();
+  const orthogroupProjection = createOrthogroupFeatureProjection();
   const context = {
     mode: normalizedMode,
     recordKeys: [],
@@ -529,6 +533,7 @@ export const admitFeatureCatalog = (
     renderedIdentitiesByResult: [],
     renderedTargetsByOverrideKey: new Map(),
     resultIndexesByRenderedId: new Map(),
+    orthogroupProjection,
     scalarMetrics: {
       resultCount: logicalResults.length,
       itemCount: items.length,
@@ -554,19 +559,11 @@ export const admitFeatureCatalog = (
   const featureRecordIds = context.recordKeys.map((recordKey) => (
     displayRecordId(context, recordKey)
   ));
-  const featureOrthogroupIndex = buildOrthogroupFeatureIndex(context.orthogroups);
-  const extractedFeatures = enrichFeaturesWithOrthogroups(
-    context.extractedFeatures,
-    featureOrthogroupIndex
-  );
-  const biologicalFeatures = enrichFeaturesWithOrthogroups(
-    context.biologicalFeatures,
-    featureOrthogroupIndex
-  );
+  const featureOrthogroupIndex = orthogroupProjection.index;
   const scalarMetrics = Object.freeze({ ...context.scalarMetrics });
   const featureState = {
-    extractedFeatures,
-    biologicalFeatures,
+    extractedFeatures: context.extractedFeatures,
+    biologicalFeatures: context.biologicalFeatures,
     featureRecordIds,
     featureSelectorSafetyScope: [],
     selectedFeatureRecordIdx: 0,

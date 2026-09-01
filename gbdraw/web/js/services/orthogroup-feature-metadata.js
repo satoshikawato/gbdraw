@@ -148,96 +148,270 @@ const clearDerivedOrthogroupMetadata = (feature) => {
   return cleared;
 };
 
-export const buildOrthogroupFeatureIndex = (orthogroups) => {
-  const index = new Map();
-  const owners = new Map();
-  const ambiguousKeys = new Set();
-  const recordsWithRenderedIds = new Set();
-  const addUniqueEntry = (key, owner, entry) => {
-    if (!key || ambiguousKeys.has(key)) return;
-    const existingOwner = owners.get(key);
-    if (existingOwner && existingOwner !== owner) {
-      index.delete(key);
-      ambiguousKeys.add(key);
-      return;
+const applyDerivedOrthogroupMetadata = (descriptor, entry) => {
+  const feature = descriptor?.feature;
+  if (!feature || typeof feature !== 'object') return feature;
+  ORTHOGROUP_FEATURE_FIELDS.forEach((field) => delete feature[field]);
+  ['proteinId', 'sourceProteinId'].forEach((field) => {
+    const original = descriptor.originalProteinFields[field];
+    if (original.supplied) {
+      feature[field] = original.value;
+    } else {
+      delete feature[field];
     }
-    owners.set(key, owner);
-    index.set(key, entry);
+  });
+  if (!entry) return feature;
+  Object.assign(feature, {
+    proteinId: entry.proteinId,
+    sourceProteinId: entry.sourceProteinId,
+    orthogroupId: entry.orthogroupId,
+    orthogroupMemberCount: entry.orthogroupMemberCount,
+    orthogroupRecordCoverage: entry.orthogroupRecordCoverage,
+    orthogroupRepresentative: entry.orthogroupRepresentative,
+    orthogroupScope: entry.orthogroupScope,
+    orthogroupSourceRecordIndex: entry.orthogroupSourceRecordIndex,
+    orthogroupMember: entry.orthogroupMember
+  });
+  return feature;
+};
+
+const indexCandidateForMember = ({
+  group,
+  member,
+  orthogroupId,
+  memberCount,
+  recordCoverage
+}) => {
+  const record = recordIdentity(member);
+  const featureIndex = sourceFeatureIndex(member);
+  const identity = memberIdentity(member);
+  const canonical = canonicalIdentity(member);
+  const hasRecordIdentity = Boolean(
+    identity.source.value || identity.rendered.value
+  ) || featureIndex.value !== null;
+  if (
+    !record.valid
+    || !featureIndex.valid
+    || !identity.valid
+    || !canonical.valid
+    || (hasRecordIdentity && record.value === null)
+    || (!hasRecordIdentity && canonical.value === null)
+  ) return null;
+  const entry = {
+    orthogroupId,
+    orthogroupMemberCount: memberCount,
+    orthogroupRecordCoverage: recordCoverage,
+    proteinId: normalizeText(member?.proteinId),
+    sourceProteinId: normalizeText(member?.sourceProteinId),
+    orthogroupRepresentative: Boolean(member?.representative),
+    orthogroupScope: normalizeGroupMetadataScope(group?.scope),
+    orthogroupSourceRecordIndex: normalizeRecordIndex(group?.source_record_index),
+    orthogroupMember: member
+  };
+  const keys = [];
+  if (identity.source.value) {
+    keys.push(orthogroupFeatureIndexKey(record.value, identity.source.value));
+  }
+  if (identity.rendered.value) {
+    keys.push(orthogroupRenderedFeatureIndexKey(record.value, identity.rendered.value));
+  }
+  if (featureIndex.value !== null) {
+    keys.push(orthogroupFeatureIndexSourceKey(record.value, featureIndex.value));
+  }
+  if (canonical.value) {
+    keys.push(orthogroupFeatureCanonicalKey(...canonical.value));
+  }
+  return {
+    entry,
+    keys,
+    renderedRecordIndex: identity.rendered.value ? record.value : null
+  };
+};
+
+/**
+ * Incrementally project orthogroup metadata while the catalog owner is already
+ * visiting groups and Features. This keeps the canonical admission path from
+ * rebuilding an index and remapping the complete Feature population afterward.
+ */
+export const createOrthogroupFeatureProjection = () => {
+  const index = new Map();
+  const recordsWithRenderedIds = new Set();
+  const candidatesByKey = new Map();
+  const featureDescriptorsByKey = new Map();
+  const featureDescriptorsByRecord = new Map();
+  const groupCandidatesById = new Map();
+  const duplicateGroupIds = new Set();
+  const renderedRecordCounts = new Map();
+  index.recordsWithRenderedIds = recordsWithRenderedIds;
+
+  const refreshIndexKey = (key) => {
+    const candidates = candidatesByKey.get(key);
+    if (candidates?.size === 1) {
+      index.set(key, candidates.values().next().value.entry);
+    } else {
+      index.delete(key);
+    }
   };
 
-  uniqueOrthogroupEntries(orthogroups).forEach(({ group, id: orthogroupId }) => {
+  const refreshFeatureDescriptor = (descriptor) => {
+    applyDerivedOrthogroupMetadata(
+      descriptor,
+      resolveOrthogroupFeatureMetadata(
+        index,
+        descriptor.feature,
+        descriptor.fallbackRecordIndex
+      )
+    );
+  };
+
+  const refreshFeatureKeys = (keys) => {
+    const descriptors = new Set();
+    keys.forEach((key) => {
+      featureDescriptorsByKey.get(key)?.forEach((descriptor) => descriptors.add(descriptor));
+    });
+    descriptors.forEach(refreshFeatureDescriptor);
+  };
+
+  const updateRenderedRecordCount = (recordIndex, delta, refreshDescriptors) => {
+    if (recordIndex === null) return;
+    const previous = renderedRecordCounts.get(recordIndex) || 0;
+    const next = previous + delta;
+    if (next > 0) {
+      renderedRecordCounts.set(recordIndex, next);
+      recordsWithRenderedIds.add(recordIndex);
+    } else {
+      renderedRecordCounts.delete(recordIndex);
+      recordsWithRenderedIds.delete(recordIndex);
+    }
+    if (Boolean(previous) !== Boolean(next)) {
+      featureDescriptorsByRecord.get(recordIndex)?.forEach((descriptor) => (
+        refreshDescriptors.add(descriptor)
+      ));
+    }
+  };
+
+  const addCandidate = (candidate, refreshKeys, refreshDescriptors) => {
+    candidate.keys.forEach((key) => {
+      if (!candidatesByKey.has(key)) candidatesByKey.set(key, new Map());
+      candidatesByKey.get(key).set(candidate.owner, candidate);
+      refreshIndexKey(key);
+      refreshKeys.add(key);
+    });
+    updateRenderedRecordCount(candidate.renderedRecordIndex, 1, refreshDescriptors);
+  };
+
+  const removeCandidate = (candidate, refreshKeys, refreshDescriptors) => {
+    candidate.keys.forEach((key) => {
+      const candidates = candidatesByKey.get(key);
+      candidates?.delete(candidate.owner);
+      if (candidates?.size === 0) candidatesByKey.delete(key);
+      refreshIndexKey(key);
+      refreshKeys.add(key);
+    });
+    updateRenderedRecordCount(candidate.renderedRecordIndex, -1, refreshDescriptors);
+  };
+
+  const addGroup = (group) => {
+    const [{ id: orthogroupId } = {}] = uniqueOrthogroupEntries([group]);
+    if (!orthogroupId || duplicateGroupIds.has(orthogroupId)) return;
+    const refreshKeys = new Set();
+    const refreshDescriptors = new Set();
+    const previousCandidates = groupCandidatesById.get(orthogroupId);
+    if (previousCandidates) {
+      previousCandidates.forEach((candidate) => (
+        removeCandidate(candidate, refreshKeys, refreshDescriptors)
+      ));
+      groupCandidatesById.delete(orthogroupId);
+      duplicateGroupIds.add(orthogroupId);
+      refreshFeatureKeys(refreshKeys);
+      refreshDescriptors.forEach(refreshFeatureDescriptor);
+      return;
+    }
+
     const members = Array.isArray(group?.members) ? group.members : [];
     const memberCount = Number(group?.member_count || members.length || 0);
-    const recordCoverage = Number(group?.record_coverage_count || new Set(
-      members
-        .map((member) => normalizeRecordIndex(member?.recordIndex ?? member?.record_index))
-        .filter((recordIndex) => recordIndex !== null)
-    ).size || 0);
-    const orthogroupScope = normalizeGroupMetadataScope(group?.scope);
-    const sourceRecordIndex = normalizeRecordIndex(group?.source_record_index);
-
+    const recordIndexes = new Set();
+    const candidates = [];
     members.forEach((member) => {
-      const record = recordIdentity(member);
-      const featureIndex = sourceFeatureIndex(member);
-      const identity = memberIdentity(member);
-      const canonical = canonicalIdentity(member);
-      const hasRecordIdentity = Boolean(
-        identity.source.value || identity.rendered.value
-      ) || featureIndex.value !== null;
-      if (
-        !record.valid
-        || !featureIndex.valid
-        || !identity.valid
-        || !canonical.valid
-        || (hasRecordIdentity && record.value === null)
-        || (!hasRecordIdentity && canonical.value === null)
-      ) return;
-      const entry = {
-        orthogroupId,
-        orthogroupMemberCount: memberCount,
-        orthogroupRecordCoverage: recordCoverage,
-        proteinId: normalizeText(member?.proteinId),
-        sourceProteinId: normalizeText(member?.sourceProteinId),
-        orthogroupRepresentative: Boolean(member?.representative),
-        orthogroupScope,
-        orthogroupSourceRecordIndex: sourceRecordIndex,
-        orthogroupMember: member
-      };
-      const owner = {};
-      if (identity.source.value) {
-        addUniqueEntry(
-          orthogroupFeatureIndexKey(record.value, identity.source.value),
-          owner,
-          entry
-        );
-      }
-      if (identity.rendered.value) {
-        addUniqueEntry(
-          orthogroupRenderedFeatureIndexKey(record.value, identity.rendered.value),
-          owner,
-          entry
-        );
-        recordsWithRenderedIds.add(record.value);
-      }
-      if (featureIndex.value !== null) {
-        addUniqueEntry(
-          orthogroupFeatureIndexSourceKey(record.value, featureIndex.value),
-          owner,
-          entry
-        );
-      }
-      if (canonical.value) {
-        addUniqueEntry(
-          orthogroupFeatureCanonicalKey(...canonical.value),
-          owner,
-          entry
-        );
-      }
+      const recordIndex = normalizeRecordIndex(member?.recordIndex ?? member?.record_index);
+      if (recordIndex !== null) recordIndexes.add(recordIndex);
+      candidates.push(member);
     });
-  });
+    const recordCoverage = Number(
+      group?.record_coverage_count || recordIndexes.size || 0
+    );
+    const projectedCandidates = candidates
+      .map((member) => indexCandidateForMember({
+        group,
+        member,
+        orthogroupId,
+        memberCount,
+        recordCoverage
+      }))
+      .filter(Boolean)
+      .map((candidate) => ({
+        ...candidate,
+        owner: {},
+        recordIndex: normalizeRecordIndex(
+          candidate.entry.orthogroupMember?.recordIndex
+          ?? candidate.entry.orthogroupMember?.record_index
+        )
+    }));
+    groupCandidatesById.set(orthogroupId, projectedCandidates);
+    projectedCandidates.forEach((candidate) => (
+      addCandidate(candidate, refreshKeys, refreshDescriptors)
+    ));
+    refreshFeatureKeys(refreshKeys);
+    refreshDescriptors.forEach(refreshFeatureDescriptor);
+  };
 
-  index.recordsWithRenderedIds = recordsWithRenderedIds;
-  return index;
+  const registerFeature = (feature, fallbackRecordIndex = null) => {
+    const record = recordIdentity(feature, fallbackRecordIndex);
+    const sourceIndex = sourceFeatureIndex(feature);
+    const identity = featureIdentity(feature);
+    const canonical = canonicalIdentity(feature);
+    const keys = [];
+    const descriptor = {
+      feature,
+      fallbackRecordIndex,
+      originalProteinFields: Object.fromEntries(
+        ['proteinId', 'sourceProteinId'].map((field) => [field, {
+          supplied: Object.prototype.hasOwnProperty.call(feature, field),
+          value: feature[field]
+        }])
+      )
+    };
+    if (record.value !== null) {
+      if (!featureDescriptorsByRecord.has(record.value)) {
+        featureDescriptorsByRecord.set(record.value, new Set());
+      }
+      featureDescriptorsByRecord.get(record.value).add(descriptor);
+    }
+    if (record.value !== null && identity.source.value) {
+      keys.push(orthogroupFeatureIndexKey(record.value, identity.source.value));
+    }
+    if (record.value !== null && identity.rendered.value) {
+      keys.push(orthogroupRenderedFeatureIndexKey(record.value, identity.rendered.value));
+    }
+    if (record.value !== null && sourceIndex.value !== null) {
+      keys.push(orthogroupFeatureIndexSourceKey(record.value, sourceIndex.value));
+    }
+    if (canonical.value) keys.push(orthogroupFeatureCanonicalKey(...canonical.value));
+    keys.forEach((key) => {
+      if (!featureDescriptorsByKey.has(key)) featureDescriptorsByKey.set(key, new Set());
+      featureDescriptorsByKey.get(key).add(descriptor);
+    });
+    refreshFeatureDescriptor(descriptor);
+    return feature;
+  };
+
+  return Object.freeze({ index, addGroup, registerFeature });
+};
+
+export const buildOrthogroupFeatureIndex = (orthogroups) => {
+  const projection = createOrthogroupFeatureProjection();
+  (Array.isArray(orthogroups) ? orthogroups : []).forEach(projection.addGroup);
+  return projection.index;
 };
 
 const resolveOrthogroupFeatureMetadata = (

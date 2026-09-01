@@ -684,6 +684,11 @@ export const createHistorySnapshotService = ({
       featureSelectorSafetyScope: artifactOwnedValue(
         getGeneratedArtifactRef(state.featureSelectorSafetyScope, null)
       ),
+      featureVisibilitySelectorCache: artifactOwnedValue(
+        typeof state.captureFeatureVisibilitySelectorCacheOwner === 'function'
+          ? state.captureFeatureVisibilitySelectorCacheOwner()
+          : state.featureVisibilitySelectorCache
+      ),
       featureRecordIds: artifactOwnedValue(getGeneratedArtifactRef(state.featureRecordIds, null)),
       orthogroups: artifactOwnedValue(getGeneratedArtifactRef(state.orthogroups, null)),
       featureOrthogroupIndex: artifactOwnedValue(
@@ -757,6 +762,16 @@ export const createHistorySnapshotService = ({
       state.featureSelectorSafetyScope,
       ownerSet.featureSelectorSafetyScope || []
     );
+    if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
+      state.replaceFeatureVisibilitySelectorCacheOwner(
+        ownerSet.featureVisibilitySelectorCache || {}
+      );
+    } else {
+      replacePlainObject(
+        state.featureVisibilitySelectorCache,
+        ownerSet.featureVisibilitySelectorCache || {}
+      );
+    }
     setGeneratedArtifactRef(state.featureRecordIds, ownerSet.featureRecordIds || []);
     setGeneratedArtifactRef(state.orthogroups, ownerSet.orthogroups || []);
     setGeneratedArtifactRef(
@@ -846,6 +861,7 @@ export const createHistorySnapshotService = ({
       'extractedFeatures',
       'biologicalFeatures',
       'featureSelectorSafetyScope',
+      'featureVisibilitySelectorCache',
       'featureRecordIds',
       'orthogroups',
       'featureOrthogroupIndex',
@@ -868,12 +884,6 @@ export const createHistorySnapshotService = ({
     ].every((key) => expected[key] === ownerSet[key]);
   };
 
-  const copyObjectEntries = (value) => Object.freeze(
-    Object.entries(value && typeof value === 'object' ? value : {}).map(([key, entry]) => (
-      Object.freeze([key, artifactOwnedValue(entry)])
-    ))
-  );
-
   const compactGeneratedArtifactSignature = (mutableIntent) => {
     const {
       zoom: _zoom,
@@ -888,7 +898,6 @@ export const createHistorySnapshotService = ({
       ui,
       featureEdits: {
         selectedFeatureRecordIdx: mutableIntent.features.selectedFeatureRecordIdx,
-        featureVisibilitySelectorCache: mutableIntent.features.featureVisibilitySelectorCache,
         featureColorOverrides: mutableIntent.features.featureColorOverrides,
         featureVisibilityManualRules: mutableIntent.features.featureVisibilityManualRules,
         featureVisibilityOverrides: mutableIntent.features.featureVisibilityOverrides,
@@ -927,9 +936,6 @@ export const createHistorySnapshotService = ({
       ? buildUiStateData({ includePreviewNavigation: true })
       : buildFallbackUiStateData(state);
     const features = {
-      featureVisibilitySelectorCache: copyObjectEntries(
-        state.featureVisibilitySelectorCache
-      ),
       selectedFeatureRecordIdx: getGeneratedArtifactRef(state.selectedFeatureRecordIdx, 0),
       featureColorOverrides: clonePlainObject(state.featureColorOverrides),
       featureVisibilityManualRules: cloneFeatureVisibilityRules(
@@ -1069,10 +1075,6 @@ export const createHistorySnapshotService = ({
         selectedResultIndex: ui.selectedResultIndex
       });
       applyFeatureIntentData(state, mutableIntent.features || {});
-      replacePlainObject(
-        state.featureVisibilitySelectorCache,
-        Object.fromEntries(mutableIntent.features?.featureVisibilitySelectorCache || [])
-      );
       setGeneratedArtifactRef(
         state.selectedOrthogroupId,
         String(mutableIntent.orthogroupState?.selectedOrthogroupId || '')
