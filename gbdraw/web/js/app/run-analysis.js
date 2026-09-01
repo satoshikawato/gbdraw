@@ -4199,9 +4199,15 @@ export const createRunAnalysis = ({
         ...entry,
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
+      const candidateRequestState = {
+        ...state,
+        selectedOrthogroupAlignmentFeature: {
+          value: workingSelectedOrthogroupAlignmentFeature
+        }
+      };
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
-        state,
+        state: candidateRequestState,
         filesData: candidateFiles,
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
