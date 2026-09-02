@@ -679,11 +679,17 @@ test('declared architecture rules actively govern the current source tree', () =
     { availableEnforcements: ['hard', 'report-only'] }
   ), { valid: true, errors: [] });
 
-  const results = WEB_ARCHITECTURE_RULES.rules.map((rule) => {
+  const ruleKeys = WEB_ARCHITECTURE_RULES.rules.map(({ key }) => key);
+  assert.deepEqual(ruleKeys, [...ruleKeys].sort());
+
+  const evaluateRules = (sources) => WEB_ARCHITECTURE_RULES.rules.map((rule) => {
     const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
-    const observed = classifyArchitectureRuleObservation(rule, detector.detect(productionSources));
+    assert.ok(detector, `Active rule ${rule.key} must have a trusted detector`);
+    const observed = classifyArchitectureRuleObservation(rule, detector.detect(sources));
     return {
       key: rule.key,
+      enforcement: rule.enforcement,
+      subjects: observed.subjects,
       ...evaluateArchitectureRuleResult({
         observation: observed.observation,
         mode: rule.enforcement.replace('-', '_').toUpperCase(),
@@ -692,10 +698,131 @@ test('declared architecture rules actively govern the current source tree', () =
       })
     };
   });
-  assert.deepEqual(results.map(({ key, decision }) => ({ key, decision })), [
-    { key: 'canonical-path.render-request', decision: 'PASS' },
-    { key: 'semantic-owner.render-request', decision: 'PASS' }
+  const results = evaluateRules(productionSources);
+
+  assert.deepEqual(results.map(({ key }) => key), ruleKeys);
+  assert.deepEqual(
+    results
+      .filter(({ enforcement }) => enforcement === 'hard')
+      .map(({ key, observation, decision }) => ({ key, observation, decision })),
+    WEB_ARCHITECTURE_RULES.rules
+      .filter(({ enforcement }) => enforcement === 'hard')
+      .map(({ key }) => ({ key, observation: 'CONFORMING', decision: 'PASS' }))
+  );
+  assert.deepEqual(
+    evaluateRules(new Map([...productionSources].reverse())),
+    results
+  );
+});
+
+test('four-rule authority activation validates and passes on the current source tree', () => {
+  const activationReadinessRegistry = {
+    schemaVersion: 1,
+    rules: [
+      {
+        key: 'canonical-path.current-result-admission',
+        kind: 'single-canonical-entry-edge',
+        detector: 'canonical-path.current-result-admission.v1',
+        allowedEdges: [{
+          from: 'app/candidate-render.js',
+          to: 'services/svg-result-ingestion.js'
+        }],
+        exactActiveEdgeCount: 1,
+        enforcement: 'hard',
+        baselineEligible: false
+      },
+      {
+        key: 'canonical-path.render-request',
+        kind: 'single-canonical-entry-edge',
+        detector: 'canonical-path.render-request.v1',
+        allowedEdges: [{
+          from: 'app/run-analysis.js',
+          to: 'services/session-request.js'
+        }],
+        exactActiveEdgeCount: 1,
+        enforcement: 'hard',
+        baselineEligible: false
+      },
+      {
+        key: 'semantic-owner.current-result-admission',
+        kind: 'single-semantic-owner',
+        detector: 'semantic-owner.current-result-admission.v1',
+        allowedDefinitionPaths: ['services/svg-result-ingestion.js'],
+        exactDefinitionCount: 1,
+        enforcement: 'hard',
+        baselineEligible: false
+      },
+      {
+        key: 'semantic-owner.render-request',
+        kind: 'single-semantic-owner',
+        detector: 'semantic-owner.render-request.v1',
+        allowedDefinitionPaths: ['services/session-request.js'],
+        exactDefinitionCount: 1,
+        enforcement: 'hard',
+        baselineEligible: false
+      }
+    ]
+  };
+  assert.deepEqual(validateArchitectureRuleRegistry(
+    activationReadinessRegistry,
+    WEB_ARCHITECTURE_DETECTORS,
+    { availableEnforcements: ['hard', 'report-only'] }
+  ), { valid: true, errors: [] });
+
+  const evaluateRegistry = (sources) => activationReadinessRegistry.rules.map((rule) => {
+    const detector = WEB_ARCHITECTURE_DETECTORS[rule.detector];
+    assert.ok(detector, `Activation rule ${rule.key} must have a trusted detector`);
+    const observed = classifyArchitectureRuleObservation(rule, detector.detect(sources));
+    const result = evaluateArchitectureRuleResult({
+      observation: observed.observation,
+      mode: 'HARD',
+      baselineRelation: 'NOT_APPLICABLE',
+      authorityResolution: 'NOT_APPLICABLE'
+    });
+    return {
+      key: rule.key,
+      detector: rule.detector,
+      subjects: observed.subjects,
+      observation: result.observation,
+      decision: result.decision
+    };
+  });
+  const results = evaluateRegistry(productionSources);
+
+  assert.deepEqual(results, [
+    {
+      key: 'canonical-path.current-result-admission',
+      detector: 'canonical-path.current-result-admission.v1',
+      subjects: ['app/candidate-render.js -> services/svg-result-ingestion.js'],
+      observation: 'CONFORMING',
+      decision: 'PASS'
+    },
+    {
+      key: 'canonical-path.render-request',
+      detector: 'canonical-path.render-request.v1',
+      subjects: ['app/run-analysis.js -> services/session-request.js'],
+      observation: 'CONFORMING',
+      decision: 'PASS'
+    },
+    {
+      key: 'semantic-owner.current-result-admission',
+      detector: 'semantic-owner.current-result-admission.v1',
+      subjects: ['services/svg-result-ingestion.js'],
+      observation: 'CONFORMING',
+      decision: 'PASS'
+    },
+    {
+      key: 'semantic-owner.render-request',
+      detector: 'semantic-owner.render-request.v1',
+      subjects: ['services/session-request.js'],
+      observation: 'CONFORMING',
+      decision: 'PASS'
+    }
   ]);
+  assert.deepEqual(
+    evaluateRegistry(new Map([...productionSources].reverse())),
+    results
+  );
 });
 
 test('pure architecture evaluation owns no I/O, source detection, or authority data', () => {
