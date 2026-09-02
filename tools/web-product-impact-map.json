@@ -2,7 +2,17 @@
   "schemaVersion": 1,
   "ruleCoverage": [
     {
+      "ruleKey": "canonical-path.current-result-admission",
+      "coverage": "complete",
+      "enforcement": "hard"
+    },
+    {
       "ruleKey": "canonical-path.render-request",
+      "coverage": "complete",
+      "enforcement": "hard"
+    },
+    {
+      "ruleKey": "semantic-owner.current-result-admission",
       "coverage": "complete",
       "enforcement": "hard"
     },
@@ -136,6 +146,395 @@
           "sensitivity": "DIRECT_ASSERTION",
           "execution": "PR_GATE",
           "residualRisk": "The DOM-free contract compares one representative current Circular request; browser admission, alternate modes, and Session migrations remain covered separately."
+        }
+      ]
+    },
+    {
+      "key": "product.saved-session-regeneration-continuity",
+      "scenarioRevision": 1,
+      "title": "Saved Session regeneration continuity",
+      "layer": "STATE",
+      "journeys": [
+        {
+          "id": "JRN-REGEN-001",
+          "actor": "Web user",
+          "context": "A supported saved Session has a committed preview and may also have a distinct active draft.",
+          "goal": "Inspect the saved preview, regenerate safely more than once, and continue editing, exporting, saving, or using History without losing the last successful artifact.",
+          "steps": [
+            "Load a supported saved Session",
+            "Inspect and interact with the saved preview",
+            "Select Generate for the active draft",
+            "Wait for the fresh interactive Result",
+            "Select Generate again when needed",
+            "Continue editing, exporting, saving, or using History, including after a failed or canceled attempt"
+          ],
+          "checkpoints": [
+            {
+              "id": "saved-preview",
+              "label": "Saved preview"
+            },
+            {
+              "id": "generate-start",
+              "label": "Generate start"
+            },
+            {
+              "id": "current-result-admission",
+              "label": "Current Result admission"
+            },
+            {
+              "id": "preview-ready",
+              "label": "Preview ready"
+            },
+            {
+              "id": "repeat-generation",
+              "label": "Repeat generation"
+            },
+            {
+              "id": "failure-or-cancel-recovery",
+              "label": "Failure or cancel recovery"
+            },
+            {
+              "id": "post-regeneration-continuation",
+              "label": "Post-regeneration continuation"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "id": "EFF-REGEN-ACTIVE-DRAFT-DISTINCT",
+          "checkpointRef": "JRN-REGEN-001:saved-preview",
+          "statement": "The active draft remains distinct from the committed saved artifact until a successful Generate replaces it."
+        },
+        {
+          "id": "EFF-REGEN-CANONICAL-EXECUTION",
+          "checkpointRef": "JRN-REGEN-001:generate-start",
+          "statement": "Generate uses the canonical typed request and executes the renderer for the active draft."
+        },
+        {
+          "id": "EFF-REGEN-CURRENT-RESULT-COMPLETE",
+          "checkpointRef": "JRN-REGEN-001:current-result-admission",
+          "statement": "Current Result admission publishes one complete sanitized artifact with its current catalog."
+        },
+        {
+          "id": "EFF-REGEN-FAILURE-RECOVERY",
+          "checkpointRef": "JRN-REGEN-001:failure-or-cancel-recovery",
+          "statement": "A failed, canceled, superseded, or stale attempt preserves or restores the last successful artifact."
+        },
+        {
+          "id": "EFF-REGEN-POST-CONTINUATION",
+          "checkpointRef": "JRN-REGEN-001:post-regeneration-continuation",
+          "statement": "Feature Search, editing, comparison interaction, export, Session save, Undo, and Redo remain available after regeneration."
+        },
+        {
+          "id": "EFF-REGEN-PREVIEW-READY-SUCCESS",
+          "checkpointRef": "JRN-REGEN-001:preview-ready",
+          "statement": "Generate reports success only after the fresh preview is interactive and ready for the next action."
+        },
+        {
+          "id": "EFF-REGEN-PROCESSING-VISIBLE",
+          "checkpointRef": "JRN-REGEN-001:generate-start",
+          "statement": "Processing becomes visible before generation checkpoint work begins."
+        },
+        {
+          "id": "EFF-REGEN-REPEAT-REUSE",
+          "checkpointRef": "JRN-REGEN-001:repeat-generation",
+          "statement": "A second Generate reruns the renderer while reusing the existing Worker and unchanged resources."
+        },
+        {
+          "id": "EFF-REGEN-SAVED-PREVIEW-LAZY",
+          "checkpointRef": "JRN-REGEN-001:saved-preview",
+          "statement": "The saved preview becomes interactive without constructing the diagram Worker."
+        }
+      ],
+      "options": [
+        {
+          "id": "safe-current-session-regeneration",
+          "summary": "Saved Session regeneration preserves the committed artifact until one complete current Result becomes interactive, and repeat or failed attempts keep the workflow usable.",
+          "effectRefs": [
+            "EFF-REGEN-ACTIVE-DRAFT-DISTINCT",
+            "EFF-REGEN-CANONICAL-EXECUTION",
+            "EFF-REGEN-CURRENT-RESULT-COMPLETE",
+            "EFF-REGEN-FAILURE-RECOVERY",
+            "EFF-REGEN-POST-CONTINUATION",
+            "EFF-REGEN-PREVIEW-READY-SUCCESS",
+            "EFF-REGEN-PROCESSING-VISIBLE",
+            "EFF-REGEN-REPEAT-REUSE",
+            "EFF-REGEN-SAVED-PREVIEW-LAZY"
+          ],
+          "requirements": [
+            {
+              "id": "REQ-REGEN-ARTIFACT-TRANSACTION",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-REGEN-001:current-result-admission",
+                "JRN-REGEN-001:failure-or-cancel-recovery"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.current-result-admission",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/svg-result-ingestion.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-CURRENT-RESULT-EDGE",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-REGEN-001:current-result-admission"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "canonical-path.current-result-admission",
+                  "subjectCategory": "canonical-entry-edge",
+                  "subject": "app/candidate-render.js -> services/svg-result-ingestion.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-CURRENT-RESULT-OWNER",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-REGEN-001:current-result-admission"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.current-result-admission",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/svg-result-ingestion.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-POST-CONTINUATION",
+              "category": "AFFORDANCE",
+              "checkpointRefs": [
+                "JRN-REGEN-001:post-regeneration-continuation"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.current-result-admission",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/svg-result-ingestion.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-PREVIEW-READINESS",
+              "category": "AFFORDANCE",
+              "checkpointRefs": [
+                "JRN-REGEN-001:preview-ready"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "canonical-path.current-result-admission",
+                  "subjectCategory": "canonical-entry-edge",
+                  "subject": "app/candidate-render.js -> services/svg-result-ingestion.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-RECOVERY-CONTINUATION",
+              "category": "AFFORDANCE",
+              "checkpointRefs": [
+                "JRN-REGEN-001:failure-or-cancel-recovery"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.current-result-admission",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/svg-result-ingestion.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-REPEAT-GENERATION",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-REGEN-001:repeat-generation"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "canonical-path.render-request",
+                  "subjectCategory": "canonical-entry-edge",
+                  "subject": "app/run-analysis.js -> services/session-request.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-REQUEST-EDGE",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-REGEN-001:generate-start",
+                "JRN-REGEN-001:repeat-generation"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "canonical-path.render-request",
+                  "subjectCategory": "canonical-entry-edge",
+                  "subject": "app/run-analysis.js -> services/session-request.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-REQUEST-OWNER",
+              "category": "SEMANTIC",
+              "checkpointRefs": [
+                "JRN-REGEN-001:generate-start"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.render-request",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/session-request.js"
+                }
+              ]
+            },
+            {
+              "id": "REQ-REGEN-SAVED-PREVIEW",
+              "category": "AFFORDANCE",
+              "checkpointRefs": [
+                "JRN-REGEN-001:saved-preview"
+              ],
+              "anyOf": [
+                {
+                  "ruleKey": "semantic-owner.current-result-admission",
+                  "subjectCategory": "definition-path",
+                  "subject": "services/svg-result-ingestion.js"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "resolution": {
+        "kind": "authority-covered",
+        "selectedOptionId": "safe-current-session-regeneration",
+        "authorityRefs": [
+          "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#oipc-c07-failure-isolation",
+          "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md#pd-oi-016-generation-failure-cancellation-and-stale-result-isolation",
+          "gbdraw/web/CLAUDE.md#module-ownership",
+          "gbdraw/web/CLAUDE.md#reactive-availability-and-live-edit-invariants",
+          "gbdraw/web/CLAUDE.md#runtime-data-flow"
+        ]
+      },
+      "contracts": [
+        {
+          "ref": "tests/web/architecture-contracts.test.mjs::History intent and SVG admission have one production ownership path",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The structural contract fixes current source ownership and import paths but does not by itself exercise a browser regeneration transaction."
+        },
+        {
+          "ref": "tests/web/contracts/active-result-edit-transaction.playwright.spec.js::visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export",
+          "checkpointRefs": [
+            "JRN-REGEN-001:post-regeneration-continuation"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The PR-smoke contract covers one representative Feature-fill workflow; other editor domains, comparison modes, and export formats are not exhaustively exercised."
+        },
+        {
+          "ref": "tests/web/contracts/session-regenerate-intent.playwright.spec.js::no-draft session preserves preview, active config, canonical request, and catalog",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission",
+            "JRN-REGEN-001:generate-start",
+            "JRN-REGEN-001:post-regeneration-continuation",
+            "JRN-REGEN-001:preview-ready",
+            "JRN-REGEN-001:saved-preview"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "DEV_STAGING",
+          "residualRisk": "The browser contract covers one representative current no-draft Session; alternate modes, migrations, cancellation, and every continuation remain covered separately."
+        },
+        {
+          "ref": "tests/web/feature-catalog.test.mjs::one catalog admission produces identities, indexes, scalar footprint, and zero secondary traversal",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The focused catalog contract proves one-pass admission mechanics without mounting a complete saved-Session browser workflow."
+        },
+        {
+          "ref": "tests/web/hepatoplasmataceae-session-regeneration.performance.playwright.spec.js::exact saved Session regenerates twice with bounded work and fresh readiness",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission",
+            "JRN-REGEN-001:failure-or-cancel-recovery",
+            "JRN-REGEN-001:generate-start",
+            "JRN-REGEN-001:post-regeneration-continuation",
+            "JRN-REGEN-001:preview-ready",
+            "JRN-REGEN-001:repeat-generation",
+            "JRN-REGEN-001:saved-preview"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "DEV_STAGING",
+          "residualRisk": "The exact large saved Session is representative rather than exhaustive across every Session mode, migration, browser, and timing cluster."
+        },
+        {
+          "ref": "tests/web/session-regeneration-contract.test.mjs::accepts failure-before-activation, rollback-restoration, and stale matrices",
+          "checkpointRefs": [
+            "JRN-REGEN-001:failure-or-cancel-recovery"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The structural matrices validate bounded recovery states and lifecycle evidence but do not synthesize every browser interruption timing."
+        },
+        {
+          "ref": "tests/web/session-regeneration-contract.test.mjs::accepts saved-preview, first Generate, and second Generate matrices",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission",
+            "JRN-REGEN-001:generate-start",
+            "JRN-REGEN-001:post-regeneration-continuation",
+            "JRN-REGEN-001:preview-ready",
+            "JRN-REGEN-001:repeat-generation",
+            "JRN-REGEN-001:saved-preview"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The structural matrices require the key lifecycle counts and states but rely on browser contracts to produce representative end-to-end observations."
+        },
+        {
+          "ref": "tests/web/session-regeneration-contract.test.mjs::rejects second-Generate Worker, renderer, and resource reuse regressions",
+          "checkpointRefs": [
+            "JRN-REGEN-001:repeat-generation"
+          ],
+          "sensitivity": "MUTATION_FAIL",
+          "execution": "PR_GATE",
+          "residualRisk": "The negative structural contract rejects known repeat-generation regressions but does not impose a calibrated elapsed-time threshold."
+        },
+        {
+          "ref": "tests/web/session-regeneration-contract.test.mjs::rejects success and processing-clear lifecycle inversions",
+          "checkpointRefs": [
+            "JRN-REGEN-001:generate-start",
+            "JRN-REGEN-001:preview-ready"
+          ],
+          "sensitivity": "MUTATION_FAIL",
+          "execution": "PR_GATE",
+          "residualRisk": "The lifecycle-order contract protects success and processing visibility boundaries without checking every interactive control."
+        },
+        {
+          "ref": "tests/web/session-request.test.mjs::canonical Session projection rebuilds the same render request",
+          "checkpointRefs": [
+            "JRN-REGEN-001:generate-start",
+            "JRN-REGEN-001:repeat-generation"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The DOM-free request contract compares one representative current Circular projection; alternate modes and browser admission are covered separately."
+        },
+        {
+          "ref": "tests/web/svg-result-ingestion.test.mjs::current-worker EMPTY admission sanitizes once and performs zero application SVG work",
+          "checkpointRefs": [
+            "JRN-REGEN-001:current-result-admission"
+          ],
+          "sensitivity": "DIRECT_ASSERTION",
+          "execution": "PR_GATE",
+          "residualRisk": "The focused admission contract verifies current-Worker sanitization and bounded empty mutation work without exercising every editor mutation domain."
         }
       ]
     }
