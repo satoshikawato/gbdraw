@@ -4,6 +4,10 @@ const baseConfig = require('./playwright.config.js');
 
 module.exports = defineConfig({
   ...baseConfig,
+  metadata: {
+    ...baseConfig.metadata,
+    gbdrawPerformanceProfile: true
+  },
   testMatch: /.*performance\.playwright\.spec\.js/,
   testIgnore: [],
   fullyParallel: false,

@@ -1,7 +1,132 @@
+import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
+
+// Keep one burst alive through the existing 0.2 s transform transition. This
+// also absorbs browser delivery delay between nominally 80 ms wheel inputs.
+const WHEEL_BURST_QUIET_MS = 220;
+const WHEEL_TRANSITION_FALLBACK_MS = 260;
+
 export const createPanZoom = (state) => {
   const { zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
   let panFrameId = null;
   let pendingPanPointer = null;
+  const previewTransformInteractionSources = new Set();
+  let wheelBurstTimerId = null;
+  let wheelFallbackTimerId = null;
+  let wheelTransitionTarget = null;
+  let wheelBurstComplete = false;
+  let wheelTransitionComplete = false;
+  const previewTransformInteractionListeners = new Set();
+
+  const previewTransformInteraction = Object.freeze({
+    isActive: () => previewTransformInteractionSources.size > 0,
+    subscribe(listener) {
+      if (typeof listener !== 'function') return () => {};
+      previewTransformInteractionListeners.add(listener);
+      return () => previewTransformInteractionListeners.delete(listener);
+    }
+  });
+
+  const notifyPreviewTransformInteraction = (active, kind, event, reconcile) => {
+    previewTransformInteractionListeners.forEach((listener) => {
+      listener({ active, kind, event, reconcile });
+    });
+  };
+
+  const beginPreviewTransformInteraction = (kind, event) => {
+    const wasActive = previewTransformInteractionSources.size > 0;
+    previewTransformInteractionSources.add(kind);
+    if (wasActive) return false;
+    recordStructuralMetric('previewTransformInteractionStartCount', 1, { kind });
+    notifyPreviewTransformInteraction(true, kind, event, false);
+    return true;
+  };
+
+  const endPreviewTransformInteraction = (kind, { reconcile = true } = {}) => {
+    if (!previewTransformInteractionSources.delete(kind)) return false;
+    if (previewTransformInteractionSources.size > 0) return false;
+    recordStructuralMetric('previewTransformInteractionEndCount', 1, { kind });
+    notifyPreviewTransformInteraction(false, kind, null, reconcile);
+    return true;
+  };
+
+  const clearWheelTimers = () => {
+    if (wheelBurstTimerId !== null) {
+      window.clearTimeout(wheelBurstTimerId);
+      wheelBurstTimerId = null;
+    }
+    if (wheelFallbackTimerId !== null) {
+      window.clearTimeout(wheelFallbackTimerId);
+      wheelFallbackTimerId = null;
+    }
+  };
+
+  const detachWheelTransitionListener = () => {
+    wheelTransitionTarget?.removeEventListener?.('transitionend', handleWheelTransitionEnd);
+    wheelTransitionTarget = null;
+  };
+
+  const finishWheelInteraction = ({ reconcile = true } = {}) => {
+    if (!previewTransformInteractionSources.has('wheel')) return false;
+    clearWheelTimers();
+    detachWheelTransitionListener();
+    wheelBurstComplete = false;
+    wheelTransitionComplete = false;
+    return endPreviewTransformInteraction('wheel', { reconcile });
+  };
+
+  function handleWheelTransitionEnd(event) {
+    if (
+      !previewTransformInteractionSources.has('wheel')
+      || event?.target !== wheelTransitionTarget
+      || event?.propertyName !== 'transform'
+    ) return;
+    wheelTransitionComplete = true;
+    if (wheelBurstComplete) finishWheelInteraction();
+  }
+
+  const scheduleWheelInteractionEnd = () => {
+    clearWheelTimers();
+    wheelBurstComplete = false;
+    wheelTransitionComplete = false;
+    wheelBurstTimerId = window.setTimeout(() => {
+      wheelBurstTimerId = null;
+      wheelBurstComplete = true;
+      if (wheelTransitionComplete) finishWheelInteraction();
+    }, WHEEL_BURST_QUIET_MS);
+    // A clamped zoom may not produce transitionend. Bound that path just past
+    // the existing 0.2 s transform transition without changing the transition.
+    wheelFallbackTimerId = window.setTimeout(() => {
+      wheelFallbackTimerId = null;
+      finishWheelInteraction();
+    }, WHEEL_TRANSITION_FALLBACK_MS);
+  };
+
+  const beginWheelInteraction = (event) => {
+    const isNewWheelInteraction = !previewTransformInteractionSources.has('wheel');
+    beginPreviewTransformInteraction('wheel', event);
+    if (isNewWheelInteraction) {
+      wheelTransitionTarget = svgContainer.value;
+      wheelTransitionTarget?.addEventListener?.('transitionend', handleWheelTransitionEnd);
+    }
+    scheduleWheelInteractionEnd();
+  };
+
+  const cancelPreviewTransformInteraction = ({ reconcile = false } = {}) => {
+    const wasActive = previewTransformInteractionSources.size > 0;
+    cancelPanFrame();
+    pendingPanPointer = null;
+    isPanning.value = false;
+    if (canvasContainerRef.value) canvasContainerRef.value.style.cursor = 'grab';
+    clearWheelTimers();
+    detachWheelTransitionListener();
+    wheelBurstComplete = false;
+    wheelTransitionComplete = false;
+    previewTransformInteractionSources.clear();
+    if (!wasActive) return false;
+    recordStructuralMetric('previewTransformInteractionEndCount', 1, { kind: 'cancel' });
+    notifyPreviewTransformInteraction(false, 'cancel', null, reconcile);
+    return true;
+  };
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
 
@@ -57,9 +182,7 @@ export const createPanZoom = (state) => {
   };
 
   const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => {
-    cancelPanFrame();
-    pendingPanPointer = null;
-    isPanning.value = false;
+    cancelPreviewTransformInteraction({ reconcile: false });
     panStart.x = 0;
     panStart.y = 0;
     panStart.panX = 0;
@@ -78,6 +201,7 @@ export const createPanZoom = (state) => {
   };
 
   const handleWheel = (event) => {
+    beginWheelInteraction(event);
     const delta = event.deltaY > 0 ? -0.1 : 0.1;
     const newZoom = Math.max(0.1, Math.min(5, zoom.value + delta));
     zoom.value = Math.round(newZoom * 10) / 10;
@@ -107,6 +231,7 @@ export const createPanZoom = (state) => {
 
     cancelPanFrame();
     pendingPanPointer = null;
+    beginPreviewTransformInteraction('pan', event);
     isPanning.value = true;
     panStart.x = event.clientX;
     panStart.y = event.clientY;
@@ -128,6 +253,7 @@ export const createPanZoom = (state) => {
   };
 
   const endPan = (event) => {
+    const wasPanning = isPanning.value;
     const finalPointer =
       typeof event?.clientX === 'number' && typeof event?.clientY === 'number'
         ? { x: event.clientX, y: event.clientY }
@@ -147,9 +273,24 @@ export const createPanZoom = (state) => {
       container.style.cursor = 'grab';
     }
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
+    if (wasPanning) endPreviewTransformInteraction('pan');
   };
 
-  return { handleWheel, startPan, doPan, endPan, resetPreviewViewport };
+  const disposePanZoom = () => {
+    cancelPreviewTransformInteraction({ reconcile: false });
+    previewTransformInteractionListeners.clear();
+  };
+
+  return {
+    handleWheel,
+    startPan,
+    doPan,
+    endPan,
+    resetPreviewViewport,
+    cancelPreviewTransformInteraction,
+    disposePanZoom,
+    previewTransformInteraction
+  };
 };
 
 export const createSidebarResize = (state) => {

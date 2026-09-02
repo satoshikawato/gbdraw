@@ -1066,7 +1066,16 @@ export const createAppSetup = () => {
   );
   const selectResult = (index) => previewRuntime.selectResult(index);
 
-  const { handleWheel, startPan, doPan, endPan, resetPreviewViewport } = createPanZoom(state);
+  const {
+    handleWheel,
+    startPan,
+    doPan,
+    endPan,
+    resetPreviewViewport,
+    cancelPreviewTransformInteraction,
+    disposePanZoom,
+    previewTransformInteraction
+  } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
   const legendActions = createLegendManager({
@@ -1088,7 +1097,8 @@ export const createAppSetup = () => {
     legendActions,
     svgActions,
     featureSelection,
-    previewRuntime
+    previewRuntime,
+    previewTransformInteraction
   });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
@@ -1164,6 +1174,8 @@ export const createAppSetup = () => {
     if (typeof disposeHistoryInputs === 'function') disposeHistoryInputs();
     if (window.__GBDRAW_HISTORY__ === history) delete window.__GBDRAW_HISTORY__;
     previewFeatureSearch.dispose();
+    featureActions.dispose();
+    disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
     disposeDiagramGenerationWorker();
   });
@@ -1927,6 +1939,7 @@ export const createAppSetup = () => {
       legendLayout.setupDiagramDrag(Boolean(context.bindingOptions.isIncrementalEdit));
     },
     installDelegatedInteractions(context) {
+      cancelPreviewTransformInteraction({ reconcile: false });
       featureActions.attachSvgFeatureHandlers({
         root: context.root,
         phase: context.phase,

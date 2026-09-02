@@ -45,7 +45,7 @@ export const isFeatureFillTarget = (element) => getFeaturePart(element) === FEAT
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);
 
-export const buildFeatureElementIndex = (svg, { markCursor = false } = {}) => {
+export const buildFeatureElementIndex = (svg) => {
   const indexed = new Map();
   if (!svg) return indexed;
   Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).forEach((element) => {
@@ -53,22 +53,16 @@ export const buildFeatureElementIndex = (svg, { markCursor = false } = {}) => {
     if (!id) return;
     if (!indexed.has(id)) indexed.set(id, []);
     indexed.get(id).push(element);
-    if (markCursor && element?.style) element.style.cursor = 'pointer';
   });
   featureElementIndexCache.set(svg, indexed);
   return indexed;
 };
 
-export const getFeatureElementIndex = (svg, { rebuild = false, markCursor = false } = {}) => {
+export const getFeatureElementIndex = (svg, { rebuild = false } = {}) => {
   if (!svg) return new Map();
   const indexed = rebuild || !featureElementIndexCache.has(svg)
-    ? buildFeatureElementIndex(svg, { markCursor })
+    ? buildFeatureElementIndex(svg)
     : (featureElementIndexCache.get(svg) || new Map());
-  if (markCursor) {
-    indexed.forEach((elements) => elements.forEach((element) => {
-      if (element?.style) element.style.cursor = 'pointer';
-    }));
-  }
   return indexed;
 };
 
