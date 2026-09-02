@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import {
   dirname,
   extname,
+  isAbsolute,
   join,
   relative,
   resolve,
@@ -1573,6 +1574,9 @@ const BUDGET_POLICY = Object.freeze({
   allowedPrivilegedImporters: {
     'services/diagram-generation.js': ['app/editor.js', 'app/run-analysis.js'],
     'services/session-request.js': ['app/run-analysis.js'],
+    'services/svg-result-ingestion.js': (
+      WEB_CHANGE_POLICY.allowedPrivilegedImporters['services/svg-result-ingestion.js']
+    ),
     'workers/diagram-generation-worker.js': []
   },
   allowedPrivilegedOwners: {
@@ -1603,6 +1607,56 @@ const BUDGET_PROFILES = Object.freeze([
 ]);
 const BUDGET_LINE_CAPACITY = 800;
 const PRODUCT_CONTRACT_AUTHORITY_PATH = 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md';
+const CURRENT_RESULT_ADMISSION_FIXTURE_SOURCES = Object.freeze({
+  'gbdraw/web/js/services/svg-result-ingestion.js': (
+    '// Fixture-only detector input; independent of architecture authority.\n'
+      + 'export const admitCurrentGeneratedResults = () => ({ admitted: true });\n'
+  ),
+  'gbdraw/web/js/app/candidate-render.js': (
+    '// Fixture-only detector input; independent of architecture authority.\n'
+      + "import { admitCurrentGeneratedResults } from '../services/svg-result-ingestion.js';\n"
+      + 'export const admitCandidateResult = () => admitCurrentGeneratedResults();\n'
+  )
+});
+
+const normalizeMappedEvidenceFixturePath = (path) => {
+  const portablePath = String(path || '').replaceAll('\\', '/');
+  if (!portablePath
+      || isAbsolute(portablePath)
+      || /^[A-Za-z]:\//.test(portablePath)) {
+    throw new Error(`Mapped evidence fixture path must be repository-relative: ${path}`);
+  }
+  const segments = portablePath.split('/');
+  if (segments.includes('..')) {
+    throw new Error(`Mapped evidence fixture path must not traverse parents: ${path}`);
+  }
+  const normalized = segments.filter((segment) => segment && segment !== '.').join('/');
+  if (!normalized) {
+    throw new Error(`Mapped evidence fixture path must name a file: ${path}`);
+  }
+  return normalized;
+};
+
+const mappedEvidenceFixtureFiles = (productImpactMapSource) => {
+  const productImpactMap = JSON.parse(productImpactMapSource);
+  const paths = new Set(
+    productImpactMap.concerns.flatMap(({ contracts }) => contracts.map(({ ref }) => (
+      normalizeMappedEvidenceFixturePath(ref.split('::', 1)[0])
+    )))
+  );
+  return Object.fromEntries([...paths].sort().map((path) => [
+    path,
+    '// Generic mapped-evidence dependency for a synthetic repository.\n'
+  ]));
+};
+
+const syntheticArchitectureFixtureDependencies = (productImpactMapSource) => Object.freeze({
+  ...mappedEvidenceFixtureFiles(productImpactMapSource),
+  ...CURRENT_RESULT_ADMISSION_FIXTURE_SOURCES
+});
+const SYNTHETIC_ARCHITECTURE_FIXTURE_DEPENDENCIES = (
+  syntheticArchitectureFixtureDependencies(PRODUCT_IMPACT_MAP_SOURCE)
+);
 const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
   ...Array.from(
     { length: BUDGET_LINE_CAPACITY },
@@ -1614,6 +1668,7 @@ const budgetLineSource = (changedLines = 0, appendedLines = 0) => [
   )
 ].join('\n') + '\n';
 const BUDGET_FIXTURE = Object.freeze({
+  ...SYNTHETIC_ARCHITECTURE_FIXTURE_DEPENDENCIES,
   '.github/workflows/deploy_web.yml': 'name: baseline deploy\n',
   '.github/workflows/gallery-publication.yml': 'name: baseline gallery\n',
   '.github/workflows/test.yml': 'name: baseline\n',
@@ -1950,6 +2005,7 @@ const assertRevisionChangeBudgetFailure = (mutate, expectedPatterns) => {
 };
 
 const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
+  ...SYNTHETIC_ARCHITECTURE_FIXTURE_DEPENDENCIES,
   'package.json': '{"private":true}\n',
   'tests/web/architecture-contracts.test.mjs': (
     "test('production rendering crosses the canonical request and Worker boundary', () => {});\n"
@@ -2043,22 +2099,35 @@ const productImpactMapSourceForRules = (architectureSource) => {
   const map = JSON.parse(PRODUCT_IMPACT_MAP_SOURCE);
   const architecture = JSON.parse(architectureSource);
   const rules = new Map(architecture.rules.map((rule) => [rule.key, rule]));
-  const concern = map.concerns[0];
-  const requirements = new Map(
-    concern.options[0].requirements.map((requirement) => [requirement.id, requirement])
-  );
-  requirements.get('REQ-RENDER-REQUEST-ENTRY').anyOf = rules
-    .get('canonical-path.render-request').allowedEdges.map(({ from, to }) => ({
+  const replacementsByRule = new Map();
+  replacementsByRule.set(
+    'canonical-path.render-request',
+    rules.get('canonical-path.render-request').allowedEdges.map(({ from, to }) => ({
       ruleKey: 'canonical-path.render-request',
       subjectCategory: 'canonical-entry-edge',
       subject: `${from} -> ${to}`
-    }));
-  requirements.get('REQ-RENDER-REQUEST-OWNER').anyOf = rules
-    .get('semantic-owner.render-request').allowedDefinitionPaths.map((subject) => ({
+    }))
+  );
+  replacementsByRule.set(
+    'semantic-owner.render-request',
+    rules.get('semantic-owner.render-request').allowedDefinitionPaths.map((subject) => ({
       ruleKey: 'semantic-owner.render-request',
       subjectCategory: 'definition-path',
       subject
-    }));
+    }))
+  );
+  map.concerns.flatMap(({ options }) => options)
+    .flatMap(({ requirements }) => requirements)
+    .forEach((requirement) => {
+      const replacedRules = new Set();
+      requirement.anyOf = requirement.anyOf.flatMap((candidate) => {
+        const replacements = replacementsByRule.get(candidate.ruleKey);
+        if (!replacements) return [candidate];
+        if (replacedRules.has(candidate.ruleKey)) return [];
+        replacedRules.add(candidate.ruleKey);
+        return replacements;
+      });
+    });
   return `${JSON.stringify(map, null, 2)}\n`;
 };
 const canonicalTransitionProductImpactMapSource = ({
@@ -2281,7 +2350,101 @@ const withTrustedArchitectureRepository = (
   }
 };
 
+test('synthetic architecture fixtures grow through evidence dependencies, not alternate authority', () => {
+  const assemblySource = [
+    normalizeMappedEvidenceFixturePath,
+    mappedEvidenceFixtureFiles,
+    syntheticArchitectureFixtureDependencies,
+    ...Object.values(CURRENT_RESULT_ADMISSION_FIXTURE_SOURCES)
+  ].join('\n');
+  for (const authorityField of [
+    'allowedEdges',
+    'allowedDefinitionPaths',
+    'exactActiveEdgeCount',
+    'exactDefinitionCount',
+    'baselineEligible'
+  ]) {
+    assert.equal(assemblySource.includes(authorityField), false, authorityField);
+  }
+
+  const mappedPaths = Object.keys(mappedEvidenceFixtureFiles(PRODUCT_IMPACT_MAP_SOURCE));
+  for (const fixture of [BUDGET_FIXTURE, TRUSTED_ARCHITECTURE_FIXTURE_FILES]) {
+    mappedPaths.forEach((path) => assert.equal(Object.hasOwn(fixture, path), true, path));
+  }
+  assert.notEqual(
+    BUDGET_FIXTURE['tests/web/architecture-contracts.test.mjs'],
+    SYNTHETIC_ARCHITECTURE_FIXTURE_DEPENDENCIES[
+      'tests/web/architecture-contracts.test.mjs'
+    ]
+  );
+  assert.notEqual(
+    TRUSTED_ARCHITECTURE_FIXTURE_FILES['tests/web/session-request.test.mjs'],
+    SYNTHETIC_ARCHITECTURE_FIXTURE_DEPENDENCIES['tests/web/session-request.test.mjs']
+  );
+
+  const syntheticSources = new Map(Object.entries(
+    SYNTHETIC_ARCHITECTURE_FIXTURE_DEPENDENCIES
+  ).filter(([path]) => path.startsWith('gbdraw/web/js/'))
+    .map(([path, source]) => [path.replace('gbdraw/web/js/', ''), source]));
+  assert.deepEqual(
+    WEB_ARCHITECTURE_DETECTORS['semantic-owner.current-result-admission.v1']
+      .detect(syntheticSources).subjects,
+    ['services/svg-result-ingestion.js']
+  );
+  assert.deepEqual(
+    WEB_ARCHITECTURE_DETECTORS['canonical-path.current-result-admission.v1']
+      .detect(syntheticSources).subjects,
+    ['app/candidate-render.js -> services/svg-result-ingestion.js']
+  );
+
+  const duplicateMap = JSON.stringify({
+    concerns: [{
+      contracts: [
+        { ref: './tests/web/evidence.test.mjs::first' },
+        { ref: 'tests/web/evidence.test.mjs::second' }
+      ]
+    }]
+  });
+  assert.deepEqual(Object.keys(mappedEvidenceFixtureFiles(duplicateMap)), [
+    'tests/web/evidence.test.mjs'
+  ]);
+  for (const ref of [
+    '/tmp/outside.test.mjs::case',
+    'C:/outside.test.mjs::case',
+    '../outside.test.mjs::case',
+    'tests/../../outside.test.mjs::case'
+  ]) {
+    assert.throws(
+      () => mappedEvidenceFixtureFiles(JSON.stringify({
+        concerns: [{ contracts: [{ ref }] }]
+      })),
+      /Mapped evidence fixture path/
+    );
+  }
+});
+
+test('otherwise unmodified synthetic repositories pass current inherited authority', () => {
+  const budget = runChangeBudgetCase(() => {});
+  assert.equal(budget.status, 0, budget.output);
+
+  withTrustedArchitectureRepository(
+    (write) => write('fixture-note.txt', 'current inherited authority\n'),
+    ({ status, output }) => {
+      assert.equal(status, 0, output);
+      WEB_ARCHITECTURE_RULES.rules.forEach(({ key }) => {
+        assert.match(
+          output,
+          new RegExp(`${key.replaceAll('.', '\\.')} .* observation=CONFORMING .* decision=PASS`)
+        );
+      });
+    }
+  );
+});
+
 test('active base rules accept one canonical entry edge', () => {
+  const registeredOwnerCount = WEB_ARCHITECTURE_RULES.rules.filter(
+    ({ kind }) => kind === 'single-semantic-owner'
+  ).length;
   withTrustedArchitectureRepository(
     (write) => write('fixture-note.txt', 'unchanged architecture\n'),
     ({ status, output }) => {
@@ -2296,17 +2459,23 @@ test('active base rules accept one canonical entry edge', () => {
       );
       assert.match(
         output,
-        /First-party static import graph[\s\S]*Before: 3 modules, 2 edges, 0 cycles[\s\S]*After: 3 modules, 2 edges, 0 cycles/
+        /First-party static import graph[\s\S]*Before: 5 modules, 3 edges, 0 cycles[\s\S]*After: 5 modules, 3 edges, 0 cycles/
       );
       assert.match(
         output,
-        /Registered Authority Location Count \| 1 \| 0 \| 0 \| 1 \| 0 \| registered rule/
+        new RegExp(
+          `Registered Authority Location Count \\| ${registeredOwnerCount} \\| 0 \\| 0 \\| `
+            + `${registeredOwnerCount} \\| 0 \\| registered rule`
+        )
       );
     }
   );
 });
 
 test('an extra registered authority location fails and remains visible in the delta', () => {
+  const registeredOwnerCount = WEB_ARCHITECTURE_RULES.rules.filter(
+    ({ kind }) => kind === 'single-semantic-owner'
+  ).length;
   withTrustedArchitectureRepository(
     (write) => write(
       'gbdraw/web/js/app/extra-authority.js',
@@ -2320,7 +2489,10 @@ test('an extra registered authority location fails and remains visible in the de
       );
       assert.match(
         output,
-        /Registered Authority Location Count \| 1 \| 1 \| 0 \| 2 \| \+1 \| registered rule/
+        new RegExp(
+          `Registered Authority Location Count \\| ${registeredOwnerCount} \\| 1 \\| 0 \\| `
+            + `${registeredOwnerCount + 1} \\| \\+1 \\| registered rule`
+        )
       );
       assert.match(output, /semantic-owner\.render-request: app\/extra-authority\.js/);
     }
@@ -2426,7 +2598,7 @@ test('an acyclic graph resolves extensionless modules and directory indexes', ()
     },
     ({ status, output }) => {
       assert.equal(status, 0, output);
-      assert.match(output, /After: 6 modules, 4 edges, 0 cycles/);
+      assert.match(output, /After: 8 modules, 5 edges, 0 cycles/);
       assert.doesNotMatch(output, /first-party static import graph is incomplete/);
     }
   );
@@ -2458,6 +2630,9 @@ test('multiple cycles report stable sorted nodes and internal edges', () => {
 });
 
 test('compatibility-like names report and a private helper adds no authority', () => {
+  const registeredOwnerCount = WEB_ARCHITECTURE_RULES.rules.filter(
+    ({ kind }) => kind === 'single-semantic-owner'
+  ).length;
   withTrustedArchitectureRepository(
     (write) => {
       write(
@@ -2474,7 +2649,10 @@ test('compatibility-like names report and a private helper adds no authority', (
       assert.match(output, /gbdraw\/web\/js\/app\/private-helper\.js: migrateLegacyFixture/);
       assert.match(
         output,
-        /Registered Authority Location Count \| 1 \| 0 \| 0 \| 1 \| 0 \| registered rule/
+        new RegExp(
+          `Registered Authority Location Count \\| ${registeredOwnerCount} \\| 0 \\| 0 \\| `
+            + `${registeredOwnerCount} \\| 0 \\| registered rule`
+        )
       );
       assert.match(output, /Gate: \*\*PASS\*\*/);
       assert.match(output, /Review: \*\*REQUIRED\*\*/);
