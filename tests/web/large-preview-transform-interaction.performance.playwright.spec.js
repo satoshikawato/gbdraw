@@ -7,6 +7,10 @@ const {
   getDiagramWorkerActivity,
   openApp
 } = require('./helpers/app-lifecycle.cjs');
+const {
+  aggregateResponsivenessSamples,
+  evaluateResponsivenessGuardrail
+} = require('./helpers/responsiveness-guardrail.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixturePath = join(
@@ -26,6 +30,12 @@ const PAN_INTERVAL_MS = 16;
 const WHEEL_STEPS = 30;
 const WHEEL_INTERVAL_MS = 80;
 const POST_INTERACTION_SETTLE_MS = 300;
+const CONTROLLED_TIMING_SETTLE_MS = 500;
+const RESPONSIVENESS_REPETITIONS = 3;
+const RESPONSIVENESS_THRESHOLDS = Object.freeze({
+  maximumMedianLongTaskTotalMs: 500,
+  maximumMedianLongestLongTaskMs: 250
+});
 const installInteractionProbe = (page) => page.addInitScript(() => {
   const FEATURE_SELECTOR = [
     'path[data-gbdraw-feature-id]',
@@ -563,24 +573,222 @@ const installInteractionProbe = (page) => page.addInitScript(() => {
   };
 });
 
-const loadExactSession = async (page, dialogs) => {
-  const chooserPromise = page.waitForEvent('filechooser', { timeout: OPERATION_TIMEOUT_MS });
-  await page.getByRole('button', { name: 'Load Session', exact: true }).click();
-  const chooser = await chooserPromise;
-  await chooser.setFiles(fixturePath);
-  await page.waitForFunction(() => (
-    window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__?.snapshot?.().lifecycle.some(
-      (event) => event.name === 'interactiveReady'
-    )
-  ), null, { timeout: OPERATION_TIMEOUT_MS });
+const installResponsivenessProbe = (page, { trackLifecycle = false } = {}) => page.addInitScript(
+  ({ shouldTrackLifecycle }) => {
+    const longTasks = [];
+    let measurement = null;
+    let longTaskObserver = null;
+    let longTaskSupported = false;
+    const lifecycle = { starts: 0, ends: 0 };
+
+    const quantile = (values, probability) => {
+      if (values.length === 0) return 0;
+      const sorted = [...values].sort((left, right) => left - right);
+      const index = Math.min(
+        sorted.length - 1,
+        Math.max(0, Math.ceil(probability * sorted.length) - 1)
+      );
+      return sorted[index];
+    };
+    const summarizeIntervals = (values) => ({
+      count: values.length,
+      p50Ms: quantile(values, 0.5),
+      p95Ms: quantile(values, 0.95),
+      maximumGapMs: values.length ? Math.max(...values) : 0,
+      over33ms: values.filter((value) => value > 33).length,
+      over50ms: values.filter((value) => value > 50).length,
+      over100ms: values.filter((value) => value > 100).length
+    });
+    const appendLongTasks = (entries) => {
+      for (const entry of entries) {
+        longTasks.push({
+          startTime: Number(entry.startTime || 0),
+          duration: Number(entry.duration || 0)
+        });
+      }
+    };
+
+    try {
+      longTaskObserver = new PerformanceObserver((list) => appendLongTasks(list.getEntries()));
+      longTaskObserver.observe({ type: 'longtask', buffered: true });
+      longTaskSupported = true;
+    } catch (_error) {
+      longTaskObserver = null;
+      longTaskSupported = false;
+    }
+
+    if (shouldTrackLifecycle) {
+      window.__GBDRAW_TEST_HOOKS__ = {
+        onStructuralMetric(metric) {
+          if (metric?.name === 'previewTransformInteractionStartCount') lifecycle.starts += 1;
+          if (metric?.name === 'previewTransformInteractionEndCount') lifecycle.ends += 1;
+        }
+      };
+    }
+
+    window.addEventListener('wheel', (event) => {
+      if (!measurement || !measurement.svg.contains(event.target)) return;
+      measurement.inputTimestamps.push(performance.now());
+    }, true);
+
+    const beginMeasurement = () => {
+      if (measurement) throw new Error('A responsiveness measurement is already active.');
+      const wrapper = document.querySelector(
+        '.gbdraw-preview-surface, .shadow-xl.bg-white.m-auto.origin-top'
+      );
+      const svg = wrapper?.querySelector?.('svg');
+      if (!wrapper || !svg) throw new Error('The exact-fixture preview is not mounted.');
+      const startedAt = performance.now();
+      const activeMeasurement = {
+        startedAt,
+        svg,
+        dispatchTimestamps: [],
+        inputTimestamps: [],
+        rafIntervals: [],
+        rafLast: null,
+        rafHandle: null,
+        heartbeatGaps: [],
+        heartbeatLast: startedAt,
+        heartbeatHandle: null,
+        lifecycleBefore: { ...lifecycle }
+      };
+      measurement = activeMeasurement;
+      const sampleAnimationFrame = (timestamp) => {
+        if (measurement !== activeMeasurement) return;
+        if (activeMeasurement.rafLast !== null) {
+          activeMeasurement.rafIntervals.push(timestamp - activeMeasurement.rafLast);
+        }
+        activeMeasurement.rafLast = timestamp;
+        activeMeasurement.rafHandle = requestAnimationFrame(sampleAnimationFrame);
+      };
+      activeMeasurement.rafHandle = requestAnimationFrame(sampleAnimationFrame);
+      activeMeasurement.heartbeatHandle = setInterval(() => {
+        const now = performance.now();
+        activeMeasurement.heartbeatGaps.push(now - activeMeasurement.heartbeatLast);
+        activeMeasurement.heartbeatLast = now;
+      }, 50);
+    };
+
+    const recordDispatch = () => {
+      if (!measurement) throw new Error('No responsiveness measurement is active.');
+      measurement.dispatchTimestamps.push(performance.now());
+    };
+
+    const endMeasurement = () => {
+      if (!measurement) throw new Error('No responsiveness measurement is active.');
+      const activeMeasurement = measurement;
+      const endedAt = performance.now();
+      measurement = null;
+      cancelAnimationFrame(activeMeasurement.rafHandle);
+      clearInterval(activeMeasurement.heartbeatHandle);
+      if (longTaskObserver) appendLongTasks(longTaskObserver.takeRecords());
+      const phaseLongTasks = longTasks.filter((entry) => (
+        entry.startTime >= activeMeasurement.startedAt && entry.startTime <= endedAt
+      ));
+      const inputIntervals = activeMeasurement.inputTimestamps.slice(1).map(
+        (timestamp, index) => timestamp - activeMeasurement.inputTimestamps[index]
+      );
+      const dispatchIntervals = activeMeasurement.dispatchTimestamps.slice(1).map(
+        (timestamp, index) => timestamp - activeMeasurement.dispatchTimestamps[index]
+      );
+      return {
+        measurementDurationMs: endedAt - activeMeasurement.startedAt,
+        deliveredEventCount: activeMeasurement.inputTimestamps.length,
+        inputIntervals: summarizeIntervals(inputIntervals),
+        dispatchIntervals: summarizeIntervals(dispatchIntervals),
+        longTasks: {
+          supported: longTaskSupported,
+          count: phaseLongTasks.length,
+          totalDurationMs: phaseLongTasks.reduce(
+            (total, entry) => total + entry.duration,
+            0
+          ),
+          longestDurationMs: phaseLongTasks.length
+            ? Math.max(...phaseLongTasks.map((entry) => entry.duration))
+            : 0
+        },
+        raf: summarizeIntervals(activeMeasurement.rafIntervals),
+        heartbeat: {
+          count: activeMeasurement.heartbeatGaps.length,
+          maximumGapMs: activeMeasurement.heartbeatGaps.length
+            ? Math.max(...activeMeasurement.heartbeatGaps)
+            : 0
+        },
+        lifecycle: {
+          interactionStarts:
+            lifecycle.starts - activeMeasurement.lifecycleBefore.starts,
+          interactionEnds:
+            lifecycle.ends - activeMeasurement.lifecycleBefore.ends
+        }
+      };
+    };
+
+    window.__GBDRAW_LARGE_PREVIEW_RESPONSIVENESS_PROBE__ = {
+      beginMeasurement,
+      endMeasurement,
+      recordDispatch
+    };
+  },
+  { shouldTrackLifecycle: trackLifecycle }
+);
+
+const loadExactSession = async (page, dialogs, { browserFetch = false } = {}) => {
+  if (browserFetch) {
+    await page.evaluate(async () => {
+      const response = await fetch(
+        '/gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz',
+        { cache: 'no-store' }
+      );
+      if (!response.ok) throw new Error(`Session fetch failed with ${response.status}.`);
+      const file = new File(
+        [await response.arrayBuffer()],
+        'hepatoplasmataceae_collinear.gbdraw-session.json.gz',
+        { type: 'application/gzip' }
+      );
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      const input = document.querySelector('input[accept*=".json"][accept*=".gz"]');
+      if (!input) throw new Error('The Session file input was not found.');
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  } else {
+    const chooserPromise = page.waitForEvent('filechooser', { timeout: OPERATION_TIMEOUT_MS });
+    await page.getByRole('button', { name: 'Load Session', exact: true }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(fixturePath);
+  }
+  await page.waitForFunction((requireStructuralReady) => {
+    const wrapper = document.querySelector(
+      '.gbdraw-preview-surface, .shadow-xl.bg-white.m-auto.origin-top'
+    );
+    const svg = wrapper?.querySelector?.('svg');
+    const structuralProbe = window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__;
+    const structuralReady = !requireStructuralReady || Boolean(
+      structuralProbe?.snapshot?.().lifecycle.some((event) => event.name === 'interactiveReady')
+    );
+    return Boolean(svg && window.__GBDRAW_APP__?.results?.length && structuralReady);
+  }, !browserFetch, { timeout: OPERATION_TIMEOUT_MS });
   await page.evaluate(() => new Promise((resolveFrame) => (
     requestAnimationFrame(() => requestAnimationFrame(resolveFrame))
   )));
   expect(dialogs).toContain('Session loaded successfully!');
 };
 
+const openExactApp = async (page, { structural = false } = {}) => {
+  if (structural) return openApp(page);
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => (
+    Boolean(window.__GBDRAW_APP__)
+      && Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0
+  ), null, { timeout: OPERATION_TIMEOUT_MS });
+  return null;
+};
+
 const ensureDenseRegionVisible = (page) => page.evaluate(() => {
-  const wrapper = document.querySelector('.gbdraw-preview-surface');
+  const wrapper = document.querySelector(
+    '.gbdraw-preview-surface, .shadow-xl.bg-white.m-auto.origin-top'
+  );
   const feature = wrapper?.querySelector?.(
     '[data-gbdraw-feature-id]:not([data-gbdraw-auto-feature-underlay="true"])'
   );
@@ -589,7 +797,9 @@ const ensureDenseRegionVisible = (page) => page.evaluate(() => {
 });
 
 const readGeometry = (page) => page.evaluate(() => {
-  const wrapper = document.querySelector('.gbdraw-preview-surface');
+  const wrapper = document.querySelector(
+    '.gbdraw-preview-surface, .shadow-xl.bg-white.m-auto.origin-top'
+  );
   const svg = wrapper?.querySelector?.('svg');
   const container = window.__GBDRAW_APP__?.canvasContainerRef;
   if (!wrapper || !svg || !container) throw new Error('Preview geometry is unavailable.');
@@ -680,12 +890,11 @@ const metricDelta = (before, after) => {
   ]).filter(([, value]) => value !== 0));
 };
 
-const prewarmHoverIndexes = async (page, geometry) => {
-  const before = await page.evaluate(() => (
-    window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__.snapshot().metrics
-  ));
+const warmOrdinaryFeatureHover = async (page, geometry) => {
   const feature = page.locator(
     '.gbdraw-preview-surface > svg '
+      + '[data-gbdraw-feature-id]:not([data-gbdraw-auto-feature-underlay="true"]), '
+      + '.shadow-xl.bg-white.m-auto.origin-top > svg '
       + '[data-gbdraw-feature-id]:not([data-gbdraw-auto-feature-underlay="true"])'
   ).first();
   await expect(feature).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
@@ -693,10 +902,16 @@ const prewarmHoverIndexes = async (page, geometry) => {
   await expect(feature).toHaveAttribute('data-gbdraw-hover-opacity', /.*/);
   await page.mouse.move(geometry.panPoint.x, geometry.panPoint.y);
   await page.waitForFunction(() => (
-    document.querySelector('.gbdraw-preview-surface > svg')
-      ?.querySelectorAll('[data-gbdraw-hover-opacity]').length === 0
+    document.querySelectorAll('[data-gbdraw-hover-opacity]').length === 0
   ));
   await page.waitForTimeout(100);
+};
+
+const prewarmHoverIndexes = async (page, geometry) => {
+  const before = await page.evaluate(() => (
+    window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__.snapshot().metrics
+  ));
+  await warmOrdinaryFeatureHover(page, geometry);
   const after = await page.evaluate(() => (
     window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__.snapshot().metrics
   ));
@@ -779,6 +994,133 @@ const runWheel = async (page, geometry, beforeMetrics) => {
     intervalMs: WHEEL_INTERVAL_MS
   });
   await waitForInteractionStart(page, beforeMetrics);
+};
+
+const runControlledWheelTiming = (page, geometry) => page.evaluate(
+  ({ x, y, steps, intervalMs, settleMs }) => new Promise((resolve, reject) => {
+    const probe = window.__GBDRAW_LARGE_PREVIEW_RESPONSIVENESS_PROBE__;
+    if (!probe) {
+      reject(new Error('The P0 responsiveness probe is unavailable.'));
+      return;
+    }
+    probe.beginMeasurement();
+    let index = 0;
+    const dispatchWheel = () => {
+      const target = document.elementFromPoint(x, y);
+      if (!target) {
+        reject(new Error('The controlled wheel target left the viewport.'));
+        return;
+      }
+      probe.recordDispatch();
+      target.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y,
+        deltaY: index < steps / 2 ? -100 : 100,
+        view: window
+      }));
+      index += 1;
+      if (index < steps) {
+        setTimeout(dispatchWheel, intervalMs);
+      } else {
+        setTimeout(() => resolve(probe.endMeasurement()), settleMs);
+      }
+    };
+    dispatchWheel();
+  }),
+  {
+    x: geometry.zoomPoint.x,
+    y: geometry.zoomPoint.y,
+    steps: WHEEL_STEPS,
+    intervalMs: WHEEL_INTERVAL_MS,
+    settleMs: CONTROLLED_TIMING_SETTLE_MS
+  }
+);
+
+const runNativeWheelDiagnostic = async (page, geometry) => {
+  await page.mouse.move(geometry.zoomPoint.x, geometry.zoomPoint.y);
+  await page.evaluate(() => {
+    window.__GBDRAW_LARGE_PREVIEW_RESPONSIVENESS_PROBE__.beginMeasurement();
+  });
+  const pendingDispatches = [];
+  await new Promise((resolveSchedule) => {
+    let index = 0;
+    const dispatchWheel = () => {
+      pendingDispatches.push(page.mouse.wheel(
+        0,
+        index < WHEEL_STEPS / 2 ? -100 : 100
+      ));
+      index += 1;
+      if (index < WHEEL_STEPS) {
+        setTimeout(dispatchWheel, WHEEL_INTERVAL_MS);
+      } else {
+        resolveSchedule();
+      }
+    };
+    dispatchWheel();
+  });
+  await Promise.all(pendingDispatches);
+  await page.waitForTimeout(CONTROLLED_TIMING_SETTLE_MS);
+  return page.evaluate(() => (
+    window.__GBDRAW_LARGE_PREVIEW_RESPONSIVENESS_PROBE__.endMeasurement()
+  ));
+};
+
+const collectWarmResponsivenessSample = async ({
+  browser,
+  testInfo,
+  trackLifecycle = false,
+  nativeInput = false
+}) => {
+  const context = await browser.newContext({
+    baseURL: testInfo.project.use.baseURL,
+    viewport: { width: 1440, height: 1000 }
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(INTERACTION_TIMEOUT_MS);
+  const dialogs = [];
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  try {
+    await installResponsivenessProbe(page, { trackLifecycle });
+    await openExactApp(page);
+    await loadExactSession(page, dialogs, { browserFetch: true });
+    await ensureDenseRegionVisible(page);
+    const geometry = await readGeometry(page);
+    await warmOrdinaryFeatureHover(page, geometry);
+    const timing = nativeInput
+      ? await runNativeWheelDiagnostic(page, geometry)
+      : await runControlledWheelTiming(page, geometry);
+    return {
+      fixtureSha,
+      geometry,
+      schedule: {
+        viewport: { width: 1440, height: 1000 },
+        requestedEvents: WHEEL_STEPS,
+        sequence: '15 zoom-in + 15 zoom-out',
+        nominalIntervalMs: WHEEL_INTERVAL_MS,
+        delivery: nativeInput
+          ? 'Playwright mouse wheel input'
+          : 'controlled browser-timer synthetic WheelEvent',
+        postInputSettleMs: CONTROLLED_TIMING_SETTLE_MS
+      },
+      timing,
+      pageErrors,
+      consoleErrors
+    };
+  } finally {
+    await context.close();
+  }
 };
 
 const workerTotals = (activity) => ({
@@ -867,77 +1209,130 @@ const assertStructuralContract = ({ interaction, summary, workerDelta }) => {
   }
 };
 
-test.describe.configure({ mode: 'serial' });
+test.describe('Structural Contract', () => {
+  test.describe.configure({ mode: 'serial' });
 
-for (const interaction of ['pan', 'wheel']) {
-  for (const thermalState of ['cold', 'warm']) {
-    test(`${thermalState} sustained ${interaction} preserves the exact-fixture interaction contract`, async ({
-      page,
-      browser
-    }, testInfo) => {
-      test.setTimeout(1_800_000);
-      page.setDefaultTimeout(INTERACTION_TIMEOUT_MS);
-      await page.setViewportSize({ width: 1440, height: 1000 });
-      expect(fixtureSha).toBe(EXPECTED_FIXTURE_SHA);
+  for (const interaction of ['pan', 'wheel']) {
+    for (const thermalState of ['cold', 'warm']) {
+      test(`${thermalState} sustained ${interaction} preserves the exact-fixture interaction contract`, async ({
+        page,
+        browser
+      }, testInfo) => {
+        test.setTimeout(1_800_000);
+        page.setDefaultTimeout(INTERACTION_TIMEOUT_MS);
+        await page.setViewportSize({ width: 1440, height: 1000 });
+        expect(fixtureSha).toBe(EXPECTED_FIXTURE_SHA);
 
-      const dialogs = [];
-      const pageErrors = [];
-      const consoleErrors = [];
-      page.on('dialog', async (dialog) => {
-        dialogs.push(dialog.message());
-        await dialog.accept();
+        const dialogs = [];
+        const pageErrors = [];
+        const consoleErrors = [];
+        page.on('dialog', async (dialog) => {
+          dialogs.push(dialog.message());
+          await dialog.accept();
+        });
+        page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
+        page.on('console', (message) => {
+          if (message.type() === 'error') consoleErrors.push(message.text());
+        });
+
+        await installInteractionProbe(page);
+        await openExactApp(page, { structural: true });
+        await loadExactSession(page, dialogs);
+        await ensureDenseRegionVisible(page);
+        const geometry = await readGeometry(page);
+        const loadWorker = workerTotals(await getDiagramWorkerActivity(page));
+        expect(loadWorker).toEqual({ constructions: 0, initializations: 0, helpers: 0, runs: 0 });
+
+        const prewarmMetricDelta = thermalState === 'warm'
+          ? await prewarmHoverIndexes(page, geometry)
+          : {};
+        const begin = await startMeasurement(page, `${thermalState}-${interaction}`);
+        expect(begin.transition).toEqual({
+          property: 'transform',
+          duration: '0.2s',
+          timingFunction: 'ease',
+          delay: '0s'
+        });
+
+        const gestureStartedAt = Date.now();
+        if (interaction === 'pan') {
+          await runPan(page, geometry, begin.metricBefore);
+        } else {
+          await runWheel(page, geometry, begin.metricBefore);
+        }
+        await waitForInteractionEnd(page, begin.metricBefore);
+        const gestureWallDurationMs = Date.now() - gestureStartedAt;
+        await page.waitForTimeout(POST_INTERACTION_SETTLE_MS);
+        const summary = await page.evaluate(() => (
+          window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__.endMeasurement()
+        ));
+        const afterWorker = workerTotals(await getDiagramWorkerActivity(page));
+        const workerDelta = subtractWorkerTotals(loadWorker, afterWorker);
+        console.log(`GBDRAW_LARGE_PREVIEW_INTERACTION_PREASSERT ${JSON.stringify({
+          profile: { thermalState, interaction },
+          geometry,
+          summary,
+          workerDelta
+        })}`);
+        assertStructuralContract({ interaction, summary, workerDelta });
+        await assertPostSettleInteraction(page);
+
+        expect(pageErrors).toEqual([]);
+        expect(consoleErrors).toEqual([]);
+        const evidence = {
+          fixtureSha,
+          browser: {
+            project: testInfo.project.name,
+            version: browser.version(),
+            platform: process.platform,
+            node: process.version,
+            osRelease: os.release()
+          },
+          profile: { thermalState, interaction },
+          schedule: {
+            viewport: { width: 1440, height: 1000 },
+            panSteps: PAN_STEPS,
+            panIntervalMs: PAN_INTERVAL_MS,
+            wheelSteps: WHEEL_STEPS,
+            wheelIntervalMs: WHEEL_INTERVAL_MS,
+            wheelDelivery: 'browser-timer-dispatched WheelEvent',
+            postInteractionSettleMs: POST_INTERACTION_SETTLE_MS
+          },
+          geometry,
+          prewarmMetricDelta,
+          gestureWallDurationMs,
+          workerBefore: loadWorker,
+          workerAfter: afterWorker,
+          workerDelta,
+          summary,
+          pageErrors,
+          consoleErrors
+        };
+        console.log(`GBDRAW_LARGE_PREVIEW_INTERACTION_EVIDENCE ${JSON.stringify(evidence)}`);
+        await testInfo.attach(`${thermalState}-${interaction}-evidence.json`, {
+          body: Buffer.from(JSON.stringify(evidence, null, 2)),
+          contentType: 'application/json'
+        });
       });
-      page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-      page.on('console', (message) => {
-        if (message.type() === 'error') consoleErrors.push(message.text());
-      });
+    }
+  }
+});
 
-      await installInteractionProbe(page);
-      await openApp(page);
-      await loadExactSession(page, dialogs);
-      await ensureDenseRegionVisible(page);
-      const geometry = await readGeometry(page);
-      const loadWorker = workerTotals(await getDiagramWorkerActivity(page));
-      expect(loadWorker).toEqual({ constructions: 0, initializations: 0, helpers: 0, runs: 0 });
-
-      const prewarmMetricDelta = thermalState === 'warm'
-        ? await prewarmHoverIndexes(page, geometry)
-        : {};
-      const begin = await startMeasurement(page, `${thermalState}-${interaction}`);
-      expect(begin.transition).toEqual({
-        property: 'transform',
-        duration: '0.2s',
-        timingFunction: 'ease',
-        delay: '0s'
-      });
-
-      const gestureStartedAt = Date.now();
-      if (interaction === 'pan') {
-        await runPan(page, geometry, begin.metricBefore);
-      } else {
-        await runWheel(page, geometry, begin.metricBefore);
-      }
-      await waitForInteractionEnd(page, begin.metricBefore);
-      const gestureWallDurationMs = Date.now() - gestureStartedAt;
-      await page.waitForTimeout(POST_INTERACTION_SETTLE_MS);
-      const summary = await page.evaluate(() => (
-        window.__GBDRAW_LARGE_PREVIEW_INTERACTION_PROBE__.endMeasurement()
-      ));
-      const afterWorker = workerTotals(await getDiagramWorkerActivity(page));
-      const workerDelta = subtractWorkerTotals(loadWorker, afterWorker);
-      console.log(`GBDRAW_LARGE_PREVIEW_INTERACTION_PREASSERT ${JSON.stringify({
-        profile: { thermalState, interaction },
-        geometry,
-        summary,
-        workerDelta
-      })}`);
-      assertStructuralContract({ interaction, summary, workerDelta });
-      await assertPostSettleInteraction(page);
-
-      expect(pageErrors).toEqual([]);
-      expect(consoleErrors).toEqual([]);
-      const evidence = {
-        fixtureSha,
+test.describe('Low-overhead responsiveness guardrail', () => {
+  test('warm controlled synthetic wheel stays below the calibrated Chromium limit', async ({
+    browser
+  }, testInfo) => {
+    test.skip(
+      testInfo.config.metadata?.gbdrawPerformanceProfile !== true,
+      'The timing guardrail requires the dedicated serial performance profile.'
+    );
+    test.setTimeout(1_800_000);
+    expect(fixtureSha).toBe(EXPECTED_FIXTURE_SHA);
+    const samples = [];
+    for (let repetition = 1; repetition <= RESPONSIVENESS_REPETITIONS; repetition += 1) {
+      const sample = await collectWarmResponsivenessSample({ browser, testInfo });
+      console.log(`GBDRAW_LARGE_PREVIEW_RESPONSIVENESS_SAMPLE ${JSON.stringify({
+        repetition,
         browser: {
           project: testInfo.project.name,
           version: browser.version(),
@@ -945,31 +1340,69 @@ for (const interaction of ['pan', 'wheel']) {
           node: process.version,
           osRelease: os.release()
         },
-        profile: { thermalState, interaction },
-        schedule: {
-          viewport: { width: 1440, height: 1000 },
-          panSteps: PAN_STEPS,
-          panIntervalMs: PAN_INTERVAL_MS,
-          wheelSteps: WHEEL_STEPS,
-          wheelIntervalMs: WHEEL_INTERVAL_MS,
-          wheelDelivery: 'browser-timer-dispatched WheelEvent',
-          postInteractionSettleMs: POST_INTERACTION_SETTLE_MS
-        },
-        geometry,
-        prewarmMetricDelta,
-        gestureWallDurationMs,
-        workerBefore: loadWorker,
-        workerAfter: afterWorker,
-        workerDelta,
-        summary,
-        pageErrors,
-        consoleErrors
-      };
-      console.log(`GBDRAW_LARGE_PREVIEW_INTERACTION_EVIDENCE ${JSON.stringify(evidence)}`);
-      await testInfo.attach(`${thermalState}-${interaction}-evidence.json`, {
-        body: Buffer.from(JSON.stringify(evidence, null, 2)),
-        contentType: 'application/json'
-      });
+        ...sample
+      })}`);
+      expect(sample.timing.longTasks.supported).toBe(true);
+      expect(sample.timing.deliveredEventCount).toBe(WHEEL_STEPS);
+      expect(sample.timing.raf.count).toBeGreaterThan(0);
+      expect(sample.pageErrors).toEqual([]);
+      expect(sample.consoleErrors).toEqual([]);
+      samples.push(sample.timing);
+    }
+    const aggregate = aggregateResponsivenessSamples(samples);
+    const guardrailApplied = testInfo.project.name === 'chromium';
+    const violations = guardrailApplied
+      ? evaluateResponsivenessGuardrail(aggregate, RESPONSIVENESS_THRESHOLDS)
+      : [];
+    const evidence = {
+      repetitions: RESPONSIVENESS_REPETITIONS,
+      guardrailApplied,
+      thresholds: RESPONSIVENESS_THRESHOLDS,
+      aggregate,
+      violations,
+      samples
+    };
+    console.log(`GBDRAW_LARGE_PREVIEW_RESPONSIVENESS_AGGREGATE ${JSON.stringify(evidence)}`);
+    await testInfo.attach('warm-controlled-wheel-responsiveness.json', {
+      body: Buffer.from(JSON.stringify(evidence, null, 2)),
+      contentType: 'application/json'
     });
-  }
-}
+    if (guardrailApplied) expect(violations, JSON.stringify(evidence, null, 2)).toEqual([]);
+  });
+});
+
+test.describe('Native headless diagnostic', () => {
+  test('warm Playwright wheel delivery is reported without an absolute timing gate', async ({
+    browser
+  }, testInfo) => {
+    test.skip(
+      testInfo.config.metadata?.gbdrawPerformanceProfile !== true,
+      'The native-input diagnostic requires the dedicated serial performance profile.'
+    );
+    test.setTimeout(1_800_000);
+    expect(fixtureSha).toBe(EXPECTED_FIXTURE_SHA);
+    const sample = await collectWarmResponsivenessSample({
+      browser,
+      testInfo,
+      trackLifecycle: true,
+      nativeInput: true
+    });
+    const evidence = {
+      browser: {
+        project: testInfo.project.name,
+        version: browser.version(),
+        platform: process.platform,
+        node: process.version,
+        osRelease: os.release()
+      },
+      ...sample,
+      coalescingRatio: sample.timing.deliveredEventCount / WHEEL_STEPS,
+      quietWindowSplitCount: sample.timing.lifecycle.interactionStarts
+    };
+    console.log(`GBDRAW_LARGE_PREVIEW_NATIVE_HEADLESS_DIAGNOSTIC ${JSON.stringify(evidence)}`);
+    expect(sample.timing.deliveredEventCount).toBeGreaterThan(0);
+    expect(sample.timing.raf.count).toBeGreaterThan(0);
+    expect(sample.pageErrors).toEqual([]);
+    expect(sample.consoleErrors).toEqual([]);
+  });
+});
