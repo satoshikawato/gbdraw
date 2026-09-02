@@ -237,6 +237,96 @@ const detectCanonicalRenderRequestPath = (sources) => {
   });
 };
 
+const CURRENT_RESULT_ADMISSION_NAME = 'admitCurrentGeneratedResults';
+const CURRENT_RESULT_ADMISSION_DEFINITION_PATTERN = new RegExp(
+  `\\bexport\\s+const\\s+${CURRENT_RESULT_ADMISSION_NAME}`
+    + '\\s*=\\s*\\([^)]*\\)\\s*=>',
+  'g'
+);
+
+const currentResultAdmissionNamedImportsV1 = (source) => {
+  const commentsMasked = maskJavaScript(source, { strings: false });
+  const code = maskJavaScript(source);
+  const imports = [];
+  const pattern = /(?:^|\n)\s*import\s*\{([\s\S]*?)\}\s*from\s*(['"])([^'"\r\n]+)\2\s*;?/g;
+  for (const match of commentsMasked.matchAll(pattern)) {
+    const keywordOffset = match[0].search(/\bimport\b/);
+    const keywordIndex = match.index + keywordOffset;
+    if (!/^import\b/.test(code.slice(keywordIndex))) continue;
+    match[1].split(',').forEach((entry) => {
+      const binding = entry.trim().match(
+        new RegExp(
+          `^${CURRENT_RESULT_ADMISSION_NAME}`
+            + '(?:\\s+as\\s+([A-Za-z_$][\\w$]*))?$'
+        )
+      );
+      if (!binding) return;
+      imports.push(Object.freeze({
+        specifier: match[3],
+        local: binding[1] || CURRENT_RESULT_ADMISSION_NAME
+      }));
+    });
+  }
+  return imports;
+};
+
+const currentResultAdmissionCallPatternV1 = (local) => new RegExp(
+  `(?:^|[^A-Za-z0-9_$.])${local.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`,
+  'g'
+);
+
+const detectCurrentResultAdmissionAuthorityV1 = (sources) => {
+  const observedDefinitions = sourceEntries(sources).flatMap(([path, source]) => {
+    const count = matches(
+      maskJavaScript(source),
+      CURRENT_RESULT_ADMISSION_DEFINITION_PATTERN
+    ).length;
+    return count ? [Object.freeze({
+      path,
+      count,
+      subject: encodeDefinitionPathSubject({ path })
+    })] : [];
+  });
+  return Object.freeze({
+    definitionCount: observedDefinitions.reduce((total, { count }) => total + count, 0),
+    observedDefinitions: Object.freeze(observedDefinitions),
+    subjects: Object.freeze(observedDefinitions.map(({ subject }) => subject))
+  });
+};
+
+const detectCanonicalCurrentResultAdmissionPathV1 = (sources) => {
+  const definitionPaths = new Set(
+    detectCurrentResultAdmissionAuthorityV1(sources).observedDefinitions
+      .map(({ path }) => path)
+  );
+  const edgesBySubject = new Map();
+  sourceEntries(sources).forEach(([from, source]) => {
+    const code = maskJavaScript(source);
+    currentResultAdmissionNamedImportsV1(source)
+      .map(({ specifier, local }) => ({
+        local,
+        to: resolvedProductionImport(from, specifier)
+      }))
+      .filter(({ to }) => definitionPaths.has(to))
+      .filter(({ local }) => matches(
+        code,
+        currentResultAdmissionCallPatternV1(local)
+      ).length > 0)
+      .forEach(({ to }) => {
+        const edge = Object.freeze({ from, to });
+        edgesBySubject.set(encodeCanonicalEntryEdgeSubject(edge), edge);
+      });
+  });
+  const subjects = [...edgesBySubject.keys()].sort();
+  return Object.freeze({
+    observedEdges: Object.freeze(subjects.map((subject) => Object.freeze({
+      ...edgesBySubject.get(subject),
+      subject
+    }))),
+    subjects: Object.freeze(subjects)
+  });
+};
+
 // Keep each detector ID and its transitive helpers executable-identical while referenced.
 // Add a versioned detector beside it, then migrate authority in a separate pull request.
 export const WEB_ARCHITECTURE_DETECTORS = Object.freeze({
@@ -249,5 +339,15 @@ export const WEB_ARCHITECTURE_DETECTORS = Object.freeze({
     subjectCategory: 'canonical-entry-edge',
     encodeSubject: encodeCanonicalEntryEdgeSubject,
     detect: detectCanonicalRenderRequestPath
+  }),
+  'semantic-owner.current-result-admission.v1': Object.freeze({
+    subjectCategory: 'definition-path',
+    encodeSubject: encodeDefinitionPathSubject,
+    detect: detectCurrentResultAdmissionAuthorityV1
+  }),
+  'canonical-path.current-result-admission.v1': Object.freeze({
+    subjectCategory: 'canonical-entry-edge',
+    encodeSubject: encodeCanonicalEntryEdgeSubject,
+    detect: detectCanonicalCurrentResultAdmissionPathV1
   })
 });
