@@ -10,7 +10,8 @@ export const createFeatureEditor = ({
   legendActions,
   svgActions,
   featureSelection = null,
-  previewRuntime = null
+  previewRuntime = null,
+  previewTransformInteraction = null
 }) => {
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
   const labelActions = createFeatureLabelActions({ state, previewRuntime });
@@ -20,7 +21,8 @@ export const createFeatureEditor = ({
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
     onFeaturePopupOpened: labelActions.syncLabelEditor,
     featureSelection,
-    previewRuntime
+    previewRuntime,
+    previewTransformInteraction
   });
   const colorActions = createFeatureColorActions({
     state,
@@ -95,6 +97,7 @@ export const createFeatureEditor = ({
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,
+    dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
     refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,

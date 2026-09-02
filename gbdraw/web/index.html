@@ -655,6 +655,16 @@
         .gbdraw-preview-feature-search-updating rect[id^="f"] {
             transition: none !important;
         }
+        .gbdraw-preview-surface :is(
+            path[data-gbdraw-feature-id],
+            polygon[data-gbdraw-feature-id],
+            rect[data-gbdraw-feature-id],
+            path[id^="f"],
+            polygon[id^="f"],
+            rect[id^="f"]
+        ) {
+            cursor: pointer;
+        }
         .gbdraw-preview-feature-search-dimmed {
             opacity: 0.18;
             transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
@@ -4740,11 +4750,13 @@
                          @mousedown="startPan"
                          @mousemove="doPan"
                          @mouseup="endPan"
+                         @pointercancel="endPan"
+                         @lostpointercapture="endPan"
                          @mouseleave="endPan">
                         <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
                             :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
                             :style="{transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${zoom})`, transformOrigin: 'top center', transition: isPanning ? 'none' : 'transform 0.2s'}"
-                            class="shadow-xl bg-white m-auto origin-top">
+                            class="gbdraw-preview-surface shadow-xl bg-white m-auto origin-top">
                         </div>
                     </div>
 
