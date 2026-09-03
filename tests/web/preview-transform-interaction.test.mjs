@@ -67,7 +67,7 @@ await writeFile(
   join(tempDir, 'app', 'pairwise-match-popup.js'),
   [
     'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-pairwise-match-id]";',
-    'export const buildPairwiseMatchHoverRows = () => [];',
+    'export const buildPairwiseMatchHoverSummary = (element) => ({ id: element.getAttribute("data-gbdraw-pairwise-match-id"), title: "Pairwise match", subtitle: "", fill: "#94a3b8", rows: [] });',
     'export const buildPairwiseMatchPayload = () => null;'
   ].join('\n'),
   'utf8'
