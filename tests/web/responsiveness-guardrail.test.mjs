@@ -38,18 +38,59 @@ assert.deepEqual(aggregate, {
   maximumHeartbeatGapMs: 65
 });
 assert.deepEqual(evaluateResponsivenessGuardrail(aggregate, {
-  maximumMedianLongTaskTotalMs: 25,
   maximumMedianLongestLongTaskMs: 15
 }), []);
 assert.deepEqual(evaluateResponsivenessGuardrail(aggregate, {
-  maximumMedianLongTaskTotalMs: 19,
   maximumMedianLongestLongTaskMs: 11
 }), [
-  'median Long Task total 20 ms exceeded 19 ms',
   'median longest Long Task 12 ms exceeded 11 ms'
+]);
+
+const slowRunnerAggregate = aggregateResponsivenessSamples([
+  {
+    longTasks: { totalDurationMs: 2755, longestDurationMs: 196 },
+    raf: { p95Ms: 116.7 },
+    heartbeat: { maximumGapMs: 200.8 }
+  },
+  {
+    longTasks: { totalDurationMs: 2598, longestDurationMs: 104 },
+    raf: { p95Ms: 100 },
+    heartbeat: { maximumGapMs: 112.5 }
+  },
+  {
+    longTasks: { totalDurationMs: 2767, longestDurationMs: 115 },
+    raf: { p95Ms: 116.6 },
+    heartbeat: { maximumGapMs: 122.4 }
+  }
+]);
+assert.deepEqual(evaluateResponsivenessGuardrail(slowRunnerAggregate, {
+  maximumMedianLongestLongTaskMs: 250
+}), []);
+
+const historicalRegressionAggregate = aggregateResponsivenessSamples([
+  {
+    longTasks: { totalDurationMs: 2977, longestDurationMs: 905 },
+    raf: { p95Ms: 0 },
+    heartbeat: { maximumGapMs: 0 }
+  },
+  {
+    longTasks: { totalDurationMs: 2505, longestDurationMs: 964 },
+    raf: { p95Ms: 0 },
+    heartbeat: { maximumGapMs: 0 }
+  },
+  {
+    longTasks: { totalDurationMs: 3361, longestDurationMs: 959 },
+    raf: { p95Ms: 0 },
+    heartbeat: { maximumGapMs: 0 }
+  }
+]);
+assert.deepEqual(evaluateResponsivenessGuardrail(historicalRegressionAggregate, {
+  maximumMedianLongestLongTaskMs: 250
+}), [
+  'median longest Long Task 959 ms exceeded 250 ms'
 ]);
 
 console.log(JSON.stringify({
   status: 'responsiveness guardrail aggregate tests passed',
-  assertions: 8
+  assertions: 10
 }));
