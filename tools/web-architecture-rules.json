@@ -2,6 +2,20 @@
   "schemaVersion": 1,
   "rules": [
     {
+      "key": "canonical-path.current-result-admission",
+      "kind": "single-canonical-entry-edge",
+      "detector": "canonical-path.current-result-admission.v1",
+      "allowedEdges": [
+        {
+          "from": "app/candidate-render.js",
+          "to": "services/svg-result-ingestion.js"
+        }
+      ],
+      "exactActiveEdgeCount": 1,
+      "enforcement": "hard",
+      "baselineEligible": false
+    },
+    {
       "key": "canonical-path.render-request",
       "kind": "single-canonical-entry-edge",
       "detector": "canonical-path.render-request.v1",
@@ -12,6 +26,17 @@
         }
       ],
       "exactActiveEdgeCount": 1,
+      "enforcement": "hard",
+      "baselineEligible": false
+    },
+    {
+      "key": "semantic-owner.current-result-admission",
+      "kind": "single-semantic-owner",
+      "detector": "semantic-owner.current-result-admission.v1",
+      "allowedDefinitionPaths": [
+        "services/svg-result-ingestion.js"
+      ],
+      "exactDefinitionCount": 1,
       "enforcement": "hard",
       "baselineEligible": false
     },

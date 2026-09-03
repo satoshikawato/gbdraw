@@ -128,7 +128,9 @@ export const createLegendEntryActions = ({
     }
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
-      results.value[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      const nextResults = [...results.value];
+      nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
+      results.value = nextResults;
     }
   };
 
@@ -740,14 +742,21 @@ export const createLegendEntryActions = ({
       onLegendGeometryChanged();
       skipCaptureBaseConfig.value = true;
       if (resultIndex >= 0 && results.value.length > resultIndex) {
-        results.value[resultIndex] = { ...results.value[resultIndex], content: serializeCleanSvg(svg) };
+        const nextResults = [...results.value];
+        nextResults[resultIndex] = {
+          ...results.value[resultIndex],
+          content: serializeCleanSvg(svg)
+        };
+        results.value = nextResults;
       }
       extractLegendEntries();
       return diff;
     } catch (error) {
       svg.replaceWith(svgSnapshot);
       if (resultSnapshot && resultIndex >= 0 && results.value.length > resultIndex) {
-        results.value[resultIndex] = resultSnapshot;
+        const nextResults = [...results.value];
+        nextResults[resultIndex] = resultSnapshot;
+        results.value = nextResults;
       }
       legendEntries.value = editorSnapshot;
       throw error;

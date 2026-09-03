@@ -8,6 +8,8 @@ const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-session-feature-metadata-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
+await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
+await mkdir(join(tempDir, 'app', 'legend-layout'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 
 const copyModule = async (sourceRelative, targetRelative) => {
@@ -21,7 +23,17 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
 await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
+await copyModule('gbdraw/web/js/app/feature-dom.js', 'app/feature-dom.js');
+await copyModule('gbdraw/web/js/app/legend/utils.js', 'app/legend/utils.js');
+await copyModule(
+  'gbdraw/web/js/app/legend-layout/transform-utils.js',
+  'app/legend-layout/transform-utils.js'
+);
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule(
+  'gbdraw/web/js/services/current-worker-result-source.js',
+  'services/current-worker-result-source.js'
+);
 await copyModule(
   'gbdraw/web/js/services/diagram-resource-staging.js',
   'services/diagram-resource-staging.js'
@@ -69,7 +81,7 @@ const {
 const { collectRenderedFeatureIdentitiesFromSvgRoot } = await import(
   pathToFileURL(join(tempDir, 'services', 'session-feature-metadata.js'))
 );
-const { ingestSvgResult } = await import(
+const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
   pathToFileURL(join(tempDir, 'services', 'svg-result-ingestion.js'))
 );
 const { extractFeatureMetadataForPreview } = await import(
@@ -264,13 +276,13 @@ globalThis.XMLSerializer = class {
   serializeToString(root) { return root.content; }
 };
 
-const committedResults = (content) => [ingestSvgResult(
-  { name: 'preview.svg', content },
+const committedResults = (content) => admitLegacyImportedResults(
+  createLegacyImportResultSource([{ name: 'preview.svg', content }]),
   {
     sanitizer: { sanitize: (value) => value },
     parser: IngressDomParser
   }
-)];
+);
 
 const svgWithFeature = ({
   renderedId = 'rendered-a',

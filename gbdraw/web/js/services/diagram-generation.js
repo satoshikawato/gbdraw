@@ -11,6 +11,7 @@ import {
   runtimeTestHooksEnabled
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
+import { markCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 
 export { DIAGRAM_HELPER_OPERATIONS } from './diagram-worker-protocol.js';
 
@@ -106,13 +107,25 @@ const normalizeGeneratedArtifactIdentity = (identity) => {
 
 export const normalizeGenerationResponse = (payload) => {
   if (Array.isArray(payload)) {
-    return { results: decodeGenerationResults(payload), metadata: {}, artifactIdentity: null };
+    return markCurrentWorkerGenerationResponse({
+      results: decodeGenerationResults(payload),
+      metadata: {},
+      artifactIdentity: null
+    });
   }
   if (!payload || typeof payload !== 'object') {
-    return { results: [], metadata: {}, artifactIdentity: null };
+    return markCurrentWorkerGenerationResponse({
+      results: [],
+      metadata: {},
+      artifactIdentity: null
+    });
   }
   if (payload.error) {
-    return { results: payload, metadata: {}, artifactIdentity: null };
+    return markCurrentWorkerGenerationResponse({
+      results: payload,
+      metadata: {},
+      artifactIdentity: null
+    });
   }
   const results = Array.isArray(payload.results)
     ? decodeGenerationResults(payload.results)
@@ -125,11 +138,11 @@ export const normalizeGenerationResponse = (payload) => {
   )
     ? decodedMetadata
     : {};
-  return {
+  return markCurrentWorkerGenerationResponse({
     results,
     metadata,
     artifactIdentity: normalizeGeneratedArtifactIdentity(payload.artifactIdentity)
-  };
+  });
 };
 
 const resolveWorkerUrl = () => new URL('../workers/diagram-generation-worker.js', import.meta.url).toString();
@@ -388,9 +401,19 @@ export const runDiagramGeneration = (payload = {}) => {
             failWorker(error);
             return;
           }
-          preparedResources.commit();
+          let resourcePromotionFinalized = false;
+          const finalizeResourcePromotion = () => {
+            if (resourcePromotionFinalized) return false;
+            preparedResources.commit();
+            resourcePromotionFinalized = true;
+            return true;
+          };
           settleActiveRequest(request, () => {
-            resolveRequest({ requestId, ...normalized });
+            resolveRequest(markCurrentWorkerGenerationResponse({
+              requestId,
+              ...normalized,
+              finalizeResourcePromotion
+            }));
           });
           return;
         }

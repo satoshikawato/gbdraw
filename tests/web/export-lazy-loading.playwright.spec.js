@@ -27,7 +27,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await page.evaluate(async ({ interactive }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    const { ingestSvgResult } = await import(
+    const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
       '/gbdraw/web/js/services/svg-result-ingestion.js'
     );
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -47,10 +47,12 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
     rect.setAttribute('fill', '#54bcf8');
     svg.appendChild(rect);
 
-    const committedResult = ingestSvgResult({
-      name: 'lazy-export.svg',
-      content: new XMLSerializer().serializeToString(svg)
-    });
+    const committedResult = admitLegacyImportedResults(
+      createLegacyImportResultSource([{
+        name: 'lazy-export.svg',
+        content: new XMLSerializer().serializeToString(svg)
+      }])
+    )[0];
     state.results.value = [committedResult];
     state.selectedResultIndex.value = 0;
     state.downloadDpi.value = 96;

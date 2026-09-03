@@ -1,5 +1,5 @@
 const SCHEMA_VERSION = 1;
-const MAXIMUM_RULE_COUNT = 3;
+const MAXIMUM_RULE_COUNT = 4;
 const RULE_KINDS = Object.freeze([
   'single-canonical-entry-edge',
   'single-semantic-owner'

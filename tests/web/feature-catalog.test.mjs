@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
+  admitFeatureCatalog,
   biologicalFeatureKey,
   featureStateFromCatalog,
   stableFeatureOverrideKey,
@@ -9,6 +11,10 @@ import {
 } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 const results = [{ name: 'diagram.svg', content: '<svg />' }];
+const featureCatalogSource = await readFile(
+  new URL('../../gbdraw/web/js/services/feature-catalog.js', import.meta.url),
+  'utf8'
+);
 const fullNote = `${'x'.repeat(49)}😀tail`;
 const compactNote = `${'x'.repeat(49)}😀`;
 const catalog = {
@@ -229,6 +235,37 @@ test('catalog result topology must match the logical Results exactly', () => {
   );
   assert.throws(
     () => validateFeatureCatalog({ ...catalog, items: [] }, results),
+    /Reload the page and Generate again/
+  );
+});
+
+test('catalog rejects empty, duplicate, and normalized-colliding rendered IDs', () => {
+  for (const svgId of ['', '   ']) {
+    const malformed = structuredClone(catalog);
+    malformed.items[0].features[0].svgId = svgId;
+    assert.throws(
+      () => validateFeatureCatalog(malformed, results),
+      /Reload the page and Generate again/
+    );
+  }
+
+  const duplicate = structuredClone(catalog);
+  duplicate.items[0].features.push({
+    ...duplicate.items[0].features[0]
+  });
+  assert.throws(
+    () => validateFeatureCatalog(duplicate, results),
+    /Reload the page and Generate again/
+  );
+
+  const normalizedCollision = structuredClone(catalog);
+  normalizedCollision.items[0].features[0].svgId = 'f0001__part1';
+  normalizedCollision.items[0].features.push({
+    ...normalizedCollision.items[0].features[0],
+    svgId: 'f0001'
+  });
+  assert.throws(
+    () => validateFeatureCatalog(normalizedCollision, results),
     /Reload the page and Generate again/
   );
 });
@@ -481,13 +518,13 @@ test('whole-record source validation is bounded by source count', () => {
     const state = featureStateFromCatalog(validated);
     assert.equal(state.biologicalFeatures.length, featureCount);
     assert.equal(state.biologicalFeatures[0].nucleotide_sequence, 'ATG');
-    assert.equal(sourceScans, 2);
+    assert.equal(sourceScans, 1);
   } finally {
     RegExp.prototype.test = nativeTest;
   }
 });
 
-test('catalog source validation does not reuse stale mutable item data', () => {
+test('admitted projections do not reread later catalog mutations', () => {
   const initialSequence = `ATG${'A'.repeat(1_000_000)}`;
   const updatedSequence = `CCC${'A'.repeat(1_000_000)}`;
   const largeCatalog = {
@@ -534,12 +571,12 @@ test('catalog source validation does not reuse stale mutable item data', () => {
     assert.equal(
       featureStateFromCatalog(validated)
         .biologicalFeatures[0].nucleotide_sequence,
-      'CCC'
+      'ATG'
     );
   } finally {
     RegExp.prototype.test = nativeTest;
   }
-  assert.equal(sourceScans, 3);
+  assert.equal(sourceScans, 1);
 });
 
 test('compound identity isolates duplicate accessions and positional indices', () => {
@@ -584,7 +621,7 @@ test('linear catalog state uses global record indexes and matching display label
   });
 
   const state = featureStateFromCatalog(
-    validateFeatureCatalog(multiRecordCatalog, results),
+    validateFeatureCatalog(multiRecordCatalog, results, { mode: 'linear' }),
     { mode: 'linear' }
   );
 
@@ -643,7 +680,7 @@ test('circular batch catalog state rebases item-local record indexes globally', 
   const batchCatalog = { schema: 3, items: [firstItem, secondItem] };
 
   const state = featureStateFromCatalog(
-    validateFeatureCatalog(batchCatalog, batchResults),
+    validateFeatureCatalog(batchCatalog, batchResults, { mode: 'circular' }),
     { mode: 'circular' }
   );
 
@@ -659,4 +696,65 @@ test('circular batch catalog state rebases item-local record indexes globally', 
     state.extractedFeatures.map((feature) => feature.displayRecordId),
     ['duplicated-accession', 'second-accession']
   );
+});
+
+test('one catalog admission produces identities, indexes, scalar footprint, and zero secondary traversal', () => {
+  const metrics = [];
+  const events = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: (metric) => metrics.push(metric),
+    onSessionLifecycleEvent: (event) => events.push(event)
+  };
+  try {
+    const source = structuredClone(catalog);
+    const beforeAdmission = structuredClone(source);
+    const admission = admitFeatureCatalog(source, results, {
+      adopt: true,
+      mode: 'linear'
+    });
+    assert.equal(admission.catalog, source);
+    assert.deepEqual(source, beforeAdmission);
+    assert.equal(admission.featureState.extractedFeatures.length, 1);
+    assert.equal(admission.featureOrthogroupIndex.size > 0, true);
+    assert.equal(admission.renderedIdentitiesByResult.length, 1);
+    assert.equal(
+      admission.renderedIdentitiesByResult[0].byRenderedId.get('f0001').stableId,
+      'stable-source-a'
+    );
+    assert.deepEqual(admission.scalarMetrics, {
+      resultCount: 1,
+      itemCount: 1,
+      recordCount: 1,
+      renderedFeatureCount: 1,
+      biologicalFeatureCount: 1,
+      orthogroupRecordCount: 1,
+      comparisonMatchCount: 0,
+      annotationCount: 0,
+      sequenceSourceCount: 1,
+      sequenceCharacters: 6
+    });
+    assert.equal(
+      metrics.filter((metric) => metric.name === 'featureCatalogAdmissionCount')
+        .reduce((total, metric) => total + metric.value, 0),
+      1
+    );
+    assert.equal(
+      metrics.filter((metric) => metric.name === 'featureCatalogSecondaryTraversalCount')
+        .reduce((total, metric) => total + metric.value, 0),
+      0
+    );
+    assert.deepEqual(
+      events.filter((event) => event.name.startsWith('catalog.')).map((event) => event.name),
+      ['catalog.admission-started', 'catalog.admission-completed']
+    );
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+});
+
+test('catalog admission cannot hide bulk post-admission orthogroup enrichment behind a zero metric', () => {
+  assert.doesNotMatch(featureCatalogSource, /\bbuildOrthogroupFeatureIndex\b/);
+  assert.doesNotMatch(featureCatalogSource, /\benrichFeaturesWithOrthogroups\b/);
+  assert.match(featureCatalogSource, /orthogroupProjection\.registerFeature\(/);
+  assert.match(featureCatalogSource, /orthogroupProjection\.addGroup\(/);
 });

@@ -30,10 +30,12 @@ export const createLegendCanvasActions = ({ state }) => {
     if (!svg || index < 0 || index >= results.value.length) return false;
     skipCaptureBaseConfig.value = true;
     skipPositionReapply.value = true;
-    results.value[index] = {
+    const nextResults = [...results.value];
+    nextResults[index] = {
       ...results.value[index],
       content: serializeCleanSvg(svg)
     };
+    results.value = nextResults;
     return true;
   };
 

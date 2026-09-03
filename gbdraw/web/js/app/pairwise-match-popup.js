@@ -211,15 +211,17 @@ const getOrthogroupById = (orthogroups, orthogroupId, groupScope = '') => {
   const requestedScope = normalizeText(groupScope)
     ? normalizeGroupMetadataScope(groupScope)
     : '';
-  const matches = (Array.isArray(orthogroups) ? orthogroups : [])
-    .filter((entry) => {
-      const status = orthogroupIdStatus(entry);
-      const scopeStatus = groupScopeStatus(entry);
-      return status.valid
-        && scopeStatus.valid
-        && status.value === id
-        && (!requestedScope || scopeStatus.value === requestedScope);
-    });
+  const matches = [];
+  for (const entry of Array.isArray(orthogroups) ? orthogroups : []) {
+    const status = orthogroupIdStatus(entry);
+    const scopeStatus = groupScopeStatus(entry);
+    if (
+      status.valid
+      && scopeStatus.valid
+      && status.value === id
+      && (!requestedScope || scopeStatus.value === requestedScope)
+    ) matches.push(entry);
+  }
   return matches.length === 1 ? matches[0] : null;
 };
 
@@ -243,26 +245,6 @@ const getFeatureLookupValues = (featureLookup) => {
   if (Array.isArray(featureLookup)) return featureLookup;
   if (typeof featureLookup === 'object') return Object.values(featureLookup);
   return [];
-};
-
-const uniqueFeatureValues = (...sources) => {
-  const seen = new Set();
-  const features = [];
-  sources.flatMap(getFeatureLookupValues).forEach((feature) => {
-    if (!feature || seen.has(feature)) return;
-    seen.add(feature);
-    features.push(feature);
-  });
-  return features;
-};
-
-const renderedFeatureForId = (renderedSvgId, featureLookup) => {
-  const id = normalizeText(renderedSvgId);
-  if (!id) return null;
-  const candidates = uniqueFeatureValues(featureLookup)
-    .map((feature) => ({ feature, identity: renderedFeatureIdentity(feature) }))
-    .filter(({ identity }) => identity.usable && identity.renderedId.value === id);
-  return candidates.length === 1 ? candidates[0] : null;
 };
 
 const matchEndpointReferences = (element, role) => {
@@ -299,139 +281,53 @@ const matchEndpointReferences = (element, role) => {
   };
 };
 
-const matchEndpointAgrees = (reference, featureLookup) => {
-  const endpoint = renderedFeatureForId(reference.renderedId.value, featureLookup);
-  return Boolean(endpoint && identityMatches(
-    reference,
-    endpoint.identity,
-    { includeRendered: true }
-  ));
-};
-
-const verifiedMatchFeatureLookup = (element, featureLookup) => {
-  const rejected = new Set();
-  for (const role of ['query', 'subject']) {
-    const endpoint = matchEndpointReferences(element, role);
-    if (!endpoint.constrained) continue;
-    const renderedIds = splitMetadataValues(attr(element, `data-${role}-feature-svg-id`));
-    if (!endpoint.valid) {
-      renderedIds.forEach((renderedId) => rejected.add(renderedId));
-      continue;
-    }
-    endpoint.references.forEach((reference) => {
-      if (!matchEndpointAgrees(reference, featureLookup)) {
-        rejected.add(reference.renderedId.value);
-      }
-    });
-  }
-  if (rejected.size === 0) return featureLookup;
-  let entries = [];
-  if (typeof featureLookup?.entries === 'function') {
-    entries = Array.from(featureLookup.entries());
-  } else if (featureLookup && typeof featureLookup === 'object' && !Array.isArray(featureLookup)) {
-    entries = Object.entries(featureLookup);
-  } else if (Array.isArray(featureLookup)) {
-    entries = featureLookup.map((feature) => [featureRenderedSvgId(feature), feature]);
-  }
-  return new Map(entries.filter(([key, feature]) => {
-    const renderedId = renderedFeatureIdentity(feature).renderedId.value;
-    return !rejected.has(normalizeText(key)) && !rejected.has(renderedId);
-  }));
-};
-
-const getRenderedFeatureForMember = (member, feature, featureLookup) => {
-  if (!feature || !featureLookup) return null;
-  const memberIdentity = featureIdentity(member);
-  let sourceIdentity = featureIdentity(feature);
-  if (!sourceIdentity.usable) {
-    sourceIdentity = featureIdentity(feature, { allowLegacySvgStable: true });
-  }
-  if (
-    !memberIdentity.usable ||
-    !sourceIdentity.usable ||
-    !identityMatches(memberIdentity, sourceIdentity)
-  ) return null;
-
-  const memberRendered = textAliasStatus(member, RENDERED_FEATURE_ID_KEYS);
-  const sourceRendered = textAliasStatus(feature, RENDERED_FEATURE_ID_KEYS);
-  if (!memberRendered.valid || !sourceRendered.valid) return null;
-  if (
-    memberRendered.supplied &&
-    sourceRendered.supplied &&
-    memberRendered.value !== sourceRendered.value
-  ) return null;
-  let renderedSvgId = memberRendered.value || sourceRendered.value;
-  if (!renderedSvgId) {
-    const legacyRendered = textAliasStatus(feature, ['svg_id', 'svgId']);
-    if (!legacyRendered.valid) return null;
-    renderedSvgId = legacyRendered.value;
-  }
-  const endpoint = renderedFeatureForId(renderedSvgId, featureLookup);
-  if (
-    !endpoint ||
-    !identityMatches(memberIdentity, endpoint.identity, { includeRendered: true }) ||
-    !identityMatches(sourceIdentity, endpoint.identity)
-  ) return null;
-  return endpoint.feature;
-};
-
-const getFeatureForMember = (member, featureLookup, sourceFeatures = []) => {
-  const identity = featureIdentity(member);
-  if (!identity.usable) return null;
-  const source = Array.isArray(sourceFeatures) && sourceFeatures.length > 0
-    ? sourceFeatures
-    : uniqueFeatureValues(featureLookup);
-  const sourceIsBiological = Array.isArray(sourceFeatures) && sourceFeatures.length > 0;
-  const candidates = source.filter((feature) => {
-    const candidateIdentity = sourceIsBiological
-      ? featureIdentity(feature, { allowLegacySvgStable: true })
-      : renderedFeatureIdentity(feature);
-    if (!identityMatches(identity, candidateIdentity)) return false;
-    if (!identity.renderedId.supplied && !candidateIdentity.renderedId.supplied) return true;
-    return Boolean(getRenderedFeatureForMember(member, feature, featureLookup));
-  });
-  return candidates.length === 1 ? candidates[0] : null;
-};
-
-const getGroupMemberForFeatureSvgId = (group, featureSvgId, featureLookup = null) => {
-  const endpoint = renderedFeatureForId(featureSvgId, featureLookup);
-  if (!endpoint) return null;
-  const members = Array.isArray(group?.members) ? group.members : [];
-  const matches = members.filter((member) => (
-    identityMatches(featureIdentity(member), endpoint.identity, { includeRendered: true })
-  ));
-  return matches.length === 1 ? matches[0] : null;
-};
-
-const groupHasFeatureSvgId = (group, featureSvgId, featureLookup = null) => {
-  const ids = splitMetadataValues(featureSvgId);
-  if (ids.length === 0) return false;
-  return ids.some((id) => Boolean(getGroupMemberForFeatureSvgId(group, id, featureLookup)));
-};
-
-const getOrthogroupForMatch = (
-  orthogroups,
-  {
+const readPairwiseMatchDescriptor = (element) => {
+  const matchKind = normalizeMatchKind(attr(element, 'data-match-kind'), element);
+  const orthogroupId = attr(element, 'data-orthogroup-id');
+  const collinearityBlockId = attr(element, 'data-collinearity-block-id');
+  const groupScope = firstText(
+    attr(element, 'data-collinear-group-scope'),
+    attr(element, 'data-group-scope')
+  );
+  const queryFeatureSvgId = attr(element, 'data-query-feature-svg-id');
+  const subjectFeatureSvgId = attr(element, 'data-subject-feature-svg-id');
+  const queryStart = attr(element, 'data-qstart');
+  const queryEnd = attr(element, 'data-qend');
+  const subjectStart = attr(element, 'data-sstart');
+  const subjectEnd = attr(element, 'data-send');
+  const matchId = firstText(
+    attr(element, 'data-gbdraw-match-id'),
+    attr(element, 'data-gbdraw-pairwise-match-id'),
+    collinearityBlockId,
+    orthogroupId
+  );
+  return {
+    matchKind,
+    matchId,
     orthogroupId,
+    orthogroupIds: uniqueMetadataValues(orthogroupId),
+    collinearityBlockId,
+    groupScope,
+    normalizedGroupScope: normalizeGroupMetadataScope(groupScope),
     queryFeatureSvgId,
     subjectFeatureSvgId,
-    featureLookup,
-    groupScope
-  } = {}
-) => {
-  const requestedId = normalizeText(orthogroupId);
-  const direct = getOrthogroupById(orthogroups, orthogroupId, groupScope);
-  if (direct) return direct;
-  if (requestedId) return null;
-  const groups = Array.isArray(orthogroups) ? orthogroups : [];
-  const matches = groups.filter((group) => {
-    const status = orthogroupIdStatus(group);
-    return status.valid && status.value && (
-      groupHasFeatureSvgId(group, queryFeatureSvgId, featureLookup) ||
-      groupHasFeatureSvgId(group, subjectFeatureSvgId, featureLookup)
-    );
-  });
-  return matches.length === 1 ? matches[0] : null;
+    queryRecordId: attr(element, 'data-query-record-id'),
+    subjectRecordId: attr(element, 'data-subject-record-id'),
+    queryInterval: intervalText(queryStart, queryEnd),
+    subjectInterval: intervalText(subjectStart, subjectEnd),
+    identity: attr(element, 'data-identity'),
+    orientation: firstText(
+      attr(element, 'data-collinearity-orientation'),
+      attr(element, 'data-orientation')
+    ),
+    title: MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise,
+    subtitle: firstText(collinearityBlockId, orthogroupId, matchId),
+    fill: firstText(attr(element, 'fill'), element?.style?.fill, '#94a3b8'),
+    endpoints: {
+      query: matchEndpointReferences(element, 'query'),
+      subject: matchEndpointReferences(element, 'subject')
+    }
+  };
 };
 
 const featureOrthogroupIdStatus = (feature) => {
@@ -465,11 +361,13 @@ const featureProduct = (feature) => firstText(
   qualifierFirstValue(feature, 'note')
 );
 
-const featureToOrthogroupMember = (feature) => {
+const featureToOrthogroupMember = (feature, resolvedIdentity = null) => {
   if (!feature) return null;
   const member = feature?.orthogroupMember || feature?.orthogroup_member || {};
-  let identity = featureIdentity(feature);
-  if (!identity.usable) identity = featureIdentity(feature, { allowLegacySvgStable: true });
+  let identity = resolvedIdentity || featureIdentity(feature);
+  if (!resolvedIdentity && !identity.usable) {
+    identity = featureIdentity(feature, { allowLegacySvgStable: true });
+  }
   return {
     recordIndex: identity.recordIndex.value,
     recordKey: firstText(member?.recordKey, member?.record_key, feature?.recordKey, feature?.record_key),
@@ -502,26 +400,325 @@ const featureToOrthogroupMember = (feature) => {
   };
 };
 
-const buildFallbackOrthogroup = ({
+const addBucketValue = (buckets, key, value) => {
+  if (!key) return;
+  if (!buckets.has(key)) buckets.set(key, []);
+  buckets.get(key).push(value);
+};
+
+const identityIndexKeys = (identity) => {
+  if (!identity?.usable) return [];
+  const recordIndex = identity.recordIndex.supplied ? identity.recordIndex.value : null;
+  const keys = [];
+  if (identity.recordKey.supplied && identity.biologicalId.supplied) {
+    keys.push(`canonical:${identity.recordKey.value}\u001f${identity.biologicalId.value}`);
+  }
+  if (recordIndex !== null && identity.sourceIndex.supplied) {
+    keys.push(`source:${recordIndex}\u001f${identity.sourceIndex.value}`);
+  }
+  if (recordIndex !== null && identity.stableId.supplied) {
+    keys.push(`stable:${recordIndex}\u001f${identity.stableId.value}`);
+  }
+  return keys;
+};
+
+const createPairwisePayloadContext = ({
+  featureLookup = new Map(),
+  sourceFeatures = [],
+  orthogroups = [],
+  descriptor = null
+} = {}) => {
+  const identityCache = new WeakMap();
+  const cachedIdentity = (source, mode) => {
+    if (!source || (typeof source !== 'object' && typeof source !== 'function')) {
+      if (mode === 'rendered') return renderedFeatureIdentity(source);
+      return featureIdentity(source, { allowLegacySvgStable: mode === 'legacy' });
+    }
+    let modes = identityCache.get(source);
+    if (!modes) {
+      modes = new Map();
+      identityCache.set(source, modes);
+    }
+    if (!modes.has(mode)) {
+      modes.set(
+        mode,
+        mode === 'rendered'
+          ? renderedFeatureIdentity(source)
+          : featureIdentity(source, { allowLegacySvgStable: mode === 'legacy' })
+      );
+    }
+    return modes.get(mode);
+  };
+
+  const renderedRecords = [];
+  const renderedByObject = new WeakMap();
+  const renderedById = new Map();
+  const featuresByOrthogroupId = new Map();
+  const featureOrthogroupStatuses = new WeakMap();
+  const seenRenderedFeatures = new Set();
+  for (const feature of getFeatureLookupValues(featureLookup)) {
+    if (!feature) continue;
+    const groupStatus = featureOrthogroupIdStatus(feature);
+    featureOrthogroupStatuses.set(feature, groupStatus);
+    if (groupStatus.valid && groupStatus.value) {
+      addBucketValue(featuresByOrthogroupId, groupStatus.value, feature);
+    }
+    if (seenRenderedFeatures.has(feature)) continue;
+    seenRenderedFeatures.add(feature);
+    const identity = cachedIdentity(feature, 'rendered');
+    const record = { feature, identity };
+    renderedRecords.push(record);
+    renderedByObject.set(feature, record);
+    if (identity.usable && identity.renderedId.value) {
+      addBucketValue(renderedById, identity.renderedId.value, record);
+    }
+  }
+
+  const sourceIsBiological = Array.isArray(sourceFeatures) && sourceFeatures.length > 0;
+  const sourceByObject = new WeakMap();
+  const sourceByIdentity = new Map();
+  const sourceValues = sourceIsBiological
+    ? sourceFeatures
+    : renderedRecords.map((record) => record.feature);
+  for (const feature of sourceValues) {
+    if (!feature) continue;
+    const standardIdentity = cachedIdentity(feature, 'standard');
+    const legacyIdentity = sourceIsBiological
+      ? cachedIdentity(feature, 'legacy')
+      : null;
+    const candidateIdentity = sourceIsBiological
+      ? legacyIdentity
+      : renderedByObject.get(feature)?.identity;
+    const record = {
+      feature,
+      candidateIdentity,
+      sourceIdentity: standardIdentity.usable ? standardIdentity : legacyIdentity,
+      sourceRendered: textAliasStatus(feature, RENDERED_FEATURE_ID_KEYS),
+      legacyRendered: textAliasStatus(feature, ['svg_id', 'svgId'])
+    };
+    if (!sourceByObject.has(feature)) sourceByObject.set(feature, record);
+    identityIndexKeys(candidateIdentity).forEach((key) => {
+      addBucketValue(sourceByIdentity, key, record);
+    });
+  }
+
+  const rejectedRenderedIds = new Set();
+  const rawRenderedRecordForId = (renderedSvgId) => {
+    const candidates = renderedById.get(normalizeText(renderedSvgId)) || [];
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+  for (const role of ['query', 'subject']) {
+    const endpoint = descriptor?.endpoints?.[role];
+    if (!endpoint?.constrained) continue;
+    const renderedIds = splitMetadataValues(descriptor[`${role}FeatureSvgId`]);
+    if (!endpoint.valid) {
+      renderedIds.forEach((renderedId) => rejectedRenderedIds.add(renderedId));
+      continue;
+    }
+    endpoint.references.forEach((reference) => {
+      const endpointRecord = rawRenderedRecordForId(reference.renderedId.value);
+      if (!endpointRecord || !identityMatches(
+        reference,
+        endpointRecord.identity,
+        { includeRendered: true }
+      )) rejectedRenderedIds.add(reference.renderedId.value);
+    });
+  }
+
+  const renderedRecordForId = (renderedSvgId) => {
+    const id = normalizeText(renderedSvgId);
+    if (!id || rejectedRenderedIds.has(id)) return null;
+    return rawRenderedRecordForId(id);
+  };
+  const featureForLookupId = (renderedSvgId) => {
+    const id = normalizeText(renderedSvgId);
+    if (!id || rejectedRenderedIds.has(id)) return null;
+    const feature = featureLookup?.get?.(id) || null;
+    const record = feature ? renderedByObject.get(feature) : null;
+    return record && rejectedRenderedIds.has(record.identity.renderedId.value)
+      ? null
+      : feature;
+  };
+
+  const groupMemberIndexes = new WeakMap();
+  const memberIndexForGroup = (group) => {
+    if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
+    const cached = groupMemberIndexes.get(group);
+    if (cached) return cached;
+    const index = { records: [], byIdentity: new Map() };
+    for (const member of Array.isArray(group.members) ? group.members : []) {
+      const record = { member, identity: cachedIdentity(member, 'standard') };
+      index.records.push(record);
+      identityIndexKeys(record.identity).forEach((key) => {
+        addBucketValue(index.byIdentity, key, record);
+      });
+    }
+    groupMemberIndexes.set(group, index);
+    return index;
+  };
+  const groupMemberForFeatureId = (group, featureSvgId) => {
+    const endpoint = renderedRecordForId(featureSvgId);
+    if (!endpoint) return null;
+    const memberIndex = memberIndexForGroup(group);
+    const seen = new Set();
+    const candidates = [];
+    identityIndexKeys(endpoint.identity).forEach((key) => {
+      for (const record of memberIndex.byIdentity.get(key) || []) {
+        if (seen.has(record)) continue;
+        seen.add(record);
+        candidates.push(record);
+      }
+    });
+    const matches = candidates.filter(({ identity }) => (
+      identityMatches(identity, endpoint.identity, { includeRendered: true })
+    ));
+    return matches.length === 1 ? matches[0].member : null;
+  };
+  const groupHasFeatureIds = (group, featureSvgIds) => (
+    splitMetadataValues(featureSvgIds)
+      .some((featureSvgId) => Boolean(groupMemberForFeatureId(group, featureSvgId)))
+  );
+
+  const groupsById = new Map();
+  const groupsByScopedId = new Map();
+  const implicitGroupMatches = [];
+  for (const group of Array.isArray(orthogroups) ? orthogroups : []) {
+    const idStatus = orthogroupIdStatus(group);
+    const scopeStatus = groupScopeStatus(group);
+    if (!idStatus.valid || !idStatus.value) continue;
+    if (scopeStatus.valid) {
+      addBucketValue(groupsById, idStatus.value, group);
+      addBucketValue(
+        groupsByScopedId,
+        `${idStatus.value}\u001f${scopeStatus.value}`,
+        group
+      );
+    }
+    if (
+      descriptor
+      && !normalizeText(descriptor.orthogroupId)
+      && descriptor.matchKind !== 'collinear'
+      && (
+        groupHasFeatureIds(group, descriptor.queryFeatureSvgId)
+        || groupHasFeatureIds(group, descriptor.subjectFeatureSvgId)
+      )
+    ) implicitGroupMatches.push(group);
+  }
+
+  const orthogroupById = (orthogroupId, groupScope = '') => {
+    const id = normalizeText(orthogroupId);
+    if (!id) return null;
+    const requestedScope = normalizeText(groupScope)
+      ? normalizeGroupMetadataScope(groupScope)
+      : '';
+    const candidates = requestedScope
+      ? groupsByScopedId.get(`${id}\u001f${requestedScope}`) || []
+      : groupsById.get(id) || [];
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+  const orthogroupForMatch = () => {
+    const direct = orthogroupById(descriptor?.orthogroupId, descriptor?.groupScope);
+    if (direct) return direct;
+    if (normalizeText(descriptor?.orthogroupId)) return null;
+    return implicitGroupMatches.length === 1 ? implicitGroupMatches[0] : null;
+  };
+
+  const renderedFeatureForMember = (member, feature) => {
+    if (!feature) return null;
+    const memberIdentity = cachedIdentity(member, 'standard');
+    const sourceRecord = sourceByObject.get(feature);
+    const sourceIdentity = sourceRecord?.sourceIdentity;
+    if (
+      !memberIdentity.usable
+      || !sourceIdentity?.usable
+      || !identityMatches(memberIdentity, sourceIdentity)
+    ) return null;
+    const memberRendered = memberIdentity.renderedId;
+    const sourceRendered = sourceRecord.sourceRendered;
+    if (!memberRendered.valid || !sourceRendered.valid) return null;
+    if (
+      memberRendered.supplied
+      && sourceRendered.supplied
+      && memberRendered.value !== sourceRendered.value
+    ) return null;
+    let renderedSvgId = memberRendered.value || sourceRendered.value;
+    if (!renderedSvgId) {
+      if (!sourceRecord.legacyRendered.valid) return null;
+      renderedSvgId = sourceRecord.legacyRendered.value;
+    }
+    const endpoint = renderedRecordForId(renderedSvgId);
+    if (
+      !endpoint
+      || !identityMatches(memberIdentity, endpoint.identity, { includeRendered: true })
+      || !identityMatches(sourceIdentity, endpoint.identity)
+    ) return null;
+    return endpoint.feature;
+  };
+  const featureForMember = (member) => {
+    const memberIdentity = cachedIdentity(member, 'standard');
+    const candidateKey = identityIndexKeys(memberIdentity)[0];
+    if (!candidateKey) return null;
+    const matches = (sourceByIdentity.get(candidateKey) || []).filter((record) => {
+      if (!identityMatches(memberIdentity, record.candidateIdentity)) return false;
+      if (!memberIdentity.renderedId.supplied && !record.candidateIdentity.renderedId.supplied) {
+        return true;
+      }
+      return Boolean(renderedFeatureForMember(member, record.feature));
+    });
+    return matches.length === 1 ? matches[0].feature : null;
+  };
+
+  const identityForFeature = (feature) => {
+    const standard = cachedIdentity(feature, 'standard');
+    return standard.usable ? standard : cachedIdentity(feature, 'legacy');
+  };
+  const orthogroupStatusForFeature = (feature) => (
+    featureOrthogroupStatuses.get(feature) || featureOrthogroupIdStatus(feature)
+  );
+  const fallbackFeaturesForOrthogroup = (orthogroupId, queryFeature, subjectFeature) => {
+    const id = normalizeText(orthogroupId);
+    const matching = featuresByOrthogroupId.get(id) || [];
+    if (matching.length) return matching;
+    return [queryFeature, subjectFeature].filter((feature) => {
+      if (!feature) return false;
+      const status = orthogroupStatusForFeature(feature);
+      return status.valid && (!status.supplied || status.value === id);
+    });
+  };
+
+  return {
+    fallbackFeaturesForOrthogroup,
+    featureForLookupId,
+    featureForMember,
+    groupHasFeatureIds,
+    groupMemberForFeatureId,
+    groupMemberRecords: (group) => memberIndexForGroup(group).records,
+    identityForFeature,
+    orthogroupById,
+    orthogroupForMatch,
+    renderedFeatureForMember
+  };
+};
+
+const buildFallbackOrthogroupWithContext = ({
   orthogroupId,
   queryFeature,
   subjectFeature,
-  featureLookup
+  context
 }) => {
   const id = normalizeText(orthogroupId);
   if (!id) return null;
-  const features = getFeatureLookupValues(featureLookup);
-  const matchingFeatures = features.filter((feature) => featureOrthogroupId(feature) === id);
-  const fallbackFeatures = matchingFeatures.length
-    ? matchingFeatures
-    : [queryFeature, subjectFeature].filter((feature) => {
-        if (!feature) return false;
-        const status = featureOrthogroupIdStatus(feature);
-        return status.valid && (!status.supplied || status.value === id);
-      });
+  const fallbackFeatures = context.fallbackFeaturesForOrthogroup(
+    id,
+    queryFeature,
+    subjectFeature
+  );
   if (!fallbackFeatures.length) return null;
   const members = fallbackFeatures
-    .map(featureToOrthogroupMember)
+    .map((feature) => featureToOrthogroupMember(
+      feature,
+      context.identityForFeature(feature)
+    ))
     .filter(Boolean);
   const firstFeature = fallbackFeatures[0] || {};
   const recordCoverageFallback = new Set(
@@ -537,6 +734,46 @@ const buildFallbackOrthogroup = ({
     members
   };
 };
+
+const getRenderedFeatureForMember = (member, feature, featureLookup) => (
+  createPairwisePayloadContext({ featureLookup, sourceFeatures: [feature] })
+    .renderedFeatureForMember(member, feature)
+);
+
+const getFeatureForMember = (member, featureLookup, sourceFeatures = []) => (
+  createPairwisePayloadContext({ featureLookup, sourceFeatures }).featureForMember(member)
+);
+
+const getGroupMemberForFeatureSvgId = (group, featureSvgId, featureLookup = null) => (
+  createPairwisePayloadContext({ featureLookup, orthogroups: [group] })
+    .groupMemberForFeatureId(group, featureSvgId)
+);
+
+const getOrthogroupForMatch = (orthogroups, options = {}) => (
+  createPairwisePayloadContext({
+    featureLookup: options.featureLookup,
+    orthogroups,
+    descriptor: {
+      matchKind: 'pairwise',
+      orthogroupId: options.orthogroupId,
+      groupScope: options.groupScope,
+      queryFeatureSvgId: options.queryFeatureSvgId,
+      subjectFeatureSvgId: options.subjectFeatureSvgId
+    }
+  }).orthogroupForMatch()
+);
+
+const buildFallbackOrthogroup = ({
+  orthogroupId,
+  queryFeature,
+  subjectFeature,
+  featureLookup
+}) => buildFallbackOrthogroupWithContext({
+  orthogroupId,
+  queryFeature,
+  subjectFeature,
+  context: createPairwisePayloadContext({ featureLookup })
+});
 
 const overrideValue = (overrides, key) => {
   const normalizedKey = normalizeText(key);
@@ -618,14 +855,16 @@ const buildMemberFeaturePayload = (member, feature, nucleotideSequence, aminoAci
   };
 };
 
-const memberFastaText = (member, feature, nucleotideSequence, aminoAcidSequence, sequenceKind) => {
+const buildMemberFastas = (member, feature, nucleotideSequence, aminoAcidSequence) => {
   const fastaFeature = buildMemberFeaturePayload(member, feature, nucleotideSequence, aminoAcidSequence);
   const fastas = buildFeatureSequenceFastas(fastaFeature, {
     nucleotideSequence,
     aminoAcidSequence
   });
-  const text = sequenceKindLabel(sequenceKind) === 'aa' ? fastas.aminoAcidFasta : fastas.nucleotideFasta;
-  return text ? `${text}\n` : '';
+  return {
+    ntFasta: fastas.nucleotideFasta ? `${fastas.nucleotideFasta}\n` : '',
+    aaFasta: fastas.aminoAcidFasta ? `${fastas.aminoAcidFasta}\n` : ''
+  };
 };
 
 const orthogroupSequenceFilename = (orthogroupId, displayName, sequenceKind) => {
@@ -644,14 +883,19 @@ const orthogroupMemberSequenceFilename = (member, orthogroupId, sequenceKind) =>
   return `${makeSafeFilename(`${id}_${memberId}_${sequenceKindLabel(sequenceKind)}`)}.${sequenceExtension(sequenceKind)}`;
 };
 
-const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId, sourceFeatures = []) => {
-  const members = Array.isArray(group?.members) ? group.members : [];
-  return members
-    .map((member) => {
-      const feature = getFeatureForMember(member, featureLookup, sourceFeatures);
-      const renderedFeature = getRenderedFeatureForMember(member, feature, featureLookup);
+const buildOrthogroupMemberRows = (group, context, orthogroupId) => (
+  context.groupMemberRecords(group)
+    .map(({ member }) => {
+      const feature = context.featureForMember(member);
+      const renderedFeature = context.renderedFeatureForMember(member, feature);
       const nucleotideSequence = memberSequence(member, feature, 'nt');
       const aminoAcidSequence = memberSequence(member, feature, 'aa');
+      const fastas = buildMemberFastas(
+        member,
+        feature,
+        nucleotideSequence,
+        aminoAcidSequence
+      );
       return {
         feature: renderedFeature || feature,
         canOpen: Boolean(renderedFeature),
@@ -662,19 +906,19 @@ const buildOrthogroupMemberRows = (group, featureLookup, orthogroupId, sourceFea
         confidence: firstText(member?.confidence, member?.memberConfidence, member?.member_confidence),
         assignmentReason: firstText(member?.assignmentReason, member?.assignment_reason),
         productOrNote: firstText(member?.product, member?.note),
-        ntFasta: memberFastaText(member, feature, nucleotideSequence, aminoAcidSequence, 'nt'),
-        aaFasta: memberFastaText(member, feature, nucleotideSequence, aminoAcidSequence, 'aa'),
+        ntFasta: fastas.ntFasta,
+        aaFasta: fastas.aaFasta,
         ntFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'nt'),
         aaFilename: orthogroupMemberSequenceFilename(member, orthogroupId, 'aa')
       };
     })
-    .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.ntFasta || row.aaFasta);
-};
+    .filter((row) => row.record || row.coordinates || row.proteinId || row.role || row.confidence || row.assignmentReason || row.productOrNote || row.ntFasta || row.aaFasta)
+);
 
 const resolveFeatureSectionProteinIds = ({
   feature,
   featureSvgIds,
-  featureLookup,
+  context,
   group,
   fallbackProteinIds,
   locusId,
@@ -688,12 +932,15 @@ const resolveFeatureSectionProteinIds = ({
 
   const ids = splitMetadataValues(featureSvgIds);
   ids.forEach((featureSvgId) => {
-    const candidateFeature = featureLookup?.get?.(featureSvgId) || null;
-    const member = getGroupMemberForFeatureSvgId(group, featureSvgId, featureLookup);
+    const candidateFeature = context.featureForLookupId(featureSvgId);
+    const member = context.groupMemberForFeatureId(group, featureSvgId);
     addFeatureProteinId(candidateFeature, member);
   });
   if (feature) {
-    addFeatureProteinId(feature, ids.length === 1 ? getGroupMemberForFeatureSvgId(group, ids[0], featureLookup) : null);
+    addFeatureProteinId(
+      feature,
+      ids.length === 1 ? context.groupMemberForFeatureId(group, ids[0]) : null
+    );
   }
   if (values.length === 0) {
     splitMetadataValues(locusId).forEach((value) => addUniqueDisplayText(values, value));
@@ -753,7 +1000,7 @@ const featureRowSubLabel = (primaryLabel, ...values) => {
 
 const buildFeatureListRows = ({
   featureSvgIds,
-  featureLookup,
+  context,
   group,
   recordId,
   interval,
@@ -770,8 +1017,8 @@ const buildFeatureListRows = ({
 
   return Array.from({ length: count }, (_unused, index) => {
     const svgId = featureIds[index] || '';
-    const feature = svgId ? featureLookup?.get?.(svgId) || null : null;
-    const member = svgId ? getGroupMemberForFeatureSvgId(group, svgId, featureLookup) : null;
+    const feature = svgId ? context.featureForLookupId(svgId) : null;
+    const member = svgId ? context.groupMemberForFeatureId(group, svgId) : null;
     const fallbackProteinId = firstNonInternalDisplayText(
       locusIds[index],
       displayNames[index],
@@ -873,13 +1120,13 @@ const orthogroupMemberSectionExtras = (memberRows, orthogroupId, displayName) =>
 const resolveBlockMemberLabels = ({
   group,
   featureSvgIds,
-  featureLookup
+  context
 }) => {
   if (!group) return '';
   const values = [];
   uniqueMetadataValues(featureSvgIds).forEach((featureSvgId) => {
-    const feature = featureLookup?.get?.(featureSvgId) || null;
-    const member = group ? getGroupMemberForFeatureSvgId(group, featureSvgId, featureLookup) : null;
+    const feature = context.featureForLookupId(featureSvgId);
+    const member = group ? context.groupMemberForFeatureId(group, featureSvgId) : null;
     if (!member) return;
     addUniqueDisplayText(values, resolveDisplayProteinId(feature, member, ''));
   });
@@ -913,16 +1160,14 @@ const buildOrthogroupDetailRows = ({
 
 const buildBlockOrthogroups = ({
   orthogroupIds,
-  orthogroups,
-  featureLookup,
-  sourceFeatures,
+  context,
   queryFeatureSvgId,
   subjectFeatureSvgId,
   orthogroupNameOverrides,
   orthogroupDescriptionOverrides,
   groupScope
 }) => orthogroupIds.map((orthogroupId) => {
-  const group = getOrthogroupById(orthogroups, orthogroupId, groupScope);
+  const group = context.orthogroupById(orthogroupId, groupScope);
   const normalizedGroupScope = normalizeGroupMetadataScope(groupScopeValue(group) || groupScope);
   const displayName = firstText(
     overrideValue(orthogroupNameOverrides, orthogroupId),
@@ -953,15 +1198,15 @@ const buildBlockOrthogroups = ({
     group?.relatedEdgeCount,
     Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
   );
-  const memberRows = buildOrthogroupMemberRows(group, featureLookup, orthogroupId, sourceFeatures);
+  const memberRows = buildOrthogroupMemberRows(group, context, orthogroupId);
   return {
     id: orthogroupId,
     displayName,
     description,
     memberCount,
     recordCoverage,
-    queryMember: resolveBlockMemberLabels({ group, featureSvgIds: queryFeatureSvgId, featureLookup }),
-    subjectMember: resolveBlockMemberLabels({ group, featureSvgIds: subjectFeatureSvgId, featureLookup }),
+    queryMember: resolveBlockMemberLabels({ group, featureSvgIds: queryFeatureSvgId, context }),
+    subjectMember: resolveBlockMemberLabels({ group, featureSvgIds: subjectFeatureSvgId, context }),
     detailRows: buildOrthogroupDetailRows({
       orthogroupId,
       idLabel,
@@ -987,13 +1232,13 @@ const buildFeatureRows = ({
   locusId,
   displayName,
   featureSvgIds,
-  featureLookup,
+  context,
   group
 }) => {
   const rows = [];
   const featureRows = buildFeatureListRows({
     featureSvgIds,
-    featureLookup,
+    context,
     group,
     recordId,
     interval,
@@ -1004,7 +1249,7 @@ const buildFeatureRows = ({
   const displayProteinIds = resolveFeatureSectionProteinIds({
     feature,
     featureSvgIds,
-    featureLookup,
+    context,
     group,
     fallbackProteinIds: proteinId,
     locusId,
@@ -1105,37 +1350,42 @@ export const buildMatchPopupPayload = (
   } = {}
 ) => {
   if (!element) return null;
-  const matchKind = normalizeMatchKind(attr(element, 'data-match-kind'), element);
-  const orthogroupId = attr(element, 'data-orthogroup-id');
-  const orthogroupIds = uniqueMetadataValues(orthogroupId);
-  const collinearityBlockId = attr(element, 'data-collinearity-block-id');
-  const groupScope = firstText(attr(element, 'data-collinear-group-scope'), attr(element, 'data-group-scope'));
-  const normalizedGroupScope = normalizeGroupMetadataScope(groupScope);
-  const queryFeatureSvgId = attr(element, 'data-query-feature-svg-id');
-  const subjectFeatureSvgId = attr(element, 'data-subject-feature-svg-id');
-  const matchFeatureLookup = verifiedMatchFeatureLookup(element, featureLookup);
-  const queryFeature = matchFeatureLookup.get?.(queryFeatureSvgId) || null;
-  const subjectFeature = matchFeatureLookup.get?.(subjectFeatureSvgId) || null;
+  const descriptor = readPairwiseMatchDescriptor(element);
+  const {
+    matchKind,
+    matchId,
+    orthogroupId,
+    orthogroupIds,
+    collinearityBlockId,
+    groupScope,
+    normalizedGroupScope,
+    queryFeatureSvgId,
+    subjectFeatureSvgId,
+    queryInterval: qInterval,
+    subjectInterval: sInterval,
+    title,
+    subtitle
+  } = descriptor;
+  const context = createPairwisePayloadContext({
+    featureLookup,
+    sourceFeatures,
+    orthogroups,
+    descriptor
+  });
+  const queryFeature = context.featureForLookupId(queryFeatureSvgId);
+  const subjectFeature = context.featureForLookupId(subjectFeatureSvgId);
   const group = matchKind === 'collinear'
     ? null
-    : getOrthogroupForMatch(orthogroups, {
-      orthogroupId,
-      queryFeatureSvgId,
-      subjectFeatureSvgId,
-      featureLookup: matchFeatureLookup,
-      groupScope
-    }) || buildFallbackOrthogroup({
+    : context.orthogroupForMatch() || buildFallbackOrthogroupWithContext({
       orthogroupId,
       queryFeature,
       subjectFeature,
-      featureLookup: matchFeatureLookup
+      context
     });
   const blockOrthogroups = matchKind === 'collinear'
     ? buildBlockOrthogroups({
       orthogroupIds,
-      orthogroups,
-      featureLookup: matchFeatureLookup,
-      sourceFeatures,
+      context,
       queryFeatureSvgId,
       subjectFeatureSvgId,
       orthogroupNameOverrides,
@@ -1155,26 +1405,13 @@ export const buildMatchPopupPayload = (
     overrideValue(orthogroupDescriptionOverrides, orthogroupId),
     group?.description
   );
-  const qInterval = intervalText(attr(element, 'data-qstart'), attr(element, 'data-qend'));
-  const sInterval = intervalText(attr(element, 'data-sstart'), attr(element, 'data-send'));
-  const title = MATCH_KIND_TITLES[matchKind] || MATCH_KIND_TITLES.pairwise;
-  const matchId = firstText(
-    attr(element, 'data-gbdraw-match-id'),
-    attr(element, 'data-gbdraw-pairwise-match-id'),
-    collinearityBlockId,
-    orthogroupId
-  );
-  const subtitle = firstText(collinearityBlockId, orthogroupId, matchId);
 
   const summaryRows = [];
-  addRow(summaryRows, 'Query record', attr(element, 'data-query-record-id'));
-  addRow(summaryRows, 'Subject record', attr(element, 'data-subject-record-id'));
+  addRow(summaryRows, 'Query record', descriptor.queryRecordId);
+  addRow(summaryRows, 'Subject record', descriptor.subjectRecordId);
   addRow(summaryRows, 'Query interval', qInterval);
   addRow(summaryRows, 'Subject interval', sInterval);
-  addRow(summaryRows, 'Orientation', firstText(
-    attr(element, 'data-collinearity-orientation'),
-    attr(element, 'data-orientation')
-  ));
+  addRow(summaryRows, 'Orientation', descriptor.orientation);
   if (matchKind === 'homology') {
     addRow(summaryRows, 'Ring label', attr(element, 'data-track-label'));
     const rawSourceIndex = integerAttr(element, 'data-source-index');
@@ -1184,7 +1421,7 @@ export const buildMatchPopupPayload = (
   }
 
   const alignmentRows = [];
-  addRow(alignmentRows, 'Identity', attr(element, 'data-identity'));
+  addRow(alignmentRows, 'Identity', descriptor.identity);
   addRow(alignmentRows, 'Alignment length', attr(element, 'data-alignment-length'));
   addRow(alignmentRows, 'E-value', attr(element, 'data-evalue'));
   addRow(alignmentRows, 'Bit score', attr(element, 'data-bitscore'));
@@ -1209,7 +1446,7 @@ export const buildMatchPopupPayload = (
   addRow(blockRows, 'Orientation', attr(element, 'data-collinearity-orientation'));
   addRow(blockRows, 'Color mode', attr(element, 'data-collinearity-color-mode'));
   if (matchKind === 'collinear') {
-    addRow(blockRows, 'Average identity', attr(element, 'data-identity'));
+    addRow(blockRows, 'Average identity', descriptor.identity);
     addRow(blockRows, 'Aligned length', attr(element, 'data-alignment-length'));
   }
   addRow(blockRows, 'Block score', attr(element, 'data-collinearity-block-score'));
@@ -1236,12 +1473,7 @@ export const buildMatchPopupPayload = (
       Array.isArray(group?.relatedEdges) ? String(group.relatedEdges.length) : ''
     ));
   }
-  const orthogroupMemberRows = buildOrthogroupMemberRows(
-    group,
-    matchFeatureLookup,
-    orthogroupId,
-    sourceFeatures
-  );
+  const orthogroupMemberRows = buildOrthogroupMemberRows(group, context, orthogroupId);
 
   if (matchKind === 'orthogroup') {
     const summarySection = section(
@@ -1258,7 +1490,7 @@ export const buildMatchPopupPayload = (
       collinearityBlockId,
       queryFeatureSvgId,
       subjectFeatureSvgId,
-      fill: firstText(element.getAttribute('fill'), element.style?.fill, '#94a3b8'),
+      fill: descriptor.fill,
       sections: summarySection.rows.length > 0 || summarySection.memberRows.length > 0
         ? [summarySection]
         : []
@@ -1298,25 +1530,25 @@ export const buildMatchPopupPayload = (
   if (matchKind !== 'homology') sections.push(buildFeatureRows({
     title: 'Query',
     feature: queryFeature,
-    recordId: attr(element, 'data-query-record-id'),
+    recordId: descriptor.queryRecordId,
     interval: qInterval,
     proteinId: attr(element, 'data-query-protein-id'),
     locusId: attr(element, 'data-query-locus-id'),
     displayName: attr(element, 'data-query-display-name'),
     featureSvgIds: queryFeatureSvgId,
-    featureLookup: matchFeatureLookup,
+    context,
     group
   }));
   if (matchKind !== 'homology') sections.push(buildFeatureRows({
     title: 'Subject',
     feature: subjectFeature,
-    recordId: attr(element, 'data-subject-record-id'),
+    recordId: descriptor.subjectRecordId,
     interval: sInterval,
     proteinId: attr(element, 'data-subject-protein-id'),
     locusId: attr(element, 'data-subject-locus-id'),
     displayName: attr(element, 'data-subject-display-name'),
     featureSvgIds: subjectFeatureSvgId,
-    featureLookup: matchFeatureLookup,
+    context,
     group
   }));
 
@@ -1339,7 +1571,7 @@ export const buildMatchPopupPayload = (
     subjectFeatureSvgId,
     blockOrthogroupCount: blockOrthogroups.length || (matchKind === 'collinear' ? orthogroupIds.length : 0),
     blockOrthogroups,
-    fill: firstText(element.getAttribute('fill'), element.style?.fill, '#94a3b8'),
+    fill: descriptor.fill,
     sequenceTitle: matchKind === 'collinear' ? 'Collinear block spans' : 'Matched sequences',
     sequenceNote: matchKind === 'collinear'
       ? 'Block envelopes may include intergenic sequence and genes that are not anchors.'
@@ -1356,42 +1588,121 @@ export const buildMatchPopupPayload = (
 export const buildPairwiseMatchPayload = (element, options = {}) =>
   buildMatchPopupPayload(element, options);
 
-export const buildPairwiseMatchHoverRows = (payload) => {
+const formatPairwiseMatchHoverRows = ({
+  matchKind,
+  identity,
+  queryInterval,
+  subjectInterval,
+  orthogroupId,
+  displayName,
+  memberCount,
+  groupScope,
+  blockOrthogroupCount,
+  collinearityBlockId
+} = {}) => {
   const rows = [];
   const addFirst = (label, value) => addRow(rows, label, value);
-  if (!payload) return rows;
-  const summary = payload.sections.find((entry) => entry.title === 'Summary');
-  const findValue = (sectionEntry, label) =>
-    sectionEntry?.rows.find((row) => row.label === label)?.value || '';
-  if (payload.matchKind === 'orthogroup') {
-    addFirst('Kind', payload.matchKind);
-    addFirst(
-      'Similarity group',
-      findValue(summary, 'Similarity group ID') || payload.orthogroupId
-    );
-    addFirst('Display name', findValue(summary, 'Display name'));
-    addFirst('Members', findValue(summary, 'Members'));
+  if (!matchKind) return rows;
+  if (matchKind === 'orthogroup') {
+    addFirst('Kind', matchKind);
+    addFirst('Similarity group', orthogroupId);
+    addFirst('Display name', displayName);
+    addFirst('Members', memberCount);
     return rows.slice(0, 6);
   }
+  addFirst('Kind', matchKind);
+  addFirst('Identity', identity);
+  addFirst('Query', queryInterval);
+  addFirst('Subject', subjectInterval);
+  if (matchKind === 'collinear') {
+    addFirst(
+      groupScope === 'adjacent_local'
+        ? 'Collinear groups'
+        : 'Similarity groups',
+      String(blockOrthogroupCount ?? '')
+    );
+  } else {
+    addFirst('Similarity group', orthogroupId);
+  }
+  addFirst('Block', collinearityBlockId);
+  return rows.slice(0, 6);
+};
+
+export const buildPairwiseMatchHoverSummary = (
+  element,
+  {
+    orthogroups = [],
+    orthogroupNameOverrides = null
+  } = {}
+) => {
+  if (!element) return null;
+  const descriptor = readPairwiseMatchDescriptor(element);
+  const groupValues = descriptor.matchKind === 'orthogroup'
+    ? (typeof orthogroups === 'function' ? orthogroups() : orthogroups)
+    : [];
+  const group = descriptor.matchKind === 'orthogroup'
+    ? getOrthogroupById(
+      groupValues,
+      descriptor.orthogroupId,
+      descriptor.groupScope
+    )
+    : null;
+  const displayName = descriptor.matchKind === 'orthogroup'
+    ? firstText(
+      overrideValue(orthogroupNameOverrides, descriptor.orthogroupId),
+      group?.displayName,
+      group?.display_name,
+      group?.name
+    )
+    : '';
+  const memberCount = descriptor.matchKind === 'orthogroup'
+    ? firstText(group?.member_count, group?.memberCount)
+    : '';
+  return {
+    id: descriptor.matchId,
+    title: descriptor.matchKind === 'orthogroup'
+      ? orthogroupTitle(descriptor.orthogroupId, displayName)
+      : descriptor.title,
+    subtitle: descriptor.matchKind === 'orthogroup' ? '' : descriptor.subtitle,
+    fill: descriptor.fill,
+    rows: formatPairwiseMatchHoverRows({
+      matchKind: descriptor.matchKind,
+      identity: descriptor.identity,
+      queryInterval: descriptor.queryInterval,
+      subjectInterval: descriptor.subjectInterval,
+      orthogroupId: descriptor.orthogroupId,
+      displayName,
+      memberCount,
+      groupScope: descriptor.normalizedGroupScope,
+      blockOrthogroupCount: descriptor.orthogroupIds.length,
+      collinearityBlockId: descriptor.collinearityBlockId
+    })
+  };
+};
+
+export const buildPairwiseMatchHoverRows = (payload) => {
+  if (!payload) return [];
+  const summary = payload.sections.find((entry) => entry.title === 'Summary');
   const alignment = payload.sections.find((entry) => entry.title === 'Alignment');
   const block = payload.sections.find((entry) => entry.title === 'Collinearity');
   const orthogroup = payload.sections.find(
     (entry) => entry.title === 'Similarity group'
   );
-  addFirst('Kind', payload.matchKind);
-  addFirst('Identity', findValue(alignment, 'Identity') || findValue(block, 'Average identity'));
-  addFirst('Query', findValue(summary, 'Query interval'));
-  addFirst('Subject', findValue(summary, 'Subject interval'));
-  if (payload.matchKind === 'collinear') {
-    addFirst(
-      payload.groupScope === 'adjacent_local'
-        ? 'Collinear groups'
-        : 'Similarity groups',
-      String(payload.blockOrthogroupCount ?? '')
-    );
-  } else {
-    addFirst('Similarity group', findValue(orthogroup, 'Similarity group ID'));
-  }
-  addFirst('Block', findValue(block, 'Block ID'));
-  return rows.slice(0, 6);
+  const findValue = (sectionEntry, label) => (
+    sectionEntry?.rows.find((row) => row.label === label)?.value || ''
+  );
+  return formatPairwiseMatchHoverRows({
+    matchKind: payload.matchKind,
+    identity: findValue(alignment, 'Identity') || findValue(block, 'Average identity'),
+    queryInterval: findValue(summary, 'Query interval'),
+    subjectInterval: findValue(summary, 'Subject interval'),
+    orthogroupId: payload.matchKind === 'orthogroup'
+      ? findValue(summary, 'Similarity group ID') || payload.orthogroupId
+      : findValue(orthogroup, 'Similarity group ID'),
+    displayName: findValue(summary, 'Display name'),
+    memberCount: findValue(summary, 'Members'),
+    groupScope: payload.groupScope,
+    blockOrthogroupCount: payload.blockOrthogroupCount,
+    collinearityBlockId: findValue(block, 'Block ID')
+  });
 };

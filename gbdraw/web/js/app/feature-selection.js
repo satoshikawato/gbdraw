@@ -287,14 +287,18 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     syncFeatureSelectionClasses();
   };
 
-  const clearFeatureSelection = ({ keepAnchorId = '', clearStatus = false } = {}) => {
+  const clearFeatureSelection = ({
+    keepAnchorId = '',
+    clearStatus = false,
+    syncDom = true
+  } = {}) => {
     selectedFeatureIds.value = new Set();
     selectedFeatureAnchorId.value = normalizeFeatureSelectionId(keepAnchorId);
     featureSelectionDrag.active = false;
     featureSelectionDrag.committed = false;
     pendingDrag = null;
     if (clearStatus) setStatus('', { timeoutMs: 0 });
-    syncFeatureSelectionClasses();
+    if (syncDom) syncFeatureSelectionClasses();
   };
 
   const markPlainFeatureClick = (featureId) => {

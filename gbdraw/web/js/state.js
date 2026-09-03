@@ -28,6 +28,7 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
+const shallowRef = window.Vue.shallowRef || ref;
 
 // System State
 const processing = ref(false);
@@ -414,11 +415,21 @@ const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityManualRules = reactive([]);
 const featureVisibilityOverrides = reactive({}); // {svg_id: 'on' | 'off' | 'exclude_matching'}
-const featureVisibilitySelectorCache = reactive({});
+const featureVisibilitySelectorCacheOwner = shallowRef({});
+const captureFeatureVisibilitySelectorCacheOwner = () => (
+  featureVisibilitySelectorCacheOwner.value
+);
+const replaceFeatureVisibilitySelectorCacheOwner = (nextOwner = {}) => {
+  featureVisibilitySelectorCacheOwner.value = (
+    nextOwner && typeof nextOwner === 'object' && !Array.isArray(nextOwner)
+      ? nextOwner
+      : {}
+  );
+};
 const featureVisibilityRules = computed(() => deriveFeatureVisibilityRulesForBoundary(
   featureVisibilityManualRules,
   featureVisibilityOverrides,
-  featureVisibilitySelectorCache
+  featureVisibilitySelectorCacheOwner.value
 ));
 const featureStrokeOverrides = reactive({}); // {featureKey: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth }}
 const labelSearch = ref('');
@@ -891,7 +902,11 @@ export const state = {
   featureVisibilityManualRules,
   featureVisibilityRules,
   featureVisibilityOverrides,
-  featureVisibilitySelectorCache,
+  get featureVisibilitySelectorCache() {
+    return featureVisibilitySelectorCacheOwner.value;
+  },
+  captureFeatureVisibilitySelectorCacheOwner,
+  replaceFeatureVisibilitySelectorCacheOwner,
   featureStrokeOverrides,
   labelSearch,
   editableLabels,

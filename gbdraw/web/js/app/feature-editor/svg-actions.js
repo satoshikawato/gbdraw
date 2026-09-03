@@ -2,13 +2,14 @@ import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
-  buildPairwiseMatchHoverRows,
+  buildPairwiseMatchHoverSummary,
   buildPairwiseMatchPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   FEATURE_ID_ATTRIBUTE,
   FEATURE_SELECTOR,
@@ -40,12 +41,12 @@ export const createFeatureSvgActions = ({
   getEffectiveLegendCaption,
   onFeaturePopupOpened = null,
   featureSelection = null,
-  previewRuntime = null
+  previewRuntime = null,
+  previewTransformInteraction = null
 }) => {
   const {
     results,
     selectedResultIndex,
-    isPanning,
     orthogroups,
     collinearGroups,
     orthogroupNameOverrides,
@@ -67,9 +68,10 @@ export const createFeatureSvgActions = ({
     skipCaptureBaseConfig,
     adv
   } = state;
-  const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
-  const formatDuration = (ms) => `${ms.toFixed(1)}ms`;
   let delegatedFeatureHandlers = null;
+  const isPreviewTransformInteractionActive = () => Boolean(
+    previewTransformInteraction?.isActive?.()
+  );
   const hoverSummaryState = {
     element: null,
     timer: null,
@@ -424,7 +426,7 @@ export const createFeatureSvgActions = ({
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;
     if (clickedPairwiseMatch?.value) return false;
-    if (isPanning?.value) return false;
+    if (isPreviewTransformInteractionActive()) return false;
     if (window.matchMedia && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
       return false;
     }
@@ -529,49 +531,49 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.timer = window.setTimeout(show, 180);
   };
 
-  const renderMatchHoverSummary = (payload, eventLike) => {
-    if (!payload || !hoverSummaryIsAllowed()) {
+  const renderMatchHoverSummary = (summary, eventLike) => {
+    if (!summary || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
     const element = ensureHoverSummaryElement();
-    const color = resolveColorToHex(payload.fill || '#94a3b8') || '#94a3b8';
+    const color = resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8';
 
     element.replaceChildren();
     const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
     const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
     swatch.style.backgroundColor = color;
     const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', payload.title));
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', payload.subtitle || payload.id || ''));
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', summary.title));
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', summary.subtitle || summary.id || ''));
     title.appendChild(swatch);
     title.appendChild(titleTextWrap);
     element.appendChild(title);
 
-    buildPairwiseMatchHoverRows(payload).forEach((row) => {
+    summary.rows.forEach((row) => {
       addHoverSummaryRow(element, row.label, row.value, { clamp: row.label === 'Query' || row.label === 'Subject' });
     });
 
     element.hidden = false;
     hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = String(payload.id || '').trim();
+    hoverSummaryState.activeSvgId = String(summary.id || '').trim();
     scheduleHoverSummaryPosition(eventLike);
     positionHoverSummary(eventLike);
   };
 
-  const scheduleMatchHoverSummary = (payload, eventLike) => {
+  const scheduleMatchHoverSummary = (summary, eventLike) => {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
       hoverSummaryState.timer = null;
     }
-    if (!payload || !hoverSummaryIsAllowed()) {
+    if (!summary || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
     scheduleHoverSummaryPosition(eventLike);
     const show = () => {
       hoverSummaryState.timer = null;
-      renderMatchHoverSummary(payload, eventLike);
+      renderMatchHoverSummary(summary, eventLike);
     };
     if (hoverSummaryState.visible) {
       show();
@@ -634,7 +636,9 @@ export const createFeatureSvgActions = ({
         skipCaptureBaseConfig.value = true;
         const idx = selectedResultIndex.value;
         if (idx >= 0 && results.value.length > idx) {
-          results.value[idx] = { ...results.value[idx], content: newContent };
+          const nextResults = [...results.value];
+          nextResults[idx] = { ...results.value[idx], content: newContent };
+          results.value = nextResults;
         }
         console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
       } else {
@@ -657,6 +661,14 @@ export const createFeatureSvgActions = ({
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
+  });
+
+  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, {
+    orthogroups: () => [
+      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
+      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
+    ],
+    orthogroupNameOverrides
   });
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
@@ -712,7 +724,9 @@ export const createFeatureSvgActions = ({
       skipCaptureBaseConfig.value = true;
       const idx = selectedResultIndex.value;
       if (idx >= 0 && results.value.length > idx) {
-        results.value[idx] = { ...results.value[idx], content: newContent };
+        const nextResults = [...results.value];
+        nextResults[idx] = { ...results.value[idx], content: newContent };
+        results.value = nextResults;
       }
       return true;
     } catch (e) {
@@ -725,10 +739,13 @@ export const createFeatureSvgActions = ({
     applyVisibilityPreviewChanges([{ featureId: svgId, mode: modeRaw }])
   );
 
-  const attachSvgFeatureHandlers = () => {
-    if (!svgContainer.value) return;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
+  const attachSvgFeatureHandlers = ({
+    root = null,
+    phase = 'preview-bind',
+    rootGeneration = 0
+  } = {}) => {
+    const svg = root || svgContainer.value?.querySelector?.('svg') || null;
+    if (!svg) return false;
 
     if (delegatedFeatureHandlers && delegatedFeatureHandlers.svg !== svg) {
       cleanupDelegatedFeatureHandlers();
@@ -749,67 +766,77 @@ export const createFeatureSvgActions = ({
     };
 
     if (delegatedFeatureHandlers?.svg === svg) {
-      const featureLookup = buildFeatureLookup();
-      delegatedFeatureHandlers.featureLookup = featureLookup;
-      delegatedFeatureHandlers.featureIdsByOrthogroupId = buildFeatureIdsByOrthogroupId(featureLookup);
-      featureSelection?.syncFeatureSelectionClasses?.(svg);
-      return;
+      return false;
     }
 
-    const queryStartedAt = getNow();
-    const pathsByIdMap = getFeatureElementIndex(svg, { markCursor: true });
-    pathsByIdMap.forEach((elements) => {
-      elements.forEach((element) => {
-        if (element?.style) element.style.cursor = 'pointer';
-      });
-    });
-    const featurePathCount = Array.from(pathsByIdMap.values()).reduce((sum, elements) => sum + elements.length, 0);
-    const queryDuration = getNow() - queryStartedAt;
+    const handlerState = {
+      svg,
+      pathsByIdMap: null,
+      featureLookup: null,
+      featureIdsByOrthogroupId: null,
+      comparisonElementsByOrthogroupId: null,
+      comparisonElementsByCollinearityBlockId: null,
+      pairwiseAffordancesPrepared: false,
+      activeHoverSvgId: null,
+      activeHoverKey: '',
+      activeMatchHoverElement: null,
+      activeMatchHoverKey: '',
+      activeHoverElements: new Set(),
+      transformPointer: null,
+      reconcileHoverAfterTransform: false,
+      hoverReconcileFrame: null,
+      beginPreviewTransformInteraction: null,
+      endPreviewTransformInteraction: null,
+      cleanup: null
+    };
 
-    const indexStartedAt = getNow();
-    const featureLookup = buildFeatureLookup();
-    const featureIdsByOrthogroupId = buildFeatureIdsByOrthogroupId(featureLookup);
-    const comparisonElementsByOrthogroupId = new Map();
-    svg.querySelectorAll('[data-orthogroup-id]').forEach((element) => {
-      if (element.matches?.(FEATURE_SELECTOR)) return;
-      getOrthogroupIds(element.getAttribute('data-orthogroup-id')).forEach((orthogroupId) => {
-        if (!comparisonElementsByOrthogroupId.has(orthogroupId)) {
-          comparisonElementsByOrthogroupId.set(orthogroupId, []);
-        }
-        comparisonElementsByOrthogroupId.get(orthogroupId).push(element);
-      });
-    });
-    const pairwiseMatchElements = Array.from(svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR));
-    const comparisonElementsByCollinearityBlockId = new Map();
-    pairwiseMatchElements.forEach((element, index) => {
-      if (element?.style) element.style.cursor = 'pointer';
-      element.setAttribute('role', 'button');
-      element.setAttribute('tabindex', '0');
-      element.setAttribute('aria-label', `Pairwise match ${index + 1}`);
-      const blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
-      if (!blockId) return;
-      if (!comparisonElementsByCollinearityBlockId.has(blockId)) {
-        comparisonElementsByCollinearityBlockId.set(blockId, []);
+    const ensureFeatureLookup = () => {
+      if (!handlerState.featureLookup) handlerState.featureLookup = buildFeatureLookup();
+      return handlerState.featureLookup;
+    };
+
+    const ensureFeaturePaths = () => {
+      if (!handlerState.pathsByIdMap) {
+        recordStructuralMetric('featureDomFullScanCount', 1, { phase: 'interaction' });
+        handlerState.pathsByIdMap = getFeatureElementIndex(svg);
       }
-      comparisonElementsByCollinearityBlockId.get(blockId).push(element);
-    });
-    const indexDuration = getNow() - indexStartedAt;
+      return handlerState.pathsByIdMap;
+    };
 
-    if (!delegatedFeatureHandlers) {
-      const handlerState = {
-        svg,
-        pathsByIdMap,
-        featureLookup,
-        featureIdsByOrthogroupId,
-        comparisonElementsByOrthogroupId,
-        pairwiseMatchElements,
-        comparisonElementsByCollinearityBlockId,
-        activeHoverSvgId: null,
-        activeHoverKey: '',
-        activeMatchHoverElement: null,
-        activeMatchHoverKey: '',
-        cleanup: null
-      };
+    const ensureFeatureOrthogroupIndex = () => {
+      if (!handlerState.featureIdsByOrthogroupId) {
+        handlerState.featureIdsByOrthogroupId = buildFeatureIdsByOrthogroupId(
+          ensureFeatureLookup()
+        );
+      }
+      return handlerState.featureIdsByOrthogroupId;
+    };
+
+    const ensureComparisonIndexes = () => {
+      if (
+        handlerState.comparisonElementsByOrthogroupId
+        && handlerState.comparisonElementsByCollinearityBlockId
+      ) {
+        return;
+      }
+      const byOrthogroup = new Map();
+      const byBlock = new Map();
+      svg.querySelectorAll('[data-orthogroup-id]').forEach((element) => {
+        if (element.matches?.(FEATURE_SELECTOR)) return;
+        getOrthogroupIds(element.getAttribute('data-orthogroup-id')).forEach((orthogroupId) => {
+          if (!byOrthogroup.has(orthogroupId)) byOrthogroup.set(orthogroupId, []);
+          byOrthogroup.get(orthogroupId).push(element);
+        });
+      });
+      svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
+        const blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
+        if (!blockId) return;
+        if (!byBlock.has(blockId)) byBlock.set(blockId, []);
+        byBlock.get(blockId).push(element);
+      });
+      handlerState.comparisonElementsByOrthogroupId = byOrthogroup;
+      handlerState.comparisonElementsByCollinearityBlockId = byBlock;
+    };
 
       const setHoverStyle = (element, highlight) => {
         if (!element?.style) return;
@@ -820,6 +847,7 @@ export const createFeatureSvgActions = ({
           }
           element.style.opacity = '0.7';
           element.style.filter = 'brightness(1.2)';
+          handlerState.activeHoverElements.add(element);
           return;
         }
         if (element.hasAttribute('data-gbdraw-hover-opacity')) {
@@ -828,47 +856,50 @@ export const createFeatureSvgActions = ({
           element.removeAttribute('data-gbdraw-hover-opacity');
           element.removeAttribute('data-gbdraw-hover-filter');
         }
+        handlerState.activeHoverElements.delete(element);
       };
 
-      const setFeatureHover = (svgId, highlight) => {
-        (handlerState.pathsByIdMap.get(svgId) || []).forEach((element) => {
-          setHoverStyle(element, highlight);
+      const setFeatureHover = (svgId) => {
+        (ensureFeaturePaths().get(svgId) || []).forEach((element) => {
+          setHoverStyle(element, true);
         });
       };
 
       const getFeatureHoverKey = (svgId) => {
-        const feat = handlerState.featureLookup.get(svgId);
+        const feat = ensureFeatureLookup().get(svgId);
         const orthogroupId = String(feat?.orthogroupId || '').trim();
         return orthogroupId ? `orthogroup:${orthogroupId}` : `feature:${svgId}`;
       };
 
-      const setOrthogroupHover = (orthogroupId, highlight) => {
+      const setOrthogroupHover = (orthogroupId) => {
         const id = String(orthogroupId || '').trim();
         if (!id) return;
-        (handlerState.featureIdsByOrthogroupId.get(id) || new Set()).forEach((featureId) => {
-          setFeatureHover(featureId, highlight);
+        ensureComparisonIndexes();
+        (ensureFeatureOrthogroupIndex().get(id) || new Set()).forEach((featureId) => {
+          setFeatureHover(featureId);
         });
         (handlerState.comparisonElementsByOrthogroupId.get(id) || []).forEach((element) => {
-          setHoverStyle(element, highlight);
+          setHoverStyle(element, true);
         });
       };
 
-      const setCollinearityBlockHover = (blockId, highlight) => {
+      const setCollinearityBlockHover = (blockId) => {
         const id = String(blockId || '').trim();
         if (!id) return;
+        ensureComparisonIndexes();
         (handlerState.comparisonElementsByCollinearityBlockId.get(id) || []).forEach((element) => {
-          setHoverStyle(element, highlight);
+          setHoverStyle(element, true);
         });
       };
 
-      const setHoverHighlight = (svgId, highlight) => {
-        const feat = handlerState.featureLookup.get(svgId);
+      const setHoverHighlight = (svgId) => {
+        const feat = ensureFeatureLookup().get(svgId);
         const orthogroupId = String(feat?.orthogroupId || '').trim();
         if (orthogroupId) {
-          setOrthogroupHover(orthogroupId, highlight);
+          setOrthogroupHover(orthogroupId);
           return;
         }
-        setFeatureHover(svgId, highlight);
+        setFeatureHover(svgId);
       };
 
       const matchAttr = (element, name) => String(element?.getAttribute?.(name) || '').trim();
@@ -881,72 +912,150 @@ export const createFeatureSvgActions = ({
         return `match:${matchAttr(matchElement, 'data-gbdraw-pairwise-match-id') || matchAttr(matchElement, 'd')}`;
       };
 
-      const setMatchHover = (matchElement, highlight) => {
+      const setMatchHover = (matchElement) => {
         if (!matchElement) return;
         const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
         const orthogroupId = matchAttr(matchElement, 'data-orthogroup-id');
-        setHoverStyle(matchElement, highlight);
+        setHoverStyle(matchElement, true);
         if (blockId) {
-          setCollinearityBlockHover(blockId, highlight);
+          setCollinearityBlockHover(blockId);
           return;
         }
         if (orthogroupId) {
-          setOrthogroupHover(orthogroupId, highlight);
+          setOrthogroupHover(orthogroupId);
         }
+      };
+
+      const clearTrackedHoverStyles = () => {
+        [...handlerState.activeHoverElements].forEach((element) => {
+          setHoverStyle(element, false);
+        });
       };
 
       const clearActiveFeatureHover = () => {
         if (!handlerState.activeHoverSvgId) return;
-        setHoverHighlight(handlerState.activeHoverSvgId, false);
+        clearTrackedHoverStyles();
         handlerState.activeHoverSvgId = null;
         handlerState.activeHoverKey = '';
       };
 
       const clearActiveMatchHover = () => {
         if (!handlerState.activeMatchHoverElement) return;
-        setMatchHover(handlerState.activeMatchHoverElement, false);
+        clearTrackedHoverStyles();
         handlerState.activeMatchHoverElement = null;
         handlerState.activeMatchHoverKey = '';
       };
 
+      const rememberTransformPointer = (eventLike) => {
+        if (!Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) return;
+        handlerState.transformPointer = {
+          clientX: eventLike.clientX,
+          clientY: eventLike.clientY
+        };
+        handlerState.reconcileHoverAfterTransform = true;
+      };
+
+      const activateFeatureHover = (featureEl, eventLike) => {
+        clearActiveMatchHover();
+        const svgId = getFeatureIdentity(featureEl);
+        if (!svgId) return false;
+        const hoverKey = getFeatureHoverKey(svgId);
+        if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
+          clearActiveFeatureHover();
+        }
+        if (handlerState.activeHoverKey !== hoverKey) {
+          setHoverHighlight(svgId);
+        }
+        handlerState.activeHoverSvgId = svgId;
+        handlerState.activeHoverKey = hoverKey;
+        scheduleHoverSummary(ensureFeatureLookup().get(svgId), featureEl, eventLike);
+        return true;
+      };
+
+      const activateMatchHover = (matchEl, eventLike) => {
+        clearActiveFeatureHover();
+        const matchKey = getMatchHoverKey(matchEl);
+        if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
+          clearActiveMatchHover();
+        }
+        if (handlerState.activeMatchHoverKey !== matchKey) {
+          setMatchHover(matchEl);
+        }
+        handlerState.activeMatchHoverElement = matchEl;
+        handlerState.activeMatchHoverKey = matchKey;
+        scheduleMatchHoverSummary(buildMatchHoverSummary(matchEl), eventLike);
+        return true;
+      };
+
+      handlerState.beginPreviewTransformInteraction = (eventLike, kind = '') => {
+        if (handlerState.hoverReconcileFrame !== null) {
+          window.cancelAnimationFrame(handlerState.hoverReconcileFrame);
+          handlerState.hoverReconcileFrame = null;
+        }
+        handlerState.reconcileHoverAfterTransform = Boolean(
+          handlerState.activeHoverSvgId || handlerState.activeMatchHoverElement
+        );
+        rememberTransformPointer(eventLike);
+        clearActiveFeatureHover();
+        clearActiveMatchHover();
+        hideHoverSummary();
+        recordStructuralMetric('previewTransformHoverCleanupCount', 1, { kind });
+      };
+
+      handlerState.endPreviewTransformInteraction = ({ reconcile = true } = {}) => {
+        if (!reconcile || !handlerState.reconcileHoverAfterTransform || !handlerState.transformPointer) {
+          handlerState.reconcileHoverAfterTransform = false;
+          handlerState.transformPointer = null;
+          return;
+        }
+        if (handlerState.hoverReconcileFrame !== null) {
+          window.cancelAnimationFrame(handlerState.hoverReconcileFrame);
+        }
+        handlerState.hoverReconcileFrame = window.requestAnimationFrame(() => {
+          handlerState.hoverReconcileFrame = null;
+          if (isPreviewTransformInteractionActive() || delegatedFeatureHandlers !== handlerState) return;
+          const pointer = handlerState.transformPointer;
+          handlerState.transformPointer = null;
+          handlerState.reconcileHoverAfterTransform = false;
+          recordStructuralMetric('previewTransformHoverReconcileCount', 1);
+          const target = getTopmostSvgTarget(
+            pointer,
+            svg,
+            `${PAIRWISE_MATCH_SELECTOR}, ${FEATURE_SELECTOR}`
+          );
+          const matchEl = getPairwiseMatchTarget(target, svg);
+          if (matchEl) {
+            activateMatchHover(matchEl, pointer);
+            return;
+          }
+          const featureEl = getFeatureTarget(target, svg);
+          if (featureEl) activateFeatureHover(featureEl, pointer);
+        });
+      };
+
       const handleMouseOver = (e) => {
+        if (isPreviewTransformInteractionActive()) {
+          rememberTransformPointer(e);
+          return;
+        }
         const featureEl = getFeatureTarget(e.target, svg);
         if (featureEl) {
-          clearActiveMatchHover();
-          const svgId = getFeatureIdentity(featureEl);
-          if (!svgId) return;
-          const hoverKey = getFeatureHoverKey(svgId);
-          if (handlerState.activeHoverKey !== hoverKey && handlerState.activeHoverSvgId) {
-            setHoverHighlight(handlerState.activeHoverSvgId, false);
-          }
-          if (handlerState.activeHoverKey !== hoverKey) {
-            setHoverHighlight(svgId, true);
-          }
-          handlerState.activeHoverSvgId = svgId;
-          handlerState.activeHoverKey = hoverKey;
-          scheduleHoverSummary(handlerState.featureLookup.get(svgId), featureEl, e);
+          activateFeatureHover(featureEl, e);
           return;
         }
         const matchEl = getPairwiseMatchTarget(e.target, svg);
         if (!matchEl) return;
-        clearActiveFeatureHover();
-        const matchKey = getMatchHoverKey(matchEl);
-        if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
-          setMatchHover(handlerState.activeMatchHoverElement, false);
-        }
-        if (handlerState.activeMatchHoverKey !== matchKey) {
-          setMatchHover(matchEl, true);
-        }
-        handlerState.activeMatchHoverElement = matchEl;
-        handlerState.activeMatchHoverKey = matchKey;
-        scheduleMatchHoverSummary(buildMatchPayload(matchEl, handlerState.featureLookup), e);
+        activateMatchHover(matchEl, e);
       };
 
       const handleMouseMove = (e) => {
+        if (isPreviewTransformInteractionActive()) {
+          rememberTransformPointer(e);
+          return;
+        }
         if (
           clickedFeature.value ||
           clickedPairwiseMatch?.value ||
-          isPanning?.value ||
           featureSelectionDrag?.active
         ) {
           hideHoverSummary();
@@ -958,6 +1067,10 @@ export const createFeatureSvgActions = ({
       };
 
       const handleMouseOut = (e) => {
+        if (isPreviewTransformInteractionActive()) {
+          rememberTransformPointer(e);
+          return;
+        }
         const featureEl = getFeatureTarget(e.target, svg);
         if (featureEl) {
           const svgId = getFeatureIdentity(featureEl);
@@ -1022,7 +1135,7 @@ export const createFeatureSvgActions = ({
           e.stopPropagation();
           hideHoverSummary();
           featureSelection?.markPlainFeatureClick?.(svgId);
-          const feat = handlerState.featureLookup.get(svgId);
+          const feat = ensureFeatureLookup().get(svgId);
           if (feat) {
             openFeatureEditorForFeature(feat, e);
           } else {
@@ -1034,7 +1147,7 @@ export const createFeatureSvgActions = ({
         if (matchEl) {
           e.stopPropagation();
           e.preventDefault();
-          openPairwiseMatchPopup(matchEl, e, handlerState.featureLookup);
+          openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
           return;
         }
         if (isBackgroundPreviewClick(e.target, svg)) {
@@ -1050,7 +1163,7 @@ export const createFeatureSvgActions = ({
         if (!matchEl) return;
         e.stopPropagation();
         e.preventDefault();
-        openPairwiseMatchPopup(matchEl, e, handlerState.featureLookup);
+        openPairwiseMatchPopup(matchEl, e, ensureFeatureLookup());
       };
 
       const handlePointerDown = (e) => {
@@ -1095,20 +1208,63 @@ export const createFeatureSvgActions = ({
         svg.removeEventListener('pointermove', handlePointerMove, true);
         svg.removeEventListener('pointerup', handlePointerUp, true);
         svg.removeEventListener('pointercancel', handlePointerCancel, true);
+        if (handlerState.hoverReconcileFrame !== null) {
+          window.cancelAnimationFrame(handlerState.hoverReconcileFrame);
+          handlerState.hoverReconcileFrame = null;
+        }
+        handlerState.reconcileHoverAfterTransform = false;
+        handlerState.transformPointer = null;
         clearActiveFeatureHover();
         clearActiveMatchHover();
         hideHoverSummary();
       };
       delegatedFeatureHandlers = handlerState;
-    }
+    recordStructuralMetric('perFeatureListenerRegistrationCount', 0, {
+      phase,
+      rootGeneration
+    });
+    return true;
+  };
 
-    console.groupCollapsed('post-gbdraw timing');
-    console.info(`feature handler index querySelectorAll: ${formatDuration(queryDuration)}`);
-    console.info(`feature handler index/delegation setup: ${formatDuration(indexDuration)}`);
-    console.groupEnd();
-    console.log(
-      `Delegated feature handlers for ${featurePathCount} feature paths (${pathsByIdMap.size} unique features)`
-    );
+  const unsubscribePreviewTransformInteraction = previewTransformInteraction?.subscribe?.(({
+    active,
+    kind,
+    event,
+    reconcile
+  }) => {
+    if (active) {
+      delegatedFeatureHandlers?.beginPreviewTransformInteraction?.(event, kind);
+      return;
+    }
+    delegatedFeatureHandlers?.endPreviewTransformInteraction?.({ reconcile });
+  }) || null;
+
+  const dispose = () => {
+    if (typeof unsubscribePreviewTransformInteraction === 'function') {
+      unsubscribePreviewTransformInteraction();
+    }
+    cleanupDelegatedFeatureHandlers();
+    if (hoverSummaryState.element?.isConnected) hoverSummaryState.element.remove();
+    hoverSummaryState.element = null;
+  };
+
+  const preparePairwiseInteractionAffordances = ({
+    root = null,
+    phase = 'preview-bind',
+    rootGeneration = 0
+  } = {}) => {
+    const svg = root || delegatedFeatureHandlers?.svg || null;
+    if (!svg || delegatedFeatureHandlers?.svg !== svg) return false;
+    if (delegatedFeatureHandlers.pairwiseAffordancesPrepared) return false;
+    recordStructuralMetric('comparisonDomFullScanCount', 1, { phase, rootGeneration });
+    Array.from(svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR)).forEach((element, index) => {
+      if (element?.style) element.style.cursor = 'pointer';
+      element.setAttribute('role', 'button');
+      element.setAttribute('tabindex', '0');
+      element.setAttribute('aria-label', `Pairwise match ${index + 1}`);
+    });
+    delegatedFeatureHandlers.pairwiseAffordancesPrepared = true;
+    return true;
   };
 
   return {
@@ -1118,6 +1274,8 @@ export const createFeatureSvgActions = ({
     attachSvgFeatureHandlers,
     getFeatureElements,
     getFeatureFillElements,
-    openFeatureEditorForFeature
+    openFeatureEditorForFeature,
+    preparePairwiseInteractionAffordances,
+    dispose
   };
 };

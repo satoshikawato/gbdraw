@@ -410,6 +410,46 @@ def test_linear_dual_legend_ids_are_namespaced_deterministic_and_referenced() ->
     }
 
 
+@pytest.mark.linear
+def test_current_renderer_output_makes_removed_consumer_id_repair_a_noop() -> None:
+    drawing = Drawing(debug=False)
+    drawing.add(
+        LinearSkewDrawer(_skew_config()).draw(
+            Group(id="gc_skew_record_1"),
+            _skew_frame(),
+            120,
+            600.0,
+            1.0,
+            24.0,
+            0.0,
+            0.0,
+            "GC",
+            "gc_skew_record_1",
+        )
+    )
+    skew_svg = drawing.tostring()
+    _assert_unique_ids_and_resolved_references(skew_svg)
+
+    legend_svg = _linear_legend_svg()
+    _assert_unique_ids_and_resolved_references(legend_svg)
+    legend_root = _root(legend_svg)
+    gradients_by_orientation = {
+        group.attrib["data-gbdraw-orientation"]: {
+            gradient.attrib["id"]
+            for gradient in group.iter()
+            if gradient.tag.rsplit("}", 1)[-1] == "linearGradient"
+        }
+        for group in legend_root.iter()
+        if group.attrib.get("data-gbdraw-role") == "comparison-legend"
+    }
+    assert gradients_by_orientation
+    assert all(
+        gradient_id.endswith(f"_{orientation}")
+        for orientation, gradient_ids in gradients_by_orientation.items()
+        for gradient_id in gradient_ids
+    )
+
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_identical_semantic_features_keep_stable_hooks_and_unique_dom_ids(
     mode: str,
