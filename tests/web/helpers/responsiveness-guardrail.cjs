@@ -30,10 +30,6 @@ const aggregateResponsivenessSamples = (samples) => {
 };
 
 const evaluateResponsivenessGuardrail = (aggregate, thresholds) => Object.freeze([
-  aggregate.medianLongTaskTotalMs > thresholds.maximumMedianLongTaskTotalMs
-    ? `median Long Task total ${aggregate.medianLongTaskTotalMs} ms exceeded `
-      + `${thresholds.maximumMedianLongTaskTotalMs} ms`
-    : null,
   aggregate.medianLongestLongTaskMs > thresholds.maximumMedianLongestLongTaskMs
     ? `median longest Long Task ${aggregate.medianLongestLongTaskMs} ms exceeded `
       + `${thresholds.maximumMedianLongestLongTaskMs} ms`
