@@ -2,7 +2,7 @@ import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
-  buildPairwiseMatchHoverRows,
+  buildPairwiseMatchHoverSummary,
   buildPairwiseMatchPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
@@ -531,49 +531,49 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.timer = window.setTimeout(show, 180);
   };
 
-  const renderMatchHoverSummary = (payload, eventLike) => {
-    if (!payload || !hoverSummaryIsAllowed()) {
+  const renderMatchHoverSummary = (summary, eventLike) => {
+    if (!summary || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
     const element = ensureHoverSummaryElement();
-    const color = resolveColorToHex(payload.fill || '#94a3b8') || '#94a3b8';
+    const color = resolveColorToHex(summary.fill || '#94a3b8') || '#94a3b8';
 
     element.replaceChildren();
     const title = createHoverSummaryElement('div', 'feature-hover-summary-title');
     const swatch = createHoverSummaryElement('div', 'feature-hover-summary-swatch');
     swatch.style.backgroundColor = color;
     const titleTextWrap = createHoverSummaryElement('div', 'feature-hover-summary-text');
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', payload.title));
-    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', payload.subtitle || payload.id || ''));
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-heading', summary.title));
+    titleTextWrap.appendChild(createHoverSummaryElement('div', 'feature-hover-summary-subtitle', summary.subtitle || summary.id || ''));
     title.appendChild(swatch);
     title.appendChild(titleTextWrap);
     element.appendChild(title);
 
-    buildPairwiseMatchHoverRows(payload).forEach((row) => {
+    summary.rows.forEach((row) => {
       addHoverSummaryRow(element, row.label, row.value, { clamp: row.label === 'Query' || row.label === 'Subject' });
     });
 
     element.hidden = false;
     hoverSummaryState.visible = true;
-    hoverSummaryState.activeSvgId = String(payload.id || '').trim();
+    hoverSummaryState.activeSvgId = String(summary.id || '').trim();
     scheduleHoverSummaryPosition(eventLike);
     positionHoverSummary(eventLike);
   };
 
-  const scheduleMatchHoverSummary = (payload, eventLike) => {
+  const scheduleMatchHoverSummary = (summary, eventLike) => {
     if (hoverSummaryState.timer) {
       window.clearTimeout(hoverSummaryState.timer);
       hoverSummaryState.timer = null;
     }
-    if (!payload || !hoverSummaryIsAllowed()) {
+    if (!summary || !hoverSummaryIsAllowed()) {
       hideHoverSummary();
       return;
     }
     scheduleHoverSummaryPosition(eventLike);
     const show = () => {
       hoverSummaryState.timer = null;
-      renderMatchHoverSummary(payload, eventLike);
+      renderMatchHoverSummary(summary, eventLike);
     };
     if (hoverSummaryState.visible) {
       show();
@@ -661,6 +661,14 @@ export const createFeatureSvgActions = ({
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
+  });
+
+  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, {
+    orthogroups: () => [
+      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
+      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
+    ],
+    orthogroupNameOverrides
   });
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
@@ -975,7 +983,7 @@ export const createFeatureSvgActions = ({
         }
         handlerState.activeMatchHoverElement = matchEl;
         handlerState.activeMatchHoverKey = matchKey;
-        scheduleMatchHoverSummary(buildMatchPayload(matchEl, ensureFeatureLookup()), eventLike);
+        scheduleMatchHoverSummary(buildMatchHoverSummary(matchEl), eventLike);
         return true;
       };
 
