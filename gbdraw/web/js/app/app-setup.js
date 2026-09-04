@@ -51,7 +51,7 @@ import { createPreviewFeatureSearch } from './feature-search/preview-actions.js'
 import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
-import { createRunAnalysis } from './run-analysis.js';
+import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
@@ -2061,47 +2061,72 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
+  const sessionImportPending = ref(false);
   let nextSessionPreviewToken = 1;
   const importSession = async (event) => {
-    const result = await importSessionFromFile(event, {
-      beforePreviewMount: ({ results: importedResults, resultIndex }) => {
-        const selectedResult = importedResults[resultIndex] || null;
-        if (!selectedResult) return null;
-        const token = `session-load:${nextSessionPreviewToken++}`;
-        return previewRuntime.registerReadinessExpectation({
-          result: selectedResult,
-          resultIndex,
-          artifactIdentity: token,
-          generationToken: token,
-          catalogState: state.featureCatalog?.value || null,
-          phase: 'session-load',
-          bindingOptions: { isIncrementalEdit: true },
-          isCurrent: () => (
-            results.value[resultIndex] === selectedResult
-            && Number(selectedResultIndex.value) === resultIndex
-          )
-        });
-      },
-      rollbackState: createSessionImportRollbackState({
-        depthTrackUiCounts,
-        depthTracks: adv.depth_tracks,
-        featureListScrollTop,
-        featureListScrollRef,
-        selectedPairwiseBlockOrthogroupId
-      })
-    });
-    if (result?.status === 'ok' || result?.status === 'legacy') {
-      historySnapshots.clearGeneratedArtifactIdentity({
-        retainedBytes: result?.status === 'ok'
-          ? Number(result.decompressedCharacters || 0) * 2
-          : 0
-      });
-      await nextTick();
-      recordSessionLifecycleEvent('history-baseline-start');
-      await history.initializeIntentBaseline('Loaded session');
-      recordSessionLifecycleEvent('history-baseline-end');
+    const input = event?.target;
+    const file = input?.files?.[0];
+    if (!file) return { status: 'skipped' };
+    if (sessionImportPending.value) {
+      input.value = '';
+      return { status: 'busy' };
     }
-    return result;
+
+    const importEvent = {
+      target: {
+        files: [file],
+        value: input.value
+      }
+    };
+    sessionImportPending.value = true;
+    recordSessionLifecycleEvent('session-import-pending-published');
+    try {
+      await nextTick();
+      await afterPaint();
+      recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
+      const result = await importSessionFromFile(importEvent, {
+        beforePreviewMount: ({ results: importedResults, resultIndex }) => {
+          const selectedResult = importedResults[resultIndex] || null;
+          if (!selectedResult) return null;
+          const token = `session-load:${nextSessionPreviewToken++}`;
+          return previewRuntime.registerReadinessExpectation({
+            result: selectedResult,
+            resultIndex,
+            artifactIdentity: token,
+            generationToken: token,
+            catalogState: state.featureCatalog?.value || null,
+            phase: 'session-load',
+            bindingOptions: { isIncrementalEdit: true },
+            isCurrent: () => (
+              results.value[resultIndex] === selectedResult
+              && Number(selectedResultIndex.value) === resultIndex
+            )
+          });
+        },
+        rollbackState: createSessionImportRollbackState({
+          depthTrackUiCounts,
+          depthTracks: adv.depth_tracks,
+          featureListScrollTop,
+          featureListScrollRef,
+          selectedPairwiseBlockOrthogroupId
+        })
+      });
+      if (result?.status === 'ok' || result?.status === 'legacy') {
+        historySnapshots.clearGeneratedArtifactIdentity({
+          retainedBytes: result?.status === 'ok'
+            ? Number(result.decompressedCharacters || 0) * 2
+            : 0
+        });
+        await nextTick();
+        recordSessionLifecycleEvent('history-baseline-start');
+        await history.initializeIntentBaseline('Loaded session');
+        recordSessionLifecycleEvent('history-baseline-end');
+      }
+      return result;
+    } finally {
+      sessionImportPending.value = false;
+      input.value = '';
+    }
   };
 
   const {
@@ -3261,6 +3286,7 @@ export const createAppSetup = () => {
   return {
     processing,
     processingStatus,
+    sessionImportPending,
     generationCancelRequested,
     errorLog,
     errorDisplay,
