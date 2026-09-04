@@ -782,8 +782,10 @@
         .hosted-build-label {
             white-space: nowrap;
         }
-        .right-drawer {
+        .result-pane {
             --right-drawer-width: min(100vw, 360px);
+        }
+        .right-drawer {
             width: var(--right-drawer-width);
             transform: translateX(0);
             visibility: visible;
@@ -795,7 +797,6 @@
             pointer-events: none;
         }
         .drawer-toggle {
-            --right-drawer-width: min(100vw, 360px);
             transform: translateY(-50%);
         }
         .drawer-toggle[aria-expanded="true"] {
@@ -803,6 +804,13 @@
                 calc(-1 * var(--right-drawer-width)),
                 -50%
             );
+        }
+        .preview-controls.preview-controls--drawer-open {
+            left: 0;
+            right: var(--right-drawer-width);
+            transform: none;
+            justify-content: center;
+            flex-wrap: wrap;
         }
         @media (max-width: 760px) {
             .feature-popup-grid {
@@ -4675,7 +4683,8 @@
                          :style="featureSelectionMarqueeStyle"></div>
 
                     <!-- Zoom and Canvas controls -->
-                    <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                    <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20"
+                         :class="{ 'preview-controls--drawer-open': showRightDrawer }">
                         <!-- Reset preview layout button -->
                         <button v-if="svgContent" @click="resetLayout"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"

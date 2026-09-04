@@ -12,11 +12,219 @@ const loadGallerySession = async (page, filename) => page.evaluate(async (name) 
   });
 }, filename);
 
+const ISSUE_461_VIEWPORTS = [
+  { id: 'issue-desktop', width: 2541, height: 1409 },
+  { id: 'desktop-common', width: 1920, height: 1080 },
+  { id: 'laptop', width: 1366, height: 768 },
+  { id: 'narrow-supported', width: 1024, height: 768 }
+];
+
+const waitForSettledDrawer = async (page) => {
+  await page.locator('.right-drawer').evaluate(async (drawer) => {
+    await Promise.all(
+      drawer.getAnimations().map((animation) => animation.finished.catch(() => {}))
+    );
+  });
+  await page.locator('.drawer-toggle').evaluate(async (toggle) => {
+    await Promise.all(
+      toggle.getAnimations().map((animation) => animation.finished.catch(() => {}))
+    );
+  });
+};
+
+const readSettledPreviewSurface = async (page) => page.locator(
+  '.gbdraw-preview-surface'
+).evaluate(async (surface) => {
+  await Promise.all(
+    surface.getAnimations().map((animation) => animation.finished.catch(() => {}))
+  );
+  const box = surface.getBoundingClientRect();
+  return {
+    left: box.left,
+    top: box.top,
+    width: box.width,
+    height: box.height,
+    transform: surface.style.transform
+  };
+});
+
+const readOverlayGeometry = (page) => page.evaluate(() => {
+  const preview = document.querySelector('[role="region"][aria-label="Result Preview"]');
+  const toggle = document.querySelector('.drawer-toggle');
+  const controls = document.querySelector('.preview-controls');
+  const zoomReset = document.querySelector('[aria-label="Reset zoom"]');
+  const zoomControls = zoomReset?.parentElement;
+  const drawer = document.querySelector('.right-drawer');
+  const rect = (element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      left: box.left,
+      top: box.top,
+      right: box.right,
+      bottom: box.bottom,
+      width: box.width,
+      height: box.height
+    };
+  };
+  const receivesPointerAtCenter = (element) => {
+    const box = element.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2
+    );
+    return Boolean(hit && element.contains(hit));
+  };
+  if (!preview || !toggle || !controls || !zoomControls || !drawer) {
+    throw new Error('Issue #461 overlay controls are not mounted.');
+  }
+  return {
+    preview: rect(preview),
+    toggle: rect(toggle),
+    controls: rect(controls),
+    zoomControls: rect(zoomControls),
+    drawer: rect(drawer),
+    controlButtons: Array.from(controls.querySelectorAll('button')).map((button) => ({
+      name: button.getAttribute('aria-label') || button.getAttribute('title') || '',
+      box: rect(button),
+      receivesPointerAtCenter: receivesPointerAtCenter(button)
+    })),
+    toggleReceivesPointerAtCenter: receivesPointerAtCenter(toggle)
+  };
+});
+
+const boxOverlap = (first, second) => {
+  const x = Math.min(first.right, second.right) - Math.max(first.left, second.left);
+  const y = Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top);
+  return { x, y, intersects: x > 0 && y > 0 };
+};
+
+const logOverlayGeometry = (viewport, drawerState, geometry) => console.log(
+  `[issue-461] ${JSON.stringify({
+    viewport,
+    drawerState,
+    editorToggle: geometry.toggle,
+    zoomControls: geometry.zoomControls,
+    drawer: geometry.drawer,
+    toggleZoomOverlap: boxOverlap(geometry.toggle, geometry.zoomControls),
+    drawerZoomOverlap: boxOverlap(geometry.drawer, geometry.zoomControls)
+  })}`
+);
+
+const assertOverlayGeometry = (geometry, label, drawerOpen) => {
+  const toggleZoomOverlap = boxOverlap(geometry.toggle, geometry.zoomControls);
+  expect(
+    toggleZoomOverlap.intersects,
+    `${label}: editor toggle intersects zoom controls `
+      + `(overlapX=${toggleZoomOverlap.x}, overlapY=${toggleZoomOverlap.y})`
+  ).toBe(false);
+
+  if (drawerOpen) {
+    const drawerZoomOverlap = boxOverlap(geometry.drawer, geometry.zoomControls);
+    expect(
+      drawerZoomOverlap.intersects,
+      `${label}: open Editor drawer intersects zoom controls `
+        + `(overlapX=${drawerZoomOverlap.x}, overlapY=${drawerZoomOverlap.y})`
+    ).toBe(false);
+  }
+
+  const insidePreview = (box) => (
+    box.left >= geometry.preview.left
+    && box.top >= geometry.preview.top
+    && box.right <= geometry.preview.right
+    && box.bottom <= geometry.preview.bottom
+  );
+  for (const [name, box] of [
+    ['editor toggle', geometry.toggle],
+    ['preview controls', geometry.controls],
+    ['zoom controls', geometry.zoomControls]
+  ]) {
+    expect(insidePreview(box), `${label}: ${name} is outside Preview bounds`).toBe(true);
+  }
+  expect(geometry.toggleReceivesPointerAtCenter, `${label}: editor toggle is blocked`).toBe(true);
+  for (const button of geometry.controlButtons) {
+    expect(
+      insidePreview(button.box),
+      `${label}: ${button.name || 'unnamed control'} is outside Preview bounds`
+    ).toBe(true);
+    expect(
+      button.receivesPointerAtCenter,
+      `${label}: ${button.name || 'unnamed control'} is blocked`
+    ).toBe(true);
+  }
+};
+
+const exercisePreviewControls = async (page) => {
+  const zoomIn = page.getByRole('button', { name: 'Zoom in', exact: true });
+  const resetZoom = page.getByRole('button', { name: 'Reset zoom', exact: true });
+  const zoomOut = page.getByRole('button', { name: 'Zoom out', exact: true });
+
+  await resetZoom.click();
+  await expect(resetZoom).toContainText('100%');
+  await zoomIn.click();
+  await expect(resetZoom).toContainText('110%');
+  await resetZoom.click();
+  await expect(resetZoom).toContainText('100%');
+  await zoomOut.click();
+  await expect(resetZoom).toContainText('90%');
+  await resetZoom.click();
+  await expect(resetZoom).toContainText('100%');
+
+  const canvasPadding = page.getByRole('button', {
+    name: 'Toggle canvas padding controls',
+    exact: true
+  });
+  await canvasPadding.click();
+  await expect(page.getByText('Canvas Padding', { exact: true })).toBeVisible();
+  await canvasPadding.click();
+  await expect(page.getByText('Canvas Padding', { exact: true })).toBeHidden();
+};
+
 test.beforeEach(async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
 });
+
+for (const viewport of ISSUE_461_VIEWPORTS) {
+  test(`zoom controls do not overlap the Editor toggle or drawer at ${viewport.id}`, async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const imported = await loadGallerySession(
+      page,
+      'majanivirus_orthogroup.gbdraw-session.json.gz'
+    );
+    expect(imported.status).toBe('ok');
+
+    const toggle = page.locator('.drawer-toggle');
+    const drawer = page.locator('.right-drawer');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await waitForSettledDrawer(page);
+    const initialSurface = await readSettledPreviewSurface(page);
+
+    const closedGeometry = await readOverlayGeometry(page);
+    logOverlayGeometry(viewport, 'closed', closedGeometry);
+    assertOverlayGeometry(closedGeometry, `${viewport.id} drawer closed`, false);
+    await exercisePreviewControls(page);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'false');
+    await waitForSettledDrawer(page);
+
+    const openGeometry = await readOverlayGeometry(page);
+    logOverlayGeometry(viewport, 'open', openGeometry);
+    assertOverlayGeometry(openGeometry, `${viewport.id} drawer open`, true);
+    await exercisePreviewControls(page);
+    expect(await readSettledPreviewSurface(page)).toEqual(initialSurface);
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+    await waitForSettledDrawer(page);
+    expect(await readSettledPreviewSurface(page)).toEqual(initialSurface);
+  });
+}
 
 test('a remembered unavailable Similarity groups tab reopens as Features', async ({
   page
