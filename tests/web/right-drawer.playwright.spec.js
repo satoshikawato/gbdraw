@@ -268,6 +268,142 @@ test('a remembered unavailable Similarity groups tab reopens as Features', async
   ).toBe('features');
 });
 
+test('preview similarity-group copy actions report isolated accessible outcomes', async ({
+  page
+}) => {
+  const imported = await loadGallerySession(
+    page,
+    'majanivirus_orthogroup.gbdraw-session.json.gz'
+  );
+  expect(imported.status).toBe('ok');
+  await expect.poll(
+    () => page.evaluate(() => window.__GBDRAW_APP__.orthogroupCount)
+  ).toBeGreaterThan(0);
+  await page.clock.install();
+  await page.evaluate(() => {
+    window.__copiedText = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => { window.__copiedText = String(value); }
+      }
+    });
+  });
+
+  const toggle = page.locator('.drawer-toggle');
+  const drawer = page.locator('.right-drawer');
+  await toggle.click();
+  await drawer.getByRole('button', { name: 'Similarity groups' }).click();
+  const groupNtCopy = drawer.locator(
+    'button[title="Copy all member nucleotide FASTA"]'
+  );
+  const groupAaCopy = drawer.locator(
+    'button[title="Copy all member amino-acid FASTA"]'
+  );
+  await expect(groupNtCopy).toHaveText(/Copy nt/);
+  await expect(groupAaCopy).toHaveText(/Copy aa/);
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText(/Copied!/);
+  await expect(groupAaCopy).toHaveAccessibleName('Copied!');
+  await expect(groupAaCopy).toHaveAttribute('aria-live', 'polite');
+  await expect(groupAaCopy).toHaveAttribute('aria-atomic', 'true');
+  await expect(groupNtCopy).toHaveText(/Copy nt/);
+  const groupAminoAcidPayload = await page.evaluate(() => window.__copiedText);
+  expect(groupAminoAcidPayload).toMatch(/^>/);
+  expect(groupAminoAcidPayload).not.toMatch(/h_[a-z2-7]{26}/i);
+  await page.clock.fastForward(1500);
+  await expect(groupAaCopy).toHaveText(/Copy aa/);
+
+  const firstMemberAaCopy = drawer.locator(
+    'button[title="Copy amino-acid FASTA"]'
+  ).first();
+  const secondMemberAaCopy = drawer.locator(
+    'button[title="Copy amino-acid FASTA"]'
+  ).nth(1);
+  await firstMemberAaCopy.click();
+  await expect(firstMemberAaCopy).toHaveText(/Copied!/);
+  await expect(secondMemberAaCopy).toHaveText(/^\s*aa\s*$/);
+  const memberAminoAcidPayload = await page.evaluate(() => window.__copiedText);
+  expect(memberAminoAcidPayload).toMatch(/^>/);
+  expect(groupAminoAcidPayload).toContain(memberAminoAcidPayload.trim());
+  await page.clock.fastForward(1500);
+  await expect(firstMemberAaCopy).toHaveText(/^\s*aa\s*$/);
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('denied'); } }
+    });
+    document.execCommand = () => false;
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText(/Copy failed/);
+  await expect(groupAaCopy).not.toHaveText(/Copied!/);
+  await expect(groupNtCopy).toHaveText(/Copy nt/);
+  await page.clock.fastForward(1500);
+  await expect(groupAaCopy).toHaveText(/Copy aa/);
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {}
+    });
+    document.execCommand = () => true;
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText(/Copied!/);
+  await page.clock.fastForward(1500);
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => { window.__copiedText = String(value); }
+      }
+    });
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText(/Copied!/);
+  await toggle.click();
+  await toggle.click();
+  await expect(groupAaCopy).toHaveText(/Copy aa/);
+
+  const openedFeaturePopup = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((candidate) => (
+      candidate?.orthogroupId && candidate?.type === 'CDS'
+    ));
+    if (!feature) return false;
+    app.openFeatureEditorFromList(feature, null);
+    return Boolean(app.clickedFeature);
+  });
+  expect(openedFeaturePopup).toBe(true);
+  const featurePopup = page.locator('.feature-popup');
+  const popupGroupAaCopy = featurePopup.locator(
+    'button[title="Copy all member amino-acid FASTA"]'
+  );
+  const popupMemberAaCopy = featurePopup.locator(
+    'button[title="Copy amino-acid FASTA"]'
+  ).first();
+  await popupGroupAaCopy.click();
+  await expect(popupGroupAaCopy).toHaveText(/Copied!/);
+  await expect(popupMemberAaCopy).toHaveText(/^\s*aa\s*$/);
+  await featurePopup.getByRole('button', { name: 'Close feature popup' }).click();
+
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((candidate) => (
+      candidate?.orthogroupId && candidate?.type === 'CDS'
+    ));
+    if (!feature) return false;
+    app.openFeatureEditorFromList(feature, null);
+    return Boolean(app.clickedFeature);
+  })).toBe(true);
+  await expect(featurePopup.locator(
+    'button[title="Copy all member amino-acid FASTA"]'
+  )).toHaveText(/Copy aa/);
+});
+
 test('individual Feature, Label, and Legend edits update the mounted SVG', { tag: '@pr-smoke' }, async ({
   page
 }) => {

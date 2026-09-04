@@ -3595,6 +3595,7 @@ export const createAppSetup = () => {
     getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
     hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,
     hasOrthogroupMemberSequence: orthogroupActions.hasOrthogroupMemberSequence,
+    orthogroupCopyFeedbackLabel: orthogroupActions.orthogroupCopyFeedbackLabel,
     copyOrthogroupSequences: orthogroupActions.copyOrthogroupSequences,
     downloadOrthogroupSequences: orthogroupActions.downloadOrthogroupSequences,
     copyOrthogroupMemberSequence: orthogroupActions.copyOrthogroupMemberSequence,

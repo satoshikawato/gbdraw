@@ -4908,15 +4908,17 @@
                             </div>
                             <div class="grid grid-cols-2 gap-2 mb-3">
                                 <button type="button"
-                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
+                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup')"
                                         :disabled="!clickedOrthogroupDetail.ntSequenceCount"
                                         :class="[
                                           'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
                                           clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                         ]"
-                                        title="Copy all member nucleotide FASTA">
-                                    <i class="ph ph-copy"></i>
-                                    <span>Copy nt</span>
+                                        title="Copy all member nucleotide FASTA"
+                                        aria-live="polite"
+                                        aria-atomic="true">
+                                    <i class="ph ph-copy" aria-hidden="true"></i>
+                                    <span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', null, 'feature-popup') }}</span>
                                 </button>
                                 <button type="button"
                                         @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
@@ -4930,15 +4932,17 @@
                                     <span>Download nt</span>
                                 </button>
                                 <button type="button"
-                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
+                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup')"
                                         :disabled="!clickedOrthogroupDetail.aaSequenceCount"
                                         :class="[
                                           'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
                                           clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                         ]"
-                                        title="Copy all member amino-acid FASTA">
-                                    <i class="ph ph-copy"></i>
-                                    <span>Copy aa</span>
+                                        title="Copy all member amino-acid FASTA"
+                                        aria-live="polite"
+                                        aria-atomic="true">
+                                    <i class="ph ph-copy" aria-hidden="true"></i>
+                                    <span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', null, 'feature-popup') }}</span>
                                 </button>
                                 <button type="button"
                                         @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
@@ -4991,14 +4995,16 @@
                                                 <td class="px-2 py-1 whitespace-nowrap">
                                                     <div class="grid grid-cols-2 gap-1 w-24">
                                                         <button type="button"
-                                                                @click="copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
+                                                                @click="copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup')"
                                                                 :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
                                                                 :class="[
                                                                   'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                   hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                 ]"
-                                                                title="Copy nucleotide FASTA">
-                                                            <i class="ph ph-copy"></i><span>nt</span>
+                                                                title="Copy nucleotide FASTA"
+                                                                aria-live="polite"
+                                                                aria-atomic="true">
+                                                            <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'nt', member, 'feature-popup') }}</span>
                                                         </button>
                                                         <button type="button"
                                                                 @click="downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
@@ -5011,14 +5017,16 @@
                                                             <i class="ph ph-download-simple"></i><span>nt</span>
                                                         </button>
                                                         <button type="button"
-                                                                @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
+                                                                @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup')"
                                                                 :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
                                                                 :class="[
                                                                   'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                   hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                 ]"
-                                                                title="Copy amino-acid FASTA">
-                                                            <i class="ph ph-copy"></i><span>aa</span>
+                                                                title="Copy amino-acid FASTA"
+                                                                aria-live="polite"
+                                                                aria-atomic="true">
+                                                            <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'aa', member, 'feature-popup') }}</span>
                                                         </button>
                                                         <button type="button"
                                                                 @click="downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
@@ -6272,9 +6280,11 @@
                                                   'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
                                                   hasOrthogroupSequence(selectedOrthogroup, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                 ]"
-                                                title="Copy all member nucleotide FASTA">
-                                            <i class="ph ph-copy"></i>
-                                            <span>Copy nt</span>
+                                                title="Copy all member nucleotide FASTA"
+                                                aria-live="polite"
+                                                aria-atomic="true">
+                                            <i class="ph ph-copy" aria-hidden="true"></i>
+                                            <span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'Copy nt') }}</span>
                                         </button>
                                         <button type="button"
                                                 @click="downloadOrthogroupSequences(selectedOrthogroup, 'nt')"
@@ -6294,9 +6304,11 @@
                                                   'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
                                                   hasOrthogroupSequence(selectedOrthogroup, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                 ]"
-                                                title="Copy all member amino-acid FASTA">
-                                            <i class="ph ph-copy"></i>
-                                            <span>Copy aa</span>
+                                                title="Copy all member amino-acid FASTA"
+                                                aria-live="polite"
+                                                aria-atomic="true">
+                                            <i class="ph ph-copy" aria-hidden="true"></i>
+                                            <span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'Copy aa') }}</span>
                                         </button>
                                         <button type="button"
                                                 @click="downloadOrthogroupSequences(selectedOrthogroup, 'aa')"
@@ -6344,8 +6356,10 @@
                                                                       'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                       hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
-                                                                    title="Copy nucleotide FASTA">
-                                                                <i class="ph ph-copy"></i><span>nt</span>
+                                                                    title="Copy nucleotide FASTA"
+                                                                    aria-live="polite"
+                                                                    aria-atomic="true">
+                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'nt', member) }}</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
@@ -6364,8 +6378,10 @@
                                                                       'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                       hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
-                                                                    title="Copy amino-acid FASTA">
-                                                                <i class="ph ph-copy"></i><span>aa</span>
+                                                                    title="Copy amino-acid FASTA"
+                                                                    aria-live="polite"
+                                                                    aria-atomic="true">
+                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'aa', member) }}</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
