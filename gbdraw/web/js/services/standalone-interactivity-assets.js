@@ -54,6 +54,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-width: 1.5;
   paint-order: stroke fill markers;
 }
+.gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--pending,
 .gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--selected {
   opacity: 1;
   filter: url(#gbdraw-interactive-feature-glow);
@@ -62,6 +63,10 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-width: 2.5;
   paint-order: stroke fill markers;
   outline: none;
+}
+.gbdraw-interactive-pairwise-match:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 .gbdraw-interactive-annotation {
   cursor: pointer;
@@ -1960,8 +1965,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var matchElementsById = new Map();
   var ambiguousMatchElementIds = new Set();
   var selectedMatchElements = [];
+  var pendingMatchElement = null;
   var comparisonElementsByCollinearityBlockId = new Map();
-  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
+  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element, index) {
     var matchId = getElementMatchId(element);
     if (matchId && !ambiguousMatchElementIds.has(matchId)) {
       if (matchElementsById.has(matchId)) {
@@ -1979,6 +1985,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       comparisonElementsByCollinearityBlockId.get(blockId).push(element);
     }
     setClassToken(element, 'gbdraw-interactive-pairwise-match', true);
+    element.setAttribute('role', 'button');
+    element.setAttribute('tabindex', '0');
+    element.setAttribute('aria-label', 'Pairwise match ' + (index + 1));
   });
 
   function setClassToken(element, token, enabled) {
@@ -2113,6 +2122,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     selectedMatchElements.forEach(function (element) {
       setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
     });
+  }
+
+  function clearPendingMatch() {
+    if (!pendingMatchElement) return;
+    setClassToken(pendingMatchElement, 'gbdraw-interactive-pairwise-match--pending', false);
+    pendingMatchElement = null;
+  }
+
+  function setPendingMatch(element) {
+    if (pendingMatchElement === element) return;
+    clearPendingMatch();
+    pendingMatchElement = element;
+    setClassToken(element, 'gbdraw-interactive-pairwise-match--pending', true);
   }
 
   function clearActiveFeatureHover() {
@@ -6399,6 +6421,41 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     closeHoverPopup();
   });
 
+  svg.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) {
+      clearPendingMatch();
+      return;
+    }
+    setPendingMatch(matchElement);
+  });
+
+  svg.addEventListener('pointerout', function (event) {
+    if (!pendingMatchElement) return;
+    var matchElement = closestMatch(event.target);
+    if (matchElement !== pendingMatchElement) return;
+    if (closestMatch(event.relatedTarget) === matchElement) return;
+    clearPendingMatch();
+  });
+
+  window.addEventListener('pointerup', clearPendingMatch, true);
+  window.addEventListener('pointercancel', clearPendingMatch, true);
+  window.addEventListener('blur', clearPendingMatch);
+
+  function activateMatch(matchElement, event) {
+    var matchId = getElementMatchId(matchElement);
+    var match = matchesById.get(matchId);
+    if (!match) return false;
+    clearPendingMatch();
+    event.preventDefault();
+    event.stopPropagation();
+    closeHoverPopup();
+    openPopup(match, event, 'match');
+    setSelectedMatch(matchId);
+    return true;
+  }
+
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
@@ -6426,14 +6483,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         closePopup();
         return;
       }
-      var matchId = getElementMatchId(matchElement);
-      var match = matchesById.get(matchId);
-      if (!match) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeHoverPopup();
-      openPopup(match, event, 'match');
-      setSelectedMatch(matchId);
+      activateMatch(matchElement, event);
       return;
     }
     var svgId = getElementFeatureId(featureElement);
@@ -6447,6 +6497,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     event.stopPropagation();
     closeHoverPopup();
     openPopup(feature, event, 'feature');
+  });
+
+  svg.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    activateMatch(matchElement, event);
   });
 
   document.addEventListener('keydown', function (event) {
