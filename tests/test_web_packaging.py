@@ -1188,7 +1188,7 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
-def test_hosted_web_build_verifies_gallery_without_refreshing() -> None:
+def test_hosted_web_uses_cloudflare_and_retains_browser_verification() -> None:
     deploy_yml = (REPO_ROOT / ".github" / "workflows" / "deploy_web.yml").read_text(
         encoding="utf-8"
     )
@@ -1197,13 +1197,24 @@ def test_hosted_web_build_verifies_gallery_without_refreshing() -> None:
     )
 
     assert 'python -m pip install -e ".[dev]"' in deploy_yml
-    checkout_verify_index = deploy_yml.index("python tools/gallery_artifact_manifest.py")
-    copy_index = deploy_yml.index("cp -r gbdraw/web/* public/")
-    package_verify_index = deploy_yml.index(
-        "python tools/gallery_artifact_manifest.py --package-root public"
+    assert "npm run test:web:gallery-publication" in deploy_yml
+    assert "npm run test:web:vibrio-generate" in deploy_yml
+    assert "node --test tests/web/gallery-session-publication.test.mjs" in deploy_yml
+    assert (
+        "tests/test_gallery_session_semantics.py tests/test_refresh_gallery_sessions.py"
+        in deploy_yml
     )
-    stamp_index = deploy_yml.index("python tools/stamp_web_build.py public")
-    assert checkout_verify_index < copy_index < package_verify_index < stamp_index
+    assert "python tools/gallery_artifact_manifest.py" in deploy_yml
+    assert 'ref: ${{ github.sha }}' in deploy_yml
+    assert 'branches: ["main"]' in deploy_yml
+    assert "workflow_dispatch:" in deploy_yml
+    assert "pages: write" not in deploy_yml
+    assert "id-token: write" not in deploy_yml
+    assert "actions/deploy-pages" not in deploy_yml
+    assert "actions/upload-pages-artifact" not in deploy_yml
+    assert "github-pages" not in deploy_yml
+    assert "CNAME" not in deploy_yml
+    assert "cp -r gbdraw/web/* public/" not in deploy_yml
     assert "refresh_gallery_sessions" not in cloudflare_source
     assert '"--refresh-gallery"' not in cloudflare_source
     assert "verify_gallery_artifacts()" in cloudflare_source
