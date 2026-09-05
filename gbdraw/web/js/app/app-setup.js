@@ -2328,29 +2328,40 @@ export const createAppSetup = () => {
   const resetAllLabelTextOverridesWithHistory = undoableAction('Reset label edits', resetAllLabelTextOverrides);
   const loadLabelOverrideTableWithHistory = undoableAction('Load label edits', loadLabelOverrideTable);
   const runInfoCopyStatus = ref('');
+  const exactReplayCopyStatus = ref('');
 
   const runInfoElapsedText = (info) => formatElapsedMs(info?.elapsedMs);
   const runInfoReproducibilityText = (info) => reproducibilityLabel(info?.reproducibility?.level);
   const runInfoHasCliHelperFiles = computed(() =>
     Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
   );
-  const copyRunCommand = async () => {
-    const command = String(lastRunInfo.value?.command || '');
+  const copyRunInfoCommand = async (commandValue, status, description) => {
+    const command = String(commandValue || '');
     if (!command) return;
     try {
       await copyTextToClipboard(command);
-      runInfoCopyStatus.value = 'Copied';
+      status.value = 'Copied';
       setTimeout(() => {
-        if (runInfoCopyStatus.value === 'Copied') runInfoCopyStatus.value = '';
+        if (status.value === 'Copied') status.value = '';
       }, 1600);
     } catch (error) {
-      console.warn('Failed to copy run command:', error);
-      runInfoCopyStatus.value = 'Copy failed';
+      console.warn(`Failed to copy ${description}:`, error);
+      status.value = 'Copy failed';
       setTimeout(() => {
-        if (runInfoCopyStatus.value === 'Copy failed') runInfoCopyStatus.value = '';
+        if (status.value === 'Copy failed') status.value = '';
       }, 2200);
     }
   };
+  const copyRunCommand = () => copyRunInfoCommand(
+    lastRunInfo.value?.sourceRecipe?.command || lastRunInfo.value?.command,
+    runInfoCopyStatus,
+    'source recipe'
+  );
+  const copyExactReplayCommand = () => copyRunInfoCommand(
+    lastRunInfo.value?.exactReplay?.command || lastRunInfo.value?.sessionCommand,
+    exactReplayCopyStatus,
+    'exact replay command'
+  );
 
   async function prepareLinearRecordCatalog(loadComparison = false) {
     if (mode.value !== 'linear') return { catalog: null, error: '' };
@@ -3306,6 +3317,7 @@ export const createAppSetup = () => {
     resultPanelTab,
     lastRunInfo,
     runInfoCopyStatus,
+    exactReplayCopyStatus,
     svgContent,
     zoom,
     layoutRepositionMode,
@@ -3870,6 +3882,7 @@ export const createAppSetup = () => {
     downloadPNG,
     downloadPDF,
     copyRunCommand,
+    copyExactReplayCommand,
     downloadCliHelperFiles,
     runInfoElapsedText,
     runInfoReproducibilityText,

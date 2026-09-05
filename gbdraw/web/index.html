@@ -5937,31 +5937,50 @@
 
                         <div class="space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Command</div>
-                                <div class="flex flex-wrap items-center justify-end gap-2">
-                                    <button v-if="runInfoHasCliHelperFiles"
-                                            type="button"
-                                            @click="downloadCliHelperFiles"
-                                            class="px-3 py-1.5 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
-                                            title="Download browser-generated files referenced by this command">
-                                        <i class="ph ph-download-simple"></i>
-                                        <span>Download CLI Files</span>
-                                    </button>
-                                    <button type="button"
-                                            @click="copyRunCommand"
-                                            class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
-                                            title="Copy command">
-                                        <i class="ph ph-copy"></i>
-                                        <span>{{ runInfoCopyStatus || 'Copy' }}</span>
-                                    </button>
-                                </div>
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Source recipe</div>
+                                <button v-if="lastRunInfo.sourceRecipe?.available !== false"
+                                        type="button"
+                                        @click="copyRunCommand"
+                                        class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Copy command">
+                                    <i class="ph ph-copy"></i>
+                                    <span>{{ runInfoCopyStatus || 'Copy' }}</span>
+                                </button>
                             </div>
-                            <pre class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.command }}</pre>
+                            <pre v-if="lastRunInfo.sourceRecipe?.available !== false"
+                                 class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
+                            <div v-else
+                                 class="rounded border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                                {{ lastRunInfo.sourceRecipe?.unavailableReason || 'Source recipe unavailable.' }}
+                            </div>
                         </div>
 
-                        <div v-if="lastRunInfo.sessionCommand" class="space-y-2">
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Session command</div>
-                            <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sessionCommand }}</pre>
+                        <div v-if="lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand" class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Exact replay</div>
+                                <button type="button"
+                                        @click="copyExactReplayCommand"
+                                        class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Copy exact replay command">
+                                    <i class="ph ph-copy"></i>
+                                    <span>{{ exactReplayCopyStatus || 'Copy' }}</span>
+                                </button>
+                            </div>
+                            <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand }}</pre>
+                        </div>
+
+                        <div v-if="runInfoHasCliHelperFiles" class="space-y-2 rounded border border-emerald-200 bg-emerald-50 p-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-bold uppercase tracking-wider text-emerald-800">Reproducibility files</div>
+                                <button type="button"
+                                        @click="downloadCliHelperFiles"
+                                        class="px-3 py-1.5 rounded border border-emerald-200 bg-white hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Download Source recipe helpers and the Exact replay file">
+                                    <i class="ph ph-download-simple"></i>
+                                    <span>Download reproducibility files</span>
+                                </button>
+                            </div>
+                            <p class="text-xs leading-relaxed text-emerald-800">{{ lastRunInfo.downloadBundle?.description }}</p>
                         </div>
 
                         <div class="space-y-1 text-xs text-slate-500 leading-relaxed">

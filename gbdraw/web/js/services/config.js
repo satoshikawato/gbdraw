@@ -2241,8 +2241,12 @@ const serializeFile = async (file) => {
   if (!file) return null;
   const source = getSessionResourceSource(file);
   if (source?.descriptor) {
-    setResourcePayloadOwner(source.descriptor, file);
-    return source.descriptor;
+    const visibleName = String(file.name || '').trim();
+    const descriptor = visibleName && visibleName !== source.descriptor.name
+      ? { ...source.descriptor, name: visibleName }
+      : source.descriptor;
+    setResourcePayloadOwner(descriptor, file);
+    return descriptor;
   }
   const cached = serializedFileDescriptors.get(file);
   if (cached) return cached;

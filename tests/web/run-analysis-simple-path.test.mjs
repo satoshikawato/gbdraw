@@ -84,6 +84,24 @@ const workerResponses = [];
 const workerHelperResponses = [];
 const workerMessages = [];
 
+const assertDownloadedFilesMatchCommands = (runInfo, entries) => {
+  const expected = runInfo.helperFiles.map(({ name }) => name).sort();
+  const downloaded = entries.map(({ name }) => name).sort();
+  assert.deepEqual(downloaded, expected);
+  const expectedSet = new Set(expected);
+  const tableDependencies = entries.flatMap(({ text }) => {
+    const rows = String(text || '').trim().split('\n').map((line) => line.split('\t'));
+    const blastIndex = rows[0]?.indexOf('blast') ?? -1;
+    return blastIndex < 0 ? [] : rows.slice(1).map((row) => row[blastIndex]).filter(Boolean);
+  });
+  const referenced = Array.from(new Set([
+    ...(runInfo.sourceRecipe?.commandArgs || []),
+    ...(runInfo.exactReplay?.commandArgs || []),
+    ...tableDependencies
+  ].filter((token) => expectedSet.has(token)))).sort();
+  assert.deepEqual(referenced, expected);
+};
+
 class AuditSimplePathWorker {
   constructor() {
     this.listeners = new Map();
@@ -590,6 +608,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
   assert.equal(state.extractedFeatures.value.length, 1);
   assert.equal(state.biologicalFeatures.value.length, 1);
+  assert.equal(state.lastRunInfo.value.sourceRecipe.available, true);
+  assert.match(state.lastRunInfo.value.sourceRecipe.command, /--gbk active\.gb/);
+  assert.doesNotMatch(state.lastRunInfo.value.sourceRecipe.command, /--session/);
+  assert.match(state.lastRunInfo.value.exactReplay.command, /--session audit-simple\.gbdraw-session\.json/);
   assert.ok(
     lifecycleEvents.indexOf('generate.processing-published')
       < lifecycleEvents.indexOf('test.after-paint-returned')
@@ -635,6 +657,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(structuralMetrics.canonicalReplayFullSerializationCount, 1);
   assert.equal(downloadedFilename, 'audit-simple-cli-files.zip');
   const helperEntries = await storedZipEntries(downloadedBlob);
+  assertDownloadedFilesMatchCommands(state.lastRunInfo.value, helperEntries);
   const replayEntry = helperEntries.find(({ name }) => name.endsWith('.gbdraw-session.json'));
   assert.ok(replayEntry);
   const replay = JSON.parse(replayEntry.text);
@@ -1158,7 +1181,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     capturedSequences = Array.from(options.sequences.values());
     return jobs.map((job) => ({
       cacheKey: job.cacheKey,
-      text: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+      text: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n'
     }));
   };
 
@@ -1209,7 +1232,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
     resourceMetrics.splice(0);
     const linearTable = adoptCurrentSessionResources({
-      multi: encodedResource('genbank', 'multi.gb', [
+      multi: encodedResource('genbank', 'alpha.gbk.tsv', [
         'LOCUS       FIRST 8 bp DNA',
         'ORIGIN',
         '        1 aaaaaaaa',
@@ -1217,6 +1240,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
         'LOCUS       SECOND 8 bp DNA',
         'ORIGIN',
         '        1 aaccggtt',
+        '//',
+        ''
+      ].join('\n')),
+      middle: encodedResource('genbank', 'middle.gbk', [
+        'LOCUS       MIDDLE 8 bp DNA',
+        'ORIGIN',
+        '        1 ccccgggg',
         '//',
         ''
       ].join('\n')),
@@ -1229,6 +1259,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       ].join('\n'))
     });
     const multiView = createSessionResourceFileView(linearTable, 'multi');
+    const middleView = createSessionResourceFileView(linearTable, 'middle');
     const thirdView = createSessionResourceFileView(linearTable, 'third');
     state.mode.value = 'linear';
     state.lInputType.value = 'gb';
@@ -1256,6 +1287,21 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       region_end: 5,
       region_reverse: true
     }, {
+      uid: 'middle',
+      gb: middleView,
+      gff: null,
+      fasta: null,
+      depth: null,
+      blast: null,
+      losat_gencode: 1,
+      losat_filename: '',
+      definition: '',
+      record_subtitle: '',
+      region_record_id: 'MIDDLE',
+      region_start: null,
+      region_end: null,
+      region_reverse: false
+    }, {
       uid: 'third',
       gb: thirdView,
       gff: null,
@@ -1277,14 +1323,14 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     });
     state.linearComparisonPlan.edges.splice(0, state.linearComparisonPlan.edges.length, {
       id: 'lazy-linear-edge',
-      queryUid: 'multi',
+      queryUid: 'middle',
       subjectUid: 'third',
       included: true,
       source: 'losat',
       file: null,
       fileActive: false,
-      losatFilename: '',
-      losatFilenameActive: false
+      losatFilename: 'alpha.gbk',
+      losatFilenameActive: true
     });
     state.files.linearCanonicalComparisons = [];
     state.losatProgram.value = 'blastn';
@@ -1303,7 +1349,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerHelperResponses.push({
       ok: true,
       result: {
-        tsv: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+        tsv: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n'
       }
     });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
@@ -1313,24 +1359,70 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify({ error: state.errorLog.value, lastWorker: workerMessages.at(-1) })
     );
     assert.equal(losatCalls, 1);
-    assert.ok(capturedSequences.includes('>SECOND\nACCG\n'));
+    assert.ok(capturedSequences.includes('>MIDDLE\nCCCCGGGG\n'));
     assert.ok(capturedSequences.includes('>THIRD\nTTTTAAAA\n'));
     const conversionRequest = workerMessages.findLast((message) => (
       message.type === 'helper' &&
       message.operation === 'convertLosatNucleotideToDisplayTsv'
     ));
     assert.deepEqual(conversionRequest?.payload.queryViewTransform, {
-      length: 4,
-      reverse: true
+      length: 8,
+      reverse: false
     });
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
-      2
+      3
     );
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount').length,
       0,
       'the explicit staged text fast path must not materialize file text again'
+    );
+    assert.equal(
+      state.lastRunInfo.value.sourceRecipe.available,
+      true,
+      state.lastRunInfo.value.sourceRecipe.unavailableReason
+    );
+    assert.match(
+      state.lastRunInfo.value.sourceRecipe.command,
+      /--gbk alpha\.gbk\.tsv middle\.gbk third\.gb/
+    );
+    assert.match(
+      state.lastRunInfo.value.sourceRecipe.command,
+      /--comparisons_table comparisons\.tsv/
+    );
+    assert.doesNotMatch(state.lastRunInfo.value.sourceRecipe.command, /\/blast_0\.txt/);
+    assert.equal(state.lastRunInfo.value.reproducibility.level, 'session-recommended');
+    assert.match(
+      state.lastRunInfo.value.reproducibility.notes.join('\n'),
+      /Download reproducibility files/
+    );
+    assert.match(state.lastRunInfo.value.exactReplay.command, /--session lazy-linear\.gbdraw-session\.json/);
+    runner.downloadCliHelperFiles();
+    assert.equal(downloadedFilename, 'lazy-linear-cli-files.zip');
+    const linearHelperEntries = await storedZipEntries(downloadedBlob);
+    assertDownloadedFilesMatchCommands(state.lastRunInfo.value, linearHelperEntries);
+    assert.ok(linearHelperEntries.some(({ name }) => name.endsWith('.gbdraw-session.json')));
+    const blastEntry = linearHelperEntries.find(({ name }) => name === 'alpha.gbk-2.tsv');
+    const comparisonsEntry = linearHelperEntries.find(({ name }) => name === 'comparisons.tsv');
+    assert.ok(blastEntry?.text.includes('MIDDLE\tTHIRD'));
+    assert.ok(comparisonsEntry);
+    const [comparisonHeader, comparisonRow] = comparisonsEntry.text.trim()
+      .split('\n')
+      .map((line) => line.split('\t'));
+    assert.equal(comparisonRow[comparisonHeader.indexOf('blast')], 'alpha.gbk-2.tsv');
+    assert.doesNotMatch(comparisonsEntry.text, /^alpha\.gbk\.tsv\t/m);
+    assert.deepEqual(
+      state.lastRunInfo.value.sourceRecipe.helperFiles.map(({ name }) => name).sort(),
+      ['alpha.gbk-2.tsv', 'comparisons.tsv']
+    );
+    assert.doesNotMatch(
+      [
+        ...state.lastRunInfo.value.sourceRecipe.commandArgs,
+        ...state.lastRunInfo.value.exactReplay.commandArgs,
+        ...linearHelperEntries.map(({ name }) => name)
+      ].join('\n'),
+      /comparison-nucleotide-|\/blast_0\.txt/
     );
 
     const committedLosatCache = state.losatCache.value;
@@ -1344,7 +1436,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerHelperResponses.push({
       ok: true,
       result: {
-        tsv: 'SECOND\tTHIRD\t100\t4\t0\t0\t1\t4\t1\t4\t1e-10\t20\n'
+        tsv: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n'
       }
     });
     const failedLinearResult = result('lazy-linear-failed.svg', 'lazy-linear-failed');
