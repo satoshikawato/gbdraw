@@ -45,7 +45,9 @@ re-review every implementation diff already admitted and staged on `dev`.
 Legacy jobs may still execute on promotion pull requests during the staged
 migration, but those reruns are not the normative promotion decision model.
 
-A push to `main` verifies and builds the exact release SHA before deployment.
+A push to `main` runs browser verification for the exact release SHA. Cloudflare
+Workers Builds owns production builds and deployment through the existing Git
+integration; GitHub Actions does not publish the site.
 Direct `main` hotfixes are unsupported; urgent changes still enter through
 `dev`, complete staging, and use the promotion boundary.
 
@@ -58,7 +60,9 @@ Direct `main` hotfixes are unsupported; urgent changes still enter through
 | Trusted PR/promotion admission | `.github/workflows/web-base-policy.yml` |
 | Ordinary Web policy CLI | `tools/check-web-change-budget.mjs` |
 | Promotion evidence verifier | `tools/check-promotion-readiness.mjs` |
-| Release verification/build/deploy | `.github/workflows/deploy_web.yml` |
+| Release browser verification | `.github/workflows/deploy_web.yml` |
+| Hosted bundle construction | `tools/prepare_cloudflare_pages.py` |
+| Production deployment | Cloudflare Workers Builds and `wrangler.toml` |
 
 `tools/check-promotion-readiness.mjs` is the planned checker implementation
 owner. It does not exist yet and must be introduced in a checker-only pull

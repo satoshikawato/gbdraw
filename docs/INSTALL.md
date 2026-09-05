@@ -19,8 +19,8 @@ To create a figure without installing `gbdraw`, open:
 
 [https://gbdraw.app/](https://gbdraw.app/)
 
-The hosted app is served as a static site on Cloudflare Pages behind the `gbdraw.app`
-custom domain.
+The hosted app is served by Cloudflare Workers with static assets at the `gbdraw.app`
+custom domain. GitHub Pages is not used for deployment.
 
 Pyodide and the main browser-side assets used by the hosted app are vendored and
 self-hosted from the repository, so the web UI does not need to fetch those runtime

@@ -132,7 +132,7 @@ either Gallery test job for those changes.
 
 The blocking `browser` job runs the common 9 Gallery parity suite. The heavyweight
 Vibrio Generate test remains available as `test:web:vibrio-generate` and continues to
-run in the separate exact-SHA main deployment workflow as stress and health evidence;
+run in the separate exact-SHA main verification workflow as stress and health evidence;
 it is not part of Gallery promotion readiness. The `browser` and `performance` job IDs
 retain their timeouts and performance baseline. Every `workflow_dispatch` run is full.
 When `complete_refresh=true`, the full performance job still runs its three-trial
@@ -246,8 +246,10 @@ their unconditional event behavior and restore the fixed two-job readiness check
 `Gallery readiness / gate` keeps the same display name, so repository settings do not
 need to change. The planner and the other two profiles can remain active.
 
-Selective CI does not alter `.github/workflows/deploy_web.yml`, deployment triggering,
-or GitHub's CodeQL setup. Those systems remain outside the impact planner.
+Selective CI does not alter `.github/workflows/deploy_web.yml`, Cloudflare deployment
+triggering, or GitHub's CodeQL setup. The main workflow retains browser verification
+only; Cloudflare Workers Builds is the sole production publisher. Those systems
+remain outside the impact planner.
 
 ## Observability
 
