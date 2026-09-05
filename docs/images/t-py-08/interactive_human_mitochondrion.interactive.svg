@@ -50,6 +50,7 @@
   stroke-width: 1.5;
   paint-order: stroke fill markers;
 }
+.gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--pending,
 .gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--selected {
   opacity: 1;
   filter: url(#gbdraw-interactive-feature-glow);
@@ -58,6 +59,10 @@
   stroke-width: 2.5;
   paint-order: stroke fill markers;
   outline: none;
+}
+.gbdraw-interactive-pairwise-match:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 .gbdraw-interactive-annotation {
   cursor: pointer;
@@ -1954,8 +1959,9 @@
   var matchElementsById = new Map();
   var ambiguousMatchElementIds = new Set();
   var selectedMatchElements = [];
+  var pendingMatchElement = null;
   var comparisonElementsByCollinearityBlockId = new Map();
-  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
+  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element, index) {
     var matchId = getElementMatchId(element);
     if (matchId &amp;&amp; !ambiguousMatchElementIds.has(matchId)) {
       if (matchElementsById.has(matchId)) {
@@ -1973,6 +1979,9 @@
       comparisonElementsByCollinearityBlockId.get(blockId).push(element);
     }
     setClassToken(element, 'gbdraw-interactive-pairwise-match', true);
+    element.setAttribute('role', 'button');
+    element.setAttribute('tabindex', '0');
+    element.setAttribute('aria-label', 'Pairwise match ' + (index + 1));
   });
 
   function setClassToken(element, token, enabled) {
@@ -2107,6 +2116,19 @@
     selectedMatchElements.forEach(function (element) {
       setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
     });
+  }
+
+  function clearPendingMatch() {
+    if (!pendingMatchElement) return;
+    setClassToken(pendingMatchElement, 'gbdraw-interactive-pairwise-match--pending', false);
+    pendingMatchElement = null;
+  }
+
+  function setPendingMatch(element) {
+    if (pendingMatchElement === element) return;
+    clearPendingMatch();
+    pendingMatchElement = element;
+    setClassToken(element, 'gbdraw-interactive-pairwise-match--pending', true);
   }
 
   function clearActiveFeatureHover() {
@@ -4526,9 +4548,129 @@
     });
   }
 
-  function copyButton(value, label) {
-    var index = copyValues.push(String(value == null ? '' : value)) - 1;
-    return '&lt;button type="button" class="gfi-copy" data-copy-index="' + index + '"&gt;' + escapeHtml(label || 'Copy') + '&lt;/button&gt;';
+  function memberCopyFeedbackIdentity(memberOrRow) {
+    var recordKey = consistentTextIdentity(memberOrRow, ['recordKey', 'record_key']);
+    var biologicalId = consistentTextIdentity(
+      memberOrRow,
+      ['biologicalFeatureId', 'biological_feature_id']
+    );
+    if (
+      recordKey.valid
+      &amp;&amp; biologicalId.valid
+      &amp;&amp; recordKey.value
+      &amp;&amp; biologicalId.value
+    ) {
+      return JSON.stringify(['canonical', recordKey.value, biologicalId.value]);
+    }
+    var recordIndex = memberRecordIndex(memberOrRow);
+    var stableId = memberFeatureSvgId(memberOrRow);
+    var sourceIndex = nonnegativeIntegerIdentity(memberOrRow, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    if (Number.isInteger(recordIndex) &amp;&amp; (stableId || Number.isInteger(sourceIndex.value))) {
+      return JSON.stringify([
+        'source',
+        recordIndex,
+        stableId,
+        Number.isInteger(sourceIndex.value) ? sourceIndex.value : null
+      ]);
+    }
+    return JSON.stringify([
+      'display',
+      firstDisplayText(memberOrRow &amp;&amp; (memberOrRow.record || memberOrRow.recordId || memberOrRow.record_id)),
+      firstDisplayText(memberOrRow &amp;&amp; memberOrRow.coordinates, memberLocationText(memberOrRow)),
+      firstNonInternalDisplayText(
+        memberOrRow &amp;&amp; (memberOrRow.proteinId || memberOrRow.protein_id),
+        memberOrRow &amp;&amp; displayProteinId(null, memberOrRow, '')
+      )
+    ]);
+  }
+
+  function sequenceCopyFeedbackKey(context, orthogroupId, action, memberOrRow, sequenceKind) {
+    return JSON.stringify([
+      'orthogroup-sequence',
+      String(context || ''),
+      String(orthogroupId || '').trim(),
+      action,
+      memberOrRow ? memberCopyFeedbackIdentity(memberOrRow) : '',
+      sequenceKindLabel(sequenceKind)
+    ]);
+  }
+
+  function copyFeedbackLabel(status) {
+    if (status === 'success') return 'Copied!';
+    if (status === 'manual') return 'Copy manually';
+    if (status === 'failure') return 'Copy failed';
+    return '';
+  }
+
+  function updateCopyFeedbackButtons(feedbackKey) {
+    if (!popup || !popup.querySelectorAll || !feedbackKey) return;
+    var feedback = copyFeedbackByKey.get(feedbackKey);
+    Array.prototype.slice.call(
+      popup.querySelectorAll('[data-copy-feedback-key]')
+    ).forEach(function (button) {
+      if (button.getAttribute('data-copy-feedback-key') !== feedbackKey) return;
+      button.textContent = feedback
+        ? copyFeedbackLabel(feedback.status)
+        : String(button.getAttribute('data-copy-label') || 'Copy');
+    });
+  }
+
+  function beginCopyFeedback(feedbackKey) {
+    var previousTimer = copyFeedbackTimers.get(feedbackKey);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    copyFeedbackTimers.delete(feedbackKey);
+    copyFeedbackByKey.delete(feedbackKey);
+    nextCopyOperationId += 1;
+    copyOperationIds.set(feedbackKey, nextCopyOperationId);
+    updateCopyFeedbackButtons(feedbackKey);
+    return nextCopyOperationId;
+  }
+
+  function finishCopyFeedback(feedbackKey, operationId, status) {
+    if (!feedbackKey || copyOperationIds.get(feedbackKey) !== operationId) return;
+    var previousTimer = copyFeedbackTimers.get(feedbackKey);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    copyFeedbackByKey.set(feedbackKey, { operationId: operationId, status: status });
+    updateCopyFeedbackButtons(feedbackKey);
+    var timer = window.setTimeout(function () {
+      var current = copyFeedbackByKey.get(feedbackKey);
+      if (
+        copyOperationIds.get(feedbackKey) !== operationId
+        || !current
+        || current.operationId !== operationId
+      ) return;
+      copyFeedbackByKey.delete(feedbackKey);
+      copyFeedbackTimers.delete(feedbackKey);
+      copyOperationIds.delete(feedbackKey);
+      updateCopyFeedbackButtons(feedbackKey);
+    }, COPY_FEEDBACK_DURATION_MS);
+    copyFeedbackTimers.set(feedbackKey, timer);
+  }
+
+  function clearCopyFeedback() {
+    copyFeedbackTimers.forEach(function (timer) {
+      window.clearTimeout(timer);
+    });
+    copyFeedbackTimers.clear();
+    copyFeedbackByKey.clear();
+    copyOperationIds.clear();
+  }
+
+  function copyButton(value, label, feedbackKey) {
+    var originalLabel = String(label || 'Copy');
+    var key = String(feedbackKey || '');
+    var feedback = key ? copyFeedbackByKey.get(key) : null;
+    var index = copyValues.push({
+      feedbackKey: key,
+      text: String(value == null ? '' : value)
+    }) - 1;
+    var feedbackAttributes = key
+      ? ' data-copy-feedback-key="' + escapeHtml(key) + '" data-copy-label="' + escapeHtml(originalLabel) + '" aria-live="polite" aria-atomic="true"'
+      : '';
+    return '&lt;button type="button" class="gfi-copy" data-copy-index="' + index + '"' + feedbackAttributes + '&gt;' +
+      escapeHtml(feedback ? copyFeedbackLabel(feedback.status) : originalLabel) + '&lt;/button&gt;';
   }
 
   function downloadButton(filename, text, label) {
@@ -4550,18 +4692,32 @@
       if (!text) return;
       var count = groupFastaCount(rows, sequenceKind);
       var suffix = count &gt; 1 ? ' (' + count + ')' : '';
-      html.push(copyButton(text, 'Copy ' + sequenceKind + suffix));
+      var feedbackKey = sequenceCopyFeedbackKey(
+        options &amp;&amp; options.feedbackContext,
+        orthogroupId,
+        'group',
+        null,
+        sequenceKind
+      );
+      html.push(copyButton(text, 'Copy ' + sequenceKind + suffix, feedbackKey));
       html.push(downloadButton(groupSequenceFilename(orthogroupId, displayName, sequenceKind), text, 'DL ' + sequenceKind + suffix));
     });
     return html.join('');
   }
 
-  function renderMemberSequenceActions(memberOrRow, orthogroupId) {
+  function renderMemberSequenceActions(memberOrRow, orthogroupId, feedbackContext) {
     var html = [];
     ['nt', 'aa'].forEach(function (sequenceKind) {
       var text = String(memberFasta(memberOrRow, sequenceKind) || '').trim();
       if (!text) return;
-      html.push(copyButton(text, 'Copy ' + sequenceKind));
+      var feedbackKey = sequenceCopyFeedbackKey(
+        feedbackContext,
+        orthogroupId,
+        'member',
+        memberOrRow,
+        sequenceKind
+      );
+      html.push(copyButton(text, 'Copy ' + sequenceKind, feedbackKey));
       html.push(downloadButton(memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId), text, 'DL ' + sequenceKind));
     });
     return html.length ? '&lt;div class="gfi-seq-actions"&gt;' + html.join('') + '&lt;/div&gt;' : '';
@@ -4569,6 +4725,11 @@
 
   var copyValues = [];
   var downloadValues = [];
+  var COPY_FEEDBACK_DURATION_MS = 1500;
+  var copyFeedbackByKey = new Map();
+  var copyFeedbackTimers = new Map();
+  var copyOperationIds = new Map();
+  var nextCopyOperationId = 0;
 
   function renderRows(rows) {
     if (!rows.length) {
@@ -4625,10 +4786,11 @@
     ).join('\n');
     var sequenceActions = renderGroupSequenceActions(rows, {
       orthogroupId: orthogroupId,
-      displayName: displayName
+      displayName: displayName,
+      feedbackContext: 'feature-orthogroup'
     });
     var body = rows.map(function (row) {
-      var sequenceActions = renderMemberSequenceActions(row, orthogroupId);
+      var sequenceActions = renderMemberSequenceActions(row, orthogroupId, 'feature-orthogroup');
       return '&lt;tr&gt;' +
         '&lt;td class="gfi-mono"&gt;' + escapeHtml(row.record) + '&lt;/td&gt;' +
         '&lt;td class="gfi-mono"&gt;' + escapeHtml(row.coordinates) + '&lt;/td&gt;' +
@@ -5363,7 +5525,7 @@
       '&lt;tbody&gt;' + body + '&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;';
   }
 
-  function renderMatchMemberTable(section, rows) {
+  function renderMatchMemberTable(section, rows, feedbackContext) {
     if (!rows.length) return '';
     var orthogroupId = String(section &amp;&amp; (section.id || section.orthogroupId || section.orthogroup_id) || rows[0] &amp;&amp; (rows[0].orthogroupId || rows[0].orthogroup_id) || '').trim();
     var displayName = String(section &amp;&amp; (section.displayName || section.display_name || section.name) || rows[0] &amp;&amp; (rows[0].displayName || rows[0].display_name) || '').trim();
@@ -5379,7 +5541,7 @@
       ).join('\n');
     }
     var body = rows.map(function (row) {
-      var sequenceActions = renderMemberSequenceActions(row, orthogroupId);
+      var sequenceActions = renderMemberSequenceActions(row, orthogroupId, feedbackContext);
       return '&lt;tr&gt;' +
         '&lt;td class="gfi-mono"&gt;' + escapeHtml(row.record) + '&lt;/td&gt;' +
         '&lt;td class="gfi-mono"&gt;' + escapeHtml(row.coordinates) + '&lt;/td&gt;' +
@@ -5390,7 +5552,8 @@
     }).join('');
     var sequenceActions = renderGroupSequenceActions(rows, {
       orthogroupId: orthogroupId,
-      displayName: displayName
+      displayName: displayName,
+      feedbackContext: feedbackContext
     });
     return '&lt;div class="gfi-table-wrap"&gt;&lt;table class="gfi-table gfi-og-members-table"&gt;' +
       '&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Record&lt;/th&gt;&lt;th&gt;Coordinates (+/-)&lt;/th&gt;&lt;th&gt;Protein ID&lt;/th&gt;&lt;th&gt;Product / note&lt;/th&gt;&lt;th&gt;Seq&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;' +
@@ -5441,7 +5604,11 @@
         ? '&lt;div class="gfi-block gfi-block--selected-og"&gt;' +
           '&lt;div class="gfi-block-title"&gt;' + escapeHtml('Selected similarity group') + '&lt;/div&gt;' +
           renderRows(selectedBlockOrthogroup.detailRows) +
-          renderMatchMemberTable(selectedBlockOrthogroup, selectedBlockOrthogroup.memberRows) +
+          renderMatchMemberTable(
+            selectedBlockOrthogroup,
+            selectedBlockOrthogroup.memberRows,
+            'selected-orthogroup:' + selectedBlockOrthogroup.id
+          ) +
           '&lt;/div&gt;'
         : '';
       return '&lt;div class="gfi-block"&gt;' +
@@ -5449,7 +5616,16 @@
         (rows.length &amp;&amp; !featureRows.length ? renderRows(rows) : '') +
         renderMatchFeatureTable(featureRows) +
         renderMatchBlockOrthogroupTable(blockOrthogroups, selectedBlockOrthogroupId) +
-        renderMatchMemberTable(section, memberRows) +
+        renderMatchMemberTable(
+          section,
+          memberRows,
+          'match-section:' + firstDisplayText(
+            section &amp;&amp; section.id,
+            section &amp;&amp; section.title,
+            match &amp;&amp; match.id,
+            selectedBlockOrthogroupId
+          )
+        ) +
         selectedHtml +
         '&lt;/div&gt;';
     }).join('') || '&lt;div class="gfi-empty"&gt;No match details available.&lt;/div&gt;';
@@ -5491,6 +5667,7 @@
   function closePopup() {
     stopPopupResize();
     stopPopupDrag();
+    clearCopyFeedback();
     updateActivePopupViewportMetrics = null;
     if (popup &amp;&amp; popup.parentNode) {
       popup.parentNode.removeChild(popup);
@@ -6194,8 +6371,10 @@
       var copyTarget = closestFromTarget(rootEvent.target, '[data-copy-index]');
       if (copyTarget) {
         var index = Number(copyTarget.getAttribute('data-copy-index'));
-        var value = Number.isFinite(index) ? copyValues[index] || '' : '';
-        Promise.resolve(copyText(value, copyTarget)).catch(function () {});
+        var copyPayload = Number.isFinite(index) ? copyValues[index] || null : null;
+        var value = copyPayload ? copyPayload.text : '';
+        var feedbackKey = copyPayload ? copyPayload.feedbackKey : '';
+        Promise.resolve(copyText(value, copyTarget, feedbackKey)).catch(function () {});
         return;
       }
       var downloadTarget = closestFromTarget(rootEvent.target, '[data-download-index]');
@@ -6241,18 +6420,34 @@
     syncStandaloneOverlayOrder();
   }
 
-  async function copyText(value, button) {
+  async function copyText(value, button, feedbackKey) {
     var text = String(value == null ? '' : value);
-    if (navigator.clipboard &amp;&amp; navigator.clipboard.writeText) {
+    var operationId = feedbackKey ? beginCopyFeedback(feedbackKey) : 0;
+    var clipboard = null;
+    try {
+      clipboard = navigator.clipboard;
+    } catch (error) {
+      clipboard = null;
+    }
+    if (clipboard &amp;&amp; clipboard.writeText) {
       try {
-        await navigator.clipboard.writeText(text);
-        if (button) button.textContent = 'Copied';
-        return;
+        await clipboard.writeText(text);
+        if (feedbackKey) finishCopyFeedback(feedbackKey, operationId, 'success');
+        else if (button) button.textContent = 'Copied';
+        return 'copied';
       } catch (error) {
         // Fall back to a prompt below when clipboard permission is unavailable.
       }
     }
-    window.prompt('Copy text', text);
+    try {
+      if (typeof window.prompt !== 'function') throw new Error('Manual copy is unavailable.');
+      window.prompt('Copy text', text);
+      if (feedbackKey) finishCopyFeedback(feedbackKey, operationId, 'manual');
+      return 'manual';
+    } catch (error) {
+      if (feedbackKey) finishCopyFeedback(feedbackKey, operationId, 'failure');
+      return 'failed';
+    }
   }
 
   function closestFeature(node) {
@@ -6393,6 +6588,41 @@
     closeHoverPopup();
   });
 
+  svg.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) {
+      clearPendingMatch();
+      return;
+    }
+    setPendingMatch(matchElement);
+  });
+
+  svg.addEventListener('pointerout', function (event) {
+    if (!pendingMatchElement) return;
+    var matchElement = closestMatch(event.target);
+    if (matchElement !== pendingMatchElement) return;
+    if (closestMatch(event.relatedTarget) === matchElement) return;
+    clearPendingMatch();
+  });
+
+  window.addEventListener('pointerup', clearPendingMatch, true);
+  window.addEventListener('pointercancel', clearPendingMatch, true);
+  window.addEventListener('blur', clearPendingMatch);
+
+  function activateMatch(matchElement, event) {
+    var matchId = getElementMatchId(matchElement);
+    var match = matchesById.get(matchId);
+    if (!match) return false;
+    clearPendingMatch();
+    event.preventDefault();
+    event.stopPropagation();
+    closeHoverPopup();
+    openPopup(match, event, 'match');
+    setSelectedMatch(matchId);
+    return true;
+  }
+
   svg.addEventListener('click', function (event) {
     if (popup &amp;&amp; popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
@@ -6420,14 +6650,7 @@
         closePopup();
         return;
       }
-      var matchId = getElementMatchId(matchElement);
-      var match = matchesById.get(matchId);
-      if (!match) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeHoverPopup();
-      openPopup(match, event, 'match');
-      setSelectedMatch(matchId);
+      activateMatch(matchElement, event);
       return;
     }
     var svgId = getElementFeatureId(featureElement);
@@ -6441,6 +6664,13 @@
     event.stopPropagation();
     closeHoverPopup();
     openPopup(feature, event, 'feature');
+  });
+
+  svg.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' &amp;&amp; event.key !== ' ') return;
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    activateMatch(matchElement, event);
   });
 
   document.addEventListener('keydown', function (event) {

@@ -912,8 +912,8 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
 
     for fragment in (
         "collinearGroups,",
-        "...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),",
-        "...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])",
+        "orthogroups: groupsForMatch(matchElement),",
+        "orthogroups: () => groupsForMatch(matchElement),",
         "const payload = buildMatchPayload(matchElement, featureLookup);",
     ):
         assert fragment in svg_actions
