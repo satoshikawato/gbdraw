@@ -109,6 +109,7 @@ import {
   bytesToBase64,
   bytesToText,
   getSessionResourceSource,
+  readFileText,
   textToBase64,
   textToBytes
 } from './file-content-cache.js';
@@ -2830,6 +2831,14 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
     throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
   return bytesToText(bytes, { fatal: true });
+};
+
+export const readCanonicalResourceText = async (resources, resourceId) => {
+  const descriptor = resources?.[resourceId];
+  const owner = getResourcePayloadOwner(descriptor);
+  return owner && owner !== descriptor
+    ? readFileText(owner)
+    : decodeCanonicalResourceText(resources, resourceId);
 };
 
 const resourceTextFromRef = (resources, ref) => (
