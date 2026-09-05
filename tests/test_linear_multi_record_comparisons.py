@@ -184,6 +184,122 @@ def test_comparison_ribbons_keep_four_pixel_clearance_from_painted_occupancy() -
     )
 
 
+@pytest.mark.parametrize("multi_record", [False, True])
+@pytest.mark.parametrize(
+    ("label_scope", "font_size", "rotation", "height", "reverse", "style"),
+    [
+        ("none", 18, 45, 60, False, "curve"),
+        ("first", 18, 45, 60, False, "curve"),
+        ("all", 18, 45, 60, False, "curve"),
+        ("all", 28, 70, 180, False, "ribbon"),
+        ("all", 12, 0, 100, True, "curve"),
+        ("all", 18, 45, 60, True, "ribbon"),
+    ],
+)
+def test_comparison_endpoints_follow_gene_tracks_with_labels(
+    multi_record, label_scope, font_size, rotation, height, reverse, style
+) -> None:
+    records = _records()[:3]
+    for record in records:
+        record.features.append(
+            SeqFeature(
+                FeatureLocation(10, 110, strand=1),
+                type="CDS",
+                qualifiers={"gene": ["long_biosynthetic_gene_label"]},
+            )
+        )
+    edges = [(0, 1), (1, 2)]
+    if reverse:
+        edges = [(subject, query) for query, subject in edges]
+    comparisons = [_comparison(*edge) for edge in edges]
+    if reverse:
+        for comparison in comparisons:
+            comparison.matches.loc[:, ["sstart", "send"]] = [110, 20]
+    canvas = assemble_linear_diagram_from_records(
+        records,
+        cfg=apply_config_overrides(
+            None,
+            {
+                "labels.linear.scope": label_scope,
+                "labels.linear.placement": "above_feature",
+                "labels.linear.rotation": rotation,
+                "labels.font_size.linear.short": font_size,
+                "objects.features.block_stroke_width.short": 2,
+                "objects.features.line_stroke_width.short": 2,
+                "canvas.show_gc": False,
+                "canvas.show_skew": False,
+                "canvas.linear.comparison_height": height,
+            },
+        ),
+        linear_comparisons=comparisons,
+        layout=(
+            LinearMultiRecordOptions(
+                multi_record_positions=("#1@1", "#2@2", "#3@3"),
+            )
+            if multi_record
+            else None
+        ),
+        pairwise_match_style=style,
+        legend="none",
+    )
+    root = ET.fromstring(canvas.tostring())
+    parents = {child: parent for parent in root.iter() for child in parent}
+    number = r"[-+0-9.eE]+"
+
+    def absolute_y(element, local_y):
+        while element is not None:
+            local_y += sum(
+                float(y)
+                for _x, y in re.findall(
+                    rf"translate\(\s*({number})[,\s]+({number})\s*\)",
+                    element.get("transform", ""),
+                )
+            )
+            element = parents.get(element)
+        return local_y
+
+    # Read painted glyph edges from the final SVG, independently of placement
+    # and footprint helpers. Both nested and composition translations count.
+    gene_bands = {}
+    for group in root.iter():
+        record_index = group.get("data-gbdraw-record-index")
+        features = [
+            element for element in group.iter()
+            if element.get("data-gbdraw-feature-id") is not None
+            and element.get("d") is not None
+        ]
+        if record_index is None or not features:
+            continue
+        values = [
+            absolute_y(feature, float(y))
+            for feature in features
+            for _x, y in re.findall(
+                rf"[ML]\s*({number})[,\s]+({number})", feature.get("d", "")
+            )
+        ]
+        half_stroke = max(float(f.get("stroke-width", "0")) for f in features) / 2
+        gene_bands[int(record_index)] = (
+            min(values) - half_stroke, max(values) + half_stroke
+        )
+    assert set(gene_bands) == {0, 1, 2}
+    paths = [p for p in root.iter() if p.get("data-pairwise-match-style")]
+    assert len(paths) == 2
+    for path, (query, subject) in zip(paths, edges, strict=True):
+        endpoints = re.findall(
+            rf"[ML]\s*({number})[,\s]+({number})", path.attrib["d"]
+        )
+        query_y = absolute_y(path, float(endpoints[0][1]))
+        subject_y = absolute_y(path, float(endpoints[1 if style == "curve" else 2][1]))
+        upper_y, lower_y = sorted((query_y, subject_y))
+        upper, lower = sorted((query, subject))
+        assert upper_y == pytest.approx(gene_bands[upper][1] + 4.0)
+        assert lower_y == pytest.approx(gene_bands[lower][0] - 4.0)
+        assert path.get("data-query-record-index") == str(query)
+        assert path.get("data-subject-record-index") == str(subject)
+        assert path.get("data-pairwise-match-style") == style
+    assert ("long_biosynthetic_gene_label" in canvas.tostring()) == (label_scope != "none")
+
+
 def test_reversed_explicit_endpoints_work_with_legacy_one_record_rows() -> None:
     canvas = assemble_linear_diagram_from_records(
         _records()[:2],

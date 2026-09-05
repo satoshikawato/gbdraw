@@ -649,25 +649,25 @@ export const createFeatureSvgActions = ({
     }
   };
 
+  const groupsForMatch = (matchElement) => (
+    matchElement.getAttribute('data-match-kind') === 'collinear'
+      ? collinearGroups?.value || []
+      : orthogroups?.value || []
+  );
+
   const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
-    orthogroups: [
-      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
-      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
-    ],
+    orthogroups: groupsForMatch(matchElement),
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
   });
 
   const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, {
-    orthogroups: () => [
-      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
-      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
-    ],
+    orthogroups: () => groupsForMatch(matchElement),
     orthogroupNameOverrides
   });
 
@@ -781,6 +781,7 @@ export const createFeatureSvgActions = ({
       activeHoverKey: '',
       activeMatchHoverElement: null,
       activeMatchHoverKey: '',
+      pendingMatchElement: null,
       activeHoverElements: new Set(),
       transformPointer: null,
       reconcileHoverAfterTransform: false,
@@ -946,6 +947,19 @@ export const createFeatureSvgActions = ({
         handlerState.activeMatchHoverKey = '';
       };
 
+      const clearPendingMatch = () => {
+        if (!handlerState.pendingMatchElement) return;
+        handlerState.pendingMatchElement.classList.remove('gbdraw-match-pending');
+        handlerState.pendingMatchElement = null;
+      };
+
+      const setPendingMatch = (matchElement) => {
+        if (handlerState.pendingMatchElement === matchElement) return;
+        clearPendingMatch();
+        handlerState.pendingMatchElement = matchElement;
+        matchElement.classList.add('gbdraw-match-pending');
+      };
+
       const rememberTransformPointer = (eventLike) => {
         if (!Number.isFinite(eventLike?.clientX) || !Number.isFinite(eventLike?.clientY)) return;
         handlerState.transformPointer = {
@@ -1090,6 +1104,7 @@ export const createFeatureSvgActions = ({
       };
 
       const handleClick = (e) => {
+        clearPendingMatch();
         if (featureSelection?.consumeSuppressNextClick?.()) {
           e.preventDefault();
           e.stopPropagation();
@@ -1167,8 +1182,24 @@ export const createFeatureSvgActions = ({
       };
 
       const handlePointerDown = (e) => {
+        if (e.button === 0 && e.isPrimary !== false) {
+          const matchEl = getPairwiseMatchClickTarget(e, svg);
+          if (matchEl) {
+            setPendingMatch(matchEl);
+            return;
+          }
+        }
+        clearPendingMatch();
         if (!featureSelection?.startMarqueePointer?.(e, svg)) return;
         e.stopPropagation();
+      };
+
+      const handlePointerOut = (e) => {
+        if (!handlerState.pendingMatchElement) return;
+        const matchEl = getPairwiseMatchTarget(e.target, svg);
+        if (matchEl !== handlerState.pendingMatchElement) return;
+        if (getPairwiseMatchTarget(e.relatedTarget, svg) === matchEl) return;
+        clearPendingMatch();
       };
 
       const handlePointerMove = (e) => {
@@ -1179,6 +1210,7 @@ export const createFeatureSvgActions = ({
       };
 
       const handlePointerUp = (e) => {
+        clearPendingMatch();
         if (!featureSelection?.commitMarqueePointer?.(e)) return;
         e.preventDefault();
         e.stopPropagation();
@@ -1186,6 +1218,7 @@ export const createFeatureSvgActions = ({
       };
 
       const handlePointerCancel = () => {
+        clearPendingMatch();
         featureSelection?.cancelMarqueePointer?.();
       };
 
@@ -1195,9 +1228,13 @@ export const createFeatureSvgActions = ({
       svg.addEventListener('click', handleClick);
       svg.addEventListener('keydown', handleKeyDown);
       svg.addEventListener('pointerdown', handlePointerDown, true);
+      svg.addEventListener('pointerout', handlePointerOut, true);
       svg.addEventListener('pointermove', handlePointerMove, true);
       svg.addEventListener('pointerup', handlePointerUp, true);
       svg.addEventListener('pointercancel', handlePointerCancel, true);
+      window.addEventListener?.('pointerup', clearPendingMatch, true);
+      window.addEventListener?.('pointercancel', clearPendingMatch, true);
+      window.addEventListener?.('blur', clearPendingMatch);
       handlerState.cleanup = () => {
         svg.removeEventListener('mouseover', handleMouseOver);
         svg.removeEventListener('mousemove', handleMouseMove);
@@ -1205,15 +1242,20 @@ export const createFeatureSvgActions = ({
         svg.removeEventListener('click', handleClick);
         svg.removeEventListener('keydown', handleKeyDown);
         svg.removeEventListener('pointerdown', handlePointerDown, true);
+        svg.removeEventListener('pointerout', handlePointerOut, true);
         svg.removeEventListener('pointermove', handlePointerMove, true);
         svg.removeEventListener('pointerup', handlePointerUp, true);
         svg.removeEventListener('pointercancel', handlePointerCancel, true);
+        window.removeEventListener?.('pointerup', clearPendingMatch, true);
+        window.removeEventListener?.('pointercancel', clearPendingMatch, true);
+        window.removeEventListener?.('blur', clearPendingMatch);
         if (handlerState.hoverReconcileFrame !== null) {
           window.cancelAnimationFrame(handlerState.hoverReconcileFrame);
           handlerState.hoverReconcileFrame = null;
         }
         handlerState.reconcileHoverAfterTransform = false;
         handlerState.transformPointer = null;
+        clearPendingMatch();
         clearActiveFeatureHover();
         clearActiveMatchHover();
         hideHoverSummary();

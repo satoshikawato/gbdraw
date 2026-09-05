@@ -157,7 +157,7 @@ const installDiagramRequestObserver = async (page) => {
   });
 };
 
-test('Similarity-group popup selects every OG match without a focus outline', async ({ page }) => {
+test('Pairwise pointer feedback commits selection and preserves keyboard focus', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
   await page.evaluate(async () => {
@@ -194,22 +194,119 @@ test('Similarity-group popup selects every OG match without a focus outline', as
   const otherOgMatch = page.getByRole('button', { name: 'Pairwise match 3', exact: true });
   const pairwiseMatch = page.getByRole('button', { name: 'Pairwise match 4', exact: true });
   await expect(firstOgMatch).toBeVisible();
-  await firstOgMatch.press('Enter');
+
+  await firstOgMatch.dispatchEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: 'mouse'
+  });
+  const pendingStyle = await firstOgMatch.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      outlineStyle: style.outlineStyle,
+      stroke: style.stroke
+    };
+  });
+  expect(pendingStyle).toEqual({
+    outlineStyle: 'none',
+    stroke: 'rgb(245, 158, 11)'
+  });
+  await expect(firstOgMatch).toHaveClass(/\bgbdraw-match-pending\b/);
+  await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toHaveCount(0);
+  await firstOgMatch.dispatchEvent('pointercancel', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: 'mouse'
+  });
+  await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-pending\b/);
+
+  await firstOgMatch.dispatchEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 2,
+    pointerType: 'mouse'
+  });
+  await otherOgMatch.dispatchEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 3,
+    pointerType: 'mouse'
+  });
+  await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-pending\b/);
+  await expect(otherOgMatch).toHaveClass(/\bgbdraw-match-pending\b/);
+  await otherOgMatch.dispatchEvent('pointerup', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 3,
+    pointerType: 'mouse'
+  });
+  await expect(otherOgMatch).not.toHaveClass(/\bgbdraw-match-pending\b/);
+  await otherOgMatch.dispatchEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 4,
+    pointerType: 'mouse'
+  });
+  await otherOgMatch.dispatchEvent('pointercancel', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 4,
+    pointerType: 'mouse'
+  });
+  await expect(otherOgMatch).not.toHaveClass(/\bgbdraw-match-pending\b/);
+
+  await firstOgMatch.dispatchEvent('click', { bubbles: true });
 
   await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
   await expect(firstOgMatch).toHaveClass(/\bgbdraw-match-selected\b/);
   await expect(secondOgMatch).toHaveClass(/\bgbdraw-match-selected\b/);
   await expect(otherOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
   await expect(pairwiseMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
-  await expect.poll(() => firstOgMatch.evaluate((element) => getComputedStyle(element).outlineStyle))
-    .toBe('none');
 
   await page.getByRole('button', { name: 'Close match popup' }).click();
   await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toHaveCount(0);
   await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
   await expect(secondOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
 
-  await pairwiseMatch.press('Enter');
+  await firstOgMatch.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(firstOgMatch).toBeFocused();
+  const keyboardFocusStyle = await firstOgMatch.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      focusVisible: element.matches(':focus-visible'),
+      outlineColor: style.outlineColor,
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth
+    };
+  });
+  expect(keyboardFocusStyle).toEqual({
+    focusVisible: true,
+    outlineColor: 'rgb(37, 99, 235)',
+    outlineStyle: 'solid',
+    outlineWidth: '2px'
+  });
+  await firstOgMatch.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
+  await expect(firstOgMatch).toHaveClass(/\bgbdraw-match-selected\b/);
+  await expect.poll(() => firstOgMatch.evaluate((element) => getComputedStyle(element).outlineStyle))
+    .toBe('solid');
+  await page.getByRole('button', { name: 'Close match popup' }).click();
+
+  await pairwiseMatch.focus();
+  await pairwiseMatch.press('Space');
+  await expect(page.getByRole('dialog', { name: 'Pairwise match details' })).toBeVisible();
   await expect(pairwiseMatch).toHaveClass(/\bgbdraw-match-selected\b/);
   await expect(firstOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);
   await expect(secondOgMatch).not.toHaveClass(/\bgbdraw-match-selected\b/);

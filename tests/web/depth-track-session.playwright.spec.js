@@ -19,6 +19,22 @@ const repeatRegionGenbankPath = join(repoRoot, 'tests/test_inputs/NC_001454.1.gb
 const sparseGenbankAPath = join(repoRoot, 'tests/test_inputs/BGC0000708.gbk');
 const sparseGenbankBPath = join(repoRoot, 'tests/test_inputs/BGC0000709.gbk');
 
+const storedZipEntryNames = (path) => {
+  const bytes = readFileSync(path);
+  const names = [];
+  let offset = 0;
+  while (offset + 30 <= bytes.length && bytes.readUInt32LE(offset) === 0x04034B50) {
+    const size = bytes.readUInt32LE(offset + 18);
+    const nameLength = bytes.readUInt16LE(offset + 26);
+    const extraLength = bytes.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    names.push(bytes.subarray(nameStart, nameStart + nameLength).toString('utf8'));
+    offset = dataStart + size;
+  }
+  return names;
+};
+
 test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-smoke' }, async ({ page }) => {
   test.setTimeout(180000);
   const genbank = readFileSync(hmmtDnaPath, 'utf8');
@@ -2342,7 +2358,8 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
         showGc: window.__GBDRAW_APP__.form.show_gc,
         showSkew: window.__GBDRAW_APP__.form.show_skew
       },
-      reproducibilityLevel: window.__GBDRAW_APP__.lastRunInfo?.reproducibility?.level
+      reproducibilityLevel: window.__GBDRAW_APP__.lastRunInfo?.reproducibility?.level,
+      exactReplayCommand: window.__GBDRAW_APP__.lastRunInfo?.exactReplay?.command || ''
     };
   });
 
@@ -2352,8 +2369,86 @@ test('HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint',
     showGc: true,
     showSkew: true
   });
-  expect(geometry.args).toEqual(['--session', 'out.gbdraw-session.json']);
-  expect(geometry.reproducibilityLevel).toBe('canonical-request');
+  expect(geometry.args).toContain('--gbk');
+  expect(geometry.args).toContain('HmmtDNA.gbk');
+  expect(geometry.args).toContain('--separate_strands');
+  expect(geometry.args).toContain('--resolve_overlaps');
+  expect(geometry.exactReplayCommand).toBe('gbdraw linear --session out.gbdraw-session.json');
+  expect(geometry.reproducibilityLevel).toBe('exact-uploaded-files');
+  await page.evaluate(() => { window.__GBDRAW_APP__.resultPanelTab = 'run-info'; });
+  await expect(page.locator('.run-info-panel').getByText('Source recipe', { exact: true })).toBeVisible();
+  await expect(page.locator('.run-info-panel').getByText('Exact replay', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.run-info-panel').getByText('Reproducibility files', { exact: true })
+  ).toBeVisible();
+  await expect(page.locator('.run-info-panel')).toContainText(
+    'The Source recipe uses only the original source files.'
+  );
+  await expect(page.locator('.run-info-panel')).toContainText('Exact replay file:');
+  await expect(page.locator('.run-info-panel')).not.toContainText('Source recipe helper files:');
+  const sourceCopy = page.locator('.run-info-panel').getByTitle('Copy command');
+  const replayCopy = page.locator('.run-info-panel').getByTitle('Copy exact replay command');
+  await sourceCopy.click();
+  await expect(sourceCopy).toContainText('Copied');
+  await replayCopy.click();
+  await expect(replayCopy).toContainText('Copied');
+  const expectedReproducibilityFiles = await page.evaluate(() => (
+    window.__GBDRAW_APP__.lastRunInfo.helperFiles.map(({ name }) => name).sort()
+  ));
+  const reproducibilityDownload = page.waitForEvent('download', { timeout: 60000 });
+  await page.locator('.run-info-panel').getByRole('button', {
+    name: 'Download reproducibility files'
+  }).click();
+  const downloadedBundle = await reproducibilityDownload;
+  const downloadedBundlePath = await downloadedBundle.path();
+  expect(downloadedBundlePath).toBeTruthy();
+  expect(storedZipEntryNames(downloadedBundlePath).sort()).toEqual(expectedReproducibilityFiles);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.lastRunInfo = {
+      ...app.lastRunInfo,
+      sourceRecipe: {
+        ...app.lastRunInfo.sourceRecipe,
+        helperFiles: [{ name: 'browser-comparison.tsv' }]
+      },
+      downloadBundle: {
+        ...app.lastRunInfo.downloadBundle,
+        description:
+          'Source recipe helper files: browser-comparison.tsv. Exact replay file: out.gbdraw-session.json.'
+      }
+    };
+  });
+  await expect(page.locator('.run-info-panel')).toContainText(
+    'Source recipe helper files: browser-comparison.tsv.'
+  );
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.lastRunInfo = {
+      ...app.lastRunInfo,
+      command: '',
+      sourceRecipe: {
+        ...app.lastRunInfo.sourceRecipe,
+        available: false,
+        command: '',
+        commandArgs: [],
+        invocation: null,
+        helperFiles: [],
+        unavailableReason:
+          'Source recipe unavailable: multiple uploaded inputs use the visible filename "genome.gbk".'
+      },
+      downloadBundle: {
+        ...app.lastRunInfo.downloadBundle,
+        description: 'The Source recipe is unavailable. Exact replay file: out.gbdraw-session.json.'
+      }
+    };
+  });
+  await expect(page.locator('.run-info-panel')).toContainText(
+    'multiple uploaded inputs use the visible filename "genome.gbk"'
+  );
+  await expect(page.locator('.run-info-panel').getByTitle('Copy command')).toHaveCount(0);
+  await expect(page.locator('.run-info-panel').getByTitle('Copy exact replay command')).toBeVisible();
   for (const bands of [geometry.client, geometry.bbox]) {
     for (const band of Object.values(bands)) {
       expect(Number.isFinite(band.top)).toBe(true);
@@ -2450,13 +2545,28 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   });
   expect(firstResult.depthAFills).toContain('#112233');
   expect(firstResult.depthBFills).toContain('#445566');
-  expect(firstResult.depthArgs).toEqual([]);
+  expect(firstResult.depthArgs).toEqual([
+    ['sample-a.tsv', ''],
+    ['', 'sample-b.tsv']
+  ]);
+  const firstRecipe = await page.evaluate(() => ({
+    available: window.__GBDRAW_APP__.lastRunInfo?.sourceRecipe?.available,
+    args: window.__GBDRAW_APP__.lastRunInfo?.sourceRecipe?.invocation?.args || [],
+    exactReplay: window.__GBDRAW_APP__.lastRunInfo?.exactReplay?.command || ''
+  }));
+  expect(firstRecipe.available).toBe(true);
+  expect(firstRecipe.args).toContain('BGC0000711.gbk');
+  expect(firstRecipe.args).toContain('BGC0000713.gbk');
+  expect(firstRecipe.exactReplay).toContain('--session');
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
   await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
+  const savedSession = JSON.parse(gunzipSync(readFileSync(savedSessionPath)).toString('utf8'));
+  expect(savedSession.webFiles.bindings.linearSeqs[0].depth[0].name).toBe('sample-a.tsv');
+  expect(savedSession.webFiles.bindings.linearSeqs[1].depth[1].name).toBe('sample-b.tsv');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
@@ -2476,6 +2586,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
     const app = window.__GBDRAW_APP__;
     return {
       sparseRows: app.linearSeqs.map((seq) => seq.depth.map(Boolean)),
+      depthNames: app.linearSeqs.map((seq) => seq.depth.map((file) => file?.name || '')),
       labels: app.adv.depth_tracks.map((track) => track.label),
       colors: app.adv.depth_tracks.map((track) => track.color.toLowerCase()),
       slotIds: app.adv.linear_track_slots.map((slot) => slot.id),
@@ -2487,6 +2598,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   });
   expect(restoredState).toEqual({
     sparseRows: [[true, false], [false, true]],
+    depthNames: [['sample-a.tsv', ''], ['', 'sample-b.tsv']],
     labels: ['Sample A', 'Sample B'],
     colors: ['#112233', '#445566'],
     slotIds: ['depth_a', 'depth_b', 'features'],
@@ -2504,7 +2616,13 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   expect(secondResult.groups).toEqual(firstResult.groups);
   expect(secondResult.depthAFills).toContain('#112233');
   expect(secondResult.depthBFills).toContain('#445566');
-  expect(secondResult.depthArgs).toEqual([]);
+  expect(secondResult.depthArgs).toEqual(firstResult.depthArgs);
+  const secondRecipe = await page.evaluate(() => ({
+    available: window.__GBDRAW_APP__.lastRunInfo?.sourceRecipe?.available,
+    args: window.__GBDRAW_APP__.lastRunInfo?.sourceRecipe?.invocation?.args || [],
+    exactReplay: window.__GBDRAW_APP__.lastRunInfo?.exactReplay?.command || ''
+  }));
+  expect(secondRecipe).toEqual(firstRecipe);
 });
 
 test('Circular sparse diagonal depth survives a session round trip and track removal', async ({ page }) => {
@@ -2593,7 +2711,10 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   });
   expect(firstResult.depthAFills).toContain('#112233');
   expect(firstResult.depthBFills).toContain('#445566');
-  expect(firstResult.depthArgs).toEqual([]);
+  expect(firstResult.depthArgs).toEqual([
+    ['sample-a.tsv', ''],
+    ['', 'sample-b.tsv']
+  ]);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
   await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -2641,7 +2762,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   expect(secondResult.groups).toEqual(firstResult.groups);
   expect(secondResult.depthAFills).toContain('#112233');
   expect(secondResult.depthBFills).toContain('#445566');
-  expect(secondResult.depthArgs).toEqual([]);
+  expect(secondResult.depthArgs).toEqual(firstResult.depthArgs);
 
   await page.evaluate(() => window.__GBDRAW_APP__.removeCircularDepthTrack(1));
   await page.waitForFunction(() => {

@@ -370,11 +370,10 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
       [['recordKey', 'biologicalFeatureId']]
     );
     const expanded = expandOrthogroup(group, biologicalByKey, renderedByKey);
-    if (text(expanded.presentationScope) === 'adjacent_local') {
+    context.orthogroupProjection.addGroup(expanded);
+    context.orthogroups.push(expanded);
+    if (text(expanded.scope) === 'cross_record' && text(expanded.presentationScope)) {
       context.collinearGroups.push(expanded);
-    } else {
-      context.orthogroupProjection.addGroup(expanded);
-      context.orthogroups.push(expanded);
     }
   });
   context.scalarMetrics.orthogroupRecordCount += orthogroups.length;

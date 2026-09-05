@@ -1167,6 +1167,7 @@ def _filter_hit_tables_by_search_scope(
     scope: CollinearitySearchScope | str,
     comparison_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
+    """Keep local semantic evidence and scope only cross-record evidence."""
     normalized_scope = normalize_collinearity_search_scope(str(scope))
     if normalized_scope == "all":
         return dict(hit_tables)
@@ -1181,8 +1182,8 @@ def _filter_hit_tables_by_search_scope(
     return {
         (query_index, subject_index): hits
         for (query_index, subject_index), hits in hit_tables.items()
-        if query_index != subject_index
-        and (min(query_index, subject_index), max(query_index, subject_index)) in allowed_pairs
+        if query_index == subject_index
+        or (min(query_index, subject_index), max(query_index, subject_index)) in allowed_pairs
     }
 
 
@@ -1265,7 +1266,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
         if len(set(normalized_pairs)) != len(normalized_pairs):
             raise ValidationError("comparison_pairs must not contain duplicates.")
         normalized_comparison_pairs = tuple(normalized_pairs)
-    directional_tables = _filter_hit_tables_by_search_scope(
+    semantic_hit_tables = _filter_hit_tables_by_search_scope(
         directional_tables,
         record_count=record_count,
         scope=normalized_search_scope,
@@ -1275,35 +1276,34 @@ def build_orthogroup_collinearity_blocks_from_hits(
             else None
         ),
     )
+    geometry_hit_tables = {
+        pair: hits
+        for pair, hits in semantic_hit_tables.items()
+        if pair[0] != pair[1]
+    }
+    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+        semantic_hit_tables,
+        extraction.protein_map,
+        record_count=record_count,
+        orthogroup_membership_mode=normalized_membership_mode,
+        orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+        max_related_edges_per_orthogroup=resolved_max_paralog_links,
+    )
+    orthogroups = edge_selection.orthogroups
     if normalized_edge_mode == "rbh":
-        edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
-            directional_tables,
-            extraction.protein_map,
-            record_count=record_count,
-            orthogroup_membership_mode=normalized_membership_mode,
-            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
-            max_related_edges_per_orthogroup=resolved_max_paralog_links,
-        )
-        orthogroups = edge_selection.orthogroups
-        comparison_edges_by_pair = {
-            pair: edge_selection.all_edges_by_pair.get(pair, _empty_hits())
-            for pair in normalized_comparison_pairs
+        edge_tables = {
+            pair: edges
+            for pair, edges in edge_selection.all_edges_by_pair.items()
+            if pair in geometry_hit_tables or pair[::-1] in geometry_hit_tables
         }
     else:
-        edge_tables = _select_orthogroup_edges(directional_tables, edge_mode=normalized_edge_mode)
-        seed_selection = select_rbh_orthogroup_edges_from_directional_hits(
-            directional_tables,
-            extraction.protein_map,
-            record_count=record_count,
-            orthogroup_membership_mode=normalized_membership_mode,
-            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
-            max_related_edges_per_orthogroup=resolved_max_paralog_links,
+        edge_tables = _select_orthogroup_edges(
+            geometry_hit_tables, edge_mode=normalized_edge_mode,
         )
-        orthogroups = seed_selection.orthogroups
-        comparison_edges_by_pair = {
-            pair: edge_tables.get(pair, _empty_hits())
-            for pair in normalized_comparison_pairs
-        }
+    comparison_edges_by_pair = {
+        pair: edge_tables.get(pair, _empty_hits())
+        for pair in normalized_comparison_pairs
+    }
     anchors = orthogroup_edges_to_lossless_collinearity_anchors(
         comparison_edges_by_pair,
         extraction.protein_map,

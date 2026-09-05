@@ -208,24 +208,63 @@ test('orthogroup members do not select one of multiple rendered references', () 
   assert.equal(member.renderedFeatureSvgId, '');
 });
 
-test('catalog presentation scope partitions local collinear groups without changing core scope', () => {
-  const localCatalog = structuredClone(catalog);
-  Object.assign(localCatalog.items[0].orthogroups[0], {
-    scope: 'cross_record',
-    presentationScope: 'adjacent_local',
-    collinearGroupScope: 'adjacent_local',
-    groupKind: 'collinear_gene_group'
-  });
-
-  const state = featureStateFromCatalog(
-    validateFeatureCatalog(localCatalog, results)
-  );
-
-  assert.deepEqual(state.orthogroups, []);
-  assert.equal(state.collinearGroups.length, 1);
-  assert.equal(state.collinearGroups[0].scope, 'cross_record');
-  assert.equal(state.collinearGroups[0].presentationScope, 'adjacent_local');
-  assert.equal(state.collinearGroups[0].members[0].proteinId, 'public-protein');
+test('catalog dual-projects collinear groups into semantic and presentation catalogs without changing core scope', () => {
+  for (const [presentationScope, groupKind] of [
+    ['adjacent_local', 'collinear_gene_group'], ['global_collinear', 'orthogroup']
+  ]) {
+    const mixed = structuredClone(catalog);
+    const item = mixed.items[0];
+    const proteins = ['a0', 'a1', 'a3', 'a4', 'a2', 'b0', 'b1'];
+    item.recordKeys = ['record_a', 'record_b'];
+    item.sequenceSources = item.recordKeys.map((recordKey, recordIndex) => ({
+      ...catalog.items[0].sequenceSources[0], key: recordKey, recordIndex
+    }));
+    item.biologicalFeatures = proteins.map((id, index) => ({
+      ...structuredClone(catalog.items[0].biologicalFeatures[0]),
+      recordKey: id.startsWith('a') ? 'record_a' : 'record_b',
+      record_id: id.startsWith('a') ? 'record_a' : 'record_b',
+      record_idx: id.startsWith('a') ? 0 : 1,
+      sequenceSourceIndex: id.startsWith('a') ? 0 : 1,
+      biologicalFeatureId: id,
+      stableFeatureId: id,
+      sourceFeatureIndex: index,
+      qualifiers: { protein_id: [id] }
+    }));
+    item.features = item.biologicalFeatures.map((feature) => ({
+      recordKey: feature.recordKey, biologicalFeatureId: feature.biologicalFeatureId,
+      svgId: feature.stableFeatureId, fillColor: '#abcdef'
+    }));
+    const member = (id, role) => ({
+      recordKey: id.startsWith('a') ? 'record_a' : 'record_b',
+      biologicalFeatureId: id, role
+    });
+    item.orthogroups = [{
+      id: 'og_1', scope: 'cross_record', presentationScope,
+      collinearGroupScope: presentationScope, groupKind,
+      members: [member('a0', 'anchor'), member('a1', 'inparalog'), member('b0', 'anchor')]
+    }, {
+      id: 'og_2', scope: 'record_local', source_record_index: 0,
+      presentationScope, collinearGroupScope: presentationScope, groupKind,
+      members: [member('a3', 'local_paralog'), member('a4', 'local_paralog')]
+    }];
+    const state = featureStateFromCatalog(validateFeatureCatalog(mixed, results));
+    assert.deepEqual(state.orthogroups.map((group) => group.id), ['og_1', 'og_2']);
+    assert.deepEqual(state.collinearGroups.map((group) => group.id), ['og_1']);
+    assert.strictEqual(state.orthogroups[0], state.collinearGroups[0]);
+    assert.equal(state.orthogroups[0].scope, 'cross_record');
+    assert.equal(state.orthogroups[1].scope, 'record_local');
+    assert.equal(state.orthogroups[1].source_record_index, 0);
+    assert.equal(state.collinearGroups[0].presentationScope, presentationScope);
+    assert.deepEqual(state.orthogroups[0].members.map((member) => member.proteinId), ['a0', 'a1', 'b0']);
+    for (const features of [state.extractedFeatures, state.biologicalFeatures]) {
+      assert.deepEqual(features.map((feature) => feature.orthogroupId || null), [
+        'og_1', 'og_1', 'og_2', 'og_2', null, 'og_1', null
+      ]);
+      assert.equal(features[1].orthogroupMember.role, 'inparalog');
+      assert.equal(features[2].orthogroupMember.role, 'local_paralog');
+      assert.equal(features[3].orthogroupMember.role, 'local_paralog');
+    }
+  }
 });
 
 test('catalog result topology must match the logical Results exactly', () => {

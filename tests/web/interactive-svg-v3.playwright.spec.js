@@ -276,6 +276,7 @@ test('browser export embeds the exact selected schema-3 item and expands referen
     });
   });
   await page.goto(pathToFileURL(svgPath).href);
+  await page.clock.install();
 
   const expandedFeatures = await page.evaluate(
     () => window.__expandedCatalogFeatures
@@ -314,19 +315,152 @@ test('browser export embeds the exact selected schema-3 item and expands referen
   await expect(memberBlock.locator('tbody tr')).toHaveCount(2);
   await expect(memberBlock).toContainText('Visible protein');
   await expect(memberBlock).toContainText('Hidden override');
-  await memberBlock.locator('.gfi-block-actions').getByRole('button', {
-    name: 'Copy aa (2)'
-  }).click();
+  const groupCopyButtons = memberBlock.locator(
+    '.gfi-block-actions [data-copy-feedback-key]'
+  );
+  const groupNtCopy = groupCopyButtons.nth(0);
+  const groupAaCopy = groupCopyButtons.nth(1);
+  await expect(groupNtCopy).toHaveText('Copy nt (2)');
+  await expect(groupAaCopy).toHaveText('Copy aa (2)');
+  await groupAaCopy.click();
   await expect.poll(() => page.evaluate(() => window.__copiedText)).toContain('>VP_1');
   const copied = await page.evaluate(() => window.__copiedText);
   expect(copied).toContain('>HP_1');
   expect(copied).toContain('MHIDDEN');
-  await memberBlock.locator('.gfi-block-actions').getByRole('button', {
-    name: 'Copy nt (2)'
-  }).click();
+  await expect(groupAaCopy).toHaveText('Copied!');
+  await expect(groupAaCopy).toHaveAccessibleName('Copied!');
+  await expect(groupAaCopy).toHaveAttribute('aria-live', 'polite');
+  await expect(groupAaCopy).toHaveAttribute('aria-atomic', 'true');
+  await expect(groupNtCopy).toHaveText('Copy nt (2)');
+
+  await page.getByRole('button', { name: 'Qualifiers', exact: true }).click();
+  await page.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(groupAaCopy).toHaveText('Copied!');
+  await page.clock.fastForward(1500);
+  await expect(groupAaCopy).toHaveText('Copy aa (2)');
+
+  const firstMemberCopyButtons = memberBlock.locator(
+    'tbody tr'
+  ).first().locator('[data-copy-feedback-key]');
+  const secondMemberAaCopy = memberBlock.locator(
+    'tbody tr'
+  ).nth(1).locator('[data-copy-feedback-key]').nth(1);
+  const firstMemberAaCopy = firstMemberCopyButtons.nth(1);
+  await firstMemberAaCopy.click();
+  await expect(firstMemberAaCopy).toHaveText('Copied!');
+  await expect(secondMemberAaCopy).toHaveText('Copy aa');
+  expect(await page.evaluate(() => window.__copiedText)).toContain('>VP_1');
+  expect(await page.evaluate(() => window.__copiedText)).not.toContain('>HP_1');
+  await page.clock.fastForward(1500);
+  await expect(firstMemberAaCopy).toHaveText('Copy aa');
+
+  await groupNtCopy.click();
+  await expect(groupNtCopy).toHaveText('Copied!');
+  await expect(groupAaCopy).toHaveText('Copy aa (2)');
   const copiedNucleotide = await page.evaluate(() => window.__copiedText);
   expect(copiedNucleotide).toContain('ATGAAATAA');
   expect(copiedNucleotide).toContain('ATGCCCTAA');
+  await page.clock.fastForward(1500);
+
+  await page.evaluate(() => {
+    window.__manualCopy = null;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('denied'); } }
+    });
+    window.prompt = (_title, value) => {
+      window.__manualCopy = String(value);
+      return null;
+    };
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText('Copy manually');
+  await expect(groupAaCopy).not.toHaveText('Copied!');
+  expect(await page.evaluate(() => window.__manualCopy)).toBe(copied);
+  await page.clock.fastForward(1500);
+  await expect(groupAaCopy).toHaveText('Copy aa (2)');
+
+  await page.evaluate(() => {
+    window.__manualCopy = null;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {}
+    });
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText('Copy manually');
+  expect(await page.evaluate(() => window.__manualCopy)).toBe(copied);
+  await page.clock.fastForward(1500);
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('denied'); } }
+    });
+    window.prompt = () => { throw new Error('prompt failed'); };
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText('Copy failed');
+  await expect(groupAaCopy).not.toHaveText('Copied!');
+  await page.clock.fastForward(1500);
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => { window.__copiedText = String(value); }
+      }
+    });
+  });
+  await groupAaCopy.click();
+  await page.clock.fastForward(1000);
+  await groupAaCopy.click();
+  await page.clock.fastForward(600);
+  await expect(groupAaCopy).toHaveText('Copied!');
+  await page.clock.fastForward(900);
+  await expect(groupAaCopy).toHaveText('Copy aa (2)');
+
+  await page.evaluate(() => {
+    window.__copyResolvers = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (value) => {
+          window.__copiedText = String(value);
+          return new Promise((resolve, reject) => {
+            window.__copyResolvers.push({ reject, resolve });
+          });
+        }
+      }
+    });
+  });
+  await groupAaCopy.click();
+  await groupAaCopy.click();
+  await page.evaluate(() => window.__copyResolvers[1].resolve());
+  await expect(groupAaCopy).toHaveText('Copied!');
+  await page.evaluate(() => window.__copyResolvers[0].reject(new Error('stale denial')));
+  await expect(groupAaCopy).toHaveText('Copied!');
+  await page.clock.fastForward(1500);
+  await expect(groupAaCopy).toHaveText('Copy aa (2)');
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => { window.__copiedText = String(value); }
+      }
+    });
+  });
+  await groupAaCopy.click();
+  await expect(groupAaCopy).toHaveText('Copied!');
+  await page.locator('[data-close]').click();
+  await page.locator('[data-gbdraw-rendered-feature-id="rendered-visible"]').click();
+  const reopenedMemberBlock = page.locator('.gfi-block').filter({
+    hasText: 'Similarity-group members'
+  }).last();
+  await expect(reopenedMemberBlock.locator(
+    '.gfi-block-actions [data-copy-feedback-key]'
+  ).nth(1)).toHaveText('Copy aa (2)');
 
   await page.locator('[data-close]').click();
   await page.locator('[data-gbdraw-rendered-feature-id="rendered-collision"]').click();

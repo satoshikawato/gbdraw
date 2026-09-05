@@ -665,3 +665,121 @@ def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
         check=True,
         cwd=Path(__file__).parents[1],
     )
+
+
+def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacent") -> Path:
+    """Render the Issue #460 evidence through typed, Web, and session boundaries."""
+    import xml.etree.ElementTree as ET
+    from dataclasses import replace
+
+    from tests.test_collinearity import _record_local_mixed_fixture
+    from gbdraw.analysis.collinearity import build_orthogroup_collinearity_blocks_from_hits
+    from gbdraw.api import render_request
+    from gbdraw.web_support.feature_catalog import build_feature_catalog_item
+    from gbdraw.web_support.request_render import render_canonical_web_request
+
+    records, extraction, hits = _record_local_mixed_fixture()
+    for record in records:
+        record.name = record.id
+        record.annotations["organism"] = "synthetic construct"
+    groups = build_orthogroup_collinearity_blocks_from_hits(
+        hits, extraction, records=records, search_scope=search_scope,
+    )
+    request = LinearDiagramRequest(
+        records=tuple(RecordInput(source=InMemoryRecordSource(record), record_key=record.id) for record in records),
+        options=LinearDiagramOptions(
+            orthogroups=groups.orthogroups,
+            collinearity_blocks=groups, collinearity_search_scope=search_scope,
+        ),
+        output=RenderOutputRequest(
+            output_directory=tmp_path / "typed", output_prefix="mixed",
+            formats=("svg", "interactive_svg"),
+        ),
+    )
+    typed = render_request(request, include_feature_catalog=True)
+    svg = (tmp_path / "typed" / "mixed.svg").read_text()
+    catalog_item = build_feature_catalog_item(
+        svg, typed.interactive_context, result_index=0, result_name="mixed.svg",
+    )
+    document = build_session_document(request)
+    with materialize_session(document, output_directory=tmp_path / "decoded") as materialized:
+        decoded = session_to_request(materialized)
+        assert decoded.options.collinearity_blocks == groups
+        assert decoded.options.orthogroups == groups.orthogroups
+        web = render_canonical_web_request(
+            document.to_dict()["renderRequest"], resource_paths=materialized.resource_paths,
+            output_directory=tmp_path / "web",
+        )
+    assert web["metadata"]["featureCatalog"]["items"] == [catalog_item]
+    semantic = {group["id"]: group for group in catalog_item["orthogroups"]}
+    assert set(semantic) == {"og_1", "og_2"}
+    assert semantic["og_1"]["scope"] == "cross_record"
+    assert semantic["og_2"]["scope"] == "record_local"
+    assert semantic["og_2"]["source_record_index"] == 0
+    biological = {
+        (feature["recordKey"], feature["biologicalFeatureId"]): feature
+        for feature in catalog_item["biologicalFeatures"]
+    }
+    for group_id, expected in (
+        ("og_1", {"a0": "anchor", "a1": "inparalog", "b0": "anchor"}),
+        ("og_2", {"a3": "local_paralog", "a4": "local_paralog"}),
+    ):
+        members = semantic[group_id]["members"]
+        assert {
+            biological[(member["recordKey"], member["biologicalFeatureId"])]["qualifiers"]["protein_id"][0]: member["role"]
+            for member in members
+        } == expected
+        if group_id == "og_2":
+            assert {biological[(m["recordKey"], m["biologicalFeatureId"])]["record_id"] for m in members} == {"record_a"}
+
+    def comparison_paths(source):
+        return [element for element in ET.fromstring(source).iter()
+                if element.tag.endswith("}path") and element.get("data-match-kind") == "collinear"]
+
+    paths = comparison_paths(svg)
+    assert len(groups.blocks) == len(paths) == 1
+    assert paths[0].get("data-orthogroup-id") == "og_1"
+    assert all(block.query_record_index != block.subject_record_index for block in groups.blocks)
+    geometry_only = build_orthogroup_collinearity_blocks_from_hits(
+        {pair: table for pair, table in hits.items() if pair[0] != pair[1]},
+        extraction, records=records, search_scope=search_scope,
+    )
+    baseline = render_request(replace(
+        request,
+        options=replace(request.options, orthogroups=geometry_only.orthogroups, collinearity_blocks=geometry_only),
+        output=replace(request.output, output_directory=tmp_path / "geometry", formats=("svg",)),
+    ))
+    assert [path.get("d") for path in paths] == [
+        path.get("d") for path in comparison_paths(baseline.output_paths[0].read_text())
+    ]
+    interactive_source = next(path for path in typed.output_paths if "interactive" in path.name).read_text()
+    interactive_root = ET.fromstring(interactive_source)
+    metadata = next(element for element in interactive_root.iter()
+                    if element.get("id") == "gbdraw-interactive-feature-metadata")
+    interactive = json.loads(metadata.text)
+    assert interactive["items"][0]["orthogroups"] == catalog_item["orthogroups"]
+    assert len(comparison_paths(interactive_source)) == 1
+    assert [path.get("d") for path in comparison_paths(web["results"][0]["content"])] == [paths[0].get("d")]
+
+    session_path = tmp_path / "mixed.gbdraw-session.json"
+    saved = save_session_document(session_path, request, adjunct={
+        "results": web["results"], "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
+    })
+    reloaded = load_session_document(session_path)
+    assert reloaded.version == saved.version == CURRENT_SESSION_VERSION == 40
+    assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["metadata"]["featureCatalog"]
+    with materialize_session(reloaded, output_directory=tmp_path / "reload") as materialized:
+        restored = session_to_request(materialized)
+        assert restored.options.collinearity_blocks == groups
+        rerendered = render_canonical_web_request(
+            reloaded.to_dict()["renderRequest"], resource_paths=materialized.resource_paths,
+            output_directory=tmp_path / "reload-web",
+        )
+    assert rerendered["metadata"]["featureCatalog"] == web["metadata"]["featureCatalog"]
+    assert [path.get("d") for path in comparison_paths(rerendered["results"][0]["content"])] == [paths[0].get("d")]
+    return session_path
+
+
+@pytest.mark.parametrize("search_scope", ["adjacent", "all"])
+def test_record_local_collinear_catalog_session_round_trip(tmp_path: Path, search_scope: str) -> None:
+    _record_local_collinear_session(tmp_path, search_scope)
