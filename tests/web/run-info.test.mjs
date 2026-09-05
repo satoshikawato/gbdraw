@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { File } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { cp, readFile, stat, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,8 +29,11 @@ const { readFileText } = await import(
 const { setResourcePayloadOwner } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'resource-payload-owner.js'))
 );
-const { readCanonicalResourceText } = await import(
+const { readCanonicalResourceRecordCount } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
+);
+const { createDiagramResourceTransport } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'diagram-resource-staging.js'))
 );
 
 const base64 = (text) => Buffer.from(text).toString('base64');
@@ -221,7 +225,9 @@ test('source recipe reuses materialized source text and preserves record selecti
       assert.equal(expected.args.includes('--records_table'), recordCount > 1);
       const readRecipe = () => buildSourceRecipe({
         ...session,
-        readResourceText: (resourceId) => readCanonicalResourceText(session.resources, resourceId)
+        readResourceRecordCount: (resourceId, kind) => (
+          readCanonicalResourceRecordCount(session.resources, resourceId, kind)
+        )
       });
       assert.deepEqual(await readRecipe(), expected);
 
@@ -244,6 +250,103 @@ test('source recipe reuses materialized source text and preserves record selecti
       }
     }
   }
+});
+
+test('source recipe counts survive transfer and follow same-name source replacements', async () => {
+  for (const input of ['native', 'lazy']) {
+    for (const format of ['genbank', 'fasta']) {
+      const transport = createDiagramResourceTransport();
+      let previousToken;
+      for (const recordCount of [1, 2, 1]) {
+        const text = Array.from({ length: recordCount }, (_, index) => (
+          format === 'genbank' ? `LOCUS       record${index}\n//\n` : `>record${index}\nACGT\n`
+        )).join('').padEnd(128, ' ');
+        const descriptor = resource(format, 'same-source.txt', text);
+        const session = canonical({
+          mode: 'circular',
+          records: [{
+            recordKey: 'selected',
+            cardinality: 'exactly_one',
+            source: format === 'genbank'
+              ? { kind: 'genbank', resourceId: 'source' }
+              : { kind: 'gffFasta', gffResourceId: 'gff', fastaResourceId: 'source' },
+            selector: { kind: 'recordIndex', index: recordCount - 1 },
+            region: null,
+            presentation: presentation()
+          }],
+          resources: {
+            source: descriptor,
+            gff: resource('gff', 'same-source.gff', '##gff-version 3\n'),
+            unused: { ...resource('web-file', 'unused.txt'), data: '%%%' }
+          },
+          webFiles: { resourceOriginalNames: { source: 'same-source.txt', gff: 'same-source.gff' } }
+        });
+        const expected = await buildSourceRecipe(session);
+        assert.equal(expected.available, true, expected.unavailableReason);
+        assert.equal(expected.args.includes('--records_table'), recordCount === 2);
+        if (recordCount === 2) {
+          assert.match(expected.generatedFiles[0].data, /#2/);
+        }
+        let reads = 0;
+        let decodes = 0;
+        const nativeAtob = globalThis.atob;
+        const file = input === 'native'
+          ? new class extends File {
+            async arrayBuffer() {
+              reads += 1;
+              return super.arrayBuffer();
+            }
+          }([text], descriptor.name, { lastModified: 7 })
+          : createSessionResourceFileView(adoptCurrentSessionResources(session.resources), 'source');
+        const readRecipe = () => buildSourceRecipe({
+          ...session,
+          readResourceRecordCount: (resourceId, kind) => (
+            readCanonicalResourceRecordCount(session.resources, resourceId, kind)
+          )
+        });
+        setResourcePayloadOwner(descriptor, file);
+        globalThis.atob = (encoded) => {
+          if (encoded === descriptor.data) decodes += 1;
+          return nativeAtob(encoded);
+        };
+        try {
+          assert.equal(await readFileText(file), text);
+          assert.deepEqual(await readRecipe(), expected);
+          const first = await transport.prepare({ request: session.renderRequest, resources: session.resources });
+          const sourceTransfer = first.stagedResources.find(({ resourceId }) => resourceId === 'source');
+          assert.ok(sourceTransfer);
+          assert.notEqual(sourceTransfer.cacheToken, previousToken);
+          previousToken = sourceTransfer.cacheToken;
+          const transferred = structuredClone(sourceTransfer.bytes, { transfer: [sourceTransfer.bytes] });
+          assert.equal(sourceTransfer.bytes.byteLength, 0);
+          assert.equal(new TextDecoder().decode(transferred), text);
+          first.commit();
+          for (let run = 0; run < 2; run += 1) {
+            // Canonical projection creates a fresh descriptor for the same payload owner.
+            session.resources.source = setResourcePayloadOwner({ ...descriptor }, file);
+            assert.deepEqual(await readRecipe(), expected);
+            const warm = await transport.prepare({ request: session.renderRequest, resources: session.resources });
+            assert.equal(warm.stagedResources.length, 0);
+            assert.equal(warm.resourceManifest.find(({ resourceId }) => resourceId === 'source').cacheToken, previousToken);
+            warm.commit();
+          }
+          assert.equal(reads, input === 'native' ? 1 : 0);
+          assert.equal(decodes, input === 'lazy' ? 1 : 0);
+          // Discovery may refill released content; recipe construction must not do so.
+          assert.equal(await readFileText(file), text);
+          assert.deepEqual(await readRecipe(), expected);
+          assert.equal(reads, input === 'native' ? 2 : 0);
+          assert.equal(decodes, input === 'lazy' ? 2 : 0);
+        } finally {
+          globalThis.atob = nativeAtob;
+        }
+      }
+    }
+  }
+  const resources = { source: resource('genbank', 'mutable.gb', 'LOCUS one\n//\n') };
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 1);
+  Object.assign(resources.source, resource('genbank', 'mutable.gb', 'LOCUS one\n//\nLOCUS two\n//\n'));
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 2);
 });
 
 test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty semantics', async () => {

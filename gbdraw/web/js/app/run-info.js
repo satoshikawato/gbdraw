@@ -199,7 +199,7 @@ const resourceBytes = (descriptor) => {
   return null;
 };
 
-const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readResourceText) => {
+const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readResourceRecordCount) => {
   const descriptors = isPlainObject(resources) ? resources : {};
   const originalNames = originalResourceNameHints(webFiles);
   const generatedNames = normalizeNameHints(generatedFileNameHints);
@@ -294,16 +294,16 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     const resourceId = String(resourceIdRaw || '').trim();
     const cacheKey = `${resourceId}:${kind}`;
     if (recordCountCache.has(cacheKey)) return recordCountCache.get(cacheKey);
-    let text;
-    if (typeof readResourceText === 'function') {
-      text = await readResourceText(resourceId);
+    let count;
+    if (typeof readResourceRecordCount === 'function') {
+      count = await readResourceRecordCount(resourceId, kind);
     } else {
       const bytes = resourceBytes(descriptors[resourceId]);
-      text = bytes ? new TextDecoder().decode(bytes) : '';
+      const text = bytes ? new TextDecoder().decode(bytes) : '';
+      count = kind === 'genbank'
+        ? (text.match(/^LOCUS\s+/gm) || []).length
+        : (text.match(/^>/gm) || []).length;
     }
-    const count = kind === 'genbank'
-      ? (text.match(/^LOCUS\s+/gm) || []).length
-      : (text.match(/^>/gm) || []).length;
     recordCountCache.set(cacheKey, count);
     return count;
   };
@@ -1424,7 +1424,7 @@ export const buildSourceRecipe = async ({
   resources,
   webFiles,
   generatedFileNameHints,
-  readResourceText = null
+  readResourceRecordCount = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
   const unavailable = (reason) => ({
@@ -1443,7 +1443,7 @@ export const buildSourceRecipe = async ({
     const semanticCoverage = renderRequest.schema === 6
       ? validateSchema6SemanticCoverage(renderRequest)
       : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
-    const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceText);
+    const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
     const args = [];
     const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
     appendDiagramOptions(args, renderRequest, files);

@@ -9,7 +9,7 @@ import {
 } from '../services/diagram-generation.js';
 import {
   buildCanonicalRenderRequest,
-  readCanonicalResourceText
+  readCanonicalResourceRecordCount
 } from '../services/session-request.js';
 import {
   buildLabelOverrideTsv,
@@ -4314,11 +4314,13 @@ export const createRunAnalysis = ({
             generatedFileNameHints.set(slot, name);
           }
         });
-        // Reuse source text before Worker transfer releases the file-content cache.
+        // Establish source counts before Worker transfer releases the file-content cache.
         sourceRecipe = await buildSourceRecipe({
           ...canonical,
           generatedFileNameHints,
-          readResourceText: (resourceId) => readCanonicalResourceText(canonical.resources, resourceId)
+          readResourceRecordCount: (resourceId, kind) => (
+            readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
+          )
         });
         throwIfGenerationCanceled();
       }

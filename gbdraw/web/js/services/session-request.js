@@ -2833,12 +2833,26 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
   return bytesToText(bytes, { fatal: true });
 };
 
-export const readCanonicalResourceText = async (resources, resourceId) => {
+const sourceRecordCounts = new WeakMap();
+
+export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
   const descriptor = resources?.[resourceId];
   const owner = getResourcePayloadOwner(descriptor);
-  return owner && owner !== descriptor
-    ? readFileText(owner)
-    : decodeCanonicalResourceText(resources, resourceId);
+  const hasFileOwner = owner && owner !== descriptor;
+  let counts = hasFileOwner && sourceRecordCounts.get(owner);
+  if (!counts) {
+    const text = hasFileOwner
+      ? await readFileText(owner)
+      : decodeCanonicalResourceText(resources, resourceId);
+    counts = {
+      genbank: (text.match(/^LOCUS\s+/gm) || []).length,
+      fasta: (text.match(/^>/gm) || []).length
+    };
+    // Immutable File/view identity outlives transferred bytes. Retain only counts;
+    // a replacement source gets its own entry, and ownerless descriptors stay uncached.
+    if (hasFileOwner) sourceRecordCounts.set(owner, counts);
+  }
+  return counts[kind];
 };
 
 const resourceTextFromRef = (resources, ref) => (
