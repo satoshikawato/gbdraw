@@ -199,7 +199,7 @@ const resourceBytes = (descriptor) => {
   return null;
 };
 
-const createRecipeFiles = (resources, webFiles, generatedFileNameHints) => {
+const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readResourceRecordCount) => {
   const descriptors = isPlainObject(resources) ? resources : {};
   const originalNames = originalResourceNameHints(webFiles);
   const generatedNames = normalizeNameHints(generatedFileNameHints);
@@ -290,14 +290,16 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints) => {
   };
 
   const visibleName = (path) => fileMetadata.get(path)?.name || fallbackNameFromPath(path);
-  const resourceRecordCount = (resourceIdRaw, kind) => {
+  const resourceRecordCount = async (resourceIdRaw, kind) => {
     const resourceId = String(resourceIdRaw || '').trim();
     const cacheKey = `${resourceId}:${kind}`;
     if (recordCountCache.has(cacheKey)) return recordCountCache.get(cacheKey);
-    const bytes = resourceBytes(descriptors[resourceId]);
-    let count = 0;
-    if (bytes) {
-      const text = new TextDecoder().decode(bytes);
+    let count;
+    if (typeof readResourceRecordCount === 'function') {
+      count = await readResourceRecordCount(resourceId, kind);
+    } else {
+      const bytes = resourceBytes(descriptors[resourceId]);
+      const text = bytes ? new TextDecoder().decode(bytes) : '';
       count = kind === 'genbank'
         ? (text.match(/^LOCUS\s+/gm) || []).length
         : (text.match(/^>/gm) || []).length;
@@ -603,7 +605,7 @@ const gridCoordinate = (value) => {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : '';
 };
 
-const appendInputArgs = (args, request, files) => {
+const appendInputArgs = async (args, request, files) => {
   const records = Array.isArray(request.records) ? request.records : [];
   if (records.length === 0) {
     throw new SourceRecipeUnavailable('Source recipe unavailable: the committed render has no source records.');
@@ -635,13 +637,21 @@ const appendInputArgs = (args, request, files) => {
       || gridCoordinate(record.presentation?.gridRow) !== ''
     ))
   ));
-  const circularSelectorNeedsTable = request.mode === 'circular' && records.some((record, index) => (
-    Boolean(record.region?.selector || record.selector)
-    && files.resourceRecordCount(
-      specs[index].ids.at(-1),
-      inputKind === 'genbank' ? 'genbank' : 'fasta'
-    ) !== 1
-  ));
+  let circularSelectorNeedsTable = false;
+  if (request.mode === 'circular') {
+    for (const [index, record] of records.entries()) {
+      if (
+        (record.region?.selector || record.selector)
+        && await files.resourceRecordCount(
+          specs[index].ids.at(-1),
+          inputKind === 'genbank' ? 'genbank' : 'fasta'
+        ) !== 1
+      ) {
+        circularSelectorNeedsTable = true;
+        break;
+      }
+    }
+  }
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
   if (
     request.schema === 6
@@ -660,14 +670,14 @@ const appendInputArgs = (args, request, files) => {
     const effectiveCardinality = request.mode === 'circular'
       ? 'all'
       : ((inputKind === 'gffFasta' || records.length > 1) && loadComparison ? 'first' : 'all');
-    records.forEach((record, index) => {
+    for (const [index, record] of records.entries()) {
       const canonicalCardinality = String(record.cardinality || '');
       const cliCardinality = (record.region?.selector || record.selector)
         ? 'exactly_one'
         : effectiveCardinality;
       if (
         canonicalCardinality !== cliCardinality
-        && files.resourceRecordCount(
+        && await files.resourceRecordCount(
           specs[index].ids.at(-1),
           inputKind === 'genbank' ? 'genbank' : 'fasta'
         ) !== 1
@@ -676,7 +686,7 @@ const appendInputArgs = (args, request, files) => {
           `Source recipe unavailable: record cardinality "${canonicalCardinality || 'missing'}" cannot be preserved by the current CLI.`
         );
       }
-    });
+    }
   }
 
   if (recordsTableRequired) {
@@ -1409,11 +1419,12 @@ const appendLayoutOptions = (args, request, recordsTableUsed = false) => {
   }
 };
 
-export const buildSourceRecipe = ({
+export const buildSourceRecipe = async ({
   renderRequest,
   resources,
   webFiles,
-  generatedFileNameHints
+  generatedFileNameHints,
+  readResourceRecordCount = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
   const unavailable = (reason) => ({
@@ -1432,9 +1443,9 @@ export const buildSourceRecipe = ({
     const semanticCoverage = renderRequest.schema === 6
       ? validateSchema6SemanticCoverage(renderRequest)
       : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
-    const files = createRecipeFiles(resources, webFiles, generatedFileNameHints);
+    const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
     const args = [];
-    const recordsTableUsed = appendInputArgs(args, renderRequest, files);
+    const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
     appendDiagramOptions(args, renderRequest, files);
     appendConfigOverrides(args, renderRequest);
     appendLayoutOptions(args, renderRequest, recordsTableUsed);

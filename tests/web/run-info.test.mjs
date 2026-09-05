@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { File } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { cp, readFile, stat, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -19,6 +20,21 @@ const {
   quoteShellArg,
   reproducibilityLabel
 } = await import(pathToFileURL(modulePath));
+const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'session-resource-backing.js'))
+);
+const { readFileText } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'file-content-cache.js'))
+);
+const { setResourcePayloadOwner } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'resource-payload-owner.js'))
+);
+const { readCanonicalResourceRecordCount } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'session-request.js'))
+);
+const { createDiagramResourceTransport } = await import(
+  pathToFileURL(join(tempDir, 'js', 'services', 'diagram-resource-staging.js'))
+);
 
 const base64 = (text) => Buffer.from(text).toString('base64');
 const resource = (kind, name, text = 'fixture') => ({
@@ -168,7 +184,7 @@ for (const { fixture, mode } of [
   ));
   if (mode === 'circular') circularGallerySession = session;
   else linearGallerySession = session;
-  const sourceRecipe = buildSourceRecipe(session);
+  const sourceRecipe = await buildSourceRecipe(session);
   assert.equal(sourceRecipe.available, true, `${fixture}: ${sourceRecipe.unavailableReason}`);
   assert.equal(sourceRecipe.mode, mode);
   assert.ok(sourceRecipe.args.includes('--gbk'), `${fixture}: expected direct GenBank input`);
@@ -179,19 +195,173 @@ for (const { fixture, mode } of [
   await materializeAndRunRecipe(session, sourceRecipe, info, fixture);
 }
 
+test('source recipe reuses materialized source text and preserves record selection', async () => {
+  for (const format of ['genbank', 'fasta']) {
+    for (const recordCount of [1, 2]) {
+      const text = Array.from({ length: recordCount }, (_, index) => (
+        format === 'genbank' ? `LOCUS       record${index}\n//\n` : `>record${index}\nACGT\n`
+      )).join('');
+      const session = canonical({
+        mode: 'circular',
+        records: [{
+          recordKey: 'selected',
+          cardinality: 'exactly_one',
+          source: format === 'genbank'
+            ? { kind: 'genbank', resourceId: 'source' }
+            : { kind: 'gffFasta', gffResourceId: 'gff', fastaResourceId: 'source' },
+          selector: { kind: 'recordIndex', index: 0 },
+          region: null,
+          presentation: presentation()
+        }],
+        resources: {
+          source: resource(format, `source.${format === 'genbank' ? 'gbk' : 'fasta'}`, text),
+          gff: resource('gff', 'source.gff', '##gff-version 3\n'),
+          unused: { ...resource('web-file', 'unused.txt'), data: '%%%' }
+        },
+        webFiles: { resourceOriginalNames: { source: `source.${format}`, gff: 'source.gff' } }
+      });
+      const expected = await buildSourceRecipe(session);
+      assert.equal(expected.available, true, expected.unavailableReason);
+      assert.equal(expected.args.includes('--records_table'), recordCount > 1);
+      const readRecipe = () => buildSourceRecipe({
+        ...session,
+        readResourceRecordCount: (resourceId, kind) => (
+          readCanonicalResourceRecordCount(session.resources, resourceId, kind)
+        )
+      });
+      assert.deepEqual(await readRecipe(), expected);
+
+      const table = adoptCurrentSessionResources(session.resources);
+      const view = createSessionResourceFileView(table, 'source');
+      setResourcePayloadOwner(session.resources.source, view);
+      assert.equal(await readFileText(view), text);
+      const nativeAtob = globalThis.atob;
+      let decodes = 0;
+      globalThis.atob = (...args) => {
+        if (args[0] === session.resources.source.data) decodes += 1;
+        return nativeAtob(...args);
+      };
+      try {
+        assert.deepEqual(await readRecipe(), expected);
+        assert.deepEqual(await readRecipe(), expected);
+        assert.equal(decodes, 0, `${format}: recipe must reuse the materialized source`);
+      } finally {
+        globalThis.atob = nativeAtob;
+      }
+    }
+  }
+});
+
+test('source recipe counts survive transfer and follow same-name source replacements', async () => {
+  for (const input of ['native', 'lazy']) {
+    for (const format of ['genbank', 'fasta']) {
+      const transport = createDiagramResourceTransport();
+      let previousToken;
+      for (const recordCount of [1, 2, 1]) {
+        const text = Array.from({ length: recordCount }, (_, index) => (
+          format === 'genbank' ? `LOCUS       record${index}\n//\n` : `>record${index}\nACGT\n`
+        )).join('').padEnd(128, ' ');
+        const descriptor = resource(format, 'same-source.txt', text);
+        const session = canonical({
+          mode: 'circular',
+          records: [{
+            recordKey: 'selected',
+            cardinality: 'exactly_one',
+            source: format === 'genbank'
+              ? { kind: 'genbank', resourceId: 'source' }
+              : { kind: 'gffFasta', gffResourceId: 'gff', fastaResourceId: 'source' },
+            selector: { kind: 'recordIndex', index: recordCount - 1 },
+            region: null,
+            presentation: presentation()
+          }],
+          resources: {
+            source: descriptor,
+            gff: resource('gff', 'same-source.gff', '##gff-version 3\n'),
+            unused: { ...resource('web-file', 'unused.txt'), data: '%%%' }
+          },
+          webFiles: { resourceOriginalNames: { source: 'same-source.txt', gff: 'same-source.gff' } }
+        });
+        const expected = await buildSourceRecipe(session);
+        assert.equal(expected.available, true, expected.unavailableReason);
+        assert.equal(expected.args.includes('--records_table'), recordCount === 2);
+        if (recordCount === 2) {
+          assert.match(expected.generatedFiles[0].data, /#2/);
+        }
+        let reads = 0;
+        let decodes = 0;
+        const nativeAtob = globalThis.atob;
+        const file = input === 'native'
+          ? new class extends File {
+            async arrayBuffer() {
+              reads += 1;
+              return super.arrayBuffer();
+            }
+          }([text], descriptor.name, { lastModified: 7 })
+          : createSessionResourceFileView(adoptCurrentSessionResources(session.resources), 'source');
+        const readRecipe = () => buildSourceRecipe({
+          ...session,
+          readResourceRecordCount: (resourceId, kind) => (
+            readCanonicalResourceRecordCount(session.resources, resourceId, kind)
+          )
+        });
+        setResourcePayloadOwner(descriptor, file);
+        globalThis.atob = (encoded) => {
+          if (encoded === descriptor.data) decodes += 1;
+          return nativeAtob(encoded);
+        };
+        try {
+          assert.equal(await readFileText(file), text);
+          assert.deepEqual(await readRecipe(), expected);
+          const first = await transport.prepare({ request: session.renderRequest, resources: session.resources });
+          const sourceTransfer = first.stagedResources.find(({ resourceId }) => resourceId === 'source');
+          assert.ok(sourceTransfer);
+          assert.notEqual(sourceTransfer.cacheToken, previousToken);
+          previousToken = sourceTransfer.cacheToken;
+          const transferred = structuredClone(sourceTransfer.bytes, { transfer: [sourceTransfer.bytes] });
+          assert.equal(sourceTransfer.bytes.byteLength, 0);
+          assert.equal(new TextDecoder().decode(transferred), text);
+          first.commit();
+          for (let run = 0; run < 2; run += 1) {
+            // Canonical projection creates a fresh descriptor for the same payload owner.
+            session.resources.source = setResourcePayloadOwner({ ...descriptor }, file);
+            assert.deepEqual(await readRecipe(), expected);
+            const warm = await transport.prepare({ request: session.renderRequest, resources: session.resources });
+            assert.equal(warm.stagedResources.length, 0);
+            assert.equal(warm.resourceManifest.find(({ resourceId }) => resourceId === 'source').cacheToken, previousToken);
+            warm.commit();
+          }
+          assert.equal(reads, input === 'native' ? 1 : 0);
+          assert.equal(decodes, input === 'lazy' ? 1 : 0);
+          // Discovery may refill released content; recipe construction must not do so.
+          assert.equal(await readFileText(file), text);
+          assert.deepEqual(await readRecipe(), expected);
+          assert.equal(reads, input === 'native' ? 2 : 0);
+          assert.equal(decodes, input === 'lazy' ? 2 : 0);
+        } finally {
+          globalThis.atob = nativeAtob;
+        }
+      }
+    }
+  }
+  const resources = { source: resource('genbank', 'mutable.gb', 'LOCUS one\n//\n') };
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 1);
+  Object.assign(resources.source, resource('genbank', 'mutable.gb', 'LOCUS one\n//\nLOCUS two\n//\n'));
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 2);
+});
+
 test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty semantics', async () => {
   for (const value of ['absent', null]) {
     const defaulted = structuredClone(circularGallerySession);
     if (value === 'absent') delete defaulted.renderRequest.diagramOptions.selectedFeaturesSet;
     else defaulted.renderRequest.diagramOptions.selectedFeaturesSet = value;
-    const defaultedRecipe = buildSourceRecipe(defaulted);
+    const defaultedRecipe = await buildSourceRecipe(defaulted);
     assert.equal(defaultedRecipe.available, true, defaultedRecipe.unavailableReason);
     assert.equal(defaultedRecipe.args.includes('-k'), false);
   }
 
   const empty = structuredClone(circularGallerySession);
   empty.renderRequest.diagramOptions.selectedFeaturesSet = [];
-  const emptyRecipe = buildSourceRecipe(empty);
+  const emptyRecipe = await buildSourceRecipe(empty);
   assert.equal(emptyRecipe.available, true, emptyRecipe.unavailableReason);
   assert.equal(emptyRecipe.args.includes('-k'), false);
   assertCliParserAccepts(emptyRecipe);
@@ -200,13 +370,13 @@ test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty 
 
   const invalid = structuredClone(circularGallerySession);
   invalid.renderRequest.diagramOptions.selectedFeaturesSet = [''];
-  const invalidRecipe = buildSourceRecipe(invalid);
+  const invalidRecipe = await buildSourceRecipe(invalid);
   assert.equal(invalidRecipe.available, false);
   assert.match(invalidRecipe.unavailableReason, /selected feature|non-empty/i);
 
   const nonEmpty = structuredClone(circularGallerySession);
   nonEmpty.renderRequest.diagramOptions.selectedFeaturesSet = ['CDS', 'tRNA'];
-  const nonEmptyRecipe = buildSourceRecipe(nonEmpty);
+  const nonEmptyRecipe = await buildSourceRecipe(nonEmpty);
   assert.equal(nonEmptyRecipe.available, true, nonEmptyRecipe.unavailableReason);
   const featureOptionIndex = nonEmptyRecipe.args.indexOf('-k');
   assert.notEqual(featureOptionIndex, -1);
@@ -218,7 +388,7 @@ test('source recipe preserves canonical string track slots', async () => {
   const stringSlot = structuredClone(circularGallerySession);
   stringSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = ['ticks:ticks'];
   stringSlot.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
-  const stringRecipe = buildSourceRecipe(stringSlot);
+  const stringRecipe = await buildSourceRecipe(stringSlot);
   assert.equal(stringRecipe.available, true, stringRecipe.unavailableReason);
   const slotOptionIndex = stringRecipe.args.indexOf('--circular_track_slot');
   assert.notEqual(slotOptionIndex, -1);
@@ -229,7 +399,7 @@ test('source recipe preserves canonical string track slots', async () => {
   await materializeAndRunRecipe(stringSlot, stringRecipe, stringInfo, 'ticks-string-slot');
 });
 
-test('source recipe serializes validated object slots without dropping child fields', () => {
+test('source recipe serializes validated object slots without dropping child fields', async () => {
   const objectSlot = structuredClone(circularGallerySession);
   objectSlot.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
     kind: 'circularTrackSlot',
@@ -245,7 +415,7 @@ test('source recipe serializes validated object slots without dropping child fie
     outerGapPx: null
   }];
   objectSlot.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
-  const objectRecipe = buildSourceRecipe(objectSlot);
+  const objectRecipe = await buildSourceRecipe(objectSlot);
   assert.equal(objectRecipe.available, true, objectRecipe.unavailableReason);
   const optionIndex = objectRecipe.args.indexOf('--circular_track_slot');
   assert.match(
@@ -256,26 +426,26 @@ test('source recipe serializes validated object slots without dropping child fie
 
   const unsupportedChild = structuredClone(objectSlot);
   unsupportedChild.renderRequest.diagramOptions.tracks.circularTrackSlots[0].params.nt = 'GC';
-  const unsupportedRecipe = buildSourceRecipe(unsupportedChild);
+  const unsupportedRecipe = await buildSourceRecipe(unsupportedChild);
   assert.equal(unsupportedRecipe.available, false);
   assert.match(unsupportedRecipe.unavailableReason, /params\.nt|losslessly/i);
 });
 
-test('source recipe distinguishes absent, null, and explicit empty track slots', () => {
+test('source recipe distinguishes absent, null, and explicit empty track slots', async () => {
   const absent = structuredClone(circularGallerySession);
   delete absent.renderRequest.diagramOptions.tracks.circularTrackSlots;
   delete absent.renderRequest.diagramOptions.tracks.circularTrackAxisIndex;
-  assert.equal(buildSourceRecipe(absent).available, true);
+  assert.equal((await buildSourceRecipe(absent)).available, true);
 
   const nullSlots = structuredClone(circularGallerySession);
   nullSlots.renderRequest.diagramOptions.tracks.circularTrackSlots = null;
   nullSlots.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = null;
-  assert.equal(buildSourceRecipe(nullSlots).available, true);
+  assert.equal((await buildSourceRecipe(nullSlots)).available, true);
 
   const emptySlots = structuredClone(circularGallerySession);
   emptySlots.renderRequest.diagramOptions.tracks.circularTrackSlots = [];
   emptySlots.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = null;
-  const emptyRecipe = buildSourceRecipe(emptySlots);
+  const emptyRecipe = await buildSourceRecipe(emptySlots);
   const emptyInfo = buildRunInfo({
     mode: 'circular',
     sourceRecipe: emptyRecipe,
@@ -296,7 +466,7 @@ test('source recipe distinguishes absent, null, and explicit empty track slots',
   for (const slot of ['future:future', 'ticks:ticks@nt=GC']) {
     const invalid = structuredClone(circularGallerySession);
     invalid.renderRequest.diagramOptions.tracks.circularTrackSlots = [slot];
-    assert.equal(buildSourceRecipe(invalid).available, false, slot);
+    assert.equal((await buildSourceRecipe(invalid)).available, false, slot);
   }
 });
 
@@ -339,7 +509,7 @@ test('allocated helper names propagate into comparisons.tsv and the executable r
   collision.generatedFileNameHints = new Map([
     ['generatedFiles.losat_blasts[0]', 'alpha.gbk']
   ]);
-  const recipe = buildSourceRecipe(collision);
+  const recipe = await buildSourceRecipe(collision);
   const info = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
 
   assert.equal(recipe.available, true, recipe.unavailableReason);
@@ -396,7 +566,7 @@ const circularCanonical = canonical({
 });
 
 {
-  const sourceRecipe = buildSourceRecipe(circularCanonical);
+  const sourceRecipe = await buildSourceRecipe(circularCanonical);
   assert.equal(sourceRecipe.available, true);
   assertCliParserAccepts(sourceRecipe);
   const info = buildRunInfo({
@@ -431,7 +601,7 @@ const circularCanonical = canonical({
   apostropheName.webFiles.resourceOriginalNames['record-1-genbank'] = "Bob's genome.gbk";
   const info = buildRunInfo({
     mode: 'circular',
-    sourceRecipe: buildSourceRecipe(apostropheName)
+    sourceRecipe: await buildSourceRecipe(apostropheName)
   });
   assert.match(info.command, /--gbk 'Bob'\\''s genome\.gbk'/);
 }
@@ -465,7 +635,7 @@ const circularCanonical = canonical({
     multiRecordSizeMode: 'equal',
     multiRecordPositions: ['alpha@1', 'beta@2']
   };
-  const sourceRecipe = buildSourceRecipe(multiRecord);
+  const sourceRecipe = await buildSourceRecipe(multiRecord);
 
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   assertCliParserAccepts(sourceRecipe);
@@ -523,7 +693,7 @@ const linearCanonical = canonical({
 });
 
 {
-  const direct = buildSourceRecipe(linearCanonical);
+  const direct = await buildSourceRecipe(linearCanonical);
   assert.equal(direct.available, true);
   assertCliParserAccepts(direct);
   const info = buildRunInfo({
@@ -558,7 +728,7 @@ const linearCanonical = canonical({
     }]
   };
   delete restored.webFiles.resourceOriginalNames;
-  const roundTrip = buildSourceRecipe(restored);
+  const roundTrip = await buildSourceRecipe(restored);
   assert.equal(roundTrip.available, true);
   assert.deepEqual(roundTrip.args, direct.args);
 }
@@ -571,7 +741,7 @@ const linearCanonical = canonical({
   generatedHelper.generatedFileNameHints = new Map([
     ['generatedFiles.losat_blasts[0]', 'browser-comparison.tsv']
   ]);
-  const sourceRecipe = buildSourceRecipe(generatedHelper);
+  const sourceRecipe = await buildSourceRecipe(generatedHelper);
   const info = buildRunInfo({ mode: 'linear', sourceRecipe });
 
   assert.equal(sourceRecipe.available, true);
@@ -587,7 +757,7 @@ const linearCanonical = canonical({
   invalidHint.generatedFileNameHints = new Map([
     ['generatedFiles.losat_blasts[0]', '..']
   ]);
-  const unavailable = buildSourceRecipe(invalidHint);
+  const unavailable = await buildSourceRecipe(invalidHint);
   assert.equal(unavailable.available, false);
   assert.match(unavailable.unavailableReason, /trustworthy visible filename/);
 }
@@ -596,7 +766,7 @@ const linearCanonical = canonical({
   const duplicateUploads = structuredClone(linearCanonical);
   duplicateUploads.webFiles.resourceOriginalNames['record-1-genbank'] = 'Genome.gbk';
   duplicateUploads.webFiles.resourceOriginalNames['record-2-genbank'] = 'genome.GBK';
-  const sourceRecipe = buildSourceRecipe(duplicateUploads);
+  const sourceRecipe = await buildSourceRecipe(duplicateUploads);
 
   assert.equal(sourceRecipe.available, false);
   assert.match(sourceRecipe.unavailableReason, /multiple required files.*genome\.GBK/i);
@@ -653,7 +823,7 @@ const linearCanonical = canonical({
   delete cardinalityAll.resources['comparison-nucleotide-1'];
   delete cardinalityAll.webFiles.resourceOriginalNames['record-2-genbank'];
   delete cardinalityAll.webFiles.resourceOriginalNames['comparison-nucleotide-1'];
-  const sourceRecipe = buildSourceRecipe(cardinalityAll);
+  const sourceRecipe = await buildSourceRecipe(cardinalityAll);
 
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   assert.ok(sourceRecipe.semanticCoverage.consumedPaths.includes('records[0].cardinality'));
@@ -665,7 +835,7 @@ const linearCanonical = canonical({
     record.presentation.gridRow = 1;
     record.presentation.gridColumn = index + 1;
   });
-  const sourceRecipe = buildSourceRecipe(gridColumn);
+  const sourceRecipe = await buildSourceRecipe(gridColumn);
 
   assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
   const table = sourceRecipe.generatedFiles.find((file) => file.name === 'records.tsv');
@@ -682,7 +852,7 @@ const linearCanonical = canonical({
     pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }],
     settings: {}
   }];
-  const sourceRecipe = buildSourceRecipe(unboundGeneratedProtein);
+  const sourceRecipe = await buildSourceRecipe(unboundGeneratedProtein);
 
   assert.equal(sourceRecipe.available, false);
   assert.match(sourceRecipe.unavailableReason, /comparison.*lossless|binding/i);
@@ -691,14 +861,14 @@ const linearCanonical = canonical({
 {
   const unknownSemanticField = structuredClone(circularCanonical);
   unknownSemanticField.renderRequest.records[0].presentation.futurePlacement = 'spiral';
-  const sourceRecipe = buildSourceRecipe(unknownSemanticField);
+  const sourceRecipe = await buildSourceRecipe(unknownSemanticField);
 
   assert.equal(sourceRecipe.available, false);
   assert.match(sourceRecipe.unavailableReason, /presentation\.futurePlacement/);
 
   const displayMetadata = structuredClone(circularCanonical);
   displayMetadata.webFiles.displayOnlyNote = 'not part of render semantics';
-  assert.equal(buildSourceRecipe(displayMetadata).available, true);
+  assert.equal((await buildSourceRecipe(displayMetadata)).available, true);
 }
 
 {
@@ -708,7 +878,7 @@ const linearCanonical = canonical({
     { ...batch.renderRequest.output, prefix: 'first' },
     { ...batch.renderRequest.output, prefix: 'second' }
   ];
-  const sourceRecipe = buildSourceRecipe(batch);
+  const sourceRecipe = await buildSourceRecipe(batch);
 
   assert.equal(sourceRecipe.available, false);
   assert.match(sourceRecipe.unavailableReason, /batch|output/i);
@@ -720,7 +890,7 @@ const linearCanonical = canonical({
   missingProvenance.version = 32;
   missingProvenance.renderRequest.schema = 2;
   missingProvenance.webFiles = {};
-  const sourceRecipe = buildSourceRecipe(missingProvenance);
+  const sourceRecipe = await buildSourceRecipe(missingProvenance);
   const info = buildRunInfo({
     mode: 'circular',
     sourceRecipe,

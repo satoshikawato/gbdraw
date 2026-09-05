@@ -7,7 +7,10 @@ import {
   runDiagramGeneration,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { buildCanonicalRenderRequest } from '../services/session-request.js';
+import {
+  buildCanonicalRenderRequest,
+  readCanonicalResourceRecordCount
+} from '../services/session-request.js';
 import {
   buildLabelOverrideTsv,
   serializeLabelOverrideRows
@@ -4301,6 +4304,26 @@ export const createRunAnalysis = ({
           + canonicalResourceBase64Characters * 2
           + 65_536
       });
+      let sourceRecipe = null;
+      if (!isReflow && manualRunStartedAt !== null) {
+        const generatedFileNameHints = new Map();
+        generatedCliFileMap.forEach((file) => {
+          const slot = String(file?.slot || '').trim();
+          const name = String(file?.name || '').trim();
+          if (slot && name && !generatedFileNameHints.has(slot)) {
+            generatedFileNameHints.set(slot, name);
+          }
+        });
+        // Establish source counts before Worker transfer releases the file-content cache.
+        sourceRecipe = await buildSourceRecipe({
+          ...canonical,
+          generatedFileNameHints,
+          readResourceRecordCount: (resourceId, kind) => (
+            readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
+          )
+        });
+        throwIfGenerationCanceled();
+      }
       const gbdrawStartedAt = getNow();
       const generationResponse = await runDiagramGeneration({
         request: canonical.renderRequest,
@@ -4422,15 +4445,6 @@ export const createRunAnalysis = ({
       let candidateRunInfo = null;
       let candidateCliHelpers = null;
       if (!isReflow && manualRunStartedAt !== null) {
-        const generatedFileNameHints = new Map();
-        generatedCliFileMap.forEach((file) => {
-          const slot = String(file?.slot || '').trim();
-          const name = String(file?.name || '').trim();
-          if (slot && name && !generatedFileNameHints.has(slot)) {
-            generatedFileNameHints.set(slot, name);
-          }
-        });
-        const sourceRecipe = buildSourceRecipe({ ...canonical, generatedFileNameHints });
         candidateRunInfo = buildRunInfo({
           mode: mode.value,
           sourceRecipe,
