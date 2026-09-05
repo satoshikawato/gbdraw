@@ -2383,6 +2383,30 @@ def assemble_linear_diagram(
             ),
             px_per_bp=sequence_width / max(1, len(record.seq)),
         )
+    # Row spacing reserves labels, but ribbon endpoints attach to track paint.
+    # Resolve this after both layout paths have fixed every slot and record.
+    for record_index, placement in record_placements.items():
+        plan = record_vertical_plans[record_index]
+        attachment_band = plan.axis_band
+        for slot in plan.slots:
+            band = slot.paint_band
+            if band is None:
+                continue
+            if slot.renderer == "features":
+                band = record_feature_lane_geometries[
+                    record_index
+                ].occupied_band.translate(slot.origin_y)
+            attachment_band = attachment_band.union(band)
+        record_placements[record_index] = replace(
+            placement,
+            comparison_top_y=(
+                placement.axis_y + attachment_band.top_y - comparison_endpoint_gap_px
+            ),
+            comparison_bottom_y=(
+                placement.axis_y + attachment_band.bottom_y + comparison_endpoint_gap_px
+            ),
+        )
+
     canvas: Drawing = canvas_config.create_svg_canvas()
     primary_target_start = len(getattr(canvas, "elements", []))
     if length_bar_group is not None:
