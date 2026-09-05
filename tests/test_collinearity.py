@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -147,6 +148,123 @@ def _hit_row(
         "evalue": 1e-30,
         "bitscore": bitscore,
     }
+
+
+def _record_local_mixed_fixture():
+    """Issue #460 evidence shared by analysis, catalog, session and browser checks."""
+    records = [
+        _record(record_id, [
+            _cds(start, start + 299, {
+                "locus_tag": [protein_id], "protein_id": [protein_id],
+                "translation": ["M" * 100],
+            })
+            for protein_id, start in features
+        ])
+        for record_id, features in (
+            ("record_a", [("a0", 100), ("a1", 700), ("a3", 1200), ("a4", 1600), ("a2", 2100)]),
+            ("record_b", [("b0", 120), ("b1", 900)]),
+        )
+    ]
+    for record in records:
+        record.seq = Seq("ATG" * 900)
+        record.annotations["molecule_type"] = "DNA"
+    hits = {
+        pair: pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
+        for pair, rows in {
+            (0, 0): [
+                _hit_row("a0", "a1", 280), _hit_row("a1", "a0", 280),
+                _hit_row("a3", "a4", 300), _hit_row("a4", "a3", 300),
+            ],
+            (0, 1): [_hit_row("a0", "b0", 300)],
+            (1, 0): [_hit_row("b0", "a0", 300)],
+        }.items()
+    }
+    return records, extract_cds_proteins(records), hits
+
+
+@pytest.mark.parametrize("search_scope", ["adjacent", "all"])
+@pytest.mark.parametrize("edge_mode", ["rbh", "one_to_one", "all_hits"])
+def test_collinear_record_local_mixed_fixture(search_scope, edge_mode):
+    records, extraction, hits = _record_local_mixed_fixture()
+    result = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        hits, extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+    )
+    groups = result.orthogroups
+    assert groups is not None
+    assert {
+        group_id: {member.protein_id for member in members}
+        for group_id, members in groups.orthogroups.items()
+    } == {"og_1": {"a0", "a1", "b0"}, "og_2": {"a3", "a4"}}
+    assert groups.scope_by_orthogroup_id == {"og_1": "cross_record", "og_2": "record_local"}
+    assert groups.source_record_index_by_orthogroup_id == {"og_2": 0}
+    assert {member.record_id for member in groups.orthogroups["og_2"]} == {"record_a"}
+    assert groups.member_by_protein_id["a1"].role == "inparalog"
+    assert {member.role for member in groups.orthogroups["og_2"]} == {"local_paralog"}
+    assert {"a2", "b1"}.isdisjoint(groups.member_by_protein_id)
+
+    # Removing only local evidence gives the pre-fix adjacent geometry baseline.
+    geometry_only = collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        {pair: table for pair, table in hits.items() if pair[0] != pair[1]},
+        extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+    )
+    assert len(result.blocks) == len(geometry_only.blocks) == 1
+    anchor = result.blocks[0].anchors[0]
+    assert anchor.query_orthogroup_member_count == 2
+    assert (replace(result.blocks[0], anchors=(
+        replace(anchor, query_orthogroup_member_count=1),
+    )),) == geometry_only.blocks
+    assert result.unblocked_anchors == geometry_only.unblocked_anchors == ()
+    assert {anchor.orthogroup_id for block in result.blocks for anchor in block.anchors} == {"og_1"}
+    comparisons = convert_collinearity_blocks_to_comparisons(result, records=records)
+    baseline = convert_collinearity_blocks_to_comparisons(geometry_only, records=records)
+    assert len(comparisons) == len(baseline) == 1
+    # Complete membership is semantic metadata, not a geometry coordinate.
+    assert comparisons[0]["query_orthogroup_member_count"].tolist() == ["2"]
+    assert comparisons[0]["subject_orthogroup_member_count"].tolist() == ["1"]
+    geometry_columns = comparisons[0].columns.difference([
+        "query_orthogroup_member_count", "subject_orthogroup_member_count",
+    ])
+    pd.testing.assert_frame_equal(
+        comparisons[0][geometry_columns], baseline[0][geometry_columns],
+    )
+
+
+@pytest.mark.parametrize("search_scope", ["adjacent", "all"])
+@pytest.mark.parametrize("edge_mode", ["one_to_one", "all_hits"])
+def test_collinear_scope_partitions_table_identity(monkeypatch, search_scope, edge_mode):
+    records, extraction, hits = _record_local_mixed_fixture()
+    records.append(_record("record_c", [_cds(0, 9, {"protein_id": ["c0"]})]))
+    extraction = extract_cds_proteins(records)
+    for pair, query, subject in (
+        ((1, 1), "b0", "b1"), ((2, 2), "c0", "c0"),
+        ((1, 2), "b0", "c0"), ((2, 1), "c0", "b0"),
+        ((0, 2), "a2", "c0"), ((2, 0), "c0", "a2"),
+    ):
+        hits[pair] = pd.DataFrame.from_records([_hit_row(query, subject)], columns=COMPARISON_COLUMNS)
+    captured = {}
+    infer = collinearity_module.select_rbh_orthogroup_edges_from_directional_hits
+    select_geometry = collinearity_module._select_orthogroup_edges
+
+    def capture_semantic(tables, *args, **kwargs):
+        captured["semantic"] = tables
+        return infer(tables, *args, **kwargs)
+
+    def capture_geometry(tables, **kwargs):
+        captured["geometry"] = tables
+        return select_geometry(tables, **kwargs)
+
+    monkeypatch.setattr(collinearity_module, "select_rbh_orthogroup_edges_from_directional_hits", capture_semantic)
+    monkeypatch.setattr(collinearity_module, "_select_orthogroup_edges", capture_geometry)
+    collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        hits, extraction, records=records, search_scope=search_scope, edge_mode=edge_mode,
+    )
+    cross_pairs = {(0, 1), (1, 0), (1, 2), (2, 1)}
+    if search_scope == "all":
+        cross_pairs |= {(0, 2), (2, 0)}
+    assert set(captured["semantic"]) == cross_pairs | {(0, 0), (1, 1), (2, 2)}
+    assert set(captured["geometry"]) == cross_pairs
+    for tables in captured.values():
+        assert all(table is hits[pair] for pair, table in tables.items())
 
 
 def _first_fasta_id(fasta_text: str) -> str:

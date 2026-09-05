@@ -54,6 +54,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-width: 1.5;
   paint-order: stroke fill markers;
 }
+.gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--pending,
 .gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--selected {
   opacity: 1;
   filter: url(#gbdraw-interactive-feature-glow);
@@ -62,6 +63,10 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-width: 2.5;
   paint-order: stroke fill markers;
   outline: none;
+}
+.gbdraw-interactive-pairwise-match:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 .gbdraw-interactive-annotation {
   cursor: pointer;
@@ -1960,8 +1965,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var matchElementsById = new Map();
   var ambiguousMatchElementIds = new Set();
   var selectedMatchElements = [];
+  var pendingMatchElement = null;
   var comparisonElementsByCollinearityBlockId = new Map();
-  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element) {
+  Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element, index) {
     var matchId = getElementMatchId(element);
     if (matchId && !ambiguousMatchElementIds.has(matchId)) {
       if (matchElementsById.has(matchId)) {
@@ -1979,6 +1985,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       comparisonElementsByCollinearityBlockId.get(blockId).push(element);
     }
     setClassToken(element, 'gbdraw-interactive-pairwise-match', true);
+    element.setAttribute('role', 'button');
+    element.setAttribute('tabindex', '0');
+    element.setAttribute('aria-label', 'Pairwise match ' + (index + 1));
   });
 
   function setClassToken(element, token, enabled) {
@@ -2113,6 +2122,19 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     selectedMatchElements.forEach(function (element) {
       setClassToken(element, 'gbdraw-interactive-pairwise-match--selected', true);
     });
+  }
+
+  function clearPendingMatch() {
+    if (!pendingMatchElement) return;
+    setClassToken(pendingMatchElement, 'gbdraw-interactive-pairwise-match--pending', false);
+    pendingMatchElement = null;
+  }
+
+  function setPendingMatch(element) {
+    if (pendingMatchElement === element) return;
+    clearPendingMatch();
+    pendingMatchElement = element;
+    setClassToken(element, 'gbdraw-interactive-pairwise-match--pending', true);
   }
 
   function clearActiveFeatureHover() {
@@ -4532,9 +4554,129 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     });
   }
 
-  function copyButton(value, label) {
-    var index = copyValues.push(String(value == null ? '' : value)) - 1;
-    return '<button type="button" class="gfi-copy" data-copy-index="' + index + '">' + escapeHtml(label || 'Copy') + '</button>';
+  function memberCopyFeedbackIdentity(memberOrRow) {
+    var recordKey = consistentTextIdentity(memberOrRow, ['recordKey', 'record_key']);
+    var biologicalId = consistentTextIdentity(
+      memberOrRow,
+      ['biologicalFeatureId', 'biological_feature_id']
+    );
+    if (
+      recordKey.valid
+      && biologicalId.valid
+      && recordKey.value
+      && biologicalId.value
+    ) {
+      return JSON.stringify(['canonical', recordKey.value, biologicalId.value]);
+    }
+    var recordIndex = memberRecordIndex(memberOrRow);
+    var stableId = memberFeatureSvgId(memberOrRow);
+    var sourceIndex = nonnegativeIntegerIdentity(memberOrRow, [
+      'featureIndex', 'feature_index', 'sourceFeatureIndex', 'source_feature_index'
+    ]);
+    if (Number.isInteger(recordIndex) && (stableId || Number.isInteger(sourceIndex.value))) {
+      return JSON.stringify([
+        'source',
+        recordIndex,
+        stableId,
+        Number.isInteger(sourceIndex.value) ? sourceIndex.value : null
+      ]);
+    }
+    return JSON.stringify([
+      'display',
+      firstDisplayText(memberOrRow && (memberOrRow.record || memberOrRow.recordId || memberOrRow.record_id)),
+      firstDisplayText(memberOrRow && memberOrRow.coordinates, memberLocationText(memberOrRow)),
+      firstNonInternalDisplayText(
+        memberOrRow && (memberOrRow.proteinId || memberOrRow.protein_id),
+        memberOrRow && displayProteinId(null, memberOrRow, '')
+      )
+    ]);
+  }
+
+  function sequenceCopyFeedbackKey(context, orthogroupId, action, memberOrRow, sequenceKind) {
+    return JSON.stringify([
+      'orthogroup-sequence',
+      String(context || ''),
+      String(orthogroupId || '').trim(),
+      action,
+      memberOrRow ? memberCopyFeedbackIdentity(memberOrRow) : '',
+      sequenceKindLabel(sequenceKind)
+    ]);
+  }
+
+  function copyFeedbackLabel(status) {
+    if (status === 'success') return 'Copied!';
+    if (status === 'manual') return 'Copy manually';
+    if (status === 'failure') return 'Copy failed';
+    return '';
+  }
+
+  function updateCopyFeedbackButtons(feedbackKey) {
+    if (!popup || !popup.querySelectorAll || !feedbackKey) return;
+    var feedback = copyFeedbackByKey.get(feedbackKey);
+    Array.prototype.slice.call(
+      popup.querySelectorAll('[data-copy-feedback-key]')
+    ).forEach(function (button) {
+      if (button.getAttribute('data-copy-feedback-key') !== feedbackKey) return;
+      button.textContent = feedback
+        ? copyFeedbackLabel(feedback.status)
+        : String(button.getAttribute('data-copy-label') || 'Copy');
+    });
+  }
+
+  function beginCopyFeedback(feedbackKey) {
+    var previousTimer = copyFeedbackTimers.get(feedbackKey);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    copyFeedbackTimers.delete(feedbackKey);
+    copyFeedbackByKey.delete(feedbackKey);
+    nextCopyOperationId += 1;
+    copyOperationIds.set(feedbackKey, nextCopyOperationId);
+    updateCopyFeedbackButtons(feedbackKey);
+    return nextCopyOperationId;
+  }
+
+  function finishCopyFeedback(feedbackKey, operationId, status) {
+    if (!feedbackKey || copyOperationIds.get(feedbackKey) !== operationId) return;
+    var previousTimer = copyFeedbackTimers.get(feedbackKey);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    copyFeedbackByKey.set(feedbackKey, { operationId: operationId, status: status });
+    updateCopyFeedbackButtons(feedbackKey);
+    var timer = window.setTimeout(function () {
+      var current = copyFeedbackByKey.get(feedbackKey);
+      if (
+        copyOperationIds.get(feedbackKey) !== operationId
+        || !current
+        || current.operationId !== operationId
+      ) return;
+      copyFeedbackByKey.delete(feedbackKey);
+      copyFeedbackTimers.delete(feedbackKey);
+      copyOperationIds.delete(feedbackKey);
+      updateCopyFeedbackButtons(feedbackKey);
+    }, COPY_FEEDBACK_DURATION_MS);
+    copyFeedbackTimers.set(feedbackKey, timer);
+  }
+
+  function clearCopyFeedback() {
+    copyFeedbackTimers.forEach(function (timer) {
+      window.clearTimeout(timer);
+    });
+    copyFeedbackTimers.clear();
+    copyFeedbackByKey.clear();
+    copyOperationIds.clear();
+  }
+
+  function copyButton(value, label, feedbackKey) {
+    var originalLabel = String(label || 'Copy');
+    var key = String(feedbackKey || '');
+    var feedback = key ? copyFeedbackByKey.get(key) : null;
+    var index = copyValues.push({
+      feedbackKey: key,
+      text: String(value == null ? '' : value)
+    }) - 1;
+    var feedbackAttributes = key
+      ? ' data-copy-feedback-key="' + escapeHtml(key) + '" data-copy-label="' + escapeHtml(originalLabel) + '" aria-live="polite" aria-atomic="true"'
+      : '';
+    return '<button type="button" class="gfi-copy" data-copy-index="' + index + '"' + feedbackAttributes + '>' +
+      escapeHtml(feedback ? copyFeedbackLabel(feedback.status) : originalLabel) + '</button>';
   }
 
   function downloadButton(filename, text, label) {
@@ -4556,18 +4698,32 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       if (!text) return;
       var count = groupFastaCount(rows, sequenceKind);
       var suffix = count > 1 ? ' (' + count + ')' : '';
-      html.push(copyButton(text, 'Copy ' + sequenceKind + suffix));
+      var feedbackKey = sequenceCopyFeedbackKey(
+        options && options.feedbackContext,
+        orthogroupId,
+        'group',
+        null,
+        sequenceKind
+      );
+      html.push(copyButton(text, 'Copy ' + sequenceKind + suffix, feedbackKey));
       html.push(downloadButton(groupSequenceFilename(orthogroupId, displayName, sequenceKind), text, 'DL ' + sequenceKind + suffix));
     });
     return html.join('');
   }
 
-  function renderMemberSequenceActions(memberOrRow, orthogroupId) {
+  function renderMemberSequenceActions(memberOrRow, orthogroupId, feedbackContext) {
     var html = [];
     ['nt', 'aa'].forEach(function (sequenceKind) {
       var text = String(memberFasta(memberOrRow, sequenceKind) || '').trim();
       if (!text) return;
-      html.push(copyButton(text, 'Copy ' + sequenceKind));
+      var feedbackKey = sequenceCopyFeedbackKey(
+        feedbackContext,
+        orthogroupId,
+        'member',
+        memberOrRow,
+        sequenceKind
+      );
+      html.push(copyButton(text, 'Copy ' + sequenceKind, feedbackKey));
       html.push(downloadButton(memberSequenceFilename(memberOrRow, sequenceKind, orthogroupId), text, 'DL ' + sequenceKind));
     });
     return html.length ? '<div class="gfi-seq-actions">' + html.join('') + '</div>' : '';
@@ -4575,6 +4731,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   var copyValues = [];
   var downloadValues = [];
+  var COPY_FEEDBACK_DURATION_MS = 1500;
+  var copyFeedbackByKey = new Map();
+  var copyFeedbackTimers = new Map();
+  var copyOperationIds = new Map();
+  var nextCopyOperationId = 0;
 
   function renderRows(rows) {
     if (!rows.length) {
@@ -4631,10 +4792,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     ).join('\\n');
     var sequenceActions = renderGroupSequenceActions(rows, {
       orthogroupId: orthogroupId,
-      displayName: displayName
+      displayName: displayName,
+      feedbackContext: 'feature-orthogroup'
     });
     var body = rows.map(function (row) {
-      var sequenceActions = renderMemberSequenceActions(row, orthogroupId);
+      var sequenceActions = renderMemberSequenceActions(row, orthogroupId, 'feature-orthogroup');
       return '<tr>' +
         '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
@@ -5369,7 +5531,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       '<tbody>' + body + '</tbody></table></div>';
   }
 
-  function renderMatchMemberTable(section, rows) {
+  function renderMatchMemberTable(section, rows, feedbackContext) {
     if (!rows.length) return '';
     var orthogroupId = String(section && (section.id || section.orthogroupId || section.orthogroup_id) || rows[0] && (rows[0].orthogroupId || rows[0].orthogroup_id) || '').trim();
     var displayName = String(section && (section.displayName || section.display_name || section.name) || rows[0] && (rows[0].displayName || rows[0].display_name) || '').trim();
@@ -5385,7 +5547,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       ).join('\\n');
     }
     var body = rows.map(function (row) {
-      var sequenceActions = renderMemberSequenceActions(row, orthogroupId);
+      var sequenceActions = renderMemberSequenceActions(row, orthogroupId, feedbackContext);
       return '<tr>' +
         '<td class="gfi-mono">' + escapeHtml(row.record) + '</td>' +
         '<td class="gfi-mono">' + escapeHtml(row.coordinates) + '</td>' +
@@ -5396,7 +5558,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }).join('');
     var sequenceActions = renderGroupSequenceActions(rows, {
       orthogroupId: orthogroupId,
-      displayName: displayName
+      displayName: displayName,
+      feedbackContext: feedbackContext
     });
     return '<div class="gfi-table-wrap"><table class="gfi-table gfi-og-members-table">' +
       '<thead><tr><th>Record</th><th>Coordinates (+/-)</th><th>Protein ID</th><th>Product / note</th><th>Seq</th></tr></thead>' +
@@ -5447,7 +5610,11 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         ? '<div class="gfi-block gfi-block--selected-og">' +
           '<div class="gfi-block-title">' + escapeHtml('Selected similarity group') + '</div>' +
           renderRows(selectedBlockOrthogroup.detailRows) +
-          renderMatchMemberTable(selectedBlockOrthogroup, selectedBlockOrthogroup.memberRows) +
+          renderMatchMemberTable(
+            selectedBlockOrthogroup,
+            selectedBlockOrthogroup.memberRows,
+            'selected-orthogroup:' + selectedBlockOrthogroup.id
+          ) +
           '</div>'
         : '';
       return '<div class="gfi-block">' +
@@ -5455,7 +5622,16 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         (rows.length && !featureRows.length ? renderRows(rows) : '') +
         renderMatchFeatureTable(featureRows) +
         renderMatchBlockOrthogroupTable(blockOrthogroups, selectedBlockOrthogroupId) +
-        renderMatchMemberTable(section, memberRows) +
+        renderMatchMemberTable(
+          section,
+          memberRows,
+          'match-section:' + firstDisplayText(
+            section && section.id,
+            section && section.title,
+            match && match.id,
+            selectedBlockOrthogroupId
+          )
+        ) +
         selectedHtml +
         '</div>';
     }).join('') || '<div class="gfi-empty">No match details available.</div>';
@@ -5497,6 +5673,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function closePopup() {
     stopPopupResize();
     stopPopupDrag();
+    clearCopyFeedback();
     updateActivePopupViewportMetrics = null;
     if (popup && popup.parentNode) {
       popup.parentNode.removeChild(popup);
@@ -6200,8 +6377,10 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       var copyTarget = closestFromTarget(rootEvent.target, '[data-copy-index]');
       if (copyTarget) {
         var index = Number(copyTarget.getAttribute('data-copy-index'));
-        var value = Number.isFinite(index) ? copyValues[index] || '' : '';
-        Promise.resolve(copyText(value, copyTarget)).catch(function () {});
+        var copyPayload = Number.isFinite(index) ? copyValues[index] || null : null;
+        var value = copyPayload ? copyPayload.text : '';
+        var feedbackKey = copyPayload ? copyPayload.feedbackKey : '';
+        Promise.resolve(copyText(value, copyTarget, feedbackKey)).catch(function () {});
         return;
       }
       var downloadTarget = closestFromTarget(rootEvent.target, '[data-download-index]');
@@ -6247,18 +6426,34 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     syncStandaloneOverlayOrder();
   }
 
-  async function copyText(value, button) {
+  async function copyText(value, button, feedbackKey) {
     var text = String(value == null ? '' : value);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    var operationId = feedbackKey ? beginCopyFeedback(feedbackKey) : 0;
+    var clipboard = null;
+    try {
+      clipboard = navigator.clipboard;
+    } catch (error) {
+      clipboard = null;
+    }
+    if (clipboard && clipboard.writeText) {
       try {
-        await navigator.clipboard.writeText(text);
-        if (button) button.textContent = 'Copied';
-        return;
+        await clipboard.writeText(text);
+        if (feedbackKey) finishCopyFeedback(feedbackKey, operationId, 'success');
+        else if (button) button.textContent = 'Copied';
+        return 'copied';
       } catch (error) {
         // Fall back to a prompt below when clipboard permission is unavailable.
       }
     }
-    window.prompt('Copy text', text);
+    try {
+      if (typeof window.prompt !== 'function') throw new Error('Manual copy is unavailable.');
+      window.prompt('Copy text', text);
+      if (feedbackKey) finishCopyFeedback(feedbackKey, operationId, 'manual');
+      return 'manual';
+    } catch (error) {
+      if (feedbackKey) finishCopyFeedback(feedbackKey, operationId, 'failure');
+      return 'failed';
+    }
   }
 
   function closestFeature(node) {
@@ -6399,6 +6594,41 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     closeHoverPopup();
   });
 
+  svg.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) {
+      clearPendingMatch();
+      return;
+    }
+    setPendingMatch(matchElement);
+  });
+
+  svg.addEventListener('pointerout', function (event) {
+    if (!pendingMatchElement) return;
+    var matchElement = closestMatch(event.target);
+    if (matchElement !== pendingMatchElement) return;
+    if (closestMatch(event.relatedTarget) === matchElement) return;
+    clearPendingMatch();
+  });
+
+  window.addEventListener('pointerup', clearPendingMatch, true);
+  window.addEventListener('pointercancel', clearPendingMatch, true);
+  window.addEventListener('blur', clearPendingMatch);
+
+  function activateMatch(matchElement, event) {
+    var matchId = getElementMatchId(matchElement);
+    var match = matchesById.get(matchId);
+    if (!match) return false;
+    clearPendingMatch();
+    event.preventDefault();
+    event.stopPropagation();
+    closeHoverPopup();
+    openPopup(match, event, 'match');
+    setSelectedMatch(matchId);
+    return true;
+  }
+
   svg.addEventListener('click', function (event) {
     if (popup && popup.contains(event.target)) return;
     if (closestSearchControls(event.target)) return;
@@ -6426,14 +6656,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         closePopup();
         return;
       }
-      var matchId = getElementMatchId(matchElement);
-      var match = matchesById.get(matchId);
-      if (!match) return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeHoverPopup();
-      openPopup(match, event, 'match');
-      setSelectedMatch(matchId);
+      activateMatch(matchElement, event);
       return;
     }
     var svgId = getElementFeatureId(featureElement);
@@ -6447,6 +6670,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     event.stopPropagation();
     closeHoverPopup();
     openPopup(feature, event, 'feature');
+  });
+
+  svg.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    var matchElement = closestMatch(event.target);
+    if (!matchElement) return;
+    activateMatch(matchElement, event);
   });
 
   document.addEventListener('keydown', function (event) {

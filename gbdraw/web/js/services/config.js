@@ -2241,8 +2241,12 @@ const serializeFile = async (file) => {
   if (!file) return null;
   const source = getSessionResourceSource(file);
   if (source?.descriptor) {
-    setResourcePayloadOwner(source.descriptor, file);
-    return source.descriptor;
+    const visibleName = String(file.name || '').trim();
+    const descriptor = visibleName && visibleName !== source.descriptor.name
+      ? { ...source.descriptor, name: visibleName }
+      : source.descriptor;
+    setResourcePayloadOwner(descriptor, file);
+    return descriptor;
   }
   const cached = serializedFileDescriptors.get(file);
   if (cached) return cached;
@@ -3307,6 +3311,7 @@ const captureSessionImportSnapshot = () => ({
   features: buildFeatureStateData(),
   editorState: buildEditorStateData(),
   orthogroupState: buildOrthogroupStateData(),
+  collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
   losatCache: new Map(state.losatCache.value),
   losatDerivedCache: new Map(state.losatDerivedCache.value),
@@ -3360,6 +3365,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     applyResultsData(snapshot.results, snapshot.ui);
     applyFeatureStateData(snapshot.features);
     applyOrthogroupStateData(snapshot.orthogroupState);
+    state.collinearGroups.value = snapshot.collinearGroups;
     applyEditorStateData(snapshot.editorState);
     applyRunStateData(snapshot.runState);
     state.errorLog.value = snapshot.errorLog;
@@ -3410,6 +3416,7 @@ const resetSessionBaseline = () => {
   state.legacyProteinDerivedEvidence.value = { schema: 1, entries: [] };
   state.losatCacheInfo.value = [];
   state.orthogroups.value = [];
+  state.collinearGroups.value = [];
   state.featureOrthogroupIndex.value = new Map();
   state.selectedOrthogroupId.value = '';
   state.selectedOrthogroupAlignmentFeature.value = '';
@@ -4183,6 +4190,7 @@ export const importSession = async (e, options = {}) => {
       : (data.features || {});
     applyFeatureStateData(features);
     if (currentSchemaSession && currentCatalogFeatureState) {
+      state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
     }
     const catalogSequenceSources = currentSchemaSession

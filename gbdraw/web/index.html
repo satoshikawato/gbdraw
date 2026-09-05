@@ -686,6 +686,7 @@
             stroke-opacity: 1 !important;
             stroke-width: 3px !important;
         }
+        .gbdraw-match-pending,
         .gbdraw-match-selected {
             opacity: 1 !important;
             filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.82));
@@ -694,6 +695,15 @@
             stroke-width: 2.5px !important;
             paint-order: stroke fill markers;
             outline: none;
+        }
+        .gbdraw-preview-surface :is(
+            path[data-gbdraw-match-id],
+            path[data-gbdraw-pairwise-match-id],
+            path[data-match-kind],
+            path[data-pairwise-match-style]
+        ):focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
         }
         .gbdraw-feature-selected {
             opacity: 1 !important;
@@ -772,8 +782,10 @@
         .hosted-build-label {
             white-space: nowrap;
         }
-        .right-drawer {
+        .result-pane {
             --right-drawer-width: min(100vw, 360px);
+        }
+        .right-drawer {
             width: var(--right-drawer-width);
             transform: translateX(0);
             visibility: visible;
@@ -785,7 +797,6 @@
             pointer-events: none;
         }
         .drawer-toggle {
-            --right-drawer-width: min(100vw, 360px);
             transform: translateY(-50%);
         }
         .drawer-toggle[aria-expanded="true"] {
@@ -793,6 +804,13 @@
                 calc(-1 * var(--right-drawer-width)),
                 -50%
             );
+        }
+        .preview-controls.preview-controls--drawer-open {
+            left: 0;
+            right: var(--right-drawer-width);
+            transform: none;
+            justify-content: center;
+            flex-wrap: wrap;
         }
         @media (max-width: 760px) {
             .feature-popup-grid {
@@ -1133,10 +1151,11 @@
                     <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
                         <i class="ph ph-archive"></i> Save Session
                     </button>
-                    <button data-history-managed @click="$refs.sessionInput.click()" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Load Session" aria-label="Load Session">
+                    <button data-history-managed @click="$refs.sessionInput.click()" :disabled="sessionImportPending" :aria-busy="sessionImportPending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
+                    <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Loading session…</span>
                 </div>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
                     <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
@@ -4665,7 +4684,8 @@
                          :style="featureSelectionMarqueeStyle"></div>
 
                     <!-- Zoom and Canvas controls -->
-                    <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                    <div class="preview-controls absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20"
+                         :class="{ 'preview-controls--drawer-open': showRightDrawer }">
                         <!-- Reset preview layout button -->
                         <button v-if="svgContent" @click="resetLayout"
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
@@ -4888,15 +4908,17 @@
                             </div>
                             <div class="grid grid-cols-2 gap-2 mb-3">
                                 <button type="button"
-                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
+                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'nt', 'feature-popup')"
                                         :disabled="!clickedOrthogroupDetail.ntSequenceCount"
                                         :class="[
                                           'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
                                           clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                         ]"
-                                        title="Copy all member nucleotide FASTA">
-                                    <i class="ph ph-copy"></i>
-                                    <span>Copy nt</span>
+                                        title="Copy all member nucleotide FASTA"
+                                        aria-live="polite"
+                                        aria-atomic="true">
+                                    <i class="ph ph-copy" aria-hidden="true"></i>
+                                    <span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'Copy nt', null, 'feature-popup') }}</span>
                                 </button>
                                 <button type="button"
                                         @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'nt')"
@@ -4910,15 +4932,17 @@
                                     <span>Download nt</span>
                                 </button>
                                 <button type="button"
-                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
+                                        @click="copyOrthogroupSequences(clickedOrthogroupDetail.id, 'aa', 'feature-popup')"
                                         :disabled="!clickedOrthogroupDetail.aaSequenceCount"
                                         :class="[
                                           'px-2 py-1.5 rounded-md text-xs flex items-center justify-center gap-1',
                                           clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                         ]"
-                                        title="Copy all member amino-acid FASTA">
-                                    <i class="ph ph-copy"></i>
-                                    <span>Copy aa</span>
+                                        title="Copy all member amino-acid FASTA"
+                                        aria-live="polite"
+                                        aria-atomic="true">
+                                    <i class="ph ph-copy" aria-hidden="true"></i>
+                                    <span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'Copy aa', null, 'feature-popup') }}</span>
                                 </button>
                                 <button type="button"
                                         @click="downloadOrthogroupSequences(clickedOrthogroupDetail.id, 'aa')"
@@ -4971,14 +4995,16 @@
                                                 <td class="px-2 py-1 whitespace-nowrap">
                                                     <div class="grid grid-cols-2 gap-1 w-24">
                                                         <button type="button"
-                                                                @click="copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
+                                                                @click="copyOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id, 'feature-popup')"
                                                                 :disabled="!hasOrthogroupMemberSequence(member, 'nt')"
                                                                 :class="[
                                                                   'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                   hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                 ]"
-                                                                title="Copy nucleotide FASTA">
-                                                            <i class="ph ph-copy"></i><span>nt</span>
+                                                                title="Copy nucleotide FASTA"
+                                                                aria-live="polite"
+                                                                aria-atomic="true">
+                                                            <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'nt', 'nt', member, 'feature-popup') }}</span>
                                                         </button>
                                                         <button type="button"
                                                                 @click="downloadOrthogroupMemberSequence(member, 'nt', clickedOrthogroupDetail.id)"
@@ -4991,14 +5017,16 @@
                                                             <i class="ph ph-download-simple"></i><span>nt</span>
                                                         </button>
                                                         <button type="button"
-                                                                @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
+                                                                @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup')"
                                                                 :disabled="!hasOrthogroupMemberSequence(member, 'aa')"
                                                                 :class="[
                                                                   'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                   hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                 ]"
-                                                                title="Copy amino-acid FASTA">
-                                                            <i class="ph ph-copy"></i><span>aa</span>
+                                                                title="Copy amino-acid FASTA"
+                                                                aria-live="polite"
+                                                                aria-atomic="true">
+                                                            <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(clickedOrthogroupDetail.id, 'aa', 'aa', member, 'feature-popup') }}</span>
                                                         </button>
                                                         <button type="button"
                                                                 @click="downloadOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id)"
@@ -5909,31 +5937,50 @@
 
                         <div class="space-y-2">
                             <div class="flex items-center justify-between gap-2">
-                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Command</div>
-                                <div class="flex flex-wrap items-center justify-end gap-2">
-                                    <button v-if="runInfoHasCliHelperFiles"
-                                            type="button"
-                                            @click="downloadCliHelperFiles"
-                                            class="px-3 py-1.5 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
-                                            title="Download browser-generated files referenced by this command">
-                                        <i class="ph ph-download-simple"></i>
-                                        <span>Download CLI Files</span>
-                                    </button>
-                                    <button type="button"
-                                            @click="copyRunCommand"
-                                            class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
-                                            title="Copy command">
-                                        <i class="ph ph-copy"></i>
-                                        <span>{{ runInfoCopyStatus || 'Copy' }}</span>
-                                    </button>
-                                </div>
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Source recipe</div>
+                                <button v-if="lastRunInfo.sourceRecipe?.available !== false"
+                                        type="button"
+                                        @click="copyRunCommand"
+                                        class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Copy command">
+                                    <i class="ph ph-copy"></i>
+                                    <span>{{ runInfoCopyStatus || 'Copy' }}</span>
+                                </button>
                             </div>
-                            <pre class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.command }}</pre>
+                            <pre v-if="lastRunInfo.sourceRecipe?.available !== false"
+                                 class="h-28 overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-950 text-slate-100 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sourceRecipe?.command || lastRunInfo.command }}</pre>
+                            <div v-else
+                                 class="rounded border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                                {{ lastRunInfo.sourceRecipe?.unavailableReason || 'Source recipe unavailable.' }}
+                            </div>
                         </div>
 
-                        <div v-if="lastRunInfo.sessionCommand" class="space-y-2">
-                            <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Session command</div>
-                            <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.sessionCommand }}</pre>
+                        <div v-if="lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand" class="space-y-2">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-bold uppercase tracking-wider text-slate-500">Exact replay</div>
+                                <button type="button"
+                                        @click="copyExactReplayCommand"
+                                        class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Copy exact replay command">
+                                    <i class="ph ph-copy"></i>
+                                    <span>{{ exactReplayCopyStatus || 'Copy' }}</span>
+                                </button>
+                            </div>
+                            <pre class="overflow-auto custom-scrollbar rounded border border-slate-200 bg-slate-50 text-slate-700 p-3 text-xs leading-relaxed whitespace-pre font-mono">{{ lastRunInfo.exactReplay?.command || lastRunInfo.sessionCommand }}</pre>
+                        </div>
+
+                        <div v-if="runInfoHasCliHelperFiles" class="space-y-2 rounded border border-emerald-200 bg-emerald-50 p-3">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="text-xs font-bold uppercase tracking-wider text-emerald-800">Reproducibility files</div>
+                                <button type="button"
+                                        @click="downloadCliHelperFiles"
+                                        class="px-3 py-1.5 rounded border border-emerald-200 bg-white hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
+                                        title="Download Source recipe helpers and the Exact replay file">
+                                    <i class="ph ph-download-simple"></i>
+                                    <span>Download reproducibility files</span>
+                                </button>
+                            </div>
+                            <p class="text-xs leading-relaxed text-emerald-800">{{ lastRunInfo.downloadBundle?.description }}</p>
                         </div>
 
                         <div class="space-y-1 text-xs text-slate-500 leading-relaxed">
@@ -6252,9 +6299,11 @@
                                                   'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
                                                   hasOrthogroupSequence(selectedOrthogroup, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                 ]"
-                                                title="Copy all member nucleotide FASTA">
-                                            <i class="ph ph-copy"></i>
-                                            <span>Copy nt</span>
+                                                title="Copy all member nucleotide FASTA"
+                                                aria-live="polite"
+                                                aria-atomic="true">
+                                            <i class="ph ph-copy" aria-hidden="true"></i>
+                                            <span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'Copy nt') }}</span>
                                         </button>
                                         <button type="button"
                                                 @click="downloadOrthogroupSequences(selectedOrthogroup, 'nt')"
@@ -6274,9 +6323,11 @@
                                                   'px-2 py-1.5 rounded text-xs flex items-center justify-center gap-1',
                                                   hasOrthogroupSequence(selectedOrthogroup, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                 ]"
-                                                title="Copy all member amino-acid FASTA">
-                                            <i class="ph ph-copy"></i>
-                                            <span>Copy aa</span>
+                                                title="Copy all member amino-acid FASTA"
+                                                aria-live="polite"
+                                                aria-atomic="true">
+                                            <i class="ph ph-copy" aria-hidden="true"></i>
+                                            <span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'Copy aa') }}</span>
                                         </button>
                                         <button type="button"
                                                 @click="downloadOrthogroupSequences(selectedOrthogroup, 'aa')"
@@ -6324,8 +6375,10 @@
                                                                       'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                       hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
-                                                                    title="Copy nucleotide FASTA">
-                                                                <i class="ph ph-copy"></i><span>nt</span>
+                                                                    title="Copy nucleotide FASTA"
+                                                                    aria-live="polite"
+                                                                    aria-atomic="true">
+                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'nt', 'nt', member) }}</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="downloadOrthogroupMemberSequence(member, 'nt', selectedOrthogroup)"
@@ -6344,8 +6397,10 @@
                                                                       'h-6 rounded text-[10px] flex items-center justify-center gap-0.5',
                                                                       hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
-                                                                    title="Copy amino-acid FASTA">
-                                                                <i class="ph ph-copy"></i><span>aa</span>
+                                                                    title="Copy amino-acid FASTA"
+                                                                    aria-live="polite"
+                                                                    aria-atomic="true">
+                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>{{ orthogroupCopyFeedbackLabel(selectedOrthogroup, 'aa', 'aa', member) }}</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="downloadOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"

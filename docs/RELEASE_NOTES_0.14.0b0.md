@@ -328,10 +328,10 @@ controlled by `--feature_height`. Feature-slot `spacing` is clearance to the
 adjacent outer track. Missing Depth data produces no paint, reserve, axis, or
 ticks; logical identity remains independent of record-local geometry.
 
-Comparison links now begin and end at the outer edges of the records' painted
-exclusion bands without an additional endpoint pad. `--comparison_height`
-remains a minimum corridor; record spacing expands around taller occupancy while
-keeping links outside the track stacks. Geometry metadata schema v2 reports
+Comparison links begin and end 4 px outside the painted feature lanes and other
+tracks. Feature labels reserve row space without shortening the links.
+`--comparison_height` remains a minimum corridor; record spacing expands around
+taller occupancy while keeping links outside the track stacks. Geometry metadata schema v2 reports
 record-specific paint, reserve, comparison-exclusion, and canvas bands.
 
 Row spacing now composes body, comparison, and definition constraints with an

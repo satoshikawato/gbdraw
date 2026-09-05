@@ -233,9 +233,71 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     });
   });
   await page.goto(pathToFileURL(svgPath).href);
-  await page.locator('[data-gbdraw-pairwise-match-id="m1"]').click();
-  await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
+  const firstMatch = page.locator('[data-gbdraw-pairwise-match-id="m1"]');
+  const secondMatch = page.locator('[data-gbdraw-pairwise-match-id="m2"]');
+  await expect(firstMatch).toHaveAttribute('role', 'button');
+  await expect(firstMatch).toHaveAttribute('tabindex', '0');
+
+  await firstMatch.hover();
+  await page.mouse.down();
+  const pendingStyle = await firstMatch.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      focused: element === document.activeElement,
+      focusVisible: element.matches(':focus-visible'),
+      outlineStyle: style.outlineStyle,
+      stroke: style.stroke
+    };
+  });
+  expect(pendingStyle).toEqual({
+    focused: true,
+    focusVisible: false,
+    outlineStyle: 'none',
+    stroke: 'rgb(245, 158, 11)'
+  });
+  await expect(firstMatch).toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
+  await expect(firstMatch).not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
+  await expect(page.locator('.gfi-title')).toHaveCount(0);
+  await firstMatch.dispatchEvent('pointercancel', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: 'mouse'
+  });
+  await expect(firstMatch).not.toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
+  await page.mouse.move(1, 1);
+  await page.mouse.up();
+
+  await firstMatch.dispatchEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 2,
+    pointerType: 'mouse'
+  });
+  await secondMatch.dispatchEvent('pointerdown', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 3,
+    pointerType: 'mouse'
+  });
+  await expect(firstMatch).not.toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
+  await expect(secondMatch).toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
+  await secondMatch.dispatchEvent('pointercancel', {
+    bubbles: true,
+    button: 0,
+    isPrimary: true,
+    pointerId: 3,
+    pointerType: 'mouse'
+  });
+  await expect(secondMatch).not.toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
+
+  await firstMatch.click();
+  await expect(firstMatch)
     .toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
+  await expect(firstMatch).not.toHaveClass(/gbdraw-interactive-pairwise-match--pending/);
   await expect(page.locator('.gfi-title')).toHaveText('Pairwise match');
   const sectionTitles = await page.locator('.gfi-block-title').allTextContents();
   expect(sectionTitles).toEqual([
@@ -272,7 +334,7 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   await page.locator('[data-close]').click();
   await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
     .not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
-  await page.locator('[data-gbdraw-pairwise-match-id="m2"]').click();
+  await secondMatch.click();
   const collinearTitles = await page.locator('.gfi-block-title').allTextContents();
   expect(collinearTitles).toEqual([
     'Collinear block spans',
@@ -296,6 +358,38 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   await expect.poll(() => page.locator('[data-gbdraw-pairwise-match-id="m3"]')
     .evaluate((element) => getComputedStyle(element).outlineStyle))
     .toBe('none');
+
+  await page.locator('[data-close]').click();
+  await firstMatch.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(firstMatch).toBeFocused();
+  const keyboardFocusStyle = await firstMatch.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      focusVisible: element.matches(':focus-visible'),
+      outlineColor: style.outlineColor,
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth
+    };
+  });
+  expect(keyboardFocusStyle).toEqual({
+    focusVisible: true,
+    outlineColor: 'rgb(37, 99, 235)',
+    outlineStyle: 'solid',
+    outlineWidth: '2px'
+  });
+  await firstMatch.press('Enter');
+  await expect(page.locator('.gfi-title')).toHaveText('Pairwise match');
+  await expect(firstMatch).toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
+  await expect.poll(() => firstMatch.evaluate((element) => getComputedStyle(element).outlineStyle))
+    .toBe('solid');
+  await page.locator('[data-close]').click();
+
+  await secondMatch.focus();
+  await secondMatch.press('Space');
+  await expect(page.locator('.gfi-title')).toHaveText('Collinearity block');
+  await expect(secondMatch).toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
 });
 
 test('standalone homology popup exports exact spans and keeps missing comparison optional', async ({ page }, testInfo) => {

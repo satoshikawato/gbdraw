@@ -67,10 +67,44 @@ const orthogroupSource = (await readFile(
 );
 await writeFile(join(tempDir, 'app', 'orthogroups.js'), orthogroupSource, 'utf8');
 
+let copyFeedbackNow = 0;
+let nextCopyFeedbackTimerId = 1;
+const copyFeedbackTimers = new Map();
+const setCopyFeedbackTimeout = (callback, delay) => {
+  const timerId = nextCopyFeedbackTimerId;
+  nextCopyFeedbackTimerId += 1;
+  copyFeedbackTimers.set(timerId, {
+    callback,
+    dueAt: copyFeedbackNow + Number(delay || 0)
+  });
+  return timerId;
+};
+const clearCopyFeedbackTimeout = (timerId) => {
+  copyFeedbackTimers.delete(timerId);
+};
+const advanceCopyFeedbackTime = (duration) => {
+  const target = copyFeedbackNow + duration;
+  while (true) {
+    const next = Array.from(copyFeedbackTimers.entries())
+      .filter(([, timer]) => timer.dueAt <= target)
+      .sort((left, right) => left[1].dueAt - right[1].dueAt)[0];
+    if (!next) break;
+    const [timerId, timer] = next;
+    copyFeedbackTimers.delete(timerId);
+    copyFeedbackNow = timer.dueAt;
+    timer.callback();
+  }
+  copyFeedbackNow = target;
+};
+
 globalThis.window = {
   Vue: {
-    computed: (getter) => ({ get value() { return getter(); } })
-  }
+    computed: (getter) => ({ get value() { return getter(); } }),
+    reactive: (value) => value,
+    watch: () => () => {}
+  },
+  setTimeout: setCopyFeedbackTimeout,
+  clearTimeout: clearCopyFeedbackTimeout
 };
 globalThis.isSecureContext = true;
 let copiedText = '';
@@ -1246,6 +1280,7 @@ const state = {
   orthogroupSearch: ref(''),
   orthogroupSortMode: ref('id'),
   selectedOrthogroupAlignmentFeature: ref(''),
+  clickedFeature: ref(null),
   svgContainer: ref({ querySelector: () => svg }),
   linearSeqs: [
     { definition: 'record-a' },
@@ -1367,14 +1402,132 @@ assert.equal(duplicateSequenceMember.aminoAcidSequence, undefined);
 state.biologicalFeatures.value = originalBiologicalFeatures;
 assert.equal(editor.getOrthogroupSequenceCount(group, 'nt'), 3);
 await editor.copyOrthogroupSequences(group, 'nt');
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'),
+  'Copied!'
+);
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa'),
+  'Copy aa'
+);
 assert.match(copiedText, /AAAA/);
 assert.match(copiedText, /CCCC/);
 assert.match(copiedText, /GGGG/);
+const copiedNucleotidePayload = copiedText;
 await editor.copyOrthogroupSequences(group, 'aa');
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa'),
+  'Copied!'
+);
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'nt', 'Copy nt'),
+  'Copied!'
+);
 assert.match(copiedText, />LOC_A\b/);
 assert.match(copiedText, />LOC_B\b/);
 assert.match(copiedText, />CAG34720\.1\b/);
 assert.doesNotMatch(copiedText, /h_[a-z2-7]{26}/);
+const copiedAminoAcidPayload = copiedText;
+
+await editor.copyOrthogroupMemberSequence(members[0], 'aa', group);
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'aa', members[0]),
+  'Copied!'
+);
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'aa', members[1]),
+  'aa'
+);
+assert.match(copiedText, /^>LOC_A\b/);
+
+const originalClipboardWriteText = navigator.clipboard.writeText;
+globalThis.document = {
+  createElement: () => ({
+    value: '',
+    setAttribute() {},
+    style: {},
+    select() {},
+    remove() {}
+  }),
+  body: { appendChild() {} },
+  execCommand: () => false
+};
+navigator.clipboard.writeText = async () => {
+  throw new Error('denied');
+};
+await editor.copyOrthogroupSequences(group, 'aa', 'failure-case');
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'failure-case'),
+  'Copy failed'
+);
+assert.notEqual(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'failure-case'),
+  'Copied!'
+);
+
+navigator.clipboard.writeText = undefined;
+globalThis.document.execCommand = () => true;
+await editor.copyOrthogroupSequences(group, 'aa', 'fallback-case');
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'fallback-case'),
+  'Copied!'
+);
+
+let rejectFirstCopy;
+let resolveSecondCopy;
+navigator.clipboard.writeText = () => new Promise((resolve, reject) => {
+  if (!rejectFirstCopy) rejectFirstCopy = reject;
+  else resolveSecondCopy = resolve;
+});
+const firstCopy = editor.copyOrthogroupSequences(group, 'aa', 'race-case');
+const secondCopy = editor.copyOrthogroupSequences(group, 'aa', 'race-case');
+resolveSecondCopy();
+await secondCopy;
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'race-case'),
+  'Copied!'
+);
+rejectFirstCopy(new Error('stale denial'));
+await firstCopy;
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa', null, 'race-case'),
+  'Copied!'
+);
+
+navigator.clipboard.writeText = async () => {};
+await editor.copyOrthogroupSequences(group, 'aa', 'rapid-case');
+advanceCopyFeedbackTime(1000);
+await editor.copyOrthogroupSequences(group, 'aa', 'rapid-case');
+advanceCopyFeedbackTime(600);
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa (2)', null, 'rapid-case'),
+  'Copied!'
+);
+advanceCopyFeedbackTime(900);
+assert.equal(
+  editor.orthogroupCopyFeedbackLabel(group, 'aa', 'Copy aa (2)', null, 'rapid-case'),
+  'Copy aa (2)'
+);
+
+advanceCopyFeedbackTime(1600);
+for (const [sequenceKind, originalLabel, member, context] of [
+  ['nt', 'Copy nt', null, 'drawer'],
+  ['aa', 'Copy aa', null, 'drawer'],
+  ['aa', 'aa', members[0], 'drawer'],
+  ['aa', 'Copy aa', null, 'failure-case'],
+  ['aa', 'Copy aa', null, 'fallback-case'],
+  ['aa', 'Copy aa', null, 'race-case']
+]) {
+  assert.equal(
+    editor.orthogroupCopyFeedbackLabel(group, sequenceKind, originalLabel, member, context),
+    originalLabel
+  );
+}
+navigator.clipboard.writeText = originalClipboardWriteText;
+copiedText = copiedNucleotidePayload;
+assert.match(copiedText, /AAAA/);
+copiedText = copiedAminoAcidPayload;
+assert.match(copiedText, />CAG34720\.1\b/);
 
 const membersWithoutStableIds = editor.getEnrichedOrthogroupMembers({
   id: 'og_no_stable_ids',

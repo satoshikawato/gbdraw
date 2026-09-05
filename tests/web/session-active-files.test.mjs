@@ -14,6 +14,10 @@ globalThis.document = {};
 const { serializeActiveRenderFiles } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
+const {
+  adoptCurrentSessionResources,
+  createSessionResourceFileView
+} = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 
 const readableFile = (name, text) => {
   let reads = 0;
@@ -95,6 +99,28 @@ assert.equal(circular.c_gb.name, 'active.gb');
 assert.equal(circular.c_depth, null);
 assert.deepEqual(circular.linearSeqs, []);
 assert.equal(circular.d_color, null);
+
+const restoredPayload = new TextEncoder().encode('LOCUS restored');
+const restoredTable = adoptCurrentSessionResources({
+  'resource-0001': {
+    kind: 'genbank',
+    name: 'resource-0001-original.gbk',
+    type: 'text/plain',
+    size: restoredPayload.byteLength,
+    lastModified: 1,
+    encoding: 'base64',
+    data: Buffer.from(restoredPayload).toString('base64')
+  }
+});
+const restoredView = createSessionResourceFileView(restoredTable, 'resource-0001', {
+  name: 'original.gbk'
+});
+const restoredCircular = await serializeActiveRenderFiles('circular', {
+  ...sourceState,
+  files: { ...sourceState.files, c_gb: restoredView }
+});
+assert.equal(restoredCircular.c_gb.name, 'original.gbk');
+assert.equal(restoredCircular.c_gb.data, Buffer.from(restoredPayload).toString('base64'));
 
 const linearInput = readableFile('linear.gb', 'LOCUS linear');
 const linearState = {

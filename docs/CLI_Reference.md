@@ -1309,10 +1309,10 @@ non-annotation slot in the complete stack. Unknown IDs, non-drawing slots, and
 annotation-to-annotation anchor chains are rejected.
 
 `--comparison_height` sets the minimum clear corridor between neighboring
-records. Comparison endpoints attach to the outer edges of their measured
-exclusion bands. Taller occupancy moves record axes apart without placing links
-through track stacks; other row or definition constraints can make the corridor
-larger than the configured minimum.
+records. Comparison endpoints follow the painted feature lanes and other tracks,
+with a 4 px clearance. Feature labels reserve row space but do not shorten the
+links. Taller occupancy moves record axes apart; other row or definition
+constraints can make the corridor larger than the configured minimum.
 
 When a logical depth track has no file for one displayed record, keep that
 record's position with `''`, `-`, `none`, or `null`. The group must still

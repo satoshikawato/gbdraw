@@ -28,7 +28,13 @@ import {
 
 export { resolveUniqueOrthogroupMemberForFeature } from '../services/feature-identity.js';
 
-const { computed } = window.Vue;
+const { computed, reactive, watch } = window.Vue;
+
+const COPY_FEEDBACK_DURATION_MS = 1500;
+const COPY_FEEDBACK_LABELS = Object.freeze({
+  success: 'Copied!',
+  failure: 'Copy failed'
+});
 
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
@@ -36,6 +42,27 @@ const normalizeLower = (value) => normalizeText(value).toLowerCase();
 const memberStableFeatureId = (member) => {
   const status = textAliasStatus(member, STABLE_FEATURE_ID_KEYS);
   return status.valid ? status.value : '';
+};
+
+const memberCopyFeedbackIdentity = (member) => {
+  const identity = featureIdentity(member);
+  if (identity.usable) {
+    return JSON.stringify([
+      identity.recordIndex.supplied ? identity.recordIndex.value : null,
+      identity.recordKey.supplied ? identity.recordKey.value : '',
+      identity.biologicalId.supplied ? identity.biologicalId.value : '',
+      identity.sourceIndex.supplied ? identity.sourceIndex.value : null,
+      identity.stableId.supplied ? identity.stableId.value : ''
+    ]);
+  }
+  return JSON.stringify([
+    normalizeText(member?.recordId ?? member?.record_id),
+    memberStableFeatureId(member),
+    normalizeText(member?.start),
+    normalizeText(member?.end),
+    normalizeText(member?.strand),
+    normalizeText(resolveDisplayProteinId(member?.sequenceFeature, member, ''))
+  ]);
 };
 
 const normalizeSequence = (value) => String(value ?? '').replace(/\s+/g, '').toUpperCase();
@@ -245,11 +272,103 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     orthogroupSearch,
     orthogroupSortMode,
     selectedOrthogroupAlignmentFeature,
+    clickedFeature,
+    showRightDrawer,
+    rightDrawerTab,
     svgContainer,
     linearSeqs,
     extractedFeatures,
     biologicalFeatures
   } = state;
+
+  const copyFeedbackByKey = reactive({});
+  const copyFeedbackTimers = new Map();
+  const copyOperationIds = new Map();
+  let nextCopyOperationId = 0;
+
+  const orthogroupCopyFeedbackKey = (
+    groupOrId,
+    sequenceKind,
+    member = null,
+    context = 'drawer'
+  ) => {
+    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
+    const groupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
+    return JSON.stringify([
+      normalizeText(context),
+      member ? 'member' : 'group',
+      groupId,
+      member ? memberCopyFeedbackIdentity(member) : '',
+      sequenceKindLabel(sequenceKind)
+    ]);
+  };
+
+  const updateCopyFeedback = (key, operationId, status) => {
+    if (copyOperationIds.get(key) !== operationId) return;
+    const previousTimer = copyFeedbackTimers.get(key);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    copyFeedbackByKey[key] = { operationId, status };
+    const timer = window.setTimeout(() => {
+      if (
+        copyOperationIds.get(key) !== operationId ||
+        copyFeedbackByKey[key]?.operationId !== operationId
+      ) return;
+      delete copyFeedbackByKey[key];
+      copyFeedbackTimers.delete(key);
+      copyOperationIds.delete(key);
+    }, COPY_FEEDBACK_DURATION_MS);
+    copyFeedbackTimers.set(key, timer);
+  };
+
+  const beginCopyFeedback = (key) => {
+    const previousTimer = copyFeedbackTimers.get(key);
+    if (previousTimer !== undefined) window.clearTimeout(previousTimer);
+    copyFeedbackTimers.delete(key);
+    delete copyFeedbackByKey[key];
+    nextCopyOperationId += 1;
+    copyOperationIds.set(key, nextCopyOperationId);
+    return nextCopyOperationId;
+  };
+
+  const clearCopyFeedback = () => {
+    copyFeedbackTimers.forEach((timer) => window.clearTimeout(timer));
+    copyFeedbackTimers.clear();
+    copyOperationIds.clear();
+    Object.keys(copyFeedbackByKey).forEach((key) => delete copyFeedbackByKey[key]);
+  };
+
+  const copyWithFeedback = async (text, key) => {
+    if (!text) return false;
+    const operationId = beginCopyFeedback(key);
+    try {
+      await copyTextToClipboard(text);
+      updateCopyFeedback(key, operationId, 'success');
+      return true;
+    } catch {
+      updateCopyFeedback(key, operationId, 'failure');
+      return false;
+    }
+  };
+
+  const orthogroupCopyFeedbackLabel = (
+    groupOrId,
+    sequenceKind,
+    originalLabel,
+    member = null,
+    context = 'drawer'
+  ) => {
+    const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
+    const status = copyFeedbackByKey[key]?.status;
+    return COPY_FEEDBACK_LABELS[status] || String(originalLabel || 'Copy');
+  };
+
+  if (typeof watch === 'function') {
+    watch(
+      [orthogroups, selectedOrthogroupId, clickedFeature, showRightDrawer, rightDrawerTab].filter(Boolean),
+      clearCopyFeedback,
+      { flush: 'sync' }
+    );
+  }
 
   const resolvableOrthogroupEntries = () => uniqueOrthogroupEntries(orthogroups.value);
 
@@ -503,10 +622,14 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     return `${stem}.${sequenceExtension(sequenceKind)}`;
   };
 
-  const copyOrthogroupSequences = async (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
+  const copyOrthogroupSequences = async (
+    groupOrId = selectedOrthogroup.value,
+    sequenceKind = 'nt',
+    context = 'drawer'
+  ) => {
     const text = buildOrthogroupFasta(groupOrId, sequenceKind);
-    if (!text) return;
-    await copyTextToClipboard(text);
+    const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, null, context);
+    return copyWithFeedback(text, key);
   };
 
   const downloadOrthogroupSequences = (groupOrId = selectedOrthogroup.value, sequenceKind = 'nt') => {
@@ -519,10 +642,15 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     );
   };
 
-  const copyOrthogroupMemberSequence = async (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
+  const copyOrthogroupMemberSequence = async (
+    member,
+    sequenceKind = 'nt',
+    groupOrId = selectedOrthogroup.value,
+    context = 'drawer'
+  ) => {
     const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
-    if (!text) return;
-    await copyTextToClipboard(text);
+    const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
+    return copyWithFeedback(text, key);
   };
 
   const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
@@ -644,6 +772,7 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     getOrthogroupSequenceCount,
     hasOrthogroupSequence,
     hasOrthogroupMemberSequence,
+    orthogroupCopyFeedbackLabel,
     copyOrthogroupSequences,
     downloadOrthogroupSequences,
     copyOrthogroupMemberSequence,

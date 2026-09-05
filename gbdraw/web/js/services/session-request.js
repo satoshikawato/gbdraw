@@ -109,6 +109,7 @@ import {
   bytesToBase64,
   bytesToText,
   getSessionResourceSource,
+  readFileText,
   textToBase64,
   textToBytes
 } from './file-content-cache.js';
@@ -2830,6 +2831,28 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
     throw new Error(`Canonical resource ${resourceId} contains invalid base64 data.`, { cause: error });
   }
   return bytesToText(bytes, { fatal: true });
+};
+
+const sourceRecordCounts = new WeakMap();
+
+export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
+  const descriptor = resources?.[resourceId];
+  const owner = getResourcePayloadOwner(descriptor);
+  const hasFileOwner = owner && owner !== descriptor;
+  let counts = hasFileOwner && sourceRecordCounts.get(owner);
+  if (!counts) {
+    const text = hasFileOwner
+      ? await readFileText(owner)
+      : decodeCanonicalResourceText(resources, resourceId);
+    counts = {
+      genbank: (text.match(/^LOCUS\s+/gm) || []).length,
+      fasta: (text.match(/^>/gm) || []).length
+    };
+    // Immutable File/view identity outlives transferred bytes. Retain only counts;
+    // a replacement source gets its own entry, and ownerless descriptors stay uncached.
+    if (hasFileOwner) sourceRecordCounts.set(owner, counts);
+  }
+  return counts[kind];
 };
 
 const resourceTextFromRef = (resources, ref) => (

@@ -7,7 +7,10 @@ import {
   runDiagramGeneration,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { buildCanonicalRenderRequest } from '../services/session-request.js';
+import {
+  buildCanonicalRenderRequest,
+  readCanonicalResourceRecordCount
+} from '../services/session-request.js';
 import {
   buildLabelOverrideTsv,
   serializeLabelOverrideRows
@@ -44,7 +47,7 @@ import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   normalizeCollinearSearchScope
 } from './losat-normalization.js';
-import { buildRunInfo } from './run-info.js';
+import { buildRunInfo, buildSourceRecipe } from './run-info.js';
 import {
   buildPairwiseLosatJobSpecs,
   resolveLinearComparisonPlan
@@ -1180,13 +1183,22 @@ export const createRunAnalysis = ({
 
   const downloadCliHelperFiles = () => {
     if (!latestCliHelperFiles.length) {
-      alert('No CLI helper files are available for the latest run.');
+      alert('No reproducibility files are available for the latest run.');
       return;
     }
     const materializedFiles = latestCliHelperFiles.map((file) => ({
       name: file.name,
       data: typeof file.buildData === 'function' ? file.buildData() : file.data
     }));
+    const archiveNames = new Set();
+    materializedFiles.forEach((file) => {
+      const name = String(file.name || '');
+      const key = name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+      if (!name || archiveNames.has(key)) {
+        throw new Error('Reproducibility bundle filenames must be unique before ZIP creation.');
+      }
+      archiveNames.add(key);
+    });
     const totalChars = materializedFiles.reduce(
       (sum, file) => sum + String(file.data ?? '').length,
       0
@@ -4292,6 +4304,26 @@ export const createRunAnalysis = ({
           + canonicalResourceBase64Characters * 2
           + 65_536
       });
+      let sourceRecipe = null;
+      if (!isReflow && manualRunStartedAt !== null) {
+        const generatedFileNameHints = new Map();
+        generatedCliFileMap.forEach((file) => {
+          const slot = String(file?.slot || '').trim();
+          const name = String(file?.name || '').trim();
+          if (slot && name && !generatedFileNameHints.has(slot)) {
+            generatedFileNameHints.set(slot, name);
+          }
+        });
+        // Establish source counts before Worker transfer releases the file-content cache.
+        sourceRecipe = await buildSourceRecipe({
+          ...canonical,
+          generatedFileNameHints,
+          readResourceRecordCount: (resourceId, kind) => (
+            readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
+          )
+        });
+        throwIfGenerationCanceled();
+      }
       const gbdrawStartedAt = getNow();
       const generationResponse = await runDiagramGeneration({
         request: canonical.renderRequest,
@@ -4415,11 +4447,19 @@ export const createRunAnalysis = ({
       if (!isReflow && manualRunStartedAt !== null) {
         candidateRunInfo = buildRunInfo({
           mode: mode.value,
-          args: ['--session', canonicalReplayPath],
+          sourceRecipe,
+          exactReplayArgs: ['--session', canonicalReplayPath],
           fileMetadata: runInfoFileMap,
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
           startedAtIso: manualRunStartedAtIso
+        });
+        sourceRecipe.generatedFiles.forEach((file) => {
+          recordGeneratedCliFile(
+            file.path,
+            file.data instanceof Uint8Array ? textDecoder.decode(file.data) : file.data,
+            { name: file.name, slot: file.slot }
+          );
         });
         if (structuredLosatTelemetry) {
           candidateRunInfo.losatTelemetry = cloneJsonData(structuredLosatTelemetry);
