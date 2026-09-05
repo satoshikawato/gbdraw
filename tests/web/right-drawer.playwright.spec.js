@@ -504,3 +504,129 @@ test('individual Feature, Label, and Legend edits update the mounted SVG', { tag
   expect(result.visibilityResultContent).toContain('display="none"');
   expect(result.legendResultContent).toContain('#ab3412');
 });
+
+test('adjacent Collinear mixed groups remain selectable after current-session save/load', async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  const { execFileSync } = require('node:child_process');
+  const { mkdirSync, readFileSync } = require('node:fs');
+  const { join } = require('node:path');
+  const { gunzipSync } = require('node:zlib');
+  const directory = testInfo.outputPath('mixed');
+  mkdirSync(directory, { recursive: true });
+  execFileSync('python', ['-c',
+    'import sys; from pathlib import Path; from tests.test_api_session import _record_local_collinear_session; _record_local_collinear_session(Path(sys.argv[1]))',
+    directory
+  ], { cwd: process.cwd(), stdio: 'pipe' });
+  const typedSession = readFileSync(join(directory, 'mixed.gbdraw-session.json'), 'utf8');
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  // The Python writer has no active Web draft; derive it from this request.
+  const session = Buffer.from(await page.evaluate(async (source) => {
+    const { projectCanonicalSessionRequest } = await import('./js/services/session-request.js');
+    const document = JSON.parse(source);
+    document.config = projectCanonicalSessionRequest({
+      renderRequest: document.renderRequest, resources: document.resources,
+      webFiles: document.webFiles
+    }).config;
+    document.config.linearComparisonPlan = { mode: 'none', defaultSource: 'losat', edges: [] };
+    return JSON.stringify(document);
+  }, typedSession));
+  const importSession = async (bytes, name) => page.evaluate(async ({ bytes, name }) => {
+    const file = new File([new Uint8Array(bytes)], name);
+    const result = await window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
+    if (result.status !== 'ok') throw new Error(result.error?.stack || result.status);
+    return { status: result.status };
+  }, { bytes: [...bytes], name });
+  expect(await importSession(session, 'mixed.gbdraw-session.json')).toMatchObject({ status: 'ok' });
+
+  const verifyGroups = async () => {
+    const state = await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      const { state } = await import('./js/state.js');
+      return {
+        semantic: app.orthogroups.map((group) => group.id),
+        presentation: state.collinearGroups.value.map((group) => group.id),
+        features: app.extractedFeatures.map((feature) => ({
+          protein: feature.protein_id, group: feature.orthogroupId || null,
+          role: feature.orthogroupMember?.role || null
+        }))
+      };
+    });
+    expect(state.semantic).toEqual(['og_1', 'og_2']);
+    expect(state.presentation).toEqual(['og_1']);
+    expect(Object.fromEntries(state.features.map((feature) => [feature.protein, feature.group]))).toEqual({
+      a0: 'og_1', a1: 'og_1', a3: 'og_2', a4: 'og_2', a2: null, b0: 'og_1', b1: null
+    });
+    expect(state.features.find((feature) => feature.protein === 'a1').role).toBe('inparalog');
+    for (const id of ['a3', 'a4']) {
+      expect(state.features.find((feature) => feature.protein === id).role).toBe('local_paralog');
+    }
+    if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
+      await page.locator('.drawer-toggle').click();
+    }
+    const drawer = page.locator('.right-drawer');
+    const groupsTab = drawer.getByRole('button', { name: 'Similarity groups' });
+    await expect(groupsTab).toBeVisible();
+    await groupsTab.click();
+    const paths = page.locator('.gbdraw-preview-surface path[data-match-kind="collinear"]');
+    await expect(paths).toHaveCount(1);
+    const geometry = await paths.evaluateAll((elements) => elements.map((element) => element.getAttribute('d')));
+    for (const [id, expectedMembers] of [['og_1', ['a0', 'a1', 'b0']], ['og_2', ['a3', 'a4']]]) {
+      const entry = drawer.locator('button').filter({ has: page.locator('.font-mono', { hasText: new RegExp(`^${id}$`) }) });
+      await expect(entry).toHaveCount(1);
+      await entry.click();
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedOrthogroupId)).toBe(id);
+      expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedOrthogroup.members.map((member) => member.proteinId).sort())).toEqual(expectedMembers);
+      const highlight = drawer.getByRole('button', { name: /Highlight$/ });
+      await expect(highlight).toBeVisible();
+      await highlight.click();
+      const highlighted = await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.extractedFeatures.filter((feature) => [...document.querySelectorAll('[data-gbdraw-feature-id]')].some((element) =>
+          element.getAttribute('data-gbdraw-feature-id') === feature.svg_id && element.getAttribute('stroke') === '#2563eb'
+        )).map((feature) => feature.protein_id).sort();
+      });
+      expect(highlighted).toEqual(expectedMembers);
+      await expect(paths).toHaveCount(1);
+      await expect(paths).toHaveAttribute('data-orthogroup-id', 'og_1');
+      expect(await paths.evaluateAll((elements) => elements.map((element) => element.getAttribute('d')))).toEqual(geometry);
+      await expect(page.locator('.gbdraw-preview-surface path[data-orthogroup-id="og_2"]')).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath('mixed-groups.png'), fullPage: true });
+    await paths.dispatchEvent('click', { clientX: 500, clientY: 350 });
+    expect(await page.evaluate(() => {
+      const match = window.__GBDRAW_APP__.clickedPairwiseMatch;
+      return match?.blockOrthogroups.map((group) => group.memberRows.length);
+    })).toEqual([3]);
+    await page.keyboard.press('Escape');
+    return geometry;
+  };
+  const before = await verifyGroups();
+  const downloadPromise = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'issue460-round-trip';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const download = await downloadPromise;
+  const saved = readFileSync(await download.path());
+  const document = JSON.parse(gunzipSync(saved).toString('utf8'));
+  expect(document.version).toBe(40);
+  expect(document.editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
+  expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
+  expect(await verifyGroups()).toEqual(before);
+  const rollback = await page.evaluate(async (bytes) => {
+    const { state } = await import('./js/state.js');
+    const { importSession } = await import('./js/services/config.js');
+    const previous = state.collinearGroups.value;
+    const result = await importSession({ target: {
+      files: [new File([new Uint8Array(bytes)], 'failed.gbdraw-session.json.gz')], value: 'selected'
+    } }, { beforePreviewMount: () => { throw new Error('Issue 460 rollback probe'); } });
+    return {
+      status: result.status, message: result.error?.message,
+      samePresentation: state.collinearGroups.value === previous
+    };
+  }, [...saved]);
+  expect(rollback).toEqual({ status: 'error', message: 'Issue 460 rollback probe', samePresentation: true });
+  expect(await verifyGroups()).toEqual(before);
+});

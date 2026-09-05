@@ -649,25 +649,25 @@ export const createFeatureSvgActions = ({
     }
   };
 
+  const groupsForMatch = (matchElement) => (
+    matchElement.getAttribute('data-match-kind') === 'collinear'
+      ? collinearGroups?.value || []
+      : orthogroups?.value || []
+  );
+
   const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
       : (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []),
-    orthogroups: [
-      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
-      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
-    ],
+    orthogroups: groupsForMatch(matchElement),
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     resolveSequenceSource: matchSequenceRegistry?.resolve
   });
 
   const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, {
-    orthogroups: () => [
-      ...(Array.isArray(orthogroups?.value) ? orthogroups.value : []),
-      ...(Array.isArray(collinearGroups?.value) ? collinearGroups.value : [])
-    ],
+    orthogroups: () => groupsForMatch(matchElement),
     orthogroupNameOverrides
   });
 
