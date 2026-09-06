@@ -7,6 +7,7 @@ from typing import Tuple
 
 from .arrows import (
     ArrowHeadLengthRatio,
+    block_path_with_open_caps,
     calculate_arrow_shaft_bounds,
     cap_arrow_head_length,
     has_arrow_shaft,
@@ -134,7 +135,11 @@ def create_rectangle_path_linear(
         f"L {normalized_end},{start_y_bottom} "
         f"L {normalized_start},{start_y_bottom} z"
     )
-    return ["block", feature_path]
+    return block_path_with_open_caps(
+        feature_path, open_tail=bool(coord_dict.get("open_start")),
+        end_cap=f"L {normalized_end},{start_y_bottom}" if coord_dict.get("open_end") else None,
+        tail_cap=f"L {normalized_start},{start_y_top}",
+    )
 
 
 def get_arrow_strand_positions(normalized_start: float, normalized_end: float) -> dict[str, list[float]]:
@@ -288,7 +293,7 @@ def create_arrow_path_linear(
         shoulder = set_arrow_shoulder(
             coord_dict["feat_strand"], arrow_end, requested_head_length
         )
-        return construct_arrow_path(
+        result = construct_arrow_path(
             arrow_start,
             arrow_end,
             shoulder,
@@ -299,6 +304,10 @@ def create_arrow_path_linear(
             feature_y_positions=resolved_y_positions,
         )
 
+        return block_path_with_open_caps(result[1], open_tail=bool(coord_dict.get(
+            "open_start" if coord_dict["feat_strand"] == "positive" else "open_end"
+        )))
+
     resolved_head_length = cap_arrow_head_length(
         normalized_feat_len,
         requested_head_length,
@@ -308,7 +317,7 @@ def create_arrow_path_linear(
         arrow_end,
         resolved_head_length,
     )
-    return _construct_narrow_arrow_path(
+    result = _construct_narrow_arrow_path(
         arrow_start,
         arrow_end,
         shoulder,
@@ -317,6 +326,10 @@ def create_arrow_path_linear(
         resolved_y_positions,
         shaft_width_ratio,
     )
+
+    return block_path_with_open_caps(result[1], open_tail=bool(coord_dict.get(
+        "open_start" if coord_dict["feat_strand"] == "positive" else "open_end"
+    )))
 
 
 def create_arrowhead_path_linear(
@@ -392,7 +405,11 @@ def create_arrow_shaft_path_linear(
         f"L {normalized_end},{shaft_bottom_y} "
         f"L {normalized_start},{shaft_bottom_y} z"
     )
-    return ["block", feature_path]
+    return block_path_with_open_caps(
+        feature_path, open_tail=bool(coord_dict.get("open_start")),
+        end_cap=f"L {normalized_end},{shaft_bottom_y}" if coord_dict.get("open_end") else None,
+        tail_cap=f"L {normalized_start},{shaft_top_y}",
+    )
 
 
 __all__ = [

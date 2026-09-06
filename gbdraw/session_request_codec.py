@@ -797,6 +797,11 @@ def _encode_record(
     index: int,
     resources: _ResourceBuilder,
 ) -> dict[str, Any]:
+    if record.display.is_circular is not None or record.display.start_coordinate is not None:
+        raise CanonicalRequestEncodingError(
+            f"Record {index} display intent cannot be represented by canonical schema 6; "
+            "record display persistence requires the shared display/placement writer integration."
+        )
     source = record.source
     if isinstance(source, GenBankInputSource):
         resource_id = resources.add_path(

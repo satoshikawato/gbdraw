@@ -75,6 +75,7 @@ from .cli_utils.common import (
     add_color_args,
     add_feature_args,
     add_input_args,
+    apply_record_display_cli_options,
     add_label_args,
     setup_logging,
     validate_input_args,
@@ -713,6 +714,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             cardinalities=_circular_cli_record_cardinality(),
         )
     )
+    record_manifest = apply_record_display_cli_options(record_manifest, args)
     multi_record_positions: list[str] = (
         []
         if args.records_table

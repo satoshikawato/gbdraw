@@ -28,6 +28,7 @@ from gbdraw.render.interactive_svg import (
     _normalize_string_array,
     _rendered_feature_entry,
     _resolve_rendered_features,
+    _validate_match_fragments,
 )
 
 FEATURE_CATALOG_SCHEMA = 3
@@ -182,6 +183,9 @@ _MATCH_ATTRIBUTES = {
 _MATCH_SNAPSHOT_ATTRIBUTES = tuple(
     dict.fromkeys(
         (
+            "id",
+            "data-gbdraw-match-fragment",
+            "data-gbdraw-match-geometry",
             "data-gbdraw-match-id",
             "data-gbdraw-pairwise-match-id",
             "data-match-kind",
@@ -401,13 +405,16 @@ def _match_payloads(
     rendered_features: Mapping[str, Mapping[str, object]],
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
-    seen: set[str] = set()
+    grouped: dict[str, list[_SvgCatalogCandidate]] = {}
     for candidate in candidates:
-        payload = _match_payload(candidate.attributes, len(payloads))
+        payload = _match_payload(candidate.attributes, len(grouped))
         match_id = _text(payload.get("id"))
-        if not match_id or match_id in seen:
+        if not match_id:
             raise GbdrawError("Rendered SVG contains invalid or duplicate match IDs.")
-        seen.add(match_id)
+        grouped.setdefault(match_id, []).append(candidate)
+    for group in grouped.values():
+        _validate_match_fragments([candidate.attributes for candidate in group])
+        payload = _match_payload(group[0].attributes, len(payloads))
         for role in ("query", "subject"):
             rendered = rendered_features.get(
                 _text(payload.get(f"{role}_feature_svg_id"))

@@ -11,6 +11,8 @@ from ...drawers.circular.gc_content import GcContentDrawer  # type: ignore[repor
 from ....configurators import GcContentConfigurator  # type: ignore[reportMissingImports]
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class GcContentGroup:
     """
     This class is responsible for creating a group for GC content visualization on a circular canvas.
@@ -28,7 +30,9 @@ class GcContentGroup:
         cfg: GbdrawConfig,
         norm_factor_override: float | None = None,
         group_id: str | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.group_id = group_id or "gc_content"
         self.gc_group = Group(id=self.group_id, debug=False)
         self.radius: float = radius
@@ -58,6 +62,7 @@ class GcContentGroup:
             self.norm_factor,
             self.dinucleotide,
             self.group_id,
+            record_transform=self.record_transform,
         )
 
     def get_group(self) -> Group:

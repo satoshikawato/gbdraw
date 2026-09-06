@@ -14,6 +14,7 @@ from ....render.drawers.circular.conservation import (  # type: ignore[reportMis
 )
 from ....svg.circular_conservation import generate_full_annulus_path_desc
 from ....svg.ids import stable_svg_id
+from ....layout.record_coordinates import RecordDisplayTransform
 
 
 class ConservationGroup:
@@ -32,6 +33,8 @@ class ConservationGroup:
         cfg: GbdrawConfig,
         group_id: str | None = None,
         slot_id: str | None = None,
+        record_transform: RecordDisplayTransform | None = None,
+        record_index: int = 0,
     ) -> None:
         safe_label = _safe_id_fragment(track_label)
         resolved_group_id = group_id or stable_svg_id(
@@ -52,6 +55,8 @@ class ConservationGroup:
         if track_color:
             self.group.attribs["data-track-color"] = str(track_color)
         self.hits = hits
+        self.record_transform = record_transform
+        self.record_index = record_index
         self.total_length = int(total_length)
         self.inner_radius_px = float(inner_radius_px)
         self.outer_radius_px = float(outer_radius_px)
@@ -102,6 +107,8 @@ class ConservationGroup:
             total_length=self.total_length,
             inner_radius_px=self.inner_radius_px,
             outer_radius_px=self.outer_radius_px,
+            record_transform=self.record_transform,
+            record_index=self.record_index,
         )
 
     def get_group(self) -> Group:

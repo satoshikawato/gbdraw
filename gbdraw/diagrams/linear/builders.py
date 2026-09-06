@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -39,6 +39,8 @@ from .positioning import (
 )
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 def add_record_group(
     canvas: Drawing,
     record: SeqRecord,
@@ -65,6 +67,7 @@ def add_record_group(
     multi_record_layout: bool = False,
     feature_offset_y: float = 0.0,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds a record group to the linear canvas."""
     if placement is not None:
@@ -87,6 +90,7 @@ def add_record_group(
         record_local_ruler=record_local_ruler,
         feature_offset_y=feature_offset_y,
         feature_lane_geometry=feature_lane_geometry,
+        record_transform=record_transform,
     ).get_group()
     if slot_id:
         record_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
@@ -119,6 +123,7 @@ def add_gc_content_group(
     slot_id: str | None = None,
     slot_renderer: str | None = None,
     sequence_width: float | None = None,
+    record_transform: RecordDisplayTransform | None = None,
     ) -> Drawing:
     """Adds a GC content group to the linear canvas."""
     cfg = canvas_config.profile.config
@@ -132,6 +137,7 @@ def add_gc_content_group(
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
+        record_transform=record_transform,
     ).get_group()
     if slot_id:
         gc_content_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
@@ -159,6 +165,7 @@ def add_depth_group(
     slot_renderer: str | None = None,
     track_height: float | None = None,
     sequence_width: float | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds a depth coverage group to the linear canvas."""
     cfg = canvas_config.profile.config
@@ -173,6 +180,7 @@ def add_depth_group(
         group_id=dom_group_id or group_id,
         axis_group_id=dom_axis_group_id or axis_group_id,
         sequence_width=sequence_width,
+        record_transform=record_transform,
     ).get_group()
     if slot_id:
         depth_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
@@ -198,6 +206,7 @@ def add_gc_skew_group(
     slot_id: str | None = None,
     slot_renderer: str | None = None,
     sequence_width: float | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds a GC skew group to the linear canvas."""
     cfg = canvas_config.profile.config
@@ -211,6 +220,7 @@ def add_gc_skew_group(
         gc_df=gc_df,
         group_id=dom_group_id or group_id,
         sequence_width=sequence_width,
+        record_transform=record_transform,
     ).get_group()
     if slot_id:
         gc_skew_group.attribs["data-gbdraw-slot-id"] = str(slot_id)
@@ -236,6 +246,7 @@ def add_record_definition_group(
     multi_record_layout: bool = False,
     record_index: int = 0,
     record_count: int = 1,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds a record definition group to the linear canvas."""
     cfg = canvas_config.profile.config
@@ -266,6 +277,7 @@ def add_record_definition_group(
             line_kinds=local_line_kinds,
             record_index=record_index,
             record_count=record_count,
+            record_transform=record_transform,
         )
         record_definition_group = definition_group_obj.get_group()
         header_y = (
@@ -296,6 +308,7 @@ def add_record_definition_group(
                 record_index=record_index,
                 record_count=record_count,
                 definition_part="row",
+                record_transform=record_transform,
             )
             reserved_width = (
                 max(0.0, float(row_definition_width))
@@ -328,6 +341,7 @@ def add_record_definition_group(
                 group_id=group_id,
                 record_index=record_index,
                 record_count=record_count,
+                record_transform=record_transform,
             )
             definition_column_width = provisional_group_obj.definition_bounding_box_width
 
@@ -340,6 +354,7 @@ def add_record_definition_group(
             group_id=group_id,
             record_index=record_index,
             record_count=record_count,
+            record_transform=record_transform,
         )
         positioned_definition_offset_x = definition_column_width + definition_gap
     else:
@@ -350,6 +365,7 @@ def add_record_definition_group(
             group_id=group_id,
             record_index=record_index,
             record_count=record_count,
+            record_transform=record_transform,
         )
         definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
         positioned_definition_offset_x = definition_offset_x - record_offset_x
@@ -379,6 +395,7 @@ def add_explicit_comparisons_on_linear_canvas(
     records: list[SeqRecord],
     placements: dict[int, LinearRecordPlacement],
     feature_dom_index: LinearFeatureDomIndex | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Draw comparisons using explicit endpoint placements."""
 
@@ -412,6 +429,7 @@ def add_explicit_comparisons_on_linear_canvas(
             query_y=query_anchor - top_y,
             subject_y=subject_anchor - top_y,
             feature_dom_index=feature_dom_index,
+            record_transforms=record_transforms,
         ).get_group()
         match_group.translate(canvas_config.horizontal_offset, top_y)
         canvas.add(match_group)

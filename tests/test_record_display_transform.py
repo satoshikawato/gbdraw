@@ -1,0 +1,490 @@
+"""Independent coordinate oracles for the internal record display contract."""
+
+from __future__ import annotations
+
+import ast
+from copy import deepcopy
+from dataclasses import FrozenInstanceError, fields
+from pathlib import Path
+
+import pytest
+
+from gbdraw.api import RecordDisplayOptions
+from gbdraw.api.record_planning import resolve_record_display
+from gbdraw.api.requests import (
+    GenBankInputSource,
+    RecordCardinality,
+    RecordInput,
+    RecordPresentation,
+)
+from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.exceptions import ValidationError
+from gbdraw.layout.record_coordinates import (
+    DisplayFragment,
+    RecordDisplayTransform,
+    SeriesPoint,
+    SourceInterval,
+    alignment_cut_breakpoints,
+)
+
+
+def transform(step=1, start=None, length=10, source_base=None):
+    return RecordDisplayTransform(
+        length,
+        source_base if source_base is not None else (1 if step == 1 else length),
+        step,
+        start,
+        True,
+    )
+
+
+def test_raw_defaults_frozen_export_and_positional_compatibility():
+    options = RecordDisplayOptions()
+    assert (options.is_circular, options.start_coordinate) == (None, None)
+    with pytest.raises(FrozenInstanceError):
+        options.start_coordinate = 1
+    for circular in (True, False, None):
+        assert RecordDisplayOptions(circular).is_circular is circular
+    presentation = RecordPresentation(reverse_complement=True)
+    source = GenBankInputSource("unused.gbk")
+    record = RecordInput(source, None, None, presentation, "key", RecordCardinality.ALL)
+    assert record.presentation is presentation
+    assert record.cardinality is RecordCardinality.ALL
+    assert record.display == options
+    assert record.display is not RecordInput(source).display
+    assert [f.name for f in fields(RecordInput)] == [
+        "source",
+        "selector",
+        "region",
+        "presentation",
+        "record_key",
+        "cardinality",
+        "display",
+    ]
+    explicit = RecordDisplayOptions(True, 5)
+    assert RecordInput(source, display=explicit).display is explicit
+    with pytest.raises(ValidationError):
+        RecordInput(source, display={})
+
+
+@pytest.mark.parametrize("value", [0, 1, "true", "", [], 1.0])
+def test_override_is_strict_bool(value):
+    with pytest.raises(ValidationError):
+        RecordDisplayOptions(is_circular=value)
+
+
+@pytest.mark.parametrize("value", [True, False, 0, -1, 1.0, "1", []])
+def test_start_is_positive_non_bool_integer(value):
+    with pytest.raises(ValidationError):
+        RecordDisplayOptions(start_coordinate=value)
+
+
+def test_explicit_linear_start_rejected():
+    with pytest.raises(ValidationError):
+        RecordDisplayOptions(False, 1)
+
+
+@pytest.mark.parametrize("topology", ["circular", "linear", "unknown"])
+@pytest.mark.parametrize("override", [None, True, False])
+def test_resolved_topology(topology, override):
+    result = resolve_record_display(
+        RecordDisplayOptions(override),
+        source_length=10,
+        detected_topology=topology,
+        source_base=10,
+        source_step=-1,
+    )
+    assert result.detected_topology == topology
+    assert result.is_circular is (
+        topology == "circular" if override is None else override
+    )
+    assert result.start_coordinate is None
+    assert result.current_start_coordinate == 10
+    assert result.orientation_step == -1
+    with pytest.raises(FrozenInstanceError):
+        result.is_circular = True
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"source_length": 0},
+        {"source_length": -1},
+        {"source_length": True},
+        {"source_length": 10.0},
+        {"source_step": 0},
+        {"source_step": 2},
+        {"source_step": True},
+        {"source_step": 1.0},
+        {"source_base": 0},
+        {"source_base": 11},
+        {"source_base": True},
+        {"detected_topology": "CIRCULAR"},
+        {"has_input_region": True},
+        {"has_collection_region": True},
+        {"is_cropped": True},
+    ],
+)
+def test_resolved_validation(kwargs):
+    facts = dict(
+        source_length=10, detected_topology="circular", source_base=1, source_step=1
+    )
+    facts.update(kwargs)
+    with pytest.raises(ValidationError):
+        resolve_record_display(RecordDisplayOptions(start_coordinate=5), **facts)
+
+
+@pytest.mark.parametrize("topology", ["linear", "unknown"])
+def test_unknown_and_linear_require_override(topology):
+    facts = dict(
+        source_length=10, detected_topology=topology, source_base=1, source_step=1
+    )
+    with pytest.raises(ValidationError):
+        resolve_record_display(RecordDisplayOptions(start_coordinate=1), **facts)
+    assert resolve_record_display(RecordDisplayOptions(True, 1), **facts).is_circular
+    with pytest.raises(ValidationError):
+        resolve_record_display(RecordDisplayOptions(True, 11), **facts)
+
+
+# D7/reconciliation expectations: literal data, never generated by the transform.
+@pytest.mark.parametrize(
+    "step,start,bases,boundaries",
+    [
+        (1, None, (0, 9), (0, 10)),
+        (1, 1, (0, 9), (0, 0)),
+        (1, 10, (1, 0), (1, 1)),
+        (1, 5, (6, 5), (6, 6)),
+        (-1, None, (9, 0), (10, 0)),
+        (-1, 1, (0, 1), (1, 1)),
+        (-1, 10, (9, 0), (0, 0)),
+        (-1, 5, (4, 5), (5, 5)),
+    ],
+)
+def test_independent_base_and_boundary_oracle(step, start, bases, boundaries):
+    tx = transform(step, start)
+    assert tuple(tx.source_base_to_display_index(b) for b in (1, 10)) == bases
+    assert tuple(tx.source_boundary_to_display_offset(u) for u in (0, 10)) == boundaries
+
+
+@pytest.mark.parametrize("step", [1, -1])
+def test_inverse_permutation_and_fragment_length_properties(step):
+    for length in range(1, 13):
+        for start in (None, *range(1, length + 1)):
+            tx = transform(step, start, length)
+            indices = [tx.source_base_to_display_index(b) for b in range(1, length + 1)]
+            assert sorted(indices) == list(range(length))
+            assert [tx.display_index_to_source_base(i) for i in indices] == list(
+                range(1, length + 1)
+            )
+            for lo in range(length + 1):
+                for hi in range(lo, length + 1):
+                    fragments = tx.project_interval(SourceInterval(lo, hi))
+                    assert (
+                        sum(f.display_end - f.display_start for f in fragments)
+                        == hi - lo
+                    )
+                    assert all(
+                        0 <= f.display_start <= f.display_end <= length
+                        for f in fragments
+                    )
+                    assert all(
+                        f.source_end - f.source_start == f.display_end - f.display_start
+                        for f in fragments
+                    )
+                    assert len(fragments) <= 2
+                    if hi == lo:
+                        assert fragments == ()
+                    else:
+                        assert sum(f.biological_start for f in fragments) == 1
+                        assert sum(f.biological_end for f in fragments) == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"length": 0},
+        {"source_step": 0},
+        {"source_step": True},
+        {"start_coordinate": True},
+        {"start_coordinate": 11},
+        {"is_circular": False, "start_coordinate": 1},
+        {"is_circular": 1},
+    ],
+)
+def test_transform_constructor_validation(kwargs):
+    args = dict(
+        length=10, source_base=1, source_step=1, start_coordinate=None, is_circular=True
+    )
+    args.update(kwargs)
+    with pytest.raises(ValidationError):
+        RecordDisplayTransform(**args)
+
+
+@pytest.mark.parametrize(
+    "method,values",
+    [
+        ("source_base_to_display_index", [0, 11, True, 1.5]),
+        ("source_boundary_to_display_offset", [-1, 11, False, 0.5]),
+        ("display_index_to_source_base", [-1, 10, True, 1.5]),
+    ],
+)
+def test_scalar_domains(method, values):
+    for value in values:
+        with pytest.raises(ValidationError):
+            getattr(transform(start=5), method)(value)
+
+
+@pytest.mark.parametrize(
+    "step,start,expected",
+    [
+        (1, 5, [(8, 10, True, False, False, True), (0, 3, False, True, True, False)]),
+        (-1, 5, [(0, 3, True, False, True, False), (8, 10, False, True, False, True)]),
+    ],
+)
+def test_cut_fragments_have_real_terminals_only(step, start, expected):
+    interval = SourceInterval(2, 7, part_index=8)
+    fragments = transform(step, start).project_interval(interval)
+    assert [
+        (
+            f.display_start,
+            f.display_end,
+            f.biological_start,
+            f.biological_end,
+            f.artificial_start,
+            f.artificial_end,
+        )
+        for f in fragments
+    ] == expected
+    assert all(f.part_index == 8 and f.orientation == step for f in fragments)
+    assert all(isinstance(f, DisplayFragment) for f in fragments)
+    assert [(f.source_start, f.source_end) for f in fragments] == (
+        [(2, 4), (4, 7)] if step == 1 else [(2, 5), (5, 7)]
+    )
+
+
+@pytest.mark.parametrize("step", [1, -1])
+@pytest.mark.parametrize("strand", [1, -1])
+def test_multipart_origin_order_and_terminals(step, strand):
+    spans = [(8, 10, 7), (0, 2, 3)]
+    if strand == -1:
+        spans.reverse()
+    parts = [SourceInterval(lo, hi, strand, index) for lo, hi, index in spans]
+    fragments = transform(step, 2).project_parts(parts)
+    assert sum(f.display_end - f.display_start for f in fragments) == 4
+    # a=2 cuts at boundary 1 forward, boundary 2 reverse (part endpoint).
+    expected = [7, 3, 3] if step == 1 else [7, 3]
+    assert [f.part_index for f in fragments] == (
+        expected if strand == 1 else expected[::-1]
+    )
+    assert fragments[0].biological_start
+    assert fragments[-1].biological_end
+    assert sum(f.biological_start for f in fragments) == 1
+    assert sum(f.biological_end for f in fragments) == 1
+    assert all(f.orientation == step * strand for f in fragments)
+
+
+@pytest.mark.parametrize("step", [1, -1])
+def test_length_one_base_boundary_full_and_empty(step):
+    tx = transform(step, 1, 1)
+    assert tx.source_base_to_display_index(1) == 0
+    assert tx.display_index_to_source_base(0) == 1
+    assert [tx.source_boundary_to_display_offset(u) for u in (0, 1)] == [0, 0]
+    assert [
+        (f.display_start, f.display_end)
+        for f in tx.project_interval(SourceInterval(0, 1))
+    ] == [(0, 1)]
+    assert tx.project_interval(SourceInterval(0, 0)) == ()
+
+
+def test_unset_local_fast_paths_and_existing_crop_affine_meaning():
+    class Record:
+        annotations = {"gbdraw_coord_base": 8, "gbdraw_coord_step": -1}
+
+    base, step = _read_coord_map(Record())
+    tx = transform(step, source_base=base)
+    parts = (SourceInterval(0, 3),)
+    points = (SeriesPoint(0, 2), SeriesPoint(2, 4))
+    assert tx.project_local_parts(parts) is parts
+    assert tx.project_local_series(points) is points
+    assert tx.local_boundary_to_display_offset(3) == 3
+    assert tx.source_base_to_display_index(8) == 0
+    assert tx.source_base_to_display_index(6) == 2
+    assert tx.source_boundary_to_display_offset(8) == 0
+    assert tx.source_boundary_to_display_offset(5) == 3
+    assert tx.display_index_to_source_base(2) == 6
+    for crop in ("has_input_region", "has_collection_region", "is_cropped"):
+        resolved = resolve_record_display(
+            RecordDisplayOptions(),
+            source_length=10,
+            detected_topology="circular",
+            source_base=base,
+            source_step=step,
+            **{crop: True},
+        )
+        assert resolved.current_start_coordinate == 8
+        assert resolved.start_coordinate is None
+
+
+@pytest.mark.parametrize(
+    "step,start,expected,sampled",
+    [
+        (1, 5, [(0, 8), (4, 0), (6, 0), (10, 8)], True),
+        (1, 4, [(0, 6), (1, 8), (5, 0), (7, 0), (10, 6)], False),
+        (-1, 4, [(0, 8), (4, 0), (6, 0), (10, 8)], True),
+        (-1, 3, [(0, 6), (3, 0), (5, 0), (9, 8), (10, 6)], False),
+        (1, 10, [(0, 0), (1, 0), (5, 8), (9, 0), (10, 0)], False),
+    ],
+)
+def test_series_sampled_unsampled_and_origin_gap(step, start, expected, sampled):
+    points = [SeriesPoint(0, 0), SeriesPoint(4, 8), SeriesPoint(8, 0)]
+    before = deepcopy(points)
+    segments = transform(step, start).project_series(points)
+    assert len(segments) == 1  # One periodic track opened at the display cut.
+    segment = segments[0]
+    assert [(p.position, p.value) for p in segment.points] == expected
+    assert segment.seam_sampled is sampled
+    assert segment.points[0].value == segment.points[-1].value
+    for point, source_index in zip(segment.points, segment.source_indices, strict=True):
+        if source_index is not None:
+            assert point.value == points[source_index].value
+    assert points == before
+
+
+def test_empty_single_sample_and_unset_series():
+    assert transform(start=5).project_series(()) == ()
+    (segment,) = transform(start=5).project_series((SeriesPoint(2, 7),))
+    assert [(p.position, p.value) for p in segment.points] == [(0, 7), (8, 7), (10, 7)]
+    points = (SeriesPoint(0, 1), SeriesPoint(9, 2))
+    (segment,) = transform().project_series(points)
+    assert segment.points is points
+    assert segment.seam_sampled is None
+    (segment,) = transform(-1).project_series(points)
+    assert [(p.position, p.value) for p in segment.points] == [(1, 2), (10, 1)]
+
+
+@pytest.mark.parametrize(
+    "step,start,span,expected",
+    [
+        (1, None, SourceInterval(0, 10), ()),
+        (1, 1, SourceInterval(0, 10), ()),
+        (1, 5, SourceInterval(0, 10), (0.4,)),
+        (-1, 5, SourceInterval(0, 10), (0.5,)),
+        (1, 5, SourceInterval(0, 10, -1), (0.6,)),
+        (-1, 5, SourceInterval(0, 10, -1), (0.5,)),
+        (1, 5, SourceInterval(4, 8), ()),
+        (1, 5, SourceInterval(0, 4), ()),
+        (1, 5, SourceInterval(4, 4), ()),
+    ],
+)
+def test_alignment_cut_oracle(step, start, span, expected):
+    assert transform(step, start).alignment_cut_breakpoints(span) == expected
+
+
+def test_alignment_query_subject_union_uses_one_parameter():
+    span = SourceInterval(0, 10)
+    query, subject = transform(1, 5), transform(-1, 7)
+    assert alignment_cut_breakpoints((query, span), (subject, span)) == (0.4, 0.7)
+    assert alignment_cut_breakpoints((query, span), (query, span)) == (0.4,)
+    assert alignment_cut_breakpoints((transform(), span), (subject, span)) == (0.7,)
+
+
+def test_projection_nonmutation_and_local_explicit_equivalence():
+    parts = [SourceInterval(1, 6, -1, 9), SourceInterval(8, 10, -1, 2)]
+    points = [SeriesPoint(0, 2), SeriesPoint(5, 8)]
+    before = deepcopy((parts, points))
+    tx = transform(-1, 5)
+    tx.project_parts(parts)
+    tx.project_series(points)
+    tx.alignment_cut_breakpoints(parts[0])
+    assert (parts, points) == before
+    assert tx.project_local_parts((SourceInterval(0, 3),)) == tx.project_parts(
+        (SourceInterval(7, 10, -1),)
+    )
+    local_series = tx.project_local_series((SeriesPoint(0, 2), SeriesPoint(5, 8)))
+    source_series = tx.project_series((SeriesPoint(0, 2), SeriesPoint(5, 8)))
+    assert [s.points for s in local_series] == [s.points for s in source_series]
+
+
+def test_transform_import_boundary():
+    path = Path(__file__).parents[1] / "gbdraw/layout/record_coordinates.py"
+    tree = ast.parse(path.read_text())
+    imports = [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
+    imports += [
+        a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names
+    ]
+    assert all(
+        name in {"__future__", "dataclasses", "typing", "math", "gbdraw.exceptions"}
+        for name in imports
+    )
+
+
+@pytest.mark.parametrize("step", [1, -1])
+def test_unset_forward_and_reverse_crop_source_fragments(step):
+    base = 3 if step == 1 else 8
+    tx = transform(step, source_base=base)
+    (fragment,) = tx.project_interval(SourceInterval(2, 8))
+    assert (fragment.display_start, fragment.display_end) == (0, 6)
+    assert (fragment.local_start, fragment.local_end) == (0, 6)
+    assert not fragment.artificial_start and not fragment.artificial_end
+
+
+def test_nonuniform_periodic_series_interpolation_preserves_sample_identity():
+    # Cut boundary 9 lies 3/5 of the way from (6,12) to periodic (11,2).
+    points = (SeriesPoint(1, 2), SeriesPoint(6, 12))
+    (segment,) = transform(start=10).project_series(points)
+    assert [(p.position, p.value) for p in segment.points] == [
+        (0, 6),
+        (2, 2),
+        (7, 12),
+        (10, 6),
+    ]
+    assert segment.source_indices == (None, 0, 1, None)
+    (sampled,) = transform(start=7).project_series(points)
+    assert sampled.source_indices == (1, 0, 1)
+    assert sampled.seam_sampled
+
+
+@pytest.mark.parametrize("parts", [(), (SourceInterval(0, 0),)])
+def test_empty_parts_have_no_terminals(parts):
+    assert transform(start=5).project_parts(parts) == ()
+
+
+def test_multipart_preserves_explicitly_absent_terminals_and_default_ordinals():
+    parts = (
+        SourceInterval(1, 6, biological_start=False),
+        SourceInterval(7, 9, biological_end=False),
+    )
+    fragments = transform(start=5).project_parts(parts)
+    assert [f.part_index for f in fragments] == [0, 0, 1]
+    assert not any(f.biological_start or f.biological_end for f in fragments)
+
+
+@pytest.mark.parametrize(
+    "args", [(2, 1), (-1, 1), (True, 1), (0, 1, 0), (0, 1, True), (0, 1, 1, -1)]
+)
+def test_interval_domain_validation(args):
+    with pytest.raises(ValidationError):
+        SourceInterval(*args)
+
+
+def test_projection_rejects_out_of_source_domain():
+    tx = transform(start=5)
+    for method in (tx.project_interval, tx.alignment_cut_breakpoints):
+        with pytest.raises(ValidationError):
+            method(SourceInterval(0, 11))
+    for points in (
+        (SeriesPoint(10, 1),),
+        (SeriesPoint(-1, 1),),
+        (SeriesPoint(1, 1), SeriesPoint(1, 2)),
+        (SeriesPoint(3, 1), SeriesPoint(1, 2)),
+    ):
+        with pytest.raises(ValidationError):
+            tx.project_series(points)
+
+
+@pytest.mark.parametrize(
+    "position,value", [(float("nan"), 1), (0, float("inf")), (True, 1), (1, "2")]
+)
+def test_series_rejects_nonfinite_or_coerced_values(position, value):
+    with pytest.raises(ValidationError):
+        SeriesPoint(position, value)

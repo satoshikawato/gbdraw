@@ -1341,7 +1341,8 @@ const standaloneMatchKind = (element) => {
 
 const buildStandaloneMatchPayloads = (svg) => {
   if (!svg) return [];
-  const payloads = Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR)).map((element, index) => {
+  const elements = Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR));
+  const payloads = elements.map((element, index) => {
     const idStatus = standaloneElementMatchId(element);
     if (!idStatus.valid) return null;
     let id = idStatus.value;
@@ -1412,12 +1413,29 @@ const buildStandaloneMatchPayloads = (svg) => {
       query_display_name: standaloneAttr(element, 'data-query-display-name'),
       subject_display_name: standaloneAttr(element, 'data-subject-display-name')
     });
-  }).filter(Boolean);
-  const idCounts = new Map();
-  payloads.forEach((payload) => {
-    idCounts.set(payload.id, (idCounts.get(payload.id) || 0) + 1);
   });
-  return payloads.filter((payload) => idCounts.get(payload.id) === 1);
+  const groups = new Map();
+  payloads.forEach((payload, index) => {
+    if (!payload) return;
+    if (!groups.has(payload.id)) groups.set(payload.id, []);
+    groups.get(payload.id).push({ payload, element: elements[index] });
+  });
+  return Array.from(groups.values()).filter((group) => {
+    if (group.length === 1 && !group[0].element.hasAttribute('data-gbdraw-match-fragment')) return true;
+    const ids = new Set();
+    const fragments = new Set();
+    const expected = JSON.stringify(group[0].payload);
+    return group.every(({ payload, element }) => {
+      const id = standaloneAttr(element, 'id');
+      const fragment = standaloneAttr(element, 'data-gbdraw-match-fragment');
+      if (!id || ids.has(id) || !/^(0|[1-9][0-9]*)$/.test(fragment) || fragments.has(fragment)
+        || ['qstart', 'qend', 'sstart', 'send', 'match_kind'].some((key) => !payload[key])
+        || JSON.stringify(payload) !== expected) return false;
+      ids.add(id);
+      fragments.add(fragment);
+      return true;
+    }) && group.every((_entry, index) => fragments.has(String(index)));
+  }).map((group) => group[0].payload);
 };
 
 const selectStandaloneSequenceSources = (matches, sources) => {

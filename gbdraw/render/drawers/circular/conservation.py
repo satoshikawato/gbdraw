@@ -11,6 +11,7 @@ from svgwrite.path import Path  # type: ignore[reportMissingImports]
 
 from ....core.color import interpolate_color
 from ....svg.circular_conservation import generate_annular_hsp_path_desc
+from ....layout.record_coordinates import RecordDisplayTransform, SourceInterval
 
 
 _SAFE_ID_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -79,6 +80,8 @@ class ConservationDrawer:
         total_length: int,
         inner_radius_px: float,
         outer_radius_px: float,
+        record_transform: RecordDisplayTransform | None = None,
+        record_index: int = 0,
     ) -> Group:
         if hits.empty or total_length <= 0:
             return group
@@ -92,25 +95,11 @@ class ConservationDrawer:
         )
         for row in work_df.itertuples(index=False):
             identity = _row_float(row, "identity")
-            path_desc = generate_annular_hsp_path_desc(
-                draw_start=_row_float(row, "draw_start"),
-                draw_end=_row_float(row, "draw_end"),
-                total_length=int(total_length),
-                inner_radius_px=float(inner_radius_px),
-                outer_radius_px=float(outer_radius_px),
-                full_reference=bool(getattr(row, "full_reference", False)),
-            )
-            path = Path(
-                d=path_desc,
-                fill=self._fill_color(identity),
-                fill_opacity=self.fill_opacity,
-                stroke=self.stroke_color,
-                stroke_width=self.stroke_width,
-                debug=False,
-            )
             source_index = int(_row_float(row, "source_index"))
             source_hit_index = int(_row_float(row, "source_hit_index"))
             match_id = f"homology_ring{source_index + 1}_hit{source_hit_index + 1}"
+            if record_index:
+                match_id += f"_record_{record_index + 1}"
             metadata: dict[str, Any] = {
                 "data-gbdraw-match-id": match_id,
                 "data-match-kind": "homology",
@@ -136,9 +125,28 @@ class ConservationDrawer:
                 "data-orientation": _row_text(row, "orientation"),
                 "data-reference-record-id": _row_text(row, "reference_record_id"),
             }
-            for attribute, value in metadata.items():
-                path.attribs[attribute] = str(value)
-            group.add(path)
+            projected = record_transform is not None and record_transform.start_coordinate is not None
+            spans = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
+            if projected:
+                metadata[f"data-{_row_text(row, 'reference_side')}-record-index"] = record_index
+                spans = tuple((part.display_start, part.display_end) for part in
+                              record_transform.project_interval(SourceInterval(int(spans[0][0]), int(spans[0][1]))))
+            for index, (start, end) in enumerate(spans):
+                path = Path(
+                    d=generate_annular_hsp_path_desc(
+                        draw_start=start, draw_end=end, total_length=int(total_length),
+                        inner_radius_px=float(inner_radius_px), outer_radius_px=float(outer_radius_px),
+                        full_reference=(end - start == total_length if projected else bool(getattr(row, "full_reference", False))),
+                    ),
+                    fill=self._fill_color(identity), fill_opacity=self.fill_opacity,
+                    stroke=self.stroke_color, stroke_width=self.stroke_width, debug=False,
+                )
+                for attribute, value in metadata.items():
+                    path.attribs[attribute] = str(value)
+                if projected:
+                    path.attribs["id"] = f"{match_id}__fragment{index}"
+                    path.attribs["data-gbdraw-match-fragment"] = str(index)
+                group.add(path)
         return group
 
 

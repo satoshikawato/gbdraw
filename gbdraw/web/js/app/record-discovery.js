@@ -26,7 +26,8 @@ export const normalizeSequenceRecords = (payload) => {
     records.push({
       selector,
       recordId: String(entry?.record_id ?? '').trim() || `Record_${index + 1}`,
-      recordLength: normalizeRecordLength(entry?.record_length)
+      recordLength: normalizeRecordLength(entry?.record_length),
+      detectedTopology: ['circular', 'linear'].includes(entry?.topology) ? entry.topology : 'unknown'
     });
   });
 
@@ -45,7 +46,8 @@ const parseGenBankRecordText = (text) => {
       return {
         selector: `#${index + 1}`,
         record_id: version || accession || locus[1],
-        record_length: locus[2] ? Number(locus[2]) : null
+        record_length: locus[2] ? Number(locus[2]) : null,
+        topology: chunk.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b[^\r\n]*\s(circular|linear)(?:\s|$)/m)?.[1] || 'unknown'
       };
     })
     .filter(Boolean)

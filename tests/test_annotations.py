@@ -124,12 +124,20 @@ def test_source_coordinates_follow_reverse_coordinate_map() -> None:
     assert resolved.annotations[0].segments == ((2, 6),)
 
 
-def test_origin_span_splits_and_linear_rejects() -> None:
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_origin_span_uses_complete_record_topology(mode) -> None:
     annotation = RegionAnnotation("a", CoordinateSpan(None, 90, 10, wraps_origin=True))
-    circular = resolve_annotations((AnnotationSet("s", (annotation,)),), [_record()], mode="circular")
+    record = _record()
+    record.annotations["topology"] = "circular"
+    circular = resolve_annotations((AnnotationSet("s", (annotation,)),), [record], mode=mode)
     assert circular.annotations[0].segments == ((0, 10), (89, 100))
-    with pytest.raises(ValidationError, match="linear"):
-        resolve_annotations((AnnotationSet("s", (annotation,)),), [_record()], mode="linear")
+    for topology in ("linear", "unknown"):
+        record.annotations["topology"] = topology
+        with pytest.raises(ValidationError, match="complete circular"):
+            resolve_annotations((AnnotationSet("s", (annotation,)),), [record], mode=mode)
+    record.annotations.update(topology="circular", gbdraw_region_applied=True)
+    with pytest.raises(ValidationError, match="complete circular"):
+        resolve_annotations((AnnotationSet("s", (annotation,)),), [record], mode=mode)
 
 
 def test_record_id_must_be_unique_but_index_disambiguates() -> None:

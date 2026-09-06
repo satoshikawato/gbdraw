@@ -198,8 +198,6 @@ def _target(
             row_number=row_number,
             column="wraps_origin",
         )
-        if mode == "linear" and wraps:
-            raise _error(row_number, "wraps_origin", "origin-spanning targets are circular-only")
         return CoordinateSpan(
             record=record,
             start=_number(_text(row, "start"), row_number=row_number, column="start", integer=True),

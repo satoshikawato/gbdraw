@@ -248,6 +248,7 @@ def _capture_circular_core_geometry(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot("depth", canvas_config, track_width_override, norm_factor_override)
         return canvas
@@ -262,6 +263,7 @@ def _capture_circular_core_geometry(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot("gc_content", canvas_config, track_width_override, norm_factor_override)
         return canvas
@@ -276,6 +278,7 @@ def _capture_circular_core_geometry(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot("gc_skew", canvas_config, track_width_override, norm_factor_override)
         return canvas
@@ -1138,6 +1141,7 @@ def test_default_preset_slots_compress_to_clear_center_definition(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot(canvas_config)
         return canvas
@@ -1394,6 +1398,7 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot(
             str(group_id or "gc_content"),
@@ -1413,6 +1418,7 @@ def test_edl933_ticks_before_features_use_measured_tick_footprint(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot(
             str(group_id or "gc_skew"),
@@ -1748,6 +1754,7 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         capture_numeric_slot(str(group_id or "gc_skew"), canvas_config, track_width_override, norm_factor_override)
         if "definition_reserved" not in captured:
@@ -2059,6 +2066,7 @@ def test_api_circular_track_slots_distribute_repeated_depth_slots_evenly(
         track_width_override=None,
         norm_factor_override=None,
         group_id=None,
+        record_transform=None,
     ):
         assert track_width_override is not None
         assert norm_factor_override is not None

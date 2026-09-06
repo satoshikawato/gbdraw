@@ -6,6 +6,9 @@ from pandas import DataFrame
 from ..layout.linear_coords import normalize_position_to_linear_track
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from ..layout.scalar_axis import project_scalar_samples
+
 def calculate_corrdinate(
     index: int,
     value: float,
@@ -38,15 +41,23 @@ def calculate_gc_content_path_desc(
     genome_size_normalization_factor: float,
     track_height: float,
     dinucleotide: str,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
+    if gc_df.empty:
+        return ""
     coodinates_list: list[str] = []
     start_position: str = "M{} {}".format(start_x, start_y)
     coodinates_list.append(start_position)
     column: str = f"{dinucleotide} content"
     mean = float(gc_df[column].mean())
     max_diff = float((gc_df[column] - mean).abs().max())
-    for index, row in gc_df.iterrows():
-        value = float(row[column])
+    samples = gc_df[column].items()
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        samples = ((p.position, p.value) for segment in project_scalar_samples(
+            gc_df.index, gc_df[column], record_transform) for p in segment.points)
+    x_corrdinate = start_x
+    for index, value in samples:
+        value = float(value)
         corrdinate, x_corrdinate = calculate_corrdinate(
             index, value, mean, max_diff, record_len, alignment_width, genome_size_normalization_factor, track_height
         )
@@ -68,7 +79,10 @@ def calculate_gc_skew_path_desc(
     alignment_width: float,
     genome_size_normalization_factor: float,
     track_height: float,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
+    if skew_df.empty:
+        return ""
     coodinates_list: list[str] = []
     start_position: str = "M{} {}".format(start_x, start_y)
     coodinates_list.append(start_position)
@@ -76,8 +90,13 @@ def calculate_gc_skew_path_desc(
     mean = float(skew_df[column].mean())
     max_diff = float((skew_df[column] - mean).abs().max()) if float((skew_df[column] - mean).abs().max()) > 0 else 1.0
 
-    for index, row in skew_df.iterrows():
-        value = float(row[column])
+    samples = skew_df[column].items()
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        samples = ((p.position, p.value) for segment in project_scalar_samples(
+            skew_df.index, skew_df[column], record_transform) for p in segment.points)
+    x_corrdinate = start_x
+    for index, value in samples:
+        value = float(value)
         corrdinate, x_corrdinate = calculate_corrdinate(
             index, value, mean, max_diff, record_len, alignment_width, genome_size_normalization_factor, track_height
         )
@@ -103,6 +122,8 @@ def calculate_linear_scalar_area_path_desc(
     *,
     value_column: str = "value_normalized",
     position_column: str = "position",
+    source_positions: bool = False,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """Return a filled linear area path for normalized scalar values."""
 
@@ -112,9 +133,15 @@ def calculate_linear_scalar_area_path_desc(
     baseline_y = float(start_y) + float(track_height)
     x_values: list[float] = []
     y_values: list[float] = []
-    for _, row in scalar_df.iterrows():
-        position = int(row[position_column])
-        value = max(0.0, min(1.0, float(row[value_column])))
+    samples = zip(scalar_df[position_column], scalar_df[value_column], strict=True)
+    projected = record_transform is not None and record_transform.start_coordinate is not None
+    if projected:
+        samples = ((p.position, p.value) for segment in project_scalar_samples(
+            scalar_df[position_column], scalar_df[value_column], record_transform,
+            source_positions=source_positions) for p in segment.points)
+    for position, value in samples:
+        position = float(position) if projected else int(position)
+        value = max(0.0, min(1.0, float(value)))
         x_value = normalize_position_to_linear_track(
             position, record_len, alignment_width, genome_size_normalization_factor
         )
@@ -146,6 +173,7 @@ def calculate_depth_path_desc(
     alignment_width: float,
     genome_size_normalization_factor: float,
     track_height: float,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """Return a filled linear area path for binned depth coverage."""
 
@@ -158,6 +186,8 @@ def calculate_depth_path_desc(
         genome_size_normalization_factor,
         track_height,
         value_column="depth_normalized",
+        source_positions=True,
+        record_transform=record_transform,
     )
 
 

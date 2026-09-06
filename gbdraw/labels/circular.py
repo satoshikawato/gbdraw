@@ -32,6 +32,8 @@ from ..svg.arrows import (
 )
 
 # Keep dense large-font labels from being pushed excessively far from features.
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 MIN_BBOX_GAP_RATIO = 0.01
 MIN_BBOX_GAP_FLOOR_PX = 1.2
 HEAVY_CLUSTER_RELAX_MAX_LABELS = 70
@@ -4467,6 +4469,7 @@ def prepare_label_list(
     feature_lane_direction: str | None = None,
     label_font_size: float | None = None,
     _candidate_cache: dict[str, object] | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ):
     cfg = profile.config
     embedded_labels = []
@@ -4545,6 +4548,7 @@ def prepare_label_list(
                 size,
                 interval,
             ),
+            record_transform=record_transform,
         )
         if _candidate_cache is not None:
             _candidate_cache["candidates"] = candidates

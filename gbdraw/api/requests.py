@@ -129,6 +129,27 @@ class RecordPresentation:
 
 
 @dataclass(frozen=True)
+class RecordDisplayOptions:
+    """Per-record topology override and optional 1-based source display start."""
+
+    is_circular: bool | None = None
+    start_coordinate: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.is_circular is not None and not isinstance(self.is_circular, bool):
+            raise ValidationError("is_circular must be a boolean or None.")
+        if self.start_coordinate is not None:
+            if (
+                not isinstance(self.start_coordinate, int)
+                or isinstance(self.start_coordinate, bool)
+                or self.start_coordinate < 1
+            ):
+                raise ValidationError("start_coordinate must be a positive integer or None.")
+            if self.is_circular is False:
+                raise ValidationError("An explicit display start requires a circular record.")
+
+
+@dataclass(frozen=True)
 class RecordInput:
     """A record source plus selection, region, and presentation metadata."""
 
@@ -138,6 +159,7 @@ class RecordInput:
     presentation: RecordPresentation = field(default_factory=RecordPresentation)
     record_key: str | None = None
     cardinality: RecordCardinality = RecordCardinality.EXACTLY_ONE
+    display: RecordDisplayOptions = field(default_factory=RecordDisplayOptions)
 
     def __post_init__(self) -> None:
         if not isinstance(
@@ -151,6 +173,8 @@ class RecordInput:
             raise ValidationError(
                 "Record cardinality must be a RecordCardinality value."
             )
+        if not isinstance(self.display, RecordDisplayOptions):
+            raise ValidationError("Record display has an unsupported type.")
         if not isinstance(self.presentation, RecordPresentation):
             raise ValidationError("Record presentation has an unsupported type.")
         if self.record_key is not None:
@@ -686,6 +710,7 @@ __all__ = [
     "LinearDiagramRequest",
     "RecordCardinality",
     "RecordCollectionOptions",
+    "RecordDisplayOptions",
     "RecordInput",
     "RecordInputSource",
     "RecordPresentation",

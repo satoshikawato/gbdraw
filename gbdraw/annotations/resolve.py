@@ -18,6 +18,7 @@ from gbdraw.features.selector_values import (
     normalize_qualifier_values,
 )
 from gbdraw.io.record_select import RecordSelector
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 from .io import annotation_sets_from_dataframe, read_annotation_table
 from .models import (
@@ -108,11 +109,11 @@ def _coordinate_segments(
     target: CoordinateSpan,
     record: SeqRecord,
     *,
-    mode: str,
+    is_circular: bool,
 ) -> tuple[tuple[tuple[int, int], ...], bool]:
     length = len(record.seq)
-    if target.wraps_origin and mode != "circular":
-        raise ValidationError("Origin-spanning annotation targets are not supported in linear diagrams.")
+    if target.wraps_origin and not is_circular:
+        raise ValidationError("Origin-spanning annotation targets require a complete circular record.")
     if target.coordinate_space == "local":
         ranges = (
             ((target.start, length), (1, target.end))
@@ -187,7 +188,7 @@ def _feature_matches(feature: object, selector: FeatureSelector, record_id: str)
     )
 
 
-def _feature_segments(target: FeatureSpan, record: SeqRecord, *, mode: str) -> tuple[tuple[int, int], ...]:
+def _feature_segments(target: FeatureSpan, record: SeqRecord, *, is_circular: bool) -> tuple[tuple[int, int], ...]:
     matched: list[object] = []
     unmatched: list[str] = []
     for selector in target.selectors:
@@ -215,7 +216,7 @@ def _feature_segments(target: FeatureSpan, record: SeqRecord, *, mode: str) -> t
 
     length = len(record.seq)
     normal = ((segments[0][0], segments[-1][1]),)
-    if mode != "circular" or len(segments) == 1:
+    if not is_circular or len(segments) == 1:
         return normal
     normal_span = normal[0][1] - normal[0][0]
     wrap_span = (length - segments[-1][0]) + segments[0][1]
@@ -250,6 +251,7 @@ def resolve_annotation_set(
     records: Sequence[SeqRecord],
     *,
     mode: str,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> ResolvedAnnotationBundle:
     """Resolve one set against already materialized records."""
 
@@ -260,9 +262,14 @@ def resolve_annotation_set(
     for annotation in annotation_set.annotations:
         record_index = _bind_record(records, annotation.target.record)
         record = records[record_index]
+        transform = record_transforms[record_index] if record_transforms is not None else None
+        is_circular = (
+            transform.is_circular if transform is not None
+            else str(record.annotations.get("topology", "")).strip().lower() == "circular"
+        ) and not bool(record.annotations.get("gbdraw_region_applied"))
         clipped = False
         if isinstance(annotation.target, CoordinateSpan):
-            segments, clipped = _coordinate_segments(annotation.target, record, mode=mode)
+            segments, clipped = _coordinate_segments(annotation.target, record, is_circular=is_circular)
             policy = annotation.target.out_of_bounds
             if clipped and policy == "error":
                 raise ValidationError(
@@ -288,7 +295,7 @@ def resolve_annotation_set(
                     )
                 )
         else:
-            segments = _feature_segments(annotation.target, record, mode=mode)
+            segments = _feature_segments(annotation.target, record, is_circular=is_circular)
         if not segments:
             warnings.append(
                 ResolutionWarning(
@@ -340,6 +347,7 @@ def resolve_annotations(
     records: Sequence[SeqRecord],
     *,
     mode: str,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> ResolvedAnnotationBundle:
     """Resolve all configured sets into one deterministic bundle."""
 
@@ -350,7 +358,7 @@ def resolve_annotations(
         if isinstance(annotations, AnnotationOptions)
         else tuple(annotations)
     )
-    resolved = [resolve_annotation_set(item, records, mode=mode) for item in sets]
+    resolved = [resolve_annotation_set(item, records, mode=mode, record_transforms=record_transforms) for item in sets]
     return ResolvedAnnotationBundle(
         tuple(annotation for bundle in resolved for annotation in bundle.annotations),
         tuple(warning for bundle in resolved for warning in bundle.warnings),

@@ -77,6 +77,7 @@ from .cli_utils.common import (
     _add_window_step_args,
     add_feature_args,
     add_input_args,
+    apply_record_display_cli_options,
     add_label_args,
     setup_logging,
     validate_input_args,
@@ -1368,6 +1369,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             regions=args.region,
         )
         linear_positions = list(args.multi_record_position or [])
+    record_manifest = apply_record_display_cli_options(record_manifest, args)
     if record_manifest.record_options.regions and blast_files:
         logger.warning(
             "WARNING: Region cropping is enabled; ensure BLAST coordinates "

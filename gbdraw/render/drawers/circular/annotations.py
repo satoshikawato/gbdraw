@@ -114,10 +114,11 @@ def draw_circular_annotation_track(
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
         part_count = sum(
             len(_safe_segments(start, end, record_length))
-            for start, end in annotation.segments
+            for start, end in annotation.geometry_segments
         )
         part_index = 0
-        for raw_start, raw_end in annotation.segments:
+        for segment_index, (raw_start, raw_end) in enumerate(annotation.geometry_segments):
+            fragment = annotation.display_parts[segment_index] if annotation.display_parts is not None else None
             for start, end in _safe_segments(raw_start, raw_end, record_length):
                 part_index += 1
                 if annotation.mark in {"band", "highlight"}:
@@ -138,7 +139,7 @@ def draw_circular_annotation_track(
                         fill="none",
                         stroke=style.stroke,
                         stroke_width=style.stroke_width,
-                        stroke_linecap="round",
+                        stroke_linecap=("butt" if fragment is not None and (fragment.artificial_start or fragment.artificial_end) else "round"),
                         debug=False,
                     )
                 if dash:
@@ -154,9 +155,26 @@ def draw_circular_annotation_track(
                         include_stable_id=False,
                     )
                 item_group.add(path)
+                if annotation.mark in {"band", "highlight"} and not auto_feature_underlay and fragment is not None and (fragment.artificial_start or fragment.artificial_end):
+                    path.attribs["stroke"] = "none"
+                    outline = _arc_path(start, end, record_length, lane_inner) + " " + _arc_path(start, end, record_length, lane_outer)
+                    for position, capped in ((start, not fragment.artificial_start), (end, not fragment.artificial_end)):
+                        if capped:
+                            x1, y1 = _point(position, record_length, lane_inner)
+                            x2, y2 = _point(position, record_length, lane_outer)
+                            outline += f" M {x1:g},{y1:g} L {x2:g},{y2:g}"
+                    border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
+                    if dash:
+                        border.attribs["stroke-dasharray"] = dash
+                    item_group.add(border)
                 if annotation.mark == "bracket" and style.line_cap != "none":
                     cap = min(5.0, 0.35 * lane_width)
                     for position in (start, end):
+                        if fragment is not None and (
+                            (position == start and (start != raw_start or fragment.artificial_start))
+                            or (position == end and (end != raw_end or fragment.artificial_end))
+                        ):
+                            continue
                         x1, y1 = _point(position, record_length, radius - cap)
                         x2, y2 = _point(position, record_length, radius + cap)
                         cap_path = Path(
@@ -169,8 +187,8 @@ def draw_circular_annotation_track(
 
         if params.show_labels and annotation.label:
             label_radius = lane_outer + style.label_offset if side != "inside" else lane_inner - style.label_offset
-            x, y = _point(annotation.midpoint_bp, record_length, label_radius)
-            angle = 360.0 * annotation.midpoint_bp / max(1, record_length) - 90.0
+            x, y = _point(annotation.geometry_midpoint_bp, record_length, label_radius)
+            angle = 360.0 * annotation.geometry_midpoint_bp / max(1, record_length) - 90.0
             orientation = style.label_orientation
             rotation = 0.0
             if orientation in {"auto", "tangent", "arc"}:

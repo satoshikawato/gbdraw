@@ -47,6 +47,7 @@ def test_root_namespace_is_the_small_beginner_facing_api() -> None:
         "LinearLayout",
         "LinearOptions",
         "LinearTrackOptions",
+        "RecordDisplayOptions",
         "Thresholds",
         "TitleOptions",
         "__version__",

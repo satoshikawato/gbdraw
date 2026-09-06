@@ -41,6 +41,7 @@ from gbdraw.analysis.depth_tracks import (
     normalize_depth_tracks,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     ProteinExtractionResult,
@@ -99,6 +100,8 @@ from .prepared import (
 )
 from .record_planning import (
     ResolvedRecordCollection,
+    ResolvedRecordDisplay,
+    _detected_topology,
     ResolvedRecordProvenance,
     _load_source_records,
     _prepared_source_cache_spec,
@@ -530,6 +533,7 @@ class PreparedDiagramRequest:
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
+    transforms: tuple[RecordDisplayTransform, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -613,6 +617,23 @@ def _validated_plan_records(
     return records
 
 
+def _initialize_plan_display_context(plan) -> None:
+    """Keep direct constructors and planner-produced context record-aligned."""
+    if not plan.transforms:
+        collection = (
+            ResolvedRecordCollection(plan.records, plan.provenance)
+            if plan.provenance
+            else _coerce_resolved_collection(plan.request, plan.records)
+        )
+        object.__setattr__(plan, "provenance", collection.provenance)
+        object.__setattr__(plan, "displays", collection.displays)
+        object.__setattr__(plan, "transforms", collection.transforms)
+    if any(len(values) != len(plan.records) for values in (
+        plan.provenance, plan.displays, plan.transforms,
+    )):
+        raise ValidationError("Plan display context must align with its records.")
+
+
 @dataclass(frozen=True)
 class CircularRequestPlan:
     """Normalized records, layout, and builder choice for a Circular request."""
@@ -624,6 +645,8 @@ class CircularRequestPlan:
     precomputed_depth_track_count: int | None = None
     inputs: PreparedDiagramInputs | None = None
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
+    displays: tuple[ResolvedRecordDisplay, ...] = ()
+    transforms: tuple[RecordDisplayTransform, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularDiagramRequest):
@@ -654,6 +677,8 @@ class CircularRequestPlan:
                 "CircularRequestPlan provenance must align with its records."
             )
 
+        _initialize_plan_display_context(self)
+
     @property
     def mode(self) -> Literal["circular"]:
         return "circular"
@@ -679,12 +704,14 @@ class CircularRequestPlan:
             return build_circular_diagram(
                 self.records[0],
                 options=self.request.options,
+                _record_transform=self.transforms[0],
                 **depth_kwargs,
             )
         return build_circular_multi_diagram(
             self.records,
             options=self.request.options,
             layout=self.layout,
+            _record_transforms=self.transforms,
             **shared_kwargs,
         )
 
@@ -717,6 +744,8 @@ class CircularBatchRequestPlan:
     records: tuple[SeqRecord, ...]
     inputs: PreparedDiagramInputs | None = None
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
+    displays: tuple[ResolvedRecordDisplay, ...] = ()
+    transforms: tuple[RecordDisplayTransform, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularBatchRequest):
@@ -735,6 +764,8 @@ class CircularBatchRequestPlan:
             raise ValidationError(
                 "CircularBatchRequestPlan provenance must align with its records."
             )
+
+        _initialize_plan_display_context(self)
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -773,6 +804,7 @@ class CircularBatchRequestPlan:
                     RecordInput(
                         source=InMemoryRecordSource(record),
                         record_key=self.request.records[index].record_key,
+                        display=self.request.records[index].display,
                     ),
                 ),
                 options=item_options,
@@ -793,6 +825,8 @@ class CircularBatchRequestPlan:
                         logical_depth_count if normalized_depth is not None else None
                     ),
                     inputs=self.inputs,
+                    displays=(self.displays[index],),
+                    transforms=(self.transforms[index],),
                     provenance=(
                         (self.provenance[index],)
                         if self.provenance
@@ -812,6 +846,8 @@ class LinearRequestPlan:
     layout: LinearMultiRecordOptions | None
     inputs: PreparedDiagramInputs | None = None
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
+    displays: tuple[ResolvedRecordDisplay, ...] = ()
+    transforms: tuple[RecordDisplayTransform, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -842,6 +878,8 @@ class LinearRequestPlan:
                 "LinearRequestPlan provenance must align with its records."
             )
 
+        _initialize_plan_display_context(self)
+
     @property
     def mode(self) -> Literal["linear"]:
         return "linear"
@@ -866,6 +904,7 @@ class LinearRequestPlan:
             kwargs["protein_extraction"] = protein_extraction
         if self.inputs is not None:
             kwargs["_resolved_feature_inputs"] = self.inputs.features
+        kwargs["_record_transforms"] = self.transforms
         built = build_linear_diagram_result(self.records, **kwargs)
         if isinstance(built, LinearDiagramBuildResult):
             return built
@@ -1094,7 +1133,15 @@ def _coerce_resolved_collection(
     """Keep private test seams compatible while planners consume provenance."""
 
     if isinstance(value, ResolvedRecordCollection):
-        return value
+        # Cached records represent selection/RC/crop, not display intent. Rebind
+        # transient context without changing records, source membership or keys.
+        if all(item.display == request.records[item.input_index].display
+               for item in value.provenance):
+            return value
+        return ResolvedRecordCollection(value.records, tuple(
+            replace(item, display=request.records[item.input_index].display)
+            for item in value.provenance
+        ))
     records = tuple(value)
     if len(records) != len(request.records):
         raise ValidationError(
@@ -1128,6 +1175,9 @@ def _coerce_resolved_collection(
                 selector=record_input.selector,
                 region=record_input.region,
                 presentation=record_input.presentation,
+                display=record_input.display,
+                source_length=record.annotations.get("gbdraw_source_length"),
+                detected_topology=_detected_topology(record, source_kind),
             )
         )
     return ResolvedRecordCollection(records, tuple(provenance))
@@ -1169,6 +1219,7 @@ def _materialized_record_inputs(
                     grid_column=source_presentation.grid_column,
                 ),
                 record_key=provenance.record_key,
+                display=provenance.display,
             )
         )
     return tuple(materialized)
@@ -1326,6 +1377,8 @@ def plan_circular_request(
         layout=resolved_layout,
         inputs=inputs,
         provenance=collection.provenance,
+        displays=collection.displays,
+        transforms=collection.transforms,
     )
 
 
@@ -1381,6 +1434,8 @@ def plan_circular_batch_request(
         records=records,
         inputs=inputs,
         provenance=collection.provenance,
+        displays=collection.displays,
+        transforms=collection.transforms,
     )
 
 
@@ -1434,6 +1489,8 @@ def plan_linear_request(
         layout=resolved_layout,
         inputs=inputs,
         provenance=collection.provenance,
+        displays=collection.displays,
+        transforms=collection.transforms,
     )
 
 
@@ -1883,6 +1940,7 @@ def build_request_plan_diagram(
                     records=item_plan.records,
                     drawing=item_plan.build(),
                     inputs=item_plan.inputs,
+                    transforms=item_plan.transforms,
                 )
                 for item_plan in plan.item_plans()
             )
@@ -1946,6 +2004,7 @@ def build_request_plan_diagram(
             )
     return PreparedDiagramRequest(
         mode=plan.mode,
+        transforms=plan.transforms,
         request=request,
         records=records,
         drawing=drawing,
@@ -2024,6 +2083,7 @@ def build_prepared_interactive_context(
             mode=prepared.mode,
             comparison_sequence_records=comparison_sequence_records,
             collinearity_search_scope=collinearity_search_scope,
+            record_transforms=prepared.transforms or None,
         )
 
     return require_interactive_svg_metadata(build)
@@ -2252,6 +2312,7 @@ def _interactive_context_cache_spec(
         record_keys,
         collinearity_scope,
         popup_policy,
+        tuple((transform.is_circular, transform.start_coordinate is not None) for transform in prepared.transforms),
     )
     return key, _prepared_key_resource_identities(key)
 

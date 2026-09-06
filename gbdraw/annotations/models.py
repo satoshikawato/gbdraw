@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from gbdraw.layout.record_coordinates import DisplayFragment
+
 from dataclasses import dataclass, field
 from math import isfinite
 from types import MappingProxyType
@@ -377,6 +379,20 @@ class ResolvedRegionAnnotation:
     style_is_annotation_override: bool = False
     legend_label: str | None = None
     metadata: Mapping[str, str] = field(default_factory=dict)
+    display_parts: tuple[DisplayFragment, ...] | None = None
+
+    @property
+    def geometry_segments(self) -> tuple[tuple[int, int], ...]:
+        if self.display_parts is None:
+            return self.segments
+        return tuple((part.display_start, part.display_end) for part in self.display_parts)
+
+    @property
+    def geometry_midpoint_bp(self) -> float:
+        if self.display_parts is None:
+            return self.midpoint_bp
+        start, end = min(self.geometry_segments, key=lambda span: (span[0] - span[1], span[0]))
+        return (start + end) / 2.0
 
 
 @dataclass(frozen=True)

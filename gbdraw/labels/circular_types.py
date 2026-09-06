@@ -46,6 +46,9 @@ class CircularLabelCandidate:
     segment_middle_bp: float
     segment_span_bp: float
     feature_coordinates: tuple[tuple[float, float], ...]
+    source_anchor_span: tuple[int, int] | None = None
+    source_part_index: int | None = None
+    source_middle_bp: float | None = None
 
 
 @dataclass(frozen=True)

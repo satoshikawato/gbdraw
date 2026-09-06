@@ -55,6 +55,7 @@ from ...labels.circular import (  # type: ignore[reportMissingImports]
     y_overlap,
 )
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
+from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.circular import (  # type: ignore[reportMissingImports]
     CircularFeatureLaneDirection,
     CircularRadialLayout,
@@ -258,12 +259,15 @@ def _prepare_circular_annotation_tracks(
     show_gc: bool,
     show_skew: bool,
     depth_track_count: int,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> tuple[list[CircularTrackSlot] | None, ResolvedAnnotationBundle, dict[str, ResolvedAnnotationTrack]]:
     slots, bundle, _auto_slot_ids = prepare_annotation_track_slots(
         annotations,
         [gb_record],
         slots,
         mode="circular",
+        record_transforms=(record_transform,) if record_transform is not None else None,
+        record_indices=(record_index,),
         default_slots=lambda: default_circular_track_slots(
             show_features=True,
             show_ticks=show_ticks,
@@ -1142,6 +1146,7 @@ def _definition_reserved_radius_px(
     *,
     plot_title: str | None,
     definition_profile: str,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> float:
     cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
@@ -1152,6 +1157,7 @@ def _definition_reserved_radius_px(
         strain=strain,
         plot_title=plot_title,
         definition_profile=definition_profile,
+        record_transform=record_transform,
     ).get_group()
 
     # Track-slot reservation is a record-local compatibility contract. Keep its
@@ -1434,6 +1440,7 @@ def _draw_resolved_circular_slot(
     use_feature_anchor_override: bool = True,
     annotation_track_layouts: dict[str, ResolvedAnnotationTrack] | None = None,
     annotation_record_index: int = 0,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Draw one resolved circular slot."""
     cfg = render_context.profile.config
@@ -1582,6 +1589,7 @@ def _draw_resolved_circular_slot(
                 gb_record,
                 canvas_config,
                 **tick_group_kwargs,
+                record_transform=record_transform,
             )
         return canvas
 
@@ -1617,6 +1625,7 @@ def _draw_resolved_circular_slot(
             canvas_config,
             selected_depth_config,
             **depth_kwargs,
+            record_transform=record_transform,
         )
         if use_slot_group_id:
             canvas = _mark_circular_track_slot_group(
@@ -1664,6 +1673,8 @@ def _draw_resolved_circular_slot(
             inner_radius_px=float(resolved_slot.draw_inner_radius_px),
             outer_radius_px=float(resolved_slot.draw_outer_radius_px),
             min_identity=float(conservation_min_identity),
+            record_index=annotation_record_index,
+            record_transform=record_transform,
             **conservation_kwargs,
         )
 
@@ -1701,6 +1712,7 @@ def _draw_resolved_circular_slot(
             canvas_config,
             slot_gc_config,
             **gc_kwargs,
+            record_transform=record_transform,
         )
         if use_slot_group_id:
             canvas = _mark_circular_track_slot_group(
@@ -1750,6 +1762,7 @@ def _draw_resolved_circular_slot(
             canvas_config,
             _slot_skew_config(skew_config, resolved_slot, nt),
             **skew_kwargs,
+            record_transform=record_transform,
         )
         if use_slot_group_id:
             canvas = _mark_circular_track_slot_group(
@@ -1843,6 +1856,7 @@ def add_record_on_circular_canvas(
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
     annotation_record_index: int = 0,
     definition_record_count: int = 1,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> _CircularPlotAssembly:
     """
     Adds various record-related groups to a circular canvas.
@@ -1887,6 +1901,7 @@ def add_record_on_circular_canvas(
         show_gc=profile.show_gc,
         show_skew=profile.show_skew,
         depth_track_count=max(1, resolved_depth_track_count),
+        record_transform=record_transform,
     )
     user_slot_mode = effective_circular_track_slots is not None
     user_active_slot_renderers = {
@@ -1995,6 +2010,7 @@ def add_record_on_circular_canvas(
         feature_shapes=feature_config.feature_shapes,
         feature_visibility_rules=feature_config.feature_visibility_rules,
         compute_label_text=compute_label_text,
+        record_transform=record_transform,
     )
     precomputed_feature_dict: dict = feature_layers.foreground_features
     layout_feature_dict = {
@@ -2038,6 +2054,7 @@ def add_record_on_circular_canvas(
             strain,
             plot_title=plot_title,
             definition_profile=definition_profile,
+            record_transform=record_transform,
         )
     radial_layout = resolve_circular_radial_layout(
         total_length=len(gb_record.seq),
@@ -2104,6 +2121,7 @@ def add_record_on_circular_canvas(
             track_preset=_circular_preset_for_layout(cfg),
             feature_lane_direction=feature_lane_direction,
             _candidate_cache=label_candidate_cache,
+            record_transform=record_transform,
         )
         if profile.label_placement == "radial":
             previous_growth: float | None = None
@@ -2253,6 +2271,7 @@ def add_record_on_circular_canvas(
                     track_preset=_circular_preset_for_layout(cfg),
                     feature_lane_direction=feature_lane_direction,
                     _candidate_cache=label_candidate_cache,
+                    record_transform=record_transform,
                 )
 
             gc_content_tick_font_size_override = _gc_content_matches_depth_axis_font_size(
@@ -2402,6 +2421,7 @@ def add_record_on_circular_canvas(
             use_feature_anchor_override=user_slot_mode,
             annotation_track_layouts=annotation_track_layouts,
             annotation_record_index=annotation_record_index,
+            record_transform=record_transform,
         )
 
     if show_external_labels:
@@ -2432,6 +2452,7 @@ def add_record_on_circular_canvas(
         species,
         strain,
         **definition_kwargs,
+        record_transform=record_transform,
     )
     definition_target = next(
         (
@@ -2617,6 +2638,7 @@ def _assemble_circular_diagram_result(
     title_target: Group | None = None,
     title_bounds: Aabb | None = None,
     title_placement: TitlePlacement | str = TitlePlacement.NONE,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> CircularAssemblyResult:
     """
     Assembles a circular diagram for a GenBank record and returns the SVG canvas.
@@ -2654,6 +2676,7 @@ def _assemble_circular_diagram_result(
         show_gc=profile.show_gc,
         show_skew=profile.show_skew,
         depth_track_count=max(1, resolved_depth_track_count),
+        record_transform=record_transform,
     )
 
     legend_table: dict = {}
@@ -2755,6 +2778,7 @@ def _assemble_circular_diagram_result(
         annotations=resolved_annotations,
         annotation_record_index=annotation_record_index,
         definition_record_count=definition_record_count,
+        record_transform=record_transform,
     )
     return _compose_circular_plot(
         plot,

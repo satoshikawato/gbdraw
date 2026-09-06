@@ -200,6 +200,7 @@ def test_circular_overlay_annotation_can_share_an_on_axis_feature_anchor() -> No
 
 def test_circular_origin_annotation_renders_two_safe_paths() -> None:
     record = SeqRecord(Seq("A" * 1000), id="r1", name="r1")
+    record.annotations["topology"] = "circular"
     annotation = RegionAnnotation(
         "origin",
         CoordinateSpan(None, 900, 100, wraps_origin=True),

@@ -388,6 +388,31 @@ def _element_match_id_status(element: ET.Element) -> tuple[str, bool]:
     return _match_id_status(element.attrib)
 
 
+def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> None:
+    """Admit explicit fragments only when DOM identity and source metadata agree."""
+    if len(attributes) == 1 and "data-gbdraw-match-fragment" not in attributes[0]:
+        return
+    dom_ids = set()
+    fragments = set()
+    metadata = None
+    for item in attributes:
+        dom_id = str(item.get("id") or "").strip()
+        fragment = str(item.get("data-gbdraw-match-fragment", ""))
+        current = {key: value for key, value in item.items()
+                   if key.startswith("data-") and key != "data-gbdraw-match-fragment"}
+        if (not dom_id or dom_id in dom_ids or not re.fullmatch(r"0|[1-9]\d*", fragment)
+                or fragment in fragments
+                or any(not str(item.get(key) or "").strip() for key in
+                       ("data-qstart", "data-qend", "data-sstart", "data-send", "data-match-kind"))
+                or (metadata is not None and current != metadata)):
+            raise GbdrawError("Rendered SVG contains invalid or duplicate match IDs: conflicting or missing fragment metadata.")
+        dom_ids.add(dom_id)
+        fragments.add(fragment)
+        metadata = current
+    if fragments != {str(index) for index in range(len(attributes))}:
+        raise GbdrawError("Rendered SVG contains invalid or duplicate match IDs: incomplete fragments.")
+
+
 def _catalog_match_id_status(match: Mapping[str, object]) -> tuple[str, bool]:
     return _consistent_text_alias(match, ("id", "matchId", "match_id"))
 
@@ -1664,23 +1689,26 @@ def enrich_svg(
                 "Interactive feature catalog contains invalid or duplicate match IDs."
             )
         matches_by_id[match_id] = match
-    elements_by_match_id: dict[str, ET.Element] = {}
+    elements_by_match_id: dict[str, list[ET.Element]] = {}
     for element in match_elements:
         match_id, valid = _element_match_id_status(element)
-        if not valid or not match_id or match_id in elements_by_match_id:
+        if not valid or not match_id:
             raise GbdrawError(
                 "Rendered SVG contains invalid or duplicate match IDs."
             )
-        elements_by_match_id[match_id] = element
+        elements_by_match_id.setdefault(match_id, []).append(element)
+    for elements in elements_by_match_id.values():
+        _validate_match_fragments([element.attrib for element in elements])
     if matches_by_id.keys() != elements_by_match_id.keys():
         raise GbdrawError(
             "Interactive feature catalog match IDs do not match the rendered SVG."
         )
-    for match_id, element in elements_by_match_id.items():
-        element.set("data-gbdraw-match-id", match_id)
-        element.set("data-gbdraw-pairwise-match-id", match_id)
-        element.set("data-gbdraw-interactive-match", "true")
-        _add_class_token(element, "gbdraw-interactive-pairwise-match")
+    for match_id, elements in elements_by_match_id.items():
+        for element in elements:
+            element.set("data-gbdraw-match-id", match_id)
+            element.set("data-gbdraw-pairwise-match-id", match_id)
+            element.set("data-gbdraw-interactive-match", "true")
+            _add_class_token(element, "gbdraw-interactive-pairwise-match")
 
     try:
         metadata_payload = json.dumps(

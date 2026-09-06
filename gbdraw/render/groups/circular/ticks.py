@@ -15,6 +15,8 @@ from ....svg.circular_ticks import (  # type: ignore[reportMissingImports]
 )
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class TickGroup:
     """
     Represents a group for tick marks and labels on a circular genomic plot.
@@ -34,7 +36,9 @@ class TickGroup:
         track_preset: str | None = None,
         group_id: str | None = None,
         slot_id: str | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.radius: float = float(radius) if radius is not None else self.canvas_config.radius
@@ -88,6 +92,7 @@ class TickGroup:
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
             length_reference_radius_px=float(self.canvas_config.radius),
+            record_transform=self.record_transform,
         )
         ticks_large_nonzero: list[int] = [x for x in ticks_large if x != 0]
         tick_label_paths_large: list[Text] = generate_circular_tick_labels(
@@ -111,6 +116,7 @@ class TickGroup:
             length_reference_radius_px=float(self.canvas_config.radius),
             group_identifier=str(self.tick_group.attribs.get("id", "tick")),
             record_identifier=str(self.gb_record.id),
+            record_transform=self.record_transform,
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)

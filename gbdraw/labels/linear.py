@@ -4,6 +4,7 @@
 """Linear track-based label placement utilities."""
 
 from collections import defaultdict
+from .coordinates import display_label_segment
 
 from .filtering import get_label_text  # type: ignore[reportMissingImports]
 from ..config.models import LinearRenderProfile  # type: ignore[reportMissingImports]
@@ -26,6 +27,8 @@ from ..layout.text_geometry import (
     translate_points,
 )
 
+
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 def check_label_overlap(label1, label2):
     """Check if two labels overlap horizontally"""
@@ -383,6 +386,7 @@ def prepare_label_list_linear(
     orthogroup_label_member_ids: set[str | int] | None = None,
     orthogroup_label_top_member_ids: set[str | int] | None = None,
     feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ):
     """
     Prepares a list of labels for linear genome visualization with proper track organization.
@@ -501,6 +505,14 @@ def prepare_label_list_linear(
                 longest_segment_start = start
                 longest_segment_end = end
                 longest_segment_length = segment_length
+
+        if getattr(feature_object, "display_parts", None) is not None:
+            projected_segment = display_label_segment(feature_object, genome_length, record_transform=record_transform)
+            if projected_segment is None:
+                continue
+            longest_segment_start = projected_segment.start
+            longest_segment_end = projected_segment.end
+            coordinate_strand = projected_segment.strand
 
         # Calculate normalized positions
         normalized_start = normalize_position_to_linear_track(

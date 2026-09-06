@@ -40,6 +40,8 @@ from .positioning import (
 )
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 def add_depth_group_on_canvas(
     canvas: Drawing,
     gb_record: SeqRecord,
@@ -51,6 +53,7 @@ def add_depth_group_on_canvas(
     norm_factor_override: float | None = None,
     group_id: str | None = None,
     axis_group_id: str | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Adds the depth coverage group to the canvas."""
     cfg = canvas_config.profile.config
@@ -70,6 +73,7 @@ def add_depth_group_on_canvas(
         group_id=group_id,
         axis_group_id=axis_group_id,
         cfg=cfg,
+        record_transform=record_transform,
     ).get_group()
     depth_group = center_group_on_canvas(depth_group, canvas_config)
     canvas.add(depth_group)
@@ -87,6 +91,8 @@ def add_conservation_group_on_canvas(
     min_identity: float,
     group_id: str | None = None,
     slot_id: str | None = None,
+    record_transform: RecordDisplayTransform | None = None,
+    record_index: int = 0,
 ) -> Drawing:
     """Adds one circular conservation ring group to the canvas."""
     cfg = canvas_config.profile.config
@@ -103,6 +109,8 @@ def add_conservation_group_on_canvas(
         cfg=cfg,
         group_id=group_id,
         slot_id=slot_id,
+        record_transform=record_transform,
+        record_index=record_index,
     ).get_group()
     conservation_group = center_group_on_canvas(conservation_group, canvas_config)
     canvas.add(conservation_group)
@@ -119,6 +127,7 @@ def add_gc_skew_group_on_canvas(
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """
     Adds the GC skew group to the canvas.
@@ -147,6 +156,7 @@ def add_gc_skew_group_on_canvas(
         norm_factor_override=norm_factor_override,
         group_id=group_id,
         cfg=cfg,
+        record_transform=record_transform,
     ).get_group()
     gc_skew_group = center_group_on_canvas(gc_skew_group, canvas_config)
     canvas.add(gc_skew_group)
@@ -163,6 +173,7 @@ def add_gc_content_group_on_canvas(
     track_width_override: float | None = None,
     norm_factor_override: float | None = None,
     group_id: str | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """
     Adds the GC content group to the canvas.
@@ -192,6 +203,7 @@ def add_gc_content_group_on_canvas(
         norm_factor_override=norm_factor_override,
         group_id=group_id,
         cfg=cfg,
+        record_transform=record_transform,
     ).get_group()
     gc_content_group = center_group_on_canvas(gc_content_group, canvas_config)
     canvas.add(gc_content_group)
@@ -211,6 +223,7 @@ def add_record_definition_group_on_canvas(
     definition_group_id: str | None = None,
     record_index: int = 0,
     record_count: int = 1,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """
     Adds the record definition group to the canvas.
@@ -236,6 +249,7 @@ def add_record_definition_group_on_canvas(
         definition_group_id=definition_group_id,
         record_index=record_index,
         record_count=record_count,
+        record_transform=record_transform,
     )
     definition_group: Group = definition_builder.get_group()
     setattr(definition_group, "_gbdraw_local_bounds", definition_builder.local_bounds)
@@ -336,6 +350,7 @@ def add_tick_group_on_canvas(
     track_preset: str | None = None,
     group_id: str | None = None,
     slot_id: str | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """
     Adds the tick group to the canvas.
@@ -359,6 +374,7 @@ def add_tick_group_on_canvas(
         track_preset=track_preset,
         group_id=group_id,
         slot_id=slot_id,
+        record_transform=record_transform,
     ).get_group()
     tick_group = center_group_on_canvas(tick_group, canvas_config)
     canvas.add(tick_group)

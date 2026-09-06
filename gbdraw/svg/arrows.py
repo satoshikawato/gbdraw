@@ -146,3 +146,24 @@ __all__ = [
 ]
 
 
+
+
+def block_path_with_open_caps(
+    path: str, *, open_tail: bool = False, end_cap: str | None = None,
+    tail_cap: str | None = None,
+) -> list[str]:
+    """Keep the filled silhouette while omitting artificial cross-section strokes.
+
+    Glyph helpers supply their exact end-cap command; the final close command
+    is their tail cap. This does not parse arbitrary SVG or alter coverage.
+    """
+    if not open_tail and end_cap is None:
+        return ["block", path]
+    outline = path.rstrip().removesuffix("z")
+    if not open_tail:
+        if tail_cap is None:
+            raise ValueError("An open head requires the authored tail-cap command")
+        outline += tail_cap
+    if end_cap is not None:
+        outline = outline.replace(end_cap, "M" + end_cap[1:], 1)
+    return ["block", path, outline]

@@ -16,6 +16,7 @@
       "LinearLayout",
       "LinearOptions",
       "LinearTrackOptions",
+      "RecordDisplayOptions",
       "Thresholds",
       "TitleOptions",
       "__version__",
@@ -24,16 +25,16 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "46bfd19c2d6b358478f0e6d5aa074f4081c381038a4686204ec3ccd7c7d0a0ac"
+    "contract_sha256": "8e789232ea55e11f386f74bc1e4e1d674ad38512c59090dbd166d268be2781d7"
   },
   "circular_cli": {
-    "actions_sha256": "47e322f96d21ca0093313f53b382a6ac88ad304053e2c77542b71860336c4769",
-    "defaults_sha256": "da80d400e87da64ec97efd22531fc4dd803be436596efcc39cb36c99a0baab39",
-    "representative_sha256": "472254bf8e70f11423fc465cf55d106854db7c702d2d25e47c7b150f3bd1b142"
+    "actions_sha256": "3f3133a040507dc351649125dc85f7a7e5adb0cebe36fca9f2102bd0420cb8ce",
+    "defaults_sha256": "54aa0d216fd6cadfd7ec6f12291bbc7708b36b6c6c3fe5650539b04bcd39dc01",
+    "representative_sha256": "3250cf47b283847e79a058595ad2b32f8ae26d83e8c0e3bc8bbee5bc4b74c8ac"
   },
   "linear_cli": {
-    "actions_sha256": "2e6de596a6e45d3cbde9c359306d0fc49c10f0630185677c7ba6ee80acee85d5",
-    "defaults_sha256": "436805006d27849e1a291ab7c948261e25e56b9efd5e381b2fbc4aa9e87a2180",
-    "representative_sha256": "51722d3740c6278c268111cf08cafbc75dcb7bc1df1378ab6088a7c1a41665c2"
+    "actions_sha256": "2d02f8c6fdb4930217eca18b246a235d9e85610fcc16b39201b7baf30b820ea1",
+    "defaults_sha256": "0246a6c739b6f7b41189ee57bb107bc3054a04f20195a22db9df403c9843cf4e",
+    "representative_sha256": "314c9fbac1e27d603f52eb19caf36a6e70b8c99386a58a695ffd9d95fa3e8f82"
   }
 }

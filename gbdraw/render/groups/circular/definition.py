@@ -19,6 +19,8 @@ from ....svg.ids import definition_group_svg_id
 from ...drawers.circular.definition import DefinitionDrawer
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 CircularDefinitionProfile = Literal["full", "record_summary", "shared_common"]
 _SUPPORTED_DEFINITION_PROFILES = {"full", "record_summary", "shared_common"}
 _TextPart = Dict[str, str | bool | None]
@@ -90,7 +92,9 @@ class DefinitionGroup:
         definition_group_id: str | None = None,
         record_index: int = 0,
         record_count: int = 1,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.gb_record: SeqRecord = gb_record
         self.canvas_config: CircularCanvasConfigurator = canvas_config
         self.species: str | None = species
@@ -228,6 +232,7 @@ class DefinitionGroup:
             show_gc=show_gc,
             font_size=active_font_size,
             name_font_weight=active_name_font_weight,
+            record_transform=self.record_transform,
         )
 
     def _measure_local_bounds(self) -> Aabb:

@@ -53,6 +53,7 @@ from gbdraw.api.requests import (
     CircularDiagramRequest as _CircularDiagramRequest,
     InMemoryRecordSource as _InMemoryRecordSource,
     LinearDiagramRequest as _LinearDiagramRequest,
+    RecordDisplayOptions,
     RecordInput as _RecordInput,
 )
 from gbdraw.api.render import render_to_bytes
@@ -924,11 +925,30 @@ def _interactive_context(
     return context
 
 
+def _record_inputs(
+    records: tuple[SeqRecord, ...],
+    record_displays: Sequence[RecordDisplayOptions] | None,
+) -> tuple[_RecordInput, ...]:
+    if record_displays is None:
+        record_displays = (RecordDisplayOptions(),) * len(records)
+    if isinstance(record_displays, (str, bytes)) or not isinstance(record_displays, Sequence):
+        raise ValidationError("record_displays must be a sequence of RecordDisplayOptions.")
+    if len(record_displays) != len(records):
+        raise ValidationError("record_displays must contain exactly one entry per record.")
+    if not all(isinstance(display, RecordDisplayOptions) for display in record_displays):
+        raise ValidationError("record_displays must contain only RecordDisplayOptions.")
+    return tuple(
+        _RecordInput(source=_InMemoryRecordSource(record), display=display)
+        for record, display in zip(records, record_displays)
+    )
+
+
 def draw_circular(
     records: RecordCollection,
     *,
     options: CircularOptions | None = None,
     layout: CircularLayout | None = None,
+    record_displays: Sequence[RecordDisplayOptions] | None = None,
 ) -> Diagram:
     """Draw one circular record or a multi-record circular grid."""
 
@@ -941,10 +961,7 @@ def draw_circular(
     compiled = _circular_options(options, record_count=len(normalized))
     prepared = _build_request_diagram(
         _CircularDiagramRequest(
-            records=tuple(
-                _RecordInput(source=_InMemoryRecordSource(record))
-                for record in normalized
-            ),
+            records=_record_inputs(normalized, record_displays),
             options=compiled,
             layout=layout._legacy() if layout is not None else None,
         )
@@ -965,6 +982,7 @@ def draw_linear(
     *,
     options: LinearOptions | None = None,
     layout: LinearLayout | None = None,
+    record_displays: Sequence[RecordDisplayOptions] | None = None,
 ) -> Diagram:
     """Draw one or more records as a linear diagram."""
 
@@ -977,10 +995,7 @@ def draw_linear(
     compiled = _linear_options(options, record_count=len(normalized))
     prepared = _build_request_diagram(
         _LinearDiagramRequest(
-            records=tuple(
-                _RecordInput(source=_InMemoryRecordSource(record))
-                for record in normalized
-            ),
+            records=_record_inputs(normalized, record_displays),
             options=compiled,
             layout=layout._legacy() if layout is not None else None,
         )
@@ -997,6 +1012,7 @@ def draw_linear(
 
 
 __all__ = [
+    "RecordDisplayOptions",
     "CircularLayout",
     "CircularOptions",
     "CircularTrackOptions",

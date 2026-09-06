@@ -27,6 +27,8 @@ from ....layout.scalar_axis import (
 from ....svg.circular_tracks import generate_circular_depth_path_desc
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class DepthDrawer:
     """Draws a depth coverage track on a circular canvas."""
 
@@ -153,6 +155,7 @@ class DepthDrawer:
         track_width: float,
         norm_factor: float,
         axis_group_id: str = "depth_axis",
+        record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         plot_df = _prepare_depth_plot_dataframe(
             depth_df,
@@ -161,7 +164,8 @@ class DepthDrawer:
             normalize=self.normalize,
         )
         depth_path_desc = generate_circular_depth_path_desc(
-            radius, record_len, plot_df, track_width, norm_factor
+            radius, record_len, plot_df, track_width, norm_factor,
+            record_transform=record_transform,
         )
         if not depth_path_desc:
             return group

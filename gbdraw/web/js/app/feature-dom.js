@@ -74,7 +74,7 @@ export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   const normalizedId = String(featureId || '').trim();
   if (!svg || !normalizedId) return [];
 
-  const indexed = featureIndex || featureElementIndexCache.get(svg);
+  const indexed = featureIndex || getFeatureElementIndex(svg);
   const indexedElements = indexed?.get?.(normalizedId);
   if (indexedElements?.length) return indexedElements;
 

@@ -16,7 +16,8 @@ from .objects import GeneObject, RepeatObject, FeatureObject
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
-from .coordinates import get_exon_and_intron_coordinates
+from .coordinates import get_exon_and_intron_coordinates, project_feature_parts
+from ..layout.record_coordinates import RecordDisplayTransform
 from .shapes import (
     DEFAULT_DIRECTIONAL_FEATURE_TYPES,
     FeatureGlyph,
@@ -172,6 +173,7 @@ def _build_feature_layers(
     split_overlaps_by_strand: bool = False,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> FeatureBuildResult:
     foreground_features: Dict[str, FeatureObject] = {}
     underlay_features: list[FeatureObject] = []
@@ -255,6 +257,11 @@ def _build_feature_layers(
             if source_feature_index is None
             else source_feature_index
         )
+        if record_transform is not None and record_transform.start_coordinate is not None:
+            feature_object.display_parts = project_feature_parts(
+                feature.location.parts, record_transform,
+                is_trans_spliced="trans_splicing" in feature.qualifiers,
+            )
         if rendering == "underlay":
             underlay_features.append(feature_object)
         else:
@@ -286,6 +293,7 @@ def create_feature_layers(
     feature_shapes: Mapping[str, str] | None = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> FeatureBuildResult:
     """Build visible features using the current rendering contract."""
 
@@ -305,6 +313,7 @@ def create_feature_layers(
         split_overlaps_by_strand=split_overlaps_by_strand,
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
+        record_transform=record_transform,
     )
 
 

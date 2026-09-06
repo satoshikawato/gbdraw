@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Hashable, Literal, Sequence
 
@@ -12,6 +12,7 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_conservation_table,
@@ -25,6 +26,7 @@ from gbdraw.io.record_select import (
     reverse_records,
 )
 from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.linear_comparison import LinearComparison
 
@@ -46,6 +48,7 @@ from .requests import (
     InMemoryRecordSource,
     RecordCardinality,
     RecordCollectionOptions,
+    RecordDisplayOptions,
     RecordInput,
     RecordInputSource,
     RecordPresentation,
@@ -56,6 +59,62 @@ logger = logging.getLogger(__name__)
 
 GenBankLoader = Callable[..., list[SeqRecord]]
 GffFastaLoader = Callable[..., list[SeqRecord]]
+
+
+@dataclass(frozen=True)
+class ResolvedRecordDisplay:
+    """Transient display intent resolved from complete source facts."""
+
+    detected_topology: Literal["circular", "linear", "unknown"]
+    is_circular: bool
+    start_coordinate: int | None
+    current_start_coordinate: int
+    orientation_step: Literal[-1, 1]
+
+
+def resolve_record_display(
+    options: RecordDisplayOptions,
+    *,
+    source_length: int,
+    detected_topology: Literal["circular", "linear", "unknown"],
+    source_base: int,
+    source_step: Literal[-1, 1],
+    has_input_region: bool = False,
+    has_collection_region: bool = False,
+    is_cropped: bool = False,
+) -> ResolvedRecordDisplay:
+    """Validate supplied source facts without loading or transforming records.
+
+    The caller supplies the full source length/topology, the existing affine
+    map from core.record_metadata, and crop applicability for this record.
+    Neither source facts nor crop state are inferred from a materialized length.
+    current_start_coordinate is the existing affine start before extra rotation.
+    """
+    if not isinstance(options, RecordDisplayOptions):
+        raise ValidationError("Record display has an unsupported type.")
+    if detected_topology not in ("circular", "linear", "unknown"):
+        raise ValidationError("Detected topology must be circular, linear, or unknown.")
+    crop_flags = (has_input_region, has_collection_region, is_cropped)
+    if not all(isinstance(value, bool) for value in crop_flags):
+        raise ValidationError("Resolved crop flags must be booleans.")
+    if options.start_coordinate is not None and any(crop_flags):
+        raise ValidationError("An explicit display start cannot be combined with a crop.")
+    is_circular = (
+        detected_topology == "circular"
+        if options.is_circular is None
+        else options.is_circular
+    )
+    # The transform owns length, affine-domain, orientation and anchor validation.
+    RecordDisplayTransform(
+        source_length, source_base, source_step, options.start_coordinate, is_circular,
+    )
+    return ResolvedRecordDisplay(
+        detected_topology=detected_topology,
+        is_circular=is_circular,
+        start_coordinate=options.start_coordinate,
+        current_start_coordinate=source_base,
+        orientation_step=source_step,
+    )
 
 
 @dataclass(frozen=True)
@@ -74,6 +133,12 @@ class ResolvedRecordProvenance:
     selector: RecordSelector | None
     region: RegionSpec | None
     presentation: RecordPresentation
+    display: RecordDisplayOptions = field(default_factory=RecordDisplayOptions)
+    source_length: int | None = None
+    detected_topology: Literal["circular", "linear", "unknown"] = "unknown"
+    is_cropped: bool = False
+    has_collection_region: bool = False
+    resolved_display: ResolvedRecordDisplay | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +147,8 @@ class ResolvedRecordCollection:
 
     records: tuple[SeqRecord, ...]
     provenance: tuple[ResolvedRecordProvenance, ...]
+    displays: tuple[ResolvedRecordDisplay, ...] = field(init=False)
+    transforms: tuple[RecordDisplayTransform, ...] = field(init=False)
 
     def __post_init__(self) -> None:
         if not self.records:
@@ -90,6 +157,46 @@ class ResolvedRecordCollection:
             raise ValidationError(
                 "Resolved record provenance must align with displayed records."
             )
+        provenance = []
+        displays = []
+        transforms = []
+        for record, item in zip(self.records, self.provenance, strict=True):
+            base, step = _read_coord_map(record)
+            cropped = item.is_cropped or bool(record.annotations.get("gbdraw_region_applied"))
+            length = item.source_length
+            if length is None and not cropped:
+                length = len(record)
+            try:
+                display = resolve_record_display(
+                    item.display,
+                    source_length=length,
+                    detected_topology=item.detected_topology,
+                    source_base=base,
+                    source_step=step,
+                    has_input_region=item.region is not None,
+                    has_collection_region=item.has_collection_region,
+                    is_cropped=cropped,
+                )
+                transform = RecordDisplayTransform(
+                    length, base, step, display.start_coordinate, display.is_circular,
+                )
+            except ValidationError as exc:
+                raise ValidationError(
+                    f"Record {item.record_key!r} (input {item.input_index + 1}, "
+                    f"source {item.source_paths or item.source_kind}, "
+                    f"selector {item.selector}, record {item.source_record_id!r}): {exc}"
+                ) from exc
+            displays.append(display)
+            transforms.append(transform)
+            provenance.append(replace(item, resolved_display=display))
+        object.__setattr__(self, "provenance", tuple(provenance))
+        object.__setattr__(self, "displays", tuple(displays))
+        object.__setattr__(self, "transforms", tuple(transforms))
+
+
+def _detected_topology(record: SeqRecord, source_kind: str):
+    value = str(record.annotations.get("topology", "")).strip().lower()
+    return value if source_kind != "gff_fasta" and value in {"circular", "linear"} else "unknown"
 
 
 @dataclass(frozen=True)
@@ -388,7 +495,8 @@ def _cardinality_indexes(
             raise ValidationError(
                 f"RecordInput #{input_index + 1} requires exactly one record; "
                 f"resolved {len(selected)}. Add a selector, use "
-                "RecordCardinality.FIRST, or explicitly use RecordCardinality.ALL."
+                "RecordCardinality.FIRST, or explicitly use RecordCardinality.ALL. "
+                "For per-record CLI settings, use --records_table."
             )
         return selected
     if not selected:
@@ -444,6 +552,8 @@ def _apply_provenance_annotations(
             "gbdraw_source_paths": provenance.source_paths,
         }
     )
+    if provenance.source_length is not None:
+        record.annotations["gbdraw_source_length"] = provenance.source_length
     if provenance.source_paths:
         record.annotations["gbdraw_source_file"] = provenance.source_paths[0]
         record.annotations["gbdraw_source_basename"] = Path(
@@ -518,7 +628,9 @@ def resolve_record_inputs(
         source_kind, source_paths = _source_details(record_input.source)
         expands = len(source_indexes) > 1
         for source_record_index in source_indexes:
-            record = copy.deepcopy(raw_records[source_record_index])
+            source_record = raw_records[source_record_index]
+            source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
+            record = copy.deepcopy(source_record)
             record = reverse_records(
                 (record,),
                 record_input.presentation.reverse_complement,
@@ -552,6 +664,11 @@ def resolve_record_inputs(
                 selector=selector,
                 region=record_input.region,
                 presentation=record_input.presentation,
+                display=record_input.display,
+                source_length=(source_record.annotations.get("gbdraw_source_length")
+                               if source_cropped else len(source_record)),
+                detected_topology=_detected_topology(source_record, source_kind),
+                is_cropped=source_cropped,
             )
             _apply_presentation(
                 record,
@@ -561,11 +678,14 @@ def resolve_record_inputs(
             _apply_provenance_annotations(record, item)
             records.append(record)
             provenance.append(item)
+    before_collection = records
     records = _apply_collection_options(
         records,
         provenance,
         record_options or RecordCollectionOptions(),
     )
+    provenance = [replace(item, has_collection_region=record is not before)
+                  for item, record, before in zip(provenance, records, before_collection, strict=True)]
     return ResolvedRecordCollection(tuple(records), tuple(provenance))
 
 
@@ -701,6 +821,10 @@ def record_input_manifest_from_table(path: str) -> RecordInputManifest:
                 source=source,
                 cardinality=RecordCardinality.EXACTLY_ONE,
                 selector=parse_record_selector(row.record_id),
+                display=RecordDisplayOptions(
+                    is_circular=None if row.topology is None else row.topology == "circular",
+                    start_coordinate=row.display_start,
+                ),
                 region=parse_region_spec(row.region) if row.region else None,
                 presentation=RecordPresentation(
                     label=row.record_label or None,
