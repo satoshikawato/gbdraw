@@ -8,3 +8,10 @@ Its decompressed SHA-256 is
 
 The schema-v2 fixture is the older supported compatibility case. Its expected
 projection is recorded in the adjacent `.expected.json` file.
+
+`HmmtDNA_basic_circular.issue-469.json.gz` preserves the unmodified JSON from
+`0f00436da728402d06d4a8fdce80cff63b552488:gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json`.
+Its decompressed SHA-256 is
+`69786dd18f7a431441085fad3e7d20ed9b54ed2f0b5aeac9685dbb3a704e6da1`.
+`test_run_info_exact_replay.py` applies only the title and unused-resource changes
+specified in [Issue #469](https://github.com/satoshikawato/gbdraw/issues/469).
