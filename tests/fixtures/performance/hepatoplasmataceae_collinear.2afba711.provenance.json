@@ -1,0 +1,11 @@
+{
+  "sourceCommit": "6e83a7bc468883441d09db3f7fcfcdf052a1ef30",
+  "sourcePath": "gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+  "gitBlobId": "f24d5423ab14a91e241ba6b03a4f6e7284fb6947",
+  "byteLength": 11408412,
+  "sha256": "2afba7111520b9dd7b00dffd351a1f4a21d4e0d9bfbaebc25ba7b5a937288577",
+  "format": "gbdraw-session",
+  "sessionVersion": 40,
+  "renderRequestSchema": 5,
+  "role": "Fixed historical input for session regeneration and large-preview interaction performance on the current app. Original gzip bytes, saved state, operations, and thresholds are preserved independently of public Gallery updates."
+}

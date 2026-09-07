@@ -15,11 +15,10 @@ const {
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixturePath = join(
   repoRoot,
-  'gbdraw',
-  'web',
-  'gallery',
-  'sessions',
-  'hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+  'tests',
+  'fixtures',
+  'performance',
+  'hepatoplasmataceae_collinear.2afba711.gbdraw-session.json.gz'
 );
 const EXPECTED_FIXTURE_SHA = '2afba7111520b9dd7b00dffd351a1f4a21d4e0d9bfbaebc25ba7b5a937288577';
 const fixtureSha = createHash('sha256').update(readFileSync(fixturePath)).digest('hex');
