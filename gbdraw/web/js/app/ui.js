@@ -229,6 +229,8 @@ export const createPanZoom = (state) => {
       return;
     }
 
+    // Own the accepted pan instead of starting native SVG text selection/drag.
+    event.preventDefault?.();
     cancelPanFrame();
     pendingPanPointer = null;
     beginPreviewTransformInteraction('pan', event);
@@ -254,8 +256,10 @@ export const createPanZoom = (state) => {
 
   const endPan = (event) => {
     const wasPanning = isPanning.value;
+    // Cancellation and capture loss may carry (0, 0), not a pointer position.
     const finalPointer =
-      typeof event?.clientX === 'number' && typeof event?.clientY === 'number'
+      event?.type !== 'pointercancel' && event?.type !== 'lostpointercapture'
+      && Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
         ? { x: event.clientX, y: event.clientY }
         : pendingPanPointer;
     cancelPanFrame();
