@@ -7,6 +7,9 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
+# Direct script execution puts helpers/, not the repository, on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
 from Bio import SeqIO
 from gbdraw.api import load_session_document, materialize_session, session_to_request
 from gbdraw.api.request_render import plan_request

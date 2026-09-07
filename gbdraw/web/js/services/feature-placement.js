@@ -34,4 +34,3 @@ const compareSourceIdentity = (left, right) => {
   }
   return a.length - b.length;
 };
-

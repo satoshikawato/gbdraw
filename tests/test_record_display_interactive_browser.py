@@ -9,7 +9,6 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
-from playwright.sync_api import sync_playwright
 
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.render.interactive_context import build_interactive_svg_context
@@ -19,6 +18,13 @@ from tests.test_record_display_comparisons import hit_frame, record, request, sv
 
 pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture
+def sync_playwright():
+    from playwright.sync_api import sync_playwright
+
+    return sync_playwright
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +71,7 @@ def interactive_fixture(mode, reverse, start=41, manual=False):
     ("linear", True, False), ("circular", True, False),
     ("linear", True, True), ("circular", True, True),
 ])
-def test_display_fragments_preview_and_standalone_source_actions(source_server, tmp_path, mode, reverse, manual):
+def test_display_fragments_preview_and_standalone_source_actions(source_server, tmp_path, mode, reverse, manual, sync_playwright):
     source, standalone, catalog = interactive_fixture(mode, reverse, manual=manual)
     (tmp_path / "source.svg").write_text(source)
     standalone_path = tmp_path / "standalone.svg"
@@ -238,7 +244,7 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
 
 
 @pytest.mark.parametrize("conflict", ["endpoint", "fragment_index", "feature_claim"])
-def test_standalone_rejects_conflicting_fragment_or_source_identity(tmp_path, conflict):
+def test_standalone_rejects_conflicting_fragment_or_source_identity(tmp_path, conflict, sync_playwright):
     _, standalone, _ = interactive_fixture("linear", False)
     root = ET.fromstring(standalone)
     paths = [n for n in root.iter() if n.get("data-gbdraw-match-id")]
@@ -268,7 +274,7 @@ def test_standalone_rejects_conflicting_fragment_or_source_identity(tmp_path, co
         browser.close()
 
 
-def test_circular_grid_match_actions_resolve_duplicate_record_instances(tmp_path):
+def test_circular_grid_match_actions_resolve_duplicate_record_instances(tmp_path, sync_playwright):
     from dataclasses import replace
     from gbdraw.api.options import CircularMultiRecordOptions
     items = [record(), record()]

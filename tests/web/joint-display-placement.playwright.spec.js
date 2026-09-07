@@ -5,6 +5,10 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
+const replayEnv = { ...process.env };
+delete replayEnv.PYTHONPATH;
+delete replayEnv.PYTHONHOME;
+
 test.beforeEach(async ({ page }) => {
   page.on('dialog', async (dialog) => { console.log('Session dialog:', dialog.message()); await dialog.dismiss(); });
   page.on('console', (message) => { if (message.type() === 'error') console.log('Browser error:', message.text()); });
@@ -123,7 +127,7 @@ for (const mode of ['circular', 'linear']) {
     await fs.writeFile(sourcePath, source);
     await fs.writeFile(infoPath, JSON.stringify(runInfo));
     const replay = spawnSync('python', [path.resolve('tests/web/helpers/joint-replay.py'), bundlePath,
-      sourcePath, infoPath, testInfo.outputPath('replay')], { encoding: 'utf8' });
+      sourcePath, infoPath, testInfo.outputPath('replay')], { encoding: 'utf8', env: replayEnv });
     expect(replay.status, replay.stdout + replay.stderr).toBe(0);
     await start.fill('91');
     await start.press('Tab');
@@ -368,7 +372,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
     await fs.writeFile(sourcePath, source); await fs.writeFile(infoPath, JSON.stringify(runInfo));
     const expected = intent === 'rotation' ? { start: 71, placements: 0, tolerance: 0 } : { start: null, placements: 1, tolerance: 1 };
     const result = spawnSync('python', [path.resolve('tests/web/helpers/joint-replay.py'), bundlePath, sourcePath, infoPath,
-      testInfo.outputPath('replay'), JSON.stringify(expected)], { encoding: 'utf8' });
+      testInfo.outputPath('replay'), JSON.stringify(expected)], { encoding: 'utf8', env: replayEnv });
     expect(result.status, result.stdout + result.stderr).toBe(0);
   });
 }
