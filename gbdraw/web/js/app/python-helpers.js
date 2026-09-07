@@ -836,34 +836,35 @@ def resolve_legacy_protein_reference_map_json(
     except Exception:
         return json.dumps({"status": "error", "error": traceback.format_exc()})
 
-def build_protein_losat_cache_key_json(
+def build_protein_losat_cache_keys_json(
     identity_manifest_json,
-    query_record_instance_key,
-    subject_record_instance_key,
-    expected_options_json,
+    pairs_json,
 ):
-    """Build the directional schema-4 key with the Python identity owner."""
+    """Build directional schema-4 keys after validating the manifest once."""
     try:
         from gbdraw.analysis.protein_colinearity import (
             build_protein_losat_cache_key,
             build_protein_losat_pair_identity,
+            validate_protein_identity_manifest,
         )
 
-        manifest = json.loads(str(identity_manifest_json))
-        options = json.loads(str(expected_options_json))
-        pair_identity = build_protein_losat_pair_identity(
-            manifest,
-            query_record_instance_key=str(query_record_instance_key),
-            subject_record_instance_key=str(subject_record_instance_key),
-        )
-        return json.dumps({
-            "key": build_protein_losat_cache_key(
+        manifest = validate_protein_identity_manifest(json.loads(str(identity_manifest_json)))
+        pairs = json.loads(str(pairs_json))
+        keys = []
+        for pair in pairs:
+            pair_identity = build_protein_losat_pair_identity(
+                manifest,
+                query_record_instance_key=str(pair["queryRecordInstanceKey"]),
+                subject_record_instance_key=str(pair["subjectRecordInstanceKey"]),
+            )
+            options = pair["expectedOptions"]
+            keys.append(build_protein_losat_cache_key(
                 pair_identity,
                 args=options.get("args") or [],
                 program=str(options.get("program") or "blastp"),
                 outfmt=str(options.get("outfmt") or "6"),
-            )
-        })
+            ))
+        return json.dumps({"keys": keys})
     except Exception:
         return json.dumps({"error": traceback.format_exc()})
 

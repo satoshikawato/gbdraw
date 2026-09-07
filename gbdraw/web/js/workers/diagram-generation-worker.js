@@ -558,22 +558,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]);
     }
   },
-  [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY]: {
-    keys: [
-      'identityManifest',
-      'queryRecordInstanceKey',
-      'subjectRecordInstanceKey',
-      'expectedOptions'
-    ],
+  [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS]: {
+    keys: ['identityManifest', 'pairs'],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
       pyodide,
-      'build_protein_losat_cache_key_json',
+      'build_protein_losat_cache_keys_json',
       [
         jsonArgument(payload.identityManifest, {}),
-        String(payload.queryRecordInstanceKey || ''),
-        String(payload.subjectRecordInstanceKey || ''),
-        jsonArgument(payload.expectedOptions, {})
+        jsonArgument(payload.pairs, [])
       ]
     )
   },

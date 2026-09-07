@@ -3274,30 +3274,6 @@ export const createRunAnalysis = ({
           };
         };
 
-        const buildCacheKey = async (metadata) => {
-          if (metadata?.identityKind === 'protein') {
-            const response = await runDiagramHelperOperation(
-              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY,
-              {
-                identityManifest: cloneJsonData(workingProteinIdentityManifest),
-                queryRecordInstanceKey: metadata.queryRecordInstanceKey,
-                subjectRecordInstanceKey: metadata.subjectRecordInstanceKey,
-                expectedOptions: {
-                  program: metadata.program,
-                  outfmt: metadata.outfmt,
-                  args: normalizeLosatArgs(metadata.args)
-                }
-              }
-            );
-            const result = response.result;
-            if (result.error || !result.key) {
-              throw new Error(result.error || 'Protein cache key generation failed.');
-            }
-            return String(result.key);
-          }
-          return hashText(JSON.stringify(buildLosatCachePayload(metadata)));
-        };
-
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
           metadata,
@@ -3616,15 +3592,54 @@ export const createRunAnalysis = ({
             }));
           }
 
+          const preparedJobs = [];
           for (const spec of jobSpecs) {
+            throwIfGenerationCanceled();
+            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
+            const cacheMetadata = await buildCacheMetadata(
+              losatArgs, spec.queryIndex, spec.subjectIndex
+            );
+            preparedJobs.push({ spec, losatArgs, cacheMetadata });
+          }
+          let proteinCacheKeys = null;
+          if (useProteinBlastp && preparedJobs.length > 0) {
+            throwIfGenerationCanceled();
+            const response = await runDiagramHelperOperation(
+              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS,
+              {
+                identityManifest: cloneJsonData(workingProteinIdentityManifest),
+                pairs: preparedJobs.map(({ cacheMetadata }) => ({
+                  queryRecordInstanceKey: cacheMetadata.queryRecordInstanceKey,
+                  subjectRecordInstanceKey: cacheMetadata.subjectRecordInstanceKey,
+                  expectedOptions: {
+                    program: cacheMetadata.program,
+                    outfmt: cacheMetadata.outfmt,
+                    args: normalizeLosatArgs(cacheMetadata.args)
+                  }
+                }))
+              }
+            );
+            throwIfGenerationCanceled();
+            const result = response.result;
+            if (
+              result.error || !Array.isArray(result.keys)
+              || result.keys.length !== preparedJobs.length
+              || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
+            ) {
+              throw new Error(result.error || 'Protein cache key generation failed.');
+            }
+            proteinCacheKeys = result.keys;
+          }
+
+          for (const [jobIndex, { spec, losatArgs, cacheMetadata }] of preparedJobs.entries()) {
             throwIfGenerationCanceled();
             const queryEntry = await getSeqEntry(spec.queryIndex);
             throwIfGenerationCanceled();
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
             throwIfGenerationCanceled();
-            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
-            const cacheMetadata = await buildCacheMetadata(losatArgs, spec.queryIndex, spec.subjectIndex);
-            const cacheKey = await buildCacheKey(cacheMetadata);
+            const cacheKey = useProteinBlastp
+              ? proteinCacheKeys[jobIndex]
+              : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
             throwIfGenerationCanceled();
             const queryCanonicalHash = await getSeqHash(spec.queryIndex);
             throwIfGenerationCanceled();
