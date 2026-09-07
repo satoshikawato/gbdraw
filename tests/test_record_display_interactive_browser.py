@@ -35,10 +35,18 @@ def source_server():
     thread.join()
 
 
-def interactive_fixture(mode, reverse, start=41):
+def interactive_fixture(mode, reverse, start=41, manual=False):
     items = [record(), record(120, "subject")]
     options = ({"linear_comparisons": [LinearComparison(0, 1, hit_frame())]} if mode == "linear" else
                {"conservation_dataframes": [hit_frame()], "conservation_reference": "query"})
+    if manual:
+        from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
+        from gbdraw.features.source import build_source_feature_catalog
+        options.update(feature_placements=(FeaturePlacementOverride(
+            "record-1", build_source_feature_catalog(items[0])[0].biological_feature_id,
+            FeaturePlacementTarget("lane", "below" if mode == "linear" else "inward", 1),
+        ),), config_overrides={"canvas.strandedness": False,
+            ("canvas.linear.track_layout" if mode == "linear" else "canvas.circular.track_type"): "middle"})
     plan, root = svg(request(mode, items if mode == "linear" else items[:1],
                              [start, 51] if mode == "linear" else [start],
                              [reverse, False] if mode == "linear" else [reverse], **options))
@@ -52,10 +60,13 @@ def interactive_fixture(mode, reverse, start=41):
     return ET.tostring(root, encoding="unicode"), standalone, catalog
 
 
-@pytest.mark.parametrize("mode", ["linear", "circular"])
-@pytest.mark.parametrize("reverse", [False, True])
-def test_display_fragments_preview_and_standalone_source_actions(source_server, tmp_path, mode, reverse):
-    source, standalone, catalog = interactive_fixture(mode, reverse)
+@pytest.mark.parametrize("mode,reverse,manual", [
+    ("linear", False, False), ("circular", False, False),
+    ("linear", True, False), ("circular", True, False),
+    ("linear", True, True), ("circular", True, True),
+])
+def test_display_fragments_preview_and_standalone_source_actions(source_server, tmp_path, mode, reverse, manual):
+    source, standalone, catalog = interactive_fixture(mode, reverse, manual=manual)
     (tmp_path / "source.svg").write_text(source)
     standalone_path = tmp_path / "standalone.svg"
     standalone_path.write_text(standalone)
@@ -164,7 +175,7 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
             feature_payloads.append(payload)
         assert feature_payloads[0] == feature_payloads[1]
 
-        b_source, _, _ = interactive_fixture(mode, reverse, start=11)
+        b_source, _, _ = interactive_fixture(mode, reverse, start=11, manual=manual)
         for content in (source, b_source, source):
             page.evaluate('fixtureMount', content)
             current_paths = page.locator('[data-gbdraw-match-id]')

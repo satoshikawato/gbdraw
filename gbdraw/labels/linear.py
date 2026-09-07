@@ -523,10 +523,18 @@ def prepare_label_list_linear(
         )
         longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
 
+        assignment = getattr(feature_object, "placement", None)
+        secondary_below = (
+            assignment is not None and assignment.side == "below"
+            and assignment.level > 0 and assignment.strand_pool == "combined"
+        )
+        label_below_feature = secondary_below or (
+            strandedness and coordinate_strand != "positive"
+        )
         if force_above_feature:
             # Above-feature mode tilts labels in the opposite direction of the user-provided angle.
             # In separate-strands mode, negative strand labels are mirrored and placed below features.
-            is_negative_separate = strandedness and coordinate_strand == "negative"
+            is_negative_separate = label_below_feature
             label_rotation_deg = base_rotation_deg if is_negative_separate else -base_rotation_deg
             label_text_anchor = "start" if label_rotation_deg != 0.0 else "middle"
         else:
@@ -540,7 +548,7 @@ def prepare_label_list_linear(
         label_contact_y_offset = 0.0
         label_leader_start_y = 0.0
         if force_above_feature:
-            place_above_feature = not (strandedness and coordinate_strand == "negative")
+            place_above_feature = not label_below_feature
             if label_rotation_deg == 0.0:
                 y_min_offset, y_max_offset = _rotated_y_bounds_from_anchor(
                     bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
@@ -574,6 +582,7 @@ def prepare_label_list_linear(
             "width_px": bbox_width_px,
             "height_px": bbox_height_px,
             "strand": coordinate_strand,
+            "secondary_below": secondary_below,
             "feature_middle_y": feature_y,  # Use actual feature position
             "feature_top_y": feature_top_y,
             "feature_bottom_y": feature_bottom_y,
@@ -592,7 +601,7 @@ def prepare_label_list_linear(
                 bbox_width_px, bbox_height_px, label_rotation_deg, label_text_anchor
             )
             label_vertical_gap = max(1.0, bbox_height_px * 0.05)
-            is_negative_separate = strandedness and coordinate_strand == "negative"
+            is_negative_separate = label_below_feature
             if is_negative_separate:
                 # Keep rotated label top edge below the feature bottom.
                 label_y = feature_bottom_y + label_vertical_gap - y_min_offset
@@ -661,7 +670,7 @@ def prepare_label_list_linear(
 
         for label in track_labels:
             # Compact vertical positioning for external labels
-            if track_layout_normalized == "below":
+            if track_layout_normalized == "below" or label["secondary_below"]:
                 label["middle_y"] = bottom_feature_y_limit + (track_height * track_num)
             else:
                 label["middle_y"] = top_feature_y_limit - (track_height * track_num)

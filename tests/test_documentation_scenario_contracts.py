@@ -54,6 +54,7 @@ SCREENSHOT_BUDGETS = {
     "H-GUI-13": 5,
     "H-GUI-14": 3,
     "H-GUI-15": 2,
+    "H-GUI-16": 2,
 }
 
 
@@ -146,7 +147,7 @@ def test_every_scenario_records_inputs_and_executable_proof() -> None:
         if chapter["role"] == "evidence":
             assert "destination" not in chapter
             if execution["kind"] in {"cli-recipe", "python-recipe"}:
-                assert execution["source"] == "docs/internal/SCENARIO_EVIDENCE.md"
+                assert execution["source"] == "docs/internal/SCENARIO_EVIDENCE.md" or execution["source"] in manifest["public_owners"]
                 assert _repo_path(execution["source"]).is_file()
         else:
             destination = _repo_path(chapter["destination"])
@@ -409,7 +410,7 @@ def test_public_destinations_and_execution_paths_keep_their_boundaries() -> None
         assert not chapter["execution"]["path"].startswith("docs/internal/")
         source = chapter["execution"].get("source")
         if source is not None:
-            assert source == "docs/internal/SCENARIO_EVIDENCE.md"
+            assert source == "docs/internal/SCENARIO_EVIDENCE.md" or source in _manifest()["public_owners"]
 
 
 def test_retired_public_categories_are_not_scenarios() -> None:

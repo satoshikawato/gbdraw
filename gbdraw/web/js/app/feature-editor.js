@@ -3,9 +3,13 @@ import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
 import { createFeatureSvgActions } from './feature-editor/svg-actions.js';
 import { createFeatureVisibilityActions } from './feature-editor/visibility-actions.js';
+import { createFeaturePlacementActions } from './feature-editor/placement-actions.js';
 
 export const createFeatureEditor = ({
   state,
+  history,
+  getCommittedRequest,
+  isCurrentFeature,
   nextTick,
   legendActions,
   svgActions,
@@ -43,6 +47,7 @@ export const createFeatureEditor = ({
   };
 
   return {
+    placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature }),
     addCustomColor: ruleActions.addCustomColor,
     addPriorityRule: ruleActions.addPriorityRule,
     addFeature: ruleActions.addFeature,

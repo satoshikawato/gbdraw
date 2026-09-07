@@ -16,10 +16,14 @@ Core feature data models.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, NamedTuple, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Literal, NamedTuple, Optional, cast
 
 from .shapes import FeatureGlyph
 from ..layout.record_coordinates import DisplayFragment
+
+
+if TYPE_CHECKING:
+    from .placement import FeaturePlacementAssignment
 
 
 FeatureSegmentKind = Literal["block", "line"]
@@ -120,6 +124,7 @@ class FeatureObject:
         self.label_text: str = label_text
         self.qualifiers: dict = qualifiers
         self.record_id: Optional[str] = record_id
+        self.placement: FeaturePlacementAssignment | None = None
         self.feature_track_id: int = 0
         self.source_feature_index: int | None = None
         self._feature_type: str = type

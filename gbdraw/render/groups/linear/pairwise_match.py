@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Dict, Mapping, Sequence, Tuple
 
@@ -19,6 +19,7 @@ from ....core.color import (
 )
 from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
+from ....layout.linear import VerticalBand
 from ....svg.ids import instance_svg_id
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....linear_comparison import project_match_endpoints
@@ -27,10 +28,11 @@ from ...drawers.linear.features import FeatureDrawer
 
 @dataclass(frozen=True)
 class LinearFeatureDomIndex:
-    """Rendered feature DOM identities keyed by source index and view ID."""
+    """Source-bound DOM identities and final feature attachment geometry."""
 
     by_source_index: Mapping[tuple[int, int], str]
     by_view_id: Mapping[tuple[int, str], tuple[str, ...]]
+    attachment_bands: Mapping[str, VerticalBand] = field(default_factory=dict)
 
 
 def build_linear_feature_dom_index(
@@ -363,6 +365,26 @@ class PairWiseMatchGroup:
                 rendered_ids.append(rendered_id)
         return ";".join(rendered_ids)
 
+    def _feature_attachment_y(self, row: object, role: str, default_y: float) -> float:
+        index = getattr(self, "feature_dom_index", None)
+        placement = getattr(self, f"{role}_placement", None)
+        other = getattr(self, "subject_placement" if role == "query" else "query_placement", None)
+        if index is None or not index.attachment_bands or placement is None or other is None:
+            return default_y
+        view_id = _attribute_text(_row_value(row, f"{role}_view_feature_svg_id", "")) or _attribute_text(
+            _row_value(row, f"{role}_feature_svg_id", "")
+        )
+        rendered_ids = self._rendered_feature_svg_id_values(
+            view_id, record_index=getattr(self, f"{role}_record_index"),
+            feature_index_value=_row_value(row, f"{role}_feature_index", ""),
+        )
+        bands = [index.attachment_bands[key] for key in rendered_ids.split(";") if key in index.attachment_bands]
+        if not bands:
+            return default_y
+        if placement.row < other.row:
+            return default_y + (max(band.bottom_y for band in bands) - placement.comparison_bottom_y)
+        return default_y + (min(band.top_y for band in bands) - placement.comparison_top_y)
+
     def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None,
                                    endpoints: tuple[float, float, float, float] | None = None) -> Path:
         """
@@ -405,12 +427,12 @@ class PairWiseMatchGroup:
             subject_start += self.subject_offset_x
             subject_end += self.subject_offset_x
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
-            query_start, query_end, getattr(self, "query_y", 0), is_query=True
+            query_start, query_end, self._feature_attachment_y(row, "query", getattr(self, "query_y", 0)), is_query=True
         )
         subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(
             subject_start,
             subject_end,
-            getattr(self, "subject_y", self.comparison_height),
+            self._feature_attachment_y(row, "subject", getattr(self, "subject_y", self.comparison_height)),
             is_query=False,
         )
 

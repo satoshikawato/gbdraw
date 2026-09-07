@@ -42,6 +42,8 @@ def test_root_namespace_is_the_small_beginner_facing_api() -> None:
         "DepthTrackOptions",
         "Diagram",
         "FeatureOptions",
+        "FeaturePlacementOverride",
+        "FeaturePlacementTarget",
         "LabelOptions",
         "LinearComparisonOptions",
         "LinearLayout",

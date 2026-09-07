@@ -5,6 +5,7 @@ the typed contracts and explicit render helpers used by pipelines and integratio
 """
 
 from .config import GbdrawConfig, apply_config_overrides, load_default_config
+from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from .io import (
     CircularTrackTable,
     ConservationTable,
@@ -175,6 +176,8 @@ from .tracks import (  # type: ignore[reportMissingImports]
 )
 
 __all__ = [
+    "FeaturePlacementOverride",
+    "FeaturePlacementTarget",
     # config
     "GbdrawConfig",
     "apply_config_overrides",

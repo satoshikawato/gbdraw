@@ -1,0 +1,24 @@
+{
+  "source_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_001879.2&rettype=gbwithparts&retmode=text",
+  "accession": "NC_001879.2",
+  "format": "gbwithparts",
+  "retrieved_utc": "2026-09-07T00:09:08.791161+00:00",
+  "source_size": 331860,
+  "source_sha256": "25c5b39fd25d702c0a390fe5e7480eda0ccc1e4d6d7c388445b4686049412a24",
+  "mirror_path": "gbdraw/web/tutorial-data/tobacco-plastome-regions/NC_001879.gbk",
+  "mirror_size": 331860,
+  "mirror_sha256": "25c5b39fd25d702c0a390fe5e7480eda0ccc1e4d6d7c388445b4686049412a24",
+  "comparison": "BYTE_IDENTICAL",
+  "normalization": null,
+  "additional_sources": [
+    {
+      "accession": "NC_012920.1",
+      "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id=NC_012920.1&rettype=gbwithparts&retmode=text",
+      "retrieved_utc": "2026-09-07T00:33:50.886052+00:00",
+      "mirror": "gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk",
+      "mirror_size": 64640,
+      "mirror_sha256": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f",
+      "authoritative_bytes_match": true
+    }
+  ]
+}

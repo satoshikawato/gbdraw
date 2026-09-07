@@ -7,6 +7,8 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 """
 
 from __future__ import annotations
+
+from gbdraw.features.placement import FeaturePlacementSlot
 from ...layout.record_labels import source_ruler_ticks
 
 import copy
@@ -1771,11 +1773,18 @@ def assemble_linear_diagram(
             "WARNING: --show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
         )
 
+    resolved_feature_slot = next(
+        (slot for slot in normalized_linear_track_slots if slot.renderer == "features"),
+        None,
+    )
     record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
         profile,
         record_transforms=record_transforms,
+        placement_slot=(FeaturePlacementSlot(
+            "linear", resolved_feature_slot.side, profile.strandedness,
+        ) if resolved_feature_slot is not None else None),
     )
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
@@ -2406,9 +2415,11 @@ def assemble_linear_diagram(
         )
     # Row spacing reserves labels, but ribbon endpoints attach to track paint.
     # Resolve this after both layout paths have fixed every slot and record.
+    feature_attachment_bands: dict[str, VerticalBand] = {}
     for record_index, placement in record_placements.items():
         plan = record_vertical_plans[record_index]
         attachment_band = plan.axis_band
+        non_feature_band: VerticalBand | None = None
         for slot in plan.slots:
             band = slot.paint_band
             if band is None:
@@ -2417,6 +2428,8 @@ def assemble_linear_diagram(
                 band = record_feature_lane_geometries[
                     record_index
                 ].occupied_band.translate(slot.origin_y)
+            else:
+                non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
             attachment_band = attachment_band.union(band)
         record_placements[record_index] = replace(
             placement,
@@ -2427,6 +2440,33 @@ def assemble_linear_diagram(
                 placement.axis_y + attachment_band.bottom_y + comparison_endpoint_gap_px
             ),
         )
+        # Feature-associated matches follow their endpoint features. A moved
+        # feature must not shorten matches attached to another occupied lane.
+        features = record_feature_dicts[record_index]
+        if not any(feature.placement is not None and feature.placement.requested_target is not None
+                   for feature in features.values()):
+            continue
+        if not any(feature.placement is not None and feature.placement.level > 0
+                   for feature in features.values()):
+            continue
+        for slot in plan.slots:
+            if slot.renderer != "features" or slot.paint_band is None:
+                continue
+            geometry = record_feature_lane_geometries[record_index]
+            for feature in features.values():
+                dom_id = feature_dom_index.by_source_index.get((record_index, feature.source_feature_index))
+                if dom_id is None:
+                    continue
+                lane = geometry.lane_for(strand=feature.strand, track_id=feature.feature_track_id,
+                                         separate_strands=render_context.profile.strandedness)
+                band = lane.band.translate(slot.origin_y)
+                if non_feature_band is not None:
+                    band = band.union(non_feature_band)
+                feature_attachment_bands[dom_id] = VerticalBand(
+                    placement.axis_y + band.top_y - comparison_endpoint_gap_px,
+                    placement.axis_y + band.bottom_y + comparison_endpoint_gap_px,
+                )
+    feature_dom_index = replace(feature_dom_index, attachment_bands=feature_attachment_bands)
 
     canvas: Drawing = canvas_config.create_svg_canvas()
     primary_target_start = len(getattr(canvas, "elements", []))
@@ -2872,6 +2912,10 @@ def assemble_linear_diagram(
                 boundary_gap_resolutions=boundary_gap_resolutions,
             ),
         )
+    if resolved_feature_slot is not None:
+        targets = FeaturePlacementSlot("linear", resolved_feature_slot.side, profile.strandedness).supported_targets()
+        for record_geometry in getattr(canvas, "_gbdraw_track_slot_geometry", {}).get("records", []):
+            record_geometry["featurePlacementTargets"] = targets
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
 

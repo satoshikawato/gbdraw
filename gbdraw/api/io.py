@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from gbdraw.features.source import SourceFeatureIdentity
+
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
@@ -71,6 +73,8 @@ def load_gff_fasta(
     reverse_flags: list[bool] | None = None,
     color_table: DataFrame | None = None,
     feature_visibility_table: DataFrame | None = None,
+    *,
+    source_feature_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = None,
 ) -> list[SeqRecord]:
     """Load paired GFF3 + FASTA files without applying diagram-mode policy."""
 
@@ -92,6 +96,7 @@ def load_gff_fasta(
             keep_all_features=resolved_keep_all_features,
             record_selectors=record_selectors,
             reverse_flags=reverse_flags,
+            source_feature_catalogs=source_feature_catalogs,
         )
     except ValueError as exc:
         raise ValidationError(str(exc)) from exc

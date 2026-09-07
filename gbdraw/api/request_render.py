@@ -85,6 +85,9 @@ from .options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
+from gbdraw.features.placement import ResolvedPlacementInputs, resolve_placement_inputs
+from gbdraw.features.source import build_source_feature_catalog
+
 from .prepared import (
     PreparedResourceIdentity,
     ResolvedFeatureInputs,
@@ -370,6 +373,7 @@ class PreparedDiagramInputs:
     gff_candidate_features: tuple[str, ...]
     gff_keep_all_features: bool
     comparison_sequences: _ComparisonSequenceSources | None = None
+    placements: tuple[ResolvedPlacementInputs, ...] = ()
 
 
 def _is_current_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
@@ -694,6 +698,8 @@ class CircularRequestPlan:
             if self.inputs is not None
             else {}
         )
+        if self.inputs is not None and self.inputs.placements:
+            shared_kwargs["_resolved_placement_inputs"] = self.inputs.placements
         if self.layout is None:
             depth_kwargs: dict[str, Any] = dict(shared_kwargs)
             if self.precomputed_depth_track_specs is not None:
@@ -802,12 +808,15 @@ class CircularBatchRequestPlan:
             item_request = CircularDiagramRequest(
                 records=(
                     RecordInput(
-                        source=InMemoryRecordSource(record),
+                        source=InMemoryRecordSource(record, source_feature_catalog=self.provenance[index].source_feature_catalog),
                         record_key=self.request.records[index].record_key,
                         display=self.request.records[index].display,
                     ),
                 ),
-                options=item_options,
+                options=replace(item_options, feature_placements=tuple(
+                    item for item in item_options.feature_placements
+                    if item.record_key == self.provenance[index].record_key
+                )) if item_options.feature_placements else item_options,
                 output=output,
                 grouping="single",
             )
@@ -824,7 +833,8 @@ class CircularBatchRequestPlan:
                     precomputed_depth_track_count=(
                         logical_depth_count if normalized_depth is not None else None
                     ),
-                    inputs=self.inputs,
+                    inputs=(replace(self.inputs, placements=(self.inputs.placements[index],))
+                            if self.inputs is not None and self.inputs.placements else self.inputs),
                     displays=(self.displays[index],),
                     transforms=(self.transforms[index],),
                     provenance=(
@@ -904,6 +914,8 @@ class LinearRequestPlan:
             kwargs["protein_extraction"] = protein_extraction
         if self.inputs is not None:
             kwargs["_resolved_feature_inputs"] = self.inputs.features
+            if self.inputs.placements:
+                kwargs["_resolved_placement_inputs"] = self.inputs.placements
         kwargs["_record_transforms"] = self.transforms
         built = build_linear_diagram_result(self.records, **kwargs)
         if isinstance(built, LinearDiagramBuildResult):
@@ -1178,6 +1190,7 @@ def _coerce_resolved_collection(
                 display=record_input.display,
                 source_length=record.annotations.get("gbdraw_source_length"),
                 detected_topology=_detected_topology(record, source_kind),
+                source_feature_catalog=build_source_feature_catalog(record),
             )
         )
     return ResolvedRecordCollection(records, tuple(provenance))
@@ -1210,7 +1223,7 @@ def _materialized_record_inputs(
         source_presentation = provenance.presentation
         materialized.append(
             RecordInput(
-                source=InMemoryRecordSource(record),
+                source=InMemoryRecordSource(record, source_feature_catalog=provenance.source_feature_catalog),
                 presentation=RecordPresentation(
                     label=str(label) if label is not None else None,
                     subtitle=str(subtitle) if subtitle is not None else None,
@@ -1327,6 +1340,38 @@ def _linear_layout_with_record_placements(
     return replace(layout, multi_record_positions=positions)
 
 
+def _materialize_placement_inputs(
+    request: DiagramRequest, collection: ResolvedRecordCollection, inputs: PreparedDiagramInputs,
+) -> tuple[DiagramRequest, PreparedDiagramInputs]:
+    options = request.options
+    if (not options.feature_placements and options.feature_placement_table is None
+            and options.feature_placement_table_file is None):
+        return request, inputs
+    catalogs = tuple(
+        item.source_feature_catalog if item.source_feature_catalog is not None
+        else build_source_feature_catalog(record)
+        for item, record in zip(collection.provenance, collection.records, strict=True)
+    )
+    exact, placements = resolve_placement_inputs(
+        records=collection.records,
+        record_keys=tuple(item.record_key for item in collection.provenance),
+        source_record_ids=tuple(item.source_record_id for item in collection.provenance),
+        source_catalogs=catalogs, overrides=options.feature_placements,
+        mode="linear" if isinstance(request, LinearDiagramRequest) else "circular",
+        table=(options.feature_placement_table if options.feature_placement_table is not None
+               else options.feature_placement_table_file),
+        selected_features=options.selected_features_set or DEFAULT_SELECTED_FEATURES,
+        feature_visibility_rules=inputs.features.feature_visibility_rules,
+        specific_color_rules=inputs.features.specific_color_rules,
+        feature_shapes=options.feature_shapes,
+    )
+    if (exact != options.feature_placements or options.feature_placement_table is not None
+            or options.feature_placement_table_file is not None):
+        request = replace(request, options=replace(options, feature_placements=exact,
+                          feature_placement_table=None, feature_placement_table_file=None))
+    return request, replace(inputs, placements=placements if exact else ())
+
+
 def plan_circular_request(
     request: CircularDiagramRequest,
 ) -> CircularRequestPlan:
@@ -1352,6 +1397,7 @@ def plan_circular_request(
             _normalize_request_records(unresolved_request, inputs),
         )
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, inputs = _materialize_placement_inputs(unresolved_request, collection, inputs)
         records = collection.records
         projected_request = replace(
             unresolved_request,
@@ -1407,6 +1453,7 @@ def plan_circular_batch_request(
             _normalize_request_records(unresolved_request, inputs),
         )
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, inputs = _materialize_placement_inputs(unresolved_request, collection, inputs)
         records = collection.records
         outputs = (
             unresolved_request.outputs
@@ -1462,6 +1509,7 @@ def plan_linear_request(
             _normalize_request_records(unresolved_request, inputs),
         )
     with _request_render_diagnostic_phase("preparation"):
+        unresolved_request, inputs = _materialize_placement_inputs(unresolved_request, collection, inputs)
         projected_request = replace(
             unresolved_request,
             records=_materialized_record_inputs(collection),

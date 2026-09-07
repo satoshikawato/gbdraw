@@ -324,14 +324,6 @@ def parse_svg(content: str) -> ET.Element:
     # Remove XML declaration to avoid parsing issues
     content = re.sub(r'<\?xml[^?]*\?>', '', content)
 
-    # Register SVG namespace
-    namespaces = {
-        'svg': 'http://www.w3.org/2000/svg',
-        'xlink': 'http://www.w3.org/1999/xlink',
-    }
-    for prefix, uri in namespaces.items():
-        ET.register_namespace(prefix, uri)
-
     return ET.fromstring(content)
 
 

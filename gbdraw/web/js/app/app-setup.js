@@ -1,3 +1,4 @@
+import { createRecordDisplayControls } from './record-display-options.js';
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
@@ -1018,6 +1019,8 @@ export const createAppSetup = () => {
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
     makeRef: ref
   });
+  const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
+  state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
   const canUndoHistory = computed(() => {
     void history.revision.value;
@@ -1093,6 +1096,9 @@ export const createAppSetup = () => {
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
+    history,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    isCurrentFeature: recordDisplayControls.isCurrentFeature,
     nextTick,
     legendActions,
     svgActions,
@@ -1242,18 +1248,6 @@ export const createAppSetup = () => {
     canShowDepthTrack.value
       ? enabledOptionClass
       : disabledOptionClass
-  ));
-  const circularSeparateStrandsDisabled = computed(() => (
-    mode.value === 'circular' && Boolean(adv.resolve_overlaps)
-  ));
-  const circularResolveOverlapsDisabled = computed(() => (
-    mode.value === 'circular' && Boolean(form.separate_strands)
-  ));
-  const circularSeparateStrandsOptionClass = computed(() => (
-    circularSeparateStrandsDisabled.value ? disabledOptionClass : enabledOptionClass
-  ));
-  const circularResolveOverlapsOptionClass = computed(() => (
-    circularResolveOverlapsDisabled.value ? disabledOptionClass : enabledOptionClass
   ));
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
   const depthTrackUiCounts = reactive({
@@ -1651,15 +1645,6 @@ export const createAppSetup = () => {
     () => [canShowDepthTrack.value, form.show_depth],
     ([available, showDepth]) => {
       if (!available && showDepth) form.show_depth = false;
-    },
-    { immediate: true }
-  );
-  watch(
-    () => [mode.value, form.separate_strands, adv.resolve_overlaps],
-    ([currentMode, separateStrands, resolveOverlaps]) => {
-      if (currentMode === 'circular' && separateStrands && resolveOverlaps) {
-        adv.resolve_overlaps = false;
-      }
     },
     { immediate: true }
   );
@@ -3295,6 +3280,8 @@ export const createAppSetup = () => {
   };
 
   return {
+    recordDisplayControls,
+    featurePlacementActions: featureActions.placementActions,
     processing,
     processingStatus,
     sessionImportPending,
@@ -3374,10 +3361,6 @@ export const createAppSetup = () => {
     hasLinearDepthFiles,
     canShowDepthTrack,
     depthToggleOptionClass,
-    circularSeparateStrandsDisabled,
-    circularResolveOverlapsDisabled,
-    circularSeparateStrandsOptionClass,
-    circularResolveOverlapsOptionClass,
     depthTrackCountLabel,
     getDepthTrackLabel,
     setDepthTrackLabel,
@@ -3443,6 +3426,7 @@ export const createAppSetup = () => {
     moveLinearSeqUp,
     moveLinearSeqDown,
     linearRecordOptions: linearRecordSelector.optionsFor,
+    refreshLinearRecordSelectors: linearRecordSelector.refresh,
     linearRecordSelectorDisabled: linearRecordSelector.isDisabled,
     linearRecordSelectorError: linearRecordSelector.errorFor,
     linearRecordSelectorWarning: linearRecordSelector.warningFor,

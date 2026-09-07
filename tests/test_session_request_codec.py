@@ -200,6 +200,10 @@ def _payload_for_schema(
 
 
 def _remove_schema6_record_fields(payload: dict[str, Any], schema: int) -> None:
+    if schema < 7:
+        payload["diagramOptions"].pop("featurePlacements", None)
+        for record in payload["records"]:
+            record.pop("display", None)
     if schema < 6:
         for record in payload["records"]:
             record.pop("cardinality", None)
@@ -262,7 +266,7 @@ def test_schema6_round_trips_circular_batch_grouping_and_outputs(
         )
     )
 
-    assert encoded.payload["schema"] == 6
+    assert encoded.payload["schema"] == CANONICAL_REQUEST_SCHEMA
     assert encoded.payload["grouping"] == "batch"
     assert [item["prefix"] for item in encoded.payload["output"]] == [
         "same-id",
@@ -301,7 +305,7 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
         )
     )
 
-    assert CANONICAL_REQUEST_SCHEMA == 6
+    assert CANONICAL_REQUEST_SCHEMA == 7
     assert encoded.payload["records"][0]["cardinality"] == "all"
     decoded = decode_canonical_request(
         encoded.payload,
@@ -2327,7 +2331,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=7), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=8), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),

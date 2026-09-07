@@ -58,6 +58,7 @@ from gbdraw.api.requests import (
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.mode_profiles import (
@@ -86,6 +87,7 @@ class FeatureOptions:
     palette: str = "default"
     visibility: TableSource | None = None
     shapes: Mapping[str, str] | None = None
+    placements: TableSource | Sequence[FeaturePlacementOverride] | None = None
 
 
 @dataclass(frozen=True)
@@ -757,6 +759,11 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
         name="default color table",
     )
     visibility_table, visibility_file = _source(features.visibility, name="feature visibility")
+    placement_table, placement_file, placements = None, None, ()
+    if isinstance(features.placements, (DataFrame, str, PathLike)):
+        placement_table, placement_file = _source(features.placements, name="feature placement")
+    elif features.placements is not None:
+        placements = features.placements
     whitelist_table, whitelist_file = _source(labels.whitelist, name="label whitelist")
     priority_table, priority_file = _source(
         labels.qualifier_priority,
@@ -777,6 +784,9 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
         "selected_features_set": features.types,
         "feature_visibility_table": visibility_table,
         "feature_visibility_table_file": visibility_file,
+        "feature_placements": placements,
+        "feature_placement_table": placement_table,
+        "feature_placement_table_file": placement_file,
         "label_whitelist_table": whitelist_table,
         "label_whitelist_file": whitelist_file,
         "qualifier_priority_table": priority_table,

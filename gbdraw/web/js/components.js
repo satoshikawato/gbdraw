@@ -170,3 +170,23 @@ export const FileUploader = {
     return { input, handleFile, clearFile, hasSelection, selectedLabel };
   }
 };
+
+export const RecordDisplayControl = {
+  template: '#record-display-control-template',
+  props: ['row', 'controller'],
+  setup(props) {
+    const error = ref('');
+    const setStart = async (event) => {
+      try {
+        if (!event.target.checkValidity()) throw new Error(event.target.validationMessage);
+        await props.controller.setStart(props.row, event.target.value);
+        error.value = '';
+      } catch (failure) {
+        error.value = failure.message;
+        event.target.value = props.controller.draftFor(props.row).startCoordinate ?? '';
+      }
+    };
+    return { error, setStart, draft: computed(() => props.controller.draftFor(props.row)),
+      surface: computed(() => props.controller.surfaceFor(props.row)) };
+  }
+};

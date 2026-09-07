@@ -1193,6 +1193,7 @@
                         ><i class="ph ph-plus"></i> Add sequence</button>
                     </div>
 
+                    <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Rotation, feature placement, or tolerance has changes pending Generate. The Result shows the last successful settings.</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gb" class="text-blue-600 focus:ring-blue-500"> GenBank</label>
@@ -1205,6 +1206,10 @@
                             <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
                             <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
+                        <section aria-label="Record rotation" class="space-y-2">
+                            <button v-if="(cInputType === 'gff' ? files.c_gff && files.c_fasta : files.c_gb) && !recordDisplayControls.rowsFor('circular').length" type="button" @click="refreshCircularRecordOrder" class="text-xs text-blue-600">Load record rotation controls</button>
+                            <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
+                        </section>
                         <details data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Circular record presentation">
                                 <i class="ph ph-selection"></i>
@@ -1488,6 +1493,9 @@
                                     >Gencode required</span>
                                 </summary>
                                 <div class="min-w-0 space-y-2 pt-2">
+                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600">Load record rotation controls</button>
+                                    <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
+
                             <details class="rounded border border-slate-200 bg-white/70 p-2">
                                 <summary>
                                     <i class="ph ph-chart-bar"></i>
@@ -2520,6 +2528,10 @@
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Resolve Feature Overlaps <help-tip text="Overlapping genomic features are assigned to additional lanes; other tracks are repacked automatically."></help-tip></span>
                                     </label>
+                                    <label class="text-xs">Feature overlap tolerance (bp)
+                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="w-20 rounded border p-1">
+                                    </label>
+
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.align_center" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Align to Center <help-tip text="Align the linear map to the center of the page."></help-tip></span>
@@ -2826,20 +2838,22 @@
                                 <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
-                                        :class="circularSeparateStrandsOptionClass"
-                                        :title="circularSeparateStrandsDisabled ? 'Turn off Resolve Overlaps to enable Separate Strands.' : ''"
+                                        :class="enabledOptionClass"
                                     >
-                                        <input type="checkbox" v-model="form.separate_strands" :disabled="circularSeparateStrandsDisabled" class="form-checkbox" aria-label="Separate Strands">
-                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction. Cannot be combined with Resolve Overlaps in circular mode."></help-tip></span>
+                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox" aria-label="Separate Strands">
+                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
                                     </label>
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
-                                        :class="circularResolveOverlapsOptionClass"
-                                        :title="circularResolveOverlapsDisabled ? 'Turn off Separate Strands to enable Resolve Overlaps.' : ''"
+                                        :class="enabledOptionClass"
                                     >
-                                        <input type="checkbox" v-model="adv.resolve_overlaps" :disabled="circularResolveOverlapsDisabled" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Cannot be combined with Separate Strands in circular mode. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                        <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
+                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
                                     </label>
+                                    <label class="text-xs">Feature overlap tolerance (bp)
+                                        <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="w-20 rounded border p-1">
+                                    </label>
+
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
                                         <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
@@ -4595,6 +4609,11 @@
                                 <i class="ph ph-selection"></i>
                                 {{ selectedFeatureCount }} selected
                             </span>
+                            <select data-history-managed aria-label="Selected feature placements" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
+                                <option value="" disabled>Placement…</option>
+                                <option v-for="choice in featurePlacementActions.choices(selectedFeatures)" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
+                            </select>
+
                             <button type="button"
                                     class="btn btn-secondary btn-sm"
                                     @click="clearFeatureSelection({ clearStatus: true })"
@@ -4815,6 +4834,12 @@
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
+                        <label class="block text-xs mb-2">Feature placement
+                            <select data-history-managed aria-label="Feature placement" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="rounded border p-1">
+                                <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
+                            </select>
+                            <span class="block text-slate-500">Applied on the next successful Generate.</span>
+                        </label>
                         <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
                             <button type="button"
                                     @click="clickedFeature.activeTab = 'edit'"
@@ -6478,6 +6503,24 @@
         </noscript>
     </div>
 </div>
+
+<script type="text/x-template" id="record-display-control-template">
+  <div class="rounded border border-slate-200 p-2 text-xs space-y-1" :data-record-rotation="row.key">
+    <div class="font-semibold">{{ row.recordId }} {{ row.selector }} · {{ row.recordLength }} bp</div>
+    <div>Detected: {{ row.detectedTopology }}</div>
+    <label class="flex gap-2"><input data-history-managed type="checkbox" :checked="surface.effectiveCircular" @change="controller.setTopology(row, $event.target.checked)" :aria-label="`Circular record ${row.recordId} ${row.selector}`"> Circular record</label>
+    <button data-history-managed type="button" class="text-blue-600" @click="controller.setTopology(row, null)">Reset to detected</button>
+    <label class="block">Display start <input data-history-managed type="number" min="1" :max="row.recordLength" :value="draft.startCoordinate" :disabled="!surface.startEnabled" @change="setStart($event)" :aria-label="`Display start ${row.recordId} ${row.selector}`" class="w-24 rounded border p-1"></label>
+    <div v-if="error" role="alert" class="text-red-600">{{ error }}</div>
+    <div>Current start: {{ draft.startCoordinate != null && surface.startEnabled ? draft.startCoordinate : surface.currentStart }}</div>
+    <div v-if="!surface.startEnabled" class="text-slate-500">{{ surface.disabledReason }}</div>
+    <div class="flex flex-wrap gap-1">
+      <button data-history-managed type="button" :disabled="!controller.shortcutState(row, 'five-prime').enabled" :title="controller.shortcutState(row, 'five-prime').reason" @click="controller.applyShortcut(row, 'five-prime')" class="text-blue-600 disabled:opacity-40">Use selected feature 5′ end</button>
+      <button data-history-managed type="button" :disabled="!controller.shortcutState(row, 'midpoint').enabled" :title="controller.shortcutState(row, 'midpoint').reason" @click="controller.applyShortcut(row, 'midpoint')" class="text-blue-600 disabled:opacity-40">Use selected feature midpoint</button>
+    </div>
+    <button data-history-managed type="button" @click="controller.resetStart(row)" class="text-blue-600">Reset start</button>
+  </div>
+</script>
 
 <script type="text/x-template" id="help-tip-template">
     <div class="help-tip inline-block align-text-bottom">

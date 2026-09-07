@@ -61,6 +61,14 @@ def setup_logging() -> None:
 def add_input_args(parser: argparse.ArgumentParser) -> None:
     """Add input file arguments (--gbk, --gff, --fasta)."""
     parser.add_argument(
+        "--feature_placement_table", metavar="TSV", default=None,
+        help="Feature placements: record, feature_selector, placement, and optional level columns.",
+    )
+    parser.add_argument(
+        "--feature_overlap_tolerance_bp", metavar="BP", type=int, default=0,
+        help="Non-negative permitted feature overlap in base pairs (default: 0).",
+    )
+    parser.add_argument(
         "--record_topology", choices=("auto", "linear", "circular"), default=None,
         help="Topology override for exactly one direct-input record (default: auto).",
     )

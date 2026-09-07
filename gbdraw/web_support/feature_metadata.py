@@ -10,6 +10,7 @@ from Bio.Seq import Seq
 
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
+    _iter_source_features as _iter_features,
     _read_coord_map as _read_record_coord_map,
     _source_feature_index,
     _source_feature_location_parts,
@@ -187,17 +188,6 @@ def _biological_selector_values(
         else:
             selector.pop("record_location", None)
     return selector, stable_feature_id, rendered_feature_id
-
-
-def _iter_features(features: Any):
-    """Yield top-level and nested GFF features in source order."""
-
-    for feature in features or []:
-        yield feature
-        yield from _iter_features(getattr(feature, "sub_features", None))
-
-
-
 
 
 

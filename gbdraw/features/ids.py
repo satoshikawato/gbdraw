@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
+
+from gbdraw.exceptions import ValidationError
+
 import hashlib
 import re
 from typing import Any, Iterable
@@ -181,6 +185,33 @@ def compute_feature_hash_from_location_parts(
     """Compute a stable feature id from all rendered location parts."""
 
     return _hash_feature_parts_key(feature_type, parts, record_id=record_id)
+
+
+def disambiguate_feature_ids(
+    identities: Iterable[tuple[str, str, int | None]],
+    *,
+    description: str = "Source feature catalog",
+) -> tuple[str, ...]:
+    """Keep legacy public IDs, disambiguating equal hashes by source ordinal."""
+    rows = tuple(identities)
+    counts = Counter((record_key, base) for record_key, base, _ in rows)
+    indexes: dict[tuple[str, str], list[int | None]] = defaultdict(list)
+    for record_key, base, index in rows:
+        indexes[(record_key, base)].append(index)
+    for identity, values in indexes.items():
+        if len(values) > 1 and (None in values or len(set(values)) != len(values)):
+            raise ValidationError(
+                f"{description} contains duplicate biological source identity {identity!r}."
+            )
+    resolved = tuple(
+        f"{base}~{index}" if counts[(record_key, base)] > 1 else base
+        for record_key, base, index in rows
+    )
+    if len({(row[0], value) for row, value in zip(rows, resolved)}) != len(rows):
+        raise ValidationError(
+            f"{description} generated a duplicate canonical biological feature identity."
+        )
+    return resolved
 
 
 def make_svg_safe_id_fragment(value: object, fallback: str = "item") -> str:

@@ -36,7 +36,10 @@ from .options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
+from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
+
 from .prepared import (
+    ParsedRecordInputs,
     PreparedResourceIdentity,
     get_or_build_parsed_source,
     prepared_resource_identity,
@@ -139,6 +142,7 @@ class ResolvedRecordProvenance:
     is_cropped: bool = False
     has_collection_region: bool = False
     resolved_display: ResolvedRecordDisplay | None = None
+    source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -344,7 +348,7 @@ def _source_key(source: RecordInputSource) -> tuple[object, ...]:
     if isinstance(source, GffFastaInputSource):
         return ("gff_fasta", str(source.gff_path), str(source.fasta_path))
     if isinstance(source, InMemoryRecordSource):
-        return ("memory", id(source.record))
+        return ("memory", id(source.record), id(source.source_feature_catalog))
     raise ValidationError("Unsupported record input source.")
 
 
@@ -367,8 +371,9 @@ def _load_source_records(
     gff_keep_all_features: bool,
     genbank_loader: GenBankLoader,
     gff_loader: GffFastaLoader,
-) -> tuple[SeqRecord, ...]:
-    def load() -> tuple[SeqRecord, ...]:
+) -> ParsedRecordInputs:
+    def load() -> ParsedRecordInputs:
+        gff_catalogs: list[tuple[SourceFeatureIdentity, ...]] = []
         if isinstance(source, GenBankInputSource):
             records = genbank_loader([str(source.path)])
         elif isinstance(source, GffFastaInputSource):
@@ -377,6 +382,7 @@ def _load_source_records(
                 [str(source.fasta_path)],
                 selected_features_set=gff_candidate_features,
                 keep_all_features=gff_keep_all_features,
+                source_feature_catalogs=gff_catalogs,
             )
         elif isinstance(source, InMemoryRecordSource):
             records = [source.record]
@@ -384,7 +390,13 @@ def _load_source_records(
             raise ValidationError("Unsupported record input source.")
         if not records:
             raise ValidationError("A record input source resolved to no records.")
-        return tuple(records)
+        catalogs = (
+            (source.source_feature_catalog,)
+            if isinstance(source, InMemoryRecordSource) and source.source_feature_catalog is not None
+            else tuple(gff_catalogs) if isinstance(source, GffFastaInputSource)
+            else tuple(build_source_feature_catalog(record) for record in records)
+        )
+        return ParsedRecordInputs(tuple(records), catalogs)
 
     cache_spec = _prepared_source_cache_spec(
         source,
@@ -604,21 +616,22 @@ def resolve_record_inputs(
     inputs = tuple(record_inputs)
     if not inputs:
         raise ValidationError("A request requires at least one RecordInput.")
-    cache: dict[tuple[object, ...], tuple[SeqRecord, ...]] = {}
+    cache: dict[tuple[object, ...], ParsedRecordInputs] = {}
     records: list[SeqRecord] = []
     provenance: list[ResolvedRecordProvenance] = []
     for input_index, record_input in enumerate(inputs):
         key = _source_key(record_input.source)
-        raw_records = cache.get(key)
-        if raw_records is None:
-            raw_records = _load_source_records(
+        parsed = cache.get(key)
+        if parsed is None:
+            parsed = _load_source_records(
                 record_input.source,
                 gff_candidate_features=gff_candidate_features,
                 gff_keep_all_features=gff_keep_all_features,
                 genbank_loader=genbank_loader,
                 gff_loader=gff_loader,
             )
-            cache[key] = raw_records
+            cache[key] = parsed
+        raw_records = parsed.records
         selector = record_input.selector or _selector_from_region(record_input.region)
         source_indexes = _cardinality_indexes(
             _selected_source_indexes(raw_records, selector),
@@ -669,6 +682,7 @@ def resolve_record_inputs(
                                if source_cropped else len(source_record)),
                 detected_topology=_detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
+                source_feature_catalog=parsed.source_feature_catalogs[source_record_index],
             )
             _apply_presentation(
                 record,

@@ -8,6 +8,8 @@ This module was extracted from `gbdraw.circular_diagram_components` to improve c
 
 from __future__ import annotations
 
+from gbdraw.features.placement import FeaturePlacementSlot
+
 import logging
 import math
 import copy
@@ -2007,6 +2009,11 @@ def add_record_on_circular_canvas(
         profile.resolve_overlaps,
         label_filtering,
         split_overlaps_by_strand=split_overlaps_by_strand,
+        placement_inputs=feature_config.placements[0] if feature_config.placements else None,
+        placement_slot=(FeaturePlacementSlot(
+            "circular", feature_lane_direction, profile.strandedness,
+        ) if feature_slot is not None else None),
+        feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
         feature_shapes=feature_config.feature_shapes,
         feature_visibility_rules=feature_config.feature_visibility_rules,
         compute_label_text=compute_label_text,
@@ -2184,7 +2191,7 @@ def add_record_on_circular_canvas(
                             # Radial inner labels need a real arena between features and
                             # the frozen inner tracks. Move the automatic tuck-in feature
                             # slot to the outside of the enlarged axis while preserving
-                            # its lane-direction payload.
+                            # the remaining slot parameters.
                             feature_params = dict(slot.params)
                             feature_params["lane_direction"] = "outside"
                             frozen_slots.append(
@@ -2205,6 +2212,21 @@ def add_record_on_circular_canvas(
                         feature_lane_direction = _lane_direction_for_feature_slot(
                             feature_slot,
                             track_preset=circular_preset,
+                        )
+                    # Reflow changed the physical slot. Rebuild occupancy through
+                    # the same planner before measuring any final geometry.
+                    from ...features.placement import plan_feature_placements
+
+                    if feature_slot is not None:
+                        plan_feature_placements(
+                            precomputed_feature_dict,
+                            slot=FeaturePlacementSlot(
+                                "circular", feature_lane_direction, profile.strandedness,
+                            ),
+                            placement_inputs=feature_config.placements[0] if feature_config.placements else None,
+                            resolve_overlaps=profile.resolve_overlaps,
+                            tolerance_bp=profile.feature_overlap_tolerance_bp,
+                            genome_length=len(gb_record.seq),
                         )
                     preflight_tracks_frozen = True
 
@@ -2500,6 +2522,11 @@ def add_record_on_circular_canvas(
             None,
         )
     track_slot_geometry = getattr(canvas, "_gbdraw_track_slot_geometry", {})
+    if feature_slot is not None:
+        targets = FeaturePlacementSlot("circular", feature_lane_direction, profile.strandedness).supported_targets()
+        for record_geometry in track_slot_geometry.get("records", []):
+            record_geometry["featurePlacementTargets"] = targets
+
     return _CircularPlotAssembly(
         drawing=canvas,
         canvas_config=canvas_config,

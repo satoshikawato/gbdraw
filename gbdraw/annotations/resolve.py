@@ -15,7 +15,7 @@ from gbdraw.features.selector_values import (
     get_feature_record_location_str,
     get_feature_qualifiers,
     get_feature_type,
-    normalize_qualifier_values,
+    matches_feature_selector,
 )
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -161,30 +161,13 @@ def _seqfeature_segments(feature: object) -> tuple[tuple[int, int], ...]:
 
 
 def _feature_matches(feature: object, selector: FeatureSelector, record_id: str) -> bool:
-    key = selector.key.lower() if selector.key else None
-    expected = selector.value
-    if key == "hash":
-        return get_feature_hash(feature, record_id) == expected
-    if key in {"location", "position"}:
-        return get_feature_location_str(feature) == expected
-    if key == "record_location":
-        return get_feature_record_location_str(feature, record_id) == expected
-    if key in {"type", "feature_type"}:
-        return get_feature_type(feature) == expected
-    qualifiers = get_feature_qualifiers(feature)
-    if key:
-        return any(
-            expected == value
-            for qualifier_key, raw_values in qualifiers.items()
-            if str(qualifier_key).lower() == key
-            for value in normalize_qualifier_values(raw_values)
-        )
-    if get_feature_hash(feature, record_id) == expected:
-        return True
-    return any(
-        expected == value
-        for raw_values in qualifiers.values()
-        for value in normalize_qualifier_values(raw_values)
+    return matches_feature_selector(
+        key=selector.key, value=selector.value,
+        feature_type=get_feature_type(feature),
+        feature_hash=get_feature_hash(feature, record_id),
+        location=get_feature_location_str(feature),
+        record_location=get_feature_record_location_str(feature, record_id),
+        qualifiers=get_feature_qualifiers(feature),
     )
 
 

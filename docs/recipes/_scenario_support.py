@@ -585,3 +585,14 @@ def publish_output(
 
 def _local_name(name: str) -> str:
     return name.rsplit("}", 1)[-1]
+
+
+def validate_joint_chloroplast(chapter: dict[str, Any], *, output_path: Path) -> None:
+    """Check the combined public example against its source and visible content."""
+    evidence = inspect_standard_svg(chapter, output_path=output_path)
+    if not {"features", "annotations", "dinucleotide_content"} <= evidence.slot_renderers:
+        raise RecipeContractError("The combined plastome example lost a documented track.")
+    if not {"rps16", "rbcL", "LSC", "IRb", "SSC", "IRa"} <= evidence.text_nodes:
+        raise RecipeContractError("The combined plastome example lost its labels or regions.")
+    if "NC_001879.2" not in evidence.record_ids or len(evidence.feature_ids) < 140:
+        raise RecipeContractError("The combined plastome example lost source feature context.")

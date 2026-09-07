@@ -13,6 +13,33 @@ These notes record what changed in this release. For the currently supported
 persisted versions and migration boundaries, see
 [Session and request compatibility](./SESSION_COMPATIBILITY.md).
 
+## Python/Web session version 41
+
+gbdraw 0.14.0b0 writes session version 41 and canonical `renderRequest` schema 7.
+Record rotation and manual feature placement are included in the shared format.
+
+- Set a complete circular record's display start to any source base, in Circular
+  or Linear mode, without editing its sequence or source coordinates. Unset and
+  explicit 1 remain distinct; crop with an explicit start is unsupported.
+- Place a whole feature on Main or an available secondary lane 1. Auto removes
+  the override. Fixed placement works with the overlap resolver on or off;
+  tolerance is a non-negative base count with default 0. Multipart fragments,
+  labels, leaders and feature-associated comparison endpoints follow the final
+  assignment.
+- CLI, package-root Python, typed requests and Web share these semantics.
+  Web drafts, bulk edits, Undo/Redo, saved Results and Run Info replay are
+  preserved separately until Generate succeeds.
+- Current writers emit request schema **7** and session **41** together.
+  Readers retain requests 1, 2, 5, 6 and sessions 27–33, 39–40; historical
+  missing display/placement/tolerance values become unset/empty/0. Schema 6
+  retains cardinality/row inheritance and session 40 retains its authority era.
+- Two bounded compatibility changes remain: overlapping undefined/negative Auto
+  features use the common negative pool with separate strands and resolver on;
+  GFF colliding feature IDs use complete original-source ordinals. Other default
+  reference diagrams are retained. See the [placement contract](REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
+  and [current compatibility](REFERENCE/session-and-request-compatibility.md).
+
+
 ## Linear Automatic source-card row layout
 
 - Linear **Arrange in rows** now applies a card's row to every biological record
@@ -112,10 +139,10 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
   `--gc_content_tick_interval` alias for
   `--gc_content_large_tick_interval` are unchanged and are not removals.
 - The private `__gbdraw_legacy_spacing` transport is confined to canonical
-  request schema 1 and 2 readers and is never emitted by the current schema 6
+  request schema 1 and 2 readers and is never emitted by the current schema 7
   writer. Pixel spacing migrates to explicit inner and outer pixel gaps.
   Factor-based spacing can still be replayed, but it cannot be re-saved
-  losslessly by the current schema 6 writer; replace it with explicit
+  losslessly by the current schema 7 writer; replace it with explicit
   `inner_gap_px` and `outer_gap_px` first.
 - `gbdraw.api.canvas`, `gbdraw.api.configurators`, and
   `gbdraw.circular_diagram_components` were thin compatibility modules and have
@@ -165,7 +192,7 @@ See the [Python API guide](./PYTHON_API.md) for executable examples.
 Active and public runtime collinearity configuration uses
 `LosslessCollinearityParameters`; canonical request schemas 1 and 2 privately
 migrate legacy `standard` parameter payloads while preserving their effective
-fields. Current schema 6 accepts only the lossless form.
+fields. Current schema 7 accepts only the lossless form.
 
 Phase 2 completes the internal state/planner consolidation:
 
@@ -186,9 +213,9 @@ Phase 2 completes the internal state/planner consolidation:
 
 ## Python/Web session version 40
 
-- gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest`
-  schema 6. Readers accept session versions 27–33 and 39–40; the public typed
-  bridge accepts versions 31–33 and 39–40.
+- The session version 40 transition introduced canonical `renderRequest`
+  schema 6. That transition retained readers for session versions 27–33 and 39–40; the public typed
+  bridge accepts versions 31–33 and 39–41.
 - Version 40 stores file bytes once under `resources`, with `webFiles` binding
   them to active and inactive inputs. Version 39 sessions with legacy embedded
   `files` remain readable.
@@ -455,13 +482,13 @@ New drawing code should prefer the top-level interface described above.
 ## Session API boundary
 
 The gbdraw 0.14.0b0 public session bridge accepts canonical documents from
-versions 31–33 and 39–40.
+versions 31–33 and 39–41.
 `load_session_document`, `build_session_document`, `materialize_session`,
 `session_to_request`, and `render_session` are exported from `gbdraw.api` and use
 the typed `renderRequest` payload rather than CLI argument names or positions.
 
-gbdraw 0.14.0b0 writes session version 40 and canonical `renderRequest` schema
-6. Version 39 introduced the canonical `ui.layoutPreferences` tree for
+gbdraw 0.14.0b0 writes session version 41 and canonical `renderRequest` schema
+7. Version 39 introduced the canonical `ui.layoutPreferences` tree for
 Circular-single, Circular-multi, and Linear legend/title preferences; version
 40 retains it, and supported older fields migrate on load. Schema 6 persists
 explicit Circular `single`, `grid`, or `batch` grouping and each input's

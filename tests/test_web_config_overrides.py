@@ -151,3 +151,28 @@ def test_json_boundary_returns_actionable_safe_rejection() -> None:
 
     assert "objects.gc_content.unknown" in result["error"]
     assert "biological secret" not in result["error"]
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_gui_filter_leaf_does_not_create_a_duplicate_raw_override(mode):
+    projected = validate_and_project_web_config_overrides(
+        mode=mode,
+        overrides={"labels.filtering.blacklist_keywords": [], UNMANAGED_OPACITY_PATH: 0.42},
+        managed_paths=["labels.filtering.blacklist_keywords"],
+    )
+    assert projected == {UNMANAGED_OPACITY_PATH: 0.42}
+
+
+def test_explicit_raw_filtering_and_unmanaged_filter_changes_remain_preserved():
+    raw = {"blacklist_keywords": [], "qualifier_priority": {"gene": ["gene"]}}
+    projected = validate_and_project_web_config_overrides(
+        mode="circular", overrides={"labels.filtering.raw": raw},
+        managed_paths=["labels.filtering.blacklist_keywords"],
+    )
+    assert projected["labels.filtering.raw"] == raw
+    config = load_default_config()
+    config["labels"]["filtering"] = raw
+    projected = validate_and_project_web_config_overrides(
+        mode="circular", config=config, managed_paths=["labels.filtering.blacklist_keywords"],
+    )
+    assert projected["labels.filtering.raw"] == raw

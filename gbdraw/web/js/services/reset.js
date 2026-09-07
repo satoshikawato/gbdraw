@@ -151,6 +151,8 @@ export const resetSettings = (state) => {
   replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
   clearReactiveObject(state.unmanagedConfigOverrides);
   replaceReactiveArray(state.annotationSets);
+  replaceReactiveArray(state.recordDisplayDrafts);
+  Object.keys(state.featurePlacementOverrides).forEach((key) => delete state.featurePlacementOverrides[key]);
   state.selectedAnnotation.value = null;
   resetLinearComparisonPlan(state);
   state.losatProgram.value = 'blastn';

@@ -414,7 +414,7 @@ class LinearFeatureLaneGeometry:
     ) -> LinearFeatureLane:
         """Return the lane shared by measurement, labels, and SVG rendering."""
 
-        strand_pool = str(strand) if separate_strands else "shared"
+        strand_pool = ("positive" if strand == "positive" else "negative") if separate_strands else "shared"
         resolved_track_id = int(track_id)
         identity = (strand_pool, resolved_track_id)
         try:
@@ -582,7 +582,11 @@ def measure_linear_feature_lanes(
     lanes_by_identity: dict[tuple[str, int], LinearFeatureLane] = {}
     lane_sources = [
         (
-            str(getattr(feature, "strand", "undefined")),
+            (
+                feature.placement.strand_pool
+                if separate_strands and getattr(feature, "placement", None) is not None
+                else str(getattr(feature, "strand", "undefined"))
+            ),
             int(getattr(feature, "feature_track_id", 0)),
         )
         for feature in feature_dict.values()
@@ -594,7 +598,9 @@ def measure_linear_feature_lanes(
             else [("undefined", 0)]
         )
     for strand, track_id in lane_sources:
-        strand_pool = strand if separate_strands else "shared"
+        strand_pool = ("positive" if strand == "positive" else "negative") if separate_strands else "shared"
+        if separate_strands:
+            strand = strand_pool
         identity = (strand_pool, track_id)
         if identity in lanes_by_identity:
             continue

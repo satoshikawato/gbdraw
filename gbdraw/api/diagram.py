@@ -120,6 +120,7 @@ from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImp
     _assemble_circular_diagram_result,
 )
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
+from gbdraw.features.placement import ResolvedPlacementInputs
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.layout.composition import (
     CompositionItem,
@@ -1631,6 +1632,7 @@ def assemble_linear_diagram_from_records(
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -2054,6 +2056,7 @@ def assemble_linear_diagram_from_records(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
+        placements=_resolved_placement_inputs,
     )
     gc_config = GcContentConfigurator(
         window=window,
@@ -2189,6 +2192,7 @@ def assemble_circular_diagram_from_record(
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
@@ -2518,6 +2522,7 @@ def assemble_circular_diagram_from_record(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
+        placements=_resolved_placement_inputs,
     )
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
@@ -2644,6 +2649,7 @@ def assemble_circular_diagram_from_records(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
@@ -2978,6 +2984,7 @@ def assemble_circular_diagram_from_records(
             _precomputed_depth_track_count=available_depth_track_count,
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
+            _resolved_placement_inputs=(_resolved_placement_inputs[record_index],) if _resolved_placement_inputs else (),
             _record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
         )
         result = _require_circular_assembly_result(sub_canvas)
@@ -3300,6 +3307,7 @@ def build_circular_diagram(
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
@@ -3369,6 +3377,7 @@ def build_circular_diagram(
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transform=_record_transform,
     )
 
@@ -3381,6 +3390,7 @@ def _build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
@@ -3467,6 +3477,7 @@ def _build_linear_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
         _return_build_result=_return_build_result,
     )
@@ -3480,6 +3491,7 @@ def build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
@@ -3491,6 +3503,7 @@ def build_linear_diagram(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
     )
     return cast(Drawing, result)
@@ -3504,6 +3517,7 @@ def build_linear_diagram_result(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
@@ -3515,6 +3529,7 @@ def build_linear_diagram_result(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
         _return_build_result=True,
     )
@@ -3529,6 +3544,7 @@ def build_circular_multi_diagram(
     options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
@@ -3606,6 +3622,7 @@ def build_circular_multi_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
     )
 

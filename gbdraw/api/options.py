@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import math
 from numbers import Integral, Real
 from pathlib import Path
 from typing import Literal, Mapping, Sequence, cast
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
+
+from gbdraw.features.placement import FeaturePlacementOverride, normalize_feature_placements
 
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityBlock,
@@ -605,8 +607,23 @@ class _ModeDiagramOptions:
     bitscore: float | None = None
     identity: float | None = None
     alignment_length: int | None = None
+    feature_placements: tuple[FeaturePlacementOverride, ...] = field(default=(), kw_only=True)
+    feature_placement_table: DataFrame | None = field(default=None, kw_only=True)
+    feature_placement_table_file: str | Path | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        placements = normalize_feature_placements(self.feature_placements)
+        object.__setattr__(self, "feature_placements", placements)
+        if sum((bool(placements), self.feature_placement_table is not None,
+                self.feature_placement_table_file is not None)) > 1:
+            raise ValidationError("Feature placement exact/table/file inputs are mutually exclusive.")
+        if self.feature_placement_table is not None and not isinstance(self.feature_placement_table, DataFrame):
+            raise ValidationError("feature_placement_table must be a DataFrame or None.")
+        if self.feature_placement_table_file is not None and (
+            not isinstance(self.feature_placement_table_file, (str, Path))
+            or not str(self.feature_placement_table_file).strip()
+        ):
+            raise ValidationError("feature_placement_table_file must identify a file.")
         nested_types = (
             ("colors", self.colors, ColorOptions),
             ("annotations", self.annotations, AnnotationOptions),
@@ -771,6 +788,8 @@ class CircularDiagramOptions(_ModeDiagramOptions):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        for placement in self.feature_placements:
+            placement.target.validate_mode("circular")
         if self.depth_tracks is not None and any(
             track.height is not None for track in self.depth_tracks
         ):
@@ -906,6 +925,8 @@ class LinearDiagramOptions(_ModeDiagramOptions):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        for placement in self.feature_placements:
+            placement.target.validate_mode("linear")
         _validate_mode_config_overrides(
             self.config_overrides,
             mode="linear",

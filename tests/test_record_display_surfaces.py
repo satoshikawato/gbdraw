@@ -13,8 +13,8 @@ from gbdraw.api import RecordDisplayOptions
 from gbdraw.api.record_planning import record_input_manifest_from_table
 from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, RecordInput
 from gbdraw.exceptions import ValidationError
-from gbdraw.session_request_codec import CanonicalRequestEncodingError, encode_canonical_request
-from gbdraw.session import SessionConversionError
+from gbdraw.session_request_codec import encode_canonical_request
+from gbdraw.session_io import load_session
 
 
 def record():
@@ -57,11 +57,13 @@ def test_records_table_preserves_order_and_per_instance_display(tmp_path):
 
 @pytest.mark.parametrize("display", [RecordDisplayOptions(True), RecordDisplayOptions(False),
                                      RecordDisplayOptions(start_coordinate=1)])
-def test_current_writer_refuses_to_drop_unrepresentable_display(display):
+def test_current_writer_preserves_raw_display(display):
     request = CircularDiagramRequest(records=(RecordInput(InMemoryRecordSource(record())),))
     request = replace(request, records=(replace(request.records[0], display=display),))
-    with pytest.raises(CanonicalRequestEncodingError, match="display.*schema|schema.*display"):
-        encode_canonical_request(request)
+    payload = encode_canonical_request(request).payload
+    assert payload["records"][0]["display"] == {
+        "isCircular": display.is_circular, "startCoordinate": display.start_coordinate,
+    }
 
 
 @pytest.mark.parametrize('mode', ['circular', 'linear'])
@@ -170,29 +172,27 @@ def test_table_reports_invalid_cell(tmp_path, topology, start, region, column):
 
 
 @pytest.mark.parametrize('mode', ['circular', 'linear'])
-def test_api_session_save_rejects_display_instead_of_losing_it(mode, tmp_path):
+def test_api_session_save_preserves_display(mode, tmp_path):
     from gbdraw.api import save_session_document
     from gbdraw.api.requests import LinearDiagramRequest
     request_type = CircularDiagramRequest if mode == 'circular' else LinearDiagramRequest
     request = request_type(records=(RecordInput(InMemoryRecordSource(record()),
                                                display=RecordDisplayOptions(None, 1)),))
     path = tmp_path / 'session.json'
-    with pytest.raises(SessionConversionError, match='display.*schema'):
-        save_session_document(path, request)
-    assert not path.exists()
+    save_session_document(path, request)
+    assert load_session(path)['renderRequest']['records'][0]['display']['startCoordinate'] == 1
 
 
 @pytest.mark.parametrize('mode', ['circular', 'linear'])
-def test_cli_session_save_rejects_display_and_writes_no_lossy_session(mode, tmp_path):
+def test_cli_session_save_preserves_display(mode, tmp_path):
     import importlib
     cli = importlib.import_module(f'gbdraw.{mode}')
     path = tmp_path / 'source.gbk'
     SeqIO.write(record(), path, 'genbank')
     session = tmp_path / 'session.json'
-    with pytest.raises(SessionConversionError, match='display.*schema'):
-        getattr(cli, f'{mode}_main')(['--gbk', str(path), '--display_start_coordinate', '25',
+    getattr(cli, f'{mode}_main')(['--gbk', str(path), '--display_start_coordinate', '25',
                                     '-o', str(tmp_path / 'diagram'), '--session_output', str(session)])
-    assert not session.exists()
+    assert load_session(session)['renderRequest']['records'][0]['display']['startCoordinate'] == 25
 
 
 @pytest.mark.parametrize('mode', ['circular', 'linear'])

@@ -14,6 +14,7 @@ from typing import Literal, Sequence, TypeAlias
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.render.formats import ACCEPTED_FORMATS, normalize_format_token
@@ -80,10 +81,16 @@ class InMemoryRecordSource:
     """One already-parsed sequence record."""
 
     record: SeqRecord
+    source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None = field(default=None, kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.record, SeqRecord):
             raise ValidationError("In-memory record source must contain a SeqRecord.")
+        if self.source_feature_catalog is not None and (
+            not isinstance(self.source_feature_catalog, tuple)
+            or not all(isinstance(item, SourceFeatureIdentity) for item in self.source_feature_catalog)
+        ):
+            raise ValidationError("source_feature_catalog must be an immutable source identity tuple.")
 
 
 RecordInputSource: TypeAlias = (

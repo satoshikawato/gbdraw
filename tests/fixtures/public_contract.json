@@ -11,6 +11,8 @@
       "DepthTrackOptions",
       "Diagram",
       "FeatureOptions",
+      "FeaturePlacementOverride",
+      "FeaturePlacementTarget",
       "LabelOptions",
       "LinearComparisonOptions",
       "LinearLayout",
@@ -25,16 +27,16 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "8e789232ea55e11f386f74bc1e4e1d674ad38512c59090dbd166d268be2781d7"
+    "contract_sha256": "a42a3d1a59c4bff31911113e1e61ae3d63f01b7f0b467609787cbc4fac0098ce"
   },
   "circular_cli": {
-    "actions_sha256": "3f3133a040507dc351649125dc85f7a7e5adb0cebe36fca9f2102bd0420cb8ce",
-    "defaults_sha256": "54aa0d216fd6cadfd7ec6f12291bbc7708b36b6c6c3fe5650539b04bcd39dc01",
-    "representative_sha256": "3250cf47b283847e79a058595ad2b32f8ae26d83e8c0e3bc8bbee5bc4b74c8ac"
+    "actions_sha256": "7b15a18a76d918aab160088fa3a1e581ad33886bd7040c51326e5d6840363bb9",
+    "defaults_sha256": "eda561cb1d3317838d3340496f5137b7f179c2fd9099f7eb3afe361cd5c2993e",
+    "representative_sha256": "8b7eb90cc57e919a4d1a0e68571cd4ed07019e62f9dcc70e2e4fd4bda8b015b4"
   },
   "linear_cli": {
-    "actions_sha256": "2d02f8c6fdb4930217eca18b246a235d9e85610fcc16b39201b7baf30b820ea1",
-    "defaults_sha256": "0246a6c739b6f7b41189ee57bb107bc3054a04f20195a22db9df403c9843cf4e",
-    "representative_sha256": "314c9fbac1e27d603f52eb19caf36a6e70b8c99386a58a695ffd9d95fa3e8f82"
+    "actions_sha256": "4bb59e4a71b4a525ff23e3482aade6b28c23cb44e4b845ef151f29eb8f3c1a38",
+    "defaults_sha256": "f5379f24358f483bf4cfaa72d8e90148ed58e5b49f9645c59cc835941affda75",
+    "representative_sha256": "5178ed7283d94f6d8db0619e49941b67171bd1129718effe0fb052e3d06f30c3"
   }
 }

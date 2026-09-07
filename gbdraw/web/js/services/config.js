@@ -73,6 +73,7 @@ import {
   resolveCircularComparisonSequenceAvailability
 } from '../app/match-sequences.js';
 import {
+  CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
@@ -204,10 +205,11 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 40;
+export const SESSION_VERSION = 41;
+const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -899,6 +901,8 @@ export const buildConfigData = () => ({
   losatProgram: state.losatProgram.value,
   circularConservation: state.circularConservation,
   annotationSets: normalizeAnnotationSets(state.annotationSets),
+  recordDisplayDrafts: cloneJsonData(state.recordDisplayDrafts),
+  featurePlacementOverrides: cloneJsonData(state.featurePlacementOverrides),
   modeProfiles: state.modeProfileStateManager?.exportState?.(),
   linearRecordLayout: {
     enabled: Boolean(state.linearRecordLayoutEnabled.value),
@@ -1098,7 +1102,7 @@ const normalizeSessionData = (data) => {
   if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
     throw new Error(`Unsupported session version: ${version}.`);
   }
-  if (version === SESSION_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
+  if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
     throw new Error(
       `Session version ${version} cannot contain legacy files; use resources and webFiles.`
     );
@@ -1179,7 +1183,7 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   rejectInvalidLosatCacheKeys(rawEntries, 'LOSAT', { requireKey: true });
   rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
 
-  if (sourceSessionVersion === SESSION_VERSION) {
+  if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     recordStructuralMetric('currentSessionPreflightProteinManifestValidationCount');
   }
   const identityIndex = buildValidatedProteinIdentityIndex(manifest);
@@ -1198,7 +1202,7 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
         );
       }
       if (classification !== 'protein-current') continue;
-      if (sourceSessionVersion === SESSION_VERSION) {
+      if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
         recordStructuralMetric('currentSessionPreflightProteinRawTextValidationCount');
       }
       if (
@@ -1237,7 +1241,7 @@ export const buildSessionLegacyArtifacts = ({
 };
 
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
-  const readsLegacyOptionValues = sourceSessionVersion < SESSION_VERSION;
+  const readsLegacyOptionValues = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   const migratedOptions = readsLegacyOptionValues
     ? migratePersistedWebOptionValues(data.config)
     : data.config;
@@ -1468,7 +1472,7 @@ const validateCurrentWriterFeatureCatalog = (data, { adopt = false } = {}) => {
 
 const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData?.version;
-  const currentSession = sourceSessionVersion === SESSION_VERSION;
+  const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   let adoptedSession = null;
   let currentResourceTable = null;
   let validatedFeatureCatalog = null;
@@ -1480,7 +1484,7 @@ const preflightSessionImport = (rawData) => {
       throw new Error('Invalid session file.');
     }
     recordSessionLifecycleEvent('session-authority-validation-start');
-    adoptedSession = adoptCurrentSessionDocument(rawData, SESSION_VERSION);
+    adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
     recordSessionLifecycleEvent('session-authority-validation-end');
     recordSessionLifecycleEvent('feature-catalog-validation-start');
     validatedFeatureCatalog = validateCurrentWriterFeatureCatalog(rawData, {
@@ -1551,7 +1555,7 @@ const preflightSessionImport = (rawData) => {
     : null;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
   let restoredConfig = canonicalProjection
-    ? sourceSessionVersion === SESSION_VERSION
+    ? sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
       ? cloneJsonData(canonicalProjection.config)
       : {
           ...restoreStoredNonCanonicalConfig(
@@ -1565,7 +1569,7 @@ const preflightSessionImport = (rawData) => {
           )
         }
     : data.config;
-  if (sourceSessionVersion < SESSION_VERSION && restoredConfig) {
+  if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
     const sourceStoredConfig = isPlainObject(normalizedData.config)
       ? normalizedData.config
       : {};
@@ -1590,7 +1594,7 @@ const preflightSessionImport = (rawData) => {
       data.files = migratedComparisonDraft.filesData;
     }
   }
-  if (canonicalProjection && sourceSessionVersion === SESSION_VERSION) {
+  if (canonicalProjection && sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     recordSessionLifecycleEvent('current-draft-validation-start');
     restoredConfig = restoreCurrentWriterActiveConfig({
       mode: canonicalProjection.mode,
@@ -1771,6 +1775,8 @@ export const applyConfigData = (data) => {
       ? cloneJsonData(data.unmanagedConfigOverrides)
       : {}
   );
+  state.recordDisplayDrafts.splice(0, state.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
+  replacePlainObject(state.featurePlacementOverrides, cloneJsonData(data.featurePlacementOverrides || {}));
   state.annotationSets.splice(
     0,
     state.annotationSets.length,
@@ -3872,7 +3878,7 @@ export const exportSession = async (
       comparisonPlanSnapshot
     });
   }
-  if (committed.renderRequest.schema === 5) {
+  if (committed.renderRequest.schema < CANONICAL_REQUEST_SCHEMA) {
     const promoted = {
       ...committed,
       renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest)
@@ -4028,7 +4034,7 @@ export const importSession = async (e, options = {}) => {
       );
     }
     const canonicalSession = Boolean(projectionResult);
-    const currentSchemaSession = sourceSessionVersion === SESSION_VERSION;
+    const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     rollbackSnapshot = captureSessionImportSnapshot();
     if (typeof rollbackStateExtension?.capture === 'function') {
       rollbackExtensionSnapshot = rollbackStateExtension.capture();
@@ -4213,7 +4219,7 @@ export const importSession = async (e, options = {}) => {
           comparisonSourceAvailability
         })
       : null;
-    const missingCatalogSequenceSources = sourceSessionVersion !== SESSION_VERSION
+    const missingCatalogSequenceSources = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION
       || !catalogSequenceSourceCoverage?.complete;
     let restoredFileSequenceSources = [];
     if (missingCatalogSequenceSources && !currentSchemaSession) {
@@ -4387,7 +4393,7 @@ export const importSession = async (e, options = {}) => {
       state.zoom.value = ui.zoom;
     }
 
-    if (sourceSessionVersion !== SESSION_VERSION) {
+    if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
       try {
         await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
       } catch (recoveryError) {

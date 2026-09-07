@@ -207,6 +207,7 @@ def measure_circular_feature_stack(
     strandedness: bool,
     track_ids: Sequence[int] = (0,),
     center_radius_px: float | None = None,
+    placements_by_track_id: Mapping[int, Any] | None = None,
 ) -> CircularFeatureStackMetrics:
     """Measure feature-lane centers from the resolved feature-stack preset."""
 
@@ -234,7 +235,26 @@ def measure_circular_feature_stack(
             center = axis + spacing + (0.5 * band_width)
 
     lane_centers: dict[int, float]
-    if normalized_preset == "middle":
+    if normalized_preset == "middle" and placements_by_track_id and not strandedness:
+        # Semantic levels reserve the empty Main band, even for a lone lane 1.
+        # Track IDs only associate the existing geometry consumers with this result.
+        step = width + spacing
+        # Retain the existing split-stack centering when an inward band is
+        # present, but measure levels from Main rather than dense occupied order.
+        split_seed = ((0.5 * width) + (0.5 * spacing)) if any(
+            assignment.side == "inward" for assignment in placements_by_track_id.values()
+        ) else 0.0
+        main_center = center + split_seed
+        lane_centers = {
+            track_id: max(0.0, (
+                center - split_seed - ((assignment.level - 1) * step)
+                if assignment.side == "inward"
+                else main_center + (assignment.level * step)
+            ))
+            for track_id, assignment in placements_by_track_id.items()
+        }
+        lane_centers.setdefault(0, main_center)
+    elif normalized_preset == "middle":
         step = width + spacing
         ids_set = set(ids)
         has_negative = any(track_id < 0 for track_id in ids)
@@ -275,6 +295,8 @@ def measure_circular_feature_stack(
         RadialBand(center_px - (0.5 * width), center_px + (0.5 * width))
         for center_px in lane_centers.values()
     ]
+    if normalized_preset == "middle" and placements_by_track_id and not strandedness:
+        band_width = (band_union(lane_bands) or RadialBand(center, center)).width_px
     all_band = band_union(lane_bands) or RadialBand(center, center)
     return CircularFeatureStackMetrics(
         lane_count=lane_count,
@@ -311,22 +333,30 @@ def build_circular_feature_layout(
         strandedness=bool(strandedness),
         include_nominal_lanes=include_nominal_lanes,
     )
+    placements = {
+        int(feature.feature_track_id): feature.placement
+        for feature in (feature_dict or {}).values()
+        if getattr(feature, "placement", None) is not None
+    }
     metrics = measure_circular_feature_stack(
         axis_radius_px=float(axis_radius_px),
         lane_width_px=width,
         lane_spacing_px=lane_spacing_px,
-        preset=track_type,
+        # Separate-strand Main keeps the existing preset's nominal strand lanes.
+        preset=track_type if lane_direction is None or strandedness else None,
         lane_direction=direction,
         strandedness=bool(strandedness),
         track_ids=track_ids,
         center_radius_px=anchor_radius_px,
+        placements_by_track_id=placements,
     )
     anchor = float(metrics.center_radius_px)
 
     lanes: dict[int, CircularFeatureLane] = {}
     for track_id in sorted(track_ids):
         center = float(metrics.lane_centers_by_track_id[int(track_id)])
-        strand_group = _feature_lane_strand_group(int(track_id), bool(strandedness))
+        assignment = placements.get(int(track_id))
+        strand_group = assignment.strand_pool if assignment is not None else _feature_lane_strand_group(int(track_id), bool(strandedness))
         half_width = width / 2.0
         lanes[int(track_id)] = CircularFeatureLane(
             track_id=int(track_id),
@@ -336,9 +366,16 @@ def build_circular_feature_layout(
             outer_px=max(0.0, float(center) + half_width),
         )
 
-    all_band = band_union([lane.band_px for lane in lanes.values()]) or RadialBand(anchor, anchor)
+    all_band = RadialBand(metrics.inner_radius_px, metrics.outer_radius_px)
     primary_lanes = [lane.band_px for tid, lane in lanes.items() if tid in {0, -1}]
-    primary_band = band_union(primary_lanes) or all_band
+    primary_band = (
+        RadialBand(
+            metrics.lane_centers_by_track_id[0] - 0.5 * width,
+            metrics.lane_centers_by_track_id[0] + 0.5 * width,
+        )
+        if placements and direction == "split" and not strandedness
+        else band_union(primary_lanes) or all_band
+    )
     return CircularFeatureLayout(
         anchor_radius_px=anchor,
         width_px=width,

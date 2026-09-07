@@ -151,7 +151,7 @@ const syntheticCliSession = {
 };
 const originalCliRequest = structuredClone(syntheticCliSession.renderRequest);
 const promotedSyntheticCli = promoteGallerySessionToCurrent(syntheticCliSession);
-assert.equal(promotedSyntheticCli.renderRequest.schema, 6);
+assert.equal(promotedSyntheticCli.renderRequest.schema, 7);
 assert.equal(promotedSyntheticCli.renderRequest.grouping, 'single');
 assert.deepEqual(promotedSyntheticCli.renderRequest.diagramOptions.output, {
   legend: 'right',
@@ -284,7 +284,7 @@ const syntheticGuiSession = {
 };
 const promotedSyntheticGui = promoteGallerySessionToCurrent(syntheticGuiSession);
 const syntheticGuiOptions = promotedSyntheticGui.renderRequest.diagramOptions;
-assert.equal(promotedSyntheticGui.renderRequest.schema, 6);
+assert.equal(promotedSyntheticGui.renderRequest.schema, 7);
 assert.equal(promotedSyntheticGui.renderRequest.grouping, 'single');
 assert.equal(promotedSyntheticGui.renderRequest.output.prefix, 'old');
 assert.equal(promotedSyntheticGui.renderRequest.output.overwrite, false);
@@ -551,10 +551,10 @@ const migratedCliOnly = migrateLegacyLinearComparisonDraft({
 assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearComparisonPlan'), false);
 assert.equal(Object.hasOwn(migratedCliOnly.config, 'linearRecordLayout'), false);
 
-const hmmt = await loadSession('HmmtDNA_ATskew.gbdraw-session.json');
+const hmmt = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/HmmtDNA_ATskew.v40-schema5.json'), 'utf8'));
 const promotedHmmt = promoteGallerySessionToCurrent({ ...hmmt, version: 39 });
 const hmmtOptions = promotedHmmt.renderRequest.diagramOptions;
-assert.equal(promotedHmmt.renderRequest.schema, 6);
+assert.equal(promotedHmmt.renderRequest.schema, 7);
 assert.equal(hmmtOptions.configOverrides['labels.circular.scope'], 'outer');
 assert.equal(hmmtOptions.configOverrides['objects.definition.circular.font_size'], 28);
 assert.equal(hmmtOptions.featureShapes.repeat_region, 'underlay');
@@ -586,7 +586,7 @@ assert.match(
   /CDS\tgene/
 );
 
-const bgc = await loadSession('BGC0000708-BGC0000713.gbdraw-session.json');
+const bgc = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json'), 'utf8'));
 const promotedBgc = promoteGallerySessionToCurrent({ ...bgc, version: 39 });
 const bgcOptions = promotedBgc.renderRequest.diagramOptions;
 assert.deepEqual(

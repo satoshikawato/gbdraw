@@ -9,6 +9,8 @@ final canvas sizing.
 
 from __future__ import annotations
 
+from gbdraw.features.placement import FeaturePlacementSlot
+
 from collections.abc import Collection
 import math
 from typing import Sequence
@@ -104,6 +106,7 @@ def _precalculate_feature_layers(
     feature_config: FeatureDrawingConfigurator,
     profile: LinearRenderProfile,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    placement_slot: FeaturePlacementSlot | None = None,
 ) -> list[FeatureBuildResult]:
     """Build feature objects once per record for the linear assembly pipeline."""
 
@@ -133,6 +136,9 @@ def _precalculate_feature_layers(
             feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             compute_label_text=compute_label_text,
+            placement_inputs=feature_config.placements[i] if feature_config.placements else None,
+            placement_slot=placement_slot,
+            feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
             record_transform=(record_transforms[i] if record_transforms is not None else None),
         )
         feature_layers.append(result)
@@ -197,6 +203,7 @@ def _precalculate_label_dimensions(
                 profile.resolve_overlaps,
                 label_filtering,
                 feature_shapes=feature_config.feature_shapes,
+                feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
                 feature_visibility_rules=feature_config.feature_visibility_rules,
             )
             feature_dict = feature_result.foreground_features
