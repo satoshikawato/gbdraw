@@ -45,6 +45,14 @@ const bindingForFile = (file, resourceId) => ({
   lastModified: Number(file?.lastModified) || 0
 });
 
+const sameEncodedPayload = (left, right) => (
+  left === right || (
+    left.encoding === right.encoding
+    && left.data === right.data
+    && Number(left.size) === Number(right.size)
+  )
+);
+
 const rewriteResourceRefs = (value, aliases) => {
   if (Array.isArray(value)) {
     return value.map((item) => rewriteResourceRefs(item, aliases));
@@ -138,15 +146,8 @@ export const buildSessionResources = async (state, committedRequest) => {
       throw new Error('An adopted session resource requires an ID and descriptor.');
     }
     const existing = resources[normalizedId];
-    if (existing && existing !== descriptor) {
-      const samePayload = (
-        existing.encoding === descriptor.encoding
-        && existing.data === descriptor.data
-        && Number(existing.size) === Number(descriptor.size)
-      );
-      if (!samePayload) {
-        throw new Error(`Conflicting adopted session resource: ${normalizedId}.`);
-      }
+    if (existing && !sameEncodedPayload(existing, descriptor)) {
+      throw new Error(`Conflicting adopted session resource: ${normalizedId}.`);
     }
     resources[normalizedId] = descriptor;
     aliases.set(normalizedId, normalizedId);
@@ -201,8 +202,14 @@ export const buildSessionResources = async (state, committedRequest) => {
     if (!file) return null;
     const source = getSessionResourceSource(file);
     if (reuseEncodedResources && source?.resourceId && source?.descriptor) {
-      const resourceId = adoptEncodedResource(source.resourceId, source.descriptor);
-      return bindingForFile(file, resourceId);
+      const existing = resources[source.resourceId];
+      if (!existing || sameEncodedPayload(existing, source.descriptor)) {
+        const resourceId = adoptEncodedResource(source.resourceId, source.descriptor);
+        return bindingForFile(file, resourceId);
+      }
+      // A regenerated resource can reuse an imported file's ID for different
+      // bytes. Bind that draft file through the ordinary byte-identity path
+      // below, preserving both the committed resource and the original file.
     }
     if (reuseEncodedResources && Array.isArray(source?.descriptors)) {
       source.descriptors.forEach(({ resourceId, descriptor }) => {
