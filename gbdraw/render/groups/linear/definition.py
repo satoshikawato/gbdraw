@@ -20,6 +20,9 @@ from ....core.text import (
 )
 from ....layout.spatial import Aabb, union_aabbs
 from ....svg.ids import definition_group_svg_id
+from ....layout.record_labels import display_coordinate_label
+
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
@@ -65,7 +68,9 @@ class DefinitionGroup:
         record_index: int = 0,
         record_count: int = 1,
         definition_part: str = "main",
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.record: SeqRecord = record
         self.title_start_x: float = title_start_x
         self.title_start_y: float = title_start_y
@@ -195,7 +200,9 @@ class DefinitionGroup:
         self.accession_label = self.track_id
 
         self.record_length: int = len(self.record.seq)
-        if self._is_region_applied():
+        if self.record_transform is not None and self.record_transform.start_coordinate is not None:
+            self.length_label = display_coordinate_label(self.record_transform)
+        elif self._is_region_applied():
             self.length_label = self._format_coordinate_span()
         else:
             self.length_label = "{:,} bp".format(self.record_length)

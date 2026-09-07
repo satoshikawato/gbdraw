@@ -9,6 +9,8 @@ final canvas sizing.
 
 from __future__ import annotations
 
+from gbdraw.features.placement import FeaturePlacementSlot
+
 from collections.abc import Collection
 import math
 from typing import Sequence
@@ -30,6 +32,7 @@ from ...features.objects import FeatureObject  # type: ignore[reportMissingImpor
 from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
 from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
 from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
+from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
 
@@ -64,6 +67,7 @@ def _precalculate_definition_metrics(
     canvas_config,
     cfg: GbdrawConfig,
     line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """
     Pre-calculate definition widths and heights for all records.
@@ -87,6 +91,7 @@ def _precalculate_definition_metrics(
             canvas_config,
             cfg=cfg,
             line_kinds=line_kinds,
+            record_transform=(record_transforms[index] if record_transforms is not None else None),
         )
         if def_group.definition_bounding_box_width > max_definition_width:
             max_definition_width = def_group.definition_bounding_box_width
@@ -100,6 +105,8 @@ def _precalculate_feature_layers(
     records: list[SeqRecord],
     feature_config: FeatureDrawingConfigurator,
     profile: LinearRenderProfile,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    placement_slot: FeaturePlacementSlot | None = None,
 ) -> list[FeatureBuildResult]:
     """Build feature objects once per record for the linear assembly pipeline."""
 
@@ -129,6 +136,10 @@ def _precalculate_feature_layers(
             feature_shapes=feature_config.feature_shapes,
             feature_visibility_rules=feature_config.feature_visibility_rules,
             compute_label_text=compute_label_text,
+            placement_inputs=feature_config.placements[i] if feature_config.placements else None,
+            placement_slot=placement_slot,
+            feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
+            record_transform=(record_transforms[i] if record_transforms is not None else None),
         )
         feature_layers.append(result)
     return feature_layers
@@ -143,6 +154,7 @@ def _precalculate_label_dimensions(
     orthogroup_label_eligibility: OrthogroupLabelEligibility | None = None,
     sequence_widths: Sequence[float] | None = None,
     feature_lane_geometries: Sequence[LinearFeatureLaneGeometry] | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[float, list[list[dict]], list[float]]:
     """Pre-calculates label placements for all records to determine the required canvas height."""
 
@@ -191,6 +203,7 @@ def _precalculate_label_dimensions(
                 profile.resolve_overlaps,
                 label_filtering,
                 feature_shapes=feature_config.feature_shapes,
+                feature_overlap_tolerance_bp=profile.feature_overlap_tolerance_bp,
                 feature_visibility_rules=feature_config.feature_visibility_rules,
             )
             feature_dict = feature_result.foreground_features
@@ -225,6 +238,7 @@ def _precalculate_label_dimensions(
                 if feature_lane_geometries is not None
                 else None
             ),
+            record_transform=(record_transforms[i] if record_transforms is not None else None),
         )
         all_labels_by_record.append(label_list)
 

@@ -29,6 +29,7 @@ if __package__:
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
+        validate_joint_chloroplast,
         load_chapter,
         parse_translate_chain,
         publish_output,
@@ -44,6 +45,7 @@ else:
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
+        validate_joint_chloroplast,
         load_chapter,
         parse_translate_chain,
         publish_output,
@@ -177,6 +179,7 @@ _TUTORIAL_FEATURE_PRESENTATION_TABLES = {
 }
 
 _GENERATED_TABLES = {
+    "H-CLI-14": {"tables/placements.tsv": 'record\tfeature_selector\tplacement\tlevel\nNC_001879.2\tprotein_id=NP_054479.1\toutward\t1\n'},
     "H-CLI-02": {
         "tables/records.tsv": (
             "gbk\trecord_label\trecord_subtitle\trecord_id\torder\trow\tcolumn\n"
@@ -2135,8 +2138,8 @@ def _assert_session_roundtrip(
     for payload in (plain, compressed):
         if (
             payload.get("format") != "gbdraw-session"
-            or payload.get("version") != 40
-            or payload.get("renderRequest", {}).get("schema") != 6
+            or payload.get("version") != 41
+            or payload.get("renderRequest", {}).get("schema") != 7
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):
             raise RecipeContractError("H-CLI-12 session schema changed.")
@@ -2519,6 +2522,8 @@ def run_scenario(
                     continue
                 if scenario_id == "H-CLI-04":
                     _assert_linear_regions_orientation_layout(chapter, generated_path)
+                elif scenario_id == "H-CLI-14":
+                    validate_joint_chloroplast(chapter, output_path=generated_path)
                 elif scenario_id in {"T-CLI-06", "T-CLI-10"}:
                     inspect_standard_svg(chapter, output_path=generated_path)
                 else:

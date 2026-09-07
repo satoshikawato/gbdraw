@@ -106,7 +106,9 @@ def _same_origin(url: str, base_url: str) -> bool:
     )
 
 
-def open_browser_capture(browser_type: BrowserType, base_url: str) -> BrowserCapture:
+def open_browser_capture(
+    browser_type: BrowserType, base_url: str, *, device_scale_factor: float = DEVICE_SCALE_FACTOR,
+) -> BrowserCapture:
     """Open the pinned browser with a fresh context and same-origin routing."""
 
     validate_capture_base_url(base_url)
@@ -128,7 +130,7 @@ def open_browser_capture(browser_type: BrowserType, base_url: str) -> BrowserCap
 
     context = browser.new_context(
         viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
-        device_scale_factor=DEVICE_SCALE_FACTOR,
+        device_scale_factor=device_scale_factor,
         locale=LOCALE,
         timezone_id=TIMEZONE_ID,
         color_scheme=COLOR_SCHEME,

@@ -104,6 +104,14 @@ def validate_and_project_web_config_overrides(
         for path in canonical_paths
         if _raw_config_leaf(effective_raw, path) != _raw_config_leaf(default_raw, path)
     }
+    # The aggregate raw alias must not duplicate changes owned by GUI leaf controls.
+    filtering_changes = {
+        key for key in effective_raw["labels"]["filtering"].keys() | default_raw["labels"]["filtering"].keys()
+        if effective_raw["labels"]["filtering"].get(key)
+        != default_raw["labels"]["filtering"].get(key)
+    }
+    if all(f"labels.filtering.{key}" in managed for key in filtering_changes):
+        candidates.discard("labels.filtering.raw")
     candidates.update(validated)
 
     projected: dict[str, object] = {}

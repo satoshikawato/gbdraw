@@ -1341,8 +1341,8 @@ export const createHistorySnapshotService = ({
         )
       : null;
     const suppressRef = state.semanticFileWatchersSuppressed;
-    const previousSuppressed = getRef(suppressRef, false);
-    setRef(suppressRef, true);
+    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
+    if (domains.has('files')) setGeneratedArtifactRef(suppressRef, true);
     try {
       if (domains.has('ui')) {
         const ui = intent.ui || {};
@@ -1399,7 +1399,7 @@ export const createHistorySnapshotService = ({
       await nextTick();
       if (afterApplyHistoryIntent) await afterApplyHistoryIntent(intent, { ...context, domains });
     } finally {
-      setRef(suppressRef, previousSuppressed);
+      if (domains.has('files')) setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
   };
 

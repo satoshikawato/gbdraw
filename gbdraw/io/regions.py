@@ -174,6 +174,10 @@ def _crop_record_to_region(
         dbxrefs=list(getattr(record, "dbxrefs", []) or []),
         annotations=dict(getattr(record, "annotations", {}) or {}),
     )
+    if not record.annotations.get(_REGION_APPLIED_KEY):
+        # Capture the complete source length before the first crop; later crops
+        # retain this provenance through the copied annotations.
+        new_record.annotations["gbdraw_source_length"] = len(record)
 
     if getattr(record, "letter_annotations", None):
         sliced = {}

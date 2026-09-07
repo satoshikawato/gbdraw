@@ -1568,6 +1568,7 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
 def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
+    from gbdraw.api.record_planning import _detected_topology
     try:
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
@@ -1582,6 +1583,7 @@ def list_sequence_records(path, format):
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
+                    "topology": _detected_topology(record, "genbank") if format == "genbank" else "unknown",
                 }
             )
         return json.dumps({"records": payload})
@@ -1598,6 +1600,7 @@ def list_gff_fasta_records(gff_path, fasta_path):
                 "selector": f"#{idx + 1}",
                 "record_id": str(record.id or f"Record_{idx + 1}"),
                 "record_length": len(record.seq),
+                "topology": "unknown",
             }
             for idx, record in enumerate(records)
         ]

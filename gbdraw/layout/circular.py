@@ -91,11 +91,7 @@ class CircularFeatureLayout:
         )
 
     def lane_for_track_id(self, track_id: int) -> CircularFeatureLane:
-        if int(track_id) in self.lanes_by_track_id:
-            return self.lanes_by_track_id[int(track_id)]
-        if 0 in self.lanes_by_track_id:
-            return self.lanes_by_track_id[0]
-        return next(iter(self.lanes_by_track_id.values()))
+        return self.lanes_by_track_id[int(track_id)]
 
 
 @dataclass(frozen=True)

@@ -156,6 +156,8 @@ const linearRecordGap = ref(24);
 const linearRecordRows = reactive([]);
 const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());
 const annotationSets = reactive([]);
+const recordDisplayDrafts = reactive([]);
+const featurePlacementOverrides = reactive({});
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
@@ -803,6 +805,8 @@ export const state = {
   files,
   circularConservation,
   annotationSets,
+  recordDisplayDrafts,
+  featurePlacementOverrides,
   selectedAnnotation,
   linearSeqs,
   linearRecordLayoutEnabled,

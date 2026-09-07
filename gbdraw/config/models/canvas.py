@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from numbers import Integral
 from dataclasses import dataclass
 from typing import Any, Literal, Mapping, TypeAlias
 
@@ -19,6 +20,13 @@ def _positive_finite_float(value: Any, *, field_name: str) -> float:
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValidationError(f"{field_name} must be a positive finite number")
     return parsed
+
+
+def validate_feature_overlap_tolerance(value: Any) -> int:
+    """The shared bp tolerance is a nonnegative integer, never a boolean."""
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+        raise ValidationError("canvas.feature_overlap_tolerance_bp must be a nonnegative integer")
+    return int(value)
 
 
 @dataclass(frozen=True)
@@ -194,6 +202,11 @@ class CanvasConfig:
     resolve_overlaps: bool
     circular: CircularCanvasConfig
     linear: LinearCanvasConfig
+    feature_overlap_tolerance_bp: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "feature_overlap_tolerance_bp",
+                           validate_feature_overlap_tolerance(self.feature_overlap_tolerance_bp))
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CanvasConfig":
@@ -209,6 +222,7 @@ class CanvasConfig:
             show_depth=bool(d.get("show_depth", False)),
             strandedness=bool(d["strandedness"]),
             resolve_overlaps=bool(d["resolve_overlaps"]),
+            feature_overlap_tolerance_bp=d.get("feature_overlap_tolerance_bp", 0),
             circular=CircularCanvasConfig.from_dict(d["circular"]),
             linear=LinearCanvasConfig.from_dict(d["linear"]),
         )

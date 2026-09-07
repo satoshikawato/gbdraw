@@ -90,6 +90,7 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.config.models import (  # type: ignore[reportMissingImports]
@@ -119,6 +120,7 @@ from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImp
     _assemble_circular_diagram_result,
 )
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
+from gbdraw.features.placement import ResolvedPlacementInputs
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
 from gbdraw.layout.composition import (
     CompositionItem,
@@ -145,7 +147,7 @@ from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
-from gbdraw.svg.ids import definition_group_svg_id
+from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
     LinearTrackSlot,
@@ -1008,6 +1010,7 @@ def _uniquify_copied_subtrees_ids(
     *,
     record_index: int,
     used_ids: set[str],
+    bind_record_identity: bool = False,
 ) -> None:
     """Repair copied multi-record subtrees with one shared reference namespace."""
 
@@ -1017,6 +1020,12 @@ def _uniquify_copied_subtrees_ids(
             attribs = getattr(child, "attribs", None)
             if not isinstance(attribs, dict):
                 continue
+            if bind_record_identity and attribs.get("data-gbdraw-feature-id"):
+                stable_id = attribs["data-gbdraw-feature-id"]
+                rendered_id = attribs.get("data-gbdraw-rendered-feature-id") or stable_id
+                attribs["data-gbdraw-rendered-feature-id"] = instance_svg_id(rendered_id, f"record_{record_index + 1}")
+                attribs["data-gbdraw-stable-feature-id"] = stable_id
+                attribs["data-gbdraw-record-index"] = str(record_index)
             raw_id = attribs.get("id")
             if not isinstance(raw_id, str) or not raw_id:
                 continue
@@ -1623,7 +1632,9 @@ def assemble_linear_diagram_from_records(
     identity: float = LINEAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = LINEAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
+    _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
 
@@ -2045,6 +2056,7 @@ def assemble_linear_diagram_from_records(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
+        placements=_resolved_placement_inputs,
     )
     gc_config = GcContentConfigurator(
         window=window,
@@ -2078,6 +2090,7 @@ def assemble_linear_diagram_from_records(
     )
 
     canvas = assemble_linear_diagram(
+        record_transforms=_record_transforms,
         records=list(records),
         blast_files=list(blast_files) if blast_files else None,
         canvas_config=canvas_config,
@@ -2179,6 +2192,8 @@ def assemble_circular_diagram_from_record(
     _annotation_record_index: int = 0,
     _definition_group_id: str | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Builds and assembles a circular diagram for a single record.
 
@@ -2507,6 +2522,7 @@ def assemble_circular_diagram_from_record(
         specific_color_rules=resolved_feature_inputs.specific_color_rules,
         default_color_map=resolved_feature_inputs.default_color_map,
         canvas_config=canvas_config,
+        placements=_resolved_placement_inputs,
     )
     legend_config = LegendDrawingConfigurator(
         color_table=color_table,
@@ -2535,6 +2551,7 @@ def assemble_circular_diagram_from_record(
         title_placement = TitlePlacement(normalized_plot_title_position)
 
     result = _assemble_circular_diagram_result(
+        record_transform=_record_transform,
         gb_record=gb_record,
         canvas_config=canvas_config,
         gc_df=gc_df,
@@ -2632,6 +2649,8 @@ def assemble_circular_diagram_from_records(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
     if not isinstance(cfg, GbdrawConfig):
@@ -2648,7 +2667,7 @@ def assemble_circular_diagram_from_records(
     bitscore = thresholds.bitscore
     identity = thresholds.identity
     alignment_length = thresholds.alignment_length
-    resolved_annotations = resolve_annotations(annotation_options, records, mode="circular")
+    resolved_annotations = resolve_annotations(annotation_options, records, mode="circular", record_transforms=_record_transforms)
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
@@ -2965,6 +2984,8 @@ def assemble_circular_diagram_from_records(
             _precomputed_depth_track_count=available_depth_track_count,
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
+            _resolved_placement_inputs=(_resolved_placement_inputs[record_index],) if _resolved_placement_inputs else (),
+            _record_transform=(_record_transforms[record_index] if _record_transforms is not None else None),
         )
         result = _require_circular_assembly_result(sub_canvas)
         record_results.append(result)
@@ -3187,6 +3208,7 @@ def assemble_circular_diagram_from_records(
             (*copied_definitions, *copied_elements),
             record_index=record_index,
             used_ids=used_ids,
+            bind_record_identity=bool(_record_transforms and any(t.start_coordinate is not None for t in _record_transforms)),
         )
         for definition in copied_definitions:
             merged_canvas.defs.add(definition)
@@ -3285,6 +3307,8 @@ def build_circular_diagram(
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_track_count: int | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
@@ -3353,6 +3377,8 @@ def build_circular_diagram(
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
+        _record_transform=_record_transform,
     )
 
 
@@ -3364,7 +3390,9 @@ def _build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
+    _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3449,6 +3477,8 @@ def _build_linear_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
+        _record_transforms=_record_transforms,
         _return_build_result=_return_build_result,
     )
 
@@ -3461,6 +3491,8 @@ def build_linear_diagram(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3471,6 +3503,8 @@ def build_linear_diagram(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
+        _record_transforms=_record_transforms,
     )
     return cast(Drawing, result)
 
@@ -3483,6 +3517,8 @@ def build_linear_diagram_result(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
 
@@ -3493,6 +3529,8 @@ def build_linear_diagram_result(
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
+        _record_transforms=_record_transforms,
         _return_build_result=True,
     )
     if not isinstance(result, LinearDiagramBuildResult):  # pragma: no cover
@@ -3506,6 +3544,8 @@ def build_circular_multi_diagram(
     options: CircularDiagramOptions | None = None,
     layout: CircularMultiRecordOptions | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
+    _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
+    _record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -3582,6 +3622,8 @@ def build_circular_multi_diagram(
         identity=options.identity,
         alignment_length=options.alignment_length,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_placement_inputs=_resolved_placement_inputs,
+        _record_transforms=_record_transforms,
     )
 
 

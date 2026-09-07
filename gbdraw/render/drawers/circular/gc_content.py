@@ -26,6 +26,8 @@ from ....svg.circular_tracks import (  # type: ignore[reportMissingImports]
 )
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class GcContentDrawer:
     """
     Draws GC content track on a circular canvas.
@@ -205,6 +207,7 @@ class GcContentDrawer:
         norm_factor: float,
         dinucleotide: str,
         group_id: str = "gc_content",
+        record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         if self.mode == "percent":
             plot_df = gc_content_percent_df(
@@ -220,10 +223,12 @@ class GcContentDrawer:
                 track_width,
                 norm_factor,
                 close_at_record_len=True,
+                record_transform=record_transform,
             )
         else:
             gc_path_desc = generate_circular_gc_content_path_desc(
-                radius, record_len, gc_df, track_width, norm_factor, dinucleotide
+                radius, record_len, gc_df, track_width, norm_factor, dinucleotide,
+                record_transform=record_transform,
             )
         if not gc_path_desc:
             return group

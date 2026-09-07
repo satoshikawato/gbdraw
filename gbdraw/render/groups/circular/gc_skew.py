@@ -11,6 +11,8 @@ from ...drawers.circular.gc_skew import SkewDrawer  # type: ignore[reportMissing
 from ....configurators import GcSkewConfigurator  # type: ignore[reportMissingImports]
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class GcSkewGroup:
     """
     Represents a group for GC skew visualization on a circular genomic plot.
@@ -28,7 +30,9 @@ class GcSkewGroup:
         cfg: GbdrawConfig,
         norm_factor_override: float | None = None,
         group_id: str | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.gb_record: SeqRecord = gb_record
         self.gc_df: DataFrame = gc_df
         self.radius: float = radius
@@ -58,6 +62,7 @@ class GcSkewGroup:
             self.dinucleotide,
             record_identifier=self.gb_record.id,
             group_identifier=str(self.skew_group.attribs.get("id", "skew")),
+            record_transform=self.record_transform,
         )
 
     def get_group(self) -> Group:

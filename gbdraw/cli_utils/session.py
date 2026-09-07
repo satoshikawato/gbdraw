@@ -29,7 +29,7 @@ from gbdraw.render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from gbdraw.session_io import (
-    CURRENT_SESSION_VERSION,
+    CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
     SessionBuildContext,
     SessionFileBinding,
@@ -805,7 +805,7 @@ def _project_session_adjunct_for_current_write(
         }
     }
     web_file_inventory = _project_web_file_inventory(session)
-    if source_version >= CURRENT_SESSION_VERSION:
+    if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return adjunct, web_file_inventory
 
     config = adjunct.get("config")
@@ -1088,6 +1088,7 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "--qualifier_priority": "files.qualifier_priority",
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
+    "--feature_placement_table": "files.cliInputs[]",
 }
 
 

@@ -8,7 +8,10 @@ from typing import Any
 from ..features.coordinates import get_strand
 from .circular_types import CircularLabelCandidate
 from .filtering import get_label_text
+from .coordinates import display_label_segment
 
+
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 def _candidate_segment(feature: Any, total_length: int) -> tuple[float, float, float, float, str]:
     block_coordinates = [
@@ -47,6 +50,7 @@ def build_circular_label_candidates(
     font_family: str,
     font_size: float,
     measure_text,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> tuple[CircularLabelCandidate, ...]:
     """Select and measure each circular feature label exactly once."""
     candidates: list[CircularLabelCandidate] = []
@@ -55,11 +59,21 @@ def build_circular_label_candidates(
         if not text:
             continue
         width_px, height_px = measure_text(text, font_family, font_size)
-        start, end, middle, span, strand = _candidate_segment(feature, total_length)
+        projected = getattr(feature, "display_parts", None)
+        segment = display_label_segment(feature, total_length, circular=True, record_transform=record_transform) if projected is not None else None
+        if projected is not None and segment is None:
+            continue
+        start, end, middle, span, strand = (
+            (segment.start, segment.end, segment.middle, segment.span, segment.strand)
+            if segment is not None else _candidate_segment(feature, total_length)
+        )
         coordinates = tuple(
             (float(coordinate.start), float(coordinate.end))
             for coordinate in getattr(feature, "coordinates", ())
         )
+        if projected is not None:
+            coordinates = tuple((p.fragment.display_start, p.fragment.display_end)
+                                for p in projected if p.kind == "block")
         candidates.append(
             CircularLabelCandidate(
                 stable_id=str(stable_id),
@@ -78,6 +92,9 @@ def build_circular_label_candidates(
                 segment_middle_bp=middle,
                 segment_span_bp=span,
                 feature_coordinates=coordinates,
+                source_anchor_span=segment.source_span if segment else None,
+                source_part_index=segment.part_index if segment else None,
+                source_middle_bp=segment.source_middle if segment else None,
             )
         )
     return tuple(candidates)

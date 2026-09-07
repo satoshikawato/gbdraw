@@ -58,6 +58,8 @@ class FeatureDrawer:
         record_index: int | None = None,
         source_feature_index: int | None = None,
         feature_part: Optional[str] = None,
+        stroke_path: str | None = None,
+        stroke_linecap: str = "round",
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -71,7 +73,7 @@ class FeatureDrawer:
             stroke=stroke_color,
             stroke_width=stroke_width,
             stroke_linejoin="round",
-            stroke_linecap="round",
+            stroke_linecap=stroke_linecap,
             debug=False,
         )
         if feature_data_id:
@@ -93,6 +95,16 @@ class FeatureDrawer:
                 )
             if feature_part:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
+        if stroke_path is not None:
+            path.attribs["stroke"] = "none"
+            outline = Path(d=stroke_path, debug=False)
+            outline.attribs.update({key: value for key, value in path.attribs.items() if key != "d"})
+            outline.attribs.update(fill="none", stroke=stroke_color, **{"stroke-linecap": "butt"})
+            if "id" in outline.attribs:
+                outline.attribs["id"] += "__outline"
+            group.add(path)
+            group.add(outline)
+            return
         group.add(path)
 
     def draw(
@@ -173,6 +185,7 @@ class FeatureDrawer:
                     record_index=record_index,
                     source_feature_index=feature_instance_id,
                     feature_part="block",
+                    stroke_path=gene_path[2] if len(gene_path) > 2 else None,
                 )
             elif path_type == "line":
                 line_index += 1
@@ -195,6 +208,7 @@ class FeatureDrawer:
                     record_index=record_index,
                     source_feature_index=feature_instance_id,
                     feature_part="connector",
+                    stroke_linecap="butt" if feature_object.display_parts is not None else "round",
                 )
         return group
 
@@ -234,7 +248,8 @@ class FeaturePathGenerator:
 
     def generate_linear_gene_path(self, gene_object):
         feature_track_id = gene_object.feature_track_id
-        coords = gene_object.location
+        coords = (gene_object.location if gene_object.display_parts is None
+                  else [part.location for part in gene_object.display_parts])
         coordinates_paths = []
         feature_y_positions = None
         if self.feature_lane_geometry is not None:
@@ -244,13 +259,17 @@ class FeaturePathGenerator:
                 separate_strands=self.separate_strands,
             ).positions
 
-        for coord in coords:
+        for coord_index, coord in enumerate(coords):
             coord_dict = {
                 "feat_type": coord.kind,
                 "feat_strand": coord.strand,
                 "feat_start": coord.start,
                 "feat_end": coord.end,
             }
+            if gene_object.display_parts is not None:
+                fragment = gene_object.display_parts[coord_index].fragment
+                coord_dict.update(display_fragment=True, open_start=fragment.artificial_start,
+                                  open_end=fragment.artificial_end)
             feat_type = coord_dict["feat_type"]
 
             if feat_type == "line":

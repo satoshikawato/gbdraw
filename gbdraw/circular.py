@@ -75,6 +75,7 @@ from .cli_utils.common import (
     add_color_args,
     add_feature_args,
     add_input_args,
+    apply_record_display_cli_options,
     add_label_args,
     setup_logging,
     validate_input_args,
@@ -713,6 +714,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             cardinalities=_circular_cli_record_cardinality(),
         )
     )
+    record_manifest = apply_record_display_cli_options(record_manifest, args)
     multi_record_positions: list[str] = (
         []
         if args.records_table
@@ -850,12 +852,6 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         logger.info(
             "Ignoring --multi_record_position because --multi_record_canvas is disabled."
         )
-    # Warn if resolve_overlaps is used with separate_strands
-    if strandedness and resolve_overlaps:
-        logger.warning(
-            "WARNING: --resolve_overlaps is ignored when --separate_strands is enabled.")
-        resolve_overlaps = False
-
     config_dict: dict = load_config_toml('gbdraw.data', 'config.toml')
 
     filtering_cfg = config_dict.setdefault("labels", {}).setdefault("filtering", {})
@@ -886,6 +882,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "canvas.circular.track_type": track_type,
         "canvas.strandedness": strandedness,
         "canvas.resolve_overlaps": resolve_overlaps,
+        "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
         "canvas.show_gc": show_gc,
         "objects.gc_content.mode": gc_content_mode,
         "objects.gc_content.min_percent": gc_content_min_percent,
@@ -1072,6 +1069,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         ),
         selected_features_set=tuple(selected_features_set),
         feature_visibility_table_file=feature_table_path or None,
+        feature_placement_table_file=args.feature_placement_table,
         label_whitelist_file=label_whitelist or None,
         qualifier_priority_file=qualifier_priority_path or None,
         label_override_file=label_table_path or None,

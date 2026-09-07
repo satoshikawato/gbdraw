@@ -1,0 +1,8 @@
+{
+  "source_path": "gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json",
+  "source_manifest": "/home/kawato/gbdraw-verification/issue465-session05-20260906T173746Z/session05-final-manifest.json",
+  "source_manifest_sha256": "726477167f4ef6321477e2bb338e2b6501fcc5ef2aaa2050526d54de5f977c53",
+  "sha256": "6da98b2b3159317447214724b6310d59784598e925a3dbe6031333698bf84417",
+  "bytes_preserved": true,
+  "purpose": "Retain the actual schema-5 AT-skew positive fixture while current Gallery assets move to writer 7/session 41."
+}

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Callable, Literal, Sequence, TypeVar
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
 from ..exceptions import ValidationError
+from ..layout.record_coordinates import RecordDisplayTransform, SourceInterval
 from .models import AnnotationOptions, ResolvedAnnotationBundle
 from .resolve import resolve_annotations
 
@@ -25,16 +27,29 @@ def prepare_annotation_track_slots(
     mode: Literal["circular", "linear"],
     default_slots: Callable[[], list[SlotT]],
     slot_factory: Callable[..., SlotT],
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_indices: Sequence[int] | None = None,
 ) -> tuple[list[SlotT] | None, ResolvedAnnotationBundle, frozenset[str]]:
     """Resolve annotation inputs and bind their sets to track slots."""
 
     bundle = (
         annotations
         if isinstance(annotations, ResolvedAnnotationBundle)
-        else resolve_annotations(annotations, records, mode=mode)
+        else resolve_annotations(annotations, records, mode=mode, record_transforms=record_transforms)
     )
     if not bundle.set_ids and not bundle.annotations:
         return slots, bundle, frozenset()
+
+    if record_transforms is not None:
+        transforms = dict(zip(record_indices or range(len(records)), record_transforms, strict=True))
+        projected = []
+        for item in bundle.annotations:
+            transform = transforms.get(item.record_index)
+            if transform is not None and transform.start_coordinate is not None:
+                parts = transform.project_local_parts(tuple(SourceInterval(start, end) for start, end in item.segments))
+                item = replace(item, display_parts=tuple(parts))
+            projected.append(item)
+        bundle = replace(bundle, annotations=tuple(projected))
 
     set_ids = bundle.set_ids or tuple(dict.fromkeys(item.set_id for item in bundle.annotations))
     if slots is None:

@@ -61,7 +61,7 @@ from tools.refresh_gallery_sessions import (
 
 pytestmark = pytest.mark.gallery
 
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, CANONICAL_REQUEST_SCHEMA})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
@@ -748,7 +748,7 @@ def test_linear_schema5_publication_preserves_materialized_cardinality_round_tri
     source = tmp_path / "source.gbdraw-session.json"
     destination = tmp_path / "refreshed.gbdraw-session.json"
     source.write_bytes(
-        _session_path("lambda_basic_linear").read_bytes()
+        (Path(__file__).parent / "fixtures/sessions/lambda_basic_linear.v40-schema5.json").read_bytes()
     )
     committed = load_session(source)
 

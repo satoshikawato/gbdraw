@@ -11,6 +11,8 @@ from ....svg.circular_tracks import generate_circle_path_desc, generate_circular
 from ....svg.ids import stable_svg_id
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class SkewDrawer:
     """
     Draws GC skew track on a circular canvas.
@@ -34,10 +36,14 @@ class SkewDrawer:
         dinucleotide: str,
         record_identifier: str | None = None,
         group_identifier: str | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         skew_desc: str = generate_circular_gc_skew_path_desc(
-            radius, gc_df, record_len, track_width, norm_factor, dinucleotide
+            radius, gc_df, record_len, track_width, norm_factor, dinucleotide,
+            record_transform=record_transform,
         )
+        if not skew_desc:
+            return group
         circle_desc: str = generate_circle_path_desc(radius, norm_factor)
         clip_id = stable_svg_id(
             "clipper_circle",

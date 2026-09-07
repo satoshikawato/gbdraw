@@ -1,0 +1,8 @@
+{
+  "source_path": "gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+  "source_manifest": "/home/kawato/gbdraw-verification/issue465-session05-20260906T173746Z/session05-final-manifest.json",
+  "source_manifest_sha256": "726477167f4ef6321477e2bb338e2b6501fcc5ef2aaa2050526d54de5f977c53",
+  "sha256": "4eb045e070d41243f29d5486ab01be08cf18e84c4ea9a0c28b852f5862e6321d",
+  "bytes_preserved": true,
+  "purpose": "Retain the original schema-5 BGC input used by historical migration tests."
+}

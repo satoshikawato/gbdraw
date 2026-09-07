@@ -6,10 +6,64 @@ from typing import List, Tuple
 
 from Bio.SeqFeature import SimpleLocation
 
-from .objects import FeatureLocation, FeatureLocationPart, Strand
+from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
+from ..layout.record_coordinates import RecordDisplayTransform, SourceInterval
 
 
 logger = logging.getLogger(__name__)
+
+
+def project_feature_parts(
+    exons: List[SimpleLocation],
+    transform: RecordDisplayTransform,
+    *,
+    is_trans_spliced: bool = False,
+) -> tuple[FeatureDisplayPart, ...]:
+    """Adapt true local boundaries once; retain unknown-strand rectangle glyphs.
+
+    The +1 traversal for an undirected block orders geometry only. It does not
+    assert biological strand or terminals, and never changes the source feature.
+    """
+    if transform.start_coordinate is None:
+        raise ValueError("Unset feature geometry must use the existing local path")
+    parts = [SourceInterval(
+        int(exon.start), int(exon.end),
+        exon.strand if exon.strand in (-1, 1) else 1,
+        index,
+        biological_start=exon.strand in (-1, 1),
+        biological_end=exon.strand in (-1, 1),
+    ) for index, exon in enumerate(exons)]
+    by_part = {}
+    for fragment in transform.project_local_parts(parts):
+        by_part.setdefault(fragment.part_index, []).append(fragment)
+    result = []
+    previous_index = None
+    for index, part in enumerate(parts):
+        if part.start == part.end:
+            continue
+        if previous_index is not None and not is_trans_spliced:
+            previous = parts[previous_index]
+            gaps = []
+            if exons[previous_index].strand == exons[index].strand == 1:
+                if previous.end < part.start:
+                    gaps = [(previous.end, part.start)]
+                elif previous.start >= part.end:
+                    gaps = [(previous.end, transform.length), (0, part.start)]
+            elif exons[previous_index].strand == exons[index].strand == -1:
+                if part.end < previous.start:
+                    gaps = [(part.end, previous.start)]
+                elif part.start >= previous.end:
+                    gaps = [(0, previous.start), (part.end, transform.length)]
+            for start, end in gaps:
+                if start == end:
+                    continue
+                connector = SourceInterval(start, end, part.strand, index, False, False)
+                result.extend(FeatureDisplayPart("line", get_strand(exons[index].strand), f)
+                              for f in transform.project_local_parts((connector,)))
+        result.extend(FeatureDisplayPart("block", get_strand(exons[index].strand), fragment)
+                      for fragment in by_part.get(index, ()))
+        previous_index = index
+    return tuple(result)
 
 
 def get_exon_coordinate(

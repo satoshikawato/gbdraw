@@ -131,8 +131,9 @@ Supported feature renderings include directional `arrow`, nondirectional
 anchor and render behind foreground glyphs. Block strokes, connector strokes,
 fill, width, visibility, and overlap resolution are separate controls.
 Overlap resolution may add drawing lanes but does not crop a feature or change
-comparison evidence. With Circular simple controls, separate-strand placement
-owns the lanes and disables overlap resolution.
+comparison evidence. Separate-strand placement and overlap resolution can be enabled together in
+both modes. Undefined-strand features share the nominal negative pool with
+negative-strand features during automatic allocation.
 
 Trans-introns are not currently visualized.
 
@@ -145,3 +146,44 @@ The [Palette Explorer](../PALETTE_EXPLORER.md) shows current palette names and
 swatches. The schemas for default-color, specific-color, qualifier-priority,
 label-filter, label-override, and visibility tables are in [Input formats and
 TSV schemas](input-formats-and-tsv-schemas.md#styling-tables).
+
+## Manual feature placement
+
+A placement belongs to a whole biological feature within its existing feature
+slot. Every exon, connector and fragment created by rotation uses one assignment.
+Glyphs, labels, leaders, reserved space and canvas bounds follow that assignment.
+Feature-associated comparison ribbons attach to the corresponding endpoint
+feature's paint with 4 SVG units of clearance; a record's other lanes do not
+replace the endpoint identity.
+
+| Resolved feature layout | Available requests |
+|---|---|
+| Circular split, combined strands | Auto, Main, Outward lane 1, Inward lane 1 |
+| Linear overlay, combined strands | Auto, Main, Above lane 1, Below lane 1 |
+| One-sided or separate strands, either mode | Auto, Main |
+
+Main means the nominal lane in the feature's strand pool. Custom slots determine
+availability from their final geometry; a preset name cannot override that
+geometry. Unsupported directions fail with a reason.
+
+| Request | Resolver off | Resolver on |
+|---|---|---|
+| Auto (no override) | Nominal lane; overlaps allowed | Allocated deterministically after fixed features |
+| Main or supported lane 1 | Fixed placement | Fixed placement reserved first |
+
+Two fixed features conflict when their envelope intersection on the same physical
+lane exceeds `feature_overlap_tolerance_bp`. The tolerance is a non-negative
+integer number of bases, default 0; touching intervals do not conflict. Circular
+wrap intersections are summed. An intron remains inside its multipart parent's
+collision envelope. Conflicts identify the features and lane; they do not silently
+move either fixed feature.
+
+In the Web Feature Editor choose **Feature placement**, or use **Selected feature
+placements** for a selection. Auto deletes the override; Undo/Redo restores the
+requested state. Apply rotation, placement or tolerance changes with **Generate
+Diagram**. They are drafts until generation succeeds; the previous Result remains
+available. A source replacement invalidates its old binding. Known invisible
+features can be dormant; an unknown or stale feature cannot.
+
+Lane 2 and higher, arbitrary pixel dragging, per-exon placement, annotation-lane
+placement and a general label-collision redesign are outside this feature.

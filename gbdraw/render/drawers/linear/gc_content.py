@@ -19,6 +19,8 @@ from ....layout.scalar_axis import (
 from ....svg.linear_tracks import calculate_gc_content_path_desc, calculate_linear_scalar_area_path_desc
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class GcContentDrawer:
     """
     Draws GC content track on a linear canvas.
@@ -207,6 +209,7 @@ class GcContentDrawer:
         start_y: float,
         dinucleotide: str,
         group_id: str = "gc_content",
+        record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         if self.mode == "percent":
             plot_df = gc_content_percent_df(
@@ -223,6 +226,7 @@ class GcContentDrawer:
                 alignment_width,
                 genome_size_normalization_factor,
                 track_height,
+                record_transform=record_transform,
             )
         else:
             gc_path_desc = calculate_gc_content_path_desc(
@@ -234,6 +238,7 @@ class GcContentDrawer:
                 genome_size_normalization_factor,
                 track_height,
                 dinucleotide,
+                record_transform=record_transform,
             )
         if not gc_path_desc:
             return group

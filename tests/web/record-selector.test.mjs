@@ -73,19 +73,19 @@ assert.deepEqual(normalizeSequenceRecords({
     { selector: '#2', record_id: '', record_length: 0 }
   ]
 }), [
-  { selector: '#1', recordId: 'RecA', recordLength: 4 },
-  { selector: '#2', recordId: 'Record_2', recordLength: null }
+  { selector: '#1', recordId: 'RecA', recordLength: 4, detectedTopology: 'unknown' },
+  { selector: '#2', recordId: 'Record_2', recordLength: null, detectedTopology: 'unknown' }
 ]);
 assert.throws(() => normalizeSequenceRecords({ records: [] }), /No records found/);
 assert.throws(() => normalizeSequenceRecords({ error: 'Unsupported format: embl' }), /Unsupported format/);
 
 assert.deepEqual(parseSequenceRecordText(`LOCUS       FIRST 12 bp DNA\nACCESSION   A1\nVERSION     A1.2\n//\nLOCUS       SECOND 7 bp DNA\nACCESSION   B1\n//\n`, 'genbank'), [
-  { selector: '#1', recordId: 'A1.2', recordLength: 12 },
-  { selector: '#2', recordId: 'B1', recordLength: 7 }
+  { selector: '#1', recordId: 'A1.2', recordLength: 12, detectedTopology: 'unknown' },
+  { selector: '#2', recordId: 'B1', recordLength: 7, detectedTopology: 'unknown' }
 ]);
 assert.deepEqual(parseSequenceRecordText('>alpha note\nACGT\nAA\n>beta\nTTT\n', 'fasta'), [
-  { selector: '#1', recordId: 'alpha', recordLength: 6 },
-  { selector: '#2', recordId: 'beta', recordLength: 3 }
+  { selector: '#1', recordId: 'alpha', recordLength: 6, detectedTopology: 'unknown' },
+  { selector: '#2', recordId: 'beta', recordLength: 3, detectedTopology: 'unknown' }
 ]);
 let fastPathStagingCalls = 0;
 const fastDiscovered = await discoverSequenceRecords({

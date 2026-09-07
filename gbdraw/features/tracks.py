@@ -82,54 +82,55 @@ def calculate_feature_metrics(feature, genome_length: Optional[int] = None) -> T
     return total_span, occupied_length
 
 
-def check_feature_overlap(
-    a: dict, b: dict, separate_strands: bool, genome_length: Optional[int] = None
+def feature_overlap_bp(
+    a: dict, b: dict, *, separate_strands: bool = False,
+    genome_length: Optional[int] = None,
+) -> int:
+    """Length of the shared outer envelope, using existing [1, length) wrap pieces."""
+    if separate_strands and _strand_pool(a["strand"]) != _strand_pool(b["strand"]):
+        return 0
+    if genome_length is None and (a["start"] > a["end"] or b["start"] > b["end"]):
+        raise ValidationError("Origin-spanning overlap length requires genome_length.")
+
+    def pieces(feature):
+        start, end = feature["start"], feature["end"]
+        return [(start, end)] if start <= end else [(start, int(genome_length)), (1, end)]
+
+    return sum(
+        max(0, min(a_end, b_end) - max(a_start, b_start))
+        for a_start, a_end in pieces(a)
+        for b_start, b_end in pieces(b)
+    )
+
+
+def _strand_pool(strand: str) -> str:
+    # The allocator's existing nominal track is 0 for positive, -1 otherwise.
+    return "positive" if strand == "positive" else "negative"
+
+
+def features_conflict(
+    a: dict, b: dict, *, tolerance_bp: int = 0,
+    separate_strands: bool = False, genome_length: Optional[int] = None,
 ) -> bool:
-    """
-    Check if two features overlap on a circular genome.
-
-    Handles origin-spanning features when genome_length is provided.
-    Origin-spanning features have start > end.
-
-    Args:
-        a: Feature dict with 'start', 'end', 'strand' keys
-        b: Feature dict with 'start', 'end', 'strand' keys
-        separate_strands: If True, features on different strands don't overlap
-        genome_length: Total genome length (required for origin-spanning detection)
-
-    Returns:
-        True if features overlap, False otherwise
-    """
-    if separate_strands and a["strand"] != b["strand"]:
+    if separate_strands and _strand_pool(a["strand"]) != _strand_pool(b["strand"]):
         return False
+    if genome_length is None and (a["start"] > a["end"] or b["start"] > b["end"]):
+        if tolerance_bp:
+            raise ValidationError("Origin-spanning overlap tolerance requires genome_length.")
+        return True  # Preserve the existing conservative no-length default.
+    return feature_overlap_bp(
+        a, b, separate_strands=separate_strands, genome_length=genome_length,
+    ) > tolerance_bp
 
-    a_start, a_end = a["start"], a["end"]
-    b_start, b_end = b["start"], b["end"]
 
-    # Check if either feature spans the origin
-    a_spans_origin = a_start > a_end
-    b_spans_origin = b_start > b_end
-
-    def overlaps_half_open(s1: int, e1: int, s2: int, e2: int) -> bool:
-        """Return whether two Biopython-style ``[start, end)`` intervals overlap."""
-        return s1 < e2 and s2 < e1
-
-    if not a_spans_origin and not b_spans_origin:
-        return overlaps_half_open(a_start, a_end, b_start, b_end)
-
-    if genome_length is None:
-        # Can't determine accurately without genome_length, assume overlap
-        return True
-
-    def split_interval(start: int, end: int) -> list[tuple[int, int]]:
-        if start <= end:
-            return [(start, end)]
-        return [(start, int(genome_length)), (1, end)]
-
-    return any(
-        overlaps_half_open(a_piece_start, a_piece_end, b_piece_start, b_piece_end)
-        for a_piece_start, a_piece_end in split_interval(a_start, a_end)
-        for b_piece_start, b_piece_end in split_interval(b_start, b_end)
+def check_feature_overlap(
+    a: dict, b: dict, separate_strands: bool, genome_length: Optional[int] = None,
+    tolerance_bp: int = 0,
+) -> bool:
+    """Compatibility boolean entry; all allocation uses the same final predicate."""
+    return features_conflict(
+        a, b, tolerance_bp=tolerance_bp,
+        separate_strands=separate_strands, genome_length=genome_length,
     )
 
 
@@ -148,6 +149,7 @@ def find_best_track(
     resolve_overlaps: bool,
     genome_length: Optional[int] = None,
     max_track: int = 100,
+    tolerance_bp: int = 0,
 ) -> int:
     """
     Find the best track for a feature, avoiding overlaps if resolve_overlaps is True.
@@ -181,7 +183,7 @@ def find_best_track(
                 return tn
             has_overlap = False
             for existing in track_dict[key]:
-                if check_feature_overlap(feature, existing, separate_strands, genome_length):
+                if check_feature_overlap(feature, existing, separate_strands, genome_length, tolerance_bp):
                     has_overlap = True
                     break
             if not has_overlap:
@@ -247,6 +249,7 @@ def _find_best_track_indexed(
     resolve_overlaps: bool,
     genome_length: Optional[int] = None,
     max_track: int = 100,
+    tolerance_bp: int = 0,
 ) -> int:
     """Find a feature track using index candidates and exact overlap checks."""
     if not separate_strands:
@@ -272,7 +275,7 @@ def _find_best_track_indexed(
                 feature_by_id,
                 genome_length,
             )
-            if not any(check_feature_overlap(feature, existing, separate_strands, genome_length) for existing in candidates):
+            if not any(check_feature_overlap(feature, existing, separate_strands, genome_length, tolerance_bp) for existing in candidates):
                 return tn
 
     if resolve_overlaps:
@@ -293,6 +296,7 @@ def _find_best_track_split_overlaps_by_strand_indexed(
     feature_by_id: dict[str, dict],
     genome_length: Optional[int] = None,
     max_track: int = 100,
+    tolerance_bp: int = 0,
 ) -> int:
     """Find split inner/outer track using index candidates and exact checks."""
     center_candidates = _feature_candidates_for_track(
@@ -303,7 +307,7 @@ def _find_best_track_split_overlaps_by_strand_indexed(
         feature_by_id,
         genome_length,
     )
-    if not any(check_feature_overlap(feature, existing, False, genome_length) for existing in center_candidates):
+    if not any(check_feature_overlap(feature, existing, False, genome_length, tolerance_bp) for existing in center_candidates):
         return 0
 
     is_negative = feature["strand"] == "negative"
@@ -323,7 +327,7 @@ def _find_best_track_split_overlaps_by_strand_indexed(
             feature_by_id,
             genome_length,
         )
-        if not any(check_feature_overlap(feature, existing, False, genome_length) for existing in candidates):
+        if not any(check_feature_overlap(feature, existing, False, genome_length, tolerance_bp) for existing in candidates):
             return sign * track_index
 
     _raise_feature_track_limit(feature, max_track)
@@ -335,6 +339,9 @@ def arrange_feature_tracks(
     resolve_overlaps: bool,
     split_overlaps_by_strand: bool = False,
     genome_length: Optional[int] = None,
+    *,
+    fixed_tracks: dict[str, int] | None = None,
+    tolerance_bp: int = 0,
 ) -> Dict[str, FeatureObject]:
     """
     Arrange features in tracks with improved strand handling and track assignment.
@@ -384,102 +391,63 @@ def arrange_feature_tracks(
 
     sorted_features = sorted(feature_metrics.items(), key=sort_key)
 
-    split_non_stranded_overlaps = (
-        bool(split_overlaps_by_strand)
-        and (not separate_strands)
-        and bool(resolve_overlaps)
-    )
-
+    # Occupancy is partitioned by physical lane, never by a raw strand third pool.
+    split = bool(split_overlaps_by_strand) and not separate_strands
     pos_tracks: Dict[str, List[dict]] = {}
-    neg_tracks: Dict[str, List[dict]] | None = {} if separate_strands else None
+    neg_tracks: Dict[str, List[dict]] = {}
+    pos_indexes: dict[str, IntervalIndex] = {}
+    neg_indexes: dict[str, IntervalIndex] = {}
     center_track: List[dict] = []
-    outer_tracks: Dict[str, List[dict]] = {}
-    inner_tracks: Dict[str, List[dict]] = {}
+    center_index = IntervalIndex(bucket_size=_feature_interval_bucket_size(genome_length))
     bucket_size = _feature_interval_bucket_size(genome_length)
-    pos_track_indexes: dict[str, IntervalIndex] = {}
-    neg_track_indexes: dict[str, IntervalIndex] | None = {} if separate_strands else None
-    center_track_index = IntervalIndex(bucket_size=bucket_size)
-    outer_track_indexes: dict[str, IntervalIndex] = {}
-    inner_track_indexes: dict[str, IntervalIndex] = {}
 
-    for feat_id, feat_metrics in sorted_features:
-        if split_non_stranded_overlaps:
-            track_num = _find_best_track_split_overlaps_by_strand_indexed(
-                feat_metrics,
-                center_track,
-                center_track_index,
-                outer_tracks,
-                outer_track_indexes,
-                inner_tracks,
-                inner_track_indexes,
-                feature_metrics,
-                genome_length=genome_length,
+    def occupancy(track_num):
+        if split and track_num == 0:
+            return {"track_0": center_track}, {"track_0": center_index}, "track_0"
+        if track_num < 0:
+            return neg_tracks, neg_indexes, f"track_{abs(track_num)}"
+        return pos_tracks, pos_indexes, f"track_{track_num}"
+
+    def reserve(feat_id, track_num, *, fixed=False):
+        metrics = feature_metrics[feat_id]
+        tracks, indexes, key = occupancy(track_num)
+        if fixed:
+            candidates = _feature_candidates_for_track(
+                metrics, key, tracks, indexes, feature_metrics, genome_length,
             )
-            if track_num == 0:
-                center_track.append(feat_metrics)
-                _insert_feature_track_index(
-                    {"track_0": center_track_index},
-                    "track_0",
-                    feat_metrics,
-                    genome_length,
-                    bucket_size,
+            if any(features_conflict(
+                metrics, other, tolerance_bp=tolerance_bp, genome_length=genome_length,
+            ) for other in candidates):
+                raise ValidationError(
+                    f"Fixed feature placement conflict for {feat_id!r} on lane {track_num}."
                 )
-            elif track_num < 0:
-                track_id = f"track_{abs(track_num)}"
-                if track_id not in inner_tracks:
-                    inner_tracks[track_id] = []
-                inner_tracks[track_id].append(feat_metrics)
-                _insert_feature_track_index(
-                    inner_track_indexes,
-                    track_id,
-                    feat_metrics,
-                    genome_length,
-                    bucket_size,
-                )
-            else:
-                track_id = f"track_{track_num}"
-                if track_id not in outer_tracks:
-                    outer_tracks[track_id] = []
-                outer_tracks[track_id].append(feat_metrics)
-                _insert_feature_track_index(
-                    outer_track_indexes,
-                    track_id,
-                    feat_metrics,
-                    genome_length,
-                    bucket_size,
-                )
-        else:
-            if separate_strands:
-                track_dict = neg_tracks if feat_metrics["strand"] == "negative" else pos_tracks  # type: ignore[assignment]
-                track_indexes = neg_track_indexes if feat_metrics["strand"] == "negative" else pos_track_indexes
-            else:
-                track_dict = pos_tracks
-                track_indexes = pos_track_indexes
-
-            track_num = _find_best_track_indexed(
-                feat_metrics,
-                track_dict,
-                track_indexes,  # type: ignore[arg-type]
-                feature_metrics,
-                separate_strands,
-                resolve_overlaps,
-                genome_length,
-            )
-            track_id = f"track_{abs(track_num)}"
-
-            if track_id not in track_dict:
-                track_dict[track_id] = []
-            track_dict[track_id].append(feat_metrics)
-            _insert_feature_track_index(
-                track_indexes,  # type: ignore[arg-type]
-                track_id,
-                feat_metrics,
-                genome_length,
-                bucket_size,
-            )
-
+        tracks.setdefault(key, []).append(metrics)
+        _insert_feature_track_index(indexes, key, metrics, genome_length, bucket_size)
         feature_dict[feat_id].feature_track_id = track_num
 
+    fixed_tracks = fixed_tracks or {}
+    for feat_id, track_num in fixed_tracks.items():
+        reserve(feat_id, track_num, fixed=True)
+
+    for feat_id, feat_metrics in sorted_features:
+        if feat_id in fixed_tracks:
+            continue
+        if split and resolve_overlaps:
+            track_num = _find_best_track_split_overlaps_by_strand_indexed(
+                feat_metrics, center_track, center_index,
+                pos_tracks, pos_indexes, neg_tracks, neg_indexes,
+                feature_metrics, genome_length=genome_length, tolerance_bp=tolerance_bp,
+            )
+        else:
+            negative = separate_strands and _strand_pool(feat_metrics["strand"]) == "negative"
+            track_num = _find_best_track_indexed(
+                feat_metrics,
+                neg_tracks if negative else pos_tracks,
+                neg_indexes if negative else pos_indexes,
+                feature_metrics, separate_strands, resolve_overlaps,
+                genome_length, tolerance_bp=tolerance_bp,
+            )
+        reserve(feat_id, track_num)
     return feature_dict
 
 
@@ -487,6 +455,8 @@ __all__ = [
     "arrange_feature_tracks",
     "calculate_feature_metrics",
     "check_feature_overlap",
+    "feature_overlap_bp",
+    "features_conflict",
     "find_best_track",
     "get_feature_ends",
 ]

@@ -124,6 +124,8 @@ def merge_feature_underlays(
                     set_id=set_id,
                     record_index=record_index,
                     segments=segments,
+                    display_parts=(tuple(part.fragment for part in feature.display_parts if part.kind == "block")
+                                   if feature.display_parts is not None else None),
                     midpoint_bp=annotation_midpoint(segments, record_length),
                     span_bp=sum(end - start for start, end in segments),
                     label="",

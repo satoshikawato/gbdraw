@@ -11,18 +11,16 @@ _SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
 _SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
 
 
+def _iter_source_features(features: object):
+    """Yield top-level and nested source features in their original order."""
+    for feature in features or ():
+        yield feature
+        yield from _iter_source_features(getattr(feature, "sub_features", None))
+
+
 def _feature_source_index_map(features: object) -> dict[int, int]:
     """Map nested feature objects to their flattened source-order ordinals."""
-
-    indexes: dict[int, int] = {}
-
-    def walk(items: object) -> None:
-        for feature in items or ():  # type: ignore[union-attr]
-            indexes[id(feature)] = len(indexes)
-            walk(getattr(feature, "sub_features", None))
-
-    walk(features)
-    return indexes
+    return {id(feature): index for index, feature in enumerate(_iter_source_features(features))}
 
 
 def _source_feature_index(feature: object) -> int | None:

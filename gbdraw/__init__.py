@@ -24,6 +24,8 @@ from .interface import (
     read_gff,
 )
 from .version import __version__
+from .api.requests import RecordDisplayOptions
+from .features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 
 __all__ = [
     "CircularLayout",
@@ -36,11 +38,14 @@ __all__ = [
     "DepthTrackOptions",
     "Diagram",
     "FeatureOptions",
+    "FeaturePlacementOverride",
+    "FeaturePlacementTarget",
     "LabelOptions",
     "LinearComparisonOptions",
     "LinearLayout",
     "LinearOptions",
     "LinearTrackOptions",
+    "RecordDisplayOptions",
     "Thresholds",
     "TitleOptions",
     "__version__",

@@ -16,9 +16,14 @@ Core feature data models.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, NamedTuple, Optional, cast
+from typing import TYPE_CHECKING, Any, List, Literal, NamedTuple, Optional, cast
 
 from .shapes import FeatureGlyph
+from ..layout.record_coordinates import DisplayFragment
+
+
+if TYPE_CHECKING:
+    from .placement import FeaturePlacementAssignment
 
 
 FeatureSegmentKind = Literal["block", "line"]
@@ -68,6 +73,22 @@ class FeatureLocationPart(NamedTuple):
 FeatureLocation = list[FeatureLocationPart]
 
 
+class FeatureDisplayPart(NamedTuple):
+    """Projected geometry attached to one unchanged biological feature."""
+
+    kind: FeatureSegmentKind
+    strand: Strand
+    fragment: DisplayFragment
+
+    @property
+    def location(self) -> FeatureLocationPart:
+        fragment = self.fragment
+        return FeatureLocationPart(
+            self.kind, str(fragment.part_index + 1).zfill(3), self.strand,
+            fragment.display_start, fragment.display_end, fragment.biological_end,
+        )
+
+
 class FeatureObject:
     def __init__(
         self,
@@ -97,11 +118,13 @@ class FeatureObject:
             glyph_kind=glyph_kind,
         )
         self.coordinates = coordinates
+        self.display_parts: tuple[FeatureDisplayPart, ...] | None = None
         self.color: str = color
         self.note: str = note
         self.label_text: str = label_text
         self.qualifiers: dict = qualifiers
         self.record_id: Optional[str] = record_id
+        self.placement: FeaturePlacementAssignment | None = None
         self.feature_track_id: int = 0
         self.source_feature_index: int | None = None
         self._feature_type: str = type

@@ -6,6 +6,7 @@ from typing import Dict, Tuple, Union
 
 from .arrows import (
     calculate_arrow_shaft_bounds,
+    block_path_with_open_caps,
     cap_arrow_head_length,
     has_arrow_shaft,
     set_arrow_shoulder,
@@ -79,13 +80,18 @@ def generate_circular_arrow_path_with_radii(
     arrow_end %= total_length
     coord_len_bp = _coord_len_bp(arrow_start, arrow_end, total_length, strand=coord_strand)
 
+    if coord_dict.get("display_fragment"):
+        coord_len_bp = int(coord_dict["coord_end"]) - int(coord_dict["coord_start"])
+
     point_x, point_y = _point_on_radius(center_radius_px, arrow_end, total_length)
     start_x_1, start_y_1 = _point_on_radius(inner_radius_px, arrow_start, total_length)
     start_x_2, start_y_2 = _point_on_radius(outer_radius_px, arrow_start, total_length)
 
     if coord_len_bp < cds_arrow_length:
         feature_path = f"M {start_x_1},{start_y_1} L{point_x},{point_y} L{start_x_2},{start_y_2} z"
-        return ["block", feature_path]
+        return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
+            "open_start" if coord_strand == "positive" else "open_end"
+        )))
 
     shoulder = set_arrow_shoulder(coord_strand, arrow_end, cds_arrow_length) % total_length
     end_x_1, end_y_1 = _point_on_radius(inner_radius_px, shoulder, total_length)
@@ -123,7 +129,9 @@ def generate_circular_arrow_path_with_radii(
             f" L{point_x},{point_y} L{end_x_2},{end_y_2}"
             f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
         )
-    return ["block", feature_path]
+    return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
+            "open_start" if coord_strand == "positive" else "open_end"
+        )))
 
 
 def generate_circular_narrow_arrow_path_with_radii(
@@ -149,6 +157,8 @@ def generate_circular_narrow_arrow_path_with_radii(
     coord_len_bp = float(
         _coord_len_bp(arrow_start, arrow_end, total_length, strand=coord_strand)
     )
+    if coord_dict.get("display_fragment"):
+        coord_len_bp = int(coord_dict["coord_end"]) - int(coord_dict["coord_start"])
     resolved_head_length_bp = cap_arrow_head_length(coord_len_bp, head_length_bp)
 
     point_x, point_y = _point_on_radius(center_radius_px, arrow_end, total_length)
@@ -163,7 +173,9 @@ def generate_circular_narrow_arrow_path_with_radii(
             f"M {full_start_x_1},{full_start_y_1} "
             f"L{point_x},{point_y} L{full_start_x_2},{full_start_y_2} z"
         )
-        return ["block", feature_path]
+        return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
+            "open_start" if coord_strand == "positive" else "open_end"
+        )))
 
     shoulder = (
         set_arrow_shoulder(coord_strand, arrow_end, resolved_head_length_bp)
@@ -233,7 +245,9 @@ def generate_circular_narrow_arrow_path_with_radii(
             f" L{head_base_x_2},{head_base_y_2} L{shaft_end_x_2},{shaft_end_y_2}"
             f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{param_2}{shaft_start_x_2},{shaft_start_y_2} z"
         )
-    return ["block", feature_path]
+    return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
+            "open_start" if coord_strand == "positive" else "open_end"
+        )))
 
 
 def generate_circular_rectangle_path_with_radii(
@@ -284,7 +298,14 @@ def generate_circular_rectangle_path_with_radii(
             f" L{end_x_2},{end_y_2}"
             f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
         )
-    return ["block", feature_path]
+    return block_path_with_open_caps(
+        feature_path,
+        open_tail=bool(coord_dict.get("open_start" if coord_strand == "positive" else "open_end")),
+        tail_cap=f"L {start_x_1},{start_y_1}",
+        end_cap=((f"L {end_x_2},{end_y_2}" if angle_deg > 20.0 else f"L{end_x_2},{end_y_2}") if coord_dict.get(
+            "open_end" if coord_strand == "positive" else "open_start"
+        ) else None),
+    )
 
 
 def generate_circular_narrow_arrow_shaft_path_with_radii(

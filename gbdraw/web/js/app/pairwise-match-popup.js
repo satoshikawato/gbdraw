@@ -1329,7 +1329,7 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
       }
       const isReference = span.role === span.referenceSide;
       return isReference
-        ? { origin: 'circular-reference' }
+        ? { origin: 'circular-reference', recordIndex: span.recordIndex }
         : { origin: 'homology-comparison', sourceIndex: span.sourceIndex };
     },
     unavailableReasonForSpan: (span) => (

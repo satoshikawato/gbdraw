@@ -68,8 +68,8 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 40
-CURRENT_RENDER_REQUEST_SCHEMA = 6
+CURRENT_SESSION_VERSION = 41
+CURRENT_RENDER_REQUEST_SCHEMA = 7
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
     -webkit-backdrop-filter: none !important;
@@ -1173,7 +1173,7 @@ def capture_gui_session_reproduction(
     output_paths: Mapping[str, Path],
     download_dir: Path,
 ) -> SessionReproductionResult:
-    """Run H-GUI-14 and reload its real v40 session in a fresh context."""
+    """Run H-GUI-14 and reload its real v41 session in a fresh context."""
 
     source_record = assert_human_mitochondrion_fixture()
     assert_output_paths(

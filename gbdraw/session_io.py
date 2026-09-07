@@ -37,10 +37,11 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 40
+CURRENT_SESSION_VERSION = 41
+CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
@@ -422,7 +423,7 @@ def expand_session_feature_catalog(
     """Expand the released v39 compact feature representation."""
 
     expanded_session = dict(session)
-    if expanded_session.get("version") == CURRENT_SESSION_VERSION:
+    if expanded_session.get("version") >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return expanded_session
     features = expanded_session.get("features")
     if not isinstance(features, Mapping):
@@ -572,7 +573,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
                 f"Session version {version} requires a canonical resources object."
             )
         files = session.get("files")
-        if version == CURRENT_SESSION_VERSION and "files" in session:
+        if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION and "files" in session:
             raise ValidationError(
                 f"Session version {version} cannot contain legacy files; "
                 "use resources and webFiles."
@@ -585,10 +586,60 @@ def validate_session(session: Mapping[str, Any]) -> None:
             raise ValidationError("Session files are required for CLI regeneration.")
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
-    if version == CURRENT_SESSION_VERSION:
+    if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session)
+    if version >= 41:
+        _validate_display_placement_drafts(session)
+
+
+def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
+    """Validate editable intent independently of the committed render request."""
+    from .api.requests import RecordDisplayOptions
+    from .features.placement import FeaturePlacementOverride, normalize_feature_placements
+
+    config = session.get("config", {})
+    if not isinstance(config, Mapping):
+        return
+    drafts = config.get("recordDisplayDrafts", [])
+    if not isinstance(drafts, list):
+        raise ValidationError("config.recordDisplayDrafts must be an array.")
+    keys = set()
+    for row in drafts:
+        if not isinstance(row, Mapping) or set(row) != {
+            "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
+        }:
+            raise ValidationError("Invalid record display draft fields.")
+        if row["scope"] not in {"circular", "linear"} or any(
+            not isinstance(row[name], str) or "\0" in row[name]
+            for name in ("sourceUid", "selector", "recordId")
+        ) or not row["sourceUid"] or not re.fullmatch(r"#[1-9]\d*", row["selector"]):
+            raise ValidationError("Record display drafts require a source UID and exact selector.")
+        RecordDisplayOptions(row["topologyOverride"], None)
+        RecordDisplayOptions(None, row["startCoordinate"])
+        key = (row["scope"], row["sourceUid"], row["selector"])
+        if key in keys:
+            raise ValidationError("Duplicate record display draft identity.")
+        keys.add(key)
+    placements = config.get("featurePlacementOverrides", {})
+    if not isinstance(placements, Mapping):
+        raise ValidationError("config.featurePlacementOverrides must be an object.")
+    rows = normalize_feature_placements(tuple(FeaturePlacementOverride.from_mapping(row) for row in placements.values()))
+    if set(placements) != {
+        json.dumps([row.record_key, row.biological_feature_id], ensure_ascii=False, separators=(",", ":"))
+        for row in rows
+    }:
+        raise ValidationError("Feature placement draft keys must encode their exact identity as a JSON pair.")
+    mode = session.get("renderRequest", {}).get("mode")
+    for row in rows:
+        row.target.validate_mode(mode)
+    adv = config.get("adv", {})
+    if not isinstance(adv, Mapping):
+        raise ValidationError("config.adv must be an object.")
+    tolerance = adv.get("feature_overlap_tolerance_bp", 0)
+    if isinstance(tolerance, bool) or not isinstance(tolerance, int) or tolerance < 0:
+        raise ValidationError("Feature overlap tolerance must be a non-negative integer.")
 
 
 def _validate_current_retired_active_config_paths(
@@ -2246,7 +2297,7 @@ def build_session_json(
     if not isinstance(config, dict):
         config = {"adv": {}}
         payload["config"] = config
-    elif source_version is not None and source_version < CURRENT_SESSION_VERSION:
+    elif source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         migrated_config = migrate_persisted_web_state_field_names(config)
         assert isinstance(migrated_config, dict)
         config = migrated_config
@@ -2340,7 +2391,7 @@ def build_session_json(
         )
     files_value = payload.get("files")
     files_for_web = files_value if isinstance(files_value, Mapping) else {}
-    if source_version is not None and source_version < CURRENT_SESSION_VERSION:
+    if source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         force_web_comparison_draft = (
             isinstance(config.get("linearRecordLayout"), Mapping)
             or isinstance(config.get("linearComparisonPlan"), Mapping)
@@ -2623,7 +2674,7 @@ def _session_cli_invocation_to_args(
         run_args[binding.argIndex] = str(materialized)
 
     session_version = int(session.get("version", 0))
-    migrate_legacy_cli = session_version < CURRENT_SESSION_VERSION
+    migrate_legacy_cli = session_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION
     _restore_cli_table_paths(
         session,
         run_args,
@@ -3466,7 +3517,7 @@ def _append_linear_gui_blastp_args(
         if (
             key == "collinearMaxUnitGap"
             and value in (None, "")
-            and int(session.get("version", 0)) < CURRENT_SESSION_VERSION
+            and int(session.get("version", 0)) < CURRENT_AUTHORITY_SESSION_MIN_VERSION
         ):
             value = blastp_cfg.get("collinearMaxGeneGap")
         if value not in (None, "", False):

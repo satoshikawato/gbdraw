@@ -1,0 +1,8 @@
+{
+  "source_path": "gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json",
+  "source_manifest": "/home/kawato/gbdraw-verification/issue465-session05-20260906T173746Z/session05-final-manifest.json",
+  "source_manifest_sha256": "726477167f4ef6321477e2bb338e2b6501fcc5ef2aaa2050526d54de5f977c53",
+  "sha256": "c8132a7687a863c0696adbd06301a122f9e3f75dd4160f933fdf0fface476db8",
+  "bytes_preserved": true,
+  "purpose": "Retain schema-5 materialized cardinality evidence with the exact original Gallery bytes."
+}

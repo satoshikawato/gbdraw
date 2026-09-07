@@ -225,6 +225,35 @@ def get_qualifier_values(qualifiers: dict, qualifier_key: str) -> list[str]:
     return []
 
 
+def matches_feature_selector(
+    *, key: str | None, value: str, feature_type: str,
+    feature_hash: str | None, location: str | None,
+    record_location: str | None, qualifiers: dict,
+) -> bool:
+    """Exact FeatureSelector matching; callers own match cardinality."""
+    key = key.lower() if key else None
+    if key == "hash":
+        return feature_hash == value
+    if key in {"location", "position"}:
+        return location == value
+    if key == "record_location":
+        return record_location == value
+    if key in {"type", "feature_type"}:
+        return feature_type == value
+    if key:
+        return any(
+            value == item
+            for qualifier_key, raw_values in qualifiers.items()
+            if str(qualifier_key).lower() == key
+            for item in normalize_qualifier_values(raw_values)
+        )
+    return feature_hash == value or any(
+        value == item
+        for raw_values in qualifiers.values()
+        for item in normalize_qualifier_values(raw_values)
+    )
+
+
 def _matches_constraint(rule_token: str, actual_value: Optional[str]) -> bool:
     if str(rule_token) == "*":
         return True

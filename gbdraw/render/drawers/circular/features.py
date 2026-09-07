@@ -11,7 +11,7 @@ from svgwrite.path import Path
 from ....features.objects import FeatureObject
 from ....features.ids import compute_feature_object_hash
 from ....layout.common import calculate_cds_ratio
-from ....layout.circular import calculate_feature_position_factors_circular
+from ....layout.circular import CircularFeatureLane, calculate_feature_position_factors_circular
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import instance_svg_id
 from ....svg.circular_features import (
@@ -75,6 +75,8 @@ class FeatureDrawer:
         rendered_feature_id: Optional[str] = None,
         source_feature_index: int | None = None,
         feature_part: Optional[str] = None,
+        stroke_path: str | None = None,
+        stroke_linecap: str = "round",
     ) -> None:
         stroke_color: str = (
             stroke_color_specified if stroke_color_specified is not None else self.default_stroke_color
@@ -88,7 +90,7 @@ class FeatureDrawer:
             stroke=stroke_color,
             stroke_width=stroke_width,
             stroke_linejoin="round",
-            stroke_linecap="round",
+            stroke_linecap=stroke_linecap,
             stroke_miterlimit=4,
             debug=False,
         )
@@ -105,6 +107,16 @@ class FeatureDrawer:
                 )
             if feature_part:
                 path.attribs["data-gbdraw-feature-part"] = feature_part
+        if stroke_path is not None:
+            path.attribs["stroke"] = "none"
+            outline = Path(d=stroke_path, debug=False)
+            outline.attribs.update({key: value for key, value in path.attribs.items() if key != "d"})
+            outline.attribs.update(fill="none", stroke=stroke_color, **{"stroke-linecap": "butt"})
+            if "id" in outline.attribs:
+                outline.attribs["id"] += "__outline"
+            group.add(path)
+            group.add(outline)
+            return
         group.add(path)
 
     def draw(
@@ -203,6 +215,7 @@ class FeatureDrawer:
                         rendered_feature_id=rendered_feature_id,
                         source_feature_index=feature_instance_id,
                         feature_part="block",
+                        stroke_path=gene_path[2] if len(gene_path) > 2 else None,
                     )
                 elif path_type == "line":
                     line_index += 1
@@ -218,6 +231,7 @@ class FeatureDrawer:
                         rendered_feature_id=rendered_feature_id,
                         source_feature_index=feature_instance_id,
                         feature_part="connector",
+                        stroke_linecap="butt" if feature_object.display_parts is not None else "round",
                     )
                 elif path_type == "label":
                     for element in path_data:
@@ -474,7 +488,8 @@ class FeaturePathGenerator:
         lane = None
         if self.feature_layout is not None:
             lane = self.feature_layout.lane_for_track_id(int(getattr(feature_object, "feature_track_id", 0)))
-        merged_coord = self._coalesce_origin_spanning_block(feature_object)
+        merged_coord = (self._coalesce_origin_spanning_block(feature_object)
+                        if feature_object.display_parts is None else None)
         if merged_coord is not None:
             merged_strand = str(merged_coord["coord_strand"])
             glyph_kind = str(getattr(feature_object, "glyph_kind", "rectangle"))
@@ -487,15 +502,25 @@ class FeaturePathGenerator:
             )
             return [merged_path]
 
-        coords = feature_object.location
+        if feature_object.display_parts is not None and lane is None:
+            inner, center, outer = self._feature_radii(feature_object.strand, None)
+            lane = CircularFeatureLane(
+                self.track_id, feature_object.strand, inner, center, outer,
+            )
+        coords = (feature_object.location if feature_object.display_parts is None
+                  else [part.location for part in feature_object.display_parts])
         coordinates_paths: List[List[str]] = []
-        for coord in coords:
+        for coord_index, coord in enumerate(coords):
             coord_dict: Dict[str, Union[str, int]] = {
                 "coord_type": str(coord.kind),
                 "coord_strand": coord.strand,
                 "coord_start": coord.start,
                 "coord_end": coord.end,
             }
+            if feature_object.display_parts is not None:
+                fragment = feature_object.display_parts[coord_index].fragment
+                coord_dict.update(display_fragment=True, open_start=fragment.artificial_start,
+                                  open_end=fragment.artificial_end)
             coord_type: str = str(coord_dict["coord_type"])
             if coord_type == "line":
                 if lane is None:

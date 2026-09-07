@@ -36,6 +36,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -79,14 +80,16 @@ from .api.requests import (
     LinearDiagramRequest,
     RecordCardinality,
     RecordCollectionOptions,
+    RecordDisplayOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 6
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 5, CANONICAL_REQUEST_SCHEMA})
+CANONICAL_REQUEST_SCHEMA = 7
+DISPLAY_PLACEMENT_SCHEMA = 7
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 5, 6, CANONICAL_REQUEST_SCHEMA})
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -839,6 +842,10 @@ def _encode_record(
     return {
         "recordKey": record.record_key or f"record-{index}",
         "cardinality": record.cardinality.value,
+        "display": {
+            "isCircular": record.display.is_circular,
+            "startCoordinate": record.display.start_coordinate,
+        },
         "source": source_payload,
         "selector": _encode_selector(record.selector),
         "region": _encode_region(record.region),
@@ -865,7 +872,14 @@ def _decode_record(
         required.add("recordKey")
     if schema >= 6:
         required.add("cardinality")
+    if schema >= DISPLAY_PLACEMENT_SCHEMA:
+        required.add("display")
     item = _object(value, path=path, required=required)
+    display = RecordDisplayOptions()
+    if schema >= DISPLAY_PLACEMENT_SCHEMA:
+        raw = _object(item["display"], path=f"{path}.display",
+                      required={"isCircular", "startCoordinate"})
+        display = RecordDisplayOptions(raw["isCircular"], raw["startCoordinate"])
     source_payload = _object(
         item["source"], path=f"{path}.source", required={"kind"}, exact=False
     )
@@ -935,6 +949,7 @@ def _decode_record(
         selector=_decode_selector(item["selector"], path=f"{path}.selector"),
         region=_decode_region(item["region"], path=f"{path}.region"),
         presentation=presentation,
+        display=display,
         record_key=(
             _required_string(item["recordKey"], f"{path}.recordKey")
             if schema >= 2
@@ -1126,6 +1141,11 @@ def _decode_linear_layout(
     return result
 
 
+_PLACEMENT_INPUT_FIELDS = frozenset({
+    "feature_placements", "feature_placement_table", "feature_placement_table_file",
+})
+
+
 def _encode_diagram_options(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
@@ -1140,14 +1160,28 @@ def _encode_diagram_options(
         raise CanonicalRequestEncodingError(
             "diagramOptions must use mode-specific options."
         )
+    if (options.feature_placement_table is not None
+            or options.feature_placement_table_file is not None):
+        raise CanonicalRequestEncodingError(
+            "Feature placement tables must be materialized before canonical encoding."
+        )
     depth_tracks = _canonical_depth_tracks_for_encoding(
         options,
         record_count=record_count,
     )
-    result: dict[str, Any] = {}
+    result: dict[str, Any] = {"featurePlacements": [
+        {
+            "recordKey": row.record_key,
+            "biologicalFeatureId": row.biological_feature_id,
+            "placement": ({"kind": "main"} if row.target.kind == "main" else {
+                "kind": "lane", "side": row.target.side, "level": row.target.level,
+            }),
+        }
+        for row in options.feature_placements
+    ]}
     for item in fields(options):
         name = item.name
-        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS:
+        if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
         value = getattr(options, name)
         default = getattr(default_options, name)
@@ -1173,6 +1207,14 @@ def _decode_diagram_options(
     if schema in {1, 2}:
         payload = _migrate_legacy_feature_visibility_fields(payload)
     payload = dict(payload)
+    placements = ()
+    if schema >= DISPLAY_PLACEMENT_SCHEMA:
+        if not isinstance(payload.get("featurePlacements"), list):
+            raise CanonicalRequestDecodingError("diagramOptions.featurePlacements must be an array.")
+        placements = tuple(FeaturePlacementOverride.from_mapping(row)
+                           for row in payload.pop("featurePlacements"))
+        for row in placements:
+            row.target.validate_mode(mode)
     for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
         key = _camel(name)
         if key in payload and payload[key] == default:
@@ -1183,7 +1225,7 @@ def _decode_diagram_options(
     known = {
         _camel(item.name): item.name
         for item in fields(options_type)
-        if item.name not in _COMPARISON_FIELDS
+        if item.name not in _COMPARISON_FIELDS and item.name not in _PLACEMENT_INPUT_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -1202,6 +1244,7 @@ def _decode_diagram_options(
         )
         for key, raw in payload.items()
     }
+    decoded["feature_placements"] = placements
     if decoded.get("config_overrides") is not None:
         decoded["config_overrides"] = _decode_config_overrides(
             decoded["config_overrides"],
@@ -1954,6 +1997,25 @@ def _decode_depth_tracks(
     return tuple(decoded)
 
 
+def _without_unwritten_feature_tolerance(name: str, value: object, error_type):
+    if name not in {"config", "config_overrides"} or not isinstance(value, MappingABC):
+        return value
+    owner = value.get("canvas", {}) if name == "config" else value
+    key = "feature_overlap_tolerance_bp" if name == "config" else "canvas.feature_overlap_tolerance_bp"
+    if not isinstance(owner, MappingABC) or key not in owner:
+        return value
+    result = deepcopy(dict(value))
+    owner = result["canvas"] if name == "config" else result
+    tolerance = owner[key]
+    if isinstance(tolerance, bool) or not isinstance(tolerance, int) or tolerance != 0:
+        raise error_type(
+            "Feature overlap tolerance cannot be represented by canonical schema 6; "
+            "persistence requires the shared display/placement writer integration."
+        )
+    owner.pop(key)  # Zero is exactly the existing missing-value behavior.
+    return result
+
+
 def _encode_option_value(
     name: str,
     value: object,
@@ -2023,6 +2085,8 @@ def _decode_option_value(
     schema: int,
     resource_paths: Mapping[str, str | Path],
 ) -> Any:
+    if schema < DISPLAY_PLACEMENT_SCHEMA:
+        value = _without_unwritten_feature_tolerance(name, value, CanonicalRequestDecodingError)
     if name == "config":
         return _migrate_legacy_full_config(
             _object(value, path="renderRequest.diagramOptions.config"),

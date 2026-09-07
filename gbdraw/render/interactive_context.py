@@ -14,7 +14,9 @@ from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.api.prepared import record_prepared_input_metric
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.annotations import AnnotationOptions, resolve_annotations
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+from gbdraw.svg.ids import instance_svg_id
 from gbdraw.web_support.orthogroup_metadata import (
     enrich_features_with_orthogroups,
     serialize_orthogroups_payload,
@@ -55,6 +57,7 @@ def build_interactive_svg_context(
     mode: str | None = None,
     comparison_sequence_records: Sequence[Sequence[SeqRecord]] | None = None,
     collinearity_search_scope: str | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> InteractiveSvgContext:
     """Build rich popup metadata from rendered records.
 
@@ -94,6 +97,10 @@ def build_interactive_svg_context(
         include_selector_safety_scope=False,
     )
     features = payload.get("features", [])
+    if mode == "circular" and len(record_list) > 1 and record_transforms and any(t.start_coordinate is not None for t in record_transforms):
+        features = [dict(feature, rendered_feature_svg_id=instance_svg_id(
+            feature["rendered_feature_svg_id"], f"record_{int(feature['record_idx']) + 1}"
+        )) for feature in features]
     biological_features = payload.get("biological_features", [])
     orthogroup_payload: list[dict[str, object]] = []
     if orthogroups is not None:
@@ -114,6 +121,7 @@ def build_interactive_svg_context(
             annotations,
             record_list,
             mode=mode or ("linear" if linear_rendered_feature_ids else "circular"),
+            record_transforms=record_transforms,
         )
         annotation_payload = [
             {

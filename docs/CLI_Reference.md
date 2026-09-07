@@ -80,7 +80,11 @@ Additional Information:
 <!-- BEGIN GENERATED CIRCULAR HELP -->
 
 ```text
-usage: gbdraw circular [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
+usage: gbdraw circular [-h] [--feature_placement_table TSV]
+              [--feature_overlap_tolerance_bp BP]
+              [--record_topology {auto,linear,circular}]
+              [--display_start_coordinate DISPLAY_START_COORDINATE]
+              [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV] [-o OUTPUT]
               [--overwrite] [-p PALETTE] [-t TABLE] [-d DEFAULT_COLORS]
               [-n NT] [-w WINDOW] [-s STEP] [--species SPECIES]
@@ -176,6 +180,18 @@ multiple records on one grid canvas.
 
 options:
   -h, --help            show this help message and exit
+  --feature_placement_table TSV
+                        Feature placements: record, feature_selector,
+                        placement, and optional level columns.
+  --feature_overlap_tolerance_bp BP
+                        Non-negative permitted feature overlap in base pairs
+                        (default: 0).
+  --record_topology {auto,linear,circular}
+                        Topology override for exactly one direct-input record
+                        (default: auto).
+  --display_start_coordinate DISPLAY_START_COORDINATE
+                        1-based source coordinate at the display start;
+                        requires one complete circular record.
   --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)
@@ -789,7 +805,11 @@ spelling is deterministic but is not a cross-version selector contract.
 <!-- BEGIN GENERATED LINEAR HELP -->
 
 ```text
-usage: gbdraw linear [-h] [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
+usage: gbdraw linear [-h] [--feature_placement_table TSV]
+              [--feature_overlap_tolerance_bp BP]
+              [--record_topology {auto,linear,circular}]
+              [--display_start_coordinate DISPLAY_START_COORDINATE]
+              [--gbk [GBK_FILE ...]] [--gff [GFF3_FILE ...]]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
               [--comparisons_table TSV] [-b [BLAST ...]]
@@ -890,6 +910,18 @@ Generate plot in PNG/PDF/SVG/PS/EPS.
 
 options:
   -h, --help            show this help message and exit
+  --feature_placement_table TSV
+                        Feature placements: record, feature_selector,
+                        placement, and optional level columns.
+  --feature_overlap_tolerance_bp BP
+                        Non-negative permitted feature overlap in base pairs
+                        (default: 0).
+  --record_topology {auto,linear,circular}
+                        Topology override for exactly one direct-input record
+                        (default: auto).
+  --display_start_coordinate DISPLAY_START_COORDINATE
+                        1-based source coordinate at the display start;
+                        requires one complete circular record.
   --gbk [GBK_FILE ...]  GenBank/DDBJ flat file
   --gff [GFF3_FILE ...]
                         GFF3 file (instead of --gbk; --fasta is required)

@@ -1030,7 +1030,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
     cardCount: 1,
     selector: '',
     grouping: 'single',
-    schema: 6,
+    schema: 7,
     cardinalities: ['all'],
     rows: [1],
     selectors: [null],

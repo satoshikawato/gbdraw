@@ -26,6 +26,7 @@ from gbdraw.api.requests import (
     LinearDiagramRequest,
     RecordCardinality,
     RecordCollectionOptions,
+    RecordDisplayOptions,
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
@@ -65,6 +66,38 @@ def _resolve(
         gff_keep_all_features=False,
         genbank_loader=loader,
     )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("start", [None, 1, 5, 10])
+def test_display_context_preserves_source_and_orientation(reverse, start):
+    record = _record("circular", "AAACCGTTAA")
+    record.annotations["topology"] = "circular"
+    resolved = _resolve((RecordInput(
+        InMemoryRecordSource(record),
+        presentation=RecordPresentation(reverse_complement=reverse),
+        display=RecordDisplayOptions(start_coordinate=start),
+    ),), None)
+    assert resolved.displays[0].start_coordinate == start
+    assert resolved.transforms[0].length == 10
+    assert resolved.transforms[0].source_base == (10 if reverse else 1)
+    assert resolved.transforms[0].source_step == (-1 if reverse else 1)
+    assert resolved.provenance[0].display == RecordDisplayOptions(start_coordinate=start)
+    assert str(record.seq) == "AAACCGTTAA"
+    assert "gbdraw_coord_step" not in record.annotations
+
+
+def test_display_all_reports_the_invalid_record(tmp_path):
+    records = [_record("duplicate", "A" * 10), _record("duplicate", "A" * 4)]
+    for record in records:
+        record.annotations["topology"] = "circular"
+    with pytest.raises(ValidationError, match="source-row:2.*Display start"):
+        _resolve((RecordInput(
+            GenBankInputSource(tmp_path / "records.gb"),
+            cardinality=RecordCardinality.ALL,
+            record_key="source-row",
+            display=RecordDisplayOptions(start_coordinate=5),
+        ),), lambda _paths: records)
 
 
 def test_record_cardinality_exactly_one_first_and_all(tmp_path: Path) -> None:
@@ -353,7 +386,7 @@ def test_linear_comparison_reader_does_not_hide_unexpected_errors(
         )
 
 
-def test_schema6_round_trips_unresolved_then_materializes_session(
+def test_current_schema_round_trips_unresolved_then_materializes_session(
     tmp_path: Path,
 ) -> None:
     source_path = tmp_path / "records.gb"
@@ -368,7 +401,7 @@ def test_schema6_round_trips_unresolved_then_materializes_session(
     )
 
     unresolved_encoded = encode_canonical_request(unresolved)
-    assert unresolved_encoded.payload["schema"] == 6
+    assert unresolved_encoded.payload["schema"] == 7
     assert unresolved_encoded.payload["records"][0]["cardinality"] == "all"
 
     resolved = resolve_request(unresolved)
@@ -449,3 +482,164 @@ def test_cli_adapters_do_not_import_or_call_domain_table_readers() -> None:
             for alias in node.names
         }
         assert not (forbidden & (referenced | imported))
+
+
+@pytest.mark.parametrize("topology,override,accepted", [
+    ("circular", None, True), ("linear", None, False), (None, None, False),
+    ("other", True, True), ("LINEAR", True, True), (" Circular ", None, True),
+])
+def test_display_resolver_observes_source_topology(topology, override, accepted):
+    record = _record("topology", "A" * 10)
+    if topology is not None:
+        record.annotations["topology"] = topology
+    inputs = (RecordInput(InMemoryRecordSource(record),
+                          display=RecordDisplayOptions(override, 5)),)
+    if not accepted:
+        with pytest.raises(ValidationError, match="record-1.*circular record"):
+            _resolve(inputs, None)
+    else:
+        result = _resolve(inputs, None)
+        assert result.displays[0].is_circular
+        assert result.transforms[0].length == 10
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_display_materialization_and_replanning_keeps_rotation(reverse):
+    from gbdraw.api.request_render import plan_request
+    record = _record("circular", "AAACCGTTAA")
+    record.annotations["topology"] = "circular"
+    request = LinearDiagramRequest(records=(RecordInput(
+        InMemoryRecordSource(record),
+        presentation=RecordPresentation(reverse_complement=reverse),
+        display=RecordDisplayOptions(None, 1),
+    ),))
+    first = plan_request(request)
+    second = plan_request(first.request)
+    assert first.transforms == second.transforms
+    assert first.displays == second.displays
+    assert first.records[0].seq == second.records[0].seq
+    assert second.request.records[0].display == RecordDisplayOptions(None, 1)
+    assert not second.request.records[0].presentation.reverse_complement
+
+
+def test_display_collection_crop_targets_only_the_selected_record():
+    records = [_record("left", "A" * 10), _record("right", "A" * 10)]
+    for record in records:
+        record.annotations["topology"] = "circular"
+    inputs = tuple(RecordInput(InMemoryRecordSource(record),
+                   display=RecordDisplayOptions(None, 5 if i == 0 else None))
+                   for i, record in enumerate(records))
+    result = resolve_record_inputs(
+        inputs, record_options=RecordCollectionOptions(regions=(parse_region_spec("#2:2-6:rc"),)),
+        gff_candidate_features=None, gff_keep_all_features=False,
+    )
+    assert [len(record) for record in result.records] == [10, 5]
+    assert [item.has_collection_region for item in result.provenance] == [False, True]
+    assert [t.length for t in result.transforms] == [10, 10]
+    assert result.transforms[1].source_base == 6
+    assert result.transforms[1].source_step == -1
+    invalid = (inputs[0], RecordInput(inputs[1].source, display=RecordDisplayOptions(None, 5)))
+    with pytest.raises(ValidationError, match="record-2.*crop"):
+        resolve_record_inputs(invalid,
+            record_options=RecordCollectionOptions(regions=(parse_region_spec("#2:2-6"),)),
+            gff_candidate_features=None, gff_keep_all_features=False)
+
+
+def test_display_input_crop_and_known_materialized_crop_validation():
+    from gbdraw.api.request_render import plan_request
+    record = _record("circular", "A" * 10)
+    record.annotations["topology"] = "circular"
+    source = InMemoryRecordSource(record)
+    with pytest.raises(ValidationError, match="crop"):
+        _resolve((RecordInput(source, region=parse_region_spec("2-6"),
+                              display=RecordDisplayOptions(None, 5)),), None)
+    plan = plan_request(LinearDiagramRequest(records=(RecordInput(source, region=parse_region_spec("2-6:rc")),)))
+    again = plan_request(plan.request)
+    assert again.transforms == plan.transforms
+    assert again.transforms[0].length == 10
+    assert again.transforms[0].source_base == 6
+    assert len(again.records[0]) == 5
+    with pytest.raises(ValidationError, match="crop"):
+        _resolve((RecordInput(InMemoryRecordSource(plan.records[0]),
+                              display=RecordDisplayOptions(None, 5)),), None)
+
+
+def test_display_batch_and_duplicate_instances_keep_aligned_context(tmp_path):
+    from gbdraw.api.request_render import plan_request
+    record = _record("duplicate", "A" * 10)
+    record.annotations["topology"] = "circular"
+    path = tmp_path / "same.gb"
+    _write_genbank(path, record, record)
+    source = GenBankInputSource(path)
+    inputs = (RecordInput(source, selector=parse_record_selector("#1"), record_key="one",
+                          display=RecordDisplayOptions(None, 1)),
+              RecordInput(source, selector=parse_record_selector("#2"), record_key="two",
+                          display=RecordDisplayOptions(None, 5)),
+              RecordInput(source, selector=parse_record_selector("#1"), record_key="again",
+                          display=RecordDisplayOptions(None, 10)))
+    batch = plan_request(CircularBatchRequest(records=inputs, output_policy=CircularBatchOutputPolicy()))
+    items = batch.item_plans()
+    assert [i.request.records[0].display.start_coordinate for i in items] == [1, 5, 10]
+    assert [i.transforms[0] for i in items] == list(batch.transforms)
+    assert [i.displays[0] for i in items] == list(batch.displays)
+    assert [i.provenance[0].record_key for i in items] == ["one", "two", "again"]
+    for i in items:
+        assert len(i.records) == len(i.provenance) == len(i.displays) == len(i.transforms) == 1
+
+
+def test_display_zero_length_rejected_with_context():
+    with pytest.raises(ValidationError, match="record-1.*Complete source length"):
+        _resolve((RecordInput(InMemoryRecordSource(_record("empty", ""))),), None)
+
+
+@pytest.mark.parametrize("crop_rc", [False, True])
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("recrop", [False, True])
+def test_display_unset_preserves_external_crop_source_length(crop_rc, reverse, recrop):
+    from copy import deepcopy
+
+    from gbdraw.api.request_render import plan_request
+    from gbdraw.io.regions import apply_region_specs
+
+    source = _record("external-crop", "AAACCGTTAA")
+    source.annotations["topology"] = "circular"
+    original_annotations = deepcopy(source.annotations)
+    cropped = apply_region_specs(
+        [source], [parse_region_spec("3-7:rc" if crop_rc else "3-7")]
+    )[0]
+    assert source.annotations == original_annotations
+    assert cropped.annotations["gbdraw_source_length"] == 10
+    cropped_annotations = deepcopy(cropped.annotations)
+    expected_seq = source.seq[2:7]
+    if crop_rc:
+        expected_seq = expected_seq.reverse_complement()
+    base, step = (7, -1) if crop_rc else (3, 1)
+    if reverse:
+        expected_seq = expected_seq.reverse_complement()
+        base, step = base + step * 4, -step
+    if recrop:
+        recropped = apply_region_specs([cropped], [parse_region_spec("2-4:rc")])[0]
+        assert len(recropped) == 3
+        assert recropped.annotations["gbdraw_source_length"] == 10
+        expected_seq = expected_seq[1:4]
+        base += step
+        if not reverse:
+            expected_seq = expected_seq.reverse_complement()
+            base, step = base + step * 2, -step
+
+    plan = plan_request(LinearDiagramRequest(records=(RecordInput(
+        InMemoryRecordSource(cropped),
+        presentation=RecordPresentation(reverse_complement=reverse),
+        region=parse_region_spec("2-4" if reverse else "2-4:rc") if recrop else None,
+    ),)))
+    again = plan_request(plan.request)
+    assert cropped.annotations == cropped_annotations
+    assert plan.records[0] is not cropped
+    for resolved in (plan, again):
+        assert resolved.records[0].seq == expected_seq
+        assert resolved.records[0].annotations["gbdraw_source_length"] == 10
+        assert resolved.provenance[0].source_length == 10
+        assert resolved.transforms[0].length == 10
+        assert resolved.transforms[0].source_base == base
+        assert resolved.transforms[0].source_step == step
+        assert resolved.displays[0].start_coordinate is None

@@ -23,6 +23,8 @@ from ....layout.scalar_axis import (
 from ....svg.linear_tracks import calculate_depth_path_desc
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class DepthDrawer:
     """Draws a depth coverage track on a linear canvas."""
 
@@ -155,6 +157,7 @@ class DepthDrawer:
         start_x: float,
         start_y: float,
         axis_group_id: str = "depth_axis",
+        record_transform: RecordDisplayTransform | None = None,
     ) -> Group:
         plot_df = _prepare_depth_plot_dataframe(
             depth_df,
@@ -170,6 +173,7 @@ class DepthDrawer:
             alignment_width,
             genome_size_normalization_factor,
             track_height,
+            record_transform=record_transform,
         )
         if not depth_path_desc:
             return group

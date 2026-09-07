@@ -37,10 +37,10 @@ def _expanded_intervals(
     label_width_bp: float,
     padding_bp: float,
 ) -> tuple[tuple[float, float], ...]:
-    intervals = [(float(start), float(end)) for start, end in annotation.segments]
+    intervals = [(float(start), float(end)) for start, end in annotation.geometry_segments]
     if annotation.label and label_width_bp > annotation.span_bp:
         half = label_width_bp / 2.0
-        center = float(annotation.midpoint_bp)
+        center = float(annotation.geometry_midpoint_bp)
         start, end = center - half, center + half
         if start < 0:
             intervals.extend(((0.0, end), (record_length + start, float(record_length))))
@@ -103,8 +103,8 @@ def assign_annotation_lanes(
         annotations,
         key=lambda item: (
             item.record_index,
-            min(start for start, _ in item.segments),
-            max(end for _, end in item.segments),
+            min(start for start, _ in item.geometry_segments),
+            max(end for _, end in item.geometry_segments),
             item.set_id,
             item.id,
         ),
@@ -140,7 +140,7 @@ def assign_annotation_lanes(
         key=lambda item: (
             item.annotation.record_index,
             item.lane,
-            min(start for start, _ in item.annotation.segments),
+            min(start for start, _ in item.annotation.geometry_segments),
             item.annotation.set_id,
             item.annotation.id,
         )

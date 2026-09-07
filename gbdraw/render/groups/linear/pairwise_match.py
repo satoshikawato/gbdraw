@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import Dict, Mapping, Sequence, Tuple
 
@@ -19,16 +19,20 @@ from ....core.color import (
 )
 from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
+from ....layout.linear import VerticalBand
 from ....svg.ids import instance_svg_id
+from ....layout.record_coordinates import RecordDisplayTransform
+from ....linear_comparison import project_match_endpoints
 from ...drawers.linear.features import FeatureDrawer
 
 
 @dataclass(frozen=True)
 class LinearFeatureDomIndex:
-    """Rendered feature DOM identities keyed by source index and view ID."""
+    """Source-bound DOM identities and final feature attachment geometry."""
 
     by_source_index: Mapping[tuple[int, int], str]
     by_view_id: Mapping[tuple[int, str], tuple[str, ...]]
+    attachment_bands: Mapping[str, VerticalBand] = field(default_factory=dict)
 
 
 def build_linear_feature_dom_index(
@@ -178,6 +182,7 @@ class PairWiseMatchGroup:
         query_y: float | None = None,
         subject_y: float | None = None,
         feature_dom_index: LinearFeatureDomIndex | None = None,
+        record_transforms: Sequence[RecordDisplayTransform] | None = None,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
@@ -227,6 +232,7 @@ class PairWiseMatchGroup:
         self.query_y = 0 if query_y is None else float(query_y)
         self.subject_y = self.comparison_height if subject_y is None else float(subject_y)
         self.feature_dom_index = feature_dom_index
+        self.record_transforms = record_transforms
         self.record_offsets_x = record_offsets_x or {}
         self.track_id: str = "comparison" + str(self.comparison_count)
         self._pairwise_match_counter = 0
@@ -359,7 +365,28 @@ class PairWiseMatchGroup:
                 rendered_ids.append(rendered_id)
         return ";".join(rendered_ids)
 
-    def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None) -> Path:
+    def _feature_attachment_y(self, row: object, role: str, default_y: float) -> float:
+        index = getattr(self, "feature_dom_index", None)
+        placement = getattr(self, f"{role}_placement", None)
+        other = getattr(self, "subject_placement" if role == "query" else "query_placement", None)
+        if index is None or not index.attachment_bands or placement is None or other is None:
+            return default_y
+        view_id = _attribute_text(_row_value(row, f"{role}_view_feature_svg_id", "")) or _attribute_text(
+            _row_value(row, f"{role}_feature_svg_id", "")
+        )
+        rendered_ids = self._rendered_feature_svg_id_values(
+            view_id, record_index=getattr(self, f"{role}_record_index"),
+            feature_index_value=_row_value(row, f"{role}_feature_index", ""),
+        )
+        bands = [index.attachment_bands[key] for key in rendered_ids.split(";") if key in index.attachment_bands]
+        if not bands:
+            return default_y
+        if placement.row < other.row:
+            return default_y + (max(band.bottom_y for band in bands) - placement.comparison_bottom_y)
+        return default_y + (min(band.top_y for band in bands) - placement.comparison_top_y)
+
+    def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None,
+                                   endpoints: tuple[float, float, float, float] | None = None) -> Path:
         """
         Generates an SVG path for a pairwise match based on the provided row data.
 
@@ -391,14 +418,21 @@ class PairWiseMatchGroup:
             factor = max(0.0, min(1.0, factor))
         default_gradient_color = interpolate_color(self.match_min_color, self.match_max_color, factor)
         dynamic_fill_color = self.resolve_match_fill_color(row, factor, default_gradient_color)
-        query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
+        if endpoints is None:
+            query_start, query_end, subject_start, subject_end = self.calculate_offsets(row)
+        else:
+            query_start, query_end, subject_start, subject_end = endpoints
+            query_start += self.query_offset_x
+            query_end += self.query_offset_x
+            subject_start += self.subject_offset_x
+            subject_end += self.subject_offset_x
         query_start_x, query_start_y, query_end_x, query_end_y = self.normalize_positions(
-            query_start, query_end, getattr(self, "query_y", 0), is_query=True
+            query_start, query_end, self._feature_attachment_y(row, "query", getattr(self, "query_y", 0)), is_query=True
         )
         subject_start_x, subject_start_y, subject_end_x, subject_end_y = self.normalize_positions(
             subject_start,
             subject_end,
-            getattr(self, "subject_y", self.comparison_height),
+            self._feature_attachment_y(row, "subject", getattr(self, "subject_y", self.comparison_height)),
             is_query=False,
         )
 
@@ -740,8 +774,19 @@ class PairWiseMatchGroup:
         """
         rows = sorted(self.comparison_df.itertuples(), key=_match_draw_order_key)
         for index, row in enumerate(rows, start=1):
-            match_path: Path = self.generate_linear_match_path(row, match_index=index)
-            self.match_group.add(match_path)
+            transforms = getattr(self, "record_transforms", None)
+            pair = ((transforms[self.query_record_index], transforms[self.subject_record_index])
+                    if transforms is not None else None)
+            projected = pair is not None and any(t.start_coordinate is not None for t in pair)
+            endpoints = (project_match_endpoints((row.qstart, row.qend, row.sstart, row.send), pair)
+                         if projected else (None,))
+            for fragment_index, fragment in enumerate(endpoints):
+                match_path = self.generate_linear_match_path(row, match_index=index, endpoints=fragment)
+                if projected:
+                    match_path.attribs["id"] = f"{self._next_pairwise_match_id(index)}__fragment{fragment_index}"
+                    match_path.attribs["data-gbdraw-match-fragment"] = str(fragment_index)
+                    match_path.attribs["data-gbdraw-match-geometry"] = "endpoint-linear"
+                self.match_group.add(match_path)
         return self.match_group
 
     def get_group(self) -> Group:
@@ -755,4 +800,3 @@ class PairWiseMatchGroup:
 
 
 __all__ = ["PairWiseMatchGroup"]
-

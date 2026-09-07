@@ -11,6 +11,8 @@ from ...drawers.linear.gc_content import GcContentDrawer  # type: ignore[reportM
 from ....configurators import GcContentConfigurator  # type: ignore[reportMissingImports]
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class GcContentGroup:
     """
     Manages the visualization of GC content for a genomic sequence in a linear layout.
@@ -39,6 +41,7 @@ class GcContentGroup:
         gc_df: DataFrame | None = None,
         group_id: str = "gc_content",
         sequence_width: float | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         """
         Initializes the GcContentGroup with the given parameters and configurations.
@@ -52,6 +55,7 @@ class GcContentGroup:
             start_x (float): Starting x-coordinate for the GC content visualization.
             start_y (float): Starting y-coordinate for the GC content visualization.
         """
+        self.record_transform = record_transform
         self.group_id = group_id
         self.gc_group = Group(id=self.group_id, debug=False)
         self.start_x: float = start_x
@@ -119,6 +123,7 @@ class GcContentGroup:
             self.start_y,
             self.dinucleotide,
             self.group_id,
+            record_transform=self.record_transform,
         )
 
     def get_group(self) -> Group:

@@ -82,6 +82,7 @@ from flows.tutorials.gui_precomputed_circular_rings import (  # noqa: E402
 from flows.tutorials.gui_quantitative_map import (  # noqa: E402
     capture_gui_quantitative_map,
 )
+from flows.how_to.joint_display_placement import capture_joint_display_placement  # noqa: E402
 from web_server import CaptureWebServer  # noqa: E402
 
 
@@ -116,7 +117,9 @@ CAPTURE_FUNCTIONS: dict[str, CaptureFunction] = {
     "H-GUI-13": capture_gui_interactive_editing,
     "H-GUI-14": capture_gui_session_reproduction,
     "H-GUI-15": capture_gui_exports,
+    "H-GUI-16": capture_joint_display_placement,
 }
+
 
 GUI_SCENARIO_IDS = scenario_ids_for("playwright")
 CLI_SCENARIO_IDS = scenario_ids_for("cli-recipe")

@@ -252,3 +252,33 @@ def test_arrow_geometry_dotted_overrides(path: str, value: object, expected: obj
 def test_arrow_geometry_rejects_invalid_overrides(path: str, value: object) -> None:
     with pytest.raises(ValidationError, match="arrow|Invalid value"):
         modify_config_dict(load_default_config(), {path: value})
+
+
+@pytest.mark.parametrize("value", [True, False, -1, 1.5, "2", None])
+def test_feature_overlap_tolerance_rejects_invalid_values_on_config_and_copy(value):
+    from dataclasses import replace
+    cfg = GbdrawConfig.from_dict(load_default_config())
+    with pytest.raises(ValidationError):
+        replace(cfg.canvas, feature_overlap_tolerance_bp=value)
+    raw = load_default_config()
+    raw["canvas"]["feature_overlap_tolerance_bp"] = value
+    with pytest.raises(ValidationError):
+        GbdrawConfig.from_dict(raw)
+    with pytest.raises(ValidationError):
+        apply_config_overrides(cfg, {"canvas.feature_overlap_tolerance_bp": value})
+
+
+def test_feature_overlap_tolerance_is_one_canvas_owner_and_survives_copy():
+    from dataclasses import asdict, replace
+    from gbdraw.config.models import CircularRenderProfile, LinearRenderProfile
+    raw = load_default_config()
+    raw["canvas"].pop("feature_overlap_tolerance_bp")
+    cfg = GbdrawConfig.from_dict(raw)
+    assert cfg.canvas.feature_overlap_tolerance_bp == 0
+    changed = apply_config_overrides(cfg, {"canvas.feature_overlap_tolerance_bp": 2})
+    assert cfg.canvas.feature_overlap_tolerance_bp == 0
+    assert changed.canvas.feature_overlap_tolerance_bp == 2
+    assert GbdrawConfig.from_dict(asdict(changed)).canvas.feature_overlap_tolerance_bp == 2
+    assert replace(changed).canvas.feature_overlap_tolerance_bp == 2
+    for profile in (CircularRenderProfile(changed), LinearRenderProfile(changed)):
+        assert profile.feature_overlap_tolerance_bp == 2

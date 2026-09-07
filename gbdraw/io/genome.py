@@ -13,6 +13,9 @@ from BCBio import GFF
 from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import InputFileError, ParseError, ValidationError
 
+from gbdraw.core.record_metadata import _copy_source_feature_identity, _feature_source_index_map
+from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
+
 logger = logging.getLogger(__name__)
 
 
@@ -239,7 +242,8 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
 
 
 def scan_features_recursive(
-    features: List[SeqFeature], feature_types_to_keep: Set[str]
+    features: List[SeqFeature], feature_types_to_keep: Set[str],
+    source_indexes: dict[int, int] | None = None,
 ) -> List[SeqFeature]:
     filtered_list: list[SeqFeature] = []
     for feature in features:
@@ -250,18 +254,23 @@ def scan_features_recursive(
                 qualifiers=feature.qualifiers,
                 id=feature.id,
             )
+            if source_indexes is not None:
+                _copy_source_feature_identity(feature, new_feature,
+                    fallback_index=source_indexes[id(feature)], coord_base=1, coord_step=1)
             filtered_list.append(new_feature)
 
         if feature.sub_features:
             # Recursively call and extend the list with the results
             filtered_list.extend(
-                scan_features_recursive(feature.sub_features, feature_types_to_keep)
+                scan_features_recursive(feature.sub_features, feature_types_to_keep, source_indexes)
             )
 
     return filtered_list
 
 
-def filter_features_by_type(record: SeqRecord, feature_types_to_keep: Set[str]) -> SeqRecord:
+def filter_features_by_type(
+    record: SeqRecord, feature_types_to_keep: Set[str], *, source_indexes: dict[int, int] | None = None,
+) -> SeqRecord:
     new_record = SeqRecord(
         seq=record.seq,
         id=record.id,
@@ -271,7 +280,7 @@ def filter_features_by_type(record: SeqRecord, feature_types_to_keep: Set[str]) 
         annotations=record.annotations,
     )
 
-    filtered_features = scan_features_recursive(record.features, feature_types_to_keep)
+    filtered_features = scan_features_recursive(record.features, feature_types_to_keep, source_indexes)
     new_record.features = filtered_features
 
     logger.info(
@@ -287,6 +296,8 @@ def load_gff_fasta(
     keep_all_features: bool = False,
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
+    *,
+    source_feature_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = None,
 ) -> list[SeqRecord]:
     """Parse paired GFF3/FASTA files without applying diagram-mode policy."""
 
@@ -311,14 +322,18 @@ def load_gff_fasta(
             parsed_gff_records = [
                 _normalize_gff3_multipart_features(record) for record in GFF.parse(gff_file)
             ]
+            catalogs = tuple(build_source_feature_catalog(record) for record in parsed_gff_records) if source_feature_catalogs is not None else ()
             if keep_all_features or selected_features_set is None:
                 gff_records = parsed_gff_records
             else:
                 feature_types_to_keep = set(selected_features_set)
                 gff_records = [
-                    filter_features_by_type(record, feature_types_to_keep)
+                    filter_features_by_type(record, feature_types_to_keep,
+                        source_indexes=_feature_source_index_map(record.features)
+                        if source_feature_catalogs is not None else None)
                     for record in parsed_gff_records
                 ]
+            catalog_by_record = {id(record): catalog for record, catalog in zip(gff_records, catalogs)}
             logger.info("INFO: Loading FASTA file {}".format(fasta_file))
             fasta_records: list[SeqRecord] = list(SeqIO.parse(fasta_file, "fasta"))
             merged_records = merge_gff_fasta_records(gff_records, fasta_records)
@@ -336,13 +351,16 @@ def load_gff_fasta(
                 if reverse_flags and file_idx < len(reverse_flags)
                 else False
             )
+            selected_catalogs = tuple(catalog_by_record[id(record)] for record in merged_records) if source_feature_catalogs is not None else ()
             merged_records = reverse_records(merged_records, reverse_flag, log=logger)
 
-            for record in merged_records:
+            for record_index, record in enumerate(merged_records):
                 if record.id in id_list:
                     logger.warning(
                         f"WARNING: Record {record.id} seems to have been already loaded. Check for duplicates!"
                     )
+                if source_feature_catalogs is not None:
+                    source_feature_catalogs.append(selected_catalogs[record_index])
                 _attach_source_annotations(record, gff_file)
                 record_list.append(record)
                 id_list.append(record.id)  # type: ignore

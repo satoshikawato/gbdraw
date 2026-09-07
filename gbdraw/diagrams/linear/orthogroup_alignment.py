@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import math
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 from dataclasses import dataclass
 from typing import NamedTuple, Sequence
 
@@ -416,18 +419,24 @@ def _rendered_center_x(
     member: OrthogroupAlignmentMember,
     records: Sequence[SeqRecord],
     canvas_config: LinearCanvasConfigurator,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> float:
     if member.record_index < 0 or member.record_index >= len(records):
         raise ValidationError(
             "align_orthogroup_feature references an orthogroup member outside the rendered records."
         )
     record = records[member.record_index]
+    center = member.center
+    transform = record_transforms[member.record_index] if record_transforms is not None else None
+    if transform is not None and transform.start_coordinate is not None:
+        boundary = math.floor(center)
+        center = transform.local_boundary_to_display_offset(boundary) + (center - boundary)
     if bool(canvas_config.normalize_length):
         record_length = max(1.0, float(len(record.seq)))
-        return float(canvas_config.alignment_width) * (member.center / record_length)
+        return float(canvas_config.alignment_width) * (center / record_length)
     longest = max(1.0, float(canvas_config.longest_genome))
     return _base_record_offset_x(record, canvas_config) + (
-        float(canvas_config.alignment_width) * (member.center / longest)
+        float(canvas_config.alignment_width) * (center / longest)
     )
 
 
@@ -510,6 +519,7 @@ def calculate_orthogroup_alignment_offsets(
     align_orthogroup_feature: str | None,
     *,
     orthogroups: OrthogroupResult | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> dict[int, float]:
     """Return per-record x offsets that align representatives to the selected member."""
 
@@ -546,12 +556,12 @@ def calculate_orthogroup_alignment_offsets(
     # record has a stronger score.
     representative_by_record[anchor_member.record_index] = anchor_member
 
-    anchor_center_x = _rendered_center_x(anchor_member, records, canvas_config)
+    anchor_center_x = _rendered_center_x(anchor_member, records, canvas_config, record_transforms)
     offsets: dict[int, float] = {}
     for record_index, representative in representative_by_record.items():
         if record_index < 0 or record_index >= len(records):
             continue
-        representative_center_x = _rendered_center_x(representative, records, canvas_config)
+        representative_center_x = _rendered_center_x(representative, records, canvas_config, record_transforms)
         offsets[record_index] = anchor_center_x - representative_center_x
     return offsets
 

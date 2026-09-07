@@ -1,3 +1,5 @@
+import { canonicalFeaturePlacements } from './feature-placement.js';
+export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
 import {
   parseColorTable,
@@ -125,11 +127,22 @@ import {
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
+import { recordDisplayKey, requestedRecordDisplay } from '../app/record-display-options.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 6;
+export const CANONICAL_REQUEST_SCHEMA = 7;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, 5, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, 6, CANONICAL_REQUEST_SCHEMA
 ]);
+
+const canonicalRecordDisplay = (raw) => {
+  if (!raw || Object.keys(raw).sort().join(',') !== 'isCircular,startCoordinate'
+    || (raw.isCircular !== null && typeof raw.isCircular !== 'boolean')
+    || (raw.startCoordinate !== null && (!Number.isSafeInteger(raw.startCoordinate) || raw.startCoordinate < 1))
+    || (raw.isCircular === false && raw.startCoordinate !== null)) {
+    throw new Error('Record display requires nullable isCircular and a positive integer or null startCoordinate.');
+  }
+  return { ...raw };
+};
 
 // Canonical schemas 1-2 omitted values that matched the former shared API
 // defaults. Keep those values stable when reading sparse persisted requests.
@@ -177,6 +190,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   showDepth: 'canvas.show_depth',
   strandedness: 'canvas.strandedness',
   resolveOverlaps: 'canvas.resolve_overlaps',
+  featureOverlapToleranceBp: 'canvas.feature_overlap_tolerance_bp',
   trackType: 'canvas.circular.track_type',
   alignCenter: 'canvas.linear.align_center',
   keepDefinitionLeftAligned: 'canvas.linear.keep_definition_left_aligned',
@@ -718,7 +732,8 @@ const buildRecords = ({ state, filesData, resources }) => {
         source,
         selector: record.selector || null,
         region: record.region || null,
-        presentation: publicationClone(record.presentation) || presentationPayload()
+        presentation: publicationClone(record.presentation) || presentationPayload(),
+        display: publicationClone(record.display) || { isCircular: null, startCoordinate: null }
       };
     });
     const singleJourney = (
@@ -897,6 +912,7 @@ const buildConfigOverrides = (
       : form.show_labels_linear,
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
+    [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: adv.feature_overlap_tolerance_bp ?? 0,
     [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
     [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: optionalNumber(adv.gc_content_min_percent),
     [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: optionalNumber(adv.gc_content_max_percent),
@@ -1934,9 +1950,9 @@ export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
   });
 };
 
-const buildLayout = (state, filesData) => {
+const buildLayout = (state, filesData, records = []) => {
   if (state.mode.value === 'linear') {
-    if (!state.linearRecordLayoutEnabled?.value) return {};
+    if (!state.linearRecordLayoutEnabled?.value && !records.some((record) => record.presentation.gridRow != null)) return {};
     return {
       recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0)
     };
@@ -2012,7 +2028,9 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     labelTextFeatureOverrideSources: publicationClone(features.labelTextFeatureOverrideSources || {}), labelVisibilityOverrides: publicationClone(features.labelVisibilityOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
     linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan || { mode: 'none', defaultSource: 'losat', edges: [] }),
-    annotationSets: publicationClone(config.annotationSets || []), canonicalPublicationFiles
+    annotationSets: publicationClone(config.annotationSets || []),
+    recordDisplayDrafts: publicationClone(config.recordDisplayDrafts || []),
+    featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}), canonicalPublicationFiles
   };
 };
 export const buildCanonicalRenderRequest = ({
@@ -2047,7 +2065,41 @@ export const buildCanonicalRenderRequest = ({
   const resources = createResourceBuilder();
   const webFiles = {};
   const recordPlan = buildRecords({ state, filesData, resources });
-  const records = recordPlan.records;
+  const drafts = state.recordDisplayDrafts || [];
+  const displayRows = state.recordDisplayRows?.value || [];
+  const sourceInputIndexes = [];
+  const records = recordPlan.records.flatMap((record, index) => {
+    const sourceUid = state.mode.value === 'linear'
+      ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
+    const sourceRows = displayRows.filter((row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
+    const selector = record.region?.selector || record.selector;
+    const selectedRows = sourceRows.filter((row) => !selector
+      || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
+    const displayFor = (row) => requestedRecordDisplay(row,
+      drafts.find((draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
+    if (record.cardinality === 'all' && selectedRows.length > 1) {
+      const displays = selectedRows.map(displayFor);
+      if (new Set(displays.map((display) => JSON.stringify(display))).size > 1) {
+        sourceInputIndexes.push(...selectedRows.map(() => index));
+        return selectedRows.map((row, rowIndex) => ({ ...record,
+          recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
+          cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
+          presentation: { ...record.presentation, gridRow: record.presentation.gridRow ?? index + 1 },
+          display: displays[rowIndex] }));
+      }
+    }
+    const selected = selectedRows[0];
+    const savedDraft = drafts.find((draft) => draft.scope === state.mode.value && draft.sourceUid === sourceUid
+      && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
+        : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
+    sourceInputIndexes.push(index);
+    return [{ ...record, display: selected ? displayFor(selected)
+      : record.display || { isCircular: savedDraft?.topologyOverride ?? null,
+        startCoordinate: savedDraft?.startCoordinate ?? null } }];
+  });
+  if (state.mode.value === 'linear' && records.length !== recordPlan.records.length) {
+    records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
+  }
   if (records.length === 0) throw new Error('A canonical request requires at least one record.');
   const selectedCircularFilesData = (
     state.mode.value === 'circular' &&
@@ -2065,7 +2117,9 @@ export const buildCanonicalRenderRequest = ({
     : filesData;
   const trackPlan = buildTrackPlan({
     state,
-    filesData: selectedCircularFilesData,
+    filesData: state.mode.value === 'linear'
+      ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
+      : selectedCircularFilesData,
     recordCount: records.length,
     resolvedCircularConservation
   });
@@ -2119,6 +2173,7 @@ export const buildCanonicalRenderRequest = ({
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
   const diagramOptions = {
+    featurePlacements: canonicalFeaturePlacements(state.featurePlacementOverrides || {}, state.mode.value),
     configOverrides: buildConfigOverrides(state, {
       depthRequested: trackPlan.depthRequested,
       hasComparisonIntent: hasLinearComparisonIntent
@@ -2275,7 +2330,9 @@ export const buildCanonicalRenderRequest = ({
   if (trackPlan.depthRequested) {
     buildDepthResources({
       state,
-      filesData: selectedCircularFilesData,
+      filesData: state.mode.value === 'linear'
+      ? { ...filesData, linearSeqs: sourceInputIndexes.map((index) => filesData.linearSeqs[index]) }
+      : selectedCircularFilesData,
       resources,
       diagramOptions,
       recordCount: records.length
@@ -2301,9 +2358,9 @@ export const buildCanonicalRenderRequest = ({
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
   if (state.mode.value === 'linear') {
-    webFiles.linearRecordMetadata = (filesData.linearSeqs || []).map((sequence, index) => ({
-      recordKey: String(records[index]?.recordKey || sequence?.uid || `record-${index + 1}`),
-      losatGencode: optionalPositiveInteger(sequence?.losat_gencode) || 1
+    webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => ({
+      recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
+      losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
     }));
   }
 
@@ -2314,7 +2371,7 @@ export const buildCanonicalRenderRequest = ({
       grouping,
       records,
       diagramOptions,
-      layout: buildLayout(state, filesData),
+      layout: buildLayout(state, filesData, records),
       comparisons: buildComparisons({
       state,
       filesData,
@@ -3300,6 +3357,16 @@ export const projectCanonicalSessionRequest = ({
     throw new Error('Unsupported canonical renderRequest mode.');
   }
   const sourceRecords = Array.isArray(renderRequest.records) ? renderRequest.records : [];
+  if (renderRequest.schema >= 7) {
+    sourceRecords.forEach((record) => canonicalRecordDisplay(record.display));
+    if (!Array.isArray(renderRequest.diagramOptions?.featurePlacements)) {
+      throw new Error('Canonical featurePlacements must be an array.');
+    }
+    canonicalFeaturePlacements(renderRequest.diagramOptions.featurePlacements, renderRequest.mode);
+  } else if (sourceRecords.some((record) => Object.hasOwn(record, 'display'))
+    || Object.hasOwn(renderRequest.diagramOptions || {}, 'featurePlacements')) {
+    throw new Error('Record display and feature placements require canonical schema 7.');
+  }
   const normalizedRecordOrdering = normalizeWebGridColumnOrdering(sourceRecords);
   const records = normalizedRecordOrdering.records;
   const reorderRecordIndexedValues = (values) => (
@@ -3397,7 +3464,8 @@ export const projectCanonicalSessionRequest = ({
         fasta: source.kind === 'gffFasta' ? resourceFile(source.fastaResourceId) : null,
         selector: cloneCanonicalJsonValue(record.selector),
         region: cloneCanonicalJsonValue(record.region),
-        presentation: cloneCanonicalJsonValue(record.presentation)
+        presentation: cloneCanonicalJsonValue(record.presentation),
+        display: cloneCanonicalJsonValue(record.display || { isCircular: null, startCoordinate: null })
       };
     });
     const source = records[0]?.source || {};
@@ -4027,6 +4095,7 @@ export const projectCanonicalSessionRequest = ({
     multi_record_row_gap_ratio: renderRequest.layout?.multiRecordRowGapRatio ?? 0.05,
     center_reserved_radius: tracks.centerReservedRadius ?? null,
     resolve_overlaps: Boolean(overrides.resolve_overlaps),
+    feature_overlap_tolerance_bp: overrides.feature_overlap_tolerance_bp ?? 0,
     comparison_height: renderRequest.mode === 'linear' && comparisonHeight.status === 'valid'
       ? comparisonHeight.value
       : null,
@@ -4146,6 +4215,17 @@ export const projectCanonicalSessionRequest = ({
       blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
       annotationSets: normalizeAnnotationSets(options.annotations?.sets),
+      recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{
+        scope: renderRequest.mode,
+        sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : 'circular',
+        selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
+        recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
+        topologyOverride: record.display?.isCircular ?? null,
+        startCoordinate: record.display?.startCoordinate ?? null
+      }] : []),
+      featurePlacementOverrides: Object.fromEntries(canonicalFeaturePlacements(
+        options.featurePlacements || [], renderRequest.mode
+      ).map((row) => [JSON.stringify([row.recordKey, row.biologicalFeatureId]), row])),
       circularConservation: renderRequest.mode === 'circular'
         ? projectCircularConservationConfig(options, files)
         : undefined
@@ -4214,6 +4294,8 @@ const canonicalizePublicationValue = async (value, resources, context, path = '$
     if (value[key] === null || Object.is(value[key], PUBLICATION_OPTION_DEFAULTS[key]) || key === 'plotTitleFontSize'
       || (path === '$.diagramOptions.configOverrides' && key === 'labels.filtering.blacklist_keywords'
         && Array.isArray(value[key]) && value[key].length === 0)
+      || (path === '$.diagramOptions.configOverrides' && key === 'canvas.feature_overlap_tolerance_bp' && value[key] === 0)
+      || (path === '$.diagramOptions.config.canvas' && key === 'feature_overlap_tolerance_bp' && value[key] === 0)
       || (context.ignoreComparisonFilters && path === '$.diagramOptions' && PUBLICATION_COMPARISON_FILTER_FIELDS.has(key))
       || (path === '$.output' && PUBLICATION_OUTPUT_ONLY_FIELDS.has(key))) continue;
     if (resourceReference && ['encoding', 'representation'].includes(key)) continue;
@@ -4242,9 +4324,10 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
 export const promoteCanonicalRenderRequestToCurrent = (request) => {
   const promoted = cloneCanonicalJsonValue(request);
   if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
-  if (promoted.schema !== 5) {
-    throw new Error('Only canonical renderRequest schema 5 can be promoted to schema 6.');
+  if (![5, 6].includes(promoted.schema)) {
+    throw new Error('Only canonical renderRequest schemas 5 and 6 can be promoted to schema 7.');
   }
+  const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
     ? (promoted.layout?.multiRecordPositions || []).map((token) => {
         const split = String(token).lastIndexOf('@');
@@ -4253,19 +4336,21 @@ export const promoteCanonicalRenderRequestToCurrent = (request) => {
     : [];
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   (promoted.records || []).forEach((record, index) => {
-    record.cardinality = promoted.mode === 'linear' &&
+    record.display = { isCircular: null, startCoordinate: null };
+    if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
       !record.selector && !record.region
       ? 'all'
       : 'exactly_one';
     if (linearRows[index]) record.presentation.gridRow = linearRows[index];
   });
+  promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
   if (promoted.mode === 'linear' && promoted.layout) {
     delete promoted.layout.multiRecordPositions;
   }
   return promoted;
 };
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = request?.schema === 5
+  const normalized = [5, 6].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
     : cloneCanonicalJsonValue(request);
   const colors = normalized.diagramOptions?.colors;
