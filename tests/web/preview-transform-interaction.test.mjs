@@ -267,29 +267,25 @@ panZoom.endPan({ clientX: 130, clientY: 150 });
 assert.equal(panZoom.previewTransformInteraction.isActive(), false);
 completeCase('wheel then pan keeps pan active after wheel ends');
 
-panZoom.startPan({
-  button: 0,
-  shiftKey: false,
-  clientX: 130,
-  clientY: 150,
-  target: backgroundTarget
-});
-panZoom.endPan({ type: 'pointercancel', clientX: 130, clientY: 150 });
-assert.equal(uiState.isPanning.value, false);
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
-completeCase('pointercancel routes to complete pan cleanup');
-
-panZoom.startPan({
-  button: 0,
-  shiftKey: false,
-  clientX: 130,
-  clientY: 150,
-  target: backgroundTarget
-});
-panZoom.endPan({ type: 'lostpointercapture', clientX: 130, clientY: 150 });
-assert.equal(uiState.isPanning.value, false);
-assert.equal(panZoom.previewTransformInteraction.isActive(), false);
-completeCase('lostpointercapture routes to complete pan cleanup');
+for (const type of ['pointercancel', 'lostpointercapture']) {
+  panZoom.resetPreviewViewport();
+  let defaultPrevented = false;
+  panZoom.startPan({
+    button: 0, shiftKey: false, clientX: 130, clientY: 150,
+    target: backgroundTarget,
+    preventDefault() { defaultPrevented = true; }
+  });
+  panZoom.doPan({ clientX: 160, clientY: 190 });
+  // Native text dragging can cancel a mouse pointer with zero coordinates.
+  // Flush the pending real move even if its animation frame has not run.
+  panZoom.endPan({ type, clientX: 0, clientY: 0 });
+  assert.equal(uiState.canvasPan.x, 30);
+  assert.equal(uiState.canvasPan.y, 40);
+  assert.equal(defaultPrevented, true);
+  assert.equal(uiState.isPanning.value, false);
+  assert.equal(panZoom.previewTransformInteraction.isActive(), false);
+  completeCase(`${type} preserves the last real pointer and completes cleanup`);
+}
 
 panZoom.startPan({
   button: 0,
