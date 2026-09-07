@@ -865,6 +865,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
       }
     };
   });
+  const loadedSvgPath = testInfo.outputPath('vibrio-loaded-preview.svg');
+  writeFileSync(loadedSvgPath, loaded.originalPreview, 'utf8');
   const loadedPreviewIdentity = svgSourceIdentity(loaded.originalPreview);
   const preFirstGenerateActiveIntent = await activeIntentSummary(page);
   const loadProbe = await probeSnapshot(page);
@@ -922,6 +924,10 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const firstProbe = !page.isClosed() && !terminal.pageCrashed
     ? await probeSnapshot(page)
     : { metrics: {}, details: [], lifecycle: [] };
+  await testInfo.attach('vibrio-first-generation-diagnostics.json', {
+    body: Buffer.from(JSON.stringify({ diagnostic: first, probe: firstProbe })),
+    contentType: 'application/json'
+  });
   const firstRecovery = await assertRecoverableErrorState(page, first, loaded.originalPreview);
   expect(first.classification, JSON.stringify(first, null, 2)).toBe('success');
   expect(first.outcome).toMatchObject({
@@ -934,6 +940,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
   const firstRecordPlacements = await recordPlacementSummary(page);
+  const firstSvgPath = testInfo.outputPath('vibrio-generate-1.svg');
+  writeFileSync(firstSvgPath, firstGeneratedSvg, 'utf8');
   const firstGeneratedIdentity = svgSourceIdentity(firstGeneratedSvg);
 
   const derivedMutationBefore = await page.evaluate(async () => {
@@ -953,6 +961,10 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const secondProbe = !page.isClosed() && !terminal.pageCrashed
     ? await probeSnapshot(page)
     : { metrics: {}, details: [], lifecycle: [] };
+  await testInfo.attach('vibrio-second-generation-diagnostics.json', {
+    body: Buffer.from(JSON.stringify({ diagnostic: second, probe: secondProbe })),
+    contentType: 'application/json'
+  });
   const secondRecovery = await assertRecoverableErrorState(page, second, loaded.originalPreview);
   expect(second.classification, JSON.stringify(second, null, 2)).toBe('success');
   expect(second.outcome).toMatchObject({
@@ -964,6 +976,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     const app = window.__GBDRAW_APP__;
     return String(app.results?.[app.selectedResultIndex]?.content || '');
   });
+  const secondSvgPath = testInfo.outputPath('vibrio-generate-2.svg');
+  writeFileSync(secondSvgPath, secondGeneratedSvg, 'utf8');
   const secondRecordPlacements = await recordPlacementSummary(page);
   const postSecondGenerateActiveIntent = await activeIntentSummary(page);
   const derivedMutationAfter = await page.evaluate(async () => {
@@ -980,7 +994,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const capturedCanonicalRequests = canonicalRequestCapture.requests;
   expect(capturedCanonicalRequests).toHaveLength(2);
   expect(capturedCanonicalRequests[0]).toMatchObject({
-    schema: 6,
+    schema: 7,
     mode: 'linear',
     recordCount: 11,
     comparisonCount: 2,
@@ -1107,9 +1121,9 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
   expect(secondComparisonSummary).toEqual(firstComparisonSummary);
-  expect(loaded.originalPreview).toContain('data-query-unit-id="h_');
-  expect(firstGeneratedSvg).toContain('data-query-unit-id="gbd_r');
-  expect(firstGeneratedIdentity.sha256).not.toBe(loadedPreviewIdentity.sha256);
+  expect(loaded.originalPreview.includes('data-query-unit-id="gbd_r')).toBe(true);
+  expect(firstGeneratedSvg.includes('data-query-unit-id="gbd_r')).toBe(true);
+  expect(firstGeneratedIdentity.sha256).toBe(loadedPreviewIdentity.sha256);
   const generatedFeatureCatalogDigest = await featureCatalogDigest(page);
 
   const activity = second.worker;
@@ -1138,21 +1152,9 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     resultMetadataBinaryDecodedBytes: Number(
       firstProbe.metrics.resultMetadataBinaryDecodedBytes || 0
     ),
-    legacyFeatureOverrideFullDescriptorComparisonCount: Number(
-      firstProbe.metrics.legacyFeatureOverrideFullDescriptorComparisonCount || 0
-    ),
-    legacyFeatureOverrideIndexedDescriptorComparisonCount: Number(
-      firstProbe.metrics.legacyFeatureOverrideIndexedDescriptorComparisonCount || 0
-    ),
-    legacyFeatureOverrideLegacyFeaturesVisited: Number(
-      firstProbe.metrics.legacyFeatureOverrideLegacyFeaturesVisited || 0
-    ),
-    legacyFeatureOverrideMigrationCallCount: Number(
-      firstProbe.metrics.legacyFeatureOverrideMigrationCallCount || 0
-    ),
-    legacyFeatureOverrideScanSkipCount: Number(
-      firstProbe.metrics.legacyFeatureOverrideScanSkipCount || 0
-    )
+    currentLegacyNormalizationCount: Number(firstProbe.metrics.currentLegacyNormalizationCount),
+    legacyOverrideMigrationCount: Number(firstProbe.metrics.legacyOverrideMigrationCount),
+    manualRuleFeatureMatchCount: Number(firstProbe.metrics.manualRuleFeatureMatchCount)
   };
   const secondStructural = {
     canonicalReplayFullSerializationCount: Number(
@@ -1170,21 +1172,9 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     resultMetadataBinaryDecodedBytes: Number(
       secondProbe.metrics.resultMetadataBinaryDecodedBytes || 0
     ),
-    legacyFeatureOverrideFullDescriptorComparisonCount: Number(
-      secondProbe.metrics.legacyFeatureOverrideFullDescriptorComparisonCount || 0
-    ),
-    legacyFeatureOverrideIndexedDescriptorComparisonCount: Number(
-      secondProbe.metrics.legacyFeatureOverrideIndexedDescriptorComparisonCount || 0
-    ),
-    legacyFeatureOverrideLegacyFeaturesVisited: Number(
-      secondProbe.metrics.legacyFeatureOverrideLegacyFeaturesVisited || 0
-    ),
-    legacyFeatureOverrideMigrationCallCount: Number(
-      secondProbe.metrics.legacyFeatureOverrideMigrationCallCount || 0
-    ),
-    legacyFeatureOverrideScanSkipCount: Number(
-      secondProbe.metrics.legacyFeatureOverrideScanSkipCount || 0
-    )
+    currentLegacyNormalizationCount: Number(secondProbe.metrics.currentLegacyNormalizationCount),
+    legacyOverrideMigrationCount: Number(secondProbe.metrics.legacyOverrideMigrationCount),
+    manualRuleFeatureMatchCount: Number(secondProbe.metrics.manualRuleFeatureMatchCount)
   };
   const resultTransportEvents = [firstProbe, secondProbe].flatMap((probe) => (
     probe.lifecycle.filter(({ name }) => name === 'result-transport-ready')
@@ -1231,6 +1221,12 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     artifactReplacementHistoryEntryCount: 1
   };
 
+  for (const [generation, count] of [[first, 1], [second, 2]]) {
+    const keyBatches = generation.worker.instances.flatMap(({ helpers }) => helpers)
+      .filter(({ operation }) => operation === 'buildProteinLosatCacheKeys');
+    expect(keyBatches).toHaveLength(count);
+  }
+
   expect(activity.constructions).toBe(1);
   expect(activity.initializations).toBe(1);
   expect(activity.runs).toBe(2);
@@ -1262,21 +1258,25 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     losatCacheHits: 47,
     losatCacheMisses: 0
   });
-  expect(second.outcome.historyStructural).toEqual(expectedGeneratedHistory);
+  const expectedUnchangedHistory = {
+    ...expectedGeneratedHistory,
+    artifactReplacementHistoryEntryCount: 0
+  };
+  expect(second.outcome.historyStructural).toEqual(expectedUnchangedHistory);
   expect(secondPhaseAttribution.historyStructural).toMatchObject(
-    expectedGeneratedHistory
+    expectedUnchangedHistory
   );
   expect(second.outcome.undoCountAfter).toBe(second.outcome.undoCountBefore);
   expect(second.outcome.redoCountAfter).toBe(second.outcome.redoCountBefore);
   expect(first.outcome.historyStructural).toMatchObject(expectedGeneratedHistory);
   expect(secondStructural.resourceMaterializationCount).toBe(0);
-  expect(secondStructural).toMatchObject({
-    legacyFeatureOverrideFullDescriptorComparisonCount: 0,
-    legacyFeatureOverrideIndexedDescriptorComparisonCount: 0,
-    legacyFeatureOverrideLegacyFeaturesVisited: 0,
-    legacyFeatureOverrideMigrationCallCount: 2,
-    legacyFeatureOverrideScanSkipCount: 2
-  });
+  for (const perGeneration of [firstStructural, secondStructural]) {
+    expect(perGeneration).toMatchObject({
+      currentLegacyNormalizationCount: 0,
+      legacyOverrideMigrationCount: 0,
+      manualRuleFeatureMatchCount: 0
+    });
+  }
   expect(secondPhaseAttribution.pythonInvocationMs).toBeGreaterThan(0);
   expect(firstPhaseAttribution.preparedInputCacheStructural).toMatchObject({
     decodedResourceCacheHitCount: 0,
@@ -1390,12 +1390,6 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(afterPing.initializations).toBe(1);
   expect(afterPing.instances[0].terminated).toBe(false);
 
-  const loadedSvgPath = testInfo.outputPath('vibrio-loaded-preview.svg');
-  const firstSvgPath = testInfo.outputPath('vibrio-generate-1.svg');
-  const secondSvgPath = testInfo.outputPath('vibrio-generate-2.svg');
-  writeFileSync(loadedSvgPath, loaded.originalPreview, 'utf8');
-  writeFileSync(firstSvgPath, firstGeneratedSvg, 'utf8');
-  writeFileSync(secondSvgPath, secondGeneratedSvg, 'utf8');
   const svgComparisonCommand = [
     'import sys',
     'from tests.utils.svg_compare import compare_svgs',
@@ -1515,7 +1509,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     },
     deterministicOutput: {
       comparison: 'tests.utils.svg_compare.compare_svgs',
-      loadedToFirstRelationship: 'derived-unit-metadata-refresh',
+      loadedToFirstRelationship: 'current-gallery-preview-regenerated',
       loadedToFirstExactBytesEqual: loaded.originalPreview === firstGeneratedSvg,
       loadedPreviewIdentity,
       firstGeneratedIdentity,
