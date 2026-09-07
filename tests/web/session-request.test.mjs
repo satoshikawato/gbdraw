@@ -463,7 +463,7 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 6);
+assert.equal(canonical.renderRequest.schema, 7);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
@@ -904,6 +904,10 @@ state.form.circular_record_selector = '';
 for (const schema of [3, 4]) {
   const branchOnlyCanonical = structuredClone(implicitBatchCanonical);
   branchOnlyCanonical.renderRequest.schema = schema;
+  if (schema < 7) {
+    delete branchOnlyCanonical.renderRequest.diagramOptions.featurePlacements;
+    branchOnlyCanonical.renderRequest.records.forEach((record) => delete record.display);
+  }
   assert.throws(
     () => projectCanonicalSessionRequest(branchOnlyCanonical),
     /Unsupported canonical renderRequest schema/
@@ -1115,6 +1119,10 @@ state.adv.circular_track_slots = [];
 
 const legacyRepeatCanonical = structuredClone(canonical);
 legacyRepeatCanonical.renderRequest.schema = 2;
+if (2 < 7) {
+  delete legacyRepeatCanonical.renderRequest.diagramOptions.featurePlacements;
+  legacyRepeatCanonical.renderRequest.records.forEach((record) => delete record.display);
+}
 legacyRepeatCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyRepeatCanonical.renderRequest.diagramOptions.selectedFeaturesSet = ['repeat_region'];
 delete legacyRepeatCanonical.renderRequest.diagramOptions.featureShapes.repeat_region;
@@ -1623,6 +1631,10 @@ assert.equal(projection.config.adv.identity, 70);
 assert.equal(projection.config.adv.alignment_length, 0);
 const legacyCircularLabelScope = structuredClone(canonical);
 legacyCircularLabelScope.renderRequest.schema = 2;
+if (2 < 7) {
+  delete legacyCircularLabelScope.renderRequest.diagramOptions.featurePlacements;
+  legacyCircularLabelScope.renderRequest.records.forEach((record) => delete record.display);
+}
 legacyCircularLabelScope.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyCircularLabelScope.renderRequest.diagramOptions.configOverrides = {
   show_labels: true,
@@ -1643,6 +1655,10 @@ assert.equal(
 );
 const legacyOutputCanonical = structuredClone(canonical);
 legacyOutputCanonical.renderRequest.schema = 2;
+if (2 < 7) {
+  delete legacyOutputCanonical.renderRequest.diagramOptions.featurePlacements;
+  legacyOutputCanonical.renderRequest.records.forEach((record) => delete record.display);
+}
 legacyOutputCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored-nested';
 assert.equal(
   projectCanonicalSessionRequest(legacyOutputCanonical).config.form.prefix,
@@ -1675,6 +1691,10 @@ assert.throws(
 for (const schema of [1, 2]) {
   const sparseCircularCanonical = structuredClone(canonical);
   sparseCircularCanonical.renderRequest.schema = schema;
+  if (schema < 7) {
+    delete sparseCircularCanonical.renderRequest.diagramOptions.featurePlacements;
+    sparseCircularCanonical.renderRequest.records.forEach((record) => delete record.display);
+  }
   sparseCircularCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
   delete sparseCircularCanonical.renderRequest.diagramOptions.evalue;
   delete sparseCircularCanonical.renderRequest.diagramOptions.bitscore;
@@ -1756,6 +1776,10 @@ assert.deepEqual(customTrackProjection.config.adv.circular_track_slots[1], {
 
 const legacyCircularSlotsCanonical = structuredClone(canonical);
 legacyCircularSlotsCanonical.renderRequest.schema = 2;
+if (2 < 7) {
+  delete legacyCircularSlotsCanonical.renderRequest.diagramOptions.featurePlacements;
+  legacyCircularSlotsCanonical.renderRequest.records.forEach((record) => delete record.display);
+}
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyCircularSlotsCanonical.renderRequest.diagramOptions.tracks = {
   circularTrackSlots: [
@@ -2003,6 +2027,10 @@ delete state.adv.ruler_label_font_size;
 delete state.adv.linear_definition_line_styles;
 const legacyLinearOptions = structuredClone(linearCanonical);
 legacyLinearOptions.renderRequest.schema = 2;
+if (2 < 7) {
+  delete legacyLinearOptions.renderRequest.diagramOptions.featurePlacements;
+  legacyLinearOptions.renderRequest.records.forEach((record) => delete record.display);
+}
 legacyLinearOptions.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
 legacyLinearOptions.renderRequest.diagramOptions.configOverrides = {
   label_placement: 'on_feature',
@@ -2209,7 +2237,7 @@ schema5Arranged.records.forEach((record) => {
   record.presentation.gridRow = null;
 });
 const promotedArranged = promoteCanonicalRenderRequestToCurrent(schema5Arranged);
-assert.equal(promotedArranged.schema, 6);
+assert.equal(promotedArranged.schema, 7);
 assert.deepEqual(
   promotedArranged.records.map((record) => [
     record.cardinality,
@@ -2598,6 +2626,10 @@ let sparseLinearCanonical;
 for (const schema of [1, 2]) {
   sparseLinearCanonical = structuredClone(linearCanonical);
   sparseLinearCanonical.renderRequest.schema = schema;
+  if (schema < 7) {
+    delete sparseLinearCanonical.renderRequest.diagramOptions.featurePlacements;
+    sparseLinearCanonical.renderRequest.records.forEach((record) => delete record.display);
+  }
   sparseLinearCanonical.renderRequest.diagramOptions.output.outputPrefix = 'ignored';
   delete sparseLinearCanonical.renderRequest.diagramOptions.evalue;
   delete sparseLinearCanonical.renderRequest.diagramOptions.bitscore;

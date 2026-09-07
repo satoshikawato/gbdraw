@@ -304,3 +304,15 @@ class TestQuickValidation:
         assert "<svg" in content
         assert "</svg>" in content
         assert "xmlns" in content
+
+
+def test_svg_comparison_does_not_change_later_serialization():
+    """Comparison must not turn subsequent inline SVG into svg:svg elements."""
+    from xml.etree import ElementTree
+    from tests.utils.svg_compare import parse_svg
+
+    source = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M 0,0 L 1,1" /></svg>'
+    tree = ElementTree.fromstring(source)
+    before = ElementTree.tostring(tree)
+    parse_svg(source)
+    assert ElementTree.tostring(tree) == before

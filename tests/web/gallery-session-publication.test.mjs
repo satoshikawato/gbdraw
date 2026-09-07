@@ -61,8 +61,8 @@ for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
-  assert.equal(result.session.version, 40, name);
-  assert.equal(result.session.renderRequest.schema, 6, name);
+  assert.equal(result.session.version, 41, name);
+  assert.equal(result.session.renderRequest.schema, 7, name);
   assert.equal(result.equivalence.equivalent, true, name);
   assert.equal(JSON.stringify(source.renderRequest), committedBefore, name);
   assert.equal(result.session.cliInvocation, source.cliInvocation, name);
@@ -82,7 +82,8 @@ for (const name of sessionNames) {
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
-assert.equal(admitGallerySession(lambda), lambda);
+assert.equal(admitGallerySession(lambda).version, 41);
+assert.equal(lambda.version, 41);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,
@@ -102,6 +103,22 @@ assert.equal(
   alteredPrepared.equivalence.actual.digest
 );
 assert.deepEqual(alteredPrepared.session.cliInvocation, alteredProvenance.cliInvocation);
+
+// Historical full configs omit the new zero-tolerance default; CLI replay writes it.
+const fullConfigRequest = structuredClone(lambdaPrepared.session.renderRequest);
+fullConfigRequest.diagramOptions.config = { canvas: {} };
+delete fullConfigRequest.diagramOptions.configOverrides;
+for (const tolerance of [0, 1]) {
+  const replayed = structuredClone(fullConfigRequest);
+  replayed.diagramOptions.config.canvas.feature_overlap_tolerance_bp = tolerance;
+  const comparison = await compareCanonicalRenderRequests({
+    expectedRequest: fullConfigRequest, expectedResources: lambdaPrepared.session.resources,
+    actualRequest: replayed, actualResources: lambdaPrepared.session.resources
+  });
+  assert.equal(comparison.equivalent, tolerance === 0);
+  if (tolerance) assert.equal(comparison.differences[0].path,
+    '$.diagramOptions.config.canvas.feature_overlap_tolerance_bp');
+}
 
 const lambdaWithUnusedComparisonDefaults = structuredClone(lambdaPrepared.session.renderRequest);
 Object.assign(lambdaWithUnusedComparisonDefaults.diagramOptions, {
@@ -148,10 +165,10 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   );
 }
 
-for (const version of [27, 30, 34, 38, 41]) {
+for (const version of [27, 30, 34, 38, 42]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 40 or historical versions 31-33\/39/
+    /supports current version 41 or historical versions 31-33\/39/
   );
 }
 

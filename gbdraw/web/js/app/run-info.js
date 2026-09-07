@@ -385,8 +385,8 @@ const coverTrackSlots = (coverage, tracks, mode) => {
   });
 };
 
-const validateSchema6SemanticCoverage = (request) => {
-  const coverage = { schema: 6, consumedPaths: new Set(), metadataPaths: new Set() };
+const validateCurrentSemanticCoverage = (request) => {
+  const coverage = { schema: request.schema, consumedPaths: new Set(), metadataPaths: new Set() };
   coverObject(coverage, request, '', [
     'mode', 'grouping', 'records', 'diagramOptions', 'layout', 'comparisons', 'output'
   ], ['schema']);
@@ -400,8 +400,9 @@ const validateSchema6SemanticCoverage = (request) => {
   (Array.isArray(request.records) ? request.records : []).forEach((record, index) => {
     const path = `records[${index}]`;
     coverObject(coverage, record, path, [
-      'cardinality', 'source', 'selector', 'region', 'presentation'
+      'cardinality', 'source', 'selector', 'region', 'presentation', ...(request.schema >= 7 ? ['display'] : [])
     ], ['recordKey']);
+    if (request.schema >= 7) coverObject(coverage, record.display, `${path}.display`, ['isCircular', 'startCoordinate']);
     if (!['all', 'exactly_one'].includes(record.cardinality)) {
       throw new SourceRecipeUnavailable(
         `Source recipe unavailable: record cardinality "${String(record.cardinality || 'missing')}" has no current CLI projection.`
@@ -460,7 +461,12 @@ const validateSchema6SemanticCoverage = (request) => {
   });
 
   const options = request.diagramOptions;
-  coverObject(coverage, options, 'diagramOptions', DIAGRAM_OPTION_FIELDS);
+  coverObject(coverage, options, 'diagramOptions', new Set([...DIAGRAM_OPTION_FIELDS, ...(request.schema >= 7 ? ['featurePlacements'] : [])]));
+  (options.featurePlacements || []).forEach((row, index) => {
+    const path = `diagramOptions.featurePlacements[${index}]`;
+    coverObject(coverage, row, path, ['recordKey', 'biologicalFeatureId', 'placement']);
+    coverObject(coverage, row.placement, `${path}.placement`, row.placement?.kind === 'main' ? ['kind'] : ['kind', 'side', 'level']);
+  });
   coverObject(coverage, options.configOverrides || {}, 'diagramOptions.configOverrides', Object.keys(
     options.configOverrides || {}
   ));
@@ -628,7 +634,8 @@ const appendInputArgs = async (args, request, files) => {
   const sourceKeys = sourcePaths.map((paths) => paths.join('\0'));
   const hasDuplicateSources = new Set(sourceKeys).size !== sourceKeys.length;
   const recordNeedsTable = records.some((record) => (
-    gridCoordinate(record.presentation?.gridColumn) !== ''
+    (record.display?.isCircular != null || record.display?.startCoordinate != null)
+    || gridCoordinate(record.presentation?.gridColumn) !== ''
     || (request.mode === 'circular' && (
       Boolean(record.region)
       || Boolean(record.presentation?.label)
@@ -653,17 +660,19 @@ const appendInputArgs = async (args, request, files) => {
     }
   }
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
-  if (
-    request.schema === 6
-    && recordsTableRequired
-    && records.some((record) => record.cardinality !== 'exactly_one')
-  ) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: this record cardinality cannot be preserved by a CLI records table.'
-    );
+  if (request.schema >= 6 && recordsTableRequired) {
+    for (const [index, record] of records.entries()) {
+      if (record.cardinality === 'exactly_one') continue;
+      if (request.schema >= 7 && await files.resourceRecordCount(
+        specs[index].ids.at(-1), inputKind === 'genbank' ? 'genbank' : 'fasta'
+      ) === 1) continue;
+      throw new SourceRecipeUnavailable(
+        'Source recipe unavailable: this record cardinality cannot be preserved by a CLI records table.'
+      );
+    }
   }
 
-  if (request.schema === 6 && !recordsTableRequired) {
+  if (request.schema >= 6 && !recordsTableRequired) {
     const loadComparison = request.mode === 'linear'
       && Array.isArray(request.comparisons)
       && request.comparisons.length > 0;
@@ -694,8 +703,8 @@ const appendInputArgs = async (args, request, files) => {
       ? circularLayoutRows(request, records)
       : [];
     const columns = inputKind === 'genbank'
-      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column']
-      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column'];
+      ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])]
+      : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])];
     const rows = records.map((record, index) => {
       const region = isPlainObject(record.region) ? record.region : null;
       const selector = selectorText(region?.selector || record.selector);
@@ -712,7 +721,9 @@ const appendInputArgs = async (args, request, files) => {
         reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
         row: gridCoordinate(record.presentation?.gridRow) || layoutRows[index] || '',
-        column: gridCoordinate(record.presentation?.gridColumn)
+        column: gridCoordinate(record.presentation?.gridColumn),
+        topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
+        display_start: record.display?.startCoordinate ?? ''
       };
       return row;
     });
@@ -863,6 +874,7 @@ const appendConfigOverrides = (args, request) => {
   take('canvas.show_depth');
   appendBooleanOption(args, take('canvas.strandedness'), '--separate_strands');
   appendBooleanOption(args, take('canvas.resolve_overlaps'), '--resolve_overlaps');
+  appendOption(args, '--feature_overlap_tolerance_bp', take('canvas.feature_overlap_tolerance_bp'));
   appendBooleanOption(
     args, take('objects.gc_content.show_axis'),
     '--show_gc_content_axis', '--hide_gc_content_axis'
@@ -1440,12 +1452,31 @@ export const buildSourceRecipe = async ({
     return unavailable('Source recipe unavailable: the committed render request is missing or invalid.');
   }
   try {
-    const semanticCoverage = renderRequest.schema === 6
-      ? validateSchema6SemanticCoverage(renderRequest)
+    const semanticCoverage = renderRequest.schema >= 6
+      ? validateCurrentSemanticCoverage(renderRequest)
       : { schema: renderRequest.schema, consumedPaths: [], metadataPaths: [] };
     const files = createRecipeFiles(resources, webFiles, generatedFileNameHints, readResourceRecordCount);
     const args = [];
     const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
+    const placements = renderRequest.diagramOptions?.featurePlacements || [];
+    if (placements.length) {
+      for (const record of renderRequest.records) {
+        if (record.cardinality === 'exactly_one') continue;
+        const source = sourceSpec(record);
+        if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
+          throw new SourceRecipeUnavailable('Source recipe unavailable: placement record instances require exact materialized records.');
+        }
+      }
+      const rows = placements.map((row) => {
+        const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
+        if (index < 0) throw new SourceRecipeUnavailable('Source recipe unavailable: unknown placement record identity.');
+        return { record: `#${index + 1}`, feature_selector: row.biologicalFeatureId,
+          placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
+          level: row.placement.kind === 'main' ? '' : row.placement.level };
+      });
+      args.push('--feature_placement_table', files.generatedTextPath('feature-placements.tsv',
+        tsv(['record', 'feature_selector', 'placement', 'level'], rows), 'generatedFiles.source_recipe.feature_placements'));
+    }
     appendDiagramOptions(args, renderRequest, files);
     appendConfigOverrides(args, renderRequest);
     appendLayoutOptions(args, renderRequest, recordsTableUsed);

@@ -9,6 +9,61 @@ import pandas as pd
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.layout.record_coordinates import RecordDisplayTransform, SourceInterval, alignment_cut_breakpoints
+
+
+def project_match_endpoints(
+    endpoints: tuple[int, int, int, int],
+    transforms: tuple[RecordDisplayTransform, RecordDisplayTransform],
+) -> tuple[tuple[float, float, float, float], ...]:
+    """Split existing record-local, directed inclusive endpoints at common t cuts.
+
+    The source HSP remains untouched. Fractional opposite-side endpoints describe
+    endpoint-linear geometry, including gapped hits, and are never sequence data.
+    Both unset transforms retain the historical endpoint geometry exactly.
+    """
+    if all(transform.start_coordinate is None for transform in transforms):
+        return (endpoints,)
+    projected = []
+    source_spans = []
+    for (start, end), transform in zip((endpoints[:2], endpoints[2:]), transforms, strict=True):
+        if any(isinstance(value, bool) or int(value) != value for value in (start, end)):
+            raise ValidationError("Comparison endpoints must be integer bases.")
+        start, end = int(start), int(end)
+        if not 1 <= min(start, end) <= max(start, end) <= transform.length:
+            raise ValidationError("Comparison endpoints must lie within their record.")
+        strand = 1 if start <= end else -1
+        span = SourceInterval(min(start, end) - 1, max(start, end), strand)
+        if transform.start_coordinate is None:
+            directed = (span.start, span.end) if strand == 1 else (span.end, span.start)
+            projected.append(((0.0, 1.0, *directed),))
+            continue
+        fragments = transform.project_local_parts((span,))
+        source_span = SourceInterval(
+            min(part.source_start for part in fragments),
+            max(part.source_end for part in fragments),
+            fragments[0].orientation * transform.source_step,
+        )
+        source_spans.append((transform, source_span))
+        intervals = []
+        traversed = 0
+        length = span.end - span.start
+        for part in fragments:
+            width = part.display_end - part.display_start
+            directed = ((part.display_start, part.display_end) if part.orientation == 1
+                        else (part.display_end, part.display_start))
+            intervals.append((traversed / length, (traversed + width) / length, *directed))
+            traversed += width
+        projected.append(tuple(intervals))
+    cuts = (0.0, *alignment_cut_breakpoints(*source_spans), 1.0)
+    result = []
+    for left, right in zip(cuts, cuts[1:]):
+        coordinates = []
+        for intervals in projected:
+            lo, hi, start, end = next(part for part in intervals if part[0] <= (left + right) / 2 < part[1])
+            coordinates.extend(start + (end - start) * (t - lo) / (hi - lo) for t in (left, right))
+        result.append(tuple(coordinates))
+    return tuple(result)
 
 
 @dataclass(frozen=True)

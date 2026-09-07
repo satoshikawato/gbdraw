@@ -9,6 +9,7 @@ show_skew = true
 show_depth = false
 strandedness = false
 resolve_overlaps = false
+feature_overlap_tolerance_bp = 0
 [canvas.circular]
 # Basicaly you shouldn't modify these values.
 # If you wish to modify width and height, I strongly recommend changing the radius accordingly (=0.4*weight/height).

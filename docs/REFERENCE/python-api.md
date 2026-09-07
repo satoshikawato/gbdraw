@@ -9,8 +9,8 @@ The package-root API is the stable, beginner-facing interface for reading annota
 ```text
 read_genbank(paths: str | PathLike[str] | Sequence[str | PathLike[str]]) -> list[SeqRecord]
 read_gff(gff_paths: str | PathLike[str] | Sequence[str | PathLike[str]], fasta_paths: str | PathLike[str] | Sequence[str | PathLike[str]], *, features: Sequence[str] | None = None) -> list[SeqRecord]
-draw_circular(records: RecordCollection, *, options: CircularOptions | None = None, layout: CircularLayout | None = None) -> Diagram
-draw_linear(records: RecordCollection, *, options: LinearOptions | None = None, layout: LinearLayout | None = None) -> Diagram
+draw_circular(records: RecordCollection, *, options: CircularOptions | None = None, layout: CircularLayout | None = None, record_displays: Sequence[RecordDisplayOptions] | None = None) -> Diagram
+draw_linear(records: RecordCollection, *, options: LinearOptions | None = None, layout: LinearLayout | None = None, record_displays: Sequence[RecordDisplayOptions] | None = None) -> Diagram
 ```
 
 `read_genbank()` returns every record from every supplied file. `read_gff()` requires equally sized GFF3 and FASTA path lists and matching sequence IDs. Each drawing function accepts one Biopython `SeqRecord` or a sequence of records. Both reject an empty record collection, non-`SeqRecord` members, and option or layout objects for the wrong mode.
@@ -26,6 +26,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | Area | Types |
 |---|---|
 | Result | `Diagram` |
+| Record display / placement | `RecordDisplayOptions`, `FeaturePlacementOverride`, `FeaturePlacementTarget` |
 | Shared presentation | `FeatureOptions`, `LabelOptions`, `TitleOptions`, `Thresholds`, `DepthTrackOptions` |
 | Circular | `CircularOptions`, `CircularLayout`, `CircularTrackOptions`, `ComparisonRingOptions`, `ComparisonRingTrackOptions` |
 | Linear | `LinearOptions`, `LinearLayout`, `LinearTrackOptions`, `LinearComparisonOptions` |
@@ -43,6 +44,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | `FeatureOptions.palette` | string | `default` |
 | `FeatureOptions.visibility` | path or `DataFrame` | `None` |
 | `FeatureOptions.shapes` | mapping | `None` |
+| `FeatureOptions.placements` | TSV path, DataFrame, exact override sequence, or `None` | `None` |
 | `LabelOptions.whitelist` | path or `DataFrame` | `None` |
 | `LabelOptions.qualifier_priority` | path or `DataFrame` | `None` |
 | `LabelOptions.overrides` | path or `DataFrame` | `None` |
@@ -158,3 +160,164 @@ Catch `gbdraw.exceptions.GbdrawError` for expected gbdraw failures and `Validati
 - [Typed request reference](typed-requests.md)
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Output format and export reference](output-formats-and-export.md)
+
+## Requested feature placement
+
+`FeatureOptions.placements` accepts a TSV path, a pandas DataFrame, or a sequence
+of `FeaturePlacementOverride` values. The package root and `gbdraw.api` export the
+same `FeaturePlacementOverride` and `FeaturePlacementTarget` types. Tables are
+resolved once into exact source identities by the shared request planner.
+
+For example, `FeatureOptions(placements="placements.tsv")` can be combined with
+`record_displays=[RecordDisplayOptions(start_coordinate=71)]` on either drawing
+function. Set tolerance through the existing options' `config_overrides`, using
+`{"canvas.feature_overlap_tolerance_bp": 1}`; booleans and negative values fail.
+
+The table columns are `record`, `feature_selector`, `placement`, and `level`.
+`main` and `auto` have no level; a supported directional target uses level 1.
+Auto removes the exact override. Unknown identities, ambiguous selectors,
+duplicate resolved identities and unsupported target directions fail explicitly.
+
+## Record display start
+
+Both drawing functions accept `record_displays`, with exactly one
+`RecordDisplayOptions(is_circular=None, start_coordinate=None)` per input record.
+`None` adds no shift; explicit `1` anchors source base 1, including after reverse
+complementation. `is_circular=None` uses detected topology; `True` or `False`
+overrides it. An explicit start requires a complete effectively circular record,
+an integer in `1..L`, and no crop. Source sequence and feature locations remain
+unchanged. Circular places that base at 12 o'clock; Linear places it at the left
+edge and wraps the complete record. See the [combined executable
+example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and the
+[placement rules](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement).
+
+## Combined rotation and placement example
+
+Use a new directory containing the four inputs obtained in the
+[CLI example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature).
+This program constructs the placement table in memory; it does not need
+`tables/placements.tsv`. Save it as `rotated_placed_chloroplast.py` and run
+`python rotated_placed_chloroplast.py`. It prints
+`Saved rotated_placed_chloroplast.svg` and produces the same diagram as the CLI.
+
+<!-- executable:H-PY-06:start -->
+```python
+from pathlib import Path
+from pandas import DataFrame
+
+from gbdraw import (
+    CircularOptions,
+    RecordDisplayOptions,
+    CircularTrackOptions,
+    Diagram,
+    FeatureOptions,
+    LabelOptions,
+    draw_circular,
+    read_genbank,
+)
+from gbdraw.api import AnnotationOptions, CircularTrackSlot, ScalarSpec
+
+
+record = read_genbank(Path("NC_001879.gbk"))[0]
+assert (record.id, len(record), record.annotations.get("topology")) == (
+    "NC_001879.2",
+    155_943,
+    "circular",
+)
+
+track_slots = (
+    CircularTrackSlot(
+        id="features",
+        renderer="features",
+        side="overlay",
+        params={"lane_direction": "split"},
+    ),
+    CircularTrackSlot(
+        id="plastome_regions",
+        renderer="annotations",
+        side="inside",
+        radius=ScalarSpec(0.65),
+        width=ScalarSpec(20, "px"),
+        params={
+            "set_id": "plastome_regions",
+            "show_labels": True,
+            "padding_px": 1,
+            "overflow": "compress",
+        },
+        inner_gap_px=1,
+        outer_gap_px=1,
+    ),
+    CircularTrackSlot(
+        id="gc_content",
+        renderer="dinucleotide_content",
+        side="inside",
+        radius=ScalarSpec(0.56),
+        width=ScalarSpec(0.08),
+        params={"nt": "GC", "legend_label": "GC content"},
+    ),
+)
+
+options = CircularOptions(
+    features=FeatureOptions(
+        types=(
+            "CDS",
+            "rRNA",
+            "tRNA",
+            "tmRNA",
+            "ncRNA",
+            "misc_RNA",
+            "rep_origin",
+        ),
+        color_table=Path("chloroplast_specific_table.tsv"),
+        placements=DataFrame([{
+            "record": "NC_001879.2",
+            "feature_selector": "protein_id=NP_054479.1",
+            "placement": "outward", "level": 1,
+        }]),
+    ),
+    labels=LabelOptions(
+        qualifier_priority=Path("qualifier_priority.tsv"),
+    ),
+    annotations=AnnotationOptions(
+        table_file="nicotiana-tabacum-regions.tsv",
+    ),
+    tracks=CircularTrackOptions(slots=track_slots),
+    species="<i>Nicotiana tabacum</i>",
+    legend="upper_left",
+    config_overrides={
+        "canvas.strandedness": False,
+        "canvas.resolve_overlaps": True,
+        "canvas.feature_overlap_tolerance_bp": 1,
+        "canvas.circular.track_type": "tuckin",
+        "labels.circular.scope": "both",
+        "labels.circular.placement": "radial",
+        "labels.unified_adjustment.outer_labels.x_radius_offset": 0.9,
+        "labels.unified_adjustment.outer_labels.y_radius_offset": 0.9,
+        "labels.unified_adjustment.inner_labels.x_radius_offset": 0.975,
+        "labels.unified_adjustment.inner_labels.y_radius_offset": 0.975,
+        "objects.definition.circular.font_size": 28,
+        "objects.definition.circular.interval": 30,
+        "objects.features.block_stroke_color": "black",
+        "objects.features.block_stroke_width.long": 1,
+        "objects.features.line_stroke_width.long": 2,
+        "objects.axis.circular.stroke_width.long": 3,
+    },
+)
+
+chloroplast_diagram = draw_circular(
+    record, options=options,
+    record_displays=[RecordDisplayOptions(start_coordinate=5500)],
+)
+chloroplast_svg = chloroplast_diagram.to_svg()
+chloroplast_bytes = chloroplast_diagram.to_bytes("svg")
+chloroplast_path = chloroplast_diagram.save(
+    Path("rotated_placed_chloroplast.svg")
+)
+
+assert isinstance(chloroplast_diagram, Diagram)
+assert chloroplast_diagram.mode == "circular"
+assert chloroplast_svg.encode("utf-8") == chloroplast_bytes
+assert chloroplast_path.read_bytes() == chloroplast_bytes
+print(f"Saved {chloroplast_path}")
+```
+<!-- executable:H-PY-06:end -->

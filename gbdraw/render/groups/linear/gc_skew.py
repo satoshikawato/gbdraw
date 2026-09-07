@@ -11,6 +11,8 @@ from ...drawers.linear.gc_skew import SkewDrawer
 from ....configurators import GcSkewConfigurator
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class GcSkewGroup:
     """
     Manages the visualization of GC skew for a genomic sequence in a linear layout.
@@ -31,10 +33,12 @@ class GcSkewGroup:
         gc_df: DataFrame | None = None,
         group_id: str = "gc_skew",
         sequence_width: float | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
         """
         Initializes the GcSkewGroup with the given parameters and configurations.
         """
+        self.record_transform = record_transform
         self.skew_group = Group(id=group_id, debug=False)
         self.start_x: float = start_x
         self.start_y: float = start_y
@@ -89,6 +93,7 @@ class GcSkewGroup:
             self.start_y,
             self.dinucleotide,
             self.group_id,
+            record_transform=self.record_transform,
         )
 
     def get_group(self) -> Group:

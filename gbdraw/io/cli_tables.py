@@ -119,6 +119,8 @@ class RecordsTableRow:
     order: int | None
     row: int | None
     column: int | None
+    topology: str | None = None
+    display_start: int | None = None
 
 
 @dataclass(frozen=True)
@@ -224,6 +226,8 @@ _CIRCULAR_TRACK_COLUMNS = frozenset(
 )
 _RECORDS_COLUMNS = frozenset(
     {
+        "topology",
+        "display_start",
         "gbk",
         "gff",
         "fasta",
@@ -505,6 +509,17 @@ def read_records_table(path: str) -> RecordsTable:
             seen_grid_cells.add(key)
         region = values.get("region", "").strip()
         _validate_records_table_region(table_path, row.row_number, region)
+        topology = values.get("topology", "").strip().lower()
+        if topology not in {"", "auto", "circular", "linear"}:
+            raise ValidationError(_cell_error(
+                table_path, row.row_number, "topology", "expected auto, circular, or linear"
+            ))
+        display_start = _parse_optional_positive_int(table_path, row, "display_start")
+        if display_start is not None and (topology == "linear" or region):
+            raise ValidationError(_cell_error(
+                table_path, row.row_number, "display_start",
+                "cannot be combined with linear topology or a region crop",
+            ))
         parsed_rows.append(
             RecordsTableRow(
                 row_index=row.row_index,
@@ -520,6 +535,8 @@ def read_records_table(path: str) -> RecordsTable:
                 order=order,
                 row=grid_row,
                 column=column,
+                topology=topology if topology in {"circular", "linear"} else None,
+                display_start=display_start,
             )
         )
 

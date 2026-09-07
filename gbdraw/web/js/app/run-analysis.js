@@ -1643,6 +1643,7 @@ export const createRunAnalysis = ({
           selector: entry.selector,
           record_id: entry.recordId,
           record_length: entry.recordLength,
+          detectedTopology: entry.detectedTopology,
           ...(recordKey ? { recordKey } : {})
         };
       });
@@ -4280,6 +4281,9 @@ export const createRunAnalysis = ({
           createdAt: manualRunStartedAtIso || new Date().toISOString(),
           renderRequest: canonical.renderRequest,
           resources: canonical.resources,
+          // Export only after successful generation; reuse the published artifact.
+          results: candidateCommit.results,
+          editorState: { featureCatalog: candidateCatalog },
           losatCache: { entries: [] },
           losatDerivedCache: { entries: [] },
           proteinIdentityManifest: emptyProteinIdentityManifest()

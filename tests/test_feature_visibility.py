@@ -750,6 +750,8 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
     def fake_load_gff_fasta(*args, **kwargs):
         captured["selected_features_set"] = set(kwargs["selected_features_set"])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
+        from gbdraw.features.source import build_source_feature_catalog
+        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
         return [record]
 
     monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
@@ -797,6 +799,8 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     def fake_load_gff_fasta(*args, **kwargs):
         captured["selected_features_set"] = set(kwargs["selected_features_set"])
         captured["keep_all_features"] = kwargs.get("keep_all_features")
+        from gbdraw.features.source import build_source_feature_catalog
+        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
         return [record]
 
     monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)

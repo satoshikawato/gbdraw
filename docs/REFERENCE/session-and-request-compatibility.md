@@ -2,12 +2,12 @@
 
 # Session and request compatibility
 
-Current writers emit session version 40 and canonical `renderRequest` schema 6.
+Current writers emit session version 41 and canonical `renderRequest` schema 7.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 40 | 27–33 and 39–40 |
-| Canonical `renderRequest` | 6 | 1, 2, 5, and 6 |
+| gbdraw session | 41 | 27–33 and 39–41 |
+| Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -27,8 +27,8 @@ explicit path and implies saving; a `.gz` suffix selects compression.
 
 The web app's **Save Session** writes the current committed result and editable
 state. **Load Session** restores saved values instead of applying fresh browser
-defaults. Generate again before saving when the result or feature catalog is
-stale. Loading and regenerating should preserve biological identities, labels,
+defaults. Generate when you want the Result to reflect changed controls; saving before
+Generate deliberately preserves the newer draft alongside the earlier Result. Loading and regenerating should preserve biological identities, labels,
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
 
@@ -77,3 +77,28 @@ durable evidence record; the cache exists to avoid repeated work.
 For the version-by-version record of retired input names and saved-result
 formats, see the [compatibility history](../SESSION_COMPATIBILITY.md). Release
 notes record when support changed; this page documents current support.
+
+## Record rotation and feature placement
+
+Session 41 and request schema 7 add requested record display and feature placement
+intent together. Schema 6 keeps its original cardinality and row-inheritance
+meaning; session 40 retains its committed-request and editable-config authority.
+
+Each schema-7 record has `display: {isCircular, startCoordinate}`. Both values
+are nullable. A null start and an explicit source coordinate 1 remain distinct.
+`diagramOptions.featurePlacements` contains sorted exact record/biological-feature
+identities with a Main or mode-compatible lane-1 target. Auto removes an override.
+Tolerance belongs to `canvas.feature_overlap_tolerance_bp`, a non-negative integer
+with default 0. Resolved lanes, pixel coordinates and display fragments are not
+requested persistence fields.
+
+Supported older requests have unset display, empty placements and tolerance 0.
+Saving a schema-5/6 Web session promotes it without requiring Generate. Versions
+27–30 still support CLI replay only, and unknown or development-only versions
+remain rejected.
+
+Editable Web rotation and placement drafts are saved in config, separately from
+the last successful request and Result. An inactive rotation start stays in the
+draft but is omitted from the effective request. Load restores both states;
+Generate applies the draft. Source replacement invalidates the replaced source's
+bindings, even when its filename or input-card UID is unchanged.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 import math
@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 
 from gbdraw.exceptions import GbdrawError
+from gbdraw.features.ids import disambiguate_feature_ids
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
     _RenderedFeatureEntry,
@@ -28,6 +29,7 @@ from gbdraw.render.interactive_svg import (
     _normalize_string_array,
     _rendered_feature_entry,
     _resolve_rendered_features,
+    _validate_match_fragments,
 )
 
 FEATURE_CATALOG_SCHEMA = 3
@@ -182,6 +184,9 @@ _MATCH_ATTRIBUTES = {
 _MATCH_SNAPSHOT_ATTRIBUTES = tuple(
     dict.fromkeys(
         (
+            "id",
+            "data-gbdraw-match-fragment",
+            "data-gbdraw-match-geometry",
             "data-gbdraw-match-id",
             "data-gbdraw-pairwise-match-id",
             "data-match-kind",
@@ -401,13 +406,16 @@ def _match_payloads(
     rendered_features: Mapping[str, Mapping[str, object]],
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
-    seen: set[str] = set()
+    grouped: dict[str, list[_SvgCatalogCandidate]] = {}
     for candidate in candidates:
-        payload = _match_payload(candidate.attributes, len(payloads))
+        payload = _match_payload(candidate.attributes, len(grouped))
         match_id = _text(payload.get("id"))
-        if not match_id or match_id in seen:
+        if not match_id:
             raise GbdrawError("Rendered SVG contains invalid or duplicate match IDs.")
-        seen.add(match_id)
+        grouped.setdefault(match_id, []).append(candidate)
+    for group in grouped.values():
+        _validate_match_fragments([candidate.attributes for candidate in group])
+        payload = _match_payload(group[0].attributes, len(payloads))
         for role in ("query", "subject"):
             rendered = rendered_features.get(
                 _text(payload.get(f"{role}_feature_svg_id"))
@@ -720,10 +728,6 @@ def _normalized_biological_features(
         else context.features
     )
     candidates: list[_SourceFeatureCandidate] = []
-    collisions: Counter[tuple[str, str]] = Counter()
-    collision_indexes: dict[tuple[str, str], list[int | None]] = defaultdict(
-        list
-    )
     for feature in source_features:
         if not isinstance(feature, Mapping):
             continue
@@ -748,38 +752,18 @@ def _normalized_biological_features(
             identity_base=identity_base,
         )
         candidates.append(candidate)
-        identity = (record_key, identity_base)
-        collisions[identity] += 1
-        collision_indexes[identity].append(feature_index)
-    for identity, indexes in collision_indexes.items():
-        if len(indexes) > 1 and (
-            any(index is None for index in indexes)
-            or len(set(indexes)) != len(indexes)
-        ):
-            raise GbdrawError(
-                "Feature catalog contains duplicate biological source identity "
-                f"{identity!r}."
-            )
-    used: set[tuple[str, str]] = set()
+    biological_ids = disambiguate_feature_ids(
+        ((item.record_key, item.identity_base, item.feature_index) for item in candidates),
+        description="Feature catalog",
+    )
     normalized: list[dict[str, object]] = []
     indexed: list[_IndexedBiologicalFeature] = []
 
-    for candidate in candidates:
+    for candidate, biological_feature_id in zip(candidates, biological_ids, strict=True):
         feature = candidate.feature
         record_key = candidate.record_key
-        identity_base = candidate.identity_base
         stable_id = candidate.stable_id
         feature_index = candidate.feature_index
-        biological_feature_id = identity_base
-        if collisions[(record_key, identity_base)] > 1:
-            biological_feature_id = f"{identity_base}~{feature_index}"
-        if (record_key, biological_feature_id) in used:
-            raise GbdrawError(
-                "Feature catalog generated a duplicate canonical biological "
-                "feature identity."
-            )
-        used.add((record_key, biological_feature_id))
-
         payload = {
             key: value
             for key, value in feature.items()

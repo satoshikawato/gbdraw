@@ -1546,11 +1546,17 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           renderedByKey
         );
         expanded['_gbdraw_' + role + '_endpoint_resolved'] = Boolean(endpoints.length);
+        // Nucleotide HSPs name records, without claiming feature endpoints.
+        expanded['_gbdraw_' + role + '_record_span'] = String(match.match_kind || 'pairwise') === 'pairwise'
+          && !Object.keys(match).some(function (key) {
+            return key.indexOf(role) === 0 && /feature|protein|locus/i.test(key);
+          });
         if (!endpoints.length) {
           clearCatalogMatchEndpoint(
             expanded,
             role,
             String(expanded.match_kind || '') === 'homology'
+              || expanded['_gbdraw_' + role + '_record_span'] === true
           );
           return;
         }
@@ -1967,12 +1973,31 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   var selectedMatchElements = [];
   var pendingMatchElement = null;
   var comparisonElementsByCollinearityBlockId = new Map();
+  function validMatchFragments(elements) {
+    var ids = new Set();
+    var fragments = new Set();
+    var signature = null;
+    return elements.every(function (element) {
+      var id = matchAttr(element, 'id');
+      var fragment = matchAttr(element, 'data-gbdraw-match-fragment');
+      var metadata = Array.prototype.slice.call(element.attributes).filter(function (attribute) {
+        return attribute.name.indexOf('data-') === 0 && attribute.name !== 'data-gbdraw-match-fragment';
+      }).map(function (attribute) { return [attribute.name, attribute.value]; }).sort();
+      var current = JSON.stringify(metadata);
+      if (!id || ids.has(id) || !/^(0|[1-9][0-9]*)$/.test(fragment) || fragments.has(fragment)
+        || ['data-qstart', 'data-qend', 'data-sstart', 'data-send', 'data-match-kind'].some(function (key) { return !matchAttr(element, key); })
+        || (signature !== null && signature !== current)) return false;
+      ids.add(id);
+      fragments.add(fragment);
+      signature = current;
+      return true;
+    }) && elements.every(function (_element, index) { return fragments.has(String(index)); });
+  }
   Array.prototype.slice.call(svg.querySelectorAll(MATCH_SELECTOR)).forEach(function (element, index) {
     var matchId = getElementMatchId(element);
     if (matchId && !ambiguousMatchElementIds.has(matchId)) {
       if (matchElementsById.has(matchId)) {
-        matchElementsById.delete(matchId);
-        ambiguousMatchElementIds.add(matchId);
+        matchElementsById.get(matchId).push(element);
       } else {
         matchElementsById.set(matchId, [element]);
       }
@@ -1988,6 +2013,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     element.setAttribute('role', 'button');
     element.setAttribute('tabindex', '0');
     element.setAttribute('aria-label', 'Pairwise match ' + (index + 1));
+  });
+  matchElementsById.forEach(function (elements, id) {
+    if ((elements.length > 1 || elements[0].hasAttribute('data-gbdraw-match-fragment')) && !validMatchFragments(elements)) {
+      matchElementsById.delete(id);
+      ambiguousMatchElementIds.add(id);
+    }
   });
 
   function setClassToken(element, token, enabled) {
@@ -2126,7 +2157,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function clearPendingMatch() {
     if (!pendingMatchElement) return;
-    setClassToken(pendingMatchElement, 'gbdraw-interactive-pairwise-match--pending', false);
+    (matchElementsById.get(getElementMatchId(pendingMatchElement)) || []).forEach(function (element) {
+      setClassToken(element, 'gbdraw-interactive-pairwise-match--pending', false);
+    });
     pendingMatchElement = null;
   }
 
@@ -2134,7 +2167,9 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     if (pendingMatchElement === element) return;
     clearPendingMatch();
     pendingMatchElement = element;
-    setClassToken(element, 'gbdraw-interactive-pairwise-match--pending', true);
+    (matchElementsById.get(getElementMatchId(element)) || []).forEach(function (fragment) {
+      setClassToken(fragment, 'gbdraw-interactive-pairwise-match--pending', true);
+    });
   }
 
   function clearActiveFeatureHover() {
@@ -5092,6 +5127,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       match
       && match._gbdraw_catalog_endpoint_contract === true
       && kind !== 'homology'
+      && match['_gbdraw_' + role + '_record_span'] !== true
       && !resolvedCatalogMatchFeature(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
@@ -5128,7 +5164,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       if (String(source && source.origin || '') !== expectedOrigin) return false;
       var candidateRecordId = consistentTextIdentity(source, ['recordId', 'record_id']);
       if (!candidateRecordId.valid) return false;
-      if (expectedOrigin === 'linear-record') {
+      if (expectedOrigin === 'linear-record' || (expectedOrigin === 'circular-reference' && recordIndex !== null)) {
         var candidateRecord = nonnegativeIntegerIdentity(
           source,
           ['recordIndex', 'record_index']

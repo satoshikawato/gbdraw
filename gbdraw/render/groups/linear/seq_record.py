@@ -17,6 +17,7 @@ from ....layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderConte
 from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import record_group_svg_id
+from ....layout.record_labels import source_ruler_ticks
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -24,6 +25,8 @@ from .length_bar import (
     format_linear_tick_label,
 )
 
+
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 class SeqRecordGroup:
     """Manages the visualization of a SeqRecord in a linear layout."""
@@ -47,7 +50,9 @@ class SeqRecordGroup:
         record_local_ruler: bool = False,
         feature_offset_y: float = 0.0,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.gb_record = gb_record
         self.canvas_config = canvas_config
         self.length_param = self.canvas_config.length_param
@@ -195,6 +200,10 @@ class SeqRecordGroup:
             return
 
         tick_coords = self._axis_tick_coordinates(start_coord, end_coord, interval)
+        projected_ticks = None
+        if self.record_transform is not None and self.record_transform.start_coordinate is not None:
+            projected_ticks = dict(source_ruler_ticks(self.record_transform, interval))
+            tick_coords = list(projected_ticks)
         if not tick_coords:
             return
 
@@ -209,7 +218,9 @@ class SeqRecordGroup:
             dominant_baseline = "text-after-edge"
 
         for coord in tick_coords:
-            if coord_span <= 0:
+            if projected_ticks is not None:
+                x_pos = bar_length * projected_ticks[coord] / record_length
+            elif coord_span <= 0:
                 x_pos = 0.0
             else:
                 x_pos = bar_length * (abs(coord - start_coord) / float(coord_span))
@@ -392,6 +403,7 @@ class SeqRecordGroup:
                     orthogroup_label_member_ids=self.orthogroup_label_member_ids,
                     orthogroup_label_top_member_ids=self.orthogroup_label_top_member_ids,
                     feature_lane_geometry=self.feature_lane_geometry,
+                    record_transform=self.record_transform,
                 )
 
         record_group: Group = self.draw_record(

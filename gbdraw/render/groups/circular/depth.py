@@ -11,6 +11,8 @@ from ....core.sequence import determine_length_parameter  # type: ignore[reportM
 from ...drawers.circular.depth import DepthDrawer
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class DepthGroup:
     """Creates a depth coverage group for a circular canvas."""
 
@@ -27,7 +29,9 @@ class DepthGroup:
         norm_factor_override: float | None = None,
         group_id: str | None = None,
         axis_group_id: str | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.depth_group = Group(id=group_id or "depth", debug=False)
         self.radius = float(radius)
         self.depth_config = depth_config
@@ -55,6 +59,7 @@ class DepthGroup:
             self.track_width,
             self.norm_factor,
             self.axis_group_id,
+            record_transform=self.record_transform,
         )
 
     def get_group(self) -> Group:

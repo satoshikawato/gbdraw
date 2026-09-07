@@ -20,12 +20,14 @@ class _RenderProfile:
     show_depth: bool = field(init=False)
     strandedness: bool = field(init=False)
     resolve_overlaps: bool = field(init=False)
+    feature_overlap_tolerance_bp: int = field(init=False)
     label_rendering: LabelRenderingPolicy = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.config, GbdrawConfig):
             raise ValidationError("render profile config must be GbdrawConfig")
         canvas = self.config.canvas
+        object.__setattr__(self, "feature_overlap_tolerance_bp", canvas.feature_overlap_tolerance_bp)
         object.__setattr__(self, "show_gc", bool(canvas.show_gc))
         object.__setattr__(self, "show_skew", bool(canvas.show_skew))
         object.__setattr__(self, "show_depth", bool(canvas.show_depth))

@@ -7,6 +7,9 @@ from pandas import DataFrame
 from svgwrite.shapes import Circle
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from ..layout.scalar_axis import project_scalar_samples
+
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     """
     Generates the SVG path description for a circle.
@@ -36,6 +39,7 @@ def generate_circular_gc_content_path_desc(
     track_width: float,
     norm_factor: float,
     dinucleotide: str,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """
     Generates the SVG path description for circular GC content representation using vectorization.
@@ -57,7 +61,11 @@ def generate_circular_gc_content_path_desc(
         radius_of_coordinate = (norm_radius + (0.5 * track_width * (diff / max_diff))).to_numpy(dtype=float)
 
     positions = gc_df.index.to_numpy(dtype=float)
-    if len(positions) > 0 and np.isclose(positions[0], 0.0):
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        segments = project_scalar_samples(positions, radius_of_coordinate, record_transform)
+        positions = np.array([p.position for segment in segments for p in segment.points])
+        radius_of_coordinate = np.array([p.value for segment in segments for p in segment.points])
+    elif len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         radius_of_coordinate = np.append(radius_of_coordinate, radius_of_coordinate[0])
 
@@ -86,7 +94,10 @@ def generate_circular_gc_skew_path_desc(
     track_width: float,
     norm_factor: float,
     dinucleotide: str,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
+    if df.empty or total_len <= 0:
+        return ""
     norm_radius: float = radius * norm_factor
 
     column: str = f"{dinucleotide} skew"
@@ -99,7 +110,12 @@ def generate_circular_gc_skew_path_desc(
     else:
         radius_of_coordinate = norm_radius + (0.5 * track_width * (diff / max_diff))
 
-    angles_rad = np.radians(360.0 * (df.index / total_len) - 90)
+    positions = df.index
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        segments = project_scalar_samples(positions, radius_of_coordinate, record_transform)
+        positions = np.array([p.position for segment in segments for p in segment.points])
+        radius_of_coordinate = np.array([p.value for segment in segments for p in segment.points])
+    angles_rad = np.radians(360.0 * (positions / total_len) - 90)
 
     x_coords = radius_of_coordinate * np.cos(angles_rad)
     y_coords = radius_of_coordinate * np.sin(angles_rad)
@@ -127,6 +143,8 @@ def generate_circular_scalar_area_path_desc(
     value_column: str = "value_normalized",
     position_column: str = "position",
     close_at_record_len: bool = False,
+    source_positions: bool = False,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """Return an annular filled area path for normalized scalar values."""
 
@@ -137,7 +155,11 @@ def generate_circular_scalar_area_path_desc(
     values = scalar_df[value_column].to_numpy(dtype=float)
     values = np.clip(values, 0.0, 1.0)
     positions = scalar_df[position_column].to_numpy(dtype=float)
-    if close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        segments = project_scalar_samples(positions, values, record_transform, source_positions=source_positions)
+        positions = np.array([p.position for segment in segments for p in segment.points])
+        values = np.array([p.value for segment in segments for p in segment.points])
+    elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         values = np.append(values, values[0])
     outer_radii = baseline_radius + (float(track_width) * values)
@@ -164,6 +186,7 @@ def generate_circular_depth_path_desc(
     depth_df: DataFrame,
     track_width: float,
     norm_factor: float,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """Return an annular filled area path for binned circular depth coverage."""
 
@@ -174,6 +197,8 @@ def generate_circular_depth_path_desc(
         track_width,
         norm_factor,
         value_column="depth_normalized",
+        source_positions=True,
+        record_transform=record_transform,
     )
 
 

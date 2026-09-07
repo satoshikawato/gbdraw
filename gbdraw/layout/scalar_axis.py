@@ -5,6 +5,23 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from typing import Any
+from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
+
+
+def project_scalar_samples(
+    positions, values, transform: RecordDisplayTransform, *, source_positions: bool = False,
+) -> tuple[DisplaySeries, ...]:
+    """Project one existing continuous track after its domain/value adapters.
+
+    GC windows are record-local. Depth bins already contain zero-based source
+    boundaries from depth_df (missing input bases there mean zero coverage).
+    Projection never recalculates windows, normalizes values, or flips skew.
+    """
+    points = tuple(SeriesPoint(float(position), float(value))
+                   for position, value in zip(positions, values, strict=True))
+    if source_positions:
+        return transform.project_series(points)
+    return transform.project_local_series(points)
 
 
 LINEAR_SCALAR_AXIS_DEFAULT_FONT_MIN_PX = 5.0

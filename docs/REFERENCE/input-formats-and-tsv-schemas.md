@@ -44,7 +44,7 @@ containing the table.
 
 | Table | Required columns | Optional columns |
 |---|---|---|
-| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `order`, `row`, `column` |
+| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column` |
 | Linear comparisons | `blast`, `query`, `subject` | None |
 | Circular conservation | `blast` | `label`, `color`, `comparison_fasta` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |
@@ -113,3 +113,32 @@ or `exclude_matching`.
 
 Table precedence and the meaning of those actions are documented in [Feature
 presentation](palettes-feature-rules-labels-shapes-and-tracks.md#feature-presentation).
+
+## Display and feature placement tables
+
+Records-table `topology` accepts `auto`, `circular`, or `linear`; blank is auto.
+`display_start` is an optional 1-based source base in `1..L`.
+Blank means no override/no additional shift. Explicit start and crop cannot be
+combined. Direct `--record_topology` and `--display_start_coordinate` flags target one
+resolved record; use a records table for distinct per-record settings.
+
+`--feature_placement_table` accepts UTF-8 TSV (including BOM):
+
+| Column | Meaning |
+|---|---|
+| `record` | Optional unique record ID or displayed `#index`; omission must resolve to one record |
+| `feature_selector` | Required exact selector, such as `protein_id=NP_054479.1`, `hash=<biologicalFeatureId>`, or a qualifier value |
+| `placement` | Required `auto`, `main`, `outward`, `inward`, `above`, or `below` |
+| `level` | Omit for Auto/Main; directional targets accept blank (lane 1) or `1` |
+
+Selectors must match exactly one original-source feature. A gene qualifier may
+match both a gene annotation and its CDS; a unique protein ID avoids that
+ambiguity. Unknown/stale identities, duplicate resolved targets, extra columns,
+wrong-mode sides and unsupported resolved layouts are errors. GFF duplicate
+identities use complete original-source order, including features hidden by
+loading or visibility rules. Changing visibility does not renumber them.
+
+Auto removes an override. Source-known cropped-out, hidden or underlay features
+retain dormant intent and reserve no foreground lane; restoring visibility or
+the crop reactivates it. Persist exact record/biological-feature identities,
+never an SVG fragment ID or a transient lane number.

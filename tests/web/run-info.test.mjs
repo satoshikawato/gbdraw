@@ -1021,3 +1021,20 @@ const linearCanonical = canonical({
   assert.equal(info.sessionCommand, '');
   assert.equal(isCliInvocationSessionExportable(info.invocation), false);
 }
+
+// Until the atomic writer can represent display, no source recipe may claim a
+// lossless command for a request carrying this unrecognized schema-6 field.
+for (const mode of ['circular', 'linear']) {
+  for (const startCoordinate of [null, 1, 25]) {
+    const unsupported = canonical({
+      mode,
+      records: [{ recordKey: 'record', cardinality: 'exactly_one',
+        source: { kind: 'genbank', resourceId: 'source' }, selector: null, region: null,
+        presentation: presentation(), display: { isCircular: null, startCoordinate } }],
+      resources: { source: resource('genbank', 'source.gbk', 'LOCUS record\n//\n') }
+    });
+    const recipe = await buildSourceRecipe(unsupported);
+    assert.equal(recipe.available, false);
+    assert.match(recipe.unavailableReason, /display/);
+  }
+}

@@ -8,11 +8,14 @@ This module was extracted from `gbdraw.linear_diagram_components` to improve coh
 
 from __future__ import annotations
 
+from gbdraw.features.placement import FeaturePlacementSlot
+from ...layout.record_labels import source_ruler_ticks
+
 import copy
 from dataclasses import dataclass, replace
 import logging
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 import pandas as pd
@@ -91,6 +94,7 @@ from ...layout.linear_multi_record import (
     solve_linear_layout,
     stable_record_keys,
 )
+from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.record_placement import resolve_record_row_positions
 from ...linear_comparison import (
     LinearComparison,
@@ -205,6 +209,7 @@ def _prepare_linear_annotation_tracks(
     canvas_config: LinearCanvasConfigurator,
     profile: LinearRenderProfile,
     record_depth_tracks: list[list[DepthTrackSpec]] | None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[
     list[LinearTrackSlot] | None,
     ResolvedAnnotationBundle,
@@ -216,6 +221,7 @@ def _prepare_linear_annotation_tracks(
         records,
         slots,
         mode="linear",
+        record_transforms=record_transforms,
         default_slots=lambda: default_linear_track_slots(
             show_features=True,
             show_depth=bool(record_depth_tracks),
@@ -893,6 +899,7 @@ def _definition_metrics_by_record(
     *,
     cfg: GbdrawConfig,
     line_kinds_by_record: list[frozenset[str] | None] | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """Return the maximum width plus record-local definition widths and heights."""
 
@@ -909,6 +916,7 @@ def _definition_metrics_by_record(
             canvas_config,
             cfg=cfg,
             line_kinds_by_record=[line_kinds],
+            record_transforms=([record_transforms[index]] if record_transforms is not None else None),
         )
         widths.append(float(width))
         heights.append(float(record_heights[0]))
@@ -1166,6 +1174,7 @@ def _linear_axis_ruler_bounds(
     render_context: LinearRecordRenderContext,
     cfg: GbdrawConfig,
     record_local_ruler: bool,
+    record_transform: RecordDisplayTransform | None = None,
 ) -> Aabb | None:
     """Return exact horizontal text extents for a ruler drawn on the record axis."""
 
@@ -1205,6 +1214,10 @@ def _linear_axis_ruler_bounds(
         if tick > minimum:
             ticks.append(int(tick))
         tick += tick_interval
+    projected_ticks = None
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        projected_ticks = dict(source_ruler_ticks(record_transform, tick_interval))
+        ticks = list(projected_ticks)
     if not ticks:
         return None
 
@@ -1213,9 +1226,9 @@ def _linear_axis_ruler_bounds(
         canvas_config.length_param
     )
     for coordinate in ticks:
-        x = placement.sequence_width * (
-            abs(coordinate - start_coord) / float(span)
-        )
+        offset = (projected_ticks[coordinate] / len(record.seq) if projected_ticks is not None
+                  else abs(coordinate - start_coord) / float(span))
+        x = placement.sequence_width * offset
         label = format_linear_tick_label(
             coordinate,
             context_length=max(1, int(canvas_config.longest_genome)),
@@ -1401,6 +1414,7 @@ def _collect_linear_primary_bounds(
     length_bar_group: LengthBarGroup | None,
     length_bar_offset_x: float,
     length_bar_offset_y: float,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Aabb:
     """Collect one authoritative plot-space box without inspecting rendered SVG."""
 
@@ -1510,6 +1524,7 @@ def _collect_linear_primary_bounds(
             render_context=render_context,
             cfg=cfg,
             record_local_ruler=multi_record_enabled,
+            record_transform=(record_transforms[record_index] if record_transforms is not None else None),
         )
         if ruler_bounds is not None:
             bounds.append(ruler_bounds.translated(horizontal_offset, 0.0))
@@ -1625,6 +1640,7 @@ def assemble_linear_diagram(
     linear_layout: LinearMultiRecordOptions | None = None,
     orthogroups: OrthogroupResult | None = None,
     align_orthogroup_feature: str | None = None,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:
     """
     Assembles a linear diagram of genomic records with optional BLAST comparison data,
@@ -1674,6 +1690,7 @@ def assemble_linear_diagram(
         canvas_config=canvas_config,
         profile=profile,
         record_depth_tracks=record_depth_tracks,
+        record_transforms=record_transforms,
     )
     if linear_track_slots is None:
         linear_track_slots = default_linear_track_slots(
@@ -1756,10 +1773,18 @@ def assemble_linear_diagram(
             "WARNING: --show_labels orthogroup_top requires orthogroup metadata; no orthogroup-specific label suppression was applied."
         )
 
+    resolved_feature_slot = next(
+        (slot for slot in normalized_linear_track_slots if slot.renderer == "features"),
+        None,
+    )
     record_feature_layers = _precalculate_feature_layers(
         records,
         feature_config,
         profile,
+        record_transforms=record_transforms,
+        placement_slot=(FeaturePlacementSlot(
+            "linear", resolved_feature_slot.side, profile.strandedness,
+        ) if resolved_feature_slot is not None else None),
     )
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
@@ -1834,6 +1859,7 @@ def assemble_linear_diagram(
         precomputed_feature_dicts=record_feature_dicts,
         orthogroup_label_eligibility=orthogroup_label_eligibility,
         feature_lane_geometries=record_feature_lane_geometries,
+        record_transforms=record_transforms,
     )
     local_definition_line_kinds = (
         [
@@ -1852,6 +1878,7 @@ def assemble_linear_diagram(
         canvas_config,
         cfg=cfg,
         line_kinds_by_record=local_definition_line_kinds,
+        record_transforms=record_transforms,
     )
     row_definition_width = 0.0
     row_definition_widths = [0.0 for _record in records]
@@ -1871,6 +1898,7 @@ def assemble_linear_diagram(
                 else frozenset()
                 for index in range(len(records))
             ],
+            record_transforms=record_transforms,
         )
 
     record_depth_data: list[list[DepthTrackData]] = (
@@ -2019,6 +2047,7 @@ def assemble_linear_diagram(
             canvas_config,
             align_orthogroup_feature,
             orthogroups=orthogroups,
+            record_transforms=record_transforms,
         )
     alignment_extents = calculate_orthogroup_alignment_canvas_extents(
         records,
@@ -2192,6 +2221,7 @@ def assemble_linear_diagram(
             orthogroup_label_eligibility=orthogroup_label_eligibility,
             feature_lane_geometries=record_feature_lane_geometries,
             sequence_widths=final_sequence_widths,
+            record_transforms=record_transforms,
         )
         record_vertical_plans, record_definition_geometries = _build_linear_record_vertical_plans(
             records=records,
@@ -2385,9 +2415,11 @@ def assemble_linear_diagram(
         )
     # Row spacing reserves labels, but ribbon endpoints attach to track paint.
     # Resolve this after both layout paths have fixed every slot and record.
+    feature_attachment_bands: dict[str, VerticalBand] = {}
     for record_index, placement in record_placements.items():
         plan = record_vertical_plans[record_index]
         attachment_band = plan.axis_band
+        non_feature_band: VerticalBand | None = None
         for slot in plan.slots:
             band = slot.paint_band
             if band is None:
@@ -2396,6 +2428,8 @@ def assemble_linear_diagram(
                 band = record_feature_lane_geometries[
                     record_index
                 ].occupied_band.translate(slot.origin_y)
+            else:
+                non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
             attachment_band = attachment_band.union(band)
         record_placements[record_index] = replace(
             placement,
@@ -2406,6 +2440,33 @@ def assemble_linear_diagram(
                 placement.axis_y + attachment_band.bottom_y + comparison_endpoint_gap_px
             ),
         )
+        # Feature-associated matches follow their endpoint features. A moved
+        # feature must not shorten matches attached to another occupied lane.
+        features = record_feature_dicts[record_index]
+        if not any(feature.placement is not None and feature.placement.requested_target is not None
+                   for feature in features.values()):
+            continue
+        if not any(feature.placement is not None and feature.placement.level > 0
+                   for feature in features.values()):
+            continue
+        for slot in plan.slots:
+            if slot.renderer != "features" or slot.paint_band is None:
+                continue
+            geometry = record_feature_lane_geometries[record_index]
+            for feature in features.values():
+                dom_id = feature_dom_index.by_source_index.get((record_index, feature.source_feature_index))
+                if dom_id is None:
+                    continue
+                lane = geometry.lane_for(strand=feature.strand, track_id=feature.feature_track_id,
+                                         separate_strands=render_context.profile.strandedness)
+                band = lane.band.translate(slot.origin_y)
+                if non_feature_band is not None:
+                    band = band.union(non_feature_band)
+                feature_attachment_bands[dom_id] = VerticalBand(
+                    placement.axis_y + band.top_y - comparison_endpoint_gap_px,
+                    placement.axis_y + band.bottom_y + comparison_endpoint_gap_px,
+                )
+    feature_dom_index = replace(feature_dom_index, attachment_bands=feature_attachment_bands)
 
     canvas: Drawing = canvas_config.create_svg_canvas()
     primary_target_start = len(getattr(canvas, "elements", []))
@@ -2428,6 +2489,7 @@ def assemble_linear_diagram(
             records,
             comparison_placements,
             feature_dom_index=feature_dom_index,
+            record_transforms=record_transforms,
         )
 
     label_font_size = _resolve_linear_diagram_label_font_size(
@@ -2515,6 +2577,7 @@ def assemble_linear_diagram(
                         record_local_ruler=multi_record_enabled,
                         feature_offset_y=resolved_slot.origin_y,
                         feature_lane_geometry=record_feature_lane_geometries[record_index],
+                        record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     )
                     feature_rendered = True
                     continue
@@ -2603,6 +2666,7 @@ def assemble_linear_diagram(
                         track_height=slot.height,
                         track_offset_y=track_offset_y,
                         sequence_width=sequence_width,
+                        record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     )
                     continue
 
@@ -2646,6 +2710,7 @@ def assemble_linear_diagram(
                         slot_id=str(slot.id),
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
+                        record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     )
                     continue
 
@@ -2672,6 +2737,7 @@ def assemble_linear_diagram(
                         slot_id=str(slot.id),
                         slot_renderer=str(slot.renderer),
                         sequence_width=sequence_width,
+                        record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                     )
 
             if not feature_rendered:
@@ -2696,6 +2762,7 @@ def assemble_linear_diagram(
                     multi_record_layout=multi_record_enabled,
                     record_local_ruler=multi_record_enabled,
                     feature_lane_geometry=record_feature_lane_geometries[record_index],
+                    record_transform=(record_transforms[record_index] if record_transforms is not None else None),
                 )
             add_record_definition_group(
                 canvas,
@@ -2727,6 +2794,7 @@ def assemble_linear_diagram(
                 multi_record_layout=multi_record_enabled,
                 record_index=record_index,
                 record_count=total_records,
+                record_transform=(record_transforms[record_index] if record_transforms is not None else None),
             )
             continue
 
@@ -2755,6 +2823,7 @@ def assemble_linear_diagram(
         length_bar_group=length_bar_group,
         length_bar_offset_x=length_bar_offset_x,
         length_bar_offset_y=length_bar_offset_y,
+        record_transforms=record_transforms,
     )
 
     legend_measurement: LegendMeasurement | None = None
@@ -2843,6 +2912,10 @@ def assemble_linear_diagram(
                 boundary_gap_resolutions=boundary_gap_resolutions,
             ),
         )
+    if resolved_feature_slot is not None:
+        targets = FeaturePlacementSlot("linear", resolved_feature_slot.side, profile.strandedness).supported_targets()
+        for record_geometry in getattr(canvas, "_gbdraw_track_slot_geometry", {}).get("records", []):
+            record_geometry["featurePlacementTargets"] = targets
     setattr(canvas, "_gbdraw_linear_source_content_bounds", source_primary_bounds)
     setattr(canvas, "_gbdraw_linear_composition_plan", composition_plan)
 

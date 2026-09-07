@@ -1048,7 +1048,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webPrSmoke, /needs: ci-impact/);
   assert.match(webPrSmoke, /needs\.ci-impact\.result == 'success'/);
   assert.match(webPrSmoke, /requiredJobs, 'web-pr-smoke'/);
-  assert.match(webPrSmoke, /timeout-minutes: 5/);
+  assert.match(webPrSmoke, /timeout-minutes: 10/);
   assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/playwright install --with-deps chromium/g)].length, 1);
@@ -1476,6 +1476,10 @@ test('normal CI uses only dev as the staging push branch', () => {
 });
 
 test('dev staging Web checks scope only the newly integrated change', () => {
+  const job = TEST_WORKFLOW.match(/\n  web-change-budget:\n[\s\S]*?(?=\n  [a-z0-9-]+:\n|$)/)?.[0];
+  assert.ok(job, 'Web change-budget job must exist');
+  assert.match(job, /\n    timeout-minutes: 10\n/);
+
   const step = TEST_WORKFLOW.match(
     /      - name: Check Web change budget\n[\s\S]*?(?=\n      - name: Check Web architecture contracts)/
   )?.[0];

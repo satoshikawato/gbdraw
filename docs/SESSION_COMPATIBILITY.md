@@ -14,13 +14,13 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 40 | 27–33 and 39–40 |
-| Canonical `renderRequest` | 6 | 1, 2, 5, and 6 |
+| gbdraw session | 41 | 27–33 and 39–41 |
+| Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert session versions 31–33 and 39–40 to
+The public typed-session bridge can convert session versions 31–33 and 39–41 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -45,7 +45,7 @@ has one output object. A Circular batch has one resolved output object per
 record. `renderRequest.output.prefix` is the output-prefix owner.
 
 The Web projects a selectorless Linear schema-5 card to explicit `all` when it
-is saved with schema 6. Legacy multi-record Web inputs already have explicit
+is saved with schemas 6 and 7. Legacy multi-record Web inputs already have explicit
 selectors, so this preserves the embedded source records shown by the card.
 
 Current sessions keep mode-specific layout values under
@@ -81,7 +81,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–40.
+remain 27–33 and 39–41.
 
 ## Retired inputs
 
@@ -167,3 +167,11 @@ Do not retain a decoded resource path after the `with` block ends. Use
 prefix, output directory, format, or overwrite policy.
 
 [Home](./DOCS.md) | [Current compatibility reference](./REFERENCE/session-and-request-compatibility.md) | [CLI inventory](./CLI_Reference.md) | [Python API](./PYTHON_API.md) | [Typed API](./TYPED_API.md) | **Compatibility history**
+
+## Session 41 and request schema 7
+
+The joint format adds requested record rotation, exact non-Auto feature placement,
+and canvas overlap tolerance. Web config retains editable drafts separately from
+the successful request and Result. Session 40 keeps its authority rules; schema 6
+keeps cardinality and row inheritance. See the [current field and migration
+contract](./REFERENCE/session-and-request-compatibility.md#record-rotation-and-feature-placement).

@@ -77,6 +77,7 @@ from .cli_utils.common import (
     _add_window_step_args,
     add_feature_args,
     add_input_args,
+    apply_record_display_cli_options,
     add_label_args,
     setup_logging,
     validate_input_args,
@@ -1263,6 +1264,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.depth.share_axis": depth_share_axis,
         "labels.linear.scope": show_labels,
         "canvas.resolve_overlaps": resolve_overlaps,
+        "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,
         "canvas.linear.track_layout": track_layout,
         "canvas.linear.track_axis_gap": track_axis_gap,
         "canvas.linear.ruler_on_axis": ruler_on_axis,
@@ -1368,6 +1370,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             regions=args.region,
         )
         linear_positions = list(args.multi_record_position or [])
+    record_manifest = apply_record_display_cli_options(record_manifest, args)
     if record_manifest.record_options.regions and blast_files:
         logger.warning(
             "WARNING: Region cropping is enabled; ensure BLAST coordinates "
@@ -1419,6 +1422,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             ),
             selected_features_set=tuple(selected_features_set),
             feature_visibility_table_file=feature_table_path or None,
+            feature_placement_table_file=args.feature_placement_table,
             label_whitelist_file=label_whitelist or None,
             qualifier_priority_file=qualifier_priority_path or None,
             label_override_file=label_table_path or None,

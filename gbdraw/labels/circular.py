@@ -32,6 +32,8 @@ from ..svg.arrows import (
 )
 
 # Keep dense large-font labels from being pushed excessively far from features.
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 MIN_BBOX_GAP_RATIO = 0.01
 MIN_BBOX_GAP_FLOOR_PX = 1.2
 HEAVY_CLUSTER_RELAX_MAX_LABELS = 70
@@ -4467,6 +4469,7 @@ def prepare_label_list(
     feature_lane_direction: str | None = None,
     label_font_size: float | None = None,
     _candidate_cache: dict[str, object] | None = None,
+    record_transform: RecordDisplayTransform | None = None,
 ):
     cfg = profile.config
     embedded_labels = []
@@ -4487,6 +4490,12 @@ def prepare_label_list(
         lane_direction = _lane_direction_from_preset(track_type)
     strandedness = profile.strandedness
     resolve_overlaps = profile.resolve_overlaps
+    displaced_lanes = any(
+        getattr(feature, "placement", None) is not None
+        and feature.placement.level > 0 and feature.placement.requested_target is not None
+        for feature in feature_dict.values()
+    )
+    lane_clearance = (resolve_overlaps and not strandedness) or displaced_lanes
 
     strands = "separate" if strandedness else "single"
     inner_labels_enabled = profile.inner_labels_enabled
@@ -4510,13 +4519,13 @@ def prepare_label_list(
     cds_ratio, offset = calculate_cds_ratio(track_ratio, length_param, track_ratio_factor)
     feature_band_width_px = float(radius) * float(cds_ratio)
     effective_anchor_clearance_px = _effective_outer_middle_anchor_clearance_px(
-        resolve_overlaps=resolve_overlaps,
+        resolve_overlaps=lane_clearance,
         strandedness=bool(strandedness),
         lane_direction=lane_direction,
         feature_band_width_px=feature_band_width_px,
     )
     effective_text_clearance_px = _effective_outer_text_clearance_px(
-        resolve_overlaps=resolve_overlaps,
+        resolve_overlaps=lane_clearance,
         strandedness=bool(strandedness),
         lane_direction=lane_direction,
         feature_band_width_px=feature_band_width_px,
@@ -4545,6 +4554,7 @@ def prepare_label_list(
                 size,
                 interval,
             ),
+            record_transform=record_transform,
         )
         if _candidate_cache is not None:
             _candidate_cache["candidates"] = candidates
@@ -4590,7 +4600,13 @@ def prepare_label_list(
             feature_middle_y: float = feature_center_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             feature_anchor_x: float = feature_middle_x
             feature_anchor_y: float = feature_middle_y
+            assignment = getattr(feature_object, "placement", None)
             is_outer_label = (feature_object.strand == "positive") or (inner_labels_enabled is False)
+            if (
+                assignment is not None and assignment.level > 0
+                and lane_direction == "split" and inner_labels_enabled
+            ):
+                is_outer_label = assignment.side == "outward"
             longest_segment_bp = _segment_span_bp(
                 longest_segment_start,
                 longest_segment_end,
@@ -4609,7 +4625,7 @@ def prepare_label_list(
                 and longest_segment_bp < circular_arrow_length_bp
             )
             if is_outer_label:
-                if resolve_overlaps and not strandedness and not is_short_directional_feature:
+                if lane_clearance and not is_short_directional_feature:
                     # Raised feature tracks look disconnected when leaders target the track center.
                     # Anchor to the outer edge so feature-to-label distance reads more naturally.
                     feature_anchor_x = feature_outer_radius * math.cos(
@@ -4622,7 +4638,7 @@ def prepare_label_list(
                     # Use the inner edge of the arena as the "anchor" radius for leader lines.
                     anchor_radius = float(outer_arena[0])
                     middle_radius = anchor_radius
-                    if resolve_overlaps and not strandedness:
+                    if lane_clearance:
                         middle_radius = max(
                             float(middle_radius),
                             float(
@@ -4638,7 +4654,7 @@ def prepare_label_list(
                         )
                 else:
                     middle_radius = radius_factor * radius
-                    if resolve_overlaps and not strandedness:
+                    if lane_clearance:
                         middle_radius = max(
                             float(middle_radius),
                             float(
@@ -4655,7 +4671,7 @@ def prepare_label_list(
                 middle_x = middle_radius * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = middle_radius * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
             else:
-                if resolve_overlaps and not strandedness and not is_short_directional_feature:
+                if lane_clearance and not is_short_directional_feature:
                     # For displaced inner features, anchor leaders on the inner edge so lines
                     # do not cross over raised feature bodies.
                     feature_anchor_x = feature_inner_radius * math.cos(
@@ -4666,7 +4682,7 @@ def prepare_label_list(
                     )
                 middle_x = (inner_radius_factor * radius) * math.cos(math.radians(360.0 * (label_middle / total_length) - 90))
                 middle_y = (inner_radius_factor * radius) * math.sin(math.radians(360.0 * (label_middle / total_length) - 90))
-                if resolve_overlaps and not strandedness:
+                if lane_clearance:
                     label_entry["max_inner_start_radius_px"] = max(
                         0.0,
                         feature_inner_radius
@@ -4721,7 +4737,7 @@ def prepare_label_list(
             if is_embedded:
                 embedded_labels.append(label_entry)
             else:
-                if feature_object.strand == "positive" or inner_labels_enabled is False:
+                if is_outer_label:
                     label_entry["is_inner"] = False
                     outer_labels.append(label_entry)
                 else:
@@ -4798,7 +4814,7 @@ def prepare_label_list(
     )
     feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
     feature_inner_radius_intervals: list[tuple[float, float, float]] | None = None
-    if resolve_overlaps and not strandedness:
+    if lane_clearance:
         feature_outer_radius_intervals = _build_outer_feature_radius_intervals(
             feature_dict,
             total_length,

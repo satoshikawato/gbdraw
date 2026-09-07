@@ -11,9 +11,12 @@ import argparse
 import logging
 import math
 import sys
+from dataclasses import replace
 from typing import Optional
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.api.record_planning import RecordInputManifest
+from gbdraw.api.requests import RecordCardinality, RecordDisplayOptions
 from gbdraw.features.shapes import parse_feature_shape_assignment
 from gbdraw.features.visibility import resolve_candidate_feature_types
 from gbdraw.io.cli_tables import RecordsTable
@@ -57,6 +60,22 @@ def setup_logging() -> None:
 
 def add_input_args(parser: argparse.ArgumentParser) -> None:
     """Add input file arguments (--gbk, --gff, --fasta)."""
+    parser.add_argument(
+        "--feature_placement_table", metavar="TSV", default=None,
+        help="Feature placements: record, feature_selector, placement, and optional level columns.",
+    )
+    parser.add_argument(
+        "--feature_overlap_tolerance_bp", metavar="BP", type=int, default=0,
+        help="Non-negative permitted feature overlap in base pairs (default: 0).",
+    )
+    parser.add_argument(
+        "--record_topology", choices=("auto", "linear", "circular"), default=None,
+        help="Topology override for exactly one direct-input record (default: auto).",
+    )
+    parser.add_argument(
+        "--display_start_coordinate", type=int, default=None,
+        help="1-based source coordinate at the display start; requires one complete circular record.",
+    )
     parser.add_argument(
         "--gbk",
         metavar="GBK_FILE",
@@ -474,6 +493,11 @@ def add_label_args(parser: argparse.ArgumentParser) -> None:
 def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Validate input file argument combinations."""
     records_table = getattr(args, "records_table", None)
+    if records_table and (
+        getattr(args, "record_topology", None) is not None
+        or getattr(args, "display_start_coordinate", None) is not None
+    ):
+        parser.error("--records_table cannot be combined with --record_topology or --display_start_coordinate.")
     if records_table and (args.gbk or args.gff or args.fasta):
         parser.error("Error: --records_table cannot be used with --gbk, --gff, or --fasta.")
     if args.gbk and (args.gff or args.fasta):
@@ -484,6 +508,27 @@ def validate_input_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         parser.error("Error: --fasta requires --gff.")
     if not records_table and not args.gbk and not (args.gff and args.fasta):
         parser.error("Error: Either --records_table, --gbk, or both --gff and --fasta must be provided.")
+
+
+def apply_record_display_cli_options(
+    manifest: RecordInputManifest, args: argparse.Namespace,
+) -> RecordInputManifest:
+    """Adapt direct flags once, leaving biological validation to the planner."""
+    topology = getattr(args, "record_topology", None)
+    start = getattr(args, "display_start_coordinate", None)
+    if topology is None and start is None:
+        return manifest
+    if args.records_table or len(manifest.records) != 1:
+        raise ValidationError(
+            "Display flags require exactly one direct-input record; use --records_table."
+        )
+    display = RecordDisplayOptions(
+        is_circular=None if topology in {None, "auto"} else topology == "circular",
+        start_coordinate=start,
+    )
+    return replace(manifest, records=(replace(
+        manifest.records[0], display=display, cardinality=RecordCardinality.EXACTLY_ONE,
+    ),))
 
 
 def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:

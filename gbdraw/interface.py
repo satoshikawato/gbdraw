@@ -53,10 +53,12 @@ from gbdraw.api.requests import (
     CircularDiagramRequest as _CircularDiagramRequest,
     InMemoryRecordSource as _InMemoryRecordSource,
     LinearDiagramRequest as _LinearDiagramRequest,
+    RecordDisplayOptions,
     RecordInput as _RecordInput,
 )
 from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
+from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.mode_profiles import (
@@ -85,6 +87,7 @@ class FeatureOptions:
     palette: str = "default"
     visibility: TableSource | None = None
     shapes: Mapping[str, str] | None = None
+    placements: TableSource | Sequence[FeaturePlacementOverride] | None = None
 
 
 @dataclass(frozen=True)
@@ -756,6 +759,11 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
         name="default color table",
     )
     visibility_table, visibility_file = _source(features.visibility, name="feature visibility")
+    placement_table, placement_file, placements = None, None, ()
+    if isinstance(features.placements, (DataFrame, str, PathLike)):
+        placement_table, placement_file = _source(features.placements, name="feature placement")
+    elif features.placements is not None:
+        placements = features.placements
     whitelist_table, whitelist_file = _source(labels.whitelist, name="label whitelist")
     priority_table, priority_file = _source(
         labels.qualifier_priority,
@@ -776,6 +784,9 @@ def _base_options(options: _CommonOptions, *, record_count: int, mode: Literal["
         "selected_features_set": features.types,
         "feature_visibility_table": visibility_table,
         "feature_visibility_table_file": visibility_file,
+        "feature_placements": placements,
+        "feature_placement_table": placement_table,
+        "feature_placement_table_file": placement_file,
         "label_whitelist_table": whitelist_table,
         "label_whitelist_file": whitelist_file,
         "qualifier_priority_table": priority_table,
@@ -924,11 +935,30 @@ def _interactive_context(
     return context
 
 
+def _record_inputs(
+    records: tuple[SeqRecord, ...],
+    record_displays: Sequence[RecordDisplayOptions] | None,
+) -> tuple[_RecordInput, ...]:
+    if record_displays is None:
+        record_displays = (RecordDisplayOptions(),) * len(records)
+    if isinstance(record_displays, (str, bytes)) or not isinstance(record_displays, Sequence):
+        raise ValidationError("record_displays must be a sequence of RecordDisplayOptions.")
+    if len(record_displays) != len(records):
+        raise ValidationError("record_displays must contain exactly one entry per record.")
+    if not all(isinstance(display, RecordDisplayOptions) for display in record_displays):
+        raise ValidationError("record_displays must contain only RecordDisplayOptions.")
+    return tuple(
+        _RecordInput(source=_InMemoryRecordSource(record), display=display)
+        for record, display in zip(records, record_displays)
+    )
+
+
 def draw_circular(
     records: RecordCollection,
     *,
     options: CircularOptions | None = None,
     layout: CircularLayout | None = None,
+    record_displays: Sequence[RecordDisplayOptions] | None = None,
 ) -> Diagram:
     """Draw one circular record or a multi-record circular grid."""
 
@@ -941,10 +971,7 @@ def draw_circular(
     compiled = _circular_options(options, record_count=len(normalized))
     prepared = _build_request_diagram(
         _CircularDiagramRequest(
-            records=tuple(
-                _RecordInput(source=_InMemoryRecordSource(record))
-                for record in normalized
-            ),
+            records=_record_inputs(normalized, record_displays),
             options=compiled,
             layout=layout._legacy() if layout is not None else None,
         )
@@ -965,6 +992,7 @@ def draw_linear(
     *,
     options: LinearOptions | None = None,
     layout: LinearLayout | None = None,
+    record_displays: Sequence[RecordDisplayOptions] | None = None,
 ) -> Diagram:
     """Draw one or more records as a linear diagram."""
 
@@ -977,10 +1005,7 @@ def draw_linear(
     compiled = _linear_options(options, record_count=len(normalized))
     prepared = _build_request_diagram(
         _LinearDiagramRequest(
-            records=tuple(
-                _RecordInput(source=_InMemoryRecordSource(record))
-                for record in normalized
-            ),
+            records=_record_inputs(normalized, record_displays),
             options=compiled,
             layout=layout._legacy() if layout is not None else None,
         )
@@ -997,6 +1022,7 @@ def draw_linear(
 
 
 __all__ = [
+    "RecordDisplayOptions",
     "CircularLayout",
     "CircularOptions",
     "CircularTrackOptions",

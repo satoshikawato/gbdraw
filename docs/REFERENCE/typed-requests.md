@@ -96,7 +96,7 @@ Materialized paths expire when the materialization context closes. `session_to_r
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
 
-Canonical request schema 6 records each input's runtime cardinality. This lets a
+Canonical request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands
 it. Deferred table paths, record-derived output naming, and collection-level
 transforms still require `resolve_request()` before encoding. Session writers
@@ -113,3 +113,74 @@ perform that resolution automatically.
 - [Session and request compatibility](session-and-request-compatibility.md)
 - [Input formats and TSV schemas](input-formats-and-tsv-schemas.md)
 - [Output format and export reference](output-formats-and-export.md)
+
+## Feature placement intent
+
+`CircularDiagramOptions` and `LinearDiagramOptions` accept exactly one of
+`feature_placements`, `feature_placement_table`, and
+`feature_placement_table_file`. Exact overrides use the public
+`FeaturePlacementOverride(record_key, biological_feature_id, target)` and
+`FeaturePlacementTarget(kind, side=None, level=None)` types. Main uses
+`kind="main"`; directional lane 1 uses `kind="lane"` with a mode-compatible
+side and `level=1`. Final feature-slot geometry determines direction support.
+
+The shared planner materializes tables before rendering or canonical encoding.
+Source-known hidden features keep dormant overrides; unknown identities fail.
+Requested placement can be combined with each `RecordInput.display` and the
+`canvas.feature_overlap_tolerance_bp` config override. It does not change source
+coordinates, sequences, or feature identities.
+
+## Record display intent
+
+`RecordInput.display` is `RecordDisplayOptions(is_circular=None,
+start_coordinate=None)`. Set it on each selected biological record. The planner
+validates topology, length, and crop constraints after source resolution, then
+passes the same display transform to both diagram modes. An unset start retains
+the existing reverse-complement display; explicit 1 anchors source base 1.
+Resolved plans expose source provenance and transforms without rotating the
+source `SeqRecord`. Reordering records does not change their exact feature
+placement identities.
+
+## Combined typed request example
+
+In a new directory, save the complete [combined Python example](python-api.md#combined-rotation-and-placement-example)
+as `rotated_placed_chloroplast.py` and obtain its four inputs. The following
+program runs that recipe, then expresses the same presentation as a typed
+request. It writes `typed_rotated_placed_chloroplast.svg` and checks whole-SVG
+parity with the package-root API. Save it as `typed_chloroplast.py` and run
+`python typed_chloroplast.py`.
+
+<!-- executable:joint-typed:start -->
+```python
+import runpy
+from pathlib import Path
+from xml.etree import ElementTree
+from gbdraw.api import (
+    CircularDiagramRequest, CircularDiagramOptions, CircularOutputOptions,
+    CircularRequestTrackOptions, ColorOptions, InMemoryRecordSource,
+    RecordInput, RecordDisplayOptions, RenderOutputRequest, render_request,
+)
+
+recipe = runpy.run_path("rotated_placed_chloroplast.py")
+options = recipe["options"]
+request = CircularDiagramRequest(
+    records=(RecordInput(InMemoryRecordSource(recipe["record"]),
+        display=RecordDisplayOptions(start_coordinate=5500)),),
+    options=CircularDiagramOptions(
+        config_overrides=options.config_overrides,
+        colors=ColorOptions(color_table_file=str(options.features.color_table)),
+        selected_features_set=options.features.types,
+        feature_placement_table=options.features.placements,
+        qualifier_priority_file=str(options.labels.qualifier_priority),
+        annotations=options.annotations,
+        tracks=CircularRequestTrackOptions(circular_track_slots=recipe["track_slots"]),
+        output=CircularOutputOptions(legend=options.legend),
+        species=options.species,
+    ),
+    output=RenderOutputRequest(output_prefix="typed_rotated_placed_chloroplast"),
+)
+result = render_request(request)
+assert ElementTree.tostring(ElementTree.parse("typed_rotated_placed_chloroplast.svg").getroot()) == ElementTree.tostring(ElementTree.fromstring(recipe["chloroplast_bytes"]))
+print("Typed and package-root SVG trees are identical")
+```
+<!-- executable:joint-typed:end -->

@@ -48,6 +48,7 @@ if __package__:
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
+        validate_joint_chloroplast,
         load_chapter,
         parse_translate_chain,
         publish_output,
@@ -63,6 +64,7 @@ else:
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
+        validate_joint_chloroplast,
         load_chapter,
         parse_translate_chain,
         publish_output,
@@ -193,6 +195,10 @@ def _validate_scenario(
             output_path=generated_paths[0],
             used_entries=used_entries,
         )
+    elif scenario_id == "H-PY-06":
+        if not isinstance(namespace.get("chloroplast_diagram"), Diagram):
+            raise RecipeContractError("The joint example must return a Diagram.")
+        validate_joint_chloroplast(chapter, output_path=generated_paths[0])
     elif scenario_id == "H-PY-01":
         _validate_circular_and_multi_record_howto(
             chapter,

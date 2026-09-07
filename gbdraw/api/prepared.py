@@ -15,7 +15,16 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.features.visibility import compile_feature_visibility_rules
+
+
+@dataclass(frozen=True)
+class ParsedRecordInputs:
+    """One cached source parse and its immutable pre-transform feature catalogs."""
+
+    records: tuple[SeqRecord, ...]
+    source_feature_catalogs: tuple[tuple[SourceFeatureIdentity, ...], ...]
 
 
 @dataclass(frozen=True)
@@ -444,6 +453,15 @@ def _retained_bytes(value: Any) -> int:
                 len(getattr(feature, "qualifiers", None) or {}) * 64
                 for feature in features
             )
+        catalogs = getattr(value, "source_feature_catalogs", ())
+        if not catalogs:
+            catalogs = tuple(getattr(item, "source_feature_catalog", ()) or ()
+                             for item in getattr(value, "provenance", ()))
+        for catalog in catalogs:
+            total += sum(256 + len(entry.location_parts) * 96
+                         + sum(len(key) + sum(len(text) for text in values)
+                               for key, values in entry.qualifiers)
+                         for entry in catalog)
         return total
     if all(
         hasattr(value, field_name)

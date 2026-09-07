@@ -776,6 +776,7 @@ export const createFeatureSvgActions = ({
       featureIdsByOrthogroupId: null,
       comparisonElementsByOrthogroupId: null,
       comparisonElementsByCollinearityBlockId: null,
+      comparisonElementsByMatchId: null,
       pairwiseAffordancesPrepared: false,
       activeHoverSvgId: null,
       activeHoverKey: '',
@@ -822,6 +823,7 @@ export const createFeatureSvgActions = ({
       }
       const byOrthogroup = new Map();
       const byBlock = new Map();
+      const byMatch = new Map();
       svg.querySelectorAll('[data-orthogroup-id]').forEach((element) => {
         if (element.matches?.(FEATURE_SELECTOR)) return;
         getOrthogroupIds(element.getAttribute('data-orthogroup-id')).forEach((orthogroupId) => {
@@ -830,6 +832,11 @@ export const createFeatureSvgActions = ({
         });
       });
       svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
+        const matchId = String(element.getAttribute('data-gbdraw-match-id') || element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
+        if (matchId) {
+          if (!byMatch.has(matchId)) byMatch.set(matchId, []);
+          byMatch.get(matchId).push(element);
+        }
         const blockId = String(element.getAttribute('data-collinearity-block-id') || '').trim();
         if (!blockId) return;
         if (!byBlock.has(blockId)) byBlock.set(blockId, []);
@@ -837,6 +844,7 @@ export const createFeatureSvgActions = ({
       });
       handlerState.comparisonElementsByOrthogroupId = byOrthogroup;
       handlerState.comparisonElementsByCollinearityBlockId = byBlock;
+      handlerState.comparisonElementsByMatchId = byMatch;
     };
 
       const setHoverStyle = (element, highlight) => {
@@ -910,14 +918,20 @@ export const createFeatureSvgActions = ({
         if (blockId) return `collinearity:${blockId}`;
         const orthogroupId = matchAttr(matchElement, 'data-orthogroup-id');
         if (orthogroupId) return `orthogroup:${orthogroupId}`;
-        return `match:${matchAttr(matchElement, 'data-gbdraw-pairwise-match-id') || matchAttr(matchElement, 'd')}`;
+        return `match:${matchAttr(matchElement, 'data-gbdraw-match-id') || matchAttr(matchElement, 'data-gbdraw-pairwise-match-id') || matchAttr(matchElement, 'd')}`;
+      };
+
+      const matchFragments = (element) => {
+        ensureComparisonIndexes();
+        const id = matchAttr(element, 'data-gbdraw-match-id') || matchAttr(element, 'data-gbdraw-pairwise-match-id');
+        return handlerState.comparisonElementsByMatchId.get(id) || [element];
       };
 
       const setMatchHover = (matchElement) => {
         if (!matchElement) return;
         const blockId = matchAttr(matchElement, 'data-collinearity-block-id');
         const orthogroupId = matchAttr(matchElement, 'data-orthogroup-id');
-        setHoverStyle(matchElement, true);
+        matchFragments(matchElement).forEach((element) => setHoverStyle(element, true));
         if (blockId) {
           setCollinearityBlockHover(blockId);
           return;
@@ -949,7 +963,7 @@ export const createFeatureSvgActions = ({
 
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
-        handlerState.pendingMatchElement.classList.remove('gbdraw-match-pending');
+        matchFragments(handlerState.pendingMatchElement).forEach((element) => element.classList.remove('gbdraw-match-pending'));
         handlerState.pendingMatchElement = null;
       };
 
@@ -957,7 +971,7 @@ export const createFeatureSvgActions = ({
         if (handlerState.pendingMatchElement === matchElement) return;
         clearPendingMatch();
         handlerState.pendingMatchElement = matchElement;
-        matchElement.classList.add('gbdraw-match-pending');
+        matchFragments(matchElement).forEach((element) => element.classList.add('gbdraw-match-pending'));
       };
 
       const rememberTransformPointer = (eventLike) => {

@@ -11,6 +11,8 @@ from ....configurators import DepthConfigurator  # type: ignore[reportMissingImp
 from ...drawers.linear.depth import DepthDrawer
 
 
+from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
 class DepthGroup:
     """Manages a linear depth coverage group."""
 
@@ -30,7 +32,9 @@ class DepthGroup:
         group_id: str = "depth",
         axis_group_id: str = "depth_axis",
         sequence_width: float | None = None,
+        record_transform: RecordDisplayTransform | None = None,
     ) -> None:
+        self.record_transform = record_transform
         self.depth_group = Group(id=group_id, debug=False)
         self.start_x = float(start_x)
         self.start_y = float(start_y)
@@ -76,6 +80,7 @@ class DepthGroup:
             self.start_x,
             self.start_y,
             self.axis_group_id,
+            record_transform=self.record_transform,
         )
 
     def get_group(self) -> Group:

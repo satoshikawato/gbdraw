@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Any, List, Mapping, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
@@ -13,6 +15,10 @@ from gbdraw.features.shapes import (
     resolve_underlay_feature_types,
 )
 from gbdraw.features.visibility import compile_feature_visibility_rules
+
+
+if TYPE_CHECKING:
+    from gbdraw.features.placement import ResolvedPlacementInputs
 
 
 class FeatureDrawingConfigurator:
@@ -40,6 +46,7 @@ class FeatureDrawingConfigurator:
         feature_visibility_rules: list[dict[str, Any]] | None = None,
         specific_color_rules: Mapping[str, Any] | None = None,
         default_color_map: Mapping[str, str] | None = None,
+        placements: tuple[ResolvedPlacementInputs, ...] = (),
     ) -> None:
         """
         Initializes the FeatureDrawingConfigurator with color settings and feature selection.
@@ -49,6 +56,7 @@ class FeatureDrawingConfigurator:
             default_colors (Optional[DataFrame]): Default colors for features.
             selected_features_set (str): Set identifier for selecting features to display.
         """
+        self.placements = placements
         cfg = profile.config
         self.color_table: Optional[DataFrame] = color_table
         self.feature_table: Optional[DataFrame] = feature_table

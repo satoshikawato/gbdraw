@@ -102,9 +102,12 @@ def draw_linear_annotation_track(
                 }
             )
         dash = ",".join(f"{value:g}" for value in style.stroke_dasharray) or None
-        part_count = len(annotation.segments)
-        for part_index, (start, end) in enumerate(annotation.segments, start=1):
+        part_count = len(annotation.geometry_segments)
+        for part_index, (start, end) in enumerate(annotation.geometry_segments, start=1):
             x1, x2 = float(start) * scale, float(end) * scale
+            fragment = annotation.display_parts[part_index - 1] if annotation.display_parts is not None else None
+            cap_start = fragment is None or not fragment.artificial_start
+            cap_end = fragment is None or not fragment.artificial_end
             if annotation.mark in {"band", "highlight"}:
                 fill = ensure_hatch_pattern(drawing, style.hatch) if style.hatch else (
                     style.fill or ("#94a3b8" if annotation.mark == "highlight" else "none")
@@ -131,7 +134,21 @@ def draw_linear_annotation_track(
                         part_count=part_count,
                         include_stable_id=True,
                     )
-                item_group.add(rect)
+                if not auto_feature_underlay and fragment is not None and (fragment.artificial_start or fragment.artificial_end):
+                    rect.attribs['stroke'] = 'none'
+                    top = lane_center - 0.5 * height_factor * lane_height
+                    bottom = lane_center + 0.5 * height_factor * lane_height
+                    outline = f"M {x1:g},{top:g} L {x2:g},{top:g} M {x1:g},{bottom:g} L {x2:g},{bottom:g}"
+                    for x, capped in ((x1, cap_start), (x2, cap_end)):
+                        if capped:
+                            outline += f" M {x:g},{top:g} L {x:g},{bottom:g}"
+                    border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
+                    if dash:
+                        border.attribs["stroke-dasharray"] = dash
+                    item_group.add(rect)
+                    item_group.add(border)
+                else:
+                    item_group.add(rect)
                 continue
             line = Line(
                 start=(x1, lane_center),
@@ -139,7 +156,7 @@ def draw_linear_annotation_track(
                 fill="none",
                 stroke=style.stroke,
                 stroke_width=style.stroke_width,
-                stroke_linecap="round",
+                stroke_linecap=("butt" if fragment is not None and (fragment.artificial_start or fragment.artificial_end) else "round"),
             )
             if dash:
                 line.attribs["stroke-dasharray"] = dash
@@ -154,19 +171,23 @@ def draw_linear_annotation_track(
                         stroke=style.stroke,
                         stroke_width=style.stroke_width,
                     )
-                    item_group.add(path)
-                    item_group.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
+                    if cap_end:
+                        item_group.add(path)
+                    if cap_start:
+                        item_group.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
                 else:
-                    item_group.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
-                    item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
+                    if cap_start:
+                        item_group.add(Line(start=(x1, lane_center - cap), end=(x1, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
+                    if cap_end:
+                        item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
         if params.show_labels and annotation.label:
             if style.label_position == "start":
-                label_bp, anchor = annotation.segments[0][0], "start"
+                label_bp, anchor = annotation.geometry_segments[0][0], "start"
             elif style.label_position == "end":
-                label_bp, anchor = annotation.segments[-1][1], "end"
+                label_bp, anchor = annotation.geometry_segments[-1][1], "end"
             else:
-                label_bp, anchor = annotation.midpoint_bp, "middle"
+                label_bp, anchor = annotation.geometry_midpoint_bp, "middle"
             label_y = lane_center + label_direction * (0.5 * lane_height + style.label_offset)
             item_group.add(
                 Text(

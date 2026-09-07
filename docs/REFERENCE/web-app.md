@@ -265,3 +265,57 @@ pairs**, and **Use uploaded BLAST TSV for all adjacent pairs**. The buttons do
 not expose pressed state because they are commands. The separate current-plan
 status, native disclosure summaries, record uploaders, and pair actions remain
 keyboard reachable.
+
+## Rotate a record and place a feature
+
+After loading a saved session, click **Load record rotation controls** if its
+record rows are not yet shown. For a complete record, use its **Records** row in Circular mode or
+**Record options** in Linear mode. **Detected** reports the source topology;
+**Circular record** overrides it and **Reset to detected** removes that override.
+Enter a 1-based source coordinate in **Display start**. It becomes the base at
+12 o'clock in Circular or at the left edge of a wrapped Linear record after
+**Generate Diagram**. **Reset start** restores no additional shift, which differs
+from explicit 1 when reverse complemented.
+
+For a shortcut, select exactly one source-bound feature in the current Result
+and choose **Use selected feature 5′ end** or **Use selected feature midpoint**.
+The midpoint counts covered bases in biological order, excluding introns, and
+uses the earlier central base for an even length. Mixed/unknown strand, multiple
+selection, another record, or a replaced source disables the shortcut. Crop,
+non-circular topology or unknown length disables the start control with a reason.
+Turning **Circular record** off retains the inactive start draft; turning it back
+on restores that value.
+
+Open the feature popup and choose **Feature placement**: Auto, Main, or an
+available directional lane 1. Bulk selection uses **Selected feature placements**.
+The [resolved-layout and resolver tables](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
+explain availability and conflicts. **Feature overlap tolerance (bp)** defaults
+to 0. Generate applies these drafts together; Undo/Redo and Save/Load retain the
+draft separately from the last successful Result. On a freshly loaded session,
+Generate rebuilds the final slot geometry before Main/side choices become
+available. Auto removal can use the saved source binding without decoding inputs.
+
+**Run Info** describes the successful Result. **Source recipe** reconstructs it
+from embedded original inputs and public CLI settings; **Exact replay** uses its
+saved canonical session and analysis artifacts. Both downloads refer to the
+successful Result, even when controls hold a newer draft. An unavailable Source
+recipe includes a reason; it does not silently omit unsupported settings.
+Rotation may split one logical comparison match into several SVG paths. Popups
+and sequence downloads still refer to one source match. Gapped matches are split
+by endpoint interpolation, not by reconstructing their aligned bases.
+
+The following crops use the [annotated chloroplast Tutorial](../TUTORIALS/GUI/build-an-annotated-chloroplast-map.md)
+with **Separate Strands** off, **Resolve Overlaps** on, display start `5500`
+and tolerance `1`. In the Feature Editor search for `ribosomal protein S16`,
+choose **Edit**, and set **Outward lane 1**. The multipart rps16 CDS keeps its
+source identity `protein_id=NP_054479.1`; both exons move together.
+
+![The NC_001879.2 Records row with display start 5500.](../images/h-gui-16/01-record-start.png)
+
+![The ribosomal protein S16 popup with Outward lane 1 selected and the Generate instruction.](../images/h-gui-16/02-feature-placement.png)
+
+Close the popup and click **Generate Diagram**, then **Save Session**. Load that
+session to restore the controls and Result. The equivalent complete
+[CLI](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and
+[Python](python-api.md#combined-rotation-and-placement-example) recipes produce the
+rotated map with its labels, legend, region annotations and GC track.

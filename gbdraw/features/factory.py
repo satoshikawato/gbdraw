@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, SimpleLocation
@@ -16,7 +18,8 @@ from .objects import GeneObject, RepeatObject, FeatureObject
 from .visibility import should_render_feature
 from ..labels.filtering import get_label_text
 from .colors import get_color, get_color_with_info
-from .coordinates import get_exon_and_intron_coordinates
+from .coordinates import get_exon_and_intron_coordinates, project_feature_parts
+from ..layout.record_coordinates import RecordDisplayTransform
 from .shapes import (
     DEFAULT_DIRECTIONAL_FEATURE_TYPES,
     FeatureGlyph,
@@ -24,7 +27,10 @@ from .shapes import (
     default_feature_rendering,
     normalize_feature_shape_overrides,
 )
+from gbdraw.exceptions import ValidationError
 from .tracks import arrange_feature_tracks
+if TYPE_CHECKING:
+    from .placement import FeaturePlacementSlot, ResolvedPlacementInputs
 
 
 def create_repeat_object(
@@ -172,6 +178,10 @@ def _build_feature_layers(
     split_overlaps_by_strand: bool = False,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    record_transform: RecordDisplayTransform | None = None,
+    placement_inputs: ResolvedPlacementInputs | None = None,
+    placement_slot: FeaturePlacementSlot | None = None,
+    feature_overlap_tolerance_bp: int = 0,
 ) -> FeatureBuildResult:
     foreground_features: Dict[str, FeatureObject] = {}
     underlay_features: list[FeatureObject] = []
@@ -255,18 +265,32 @@ def _build_feature_layers(
             if source_feature_index is None
             else source_feature_index
         )
+        if record_transform is not None and record_transform.start_coordinate is not None:
+            feature_object.display_parts = project_feature_parts(
+                feature.location.parts, record_transform,
+                is_trans_spliced="trans_splicing" in feature.qualifiers,
+            )
         if rendering == "underlay":
             underlay_features.append(feature_object)
         else:
             foreground_features[feature_id] = feature_object
 
-    foreground_features = arrange_feature_tracks(
-        foreground_features,
-        separate_strands,
-        resolve_overlaps,
-        split_overlaps_by_strand=split_overlaps_by_strand,
-        genome_length=genome_length,
-    )
+    if placement_slot is not None:
+        from .placement import plan_feature_placements
+
+        plan_feature_placements(
+            foreground_features, slot=placement_slot, placement_inputs=placement_inputs,
+            resolve_overlaps=resolve_overlaps, tolerance_bp=feature_overlap_tolerance_bp,
+            genome_length=genome_length,
+        )
+    else:
+        if placement_inputs is not None and placement_inputs.overrides:
+            raise ValidationError("Feature placement requires resolved slot geometry.")
+        arrange_feature_tracks(
+            foreground_features, separate_strands, resolve_overlaps,
+            split_overlaps_by_strand=split_overlaps_by_strand,
+            genome_length=genome_length, tolerance_bp=feature_overlap_tolerance_bp,
+        )
     return FeatureBuildResult(
         foreground_features=foreground_features,
         underlay_features=tuple(underlay_features),
@@ -286,6 +310,10 @@ def create_feature_layers(
     feature_shapes: Mapping[str, str] | None = None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     compute_label_text: bool = True,
+    record_transform: RecordDisplayTransform | None = None,
+    placement_inputs: ResolvedPlacementInputs | None = None,
+    placement_slot: FeaturePlacementSlot | None = None,
+    feature_overlap_tolerance_bp: int = 0,
 ) -> FeatureBuildResult:
     """Build visible features using the current rendering contract."""
 
@@ -305,6 +333,10 @@ def create_feature_layers(
         split_overlaps_by_strand=split_overlaps_by_strand,
         feature_visibility_rules=feature_visibility_rules,
         compute_label_text=compute_label_text,
+        record_transform=record_transform,
+        placement_inputs=placement_inputs,
+        placement_slot=placement_slot,
+        feature_overlap_tolerance_bp=feature_overlap_tolerance_bp,
     )
 
 

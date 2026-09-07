@@ -200,3 +200,89 @@ def test_arrange_feature_tracks_raises_when_all_feature_lanes_are_occupied() -> 
             resolve_overlaps=True,
             genome_length=1000,
         )
+
+
+def test_shared_overlap_length_and_tolerance_boundary():
+    from gbdraw.features.tracks import feature_overlap_bp, features_conflict
+    a = {"start": 990, "end": 20, "strand": "positive"}
+    b = {"start": 995, "end": 10, "strand": "positive"}
+    assert feature_overlap_bp(a, b, separate_strands=False, genome_length=1000) == 14
+    assert not features_conflict(a, b, tolerance_bp=14, genome_length=1000)
+    assert features_conflict(a, b, tolerance_bp=13, genome_length=1000)
+
+
+@pytest.mark.parametrize("tolerance", [19, 20])
+def test_undefined_negative_collision_uses_one_pool_in_both_orders(tolerance):
+    from gbdraw.features.tracks import feature_overlap_bp, features_conflict, find_best_track
+    for first, second in [("negative", "undefined"), ("undefined", "negative")]:
+        a = {"start": 20, "end": 50, "strand": first, "id": "a"}
+        b = {"start": 30, "end": 50, "strand": second, "id": "b"}
+        assert feature_overlap_bp(a, b, separate_strands=True, genome_length=120) == 20
+        assert features_conflict(a, b, separate_strands=True, tolerance_bp=tolerance,
+                                 genome_length=120) == (tolerance < 20)
+        assert find_best_track(b, {"track_1": [a]}, True, True, genome_length=120,
+                               tolerance_bp=tolerance) == (-2 if tolerance < 20 else -1)
+        positive = dict(b, strand="positive")
+        assert not features_conflict(a, positive, separate_strands=True,
+                                     genome_length=120, tolerance_bp=tolerance)
+
+
+@pytest.mark.parametrize("overlap", [0, 1, 2, 3])
+@pytest.mark.parametrize("tolerance", [0, 1, 2])
+@pytest.mark.parametrize("split,separate,strand", [
+    (False, False, "positive"), (True, False, "negative"),
+    (True, False, "positive"), (False, True, "negative"),
+    (False, True, "positive"),
+])
+def test_every_auto_path_uses_shared_tolerance(overlap, tolerance, split, separate, strand):
+    from gbdraw.features.tracks import find_best_track
+    features = {
+        "a": _make_feature("a", strand, [(100, 200)]),
+        "b": _make_feature("b", strand, [(200-overlap, 220)]),
+    }
+    arrange_feature_tracks(features, separate, True, split, 1000, tolerance_bp=tolerance)
+    nominal = -1 if separate and strand == "negative" else 0
+    step = -1 if strand == "negative" and (separate or split) else 1
+    assert features["a"].feature_track_id == nominal
+    assert features["b"].feature_track_id == nominal + (step if overlap > tolerance else 0)
+    # The existing public/unindexed path must use the same final predicate too.
+    a = {"start": 100, "end": 200, "strand": strand, "id": "a"}
+    b = {"start": 200-overlap, "end": 220, "strand": strand, "id": "b"}
+    expected = nominal + ((-1 if nominal == -1 else 1) if overlap > tolerance else 0)
+    assert find_best_track(b, {f"track_{abs(nominal)}": [a]}, separate, True,
+                           genome_length=1000, tolerance_bp=tolerance) == expected
+
+
+def test_fixed_reservations_keep_index_candidate_filter(monkeypatch):
+    import gbdraw.features.tracks as owner
+    calls = []
+    actual = owner.features_conflict
+
+    def capture(a, b, **kwargs):
+        calls.append((a["id"], b["id"]))
+        return actual(a, b, **kwargs)
+
+    monkeypatch.setattr(owner, "features_conflict", capture)
+    features = {
+        str(i): _make_feature(str(i), "positive", [(100+i*100, 110+i*100)])
+        for i in range(1000)
+    }
+    owner.arrange_feature_tracks(features, False, True, genome_length=110000,
+                                fixed_tracks={str(i): 0 for i in range(500)})
+    assert len(calls) < 5000  # Far below 499,500 full pair comparisons.
+    assert {f.feature_track_id for f in features.values()} == {0}
+
+
+@pytest.mark.parametrize("separate", [False, True])
+@pytest.mark.parametrize("split", [False, True])
+def test_auto_retains_all_100_lanes_with_fixed_first(separate, split):
+    features = {
+        str(i): _make_feature(str(i), "positive", [(100, 200)])
+        for i in range(100)
+    }
+    arrange_feature_tracks(features, separate, True, split, 1000, fixed_tracks={"99": 0})
+    assert features["99"].feature_track_id == 0
+    assert {f.feature_track_id for f in features.values()} == set(range(100))
+    features["extra"] = _make_feature("extra", "positive", [(100, 200)])
+    with pytest.raises(ValidationError, match="all 100 feature lanes"):
+        arrange_feature_tracks(features, separate, True, split, 1000, fixed_tracks={"99": 0})

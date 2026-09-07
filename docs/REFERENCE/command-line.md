@@ -125,3 +125,76 @@ Invalid input combinations, unknown schema columns, mismatched selectors,
 impossible layouts, incompatible track stacks, and unsafe output paths fail
 before a successful result is reported. A warning identifies an ignored or
 adjusted combination; it does not make the requested combination valid.
+
+## Rotate a plastome and place a multipart feature
+
+This example keeps the colors, radial labels, structural-region brackets and GC
+track of the [annotated chloroplast tutorial](../TUTORIALS/CLI/build-an-annotated-chloroplast-map.md).
+Start in an empty directory. Download the complete GenBank record from
+[NCBI NC_001879.2](https://www.ncbi.nlm.nih.gov/nuccore/NC_001879.2), saving it as
+`NC_001879.gbk` (155,943 bp, circular). Obtain the three support tables listed in
+that tutorial: `chloroplast_specific_table.tsv`, `qualifier_priority.tsv`, and
+`nicotiana-tabacum-regions.tsv`.
+
+Create `tables/placements.tsv` with these complete contents (real tabs):
+
+```tsv
+record	feature_selector	placement	level
+NC_001879.2	protein_id=NP_054479.1	outward	1
+```
+
+The unique protein ID selects the two-part rps16 CDS. Combined strands and the
+split feature slot make Outward lane 1 available. The resolver allocates Auto
+features after the fixed rps16 feature. Source base 5500 becomes the display
+start; the source sequence and feature locations are unchanged.
+
+<!-- executable:H-CLI-14:start -->
+```bash
+gbdraw circular \
+  --gbk NC_001879.gbk \
+  -t chloroplast_specific_table.tsv \
+  -k CDS,rRNA,tRNA,tmRNA,ncRNA,misc_RNA,rep_origin \
+  --species '<i>Nicotiana tabacum</i>' \
+  --track_type tuckin \
+  --display_start_coordinate 5500 \
+  --feature_placement_table tables/placements.tsv \
+  --feature_overlap_tolerance_bp 1 \
+  --resolve_overlaps \
+  --gc \
+  --no-skew \
+  --labels both \
+  --label_placement radial \
+  --outer_label_x_radius_offset 0.9 \
+  --outer_label_y_radius_offset 0.9 \
+  --inner_label_x_radius_offset 0.975 \
+  --inner_label_y_radius_offset 0.975 \
+  --qualifier_priority qualifier_priority.tsv \
+  --annotation_table nicotiana-tabacum-regions.tsv \
+  --circular_track_slot 'features:features@side=overlay,lane_direction=split' \
+  --circular_track_slot 'plastome_regions:annotations@set_id=plastome_regions,side=inside,r=0.65,w=20px,inner_gap_px=1,outer_gap_px=1,show_labels=true,padding_px=1,overflow=compress' \
+  --circular_track_slot 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08,nt=GC,legend_label=GC content' \
+  --block_stroke_color black \
+  --block_stroke_width 1 \
+  --line_stroke_width 2 \
+  --axis_stroke_width 3 \
+  --definition_font_size 28 \
+  --legend upper_left \
+  -o rotated_placed_chloroplast \
+  -f svg
+```
+<!-- executable:H-CLI-14:end -->
+
+The command writes `rotated_placed_chloroplast.svg`. Inspect the complete plastome
+and both rps16 parts in the outward lane. The start cuts its intervening intron;
+all resulting fragments keep one placement. Tolerance 1 means conflicts require
+more than one overlapping base. See the equivalent [literal Python
+example](python-api.md#combined-rotation-and-placement-example).
+
+![Rotated tobacco plastome with multipart rps16 fixed outward](../images/h-cli-14/rotated_placed_chloroplast.svg)
+
+For Linear use `--display_start_coordinate` with a complete circular record and
+`above`/`below` on a combined-strand overlay slot. A direct start flag targets one
+resolved record; use a [records table](input-formats-and-tsv-schemas.md#display-and-feature-placement-tables)
+for multiple targets. `--record_topology auto|circular|linear` overrides topology. Unset adds no
+shift; explicit 1 anchors source base 1 even after reverse complementation.
+Crop and explicit start cannot be combined.

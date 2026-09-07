@@ -49,6 +49,8 @@ const ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'losatProgram',
   'circularConservation',
   'annotationSets',
+  'recordDisplayDrafts',
+  'featurePlacementOverrides',
   'modeProfiles',
   'unmanagedConfigOverrides',
   'linearRecordLayout',
@@ -205,8 +207,8 @@ const saveCurrentSession = async (page, title) => {
   const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
   expect(session).toMatchObject({
     format: 'gbdraw-session',
-    version: 40,
-    renderRequest: { schema: 6 }
+    version: 41,
+    renderRequest: { schema: 7 }
   });
   return { path, session };
 };

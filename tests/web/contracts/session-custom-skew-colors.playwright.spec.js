@@ -9,11 +9,10 @@ test.describe.configure({ retries: 0 });
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sourceSessionPath = join(
   repoRoot,
-  'gbdraw',
-  'web',
-  'gallery',
+  'tests',
+  'fixtures',
   'sessions',
-  'HmmtDNA_ATskew.gbdraw-session.json'
+  'HmmtDNA_ATskew.v40-schema5.json'
 );
 const sourceSession = JSON.parse(readFileSync(sourceSessionPath, 'utf8'));
 const AT_SLOT_ID = 'a_skew_2';
@@ -259,7 +258,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
 
   const firstGenerate = await generateThroughUi(page);
   expect(requestEvidence(firstGenerate.request)).toEqual({
-    schema: 6,
+    schema: 7,
     at: {
       id: AT_SLOT_ID,
       renderer: 'dinucleotide_skew',
@@ -280,7 +279,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
   expectRenderedAtColors(paletteGenerate.svg);
 
   const { path: savedPath, saved } = await saveSessionThroughUi(page);
-  expect(saved.renderRequest.schema).toBe(6);
+  expect(saved.renderRequest.schema).toBe(7);
   expect(requestEvidence(saved.renderRequest).at.params).toEqual(expectedAtParams);
   expect(
     saved.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params

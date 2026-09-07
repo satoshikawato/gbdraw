@@ -242,6 +242,8 @@ assert.deepEqual(CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS, [
   'losatProgram',
   'circularConservation',
   'annotationSets',
+  'recordDisplayDrafts',
+  'featurePlacementOverrides',
   'modeProfiles',
   'unmanagedConfigOverrides',
   'linearRecordLayout',
