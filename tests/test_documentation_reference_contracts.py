@@ -43,6 +43,13 @@ REFERENCE_FILES = {
 }
 DOCUMENTATION_PAGES = (
     *(REFERENCE_ROOT / name for name in REFERENCE_FILES),
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "CHANGELOG.md",
+    REPO_ROOT / "docs" / "DOCS.md",
+    REPO_ROOT / "docs" / "ABOUT.md",
+    REPO_ROOT / "docs" / "INSTALL.md",
+    REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0b0.md",
+    REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0.md",
     REPO_ROOT / "docs" / "FAQ.md",
     REPO_ROOT / "docs" / "GALLERY.md",
     REPO_ROOT / "docs" / "PALETTE_EXPLORER.md",
@@ -207,7 +214,7 @@ def test_public_reference_rejects_artificially_split_lambda_fixture() -> None:
     assert "does not split one biological sequence into artificial records" in public_prose
 
 
-def test_technical_faq_and_gallery_local_links_resolve() -> None:
+def test_release_reference_faq_and_gallery_local_links_resolve() -> None:
     missing: list[str] = []
     for source in DOCUMENTATION_PAGES:
         for raw_target in MARKDOWN_LINK_RE.findall(source.read_text(encoding="utf-8")):

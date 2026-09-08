@@ -47,9 +47,24 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Canonical schema 6 records each input's cardinality, including
-selectorless `all` inputs. Resolve a typed request before encoding when it still
-contains deferred paths or collection-level transforms.
+envelopes. Public typed session conversion accepts versions 31–33 and 39–41;
+versions 27–30 are CLI replay inputs only. Canonical schema 7 retains schema 6's
+input cardinality, including selectorless `all` inputs. Resolve a typed request
+before encoding when it still contains deferred paths or collection-level transforms.
+
+In Web **Run Info**, **Source recipe** uses the original input filenames and
+public CLI settings. Keep those original files and download any listed generated
+helpers with **Download reproducibility files**. That bundle also includes the
+canonical session referenced by **Exact replay**, with its embedded resources
+and saved analysis artifacts. An unavailable Source recipe reports why it cannot
+express the committed semantics losslessly.
+
+Both commands target the successful generation represented by Run Info, even
+after Undo/Redo or edits to the current controls. Exact replay reconstructs that
+committed generation; it does not apply later preview-only editor changes or an
+ungenerated draft. **Save Session** is the route for preserving editable work
+alongside the earlier Result. Exact replay does not promise byte-identical SVG
+across gbdraw versions or font environments.
 
 ## Saved comparison results and cache reuse
 

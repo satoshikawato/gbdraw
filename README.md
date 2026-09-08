@@ -41,6 +41,8 @@ The [documentation home](./docs/DOCS.md) links the four routes above. Supporting
 pages cover [installation](./docs/INSTALL.md), [tutorial
 inputs](./docs/GETTING_TUTORIAL_DATA.md), [citation and project
 background](./docs/ABOUT.md), and the [changelog](./CHANGELOG.md).
+See the [0.14.0 release notes (unreleased)](./docs/RELEASE_NOTES_0.14.0.md)
+for the upcoming release and migration from 0.13.
 See [Contributing](./CONTRIBUTING.md) to report a bug, set up a development
 environment, or submit a pull request.
 
@@ -77,7 +79,10 @@ If you need PNG/PDF/EPS/PS export from a source install, add the optional export
 python -m pip install -e ".[dev,export]"
 ```
 
-See [Installation](./docs/INSTALL.md) for details and platform notes.
+Local GUI/Web assets have no hosted Google Analytics injection.
+See [Installation](./docs/INSTALL.md) for details, supported Python versions,
+platform notes, and the PyPI route after publication. The package version is
+still `0.14.0b0`; 0.14.0 has not been published to PyPI.
 
 ## Bug reports and suggestions
 
