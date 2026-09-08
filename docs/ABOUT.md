@@ -16,7 +16,8 @@ Project links:
 
 - GitHub: https://github.com/satoshikawato/gbdraw/
 - Web app: https://gbdraw.app/
-- [Release notes](./RELEASE_NOTES_0.14.0b0.md) and the [full changelog](../CHANGELOG.md)
+- [0.14.0 release notes (unreleased)](./RELEASE_NOTES_0.14.0.md),
+  [0.14.0b0 beta history](./RELEASE_NOTES_0.14.0b0.md), and the [full changelog](../CHANGELOG.md)
 - [Contributing](../CONTRIBUTING.md) and the [Code of Conduct](../CODE_OF_CONDUCT.md)
 
 ## Acknowledgments and inspiration

@@ -61,7 +61,8 @@ back to reproducible Tutorials or the relevant technical documentation.
 - [Get the tutorial inputs](./GETTING_TUTORIAL_DATA.md)
 - [Palette Explorer](./PALETTE_EXPLORER.md)
 - [About and citation](./ABOUT.md)
-- [Release notes](./RELEASE_NOTES_0.14.0b0.md)
+- [0.14.0 release notes (unreleased)](./RELEASE_NOTES_0.14.0.md)
+- [0.14.0b0 beta history](./RELEASE_NOTES_0.14.0b0.md)
 
 ## Entry points
 
