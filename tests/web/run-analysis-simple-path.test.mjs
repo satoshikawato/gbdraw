@@ -532,6 +532,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const readinessRuntime = createImmediatePreviewRuntime({
     onEvent(name) {
       assert.equal(state.processing.value, true, name);
+      if (name === 'test.preview-mounted' || name === 'test.preview-ready') {
+        assert.equal(state.processingStatus.value, 'Preparing preview...', name);
+      }
       lifecycleEvents.push(name);
       if (cancelDuringPreview && name === 'test.preview-mounted') {
         runner.cancelRunAnalysis();
@@ -562,7 +565,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       generationHistory.runUndoableArtifactReplacement(...args)
     ),
     state,
-    serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
+    serializeCanonicalFiles: () => {
+      assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
+      return serializeActiveRenderFiles(state.mode.value, state);
+    },
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {
       if (failArtifactAdoption) {

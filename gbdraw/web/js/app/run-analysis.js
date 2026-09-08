@@ -2484,6 +2484,7 @@ export const createRunAnalysis = ({
         circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
+          setProcessingStatus('Preparing conservation comparisons...');
           circularConservation.ring_width = normalizePositiveNumberOrNull(
             circularConservation.ring_width
           );
@@ -2601,7 +2602,7 @@ export const createRunAnalysis = ({
             }
 
             if (losatJobs.length > 0) {
-              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
+              setProcessingStatus('Preparing comparison search runtime...');
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
                 console.warn('LOSAT runtime warmup failed; execution will report the error.', error);
                 return null;
@@ -2610,6 +2611,7 @@ export const createRunAnalysis = ({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
+              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
               const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
@@ -2764,6 +2766,7 @@ export const createRunAnalysis = ({
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
+          setProcessingStatus('Preparing comparisons...');
           adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
           adv.min_bitscore = normalizeBlastThresholdNumber(
             adv.min_bitscore,
@@ -3744,11 +3747,12 @@ export const createRunAnalysis = ({
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (losatJobs.length > 0) {
-            setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
+            setProcessingStatus('Preparing comparison search runtime...');
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
+            setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
             const executionStartedAt = getNow();
             const losatResults = await executeLosatJobs(losatJobs, {
               concurrency: getLosatParallelWorkers(),
@@ -4005,6 +4009,7 @@ export const createRunAnalysis = ({
               }
             }
           } else {
+            setProcessingStatus('Preparing nucleotide comparison results...');
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
@@ -4208,7 +4213,12 @@ export const createRunAnalysis = ({
       }
 
       throwIfGenerationCanceled();
-      setProcessingStatus('Rendering SVG...');
+      setProcessingStatus('Preparing render inputs and session...');
+      if (!isReflow) {
+        await nextTick();
+        await waitForAfterPaint();
+        throwIfGenerationCanceled();
+      }
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
@@ -4347,9 +4357,19 @@ export const createRunAnalysis = ({
       const generationResponse = await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
+      }, {
+        onProgress: ({ stage }) => {
+          const message = {
+            'preparing-runtime': 'Preparing diagram runtime (first use)...',
+            'preparing-resources': 'Preparing diagram input resources...',
+            rendering: 'Rendering diagram...',
+            finalizing: 'Finalizing diagram results...'
+          }[stage];
+          if (message) setProcessingStatus(message);
+        }
       });
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
-      setProcessingStatus('Preparing generated diagram...');
+      setProcessingStatus('Preparing preview...');
       await nextTick();
       await waitForAfterPaint();
       throwIfGenerationCanceled();
