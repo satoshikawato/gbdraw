@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
 import shutil
 import statistics
@@ -29,6 +30,9 @@ def _operation_command(operation: str) -> list[str]:
     if operation == "projection":
         return [
             shutil.which("node") or "node",
+            # Avoid timing-dependent overlap of inflated Buffers and JSON.parse
+            # allocations. Apply the same GC profile to the fixed base and head.
+            "--no-incremental-marking",
             "tests/web/session-request.test.mjs",
             "--project-session",
             "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
@@ -65,10 +69,12 @@ def _run_trial(operation: str, revision: str, index: int) -> dict[str, float | i
             match = PEAK_RSS_RE.search(result.stderr)
             if match is None:
                 raise RuntimeError("Could not read peak RSS from /usr/bin/time output.")
-            return {
+            trial = {
                 "wallSeconds": round(wall_seconds, 2),
                 "peakRssKiB": int(match.group(1)),
             }
+            print(json.dumps({"revision": revision, "trial": index, **trial}), flush=True)
+            return trial
         finally:
             subprocess.run(
                 ["git", "worktree", "remove", "--force", str(worktree)],
@@ -138,9 +144,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.baseline_revision and args.baseline_revision != baseline["baseSha"]:
         parser.error("--baseline-revision must match the checked-in fixed base SHA.")
     baseline_trials = None
-    if args.baseline_revision:
+    # The recorded Node 18 measurements predate this projection GC profile.
+    # Always measure its fixed baseline with the same executable and flags.
+    baseline_revision = args.baseline_revision
+    if args.operation == "projection":
+        baseline_revision = baseline["baseSha"]
+    if baseline_revision:
         baseline_trials = [
-            _run_trial(args.operation, args.baseline_revision, index + 1)
+            _run_trial(args.operation, baseline_revision, index + 1)
             for index in range(args.trials)
         ]
     trials = [
@@ -152,20 +163,30 @@ def main(argv: list[str] | None = None) -> int:
         "baseSha": baseline["baseSha"],
         "headRevision": args.revision,
         "operation": args.operation,
+        "command": _operation_command(args.operation),
+        "pythonVersion": platform.python_version(),
+        "platform": platform.platform(),
         "baselineTrials": baseline_trials,
         "trials": trials,
-        "summary": enforce_performance_gate(
+    }
+    if args.operation == "projection":
+        report["nodeVersion"] = subprocess.check_output(
+            [report["command"][0], "--version"], text=True
+        ).strip()
+    try:
+        report["summary"] = enforce_performance_gate(
             baseline,
             args.operation,
             trials,
             baseline_trials=baseline_trials,
-        ),
-    }
+        )
+    except RuntimeError as error:
+        report["summary"] = {"passed": False, "error": str(error)}
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
-    return 0
+    return 0 if report["summary"]["passed"] else 1
 
 
 if __name__ == "__main__":
