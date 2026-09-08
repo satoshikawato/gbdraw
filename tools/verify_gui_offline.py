@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+from email.parser import BytesParser
+import hashlib
 import http.server
 import io
 import json
@@ -1150,6 +1152,42 @@ def smoke_test(contract: str = "all") -> None:
         _run_browser_contract(browser_contract)
 
 
+def inspect_sdist(sdist_path: Path) -> None:
+    with tarfile.open(sdist_path, "r:gz") as sdist:
+        names = set(sdist.getnames())
+    for path in REQUIRED_TUTORIAL_DATA_FILES:
+        suffix = f"/gbdraw/web/{path.as_posix()}"
+        if not any(name.endswith(suffix) for name in names):
+            raise FileNotFoundError(f"Sdist is missing {suffix}")
+    if not any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names):
+        raise FileNotFoundError("Sdist is missing tools/build_lambda_gff3_fixture.py")
+
+
+def inspect_distributions(dist_dir: Path) -> None:
+    """Validate the single publishable pair without rebuilding either archive."""
+    version = BUILD_SUPPORT.read_project_version()
+    wheel_name = BUILD_SUPPORT.expected_browser_wheel_name(version)
+    sdist_name = f"gbdraw-{version}.tar.gz"
+    if {path.name for path in dist_dir.iterdir()} != {wheel_name, sdist_name}:
+        raise RuntimeError("Release distributions must contain exactly the versioned wheel and sdist")
+    wheel_path, sdist_path = dist_dir / wheel_name, dist_dir / sdist_name
+    with zipfile.ZipFile(wheel_path) as wheel:
+        wheel_metadata = wheel.read(f"gbdraw-{version}.dist-info/METADATA")
+    with tarfile.open(sdist_path, "r:gz") as sdist:
+        member = sdist.extractfile(f"gbdraw-{version}/PKG-INFO")
+        if member is None:
+            raise FileNotFoundError("Sdist is missing PKG-INFO")
+        sdist_metadata = member.read()
+    for metadata_bytes in (wheel_metadata, sdist_metadata):
+        metadata = BytesParser().parsebytes(metadata_bytes)
+        if metadata.get_all("Name") != ["gbdraw"] or metadata.get_all("Version") != [version]:
+            raise RuntimeError("Distribution metadata does not match the project name/version")
+    inspect_sdist(sdist_path)
+    inspect_wheel(wheel_path)
+    for path in (sdist_path, wheel_path):
+        print(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
+
+
 def inspect_wheel(wheel_path: Path) -> None:
     if not wheel_path.exists():
         raise FileNotFoundError(wheel_path)
@@ -1267,6 +1305,11 @@ def main() -> int:
     inspect_parser = subparsers.add_parser("inspect-wheel", help="Inspect a built wheel for offline GUI assets.")
     inspect_parser.add_argument("wheel_path", type=Path)
 
+    distributions_parser = subparsers.add_parser(
+        "inspect-distributions", help="Verify a release wheel/sdist pair without rebuilding."
+    )
+    distributions_parser.add_argument("dist_dir", type=Path)
+
     args = parser.parse_args()
 
     try:
@@ -1278,6 +1321,8 @@ def main() -> int:
             smoke_test(args.contract)
         elif args.command == "inspect-wheel":
             inspect_wheel(args.wheel_path)
+        elif args.command == "inspect-distributions":
+            inspect_distributions(args.dist_dir)
         else:
             parser.error(f"Unknown command: {args.command}")
     except (FileNotFoundError, RuntimeError, urllib.error.URLError, subprocess.SubprocessError) as exc:
