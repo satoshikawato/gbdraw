@@ -16,6 +16,9 @@ def main() -> None:
     assert package_path.is_relative_to(Path(sysconfig.get_path("purelib")).resolve())
     assert sys.prefix != sys.base_prefix
     assert gbdraw.__version__ == importlib.metadata.version("gbdraw")
+    # App-shell startup fetches this JSON before the first Generate.
+    palettes = json.loads((package_path.parent / "web/gallery/palettes/palettes.json").read_text())
+    assert palettes["palettes"]["default"]["CDS"]
     cli = Path(sysconfig.get_path("scripts")) / (
         "gbdraw.exe" if sys.platform == "win32" else "gbdraw"
     )

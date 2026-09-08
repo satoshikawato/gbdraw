@@ -256,7 +256,9 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
         include_browser_wheel=True
     )
 
-    assert all("web/gallery" not in pattern for pattern in package_data_patterns)
+    assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
+        "web/gallery/palettes/palettes.json"
+    ]
     assert "web/js/services/*.js" in package_data_patterns
     assert "web/tutorial-data/*.json" in package_data_patterns
     assert "web/tutorial-data/*/*.gb" in package_data_patterns
@@ -1346,7 +1348,10 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     assert not missing, (
         "build_py did not copy required offline GUI assets:\n" + "\n".join(missing)
     )
-    assert not (build_root / "gbdraw" / "web" / "gallery").exists()
+    assert [
+        path.relative_to(build_root).as_posix()
+        for path in (build_root / "gbdraw/web/gallery").rglob("*") if path.is_file()
+    ] == ["gbdraw/web/gallery/palettes/palettes.json"]
     copied_wheels = sorted(
         path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl")
     )
@@ -1402,7 +1407,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
             name for name in outer_names if name.startswith("gbdraw/web/gallery/")
         )
         assert browser_wheels == [browser_wheel_member]
-        assert gallery_members == []
+        assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
         assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names

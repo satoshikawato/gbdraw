@@ -1166,6 +1166,7 @@ def inspect_wheel(wheel_path: Path) -> None:
     required = {
         "gbdraw/web/index.html",
         "gbdraw/web/open-source-notices.html",
+        "gbdraw/web/gallery/palettes/palettes.json",
         "gbdraw/web/assets/favicon.ico",
         "gbdraw/web/assets/gbdraw-logo.svg",
         "gbdraw/web/assets/gbdraw-logo-title.svg",
