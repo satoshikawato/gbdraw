@@ -7,6 +7,7 @@ import hashlib
 import html
 import importlib.util
 import json
+import os
 import re
 import shutil
 import socket
@@ -255,7 +256,9 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
         include_browser_wheel=True
     )
 
-    assert all("web/gallery" not in pattern for pattern in package_data_patterns)
+    assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
+        "web/gallery/palettes/palettes.json"
+    ]
     assert "web/js/services/*.js" in package_data_patterns
     assert "web/tutorial-data/*.json" in package_data_patterns
     assert "web/tutorial-data/*/*.gb" in package_data_patterns
@@ -1345,7 +1348,10 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     assert not missing, (
         "build_py did not copy required offline GUI assets:\n" + "\n".join(missing)
     )
-    assert not (build_root / "gbdraw" / "web" / "gallery").exists()
+    assert [
+        path.relative_to(build_root).as_posix()
+        for path in (build_root / "gbdraw/web/gallery").rglob("*") if path.is_file()
+    ] == ["gbdraw/web/gallery/palettes/palettes.json"]
     copied_wheels = sorted(
         path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl")
     )
@@ -1401,7 +1407,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
             name for name in outer_names if name.startswith("gbdraw/web/gallery/")
         )
         assert browser_wheels == [browser_wheel_member]
-        assert gallery_members == []
+        assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
         assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
@@ -1444,6 +1450,53 @@ def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
         suffix = f"/gbdraw/web/{path.as_posix()}"
         assert any(name.endswith(suffix) for name in names), suffix
     assert any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names)
+
+    # Rebuild using only the sdist. Local caches and obsolete browser wheels
+    # must not enter a subsequent distribution through broad manifest globs.
+    source_dir = tmp_path / "source"
+    with tarfile.open(sdist_path, "r:gz") as sdist:
+        sdist.extractall(source_dir, filter="data")
+    source = next(source_dir.iterdir())
+    sentinels = (
+        "gbdraw/web/gbdraw-0.0.0-py3-none-any.whl",
+        "gbdraw/web/vendor/vue/__pycache__/local.pyc",
+        "gbdraw/web/vendor/vue/.DS_Store",
+        "docs/internal/local-evidence.txt",
+    )
+    for name in sentinels:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("local file; not distribution content\n", encoding="utf-8")
+    rebuilt_dir = tmp_path / "rebuilt"
+    subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(rebuilt_dir)],
+        cwd=source, check=True,
+    )
+    with tarfile.open(next(rebuilt_dir.glob("*.tar.gz")), "r:gz") as sdist:
+        rebuilt_names = {name.split("/", 1)[-1] for name in sdist.getnames()}
+    assert not set(sentinels) & rebuilt_names
+    wheel_path = next(rebuilt_dir.glob("*.whl"))
+    verify_module.inspect_wheel(wheel_path)
+    with zipfile.ZipFile(wheel_path) as wheel:
+        assert not set(sentinels) & set(wheel.namelist())
+
+    # The entry point and resources must work without an editable checkout or
+    # shared site-packages. Copy only the input and standalone assertion script.
+    env = {key: value for key, value in os.environ.items()
+           if key not in {"PYTHONPATH", "PYTHONHOME"}}
+    venv_dir = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, env=env)
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    subprocess.run(
+        [str(python), "-m", "pip", "install", str(wheel_path)],
+        cwd=tmp_path, check=True, env=env,
+    )
+    smoke_dir = tmp_path / "installed-smoke"
+    smoke_dir.mkdir()
+    shutil.copy2(REPO_ROOT / "tests/test_inputs/HmmtDNA.gbk", smoke_dir)
+    script = smoke_dir / "installed_package_smoke.py"
+    shutil.copy2(REPO_ROOT / "tests/utils/installed_package_smoke.py", script)
+    subprocess.run([str(python), "-I", str(script)], cwd=smoke_dir, check=True, env=env)
 
 
 def _run_offline_gui_browser_contract(contract: str) -> None:
