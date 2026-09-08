@@ -340,10 +340,22 @@ test('production rendering crosses the canonical request and Worker boundary', (
     new Map([['app/run-analysis.js', 1]])
   );
   assert.deepEqual(directImports.get('app/run-analysis.js')?.has('services/diagram-generation.js'), true);
-  assert.match(
-    productionSources.get('app/run-analysis.js'),
-    /runDiagramGeneration\s*\(\s*\{\s*request:\s*canonical\.renderRequest,\s*resources:\s*canonical\.resources\s*\}\s*\)/s
-  );
+  const canonicalPayloadCall = /runDiagramGeneration\s*\(\s*\{\s*request:\s*canonical\.renderRequest,\s*resources:\s*canonical\.resources\s*\}\s*(?=\)|,\s*\{\s*onProgress\s*:)/s;
+  assert.match(productionSources.get('app/run-analysis.js'), canonicalPayloadCall);
+  for (const ending of [')', ', { onProgress: observer })']) {
+    assert.match(
+      `runDiagramGeneration({ request: canonical.renderRequest, resources: canonical.resources }${ending}`,
+      canonicalPayloadCall
+    );
+  }
+  for (const call of [
+    'runDiagramGeneration({ request: alternateRequest, resources: canonical.resources })',
+    'runDiagramGeneration({ request: canonical.renderRequest, resources: alternateResources })',
+    'runDiagramGeneration({ request: canonical.renderRequest, resources: canonical.resources, argv: [] })',
+    'runDiagramGeneration({ request: canonical.renderRequest, resources: canonical.resources }, alternatePayload)'
+  ]) {
+    assert.doesNotMatch(call, canonicalPayloadCall);
+  }
 });
 
 test('the embedded Python render bridge has no alternate production caller', () => {
