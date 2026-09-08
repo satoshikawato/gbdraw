@@ -21,7 +21,8 @@ jobs:
   ci-impact:
     name: CI impact plan
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Full-history checkout can take nearly five minutes before trusted-base setup.
+    timeout-minutes: 10
     outputs:
       plan: ${{ steps.pr_plan.outputs.plan || steps.dev_plan.outputs.plan }}
     steps:

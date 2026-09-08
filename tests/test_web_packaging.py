@@ -1444,12 +1444,7 @@ def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
     )
 
     sdist_path = next(dist_dir.glob("gbdraw-*.tar.gz"))
-    with tarfile.open(sdist_path, "r:gz") as sdist:
-        names = set(sdist.getnames())
-    for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES:
-        suffix = f"/gbdraw/web/{path.as_posix()}"
-        assert any(name.endswith(suffix) for name in names), suffix
-    assert any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names)
+    verify_module.inspect_sdist(sdist_path)
 
     # Rebuild using only the sdist. Local caches and obsolete browser wheels
     # must not enter a subsequent distribution through broad manifest globs.
