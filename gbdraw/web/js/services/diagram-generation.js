@@ -316,7 +316,7 @@ const settleActiveRequest = (request, callback) => {
   callback();
 };
 
-export const runDiagramGeneration = (payload = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -338,10 +338,16 @@ export const runDiagramGeneration = (payload = {}) => {
     reject: rejectRequest
   };
   activeRequest = request;
+  const reportProgress = (stage) => {
+    if (!request.settled && activeRequest === request && typeof onProgress === 'function') {
+      onProgress({ requestId, stage });
+    }
+  };
 
   (async () => {
     try {
       const initializationWasWarm = workerInitialized;
+      if (!initializationWasWarm) reportProgress('preparing-runtime');
       const initializationStartedAt = globalThis.performance?.now?.() ?? Date.now();
       const currentWorker = await ensureWorkerInitialized();
       recordSessionLifecycleEvent('worker-initialization-resolved', {
@@ -351,6 +357,7 @@ export const runDiagramGeneration = (payload = {}) => {
           : (globalThis.performance?.now?.() ?? Date.now()) - initializationStartedAt
       });
       if (request.settled || activeRequest !== request) return;
+      reportProgress('preparing-resources');
       const preparedResources = await resourceTransport.prepare(payload);
       if (request.settled || activeRequest !== request) return;
       const workerPayload = {
@@ -378,6 +385,10 @@ export const runDiagramGeneration = (payload = {}) => {
         const data = event.data || {};
         if (data.type === 'test-lifecycle' && data.requestId === requestId) {
           recordSessionLifecycleEvent(data.event?.name, data.event);
+          return;
+        }
+        if (data.type === 'progress' && data.requestId === requestId) {
+          reportProgress(data.stage);
           return;
         }
         if (data.type !== 'run' || data.requestId !== requestId) return;
