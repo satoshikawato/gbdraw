@@ -7,6 +7,7 @@ import hashlib
 import html
 import importlib.util
 import json
+import os
 import re
 import shutil
 import socket
@@ -1444,6 +1445,53 @@ def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
         suffix = f"/gbdraw/web/{path.as_posix()}"
         assert any(name.endswith(suffix) for name in names), suffix
     assert any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names)
+
+    # Rebuild using only the sdist. Local caches and obsolete browser wheels
+    # must not enter a subsequent distribution through broad manifest globs.
+    source_dir = tmp_path / "source"
+    with tarfile.open(sdist_path, "r:gz") as sdist:
+        sdist.extractall(source_dir, filter="data")
+    source = next(source_dir.iterdir())
+    sentinels = (
+        "gbdraw/web/gbdraw-0.0.0-py3-none-any.whl",
+        "gbdraw/web/vendor/vue/__pycache__/local.pyc",
+        "gbdraw/web/vendor/vue/.DS_Store",
+        "docs/internal/local-evidence.txt",
+    )
+    for name in sentinels:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("local file; not distribution content\n", encoding="utf-8")
+    rebuilt_dir = tmp_path / "rebuilt"
+    subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(rebuilt_dir)],
+        cwd=source, check=True,
+    )
+    with tarfile.open(next(rebuilt_dir.glob("*.tar.gz")), "r:gz") as sdist:
+        rebuilt_names = {name.split("/", 1)[-1] for name in sdist.getnames()}
+    assert not set(sentinels) & rebuilt_names
+    wheel_path = next(rebuilt_dir.glob("*.whl"))
+    verify_module.inspect_wheel(wheel_path)
+    with zipfile.ZipFile(wheel_path) as wheel:
+        assert not set(sentinels) & set(wheel.namelist())
+
+    # The entry point and resources must work without an editable checkout or
+    # shared site-packages. Copy only the input and standalone assertion script.
+    env = {key: value for key, value in os.environ.items()
+           if key not in {"PYTHONPATH", "PYTHONHOME"}}
+    venv_dir = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, env=env)
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    subprocess.run(
+        [str(python), "-m", "pip", "install", str(wheel_path)],
+        cwd=tmp_path, check=True, env=env,
+    )
+    smoke_dir = tmp_path / "installed-smoke"
+    smoke_dir.mkdir()
+    shutil.copy2(REPO_ROOT / "tests/test_inputs/HmmtDNA.gbk", smoke_dir)
+    script = smoke_dir / "installed_package_smoke.py"
+    shutil.copy2(REPO_ROOT / "tests/utils/installed_package_smoke.py", script)
+    subprocess.run([str(python), "-I", str(script)], cwd=smoke_dir, check=True, env=env)
 
 
 def _run_offline_gui_browser_contract(contract: str) -> None:
