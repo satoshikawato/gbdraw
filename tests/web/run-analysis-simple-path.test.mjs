@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { encodeAnnotationTable, parseAnnotationTable } from '../../gbdraw/web/js/app/annotations/table-codec.js';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -1688,7 +1689,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       legendLabel: null,
       metadata: {}
     }],
-    defaultStyle: null,
+    defaultStyle: { fill: null },
     legendLabel: null
   });
 
@@ -1757,6 +1758,18 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const linearResult = result('linear-none.svg', 'linear-none');
   workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
+  // Observe the existing internal helper staging boundary. Run Info deliberately
+  // withholds annotation Source recipes because TSV cannot preserve inheritance.
+  const stagedAnnotationTables = [];
+  const NativeMap = globalThis.Map;
+  globalThis.Map = class extends NativeMap {
+    set(key, value) {
+      if (key === '/web_annotations.tsv' && typeof value?.data === 'string') {
+        stagedAnnotationTables.push(value.data);
+      }
+      return super.set(key, value);
+    }
+  };
   try {
     assert.deepEqual(
       await runner.runAnalysis(comparisonPlanSnapshot),
@@ -1764,6 +1777,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       JSON.stringify(state.errorLog.value)
     );
   } finally {
+    globalThis.Map = NativeMap;
     if (previousLosatExecutor === undefined) {
       delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     } else {
@@ -1772,6 +1786,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   }
 
   const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
+  assert.ok(stagedAnnotationTables.length > 0, 'Generate stages the annotation helper');
+  for (const text of stagedAnnotationTables) {
+    assert.equal(text, encodeAnnotationTable(state.annotationSets));
+    assert.equal(parseAnnotationTable(text)[0].annotations[0].style.fill, null);
+  }
   const payload = workerRunMessages.at(-1).payload;
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);

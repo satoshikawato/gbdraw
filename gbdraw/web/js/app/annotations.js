@@ -1,11 +1,12 @@
 import { createAnnotationSet, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
-import { parseAnnotationTable } from './annotations/table-codec.js';
+import { encodeAnnotationTable, parseAnnotationTable } from './annotations/table-codec.js';
 import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
 import { readFileText } from '../services/file-content-cache.js';
+import { downloadTextFile } from '../services/text-download.js';
 
 export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
@@ -71,6 +72,11 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
     item.target.record = record;
   };
   const importAnnotationTable = (text) => replaceSets(parseAnnotationTable(text));
+  const canDownloadAnnotationTable = () => state.annotationSets.some((set) => set.annotations.length > 0);
+  const downloadAnnotationTable = () => {
+    if (!canDownloadAnnotationTable()) return;
+    downloadTextFile('annotations.tsv', encodeAnnotationTable(state.annotationSets));
+  };
   const importAnnotationTableFile = async (event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
@@ -81,6 +87,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
     addAnnotationSet, renameAnnotationSet, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
+    canDownloadAnnotationTable, downloadAnnotationTable,
     recordOptionsFor: recordSelector.optionsFor,
     recordValueFor: recordSelector.valueFor,
     setRecordValue: recordSelector.setValue,

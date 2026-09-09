@@ -33,6 +33,14 @@ Preview dragging now follows pointer movement over both blank space and
 comparison ribbons, including large diagrams. Pan, zoom, Fit, and Reset change
 the view without regenerating the biological diagram.
 
+**Region Annotations → Download TSV** saves the current editor draft as
+`annotations.tsv`, including changes made since the last Generate. The file
+works with Web **Import TSV** and the existing Python/CLI annotation-table
+readers. Download works offline and preserves effective row targets and styles,
+including explicit no-fill. Empty drafts cannot be downloaded. See the
+[annotation-table reference](./REFERENCE/input-formats-and-tsv-schemas.md#annotation-table-fields)
+for the TSV round-trip limits.
+
 The hosted app at [gbdraw.app](https://gbdraw.app/) and local `gbdraw gui` share
 the browser interface. Only hosted gbdraw.app uses Google Analytics 4 for
 aggregate page-usage metrics; gbdraw does not send uploaded genome files or
@@ -204,8 +212,6 @@ requirements.
 
 ## Known limitations / deferred work
 
-- Annotation TSV Download from the Web editor is deferred to v0.15. Existing
-  annotation-table input and rendering remain available.
 - Manual feature placement is limited to Main and supported lane 1 directions;
   higher lanes, arbitrary pixel dragging, and per-exon placement are not offered.
 - Rotation requires a complete circular record with known length. Gapped
