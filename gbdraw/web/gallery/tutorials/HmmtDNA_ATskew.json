@@ -540,8 +540,8 @@
       "href": "../"
     },
     {
-      "label": "Read the advanced customization tutorial",
-      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/3_Advanced_Customization.md"
+      "label": "Read the track customization reference",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#tracks-axes-and-annotations"
     }
   ]
 }
