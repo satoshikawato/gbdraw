@@ -89,13 +89,14 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
   const overrides = {};
   const transactions = [];
   const state = { mode: { value: 'linear' }, selectedResultIndex: { value: 0 }, featurePlacementOverrides: overrides,
+    form: { linear_track_layout: 'middle', separate_strands: false }, adv: {},
     featureCatalog: { value: { items: [{ recordKeys: ['card'] }] } },
     trackSlotResolvedGeometry: { value: { mode: 'linear', records: [{ recordIndex: 0, resultIndex: 0,
       featurePlacementTargets: [{ kind: 'main' }, { kind: 'lane', side: 'below', level: 1 }] }] } } };
   const actions = createFeaturePlacementActions({ state, isCurrentFeature: () => true,
-    getCommittedRequest: () => ({ records: [{ recordKey: 'card' }], grouping: 'single' }),
+    getCommittedRequest: () => ({ mode: 'linear', records: [{ recordKey: 'card' }], grouping: 'single' }),
     history: { runUndoable: async (label, fn) => { transactions.push({ label, before: structuredClone(overrides) }); fn(); } } });
-  assert.equal(actions.choices(features).find((choice) => choice.value === 'above').enabled, false);
+  assert.equal(actions.choices(features).find((choice) => choice.value === 'above').enabled, true);
   await actions.setPlacement(features, 'below');
   assert.equal(Object.keys(overrides).length, 2);
   assert.equal(transactions.length, 1);
@@ -103,8 +104,64 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
   assert.deepEqual(overrides, {});
   assert.equal(transactions.length, 2);
   assert.equal(Object.keys(transactions[1].before).length, 2);
+  state.form.separate_strands = true;
   assert.throws(() => actions.setPlacement(features, 'above'), /Unavailable/);
 });
+
+for (const mode of ['circular', 'linear']) {
+  test(`${mode} placement admission follows draft slots and preserves artifact geometry`, () => {
+    const feature = { record_key: 'record-1', biological_feature_id: 'feature' };
+    const state = { mode: { value: mode }, form: createDefaultForm(), adv: createDefaultAdv(mode),
+      featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['record-1'] }] } },
+      trackSlotResolvedGeometry: { value: { mode, records: [] } } };
+    const geometry = structuredClone(state.trackSlotResolvedGeometry.value);
+    const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => ({ mode }),
+      isCurrentFeature: (entry) => entry === feature, history: { runUndoable: (_label, fn) => fn() } });
+    const sides = mode === 'circular' ? ['outward', 'inward'] : ['above', 'below'];
+    const check = (enabled) => {
+      for (const side of sides) {
+        assert.equal(actions.choices([feature]).find((choice) => choice.value === side).enabled, enabled);
+        if (enabled) {
+          actions.setPlacement([feature], side);
+          assert.equal(actions.valueFor(feature), side);
+        } else {
+          const before = structuredClone(state.featurePlacementOverrides);
+          assert.throws(() => actions.setPlacement([feature], side), /current draft feature slot/);
+          assert.deepEqual(state.featurePlacementOverrides, before);
+        }
+      }
+      assert.deepEqual(state.trackSlotResolvedGeometry.value, geometry);
+    };
+    const layoutField = mode === 'circular' ? 'track_type' : 'linear_track_layout';
+    for (const separate of [true, false]) {
+      state.form.separate_strands = separate;
+      for (const layout of mode === 'circular' ? ['middle', 'tuckin', 'spreadout'] : ['middle', 'above', 'below']) {
+        state.form[layoutField] = layout;
+        check(layout === 'middle' && (mode === 'circular' || !separate));
+      }
+    }
+    // A custom slot's resolved direction takes precedence over the preset name.
+    state.adv[`${mode}_track_slots_enabled`] = true;
+    state.form[layoutField] = mode === 'circular' ? 'tuckin' : 'above';
+    state.form.separate_strands = false;
+    const slot = { id: 'features', renderer: 'features', enabled: true, side: 'overlay',
+      params: mode === 'circular' ? { lane_direction: 'split' } : {} };
+    state.adv[`${mode}_track_slots`] = [slot];
+    state.adv[`${mode}_track_slots_axis_index`] = 0;
+    check(true);
+    state.form[layoutField] = 'middle';
+    slot.side = mode === 'circular' ? 'inside' : 'below';
+    slot.params = {};
+    check(false);
+    // Omitted side uses the same Axis resolution as request projection.
+    delete slot.side;
+    check(false);
+    slot.enabled = false;
+    assert.deepEqual(actions.choices([feature]).filter((entry) => entry.enabled).map((entry) => entry.value), ['auto']);
+    assert.throws(() => actions.setPlacement([feature], 'main'), /Unavailable/);
+    assert.ok(actions.choices([{ ...feature, record_key: 'unknown' }]).every((entry) => !entry.enabled));
+  });
+}
 
 test('historical session 40 schema 6 promotes without Generate and preserves cardinality', async () => {
   const bytes = await readFile('tests/fixtures/sessions/test_linear_cli_sidecar_reuses0.v40-schema6.json.gz');
