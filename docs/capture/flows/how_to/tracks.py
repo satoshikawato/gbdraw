@@ -736,7 +736,7 @@ def capture_gui_quantitative_tracks(
 
         _configure_title(page, "Complete AP027133.1 genome with quantitative tracks")
 
-        depth_section.scroll_into_view_if_needed()
+        depth_section.evaluate("(element) => element.scrollIntoView({ block: 'start' })")
         screenshot_bytes["track-settings.png"] = capture_screenshot(
             page,
             output_paths["track-settings.png"],
@@ -749,8 +749,8 @@ def capture_gui_quantitative_tracks(
             _assert_quantitative_svg,
         )
         set_feature_search_visible(page, visible=False)
-        _fit_circular_preview(page)
-        depth_section.scroll_into_view_if_needed()
+        _fit_circular_preview(page, pan_left_ratio=0.18)
+        depth_section.evaluate("(element) => element.scrollIntoView({ block: 'start' })")
         screenshot_bytes["track-result.png"] = capture_screenshot(
             page,
             output_paths["track-result.png"],

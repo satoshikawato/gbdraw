@@ -270,16 +270,18 @@
           ["IRa", "130,601", "155,943", "25,343 bp", "Bracket", "0"]
         ]
       },
-      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2. Keep all four rows in one annotation set so one track can render them together.",
+      "note": "The four boundaries correspond to JLB, JSB, JSA, and JLA for NC_001879.2. Keep all four rows in one annotation set so one track can render them together. Download TSV saves the current annotation table for reuse through Import TSV.",
       "operations": [
         {
+          "dataDependent": true,
           "media": {
             "src": "./media/tobacco-chloroplast/manual-06-01-region-annotations.webp",
-            "alt": "Region Annotations card with the plastome_regions set and LSC, IRb, SSC, and IRa coordinate rows.",
+            "alt": "Region Annotations card with Download TSV and the plastome_regions set containing LSC, IRb, SSC, and IRa coordinate rows.",
             "caption": "Import the TSV and verify the plastome_regions set contains the four bracket rows from the table."
           },
           "capture": {
             "source": "webapp",
+            "session": "./sessions/tobacco-chloroplast.gbdraw-session.json",
             "cardTitle": "Region Annotations",
             "openDetails": ["Region Annotations"],
             "viewport": {
@@ -287,10 +289,30 @@
               "height": 1200
             },
             "cropPadding": 14,
+            "assertAppState": {
+              "annotationSets.0.id": "plastome_regions",
+              "annotationSets.0.annotations.0.id": "lsc",
+              "annotationSets.0.annotations.1.id": "irb",
+              "annotationSets.0.annotations.2.id": "ssc",
+              "annotationSets.0.annotations.3.id": "ira"
+            },
+            "visibleText": ["Download TSV"],
+            "visibleControls": [
+              {"selector": "input[aria-label='Annotation set id']", "value": "plastome_regions"},
+              {"selector": "select[aria-label='Annotation target record']", "nth": 0, "value": "#1 · NC_001879.2 · 155,943 bp"},
+              {"selector": "input[placeholder='annotation_id']", "nth": 0, "value": "lsc"},
+              {"selector": "input[placeholder='annotation_id']", "nth": 1, "value": "irb"},
+              {"selector": "input[placeholder='annotation_id']", "nth": 2, "value": "ssc"},
+              {"selector": "input[placeholder='annotation_id']", "nth": 3, "value": "ira"}
+            ],
             "actions": [
               {
+                "type": "click",
+                "selector": "button:text-is('Load record rotation controls')"
+              },
+              {
                 "type": "waitForFunction",
-                "script": "() => { const set = window.__GBDRAW_APP__?.annotationSets?.find((entry) => entry.id === 'plastome_regions'); return set?.annotations?.map((entry) => entry.id).join(',') === 'lsc,irb,ssc,ira'; }"
+                "script": "() => { const app = window.__GBDRAW_APP__; const set = app?.annotationSets?.find((entry) => entry.id === 'plastome_regions'); return app?.circularRecordList?.length === 1 && set?.annotations?.map((entry) => entry.id).join(',') === 'lsc,irb,ssc,ira'; }"
               }
             ]
           }
@@ -383,12 +405,12 @@
   ],
   "related": [
     {
-      "label": "Customize circular plots",
-      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/1_Customizing_Plots.md#6-mark-chloroplast-genome-regions"
+      "label": "Build the annotated chloroplast map",
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/GUI/build-an-annotated-chloroplast-map.md"
     },
     {
       "label": "Region annotation table reference",
-      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/5_Table_Driven_Inputs.md#7-region-annotation-tables"
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/input-formats-and-tsv-schemas.md#annotation-table-fields"
     },
     {
       "label": "Open the gbdraw web app",

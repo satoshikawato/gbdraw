@@ -390,6 +390,7 @@ def capture_gui_annotated_chloroplast(
         )
         expect(page.get_by_label("Annotation lane", exact=True)).to_have_count(4)
         annotations.scroll_into_view_if_needed()
+        expect(page.get_by_role("button", name="Download TSV", exact=True)).to_be_enabled()
         screenshot_bytes[SCREENSHOT_NAMES[2]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[2]], "Circular"
         )

@@ -537,6 +537,8 @@ def _drag_legend(page: Page) -> tuple[str, str]:
     expect(toggle).to_have_attribute("aria-pressed", "true")
     legend = result_region.locator("#legend")
     expect(legend).to_have_css("cursor", "grab", timeout=ACTION_TIMEOUT_MS)
+    # Layout editing fits the preview with a 200 ms zoom transition.
+    page.wait_for_timeout(250)
     handle = legend.evaluate(
         """
         (legend) => {
@@ -614,7 +616,7 @@ def _drag_legend(page: Page) -> tuple[str, str]:
         raise AssertionError(
             f"The public legend drag did not start at {handle!r}: {drag_start!r}"
         )
-    page.mouse.move(start_x - 70, start_y - 32, steps=10)
+    page.mouse.move(start_x, start_y - 32, steps=10)
     page.mouse.up()
     page.wait_for_timeout(250)
     after = legend.get_attribute("transform") or ""
@@ -1268,7 +1270,7 @@ def capture_gui_session_reproduction(
         set_feature_search_visible(page, visible=False)
         expect(
             page.get_by_role("button", name="Undo", exact=True)
-        ).to_be_disabled()
+        ).to_have_attribute("title", "Undo Generate diagram")
         _stabilize_static_capture_surface(page)
         screenshot_bytes["reloaded-result.png"] = capture_screenshot(
             page, output_paths["reloaded-result.png"], "Circular"
