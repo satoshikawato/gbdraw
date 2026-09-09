@@ -22,7 +22,7 @@ export const isIgnoredTarget = (target) =>
 const isEditableControl = (element) => {
   if (!element) return false;
   const tag = String(element.tagName || '').toLowerCase();
-  if (tag === 'textarea') return true;
+  if (tag === 'textarea' || tag === 'select') return true;
   if (tag !== 'input') return false;
   return TEXT_INPUT_TYPES.has(String(element.type || '').toLowerCase());
 };
