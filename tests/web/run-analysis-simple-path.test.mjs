@@ -935,7 +935,39 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
   assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  const identities = [{ selector: '#1', record_id: 'audit', recordKey: 'record-1' }];
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+
+  state.mode.value = 'linear';
+  await runner.refreshCircularRecordOrder();
+  assert.equal(state.files.c_gb, fallbackPrimary);
+  assert.deepEqual(state.circularRecordList.value, []);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+  state.mode.value = 'circular';
+  workerHelperResponses.push({ ok: true, result: {
+    records: [{ selector: '#1', record_id: 'audit', record_length: 10 }]
+  } });
+  await runner.refreshCircularRecordOrder();
+  assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+
+  // Equal biological names on a different source cannot inherit the retired key,
+  // even if replacement/removal happens while Circular is inactive.
+  state.mode.value = 'linear';
+  state.files.c_gb = new AuditFile(['LOCUS audit 10 bp DNA circular\n//\n'], 'replacement.gb');
+  await runner.refreshCircularRecordOrder();
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  state.mode.value = 'circular';
+  await runner.refreshCircularRecordOrder();
+  assert.equal(state.circularRecordList.value[0].record_id, 'audit');
+  assert.equal(state.circularRecordList.value[0].recordKey, undefined);
+  state.mode.value = 'linear';
+  state.files.c_gb = null;
+  await runner.refreshCircularRecordOrder();
+  assert.deepEqual(state.circularRecordList.value, []);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  state.mode.value = 'circular';
+  state.files.c_gb = fallbackPrimary;
 
   state.form.multi_record_canvas = true;
   state.files.c_depth = null;

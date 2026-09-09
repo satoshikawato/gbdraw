@@ -18,6 +18,7 @@ import {
 import { resolveCircularLayoutPreference } from './layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
+import { featureStateFromCatalog } from '../services/feature-catalog.js';
 
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
@@ -409,10 +410,14 @@ export const setupWatchers = ({
         resetPreviewViewport();
       }
 
-      extractedFeatures.value = [];
-      if (biologicalFeatures) biologicalFeatures.value = [];
-      featureSelectorSafetyScope.value = [];
-      featureRecordIds.value = [];
+      // The retained Result's catalog owns this projection across mode inactivity.
+      const features = state.featureCatalog?.value && generatedMode.value === mode.value
+        ? featureStateFromCatalog(window.Vue.toRaw(state.featureCatalog.value), { mode: mode.value })
+        : {};
+      extractedFeatures.value = features.extractedFeatures || [];
+      if (biologicalFeatures) biologicalFeatures.value = features.biologicalFeatures || [];
+      featureSelectorSafetyScope.value = features.featureSelectorSafetyScope || [];
+      featureRecordIds.value = features.featureRecordIds || [];
       selectedFeatureRecordIdx.value = 0;
       featureVisibilityManualRules.splice(0);
       Object.keys(featureVisibilityOverrides).forEach((k) => delete featureVisibilityOverrides[k]);
