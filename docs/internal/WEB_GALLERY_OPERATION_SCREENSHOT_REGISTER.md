@@ -31,6 +31,14 @@ rotation controls** so lazy record discovery has finished before checking the
 target selector. The other 111 Gallery WebP files and all tracked Gallery SVGs
 were retained. Strict capture metadata validation passed for 113 operations.
 
+The full CLI/Python recipe run also found old comparison metadata in the
+`T-CLI-10` and `T-PY-07` SVGs, plus a session 40/schema 5 download and an old
+Interactive SVG script in `T-CLI-11`. Those four artifacts were regenerated
+through the existing recipe owners and the session assertion now uses 41/schema 7.
+The collinear SVGs retain their geometry, text, and colors; the handoff's static
+SVG and replay remain byte-identical. No renderer or compatibility path changes
+are needed.
+
 ## Coordinate-scale visibility (#311 and #315)
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
