@@ -188,7 +188,7 @@ const state = {
 
 const built = await buildSessionResources(state, committed);
 const bindings = built.webFiles.bindings;
-assert.equal(bindings.schema, 1);
+assert.equal(bindings.schema, 2);
 assert.equal(activeReads, 1, 'one File object used in several roles is read once');
 assert.equal(
   bindings.c_gb.resourceId,
@@ -344,3 +344,62 @@ assert.equal(
   Buffer.from(dormantSaved.resources[dormantResourceId].data, 'base64').toString('utf8'),
   'dormant-uploaded-comparison'
 );
+
+// C1 I10/I11/I13/I22/I23: payload identity is independent of draft metadata.
+const backing = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
+const authority = await import(pathToFileURL(join(tempRoot, 'js/services/session-authority.js')));
+const { readFile } = await import('node:fs/promises');
+const { createHash } = await import('node:crypto');
+const frozenBytes = await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json'));
+const frozenProvenance = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.provenance.json')));
+assert.equal(createHash('sha256').update(frozenBytes).digest('hex'), frozenProvenance.sha256);
+const frozen = JSON.parse(frozenBytes);
+const frozenLeaf = frozen.webFiles.bindings.c_gb;
+const frozenTable = backing.adoptCurrentSessionResources(frozen.resources);
+const oldFile = backing.createSessionResourceFileView(frozenTable, frozenLeaf.resourceId, frozenLeaf);
+const promoted = await buildSessionResources({ files: { c_gb: oldFile } }, authority.adoptRuntimeCanonicalSession(frozen));
+assert.equal(promoted.webFiles.bindings.schema, 2);
+assert.deepEqual(promoted.webFiles.bindings.c_gb, frozenLeaf);
+
+const descriptor = (text, name = 'same.gb') => ({ kind: 'genbank', name, type: 'text/plain',
+  encoding: 'base64', size: Buffer.byteLength(text), data: base64(text), lastModified: 0 });
+for (const adopted of [false, true]) {
+  const committed = { renderRequest: { schema: 7, records: [{ source: { resourceId: 'occupied' } }] },
+    resources: { occupied: descriptor('committed\n', 'committed.gb'), same: descriptor('A\n') } };
+  const parts = { occupied: descriptor('A\n'), unused: descriptor('B\n', 'unique.gb') };
+  const table = backing.adoptCurrentSessionResources(parts);
+  const components = [
+    { resourceId: 'unused', name: '', type: '', lastModified: 0.5 },
+    { resourceId: 'occupied', name: 'one.gb', type: 'text/plain', lastModified: 1 },
+    { resourceId: 'occupied', name: 'repeat.gb', type: 'different', lastModified: 2 }
+  ];
+  const file = backing.createCombinedSessionResourceFileView(table, components, {
+    name: '', type: '', lastModified: 0.25
+  });
+  const state = { files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } };
+  const canonical = adopted ? authority.adoptRuntimeCanonicalSession(committed) : committed;
+  const first = await buildSessionResources(state, canonical);
+  const binding = first.webFiles.bindings.c_gb;
+  assert.equal(binding.kind, 'composite');
+  assert.equal(binding.name, '');
+  assert.equal(binding.components[0].name, '');
+  assert.deepEqual(binding.components.map(c => first.resources[c.resourceId].data),
+    ['B\n', 'A\n', 'A\n'].map(base64));
+  assert.equal(binding.components[1].resourceId, binding.components[2].resourceId);
+  assert.equal(binding.components[1].resourceId, first.webFiles.bindings.c_fasta.resourceId);
+  if (adopted) {
+    assert.equal(binding.components[1].resourceId, 'same');
+    assert.equal(binding.components[0].resourceId, 'unused');
+    assert.equal(first.renderRequest, committed.renderRequest);
+  }
+  const loaded = backing.createCombinedSessionResourceFileView(
+    backing.adoptCurrentSessionResources(first.resources), binding.components, binding
+  );
+  const second = await buildSessionResources({ files: { c_gb: loaded } }, authority.adoptRuntimeCanonicalSession(first));
+  assert.deepEqual(second.webFiles.bindings.c_gb, binding);
+  state.files.c_gb = makeFile('native replacement\n', 'replacement.gb');
+  const replaced = await buildSessionResources(state, canonical);
+  assert.equal(replaced.webFiles.bindings.c_gb.kind, undefined);
+  assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
+  assert.equal(replaced.resources[replaced.webFiles.bindings.c_gb.resourceId].data, base64('native replacement\n'));
+}

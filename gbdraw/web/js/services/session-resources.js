@@ -1,31 +1,20 @@
 import {
-  base64ToBytes,
   bytesToBase64,
   getSessionResourceSource,
   readFileBytes,
-  sha256Hex,
-  textToBytes
+  sha256Hex
 } from './file-content-cache.js';
 import {
-  decodeDepthText,
-  isEncodedDepthFileEntry
-} from './depth-file-codec.js';
+  adoptCurrentSessionResources,
+  createSessionResourceFileView,
+  sessionResourceSource
+} from './session-resource-backing.js';
 import { isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
 } from './canonical-resource-references.js';
-
-const resourceBytes = (entry) => {
-  if (isEncodedDepthFileEntry(entry)) {
-    return textToBytes(decodeDepthText(entry.data));
-  }
-  if (entry?.encoding !== 'base64' || typeof entry?.data !== 'string') {
-    throw new Error('Session resources must contain supported embedded file data.');
-  }
-  return base64ToBytes(entry.data);
-};
 
 const safeResourceLeaf = (value) => {
   const basename = String(value || 'resource.dat')
@@ -40,7 +29,7 @@ const safeResourceLeaf = (value) => {
 
 const bindingForFile = (file, resourceId) => ({
   resourceId,
-  name: String(file?.name || 'file'),
+  name: file?.name === undefined ? 'file' : String(file.name),
   type: String(file?.type || ''),
   lastModified: Number(file?.lastModified) || 0
 });
@@ -127,104 +116,157 @@ export const buildSessionResources = async (state, committedRequest) => {
 
   const resources = {};
   const aliases = new Map();
-  const identityToResourceId = new Map();
   const reuseEncodedResources = isAdoptedCanonicalSession(committedRequest);
+  // A textual ID is canonical only within its own source table.
+  const committedTable = adoptCurrentSessionResources(committedRequest.resources);
+  const candidatesBySize = new Map();
+  const candidatesByDescriptor = new WeakMap();
+  const usedNames = new Set();
   let nextResourceNumber = 1;
+  let allocation = Promise.resolve();
 
   const nextResourceId = () => {
     let resourceId;
     do {
-      resourceId = `resource-${String(nextResourceNumber).padStart(4, '0')}`;
-      nextResourceNumber += 1;
-    } while (Object.prototype.hasOwnProperty.call(resources, resourceId));
+      resourceId = `resource-${String(nextResourceNumber++).padStart(4, '0')}`;
+    } while (Object.hasOwn(resources, resourceId));
     return resourceId;
   };
-
-  const adoptEncodedResource = (resourceId, descriptor) => {
-    const normalizedId = String(resourceId || '').trim();
-    if (!normalizedId || !descriptor) {
-      throw new Error('An adopted session resource requires an ID and descriptor.');
+  const candidateFor = (source) => {
+    const key = source.descriptor || source.bytes;
+    if (candidatesByDescriptor.has(key)) {
+      return candidatesByDescriptor.get(key);
     }
-    const existing = resources[normalizedId];
-    if (existing && !sameEncodedPayload(existing, descriptor)) {
-      throw new Error(`Conflicting adopted session resource: ${normalizedId}.`);
-    }
-    resources[normalizedId] = descriptor;
-    aliases.set(normalizedId, normalizedId);
-    return normalizedId;
-  };
-
-  const addBytes = async (bytes, metadata = {}) => {
-    const identity = `${bytes.byteLength}:${await sha256Hex(bytes)}`;
-    const existing = identityToResourceId.get(identity);
-    if (existing) return existing;
-
-    recordStructuralMetric('base64EncodeCount', 1, {
-      resourceName: String(metadata.name || 'file')
-    });
-    recordStructuralMetric('encodedByteCount', bytes.byteLength, {
-      resourceName: String(metadata.name || 'file')
-    });
-    const encoded = bytesToBase64(bytes);
-    const resourceId = nextResourceId();
-    identityToResourceId.set(identity, resourceId);
-    resources[resourceId] = {
-      kind: String(metadata.kind || 'web-file'),
-      name: `${resourceId}-${safeResourceLeaf(metadata.name)}`,
-      type: String(metadata.type || 'application/octet-stream'),
-      size: bytes.byteLength,
-      lastModified: Number(metadata.lastModified) || 0,
-      encoding: 'base64',
-      data: encoded
+    const candidate = {
+      ...source,
+      size: source.descriptor?.size ?? source.bytes.byteLength,
+      bytesPromise: null,
+      identityPromise: null
     };
-    return resourceId;
+    candidatesByDescriptor.set(key, candidate);
+    return candidate;
+  };
+  const bytesFor = candidate => {
+    candidate.bytesPromise ??= Promise.resolve().then(() => candidate.bytes || candidate.readBytes());
+    return candidate.bytesPromise;
+  };
+  const identityFor = candidate => {
+    candidate.identityPromise ??= bytesFor(candidate).then(bytes => {
+      // readBytes has already validated any declared checksum.
+      if (candidate.descriptor?.checksum) {
+        return candidate.descriptor.checksum.trim().toLowerCase().replace(/^sha256:/, '');
+      }
+      recordStructuralMetric('resourceIdentityHashCount', 1);
+      return sha256Hex(bytes);
+    });
+    return candidate.identityPromise;
+  };
+  const register = (id, candidate) => {
+    let bucket = candidatesBySize.get(candidate.size);
+    if (!bucket) {
+      bucket = { encoded: new Map(), identities: new Map(), pending: new Map() };
+      candidatesBySize.set(candidate.size, bucket);
+    }
+    const descriptor = candidate.descriptor;
+    if (descriptor) {
+      let encoded = bucket.encoded.get(descriptor.encoding);
+      if (!encoded) bucket.encoded.set(descriptor.encoding, encoded = new Map());
+      if (!encoded.has(descriptor.data)) encoded.set(descriptor.data, id);
+    }
+    bucket.pending.set(id, candidate);
+    usedNames.add(resources[id].name);
+  };
+  const equivalentId = async candidate => {
+    const bucket = candidatesBySize.get(candidate.size);
+    if (!bucket) return null;
+    const descriptor = candidate.descriptor;
+    const encodedId = descriptor && bucket.encoded.get(descriptor.encoding)?.get(descriptor.data);
+    if (encodedId) return encodedId;
+    const identity = await identityFor(candidate);
+    if (bucket.identities.has(identity)) return bucket.identities.get(identity);
+    for (const [id, existing] of bucket.pending) {
+      const existingIdentity = await identityFor(existing);
+      bucket.pending.delete(id);
+      if (!bucket.identities.has(existingIdentity)) bucket.identities.set(existingIdentity, id);
+      if (existingIdentity === identity) return id;
+    }
+    return null;
+  };
+  const allocate = (source, metadata, preferredId = '') => {
+    // File arrays may resolve concurrently; allocation itself is one ordered
+    // transaction so two equal sources cannot publish duplicate payloads.
+    allocation = allocation.then(async () => {
+      const candidate = candidateFor(source);
+      const existing = preferredId && resources[preferredId];
+      if (source.descriptor?.checksum && source.descriptor !== existing
+        && source.descriptor.checksum !== existing?.checksum) await bytesFor(candidate);
+      if (existing && source.descriptor && sameEncodedPayload(existing, source.descriptor)) {
+        return preferredId;
+      }
+      const equivalent = await equivalentId(candidate);
+      if (equivalent) return equivalent;
+      // Preserve the existing collision integrity check through the lazy backing.
+      if (existing) await bytesFor(candidate);
+      const descriptor = source.descriptor;
+      const safePreferred = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(preferredId)
+        && !Object.hasOwn(resources, preferredId)
+        && descriptor?.name === safeResourceLeaf(descriptor.name)
+        && !usedNames.has(descriptor.name);
+      let id = safePreferred ? preferredId : nextResourceId();
+      let name = safePreferred ? descriptor.name : `${id}-${safeResourceLeaf(metadata.name)}`;
+      while (usedNames.has(name)) {
+        id = nextResourceId();
+        name = `${id}-${safeResourceLeaf(metadata.name)}`;
+      }
+      if (descriptor) {
+        resources[id] = safePreferred ? descriptor : { ...descriptor, name };
+      } else {
+        const bytes = await bytesFor(candidate);
+        recordStructuralMetric('base64EncodeCount', 1, { resourceName: metadata.name });
+        recordStructuralMetric('encodedByteCount', bytes.byteLength, { resourceName: metadata.name });
+        resources[id] = {
+          kind: String(metadata.kind || 'web-file'), name,
+          type: String(metadata.type || 'application/octet-stream'),
+          size: bytes.byteLength, lastModified: Number(metadata.lastModified) || 0,
+          encoding: 'base64', data: bytesToBase64(bytes)
+        };
+      }
+      register(id, candidate);
+      return id;
+    });
+    return allocation;
   };
 
   if (reuseEncodedResources) {
-    Object.entries(committedRequest.resources).forEach(([resourceId, descriptor]) => {
-      adoptEncodedResource(resourceId, descriptor);
+    Object.entries(committedRequest.resources).forEach(([id, descriptor]) => {
+      resources[id] = descriptor;
+      register(id, candidateFor(sessionResourceSource(createSessionResourceFileView(committedTable, id))));
+      aliases.set(id, id);
     });
   }
-
-  const committedResourceIds = collectCanonicalResourceIds(committedRequest.renderRequest);
-  for (const resourceId of committedResourceIds) {
-    const entry = committedRequest.resources[resourceId];
-    if (!entry) {
-      throw new Error(`Committed render resource is missing: ${resourceId}.`);
+  for (const id of collectCanonicalResourceIds(committedRequest.renderRequest)) {
+    if (!Object.hasOwn(committedRequest.resources, id)) {
+      throw new Error(`Committed render resource is missing: ${id}.`);
     }
-    const nextId = reuseEncodedResources
-      ? adoptEncodedResource(resourceId, entry)
-      : await addBytes(resourceBytes(entry), entry);
-    aliases.set(resourceId, nextId);
+    const source = sessionResourceSource(createSessionResourceFileView(committedTable, id));
+    if (!reuseEncodedResources) await source.readBytes();
+    aliases.set(id, reuseEncodedResources ? id : await allocate(source, source.descriptor));
   }
 
-  const bindFile = async (file) => {
+  const bindSource = async (source, metadata) => bindingForFile(
+    metadata, await allocate(source, metadata, source.resourceId)
+  );
+  const bindFile = async file => {
     if (!file) return null;
     const source = getSessionResourceSource(file);
-    if (reuseEncodedResources && source?.resourceId && source?.descriptor) {
-      const existing = resources[source.resourceId];
-      if (!existing || sameEncodedPayload(existing, source.descriptor)) {
-        const resourceId = adoptEncodedResource(source.resourceId, source.descriptor);
-        return bindingForFile(file, resourceId);
-      }
-      // A regenerated resource can reuse an imported file's ID for different
-      // bytes. Bind that draft file through the ordinary byte-identity path
-      // below, preserving both the committed resource and the original file.
+    if (Array.isArray(source?.descriptors)) {
+      const components = [];
+      for (const component of source.descriptors) components.push(await bindSource(component, component));
+      const { resourceId: _resourceId, ...metadata } = bindingForFile(file, '');
+      return { kind: 'composite', components, ...metadata };
     }
-    if (reuseEncodedResources && Array.isArray(source?.descriptors)) {
-      source.descriptors.forEach(({ resourceId, descriptor }) => {
-        adoptEncodedResource(resourceId, descriptor);
-      });
-      return undefined;
-    }
-    const bytes = await readFileBytes(file);
-    const resourceId = await addBytes(bytes, {
-      kind: 'web-file',
-      name: file.name,
-      type: file.type,
-      lastModified: file.lastModified
-    });
-    return bindingForFile(file, resourceId);
+    if (source?.descriptor) return bindSource(source, file);
+    return bindSource({ bytes: await readFileBytes(file) }, file);
   };
 
   const bindFileValue = async (value) => {
@@ -241,7 +283,7 @@ export const buildSessionResources = async (state, committedRequest) => {
     : [];
 
   const bindings = {
-    schema: 1,
+    schema: 2,
     c_gb: await bindFile(files.c_gb),
     c_gff: await bindFile(files.c_gff),
     c_fasta: await bindFile(files.c_fasta),

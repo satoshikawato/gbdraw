@@ -1,0 +1,9 @@
+{
+  "sourceCommit": "4e8c93804186f9c4b163b584bd81d759b1b3522d",
+  "writer": "gbdraw/web/js/services/session-resources.js::buildSessionResources",
+  "history": "first-parent main",
+  "sha256": "fc12a25ac9b6aa8358ce5e0c9614bfb5a9e068949c369a799dfe8936ee93a06a",
+  "sessionVersion": 41,
+  "bindingSchema": 1,
+  "requestSchema": 7
+}

@@ -783,3 +783,32 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
 @pytest.mark.parametrize("search_scope", ["adjacent", "all"])
 def test_record_local_collinear_catalog_session_round_trip(tmp_path: Path, search_scope: str) -> None:
     _record_local_collinear_session(tmp_path, search_scope)
+
+
+def test_composite_document_replays_only_committed_request(tmp_path):
+    import base64
+    payload = json.loads((Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json').read_text())
+    committed = load_session_document(payload)
+    # Deliberately non-GenBank draft bytes: replay must never consume them.
+    payload['resources']['draft'] = {
+        'kind': 'web-file', 'name': 'draft.gb', 'type': 'text/plain',
+        'encoding': 'base64', 'size': 5, 'data': base64.b64encode(b'draft').decode(),
+    }
+    leaf = {'resourceId': 'draft', 'name': 'draft.gb', 'type': '', 'lastModified': 0}
+    payload['webFiles']['bindings'].update(schema=2, c_gb={
+        'kind': 'composite', 'components': [leaf, {**leaf, 'name': 'again.gb'}],
+        'name': 'logical.gb', 'type': 'text/plain', 'lastModified': 0,
+    })
+    document = load_session_document(payload)
+    saved = tmp_path / 'composite.json'
+    from gbdraw.session_io import write_session_json
+    write_session_json(saved, document.to_dict())
+    restored = load_session_document(saved)
+    assert restored.to_dict()['webFiles'] == payload['webFiles']
+    with materialize_session(restored, output_directory=tmp_path / 'composite') as materialized:
+        request = session_to_request(materialized)
+        assert len(request.records) == 1
+        result = render_session(materialized)
+    with materialize_session(committed, output_directory=tmp_path / 'committed') as materialized:
+        control = render_session(materialized)
+    assert result.output_paths[0].read_bytes() == control.output_paths[0].read_bytes()

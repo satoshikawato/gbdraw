@@ -1,4 +1,5 @@
 import { assertSafeObjectKeys } from './safe-object-keys.js';
+import { validateWebFileBindings } from './session-resource-backing.js';
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
@@ -158,14 +159,7 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
   const config = isPlainObject(sessionData.config) ? sessionData.config : {};
   const ui = isPlainObject(sessionData.ui) ? sessionData.ui : {};
   const webFiles = isPlainObject(sessionData.webFiles) ? sessionData.webFiles : {};
-  const hasBindings = Object.prototype.hasOwnProperty.call(webFiles, 'bindings');
-  if (hasBindings && !isPlainObject(webFiles.bindings)) {
-    throw new Error('Session webFiles.bindings must be an object.');
-  }
-  const bindings = hasBindings ? webFiles.bindings : {};
-  if (hasBindings && bindings.schema !== 1) {
-    throw new Error('Unsupported Web file binding schema.');
-  }
+  const bindings = webFiles.bindings || {};
 
   assertNoOwnField(config, 'blastSource', 'Current sessions cannot contain config.blastSource.');
   assertNoOwnField(config.adv, 'blastSource', 'Current sessions cannot contain config.adv.blastSource.');
@@ -221,7 +215,6 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
   if (!hasWebComparisonDraft && bindingEntries.length === 0) return;
 
   const edgeIds = validateLinearComparisonPlan(config.linearComparisonPlan);
-  const resources = isPlainObject(sessionData.resources) ? sessionData.resources : {};
   const boundIds = new Set();
   bindingEntries.forEach((binding) => {
     if (!isPlainObject(binding)) {
@@ -242,15 +235,6 @@ export const validateCurrentComparisonAuthority = (sessionData) => {
     }
     if (!isPlainObject(binding.file)) {
       throw new Error('Each current comparison file binding requires a file resource binding.');
-    }
-    const resourceId = typeof binding.file.resourceId === 'string'
-      ? binding.file.resourceId.trim()
-      : '';
-    if (!resourceId) {
-      throw new Error('Each current comparison file binding requires a resourceId.');
-    }
-    if (!Object.prototype.hasOwnProperty.call(resources, resourceId)) {
-      throw new Error(`Current comparison file binding references a missing resource: ${resourceId}.`);
     }
     boundIds.add(id);
   });
@@ -279,6 +263,10 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     throw new Error('Session authority inventory requires an object.');
   }
   assertSafeObjectKeys(sessionData, 'Session');
+  const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
+  if (bindings?.schema === 2 && Number(version) !== 41) {
+    throw new Error('Web binding schema 2 requires session version 41.');
+  }
   if (Number(version) < 31) return;
   if (
     Number(version) >= 40 &&

@@ -8,6 +8,7 @@ Current writers emit session version 41 and canonical `renderRequest` schema 7.
 |---|---:|---|
 | gbdraw session | 41 | 27–33 and 39–41 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
+| Web file bindings | 2 | 1; 2 in session 41 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -32,12 +33,33 @@ Generate deliberately preserves the newer draft alongside the earlier Result. Lo
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
 
+The Web file inventory uses binding schema 2. An explicit composite `c_gb`
+restores one editable GenBank File from ordered component resource bindings.
+Each component retains its own filename, MIME type, modification time and exact
+bytes; duplicate payloads can share storage while retaining every occurrence.
+Combining appends LF to each nonempty component that lacks a final LF. Composition
+is independent of the last committed `renderRequest`, which remains the replay
+authority. Python validates and preserves the draft binding without combining
+its components for rendering.
+
+Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
+without explicit bindings retain their request-derived source initialization;
+original components cannot be recovered if their membership was never saved.
+Schema 2 is accepted only with session 41. Unknown or malformed bindings reject
+before import replaces the current work. Older schema-1 readers reject new
+schema-2 documents; changing the schema number does not convert them.
+
 ## Replay boundaries
 
 On the command line, replay a session with the same `circular` or `linear`
 subcommand that created it. Output prefix, format, session-output, and overwrite
 options may replace their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
+
+With `--session_output`, canonical CLI replay writes the regenerated Result and
+preserves the editable draft's component bytes, order and File metadata. Resource
+IDs may change when the output table is rebuilt. Explicit Web bindings, including
+null and empty lists, take precedence over historical direct-source lists.
 
 In Python, `render_session()` is the persisted-session entry point.
 `load_session_document()` validates a document, and `materialize_session()`
