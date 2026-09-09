@@ -158,11 +158,15 @@ replace the endpoint identity.
 
 | Resolved feature layout | Available requests |
 |---|---|
-| Circular split, combined strands | Auto, Main, Outward lane 1, Inward lane 1 |
+| Circular split, combined or separate strands | Auto, Main, Outward lane 1, Inward lane 1 |
 | Linear overlay, combined strands | Auto, Main, Above lane 1, Below lane 1 |
-| One-sided or separate strands, either mode | Auto, Main |
+| One-sided, either mode; Linear separate strands | Auto, Main |
 
-Main means the nominal lane in the feature's strand pool. Custom slots determine
+Main means the nominal lane in the feature's strand pool. In Circular split
+layout, Outward/Inward lane 1 sits one lane beyond the nominal outer/inner lane
+when strands are separate, or one lane from the shared Main lane when combined.
+Moving one feature leaves the other features' nominal lanes in place.
+Custom slots determine
 availability from their final geometry; a preset name cannot override that
 geometry. Unsupported directions fail with a reason.
 

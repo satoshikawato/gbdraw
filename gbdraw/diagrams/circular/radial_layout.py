@@ -239,15 +239,10 @@ def measure_circular_feature_stack(
         # Semantic levels reserve the empty Main band, even for a lone lane 1.
         # Track IDs only associate the existing geometry consumers with this result.
         step = width + spacing
-        # Retain the existing split-stack centering when an inward band is
-        # present, but measure levels from Main rather than dense occupied order.
-        split_seed = ((0.5 * width) + (0.5 * spacing)) if any(
-            assignment.side == "inward" for assignment in placements_by_track_id.values()
-        ) else 0.0
-        main_center = center + split_seed
+        main_center = center
         lane_centers = {
             track_id: max(0.0, (
-                center - split_seed - ((assignment.level - 1) * step)
+                main_center - (assignment.level * step)
                 if assignment.side == "inward"
                 else main_center + (assignment.level * step)
             ))
@@ -261,10 +256,10 @@ def measure_circular_feature_stack(
         if bool(strandedness) or has_negative:
             lane_centers = {}
             split_seed = (0.5 * width) + (0.5 * spacing)
-            for idx, track_id in enumerate(sorted((tid for tid in ids if tid < 0), key=lambda value: abs(value))):
-                lane_centers[int(track_id)] = max(0.0, center - split_seed - (idx * step))
-            for idx, track_id in enumerate(sorted((tid for tid in ids if tid >= 0), key=lambda value: (value != 0, value))):
-                lane_centers[int(track_id)] = max(0.0, center + split_seed + (idx * step))
+            for track_id in (tid for tid in ids if tid < 0):
+                lane_centers[int(track_id)] = max(0.0, center - split_seed - ((abs(track_id) - 1) * step))
+            for track_id in (tid for tid in ids if tid >= 0):
+                lane_centers[int(track_id)] = max(0.0, center + split_seed + (track_id * step))
             if not lane_centers:
                 lane_centers[0] = max(0.0, center)
         else:
@@ -342,8 +337,7 @@ def build_circular_feature_layout(
         axis_radius_px=float(axis_radius_px),
         lane_width_px=width,
         lane_spacing_px=lane_spacing_px,
-        # Separate-strand Main keeps the existing preset's nominal strand lanes.
-        preset=track_type if lane_direction is None or strandedness else None,
+        preset=track_type if lane_direction is None else None,
         lane_direction=direction,
         strandedness=bool(strandedness),
         track_ids=track_ids,

@@ -165,8 +165,8 @@ for (const mode of ['circular', 'linear']) {
     await loaded.locator('.drawer-toggle').click();
     await loaded.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
     const loadedPlacement = loaded.getByRole('combobox', { name: 'Feature placement', exact: true });
-    // Resolved geometry is regenerated; Auto removal only needs the saved source binding.
-    await expect(loadedPlacement.locator('option[value=main]')).toHaveJSProperty('disabled', true);
+    // Saved resolved geometry keeps placement available before regeneration.
+    await expect(loadedPlacement.locator('option[value=main]')).toHaveJSProperty('disabled', false);
     await expect(loadedPlacement.locator('option[value=auto]')).toHaveJSProperty('disabled', false);
     await loadedPlacement.selectOption('auto');
     await loaded.getByRole('button', { name: 'Close feature popup', exact: true }).click();

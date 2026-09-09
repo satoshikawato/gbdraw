@@ -3414,6 +3414,7 @@ const resetSessionBaseline = () => {
   state.selectedResultIndex.value = 0;
   state.resultPanelTab.value = 'preview';
   state.lastRunInfo.value = null;
+  state.trackSlotResolvedGeometry.value = null;
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -3928,6 +3929,9 @@ export const exportSession = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
+    runMetadata: state.trackSlotResolvedGeometry.value
+      ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) }
+      : {},
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(state.featureColorOverrides),
@@ -4337,6 +4341,9 @@ export const importSession = async (e, options = {}) => {
     state.skipPositionReapply.value = true;
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    state.trackSlotResolvedGeometry.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
+    );
     const previewReadiness = typeof options?.beforePreviewMount === 'function'
       ? options.beforePreviewMount({
           results: state.results.value,
