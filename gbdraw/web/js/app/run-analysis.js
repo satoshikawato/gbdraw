@@ -1649,7 +1649,10 @@ export const createRunAnalysis = ({
       });
       circularRecordList.value = nextRecords;
       circularRecordDiscovery.status = 'ready';
-      circularRecordDiscovery.canonicalRecordIdentities = [];
+      // Identity belongs to the source, including while its mode is inactive.
+      circularRecordDiscovery.canonicalRecordIdentities = nextRecords
+        .filter((record) => record.recordKey)
+        .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {
