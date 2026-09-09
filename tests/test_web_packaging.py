@@ -216,7 +216,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
 @pytest.mark.browser
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.14.0b0-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.14.0-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -862,7 +862,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     repo_root = tmp_path / "repo"
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
-    expected_name = "gbdraw-0.14.0b0-py3-none-any.whl"
+    expected_name = "gbdraw-0.14.0-py3-none-any.whl"
     calls: list[object] = []
 
     def fake_run(
@@ -1382,7 +1382,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.14.0b0-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.14.0-py3-none-any.whl"
     subprocess.run(
         [
             sys.executable,

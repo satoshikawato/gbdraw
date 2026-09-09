@@ -64,8 +64,8 @@ gbdraw gui
 
 ## 3. PyPI installation
 
-**Not yet published:** the package version remains `0.14.0b0`, and 0.14.0 has
-not been published to PyPI. The Trusted Publishing workflow is prepared;
+**Not yet published:** the source version is `0.14.0` (internal final candidate);
+0.14.0 has not been published to PyPI. The Trusted Publishing workflow is prepared;
 publisher setup and the release transaction must complete before this route is
 available. To test the current implementation now, use a source install below.
 

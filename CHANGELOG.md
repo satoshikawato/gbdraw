@@ -18,8 +18,8 @@ write-up of a release.
 - Includes the beta's package-root Python API and current session/request
   compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
 - See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
-  compatibility, and installation availability. The package remains `0.14.0b0`;
-  the final release has not been published.
+  compatibility, and installation availability. The source version is `0.14.0`
+  (internal final candidate); the final release has not been published.
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
