@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,6 +52,79 @@ const restored = parseAnnotationTable(table);
 assert.equal(restored[0].id, 'review');
 assert.equal(restored[0].annotations[0].target.start, 10);
 assert.equal(restored[0].annotations[1].target.selectors[0].value, 'ABC_1');
+
+test('explicit no-fill survives TSV while omitted fill keeps the Web default', () => {
+  const draft = [createAnnotationSet({
+    id: 'no-fill', defaultStyle: { fill: null },
+    annotations: [
+      { id: 'inherited', target: coordinateTarget({ start: 5, end: 8 }), mark: 'band' },
+      { id: 'override', target: featureTarget({ selector: 'locus_tag=ABC_1' }),
+        mark: 'bracket', style: { fill: null } }
+    ]
+  })];
+  const reimported = parseAnnotationTable(encodeAnnotationTable(draft));
+  assert.deepEqual(reimported[0].annotations.map((item) => item.style.fill), [null, null]);
+  const omittedFill = parseAnnotationTable('set_id\tid\tmark\tstart\tend\tstroke\ns\ta\tband\t1\t5\t#123456\n');
+  assert.equal(omittedFill[0].annotations[0].style.fill, '#94a3b8');
+});
+
+test('download reads the current rows without mutating state or resolving a catalog', async () => {
+  const draftState = {
+    annotationSets: [],
+    results: [{ content: '<svg/>', annotations: 'committed, older data' }],
+    selectedResultIndex: 0, selectedAnnotation: { setId: 'review', id: 'coords' },
+    selectedFeatures: [{ id: 'feature' }], zoom: 2, canvasPan: { x: 5, y: 8 },
+    history: ['before', 'after']
+  };
+  const draftEditor = createAnnotationEditor({
+    state: draftState, getRecordCatalog: () => { throw new Error('Download must not resolve records'); }
+  });
+  const calls = [];
+  let blob;
+  const original = { document: globalThis.document, create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  globalThis.document = {
+    body: {
+      appendChild(link) { link.parentNode = this; calls.push('append'); },
+      removeChild() { calls.push('remove'); }
+    },
+    createElement(tag) {
+      assert.equal(tag, 'a');
+      return { click() { calls.push(['click', this.download, this.href]); } };
+    }
+  };
+  URL.createObjectURL = (value) => { blob = value; calls.push('blob'); return 'blob:annotation'; };
+  URL.revokeObjectURL = (url) => calls.push(['revoke', url]);
+  try {
+    assert.equal(draftEditor.canDownloadAnnotationTable(), false);
+    draftEditor.downloadAnnotationTable();
+    draftState.annotationSets.push(createAnnotationSet());
+    assert.equal(draftEditor.canDownloadAnnotationTable(), false);
+    draftEditor.downloadAnnotationTable();
+    assert.deepEqual(calls, []);
+    draftState.annotationSets.push(createAnnotationSet({ id: 'current', annotations: [
+      { id: 'id-bound', target: coordinateTarget({ recordId: 'unique', start: 7, end: 20 }), label: 'Current draft', mark: 'band' },
+      { id: 'index-bound', target: featureTarget({ recordIndex: 1, selector: 'locus_tag=ABC_1' }), mark: 'bracket', style: { fill: null } }
+    ] }));
+    assert.equal(draftEditor.canDownloadAnnotationTable(), true);
+    const before = structuredClone(draftState);
+    draftEditor.downloadAnnotationTable();
+    assert.deepEqual(draftState, before);
+    assert.deepEqual(calls, ['blob', 'append', ['click', 'annotations.tsv', 'blob:annotation'], 'remove', ['revoke', 'blob:annotation']]);
+    assert.equal(blob.type, 'text/tab-separated-values;charset=utf-8');
+    const text = await blob.text();
+    assert.equal(text, encodeAnnotationTable(draftState.annotationSets));
+    const rows = parseAnnotationTable(text)[0].annotations;
+    assert.equal(rows[0].label, 'Current draft');
+    assert.deepEqual(rows.map((item) => item.target.record), [
+      { kind: 'recordId', value: 'unique' }, { kind: 'recordIndex', index: 1 }
+    ]);
+  } finally {
+    if (original.document === undefined) delete globalThis.document;
+    else globalThis.document = original.document;
+    URL.createObjectURL = original.create;
+    URL.revokeObjectURL = original.revoke;
+  }
+});
 
 assert.equal(annotationRecordSelectorValue(annotationRecordSelectorFromValue('')), '');
 assert.equal(annotationRecordSelectorValue(annotationRecordSelectorFromValue('RecA')), 'RecA');

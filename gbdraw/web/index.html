@@ -2245,7 +2245,9 @@
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
                                 <label class="btn btn-secondary text-[10px] flex-1 cursor-pointer"><i class="ph ph-upload-simple"></i> Import TSV<input type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile"></label>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> Download TSV</button>
                             </div>
+                            <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="text-[10px] text-slate-500">Add an annotation row to download TSV.</p>
                             <div v-if="annotationSets.length === 0" class="rounded border border-dashed border-slate-200 p-2 text-[10px] text-slate-400">No annotation sets.</div>
                             <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                 <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
