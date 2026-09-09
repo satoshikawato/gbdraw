@@ -49,8 +49,8 @@
       "sha256": "56d75c22a3fe552326ec8cea571d6526c9f33965a215cc4a79fdfc6a0ab719a8"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
-      "bytes": 1373579,
-      "sha256": "2fc8bd9871b17c41f61709712348ec7fafbc3977aa15640742c9c78ec76c4d60"
+      "bytes": 1373456,
+      "sha256": "f30c316e9ad078e62a47fb9decff499c56067597f9ec64a6001e68b61c95fb40"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
       "bytes": 40748443,
@@ -89,8 +89,8 @@
       "sha256": "b226b2c4c91d56bb108afdd00f9c5237656719184ebc3bd1d5af2024a57a0fcf"
     },
     "gallery/sessions/tobacco-chloroplast.gbdraw-session.json": {
-      "bytes": 1578134,
-      "sha256": "b8e932eaa1cc6c00ffca90987865deef54b75a33aded9239fd8329a3db93414b"
+      "bytes": 1578096,
+      "sha256": "6f8c6e3ce6b8938e0f42f4d6e28e1ca9663829baef0e3a72044b9a0b0e579eb7"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
       "bytes": 75898884,
@@ -129,8 +129,8 @@
       "sha256": "9d1b71a0c2a269e3e2e0fdde6e2e85f69cdc27e12a0f2ebf8e4506df35cd60f3"
     },
     "gallery/sources/tobacco-chloroplast.svg": {
-      "bytes": 260967,
-      "sha256": "aeb12c56a80c8b706ca4d00850ff1349a14bc83e7dda56393989017682de9b00"
+      "bytes": 260844,
+      "sha256": "d83da83c608974dcd4b05acc33e25ca4e80aadf3034020882ec3c9c8ab90c959"
     },
     "gallery/sources/vibrio-harveyi-group-collinear.svg": {
       "bytes": 15720579,
