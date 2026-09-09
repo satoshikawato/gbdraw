@@ -81,8 +81,8 @@ python -m pip install -e ".[dev,export]"
 
 Local GUI/Web assets have no hosted Google Analytics injection.
 See [Installation](./docs/INSTALL.md) for details, supported Python versions,
-platform notes, and the PyPI route after publication. The package version is
-still `0.14.0b0`; 0.14.0 has not been published to PyPI.
+platform notes, and the PyPI route after publication. The source version is
+`0.14.0` (internal final candidate); 0.14.0 has not been published to PyPI.
 
 ## Bug reports and suggestions
 

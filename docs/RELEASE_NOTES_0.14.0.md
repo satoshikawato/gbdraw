@@ -3,8 +3,8 @@
 # gbdraw 0.14.0 release notes
 
 **Status: unreleased.** These notes describe the implemented changes planned for
-the final 0.14.0 release. The package version remains `0.14.0b0`; 0.14.0 has not
-been published to PyPI. Installation availability is documented in
+the final 0.14.0 release. The source version is `0.14.0` (internal final candidate);
+0.14.0 has not been published to PyPI. Installation availability is documented in
 [Installation](./INSTALL.md).
 
 ## Highlights
