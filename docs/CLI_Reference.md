@@ -28,7 +28,7 @@ see [Session and request compatibility](./SESSION_COMPATIBILITY.md#retired-input
 ## Main command
 
 ```text
-gbdraw v. 0.14.0b0: A diagram generator for small genomes
+gbdraw v. 0.14.0: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
