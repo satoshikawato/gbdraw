@@ -262,6 +262,25 @@ test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async (
   await expect(page.getByLabel('FASTA File', { exact: true })).toHaveCount(1);
 });
 
+test('Circular enabled options render without an undefined-property warning', { tag: '@pr-smoke' }, async ({ page }) => {
+  const warnings = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().includes('enabledOptionClass')) {
+      warnings.push(message.text());
+    }
+  });
+  await openApp(page, { waitForPalette: false });
+
+  for (const name of ['Separate Strands', 'Resolve Overlaps']) {
+    const checkbox = page.getByRole('checkbox', { name, exact: true });
+    await expect(checkbox).toBeEnabled();
+    const label = checkbox.locator('..');
+    await expect.soft(label).toHaveClass(/\btext-slate-700\b/);
+    await expect.soft(label).toHaveClass(/\bcursor-pointer\b/);
+  }
+  expect(warnings).toEqual([]);
+});
+
 test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
