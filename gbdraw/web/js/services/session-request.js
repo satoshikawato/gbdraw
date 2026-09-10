@@ -117,8 +117,10 @@ import {
 } from './file-content-cache.js';
 import {
   adoptedSessionResourceDescriptor,
+  adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
-  createSessionResourceFileView
+  createSessionResourceFileView,
+  validateWebFileBindings
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
 import {
@@ -2503,44 +2505,38 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   return file;
 };
 
-const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null) => {
+const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, schema = 1) => {
   if (binding === null || binding === undefined) return null;
-  if (!binding || typeof binding !== 'object' || Array.isArray(binding)) {
-    throw new Error('Web file bindings must be objects or null.');
-  }
   const resourceId = String(binding.resourceId || '').trim();
-  if (!resourceId) throw new Error('A Web file binding requires a resourceId.');
-  const metadata = {
-    name: normalizeOriginalResourceName(binding.name),
-    type: String(binding.type || ''),
-    lastModified: Number(binding.lastModified) || 0
-  };
+  const metadata = schema === 2
+    ? { name: binding.name, type: binding.type, lastModified: binding.lastModified }
+    : {
+        name: normalizeOriginalResourceName(binding.name),
+        type: String(binding.type || ''),
+        lastModified: Number(binding.lastModified) || 0
+      };
   if (resolveResourceFile) return resolveResourceFile(resourceId, metadata);
   const file = resourceAsLegacyFile(resources, resourceId);
-  return { ...file, ...metadata, name: metadata.name || file.name };
+  return { ...file, ...metadata, name: schema === 2 ? metadata.name : (metadata.name || file.name) };
 };
 
-const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null) => (
+const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null, schema = 1) => (
   Array.isArray(value)
-    ? value.map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile))
-    : webBindingAsLegacyFile(resources, value, resolveResourceFile)
+    ? value.map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile, schema))
+    : webBindingAsLegacyFile(resources, value, resolveResourceFile, schema)
 );
 
 const applyWebFileBindings = (
   files,
   webMetadata,
   resources,
-  { resolveResourceFile = null, adoptCanonicalPayloads = false } = {}
+  { resolveResourceFile = null, sessionResourceTable = null, adoptCanonicalPayloads = false } = {}
 ) => {
   const bindings = webMetadata?.bindings;
-  if (bindings === undefined || bindings === null) return files;
-  if (!bindings || typeof bindings !== 'object' || Array.isArray(bindings)) {
-    throw new Error('Session webFiles.bindings must be an object.');
-  }
-  if (bindings.schema !== 1) {
-    throw new Error('Unsupported Web file binding schema.');
-  }
-
+  if (bindings === undefined) return files;
+  const resolveBinding = bindings.schema === 2 && sessionResourceTable
+    ? (id, metadata) => createSessionResourceFileView(sessionResourceTable, id, metadata)
+    : resolveResourceFile;
   const restored = { ...files };
   [
     'c_gb',
@@ -2557,10 +2553,16 @@ const applyWebFileBindings = (
     'qualifier_priority'
   ].forEach((field) => {
     if (!Object.prototype.hasOwnProperty.call(bindings, field)) return;
+    if (field === 'c_gb' && bindings.c_gb?.kind === 'composite') {
+      const table = sessionResourceTable || adoptCurrentSessionResources(resources);
+      restored.c_gb = createCombinedSessionResourceFileView(table, bindings.c_gb.components, bindings.c_gb);
+      return;
+    }
     restored[field] = webBindingValueAsLegacyFile(
       resources,
       bindings[field],
-      resolveResourceFile
+      resolveBinding,
+      bindings.schema
     );
   });
   restored.c_conservation_blasts_source =
@@ -2569,11 +2571,11 @@ const applyWebFileBindings = (
   if (Array.isArray(bindings.linearSeqs)) {
     restored.linearSeqs = bindings.linearSeqs.map((sequence, index) => ({
       uid: String(sequence?.uid || `canonical-seq-${index + 1}`),
-      gb: webBindingValueAsLegacyFile(resources, sequence?.gb, resolveResourceFile),
-      gff: webBindingValueAsLegacyFile(resources, sequence?.gff, resolveResourceFile),
-      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveResourceFile),
-      depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveResourceFile),
-      blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveResourceFile),
+      gb: webBindingValueAsLegacyFile(resources, sequence?.gb, resolveBinding, bindings.schema),
+      gff: webBindingValueAsLegacyFile(resources, sequence?.gff, resolveBinding, bindings.schema),
+      fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveBinding, bindings.schema),
+      depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveBinding, bindings.schema),
+      blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveBinding, bindings.schema),
       losat_gencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
       losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
@@ -2591,13 +2593,13 @@ const applyWebFileBindings = (
       queryUid: String(comparison?.queryUid || ''),
       subjectUid: String(comparison?.subjectUid || ''),
       source: String(comparison?.source || 'upload'),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveResourceFile)
+      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
     }));
   }
   if (Array.isArray(bindings.linearCanonicalComparisons)) {
     restored.linearCanonicalComparisons = bindings.linearCanonicalComparisons.map((comparison) => ({
       ...(adoptCanonicalPayloads ? comparison : cloneCanonicalJsonValue(comparison)),
-      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveResourceFile)
+      file: webBindingValueAsLegacyFile(resources, comparison?.file, resolveBinding, bindings.schema)
     }));
   }
   return restored;
@@ -3177,49 +3179,19 @@ const combineCircularGenbankResources = (
   });
   if (resourceIds.length === 0) return null;
 
-  if (sessionResourceTable) {
-    return createCombinedSessionResourceFileView(
-      sessionResourceTable,
-      resourceIds,
-      {
-        name: normalizeOriginalResourceName(originalName)
-          || 'canonical-circular-records.gb',
-        type: 'text/plain'
-      }
-    );
+  if (!sessionResourceTable && resourceIds.length === 1) {
+    return resolveResourceFile
+      ? resolveResourceFile(resourceIds[0])
+      : resourceAsLegacyFile(resources, resourceIds[0]);
   }
-
-  const files = resourceIds.map((resourceId) => (
-    resolveResourceFile
-      ? resolveResourceFile(resourceId)
-      : resourceAsLegacyFile(resources, resourceId)
-  ));
-  if (files.length === 1) return files[0];
-  const chunks = files.map((file) => {
-    if (file.encoding && file.encoding !== 'base64') {
-      throw new Error(`Unsupported canonical resource encoding: ${file.encoding}`);
+  return createCombinedSessionResourceFileView(
+    sessionResourceTable || adoptCurrentSessionResources(resources),
+    resourceIds.map(resourceId => ({ resourceId })),
+    {
+      name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
+      type: 'text/plain'
     }
-    const decoded = base64ToBytes(file.data);
-    if (decoded[decoded.length - 1] === 0x0A) return decoded;
-    const terminated = new Uint8Array(decoded.length + 1);
-    terminated.set(decoded);
-    terminated[decoded.length] = 0x0A;
-    return terminated;
-  });
-  const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.length, 0));
-  let offset = 0;
-  chunks.forEach((chunk) => {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  });
-  return {
-    name: normalizeOriginalResourceName(originalName) || 'canonical-circular-records.gb',
-    type: 'text/plain',
-    size: bytes.length,
-    lastModified: Math.max(0, ...files.map((file) => Number(file.lastModified) || 0)),
-    encoding: 'base64',
-    data: bytesToBase64(bytes)
-  };
+  );
 };
 
 const validateCanonicalAssemblyOutput = (value, schema) => {
@@ -3386,6 +3358,7 @@ export const projectCanonicalSessionRequest = ({
   const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
+  const explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
   const originalNameHints = {
     ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
@@ -3469,7 +3442,7 @@ export const projectCanonicalSessionRequest = ({
       };
     });
     const source = records[0]?.source || {};
-    if (source.kind === 'genbank') {
+    if (source.kind === 'genbank' && !Object.hasOwn(explicitBindings || {}, 'c_gb')) {
       files.c_gb = combineCircularGenbankResources(
         resources,
         records,
@@ -3819,7 +3792,7 @@ export const projectCanonicalSessionRequest = ({
     files,
     webMetadata,
     resources,
-    { resolveResourceFile, adoptCanonicalPayloads }
+    { resolveResourceFile, sessionResourceTable, adoptCanonicalPayloads }
   ));
   const explicitOverrides = Object.fromEntries(
     Object.entries(options.configOverrides || {}).filter(

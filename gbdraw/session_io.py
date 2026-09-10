@@ -584,6 +584,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         files = session.get("files")
         if files is None or not isinstance(files, Mapping):
             raise ValidationError("Session files are required for CLI regeneration.")
+    _validate_web_file_bindings(session)
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
@@ -592,6 +593,100 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_current_feature_catalog_authority(session)
     if version >= 41:
         _validate_display_placement_drafts(session)
+
+
+def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
+    """Admit the Web draft inventory independently of committed replay."""
+    web_files = session.get("webFiles")
+    if not isinstance(web_files, Mapping) or "bindings" not in web_files:
+        return
+    bindings = web_files["bindings"]
+    if not isinstance(bindings, Mapping):
+        raise ValidationError("Session webFiles.bindings must be an object.")
+    schema = bindings.get("schema")
+    if isinstance(schema, bool) or schema not in (1, 2):
+        raise ValidationError("Unsupported Web file binding schema.")
+    current = schema == 2
+    if current and (session.get("version") != 41 or "c_gb" not in bindings):
+        raise ValidationError("Web binding schema 2 requires session 41 and c_gb.")
+    resources = session.get("resources", {})
+
+    def metadata(value: Mapping[str, Any]) -> None:
+        modified = value.get("lastModified")
+        if (not isinstance(value.get("name"), str)
+                or not isinstance(value.get("type"), str)
+                or isinstance(modified, bool)
+                or not isinstance(modified, (int, float))
+                or not math.isfinite(modified) or modified < 0):
+            raise ValidationError("Invalid Web file binding metadata.")
+
+    def leaf(value: Any) -> None:
+        if not isinstance(value, Mapping) or "kind" in value or "components" in value:
+            raise ValidationError("A component must be an ordinary Web file binding.")
+        resource_id = value.get("resourceId")
+        if not isinstance(resource_id, str) or not resource_id.strip():
+            raise ValidationError("A Web file binding requires a resourceId.")
+        if current and resource_id != resource_id.strip():
+            raise ValidationError("A Web file binding requires a canonical resourceId.")
+        resource_id = resource_id.strip()
+        if resource_id not in resources:
+            raise ValidationError(f"Web file binding references a missing resource: {resource_id}.")
+        if current:
+            if set(value) != {"resourceId", "name", "type", "lastModified"}:
+                raise ValidationError("Invalid ordinary Web file binding fields.")
+            metadata(value)
+            descriptor = resources[resource_id]
+            if (not isinstance(descriptor, Mapping)
+                    or descriptor.get("encoding") not in ("base64", DEPTH_FILE_ENCODING)
+                    or (descriptor.get("encoding") == "base64" and not isinstance(descriptor.get("data"), str))
+                    or (descriptor.get("encoding") == DEPTH_FILE_ENCODING and not isinstance(descriptor.get("data"), Mapping))
+                    or isinstance(descriptor.get("size"), bool)
+                    or not isinstance(descriptor.get("size"), int) or descriptor["size"] < 0):
+                raise ValidationError("Invalid Web file binding resource payload.")
+
+    def value(binding: Any, composite_allowed: bool = False) -> None:
+        if binding is None:
+            return
+        if isinstance(binding, list):
+            for item in binding:
+                value(item)
+        elif isinstance(binding, Mapping) and "kind" in binding:
+            if not current or not composite_allowed or binding["kind"] != "composite":
+                raise ValidationError("Unsupported Web composite file binding.")
+            if set(binding) != {"kind", "components", "name", "type", "lastModified"}:
+                raise ValidationError("Invalid composite binding fields.")
+            metadata(binding)
+            components = binding["components"]
+            if not isinstance(components, list) or len(components) < 2:
+                raise ValidationError("A composite binding requires at least two components.")
+            for component in components:
+                leaf(component)
+                if resources[component["resourceId"]]["encoding"] != "base64":
+                    raise ValidationError("Composite components require base64 resources.")
+        else:
+            leaf(binding)
+
+    slots = {
+        "c_gb", "c_gff", "c_fasta", "c_depth", "c_conservation_blasts",
+        "c_conservation_fastas", "c_conservation_sequence_sources", "d_color",
+        "t_color", "blacklist", "whitelist", "qualifier_priority",
+    }
+    if current and set(bindings) - slots - {
+        "schema", "c_conservation_blasts_source", "linearSeqs", "linearComparisons",
+    }:
+        raise ValidationError("Unknown Web binding inventory field.")
+    for slot in slots:
+        value(bindings.get(slot), slot == "c_gb")
+    for sequence in bindings.get("linearSeqs", []):
+        if isinstance(sequence, Mapping):
+            for slot in ("gb", "gff", "fasta", "depth", "blast"):
+                value(sequence.get(slot))
+    for slot in ("linearComparisons", "linearCanonicalComparisons"):
+        entries = bindings.get(slot)
+        if isinstance(entries, list):
+            for row in entries:
+                if isinstance(row, Mapping):
+                    value(row.get("file"))
 
 
 def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
@@ -671,13 +766,8 @@ def _validate_current_comparison_authority(
     ui = ui_value if isinstance(ui_value, Mapping) else {}
     web_files_value = session.get("webFiles")
     web_files = web_files_value if isinstance(web_files_value, Mapping) else {}
-    has_bindings = "bindings" in web_files
     bindings_value = web_files.get("bindings")
-    if has_bindings and not isinstance(bindings_value, Mapping):
-        raise ValidationError("Session webFiles.bindings must be an object.")
     bindings = bindings_value if isinstance(bindings_value, Mapping) else {}
-    if has_bindings and bindings.get("schema") != 1:
-        raise ValidationError("Unsupported Web file binding schema.")
     adv_value = config.get("adv")
     adv = adv_value if isinstance(adv_value, Mapping) else {}
     layout_value = config.get("linearRecordLayout")
@@ -802,8 +892,6 @@ def _validate_current_comparison_authority(
             )
 
     bound_ids: set[str] = set()
-    resources_value = session.get("resources")
-    resources = resources_value if isinstance(resources_value, Mapping) else {}
     for binding in comparison_bindings:
         if not isinstance(binding, Mapping):
             raise ValidationError(
@@ -831,16 +919,6 @@ def _validate_current_comparison_authority(
         if not isinstance(file_binding, Mapping):
             raise ValidationError(
                 "Each current comparison file binding requires a file resource binding."
-            )
-        resource_id = str(file_binding.get("resourceId") or "").strip()
-        if not resource_id:
-            raise ValidationError(
-                "Each current comparison file binding requires a resourceId."
-            )
-        if resource_id not in resources:
-            raise ValidationError(
-                "Current comparison file binding references a missing resource: "
-                f"{resource_id}."
             )
         bound_ids.add(edge_id)
     for edge in edges:
@@ -2086,6 +2164,44 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
     return None
 
 
+def _project_web_file_binding(
+    resources: Mapping[str, Any],
+    binding: Any,
+    *,
+    schema: int | None,
+) -> Any:
+    """Transport an admitted binding without choosing destination identities.
+
+    Schema None is the existing direct-source metadata-default context.
+    Source descriptors remain alive, unmodified and encoded until assembly.
+    """
+    if binding is None:
+        return None
+    if isinstance(binding, list):
+        return [_project_web_file_binding(resources, item, schema=schema) for item in binding]
+    if binding.get("kind") == "composite":
+        return {
+            **binding,
+            "components": [
+                _project_web_file_binding(resources, part, schema=schema)
+                for part in binding["components"]
+            ],
+        }
+    resource_id = binding["resourceId"]
+    resource = resources.get(resource_id)
+    if not isinstance(resource, Mapping):
+        raise ValidationError(f"Web file binding references a missing resource: {resource_id}.")
+    metadata = (
+        {key: binding[key] for key in ("name", "type", "lastModified")}
+        if schema == 2 else {
+            "name": str(binding.get("name") or resource.get("name") or "file"),
+            "type": str(binding.get("type") or resource.get("type") or ""),
+            "lastModified": int(binding.get("lastModified") or resource.get("lastModified") or 0),
+        }
+    )
+    return {"resourceId": resource_id, "descriptor": resource, **metadata}
+
+
 def _attach_current_web_file_bindings(
     payload: dict[str, Any],
     files: Mapping[str, Any],
@@ -2094,57 +2210,126 @@ def _attach_current_web_file_bindings(
     if not isinstance(resources_value, dict):
         raise ValidationError("Current session resources must be an object.")
     resources = resources_value
-    identities: dict[tuple[int, str], str] = {}
-    for resource_id, resource in resources.items():
-        if not isinstance(resource, Mapping):
-            continue
-        resource_bytes = _embedded_entry_bytes(resource)
-        if resource_bytes is None:
-            continue
-        identity = (len(resource_bytes), hashlib.sha256(resource_bytes).hexdigest())
-        identities.setdefault(identity, str(resource_id))
-
+    candidates: dict[int, list[str]] = {}
+    encoded: dict[tuple[int, str], str] = {}
+    decoded: dict[int, bytes] = {}
+    identities: dict[int, str] = {}
+    canonical_by_identity: dict[tuple[int, str], str] = {}
+    used_names = {safe_embedded_filename(entry.get("name")) for entry in resources.values()}
     next_number = 1
 
-    def add_file(entry: Any) -> dict[str, Any] | None:
+    def register(resource_id: str, entry: Mapping[str, Any]) -> None:
+        candidates.setdefault(entry["size"], []).append(resource_id)
+        if entry.get("encoding") == "base64":
+            encoded.setdefault((entry["size"], entry["data"]), resource_id)
+
+    for resource_id, resource in resources.items():
+        if not isinstance(resource_id, str) or resource_id != resource_id.strip() or not resource_id:
+            raise ValidationError("Canonical resource IDs must be unique non-empty strings.")
+        register(resource_id, resource)
+
+    def read(entry: Mapping[str, Any]) -> bytes:
+        key = id(entry)
+        if key not in decoded:
+            data = _embedded_entry_bytes(entry)
+            if data is None or len(data) != entry.get("size"):
+                raise ValidationError("Invalid embedded resource bytes or byte size.")
+            checksum = entry.get("checksum")
+            if checksum:
+                actual = hashlib.sha256(data).hexdigest()
+                if actual != str(checksum).lower().removeprefix("sha256:"):
+                    raise ValidationError("Embedded resource checksum does not match.")
+                identities[key] = actual
+            decoded[key] = data
+        return decoded[key]
+
+    def identity(entry: Mapping[str, Any]) -> str:
+        data = read(entry)
+        if id(entry) not in identities:
+            identities[id(entry)] = hashlib.sha256(data).hexdigest()
+        return identities[id(entry)]
+
+    def allocate_file(entry: Mapping[str, Any], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
         nonlocal next_number
-        if not isinstance(entry, Mapping):
-            return None
-        file_bytes = _embedded_entry_bytes(entry)
-        if file_bytes is None:
-            return None
-        identity = (len(file_bytes), hashlib.sha256(file_bytes).hexdigest())
-        resource_id = identities.get(identity)
+        size = entry.get("size")
+        existing = resources.get(preferred_id)
+        if entry.get("checksum") and entry is not existing and entry.get("checksum") != (existing or {}).get("checksum"):
+            read(entry)
+        resource_id = (
+            preferred_id if existing is not None and all(
+                entry.get(field) == existing.get(field) for field in ("encoding", "data", "size")
+            ) else encoded.get((size, entry["data"])) if entry.get("encoding") == "base64" else None
+        )
+        if resource_id is None and size in candidates:
+            digest = identity(entry)
+            resource_id = canonical_by_identity.get((size, digest))
+            pending = candidates[size]
+            while pending and resource_id is None:
+                candidate_id = pending.pop()
+                candidate_digest = identity(resources[candidate_id])
+                canonical_by_identity.setdefault((size, candidate_digest), candidate_id)
+                resource_id = canonical_by_identity.get((size, digest))
         if resource_id is None:
-            while True:
-                candidate = f"resource-{next_number:04d}"
-                next_number += 1
-                if candidate not in resources:
-                    resource_id = candidate
-                    break
-            name = safe_embedded_filename(
-                entry.get("name"), fallback="resource.dat"
-            )
+            # Validation is required for introduced payloads; retain encoded bytes.
+            data = read(entry)
+            safe_name = safe_embedded_filename(entry.get("name"), fallback="resource.dat")
+            if (re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", preferred_id)
+                    and preferred_id not in resources and safe_name == entry.get("name")
+                    and safe_name not in used_names):
+                resource_id, name = preferred_id, safe_name
+            else:
+                while True:
+                    candidate = f"resource-{next_number:04d}"
+                    next_number += 1
+                    name = f"{candidate}-{safe_name}"
+                    if candidate not in resources and name not in used_names:
+                        resource_id = candidate
+                        break
             resources[resource_id] = {
-                "kind": "web-file",
-                "name": f"{resource_id}-{name}",
+                **entry, "kind": str(entry.get("kind") or "web-file"), "name": name,
+                "size": len(data),
                 "type": str(entry.get("type") or "application/octet-stream"),
-                "size": len(file_bytes),
-                "lastModified": int(entry.get("lastModified") or 0),
-                "encoding": "base64",
-                "data": base64.b64encode(file_bytes).decode("ascii"),
+                "encoding": "base64", "data": (
+                    entry["data"] if entry.get("encoding") != DEPTH_FILE_ENCODING
+                    else base64.b64encode(data).decode("ascii")
+                ),
             }
-            identities[identity] = resource_id
+            decoded[id(resources[resource_id])] = data
+            if id(entry) in identities:
+                identities[id(resources[resource_id])] = identities[id(entry)]
+            used_names.add(name)
+            register(resource_id, resources[resource_id])
         return {
             "resourceId": resource_id,
-            "name": str(entry.get("name") or "file"),
-            "type": str(entry.get("type") or ""),
-            "lastModified": int(entry.get("lastModified") or 0),
+            "name": str(metadata.get("name", "file")),
+            "type": str(metadata.get("type") or ""),
+            "lastModified": metadata.get("lastModified", 0),
         }
 
-    def add_value(value: Any) -> Any:
+    def add_file(value: Any) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        if not isinstance(value, Mapping) or "components" in value or value.get("kind") == "composite":
+            raise ValidationError("Expected an ordinary Web inventory file.")
+        if "descriptor" in value:
+            if set(value) != {"descriptor", "resourceId", "name", "type", "lastModified"} or not isinstance(value["descriptor"], Mapping):
+                raise ValidationError("Invalid resource-backed Web inventory file.")
+            return allocate_file(value["descriptor"], value["resourceId"], value)
+        if "resourceId" in value:
+            raise ValidationError("Web inventory source references require a descriptor.")
+        return allocate_file(value, "", value)
+
+    def add_value(value: Any, *, composite_allowed: bool = False) -> Any:
         if isinstance(value, list):
             return [add_value(item) for item in value]
+        if isinstance(value, Mapping) and value.get("kind") == "composite":
+            if (not composite_allowed
+                    or set(value) != {"kind", "components", "name", "type", "lastModified"}
+                    or not isinstance(value["components"], list)
+                    or len(value["components"]) < 2
+                    or any(part is None for part in value["components"])):
+                raise ValidationError("Invalid composite Web inventory file.")
+            return {**value, "components": [add_file(part) for part in value["components"]]}
         return add_file(value)
 
     linear_sequences_value = files.get("linearSeqs")
@@ -2183,8 +2368,8 @@ def _attach_current_web_file_bindings(
             comparison_bindings.append({"id": comparison_id, "file": binding})
 
     bindings = {
-        "schema": 1,
-        "c_gb": add_file(files.get("c_gb")),
+        "schema": 2,
+        "c_gb": add_value(files.get("c_gb"), composite_allowed=True),
         "c_gff": add_file(files.get("c_gff")),
         "c_fasta": add_file(files.get("c_fasta")),
         "c_depth": add_value(files.get("c_depth")),
@@ -2228,33 +2413,39 @@ def _attach_current_web_file_bindings(
             for metadata in metadata_value
         ]
     resource_aliases: dict[str, str] = {}
+    explicit_names: dict[str, str] = {}
+
+    def reference_value(value: Any, source: Any) -> Any:
+        if isinstance(value, list):
+            return [reference_value(item, source[index]) for index, item in enumerate(value)]
+        if value is None:
+            return None
+        if isinstance(source, Mapping) and "resourceId" in source:
+            resource_aliases[source["resourceId"]] = value["resourceId"]
+        explicit_names.setdefault(value["resourceId"], value["name"])
+        return value["resourceId"]
+
     for source_field, binding_field in (
         ("conservationLosatFastaSources", "c_conservation_fastas"),
         ("conservationSequenceSources", "c_conservation_sequence_sources"),
     ):
-        source_ids = web_files.get(source_field)
-        rebound_files = bindings[binding_field]
-        if not isinstance(source_ids, list) or not isinstance(rebound_files, list):
+        if source_field not in web_files:
             continue
-        rewritten_ids: list[str | None] = []
-        for index, source_id_value in enumerate(source_ids):
-            rebound = rebound_files[index] if index < len(rebound_files) else None
-            rebound_id = (
-                str(rebound.get("resourceId") or "").strip()
-                if isinstance(rebound, Mapping)
-                else ""
-            )
-            rewritten_ids.append(rebound_id or None)
-            source_id = str(source_id_value or "").strip()
-            if source_id and rebound_id:
-                resource_aliases[source_id] = rebound_id
-        web_files[source_field] = rewritten_ids
+        rebound = bindings[binding_field]
+        source = files.get(binding_field)
+        web_files[source_field] = reference_value(
+            rebound if isinstance(rebound, list) else [rebound] if rebound is not None else [],
+            source if isinstance(source, list) else [source] if source is not None else [],
+        )
     original_names = web_files.get("resourceOriginalNames")
     if isinstance(original_names, Mapping):
         web_files["resourceOriginalNames"] = {
-            resource_aliases.get(str(resource_id), str(resource_id)): name
-            for resource_id, name in original_names.items()
-            if resource_aliases.get(str(resource_id), str(resource_id)) in resources
+            **{
+                resource_aliases.get(str(resource_id), str(resource_id)): name
+                for resource_id, name in original_names.items()
+                if resource_aliases.get(str(resource_id), str(resource_id)) in resources
+            },
+            **explicit_names,
         }
     web_files["bindings"] = bindings
     payload["webFiles"] = web_files
@@ -2278,9 +2469,20 @@ def build_session_json(
     """Build a GUI-loadable session JSON payload from a CLI run."""
 
     source_version: int | None = None
+    source_composite = None
     if context.source_session is not None:
         validate_session(context.source_session)
         source_version = int(context.source_session["version"])
+        source_web_files = context.source_session.get("webFiles")
+        source_bindings = source_web_files.get("bindings") if isinstance(source_web_files, Mapping) else None
+        explicit = source_bindings.get("c_gb") if isinstance(source_bindings, Mapping) else None
+        if isinstance(explicit, Mapping) and explicit.get("kind") == "composite":
+            from .session import _validate_document
+
+            _validate_document(context.source_session)
+            source_composite = _project_web_file_binding(
+                context.source_session["resources"], explicit, schema=source_bindings["schema"],
+            )
         payload: dict[str, Any] = _json_clone(context.source_session)
     else:
         payload = {}
@@ -2391,6 +2593,8 @@ def build_session_json(
         )
     files_value = payload.get("files")
     files_for_web = files_value if isinstance(files_value, Mapping) else {}
+    if source_composite is not None:
+        files_for_web = {**files_for_web, "c_gb": source_composite}
     if source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         force_web_comparison_draft = (
             isinstance(config.get("linearRecordLayout"), Mapping)

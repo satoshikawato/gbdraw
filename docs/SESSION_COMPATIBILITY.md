@@ -16,6 +16,7 @@ Current writers emit one session and request format:
 |---|---:|---|
 | gbdraw session | 41 | 27–33 and 39–41 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
+| Web file bindings | 2 | 1; 2 in session 41 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
@@ -175,3 +176,28 @@ and canvas overlap tolerance. Web config retains editable drafts separately from
 the successful request and Result. Session 40 keeps its authority rules; schema 6
 keeps cardinality and row inheritance. See the [current field and migration
 contract](./REFERENCE/session-and-request-compatibility.md#record-rotation-and-feature-placement).
+
+## Web binding schema 2
+
+Session 41 writers assemble `webFiles.bindings` schema 2 while retaining request
+schema 7. The binding inventory includes `c_gb`, which may be null, an ordinary
+File binding, or one explicit composite. A composite stores `kind: "composite"`,
+an ordered `components` list of at least two ordinary bindings, and the logical
+File's `name`, `type` and `lastModified`. Ordinary bindings store `resourceId`
+and those three metadata fields. Components refer to the existing `resources`
+table; repeated references retain their positions. Nested composites and
+composites outside `c_gb` are rejected.
+
+Schema 1 remains readable with its existing metadata defaults and independent
+File-array semantics. A validating serializer preserves a supplied schema-1
+document; a newly assembled Web inventory uses schema 2. Sessions without an
+explicit binding retain request-derived initialization. Schema 2 requires
+session 41; older readers that support schema 1 reject schema 2 explicitly.
+
+Canonical CLI replay with `--session_output` transports schema-1 and schema-2
+draft bindings through the existing Web file inventory. The sidecar contains
+regenerated committed inputs and Results alongside the original draft component
+bytes, metadata and ordered occurrences, with destination-safe resource IDs.
+Explicit binding slots override historical direct lists even when null or empty.
+The frozen main-writer witness and its provenance are in
+`tests/fixtures/sessions/single.v41-bindings1.json` and the adjacent provenance file.

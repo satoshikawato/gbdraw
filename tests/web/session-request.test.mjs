@@ -1857,6 +1857,8 @@ assert.throws(
 const secondGenbank = {
   ...genbank,
   name: 'second.gb',
+  encoding: 'base64',
+  size: new TextEncoder().encode(genbankText.replaceAll('WEBTEST', 'WEBTWO')).byteLength,
   data: btoa(genbankText.replaceAll('WEBTEST', 'WEBTWO'))
 };
 const multiCircularProjection = projectCanonicalSessionRequest({
@@ -1873,7 +1875,8 @@ const multiCircularProjection = projectCanonicalSessionRequest({
     'record-2-genbank': { kind: 'genbank', ...secondGenbank }
   }
 });
-const combinedCircularGenbank = atob(multiCircularProjection.files.c_gb.data);
+const { readSessionResourceText } = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
+const combinedCircularGenbank = await readSessionResourceText(multiCircularProjection.files.c_gb);
 assert.equal(combinedCircularGenbank.match(/^LOCUS/gm)?.length, 2);
 assert.match(combinedCircularGenbank, /WEBTEST/);
 assert.match(combinedCircularGenbank, /WEBTWO/);
@@ -4649,4 +4652,63 @@ if (roundTripSessionIndex >= 0) {
   console.log(JSON.stringify(sparseDepthCanonical));
 } else if (process.argv.includes('--print')) {
   console.log(JSON.stringify(canonical));
+}
+
+// C1 I03/I04/I14/I15/I23: explicit draft composition wins over table/request order.
+{
+  const backing = await import(pathToFileURL(join(tempRoot, 'js/services/session-resource-backing.js')));
+  const frozen = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json')));
+  const oldProjection = projectCanonicalSessionRequest({ ...frozen,
+    sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
+  assert.equal(oldProjection.files.c_gb.name, frozen.webFiles.bindings.c_gb.name);
+  assert.equal(oldProjection.files.c_gb.lastModified, 7);
+  const omitted = structuredClone(frozen);
+  omitted.webFiles.bindings.c_gb = { resourceId: frozen.webFiles.bindings.c_gb.resourceId };
+  const defaults = projectCanonicalSessionRequest({ ...omitted,
+    sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
+  assert.equal(defaults.files.c_gb.type, '');
+  assert.equal(defaults.files.c_gb.lastModified, 0);
+  const descriptor = (text, name) => ({ kind: 'web-file', name, type: 'text/plain',
+    encoding: 'base64', data: Buffer.from(text).toString('base64'), size: Buffer.byteLength(text), lastModified: 0 });
+  const resources = { ...frozen.resources, first: descriptor('first', 'misleading.gb'),
+    second: descriptor('second\r\n', 'misleading.gb'), orphan: descriptor('unused', 'first.gb') };
+  const components = ['second', 'first', 'second'].map((resourceId, i) => ({
+    resourceId, name: i === 0 ? '' : `part-${i}.gb`, type: '', lastModified: i / 2
+  }));
+  const composite = { kind: 'composite', components, name: '', type: '', lastModified: 0.25 };
+  const webFiles = { ...frozen.webFiles, bindings: { schema: 2, c_gb: composite } };
+  for (const entries of [Object.entries(resources), Object.entries(resources).reverse()]) {
+    for (const adopted of [true, false]) {
+      const table = Object.fromEntries(entries);
+      const projected = projectCanonicalSessionRequest({ ...frozen, resources: table, webFiles,
+        sessionResourceTable: adopted ? backing.adoptCurrentSessionResources(table) : null });
+      const file = projected.files.c_gb;
+      assert.equal(Array.isArray(file), false);
+      assert.equal(backing.isSessionResourceFileView(file), true);
+      assert.equal(file.name, '');
+      assert.equal(await backing.readSessionResourceText(file), 'second\r\nfirst\nsecond\r\n');
+      assert.deepEqual(backing.sessionResourceSource(file).descriptors.map(({ descriptor, readBytes, ...part }) => part), components);
+    }
+  }
+  const linear = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
+  const inactive = projectCanonicalSessionRequest({ ...linear,
+    resources: { ...linear.resources, first: resources.first, second: resources.second },
+    webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } } });
+  assert.equal(linear.renderRequest.mode, 'linear');
+  assert.equal(await backing.readSessionResourceText(inactive.files.c_gb), 'second\r\nfirst\nsecond\r\n');
+  const leaf = frozen.webFiles.bindings.c_gb;
+  for (const schema of [1, 2]) {
+    const arrays = [leaf, [null, leaf]];
+    const projected = projectCanonicalSessionRequest({ ...frozen,
+      webFiles: { bindings: { schema, c_gb: arrays } },
+      sessionResourceTable: backing.adoptCurrentSessionResources(frozen.resources) });
+    assert.equal(Array.isArray(projected.files.c_gb), true);
+    assert.equal(Array.isArray(projected.files.c_gb[1]), true);
+    assert.equal(projected.files.c_gb[1][0], null);
+    assert.equal(backing.sessionResourceSource(projected.files.c_gb[0]).descriptors, undefined);
+  }
+  const bad = { ...webFiles, bindings: { schema: 2, c_gb: { ...composite, components: [] } } };
+  assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }), /at least two/);
+  const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
+  assert.equal(noDraft.files.c_gb, null);
 }
