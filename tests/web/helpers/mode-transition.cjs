@@ -55,7 +55,7 @@ const popup = async (page, index = 0) => {
   await expect(page.locator('.feature-popup')).toBeVisible();
   return page.evaluate(() => {
     const feature = window.__GBDRAW_APP__.clickedFeature;
-    return { id: feature.id, featureId: feature.featureId, sourceText: feature.labelSourceText };
+    return { id: feature.id, featureId: feature.svg_id, sourceText: feature.labelSourceText };
   });
 };
 

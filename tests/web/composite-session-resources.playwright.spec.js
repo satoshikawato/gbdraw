@@ -126,18 +126,54 @@ const save = async (page, testInfo, label) => {
   }
 };
 
+const prepareSeed = async (journey, testInfo) => {
+  const bytes = await fs.readFile(seed);
+  expect(hash(bytes)).toBe('11009dd28a1d98afa79e8b5d22b94217f61d9f53cb6353010095c983c3a9d90e');
+  const session = JSON.parse(gunzipSync(bytes));
+  if (journey !== 'minimal') return { file: seed, session };
+
+  // Three real plasmids exercise composite ordering and persistence in PR smoke.
+  // Keep the six-replicon Gallery fixture for grid/batch and CLI acceptance.
+  const records = session.renderRequest.records.slice(2, 5)
+    .map((record, index) => ({ ...record, recordKey: `record-${index + 1}` }));
+  const resourceIds = new Set(records.map(record => record.source.resourceId));
+  const title = 'Three Vibrio plasmids';
+  const input = testInfo.outputPath('three-plasmids-input.json');
+  const file = testInfo.outputPath('three-plasmids.gbdraw-session.json.gz');
+  await fs.writeFile(input, JSON.stringify({
+    format: session.format, version: session.version,
+    results: [], editorState: { featureCatalog: null },
+    ui: session.ui,
+    config: { ...session.config,
+      form: { ...session.config.form, plot_title: title },
+      adv: { ...session.config.adv, multi_record_positions: [] } },
+    renderRequest: { ...session.renderRequest, records,
+      layout: { ...session.renderRequest.layout, multiRecordPositions: [] },
+      diagramOptions: { ...session.renderRequest.diagramOptions, plotTitle: title } },
+    resources: Object.fromEntries(Object.entries(session.resources)
+      .filter(([id, resource]) => resource.kind !== 'genbank' || resourceIds.has(id)))
+  }));
+  // Materialize the matching SVG and catalog through the normal CLI writer.
+  const { stdout, stderr } = await promisify(execFile)('python', [
+    '-m', 'gbdraw.cli', 'circular', '--session', input,
+    '-o', testInfo.outputPath('three-plasmids'), '--session_output', file
+  ], { cwd: testInfo.outputDir, env: { ...process.env, PYTHONPATH: process.cwd() },
+    timeout: generateTimeout, maxBuffer: 1_000_000 });
+  await fs.writeFile(testInfo.outputPath('three-plasmids-cli.log'), stdout + stderr);
+  return { file, session: JSON.parse(gunzipSync(await fs.readFile(file))) };
+};
+
 for (const journey of ['minimal', 'grid-batch-grid']) {
   test(`Session export Vibrio composite resources survive ${journey} Save, fresh Load and Generate${journey === 'minimal' ? ' @pr-smoke' : ''}`, async ({ browser }, testInfo) => {
     test.setTimeout(6 * generateTimeout + 6 * loadTimeout);
     const contexts = [];
     try {
-      const { page, external } = await load(browser, seed, contexts);
+      const { file, session: seedSession } = await prepareSeed(journey, testInfo);
+      const recordCount = journey === 'minimal' ? 3 : 6;
+      const { page, external } = await load(browser, file, contexts);
       const original = await snapshot(page);
-      expect(original.request.records).toHaveLength(6);
-      expect(original.components).toHaveLength(6);
-      const seedBytes = await fs.readFile(seed);
-      expect(hash(seedBytes)).toBe('11009dd28a1d98afa79e8b5d22b94217f61d9f53cb6353010095c983c3a9d90e');
-      const seedSession = JSON.parse(gunzipSync(seedBytes));
+      expect(original.request.records).toHaveLength(recordCount);
+      expect(original.components).toHaveLength(recordCount);
       const seedIds = [...new Set(seedSession.renderRequest.records.map(r => r.source.resourceId))];
       expect(original.components.map(({ size, sha256 }) => ({ size, sha256 })))
         .toEqual(seedIds.map(id => resourceIdentity(seedSession.resources[id])));
@@ -149,19 +185,19 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       if (journey === 'grid-batch-grid') {
         await page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true }).uncheck();
         await generate(page);
-        expect((await snapshot(page)).results).toHaveLength(6);
+        expect((await snapshot(page)).results).toHaveLength(recordCount);
         await page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true }).check();
         await generate(page);
       }
       const generated = await snapshot(page);
-      expect(generated.records).toHaveLength(6);
+      expect(generated.records).toHaveLength(recordCount);
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated');
       expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([41, 2, 7]);
       const composite = session.webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
-      expect(composite.components).toHaveLength(6);
+      expect(composite.components).toHaveLength(recordCount);
       expect(composite.components.map(part => resourceIdentity(session.resources[part.resourceId])))
         .toEqual(original.components.map(({ size, sha256 }) => ({ size, sha256 })));
       expect(composite.components.map(({ resourceId, ...metadata }) => metadata))
@@ -169,7 +205,8 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(metrics.filter(metric => ['base64EncodeCount', 'base64DecodeCount'].includes(metric.name)))
         .toEqual([]);
       const genomicSizes = Object.values(session.resources).filter(r => r.kind === 'genbank' || composite.components.some(c => session.resources[c.resourceId] === r)).map(r => r.size);
-      expect(genomicSizes.reduce((sum, n) => sum + n, 0)).toBe(34_912_520);
+      expect(genomicSizes.reduce((sum, n) => sum + n, 0))
+        .toBe(2 * original.components.reduce((sum, component) => sum + component.size, 0));
       const resources = Object.fromEntries(Object.entries(session.resources)
         .map(([id, descriptor]) => [id, resourceIdentity(descriptor)]));
       for (const [id, identity] of Object.entries(generated.resources)) expect(resources[id]).toEqual(identity);

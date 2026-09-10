@@ -81,7 +81,6 @@ export const setupWatchers = ({
     suppressCircularMultiRecordDefaults,
     featureRecordIds,
     selectedFeatureRecordIdx,
-    featureVisibilityManualRules,
     featureVisibilityOverrides,
     replaceFeatureVisibilitySelectorCacheOwner,
     featurePanelTab,
@@ -94,11 +93,9 @@ export const setupWatchers = ({
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
-    labelOverrideContextKey,
     labelTextBulkOverrides,
     labelTextFeatureOverrides,
     canonicalLabelOverrideRows,
-    labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
     labelOverrideBuildWarning,
     isFeatureDrawerMounted,
@@ -423,18 +420,14 @@ export const setupWatchers = ({
       featureSelectorSafetyScope.value = features.featureSelectorSafetyScope || [];
       featureRecordIds.value = features.featureRecordIds || [];
       selectedFeatureRecordIdx.value = 0;
-      featureVisibilityManualRules.splice(0);
-      Object.keys(featureVisibilityOverrides).forEach((k) => delete featureVisibilityOverrides[k]);
+      // Mode inactivity clears projections, not durable label/visibility intent.
+      // The editor's existing identity reconciliation handles source replacement.
       if (typeof replaceFeatureVisibilitySelectorCacheOwner === 'function') {
         replaceFeatureVisibilitySelectorCacheOwner({});
       } else {
         replacePlainObject(state.featureVisibilitySelectorCache, {});
       }
       editableLabels.value = [];
-      Object.keys(labelTextFeatureOverrides).forEach((k) => delete labelTextFeatureOverrides[k]);
-      Object.keys(labelTextBulkOverrides).forEach((k) => delete labelTextBulkOverrides[k]);
-      Object.keys(labelTextFeatureOverrideSources).forEach((k) => delete labelTextFeatureOverrideSources[k]);
-      Object.keys(labelVisibilityOverrides).forEach((k) => delete labelVisibilityOverrides[k]);
       orthogroups.value = [];
       collinearGroups.value = [];
       featureOrthogroupIndex.value = new Map();
@@ -443,7 +436,6 @@ export const setupWatchers = ({
       orthogroupSearch.value = '';
       Object.keys(orthogroupNameOverrides).forEach((k) => delete orthogroupNameOverrides[k]);
       Object.keys(orthogroupDescriptionOverrides).forEach((k) => delete orthogroupDescriptionOverrides[k]);
-      labelOverrideContextKey.value = '';
       labelOverrideBuildWarning.value = '';
       labelLayoutDirtyReason.value = '';
       labelSearch.value = '';
