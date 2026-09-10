@@ -3362,6 +3362,7 @@ export const createAppSetup = () => {
     hasCircularDepthFiles,
     hasLinearDepthFiles,
     canShowDepthTrack,
+    enabledOptionClass,
     depthToggleOptionClass,
     depthTrackCountLabel,
     getDepthTrackLabel,
