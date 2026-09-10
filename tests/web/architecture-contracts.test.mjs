@@ -1060,7 +1060,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webPrSmoke, /needs: ci-impact/);
   assert.match(webPrSmoke, /needs\.ci-impact\.result == 'success'/);
   assert.match(webPrSmoke, /requiredJobs, 'web-pr-smoke'/);
-  assert.match(webPrSmoke, /timeout-minutes: 10/);
+  assert.match(webPrSmoke, /timeout-minutes: 15/);
   assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/playwright install --with-deps chromium/g)].length, 1);
