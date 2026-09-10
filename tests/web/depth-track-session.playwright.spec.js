@@ -1585,7 +1585,7 @@ ORIGIN
   expect(exportedSession.version).toBe(41);
   expect(exportedSession).not.toHaveProperty('files');
   expect(exportedSession.webFiles).toEqual(expect.any(Object));
-  expect(exportedSession.webFiles.bindings.schema).toBe(1);
+  expect(exportedSession.webFiles.bindings.schema).toBe(2);
   expect(exportedSession.webFiles.bindings.c_gb.name).toBe('layout-preferences.gbk');
   expect(exportedSession.webFiles.bindings.linearSeqs[0].gb.name).toBe(
     'inactive-linear-layout.gbk'
