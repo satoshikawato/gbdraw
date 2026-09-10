@@ -377,6 +377,7 @@ const hasFeatureScopedOverrideInSvg = (svg, ...overrideMaps) => {
 export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   const {
     mode,
+    generatedMode,
     form,
     filterMode,
     manualWhitelist,
@@ -665,6 +666,9 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     requiredFeatureIds = [],
     optionalFeatureIds = []
   } = {}) => {
+    // The retained Result can outlive its active mode. Keep its label intent
+    // dormant until its own mode can project and reconcile those identities.
+    if (generatedMode.value !== mode.value) return;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
