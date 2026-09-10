@@ -307,7 +307,7 @@ export const setupWatchers = ({
     }
   );
 
-  watch([svgContent, () => results.value[selectedResultIndex.value]], () => {
+  watch([svgContent, svgContainer, () => results.value[selectedResultIndex.value]], () => {
     const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
     skipCaptureBaseConfig.value = false;
     skipPositionReapply.value = false;
@@ -405,6 +405,10 @@ export const setupWatchers = ({
     () => {
       if (semanticFileWatchersSuppressed.value) return;
       cancelDefinitionUpdate();
+
+      // Vue replaces the mode-keyed container. Release its frozen live-edit
+      // payload first so the new root materializes the selected Result content.
+      previewRuntime?.clearActiveRuntime?.();
 
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport();
