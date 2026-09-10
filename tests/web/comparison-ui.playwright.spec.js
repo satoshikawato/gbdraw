@@ -517,11 +517,11 @@ test('preserved imported comparison generates only after explicit inheritance', 
 
 test('LOSAT and LOSATP modes own their controls and mixed plans require explicit topology change', async ({ page }) => {
   await openLinear(page);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.addLinearSeq();
     app.addLinearSeq();
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
   });
   await comparisonSettings(page).locator('summary').click();
   const losatMode = page.getByRole('group', { name: 'LOSAT Mode' });
@@ -676,10 +676,10 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
 
 test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and filters', async ({ page }) => {
   await openLinear(page);
-  const transitions = await page.evaluate(() => {
+  const transitions = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.addLinearSeq();
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastn');
     app.losat.blastn.task = 'dc-megablast';
     Object.assign(app.losat.blastp, {
@@ -783,7 +783,7 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
 test('comparison controls drive appearance and current Session round trips', async ({ page }) => {
   test.setTimeout(600000);
   await openLinear(page);
-  await page.evaluate((records) => {
+  await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(
@@ -801,7 +801,7 @@ test('comparison controls drive appearance and current Session round trips', asy
       show_depth: false,
       show_labels_linear: 'none'
     });
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('pairwise');
   }, [makeGenbank('Ui04A', 'atg'), makeGenbank('Ui04B', 'gct')]);
@@ -909,9 +909,9 @@ test('comparison controls drive appearance and current Session round trips', asy
   expect(taller.style).toBe('curve');
   expect(taller.path).not.toBe(curve.path);
 
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.sessionTitle = 'ui04-comparison-controls';
@@ -1010,7 +1010,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await configureRecords();
   const missingUpload = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     const edgeKey = app.linearComparisonResolution.edges[0].edgeKey;
     app.setLinearComparisonGapAction(edgeKey, 'upload');
     document.querySelector('[data-linear-comparison-disclosure="selected-pairs"]')?.removeAttribute('open');
@@ -1040,7 +1040,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   await configureRecords();
   const selectedCollinear = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     const edgeKey = app.linearComparisonResolution.edges[0].edgeKey;

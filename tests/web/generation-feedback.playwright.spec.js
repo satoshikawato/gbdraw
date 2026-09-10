@@ -163,7 +163,7 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
     for (let i = 0; i < 2; i += 1) {
       app.setLinearSeqPrimaryFile(i, 'gb', new File([content], `record-${i}.gbk`, { type: 'text/plain' }));
     }
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     await window.Vue.nextTick();
   }, source);
   await generate(page).click();
