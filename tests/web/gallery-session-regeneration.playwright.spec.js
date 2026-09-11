@@ -58,7 +58,7 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
     const { state } = await import('/gbdraw/web/js/state.js');
     state.losatCache.value.clear();
     state.losatDerivedCache.value.clear();
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('pairwise');
     return {

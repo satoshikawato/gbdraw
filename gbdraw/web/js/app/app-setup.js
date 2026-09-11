@@ -476,11 +476,11 @@ export const createAppSetup = () => {
     if (invalidate) invalidateLinearComparisonArtifacts();
   };
 
-  const mutateLinearComparisonPlan = (mutator) => {
+  const mutateLinearComparisonPlan = (mutator) => history.runUndoable('Change comparisons', () => {
     const next = normalizeLinearComparisonPlan(linearComparisonPlan);
     mutator(next);
     replaceLinearComparisonPlan(next);
-  };
+  });
 
   const effectiveLinearComparisonLayout = () => (
     linearRecordLayoutEnabled.value ? linearRecordRows : []
@@ -616,7 +616,7 @@ export const createAppSetup = () => {
 
   const setLinearComparisonGlobalAction = (action) => {
     const normalized = String(action || '').trim().toLowerCase();
-    mutateLinearComparisonPlan((next) => {
+    return mutateLinearComparisonPlan((next) => {
       if (normalized === 'none') {
         next.mode = LINEAR_COMPARISON_MODES.NONE;
         return;

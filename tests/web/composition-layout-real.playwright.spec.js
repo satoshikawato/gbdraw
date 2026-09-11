@@ -67,7 +67,7 @@ const renderRealDiagram = async (
     } else {
       app.lInputType = 'gb';
       app.setLinearSeqPrimaryFile(0, 'gb', input);
-      app.setLinearComparisonGlobalAction('none');
+      await app.setLinearComparisonGlobalAction('none');
       app.setLinearTrackSlotsEnabled(false);
     }
     await window.Vue.nextTick();

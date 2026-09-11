@@ -1750,7 +1750,7 @@
                                     >Clear comparison</button>
                                 </div>
                             </div>
-                            <div role="group" aria-label="Set all adjacent comparisons" data-capture="linear-blast-source" class="linear-comparison-actions">
+                            <div role="group" aria-label="Set all adjacent comparisons" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
                                 <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Upload BLAST TSV</button>
