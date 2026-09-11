@@ -15,6 +15,7 @@ import {
   buildOrthogroupStateData,
   buildRunStateData,
   buildUiStateData,
+  canonicalRenderArtifactOwner,
   exportSession,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
@@ -2018,8 +2019,14 @@ export const createAppSetup = () => {
     }
   });
   historySnapshots.setGeneratedArtifactRuntimeOwner({
-    capture: captureGeneratedArtifactRuntimeState,
-    restore: restoreGeneratedArtifactRuntimeState
+    capture: () => ({
+      ...captureGeneratedArtifactRuntimeState(),
+      canonical: canonicalRenderArtifactOwner.capture()
+    }),
+    restore: (snapshot, options) => {
+      canonicalRenderArtifactOwner.restore(snapshot.canonical);
+      return restoreGeneratedArtifactRuntimeState(snapshot, options);
+    }
   });
   const resultsManager = createResultsManager({
     state,

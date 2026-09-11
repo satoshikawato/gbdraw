@@ -2879,6 +2879,14 @@ export const getCommittedCanonicalRenderRequest = () => (
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
 
+export const canonicalRenderArtifactOwner = Object.freeze({
+  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),
+  restore: (snapshot) => {
+    committedCanonicalSession = snapshot.committedCanonicalSession;
+    activeSessionResourceTable = snapshot.activeSessionResourceTable;
+  }
+});
+
 const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
   state.matchSequenceRegistry?.reset?.();
   state.circularRecordList.value = [];
