@@ -1060,14 +1060,16 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webPrSmoke, /needs: ci-impact/);
   assert.match(webPrSmoke, /needs\.ci-impact\.result == 'success'/);
   assert.match(webPrSmoke, /requiredJobs, 'web-pr-smoke'/);
-  assert.match(webPrSmoke, /timeout-minutes: 15/);
+  assert.match(webPrSmoke, /timeout-minutes: 10/);
   assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/playwright install --with-deps chromium/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/python tools\/prepare_browser_wheel\.py/g)].length, 1);
-  assert.match(webPrSmoke, /Run fast Web JavaScript contracts/);
-  assert.match(webPrSmoke, /! -name 'gallery-session-publication\.test\.mjs'/);
-  assert.match(webPrSmoke, /-m "browser and not slow"/);
+  const webContracts = workflowJob('web-contracts-pr');
+  assert.match(webContracts, /Run fast Web JavaScript contracts/);
+  assert.match(webContracts, /! -name 'gallery-session-publication\.test\.mjs'/);
+  assert.match(webContracts, /-m "browser and not slow"/);
+  assert.doesNotMatch(webPrSmoke, /Run fast Web JavaScript contracts|python -m pytest/);
   assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
   assert.match(webPrSmoke, /if: failure\(\)[\s\S]+path: test-results\//);
   assert.doesNotMatch(
@@ -1087,6 +1089,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'web-contracts-pr',
     'web-pr-smoke'
   ]);
   assert.match(
@@ -1111,6 +1114,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'web-contracts-pr',
     'web-pr-smoke'
   ]) {
     const job = workflowJob(jobId);
@@ -1177,11 +1181,8 @@ test('PR smoke selection is explicit while the full functional inventory stays w
     /pass-with-no-tests/
   );
 
-  const selectedCount = PLAYWRIGHT_SPEC_SOURCES.reduce(
-    (count, source) => count + [...source.matchAll(/tag: ['"]@pr-smoke['"]/g)].length,
-    0
-  );
-  assert.ok(selectedCount >= 6 && selectedCount <= 10, `selected ${selectedCount} smoke tests`);
+  // Expanded Playwright discovery (including nested/parameterized tests) is checked
+  // by tests/ci/playwright-inventory.test.mjs, not a tag-source regex.
 });
 
 test('exact dev staging routes every job through the protected-branch plan', () => {
@@ -1193,8 +1194,6 @@ test('exact dev staging routes every job through the protected-branch plan', () 
     'browser',
     'playwright-functional',
     'playwright-performance',
-    'acceptance-supported-main',
-    'slow-main',
     'lint',
     'losat-cache-browser-acceptance'
   ];
@@ -1533,7 +1532,7 @@ test('dev staging Web checks scope only the newly integrated change', () => {
   );
 });
 
-test('supported-version and slow matrices cover exact dev staging', () => {
+test('supported-version and slow matrices are mandatory in explicit release acceptance', () => {
   for (const jobName of ['acceptance-supported-main', 'slow-main']) {
     const job = TEST_WORKFLOW.match(
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
@@ -1548,6 +1547,12 @@ test('supported-version and slow matrices cover exact dev staging', () => {
       /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/dev'/
     );
   }
+  const gate = workflowJob('release-gate');
+  assert.match(gate, /name: Release \/ gate/);
+  assert.match(gate, /inputs\.tier == 'release'/);
+  assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: release/);
+  assert.match(gate, /Require exact candidate Gallery readiness/);
+  assert.match(workflowJob('dev-staging-gate'), /inputs\.tier != 'release'/);
 });
 
 const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');

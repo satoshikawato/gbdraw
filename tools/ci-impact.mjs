@@ -14,10 +14,11 @@ import {
   createImpactPlan,
   isFullObjectId,
   knownJobsFor,
+  requiresFullCoverage,
   validateGateResults
 } from './ci-impact-policy.mjs';
 
-const SUPPORTED_PROFILES = new Set(['pr', 'dev', 'gallery']);
+const SUPPORTED_PROFILES = new Set(['pr', 'dev', 'gallery', 'release']);
 const SUPPORTED_EVENTS = new Set(['pull_request', 'push', 'workflow_dispatch']);
 const REPOSITORY_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,99})\/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,99})$/;
 const SUMMARY_PATH_LIMIT = 20;
@@ -97,6 +98,9 @@ export const readPlanConfiguration = (env, cwd = process.cwd()) => {
   }
   if ((profile === 'pr') !== (eventName === 'pull_request')) {
     fail('PROFILE_EVENT_MISMATCH', 'PR profile must match a pull_request event.');
+  }
+  if (profile === 'release' && eventName !== 'workflow_dispatch') {
+    fail('PROFILE_EVENT_MISMATCH', 'Release acceptance requires an explicit dispatch.');
   }
   if (!REPOSITORY_NAME.test(repository)) {
     fail('INVALID_REPOSITORY', 'CI_IMPACT_REPOSITORY must be OWNER/REPOSITORY.');
@@ -212,6 +216,7 @@ const readGitChanges = ({ configuration, runGitImpl }) => {
 const planFields = ({ configuration, classification, decision, basis, inheritedEvidence }) => ({
   profile: configuration.profile,
   impact: classification.impact,
+  capabilities: classification.capabilities,
   decision,
   basis,
   changeBaseSha: configuration.changeBaseSha,
@@ -223,6 +228,7 @@ const planFields = ({ configuration, classification, decision, basis, inheritedE
 
 const fullClassification = (reason) => Object.freeze({
   impact: 'full',
+  capabilities: Object.freeze(['full']),
   valid: false,
   changedPathCount: 0,
   paths: Object.freeze([]),
@@ -290,7 +296,7 @@ export const buildImpactPlan = async ({
     });
   }
 
-  if (!classification.valid || classification.impact === 'full') {
+  if (!classification.valid || requiresFullCoverage(configuration.profile, classification.capabilities)) {
     return Object.freeze({
       plan: createImpactPlan(planFields({
         configuration,
@@ -367,7 +373,7 @@ export const formatPlanSummary = ({ plan, classification, evidenceFailure }) => 
   const requiredJobs = plan.requiredJobs.length ? plan.requiredJobs.map((job) => `\`${job}\``).join(', ') : 'none';
   const routing = plan.profile === 'pr'
     ? 'active; pull-request jobs use the trusted-base plan'
-    : plan.profile === 'dev'
+    : ['dev', 'release'].includes(plan.profile)
       ? 'active; dev staging jobs use the protected-branch plan'
       : 'active; Gallery readiness jobs use the protected-branch plan';
   const lines = [
@@ -375,6 +381,7 @@ export const formatPlanSummary = ({ plan, classification, evidenceFailure }) => 
     '',
     `- Profile: \`${plan.profile}\``,
     `- Impact: \`${plan.impact}\``,
+    `- Capabilities: ${plan.capabilities.join(', ')}`,
     `- Decision: \`${plan.decision}\``,
     `- Basis: \`${plan.basis}\``,
     `- Change base/head: \`${plan.changeBaseSha}\` / \`${plan.changeHeadSha}\``,

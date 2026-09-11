@@ -164,7 +164,7 @@ const prepareSeed = async (journey, testInfo) => {
 };
 
 for (const journey of ['minimal', 'grid-batch-grid']) {
-  test(`Session export Vibrio composite resources survive ${journey} Save, fresh Load and Generate${journey === 'minimal' ? ' @pr-smoke' : ''}`, async ({ browser }, testInfo) => {
+  test(`Session export Vibrio composite resources survive ${journey} Save, fresh Load and Generate`, async ({ browser }, testInfo) => {
     test.setTimeout(6 * generateTimeout + 6 * loadTimeout);
     const contexts = [];
     try {

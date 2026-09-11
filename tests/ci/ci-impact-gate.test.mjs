@@ -86,6 +86,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
       'recipes-standard',
       'gallery',
       'lint',
+      'web-contracts-pr',
       'web-pr-smoke'
     ]
   ]);
@@ -122,8 +123,6 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
       'browser',
       'playwright-functional',
       'playwright-performance',
-      'acceptance-supported-main',
-      'slow-main',
       'lint',
       'losat-cache-browser-acceptance'
     ]
@@ -180,7 +179,7 @@ test('Gallery gate rejects the wrong profile, workflow SHA, and schema', () => {
   for (const [candidate, expected, message] of [
     [impactPlan, { profile: 'dev', workflowSha: SHA.workflow }, /profile does not match/],
     [impactPlan, { profile: 'gallery', workflowSha: 'd'.repeat(40) }, /workflow SHA does not match/],
-    [{ ...impactPlan, schemaVersion: 2 }, {
+    [{ ...impactPlan, schemaVersion: 999 }, {
       profile: 'gallery', workflowSha: SHA.workflow
     }, /schema version is not supported/]
   ]) {
@@ -305,7 +304,7 @@ test('trusted gate rejects wrong profile, workflow SHA, and helper schema', () =
     expected: { profile: 'pr', workflowSha: 'd'.repeat(40) }
   }), /workflow SHA does not match/);
   assert.throws(() => validateGateResults({
-    plan: { ...impactPlan, schemaVersion: 2 },
+    plan: { ...impactPlan, schemaVersion: 999 },
     needs,
     knownJobs: knownJobsFor('pr'),
     expected: { profile: 'pr', workflowSha: SHA.workflow }
@@ -385,4 +384,16 @@ test('gate CLI emits a passing summary for a valid payload', async () => {
   assert.match(summary, /Gate result: pass/);
   assert.match(summary, /`recipes-standard`: `success` \(required\)/);
   assert.match(summary, /`gallery`: `skipped` \(not required\)/);
+});
+
+test('release aggregate rejects any skipped or failed exhaustive matrix', () => {
+  const release = plan({ profile: 'release', impact: 'full', decision: 'full', basis: 'MANUAL_FULL_RUN', inheritedEvidence: null });
+  assert.equal(validate(release, needsFor(release)).ok, true);
+  for (const jobId of release.requiredJobs) {
+    for (const result of ['skipped', 'failure', 'cancelled']) {
+      const needs = needsFor(release);
+      needs[jobId].result = result;
+      assert.throws(() => validate(release, needs), /required CI job did not succeed/);
+    }
+  }
 });

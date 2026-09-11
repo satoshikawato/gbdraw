@@ -62,7 +62,7 @@ const expectTranslation = (before, after, dx, dy) => {
   expect(after.panning).toBe(false);
 };
 
-test('@pr-smoke background pan preserves screen displacement after text selection and zoom', async ({ page }, testInfo) => {
+test('background pan preserves screen displacement after text selection and zoom', async ({ page }, testInfo) => {
   test.setTimeout(180000);
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -112,7 +112,7 @@ test('@pr-smoke background pan preserves screen displacement after text selectio
   expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 0 });
 });
 
-test('@pr-smoke preview pan leaves feature and match gestures available', async ({ page }) => {
+test('preview pan leaves feature and match gestures available', async ({ page }) => {
   test.setTimeout(180000);
   // Keep the wide comparison's editing targets visible at its existing zoom anchor.
   await page.setViewportSize({ width: 2520, height: 1327 });

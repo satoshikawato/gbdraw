@@ -54,7 +54,7 @@ const focusAfterHistoryCapture = async (page, locator) => {
   }));
 };
 
-test('independent Linear typography follows linked, imported, and History journeys @pr-smoke', async ({ page }, testInfo) => {
+test('independent Linear typography follows linked, imported, and History journeys', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   const genbank = readFileSync(genbankPath, 'utf8');
 

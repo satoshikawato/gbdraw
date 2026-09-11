@@ -45,7 +45,7 @@ const expectHistory = async (page, undo, redo, label) => {
 };
 
 for (const inputMethod of ['keyboard', 'pointer']) {
-  test(`Label Mode ${inputMethod} edit has one Undo step and survives generation and fresh Load @pr-smoke`, async ({
+  test(`Label Mode ${inputMethod} edit has one Undo step and survives generation and fresh Load`, async ({
     page, context, browser
   }, testInfo) => {
     test.setTimeout(300_000);

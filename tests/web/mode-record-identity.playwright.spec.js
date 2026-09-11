@@ -67,7 +67,7 @@ const structure = (page, svg) => page.evaluate(svg => {
 }, svg);
 
 for (const committed of [false, true]) {
-  test(`@pr-smoke ${committed ? 'committed' : 'ungenerated'} Circular placement retains source identity through mode history and Save/Load`, async ({ browser }, testInfo) => {
+  test(`${committed ? 'committed' : 'ungenerated'} Circular placement retains source identity through mode history and Save/Load`, async ({ browser }, testInfo) => {
     test.setTimeout(360000);
     const pages = [];
     try {

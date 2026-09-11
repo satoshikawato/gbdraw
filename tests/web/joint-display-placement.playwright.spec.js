@@ -68,7 +68,7 @@ ORIGIN
 `;
 
 for (const mode of ['circular', 'linear']) {
-  test(`@pr-smoke joint rotation placement and saved drafts in ${mode}`, async ({ page, browser }, testInfo) => {
+  test(`joint rotation placement and saved drafts in ${mode}`, async ({ page, browser }, testInfo) => {
     test.setTimeout(240000);
     await page.addInitScript(() => {
       window.__JOINT_LIFECYCLE__ = [];
