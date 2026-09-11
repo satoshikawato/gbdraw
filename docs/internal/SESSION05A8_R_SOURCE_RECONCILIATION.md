@@ -128,5 +128,66 @@ The trusted-base change gate passes; the added public operation requires human
 review under `WEB_CHANGE_POLICY.md`. Hosted and post-merge results are recorded
 in the session handoff rather than inferred from local checks. CI tiers,
 ten-case PR smoke budget, workflows, timeouts, Gallery artifacts, and unrelated
-05A4 findings remain unchanged. The independent 05A4-10 fix is pending the
-visibility PR's merge.
+05A4 findings remain unchanged.
+
+Visibility PR #510 was reviewed by the user at
+`d83f46fd86d9b42fdefa288afc5afce2ac44ce42`, passed all PR gates, and merged as
+`b67f9e505acd3a3a16320d6caa930bd30c1a2040`. Its final local head passed 403 fast
+Web contracts and all 33 selected browser cases. The independent legend branch
+starts at that fetched exact `dev`; retained M20 still fails there before
+legend production changes.
+
+## Legend implementation and verification
+
+`legend/entry-actions.js` remains the owner of editor legend extraction and its
+generated original-category inventory. Its existing extraction scan now
+reconciles `originalLegendOrder` with the admitted diagram instead of only
+initializing it once. Surviving categories retain their default relative order;
+explicitly deleted rows retain their restore intent. New generated categories
+are admitted into that same inventory. No second category cache or feature
+catalog is introduced.
+
+Manual additions use the existing `data-legend-owner="direct-editor"` marker
+at their creation, including when a later renderer produces the same caption.
+Extraction excludes those rows from the generated inventory, so they keep their
+manual lifetime across Generate and replacement. Renderer categories are keyed
+by caption, not biological feature ID: lambda and tobacco have disjoint feature
+identities yet legitimately share `CDS`.
+
+Source replacement can also remove a customized category. The existing source
+binding predicate, already wired for visibility, supplies one `sourceReplaced`
+fact to the candidate mutation planner. Old generated-category styles and
+renames may be absent in that replacement. The unchanged-source malformed
+binding control remains strict. Explicit deletion is idempotent while its
+category is absent and keeps the existing user-facing restore contract.
+`svg-result-ingestion.js` applies these plan capabilities using its existing
+lazy legend index; it adds no parsing or scan to an empty mutation plan.
+
+This is `IMPLEMENT_EXISTING_AUTHORITY`: current generated-category membership,
+the existing manual Add/Restore contract, and the session's source-replacement
+invariant determine these outcomes. Palette colors, valid category styles,
+legend position, font size, layout preferences, visibility rules, labels, and
+placement intent keep their existing owners. There are no persisted fields or
+reader/writer changes.
+
+The successful candidate's existing mounted binder updates the inventory, and
+the Generate rollback handle already captures all affected legend state. A
+rejected replacement therefore preserves the prior diagram and editor state;
+History restores the corresponding source, Result, and legend inventory.
+There is no watcher-order workaround or additional delay.
+
+The old initialize-only inventory update is replaced in place. Ownership and
+production paths remain Generate → existing source binding and candidate plan
+→ SVG admission → existing legend extraction; owner/path excess and persisted
+compatibility paths do not increase. Normal revert is sufficient for rollback.
+
+The retained M20 passes after the inventory correction. Added browser coverage
+exercises L1–L8, common category/different feature identity, manual rows,
+customized absent categories, rejected replacement, and Save/fresh Load.
+Deterministic tests cover inventory replacement, default-order retention,
+manual ownership, deleted-row intent, absent-category admission, and strict
+unchanged-source rejection. Local verification passes both original journeys,
+the two L1–L8/manual-row browser cases, seven visibility/composition browser
+controls, 405 fast Web contracts, and 137 architecture contracts. The policy
+result is Gate PASS, Review CLEAR. Final exact-head and hosted results are
+recorded in the session handoff.

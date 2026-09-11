@@ -459,6 +459,7 @@ test('a requested Legend addition reuses an exact renderer-produced caption', ()
   });
   assert.equal((results[0].content.match(/data-legend-key="CDS"/g) || []).length, 1);
   assert.match(results[0].content, /fill="#556677"/);
+  assert.match(results[0].content, /data-legend-owner="direct-editor"/);
 });
 
 test('a renderer-derived Legend style may be absent when no current binding remains', () => {
@@ -503,6 +504,38 @@ test('an unexplained missing Legend binding remains rejected', () => {
     }),
     /missing a Legend binding/
   );
+});
+
+test('source replacement may retire styled, renamed, or deleted generated Legend categories', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan({
+    ...planOptions.Legend(admission),
+    sourceReplaced: true,
+    legendEntries: [{ caption: 'Genes', originalCaption: 'CDS', color: '#334455' }],
+    originalLegendOrder: ['CDS', 'rRNA'],
+    deletedLegendEntries: [{ caption: 'rRNA', originalCaption: 'rRNA' }],
+    legendColorOverrides: { Genes: '#334455' },
+    legendStrokeOverrides: { Genes: { strokeColor: '#445566', strokeWidth: 3 } }
+  });
+  assert.doesNotThrow(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: value => value },
+    parser: FakeDomParser
+  }));
+});
+
+test('explicit category deletion stays idempotent while the category is absent', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    originalLegendOrder: ['rRNA'],
+    deletedLegendEntries: [{ caption: 'rRNA', originalCaption: 'rRNA' }]
+  });
+  assert.doesNotThrow(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission, mutationPlan: plan,
+    sanitizer: { sanitize: value => value }, parser: FakeDomParser
+  }));
 });
 
 test('Label replay is deferred until mounted identity binding', () => {

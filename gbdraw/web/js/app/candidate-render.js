@@ -110,6 +110,7 @@ const compilePlanBundle = ({
   legendEntries = [],
   deletedLegendEntries = [],
   originalLegendOrder = [],
+  sourceReplaced = false,
   addedLegendCaptions = [],
   legendColorOverrides = {},
   legendStrokeOverrides = {},
@@ -233,6 +234,7 @@ const compilePlanBundle = ({
       addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
         from: entry.originalCaption,
         to: entry.caption,
+        allowMissing: sourceReplaced,
         xPos: entry.xPos,
         yPos: entry.yPos
       });
@@ -241,7 +243,7 @@ const compilePlanBundle = ({
     const legendRenderedIds = entry.featureIds.length > 0
       ? entry.featureIds
       : [...(renderedIdsByDirectCaption.get(entry.caption) || [])];
-    const allowMissing = rendererDerivedCaptions.has(entry.caption)
+    const allowMissing = (sourceReplaced && isOriginal) || rendererDerivedCaptions.has(entry.caption)
       && (
         legendRenderedIds.length === 0
         || legendRenderedIds.every((renderedId) => hiddenRenderedIds.has(renderedId))
@@ -298,7 +300,9 @@ const compilePlanBundle = ({
   });
 
   deletedCaptions.forEach((caption) => {
-    addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption });
+    // Explicit deletions remain valid while their category is absent, including
+    // subsequent Generate calls after a source replacement.
+    addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
   });
 
   if (typeof transformSvg === 'function') {

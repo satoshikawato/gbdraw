@@ -1760,7 +1760,10 @@ export const createRunAnalysis = ({
       ?? extractedFeatures.value;
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
-    const visibilitySourceChanged = !isReflow && Object.keys(featureVisibilityOverrides).length > 0
+    const hasSourceBoundEditorIntent = Object.keys(featureVisibilityOverrides).length > 0
+      || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
+      || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
+    const sourceReplaced = !isReflow && hasSourceBoundEditorIntent
       && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
         .some(feature => !isCurrentFeature(feature));
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
@@ -4459,6 +4462,7 @@ export const createRunAnalysis = ({
             'run-analysis sanitize and reapply editor overrides',
             () => prepareCandidateCommit({
               generationResponse,
+              sourceReplaced,
               catalogAdmission: candidateCatalogAdmission,
               results: res,
               catalog: candidateCatalog,
@@ -4705,7 +4709,7 @@ export const createRunAnalysis = ({
           await restoreCommittedArtifact();
           return { status: 'stale' };
         }
-        const removedVisibilityTargets = visibilitySourceChanged && reconcileFeatureVisibilityOverrides(
+        const removedVisibilityTargets = sourceReplaced && reconcileFeatureVisibilityOverrides(
           featureVisibilityOverrides,
           candidateBiologicalFeatures,
           workingExtractedFeatures,

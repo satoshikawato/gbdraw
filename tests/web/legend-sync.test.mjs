@@ -375,4 +375,27 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(strokeActions.reconcileStrokeOverrides({
     changes: [{ path: ['editorState', 'legend', 'entries', '0', 'caption'] }]
   }), false);
+
+  // The generated inventory follows the current diagram, independently of
+  // explicitly owned rows and the default order of surviving categories.
+  state.legendEntries.value = [];
+  state.originalLegendOrder.value = ['Alpha', 'Beta'];
+  state.deletedLegendEntries.value = [{ caption: 'Deleted', originalCaption: 'Deleted' }];
+  state.originalLegendOrder.value.push('Deleted');
+  featureLegend.children.forEach(entry => { entry.parentElement = null; });
+  featureLegend.children = [];
+  featureLegend.appendChild(mockLegendEntry('Gamma', '#334455', 0));
+  featureLegend.appendChild(mockLegendEntry('Beta', '#445566', 70));
+  const manual = mockLegendEntry('Manual', '#884422', 140);
+  manual.setAttribute('data-legend-owner', 'direct-editor');
+  featureLegend.appendChild(manual);
+  actions.extractLegendEntries();
+  assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted', 'Gamma']);
+  assert.deepEqual(state.legendEntries.value.map(e => e.caption), ['Gamma', 'Beta', 'Manual']);
+  actions.extractLegendEntries();
+  assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted', 'Gamma']);
+  featureLegend.children[0].remove();
+  actions.extractLegendEntries();
+  assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted']);
+  assert.deepEqual(state.legendEntries.value.map(e => e.caption), ['Beta', 'Manual']);
 }
