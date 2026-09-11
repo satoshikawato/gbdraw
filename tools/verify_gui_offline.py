@@ -502,7 +502,7 @@ def _verify_exports(page) -> None:
 def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
     setup_state = page.evaluate(
         """
-        ({ leftText, rightText }) => {
+        async ({ leftText, rightText }) => {
           const app = window.__GBDRAW_APP__;
           app.mode = 'linear';
           app.lInputType = 'gb';
@@ -519,7 +519,7 @@ def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
             'gb',
             new File([rightText], 'SARS-CoV-1.gbk', { type: 'text/plain' })
           );
-          app.setLinearComparisonGlobalAction('losat');
+          await app.setLinearComparisonGlobalAction('losat');
           if (!app.setLinearComparisonLosatMode('blastn')) {
             throw new Error('Could not select the current Linear LOSAT nucleotide mode.');
           }
