@@ -140,9 +140,11 @@ legend production changes.
 ## Legend implementation and verification
 
 `legend/entry-actions.js` remains the owner of editor legend extraction and its
-generated original-category inventory. Its existing extraction scan now
-reconciles `originalLegendOrder` with the admitted diagram instead of only
-initializing it once. Surviving categories retain their default relative order;
+generated original-category inventory. The existing Result binder requests
+inventory replacement for an accepted nonincremental Result; ordinary live
+extraction does not advance it. The same extraction scan reconciles
+`originalLegendOrder` with the admitted diagram instead of only initializing
+it once. Surviving categories retain their default relative order;
 explicitly deleted rows retain their restore intent. New generated categories
 are admitted into that same inventory. No second category cache or feature
 catalog is introduced.
@@ -162,6 +164,21 @@ binding control remains strict. Explicit deletion is idempotent while its
 category is absent and keeps the existing user-facing restore contract.
 `svg-result-ingestion.js` applies these plan capabilities using its existing
 lazy legend index; it adds no parsing or scan to an empty mutation plan.
+
+The G2 return control exposed a separate condition in that same candidate-plan
+owner: style replay iterated only current legend rows, so a saved category color
+was skipped on its first returning Generate. Style operations now come directly
+from the existing `legendColorOverrides`/`legendStrokeOverrides` maps and resolve
+against the admitted SVG without inventing entries. A dormant style may therefore
+require the existing mutation parse even when it finds no current category;
+the path without style intent and the empty-plan path remain unchanged.
+
+Supported generated-category rename uses `feature-editor/color-actions.js` and
+the existing specific-rule/feature-group intent. Its matcher rows survive B and
+name the category again when matching A features return. Category styles remain
+in their existing maps; deletion remains in `deletedLegendEntries` for Restore
+and continues to suppress the returning category. These representations and
+lifetimes are preserved rather than normalized into a new legend identity.
 
 This is `IMPLEMENT_EXISTING_AUTHORITY`: current generated-category membership,
 the existing manual Add/Restore contract, and the session's source-replacement
@@ -184,10 +201,17 @@ compatibility paths do not increase. Normal revert is sufficient for rollback.
 The retained M20 passes after the inventory correction. Added browser coverage
 exercises L1–L8, common category/different feature identity, manual rows,
 customized absent categories, rejected replacement, and Save/fresh Load.
+G1 compares the complete legend state and layout preferences plus digests of all
+Results, the mounted SVG, and canonical request across rejection. G2 returns to
+A after fresh loading B and verifies rename, an independent category color,
+and deletion on the first Generate. G3 verifies the explicitly owned row in B
+after Save/fresh Load and regeneration. No visibility-owner implementation or
+session format is changed by these boundary refinements.
 Deterministic tests cover inventory replacement, default-order retention,
 manual ownership, deleted-row intent, absent-category admission, and strict
 unchanged-source rejection. Local verification passes both original journeys,
-the two L1–L8/manual-row browser cases, seven visibility/composition browser
-controls, 405 fast Web contracts, and 137 architecture contracts. The policy
+all 35 selected browser cases covering L1–L8, G1–G3, V1–V8, and the closed
+05A2/05A4 neighbors; 29 focused legend/admission checks; 407 fast Web contracts;
+and 137 architecture contracts. The policy
 result is Gate PASS, Review CLEAR. Final exact-head and hosted results are
 recorded in the session handoff.

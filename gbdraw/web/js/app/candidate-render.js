@@ -239,48 +239,6 @@ const compilePlanBundle = ({
         yPos: entry.yPos
       });
     }
-    const targetCaption = isOriginal ? entry.originalCaption : entry.caption;
-    const legendRenderedIds = entry.featureIds.length > 0
-      ? entry.featureIds
-      : [...(renderedIdsByDirectCaption.get(entry.caption) || [])];
-    const allowMissing = (sourceReplaced && isOriginal) || rendererDerivedCaptions.has(entry.caption)
-      && (
-        legendRenderedIds.length === 0
-        || legendRenderedIds.every((renderedId) => hiddenRenderedIds.has(renderedId))
-      );
-    if (
-      hasOwn(legendColorOverrides, entry.caption)
-      && !deletedCaptions.has(entry.originalCaption)
-    ) {
-      const color = normalizePaint(legendColorOverrides[entry.caption], 'legend color');
-      if (color) {
-        addToResults(operationsByResult, allResultIndexes, 'legendFills', {
-          caption: targetCaption,
-          color,
-          allowMissing
-        });
-      }
-    }
-    const stroke = legendStrokeOverrides?.[entry.caption];
-    if (stroke && typeof stroke === 'object' && !deletedCaptions.has(entry.originalCaption)) {
-      const strokeColor = hasOwn(stroke, 'strokeColor')
-        ? normalizePaint(stroke.strokeColor, 'legend stroke color')
-        : '';
-      const strokeWidth = hasOwn(stroke, 'strokeWidth')
-        ? normalizeStrokeWidth(stroke.strokeWidth)
-        : null;
-      if (strokeColor || strokeWidth !== null) {
-        addToResults(operationsByResult, allResultIndexes, 'legendStrokes', {
-          caption: targetCaption,
-          strokeColor,
-          strokeWidth,
-          allowMissing,
-          renderedIds: legendRenderedIds.filter((renderedId) => (
-            renderedResultIndexes(catalogAdmission, renderedId).size > 0
-          ))
-        });
-      }
-    }
     if (
       originalCaptions.size > 0
       && !isOriginal
@@ -296,6 +254,37 @@ const compilePlanBundle = ({
           yPos: entry.yPos
         });
       }
+    }
+  });
+
+  // Category style preferences outlive the current generated entry projection.
+  // Apply a returning category's preference without synthesizing a manual row.
+  const entriesByCaption = new Map(currentEntries.map(entry => [entry.caption, entry]));
+  const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
+  styledCaptions.forEach(caption => {
+    const entry = entriesByCaption.get(caption);
+    const originalCaption = entry?.originalCaption || caption;
+    if (deletedCaptions.has(originalCaption)) return;
+    const isOriginal = originalCaptions.has(originalCaption);
+    const targetCaption = isOriginal ? originalCaption : caption;
+    const legendRenderedIds = entry?.featureIds.length > 0
+      ? entry.featureIds : [...(renderedIdsByDirectCaption.get(caption) || [])];
+    const allowMissing = !entry || (sourceReplaced && isOriginal) || (rendererDerivedCaptions.has(caption)
+      && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
+    if (hasOwn(legendColorOverrides, caption)) {
+      const color = normalizePaint(legendColorOverrides[caption], 'legend color');
+      if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', {
+        caption: targetCaption, color, allowMissing
+      });
+    }
+    const stroke = legendStrokeOverrides[caption];
+    if (stroke && typeof stroke === 'object') {
+      const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
+      const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
+      if (strokeColor || strokeWidth !== null) addToResults(operationsByResult, allResultIndexes, 'legendStrokes', {
+        caption: targetCaption, strokeColor, strokeWidth, allowMissing,
+        renderedIds: legendRenderedIds.filter(id => renderedResultIndexes(catalogAdmission, id).size > 0)
+      });
     }
   });
 

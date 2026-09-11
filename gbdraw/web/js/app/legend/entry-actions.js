@@ -763,7 +763,7 @@ export const createLegendEntryActions = ({
     }
   };
 
-  const extractLegendEntries = () => {
+  const extractLegendEntries = ({ replaceGeneratedInventory = false } = {}) => {
     if (!svgContainer.value) {
       legendEntries.value = [];
       return;
@@ -849,16 +849,18 @@ export const createLegendEntryActions = ({
 
     legendEntries.value = visuallySortedEntries;
 
-    // Keep the default order for surviving categories and user-deleted rows,
-    // while replacing the generated inventory as the effective diagram changes.
-    const retainedCaptions = new Set([
-      ...generatedCaptions,
-      ...deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
-    ]);
-    originalLegendOrder.value = [...new Set([
-      ...originalLegendOrder.value.filter(caption => retainedCaptions.has(caption)),
-      ...visuallySortedEntries.map(entry => entry.originalCaption).filter(caption => generatedCaptions.has(caption))
-    ])];
+    if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {
+      // Keep default order and deletion intent; live editor extraction alone
+      // must not advance the accepted generated inventory.
+      const retainedCaptions = new Set([
+        ...generatedCaptions,
+        ...deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
+      ]);
+      originalLegendOrder.value = [...new Set([
+        ...originalLegendOrder.value.filter(caption => retainedCaptions.has(caption)),
+        ...visuallySortedEntries.map(entry => entry.originalCaption).filter(caption => generatedCaptions.has(caption))
+      ])];
+    }
 
     if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
       visuallySortedEntries.forEach((entry) => {

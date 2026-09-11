@@ -1903,7 +1903,9 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
-      legendActions.extractLegendEntries();
+      legendActions.extractLegendEntries({
+        replaceGeneratedInventory: !context.bindingOptions.isIncrementalEdit
+      });
     },
     bindComposition(context) {
       if (context.bindingOptions.trustedRestore) return;

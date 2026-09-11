@@ -83,7 +83,7 @@ assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+state\.skipPo
 const sessionLegendSyncSource = appSetupSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
-assert.match(sessionLegendSyncSource, /extractLegendEntries\(\)/);
+assert.match(sessionLegendSyncSource, /extractLegendEntries\(\{\s*replaceGeneratedInventory: !context\.bindingOptions\.isIncrementalEdit/);
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
 assert.match(configSource, /entries: normalizeSessionLegendEntries\(legend\.entries\)/);
@@ -390,12 +390,16 @@ const mockLegendEntry = (caption, color, x) => {
   manual.setAttribute('data-legend-owner', 'direct-editor');
   featureLegend.appendChild(manual);
   actions.extractLegendEntries();
+  assert.deepEqual(state.originalLegendOrder.value, ['Alpha', 'Beta', 'Deleted']);
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
   assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted', 'Gamma']);
   assert.deepEqual(state.legendEntries.value.map(e => e.caption), ['Gamma', 'Beta', 'Manual']);
   actions.extractLegendEntries();
   assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted', 'Gamma']);
   featureLegend.children[0].remove();
   actions.extractLegendEntries();
+  assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted', 'Gamma']);
+  actions.extractLegendEntries({ replaceGeneratedInventory: true });
   assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted']);
   assert.deepEqual(state.legendEntries.value.map(e => e.caption), ['Beta', 'Manual']);
 }
