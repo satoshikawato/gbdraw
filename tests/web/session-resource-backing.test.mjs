@@ -16,6 +16,8 @@ const {
   adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
+  matchesSessionResourceDescriptor,
+  releaseSessionResourceContent,
   readSessionResourceBytes,
   readSessionResourceText
 } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
@@ -426,4 +428,34 @@ test('same-length adopted, alternate-encoded and new candidates decode/hash at m
   assert.equal(metricTotal('base64EncodeCount'), 1);
   assert.equal(metricTotal('resourceIdentityHashCount'), 5);
   for (const id of ['alpha', 'beta', 'differentId']) assert.equal(metricTotal('resourceByteReadCount', id), 1);
+});
+
+
+test('composite descriptor matching preserves order, LF boundaries and immutable backing identity', () => {
+  const resources = {
+    empty: encodedDescriptor('empty.gb', ''),
+    alpha: encodedDescriptor('alpha.gb', 'a'),
+    beta: encodedDescriptor('beta.gb', 'b\r\n')
+  };
+  const components = ['alpha', 'empty', 'beta', 'alpha'].map(resourceId => ({ resourceId }));
+  const view = createCombinedSessionResourceFileView(adoptCurrentSessionResources(resources), components);
+  assert.equal(matchesSessionResourceDescriptor(view, resources.alpha), true);
+  for (const text of ['a\nb\r\nc\n', 'b\r\na\na\n', 'ab\r\na\n', 'a\nb\r\na']) {
+    assert.equal(matchesSessionResourceDescriptor(view, encodedDescriptor('combined.gb', text)), false);
+  }
+  const combined = encodedDescriptor('combined.gb', 'a\nb\r\na\n');
+  resetMetrics();
+  assert.equal(matchesSessionResourceDescriptor(view, combined), true);
+  assert.equal(metricTotal('base64DecodeCount'), 5);
+  const decoded = metricTotal('decodedByteCount');
+  releaseSessionResourceContent(view);
+  for (let index = 0; index < 20; index += 1) {
+    assert.equal(matchesSessionResourceDescriptor(view, { ...combined, name: 'renamed.gb' }), true);
+  }
+  assert.equal(metricTotal('base64DecodeCount'), 5, 'verified descriptor matching needs no repeated decoding');
+  assert.equal(metricTotal('decodedByteCount'), decoded);
+  assert.equal(matchesSessionResourceDescriptor(view, encodedDescriptor('combined.gb', 'a\nb\r\nc\n')), false);
+  const replaced = createCombinedSessionResourceFileView(adoptCurrentSessionResources({ ...resources,
+    alpha: encodedDescriptor('alpha.gb', 'c') }), components);
+  assert.equal(matchesSessionResourceDescriptor(replaced, combined), false);
 });

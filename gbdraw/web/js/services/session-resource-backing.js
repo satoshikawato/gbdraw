@@ -338,6 +338,46 @@ export const isSessionResourceFileView = (file) => Boolean(
   && fileViewBackings.has(file)
 );
 
+export const matchesSessionResourceDescriptor = (file, descriptor) => {
+  const backing = fileViewBackings.get(file);
+  // Native Files remain bound by the successful run's object identity.
+  if (!backing || backing.dirty) return true;
+  if (!descriptor) return false;
+  const matches = (entry) => entry?.encoding === descriptor.encoding
+    && entry?.data === descriptor.data;
+  if (matches(backing.descriptor)) return true;
+  if (!backing.sourceBackings) return false;
+  if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;
+  if (descriptor.encoding !== 'base64' || descriptor.size !== backing.size) return false;
+
+  const decode = (entry) => {
+    recordStructuralMetric('base64DecodeCount', 1, {
+      resourceId: entry.resourceId, resourceName: entry.name
+    });
+    const binary = atob(entry.descriptor.data);
+    recordStructuralMetric('decodedByteCount', binary.length, {
+      resourceId: entry.resourceId, resourceName: entry.name
+    });
+    return binary;
+  };
+  const combined = decode({ ...backing, descriptor });
+  if (combined.length !== descriptor.size) return false;
+  let offset = 0;
+  for (const part of backing.sourceBackings) {
+    const binary = decode(part);
+    if (binary.length !== part.size || !combined.startsWith(binary, offset)) return false;
+    offset += binary.length;
+    if (binary.length && binary.charCodeAt(binary.length - 1) !== LF_BYTE) {
+      if (combined.charCodeAt(offset++) !== LF_BYTE) return false;
+    }
+  }
+  if (offset !== combined.length) return false;
+  // The immutable composite's existing descriptor slot can now reference its
+  // verified serialized representation, without retaining decoded content.
+  backing.descriptor = descriptor;
+  return true;
+};
+
 export const sessionResourceSource = (file) => {
   const backing = fileViewBackings.get(file);
   if (!backing || backing.dirty) return null;
