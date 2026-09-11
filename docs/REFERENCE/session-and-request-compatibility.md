@@ -33,6 +33,11 @@ Generate deliberately preserves the newer draft alongside the earlier Result. Lo
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
 
+Fresh CLI sessions omit `config` because they have no independent Web draft.
+Web initializes their settings from `renderRequest` and restores original input
+files from their bindings. A present `config` must contain valid `form` and `adv`
+objects; a partial draft is rejected. CLI replay preserves a supplied Web draft.
+
 The Web file inventory uses binding schema 2. An explicit composite `c_gb`
 restores one editable GenBank File from ordered component resource bindings.
 Each component retains its own filename, MIME type, modification time and exact

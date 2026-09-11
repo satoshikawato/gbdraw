@@ -2497,8 +2497,7 @@ def build_session_json(
 
     config = payload.get("config")
     if not isinstance(config, dict):
-        config = {"adv": {}}
-        payload["config"] = config
+        config = {}
     elif source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         migrated_config = migrate_persisted_web_state_field_names(config)
         assert isinstance(migrated_config, dict)

@@ -25,6 +25,8 @@ export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
 });
 
 const WEB_EDITOR_UI_FIELDS = Object.freeze([
+  'cInputType',
+  'lInputType',
   'zoom',
   'canvasPan',
   'canvasPadding',
@@ -278,6 +280,14 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   }
   if (Number(version) >= 40) {
     validateCurrentComparisonAuthority(sessionData);
+    for (const field of ['cInputType', 'lInputType']) {
+      if (
+        Object.prototype.hasOwnProperty.call(sessionData.ui || {}, field)
+        && !['gb', 'gff'].includes(sessionData.ui[field])
+      ) {
+        throw new Error(`Session ui.${field} must be gb or gff when present.`);
+      }
+    }
     if (
       Object.prototype.hasOwnProperty.call(sessionData, 'features')
       && !isPlainObject(sessionData.features)

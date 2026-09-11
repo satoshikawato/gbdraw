@@ -1529,7 +1529,7 @@ const preflightSessionImport = (rawData) => {
   )
     ? { ...data.renderRequest, comparisons: [] }
     : data.renderRequest;
-  const runtimeStoredConfig = currentSession
+  const runtimeStoredConfig = currentSession && Object.prototype.hasOwnProperty.call(data, 'config')
     ? migrateImportedLinearTrackSlots(
         migrateImportedCircularTrackSlots(data.config),
         sourceSessionVersion
@@ -1594,7 +1594,8 @@ const preflightSessionImport = (rawData) => {
       data.files = migratedComparisonDraft.filesData;
     }
   }
-  if (canonicalProjection && sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
+  if (canonicalProjection && sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
+    && Object.prototype.hasOwnProperty.call(data, 'config')) {
     recordSessionLifecycleEvent('current-draft-validation-start');
     restoredConfig = restoreCurrentWriterActiveConfig({
       mode: canonicalProjection.mode,
@@ -4076,10 +4077,9 @@ export const importSession = async (e, options = {}) => {
       } else {
         state.lInputType.value = canonicalProjection.inputType;
       }
-    } else {
-      if (ui.cInputType) state.cInputType.value = ui.cInputType;
-      if (ui.lInputType) state.lInputType.value = ui.lInputType;
     }
+    if (ui.cInputType) state.cInputType.value = ui.cInputType;
+    if (ui.lInputType) state.lInputType.value = ui.lInputType;
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
     // The mode watcher clears feature/editor state. Let that reset finish before
     // restoring session-owned metadata such as extractedFeatures.

@@ -1204,6 +1204,7 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     source["version"] = 33
     source.get("webFiles", {}).pop("bindings", None)
     source["renderRequest"]["schema"] = 2
+    source["config"] = {"form": {}, "adv": {}}
     source["config"]["adv"]["depth_tick_interval"] = 10
     source["config"]["adv"]["depth_tracks"] = [{"tick_interval": 5}]
     source["config"]["losat"] = {
@@ -1448,6 +1449,7 @@ def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
     )
     source["version"] = 33
     source.get("webFiles", {}).pop("bindings", None)
+    source["config"] = {"form": {}, "adv": {}}
     source["config"]["blastSource"] = "upload"
     source["config"]["linearRecordLayout"] = {
         "enabled": True,
@@ -1596,7 +1598,7 @@ def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
         generated_at=datetime(2026, 7, 21),
         canonical_request=_canonical_request("linear"),
     )
-    payload["config"]["blastSource"] = "losat"
+    payload["config"] = {"form": {}, "adv": {}, "blastSource": "losat"}
     with pytest.raises(ValidationError, match="retired blastSource"):
         validate_session(payload)
 
@@ -1629,7 +1631,7 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
         generated_at=datetime(2026, 8, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"]["adv"][field] = []
+    payload["config"] = {"form": {}, "adv": {field: []}}
 
     with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
         validate_session(payload)
@@ -1648,6 +1650,7 @@ def test_current_comparison_authority_validates_file_bindings() -> None:
         canonical_request=_canonical_request("linear"),
     )
     resource_id = next(iter(payload["resources"]))
+    payload["config"] = {"form": {}, "adv": {}}
     payload["config"]["linearComparisonPlan"] = {
         "mode": "selected",
         "defaultSource": "losat",
@@ -1976,7 +1979,7 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
         canonical_request=_canonical_request(mode),
     )
 
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
     assert payload["cliInvocation"]["args"][-6:] == [
         "--feature_shape",
         "CDS=arrow",
@@ -2761,7 +2764,7 @@ def test_cli_session_keeps_hidden_scale_in_canonical_request(
         ),
     )
 
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
     assert payload["cliInvocation"]["args"] == args
     assert (
         payload["renderRequest"]["diagramOptions"]["config"]["objects"]["scale"][
@@ -2822,7 +2825,7 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
 
     assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
     assert payload["cliInvocation"]["args"] == list(args)
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
 
 
 def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
@@ -2876,7 +2879,7 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert payload["resources"]
     assert payload["orthogroupState"] == {}
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
     assert payload["cliInvocation"]["args"] == list(args)
 
 
@@ -3112,6 +3115,44 @@ def test_schema1_frozen_main_writer_is_preserved(tmp_path):
     write_session_json(output, payload)
     assert load_session(output)['webFiles']['bindings'] == payload['webFiles']['bindings']
     assert payload['webFiles']['bindings']['schema'] == 1
+
+
+@pytest.mark.parametrize("modified", [0, 0.5])
+def test_cli_composite_inventory_preserves_equal_byte_occurrences_and_metadata(
+    tmp_path, monkeypatch, modified
+):
+    import gbdraw.cli_utils.session as cli_session
+
+    first, second = tmp_path / "first.gb", tmp_path / "second.gb"
+    first.write_bytes(b"same bytes\n")
+    second.write_bytes(first.read_bytes())
+    monkeypatch.setattr(cli_session, "serialize_file_entry", lambda path, **_kwargs: {
+        **_file_entry("", Path(path).read_bytes()), "type": "", "lastModified": modified,
+    })
+    files, provenance = collect_embedded_files_from_cli_args(
+        "circular", ["--gbk", str(first), str(second), str(first)]
+    )
+    composite = files["c_gb"]
+    assert len(composite["components"]) == 3
+    assert [binding.name for binding in provenance] == ["first.gb", "second.gb", "first.gb"]
+    for index, binding in enumerate(provenance):
+        assert binding.slot == f"files.c_gb.components[{index}]"
+        assert session_io_module.get_session_slot({"files": files}, binding.slot) == composite["components"][index]
+    payload = build_session_json(
+        SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
+        svg_results=[], embedded_files=files, generated_at=datetime(2026, 9, 11),
+        canonical_request=_canonical_request("circular"),
+    )
+    actual = payload["webFiles"]["bindings"]["c_gb"]
+    assert {key: actual[key] for key in ("name", "type", "lastModified")} == {
+        "name": "", "type": "", "lastModified": modified,
+    }
+    assert len(actual["components"]) == 3
+    for component in actual["components"]:
+        assert {key: component[key] for key in ("name", "type", "lastModified")} == {
+            "name": "", "type": "", "lastModified": modified,
+        }
+        assert base64.b64decode(payload["resources"][component["resourceId"]]["data"]) == first.read_bytes()
 
 
 def test_schema2_composite_load_write_preserves_order_and_metadata(tmp_path):

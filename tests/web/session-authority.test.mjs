@@ -31,6 +31,7 @@ const session = {
   format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',
   renderRequest: {}, resources: {}, webFiles: {}, config: {}, files: {},
   ui: {
+    cInputType: 'gff', lInputType: 'gb',
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
     canvasPan: { x: 3, y: 4 }, generatedLegendPosition: 'right', downloadDpi: 300,
     linearTypographyLinked: false,
@@ -69,6 +70,15 @@ const currentSession = {
 };
 delete currentSession.files;
 assert.doesNotThrow(() => validateSessionAuthorityInventory(currentSession, 40));
+for (const field of ['cInputType', 'lInputType']) {
+  assert.throws(
+    () => validateSessionAuthorityInventory({
+      ...currentSession,
+      ui: { ...currentSession.ui, [field]: 'unknown' }
+    }, 40),
+    new RegExp(`Session ui.${field} must be gb or gff`)
+  );
+}
 const currentWebDraft = {
   ...currentSession,
   resources: {
@@ -299,6 +309,8 @@ assert.throws(
   /requires a feature catalog for saved results/
 );
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
+  cInputType: 'gff',
+  lInputType: 'gb',
   legend: 'left',
   linearPlotTitlePosition: 'top',
   zoom: 1.5,
