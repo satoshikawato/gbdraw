@@ -195,7 +195,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear');"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
               {"type": "wait", "ms": 300}
             ],
@@ -236,7 +236,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear');"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); }"
               },
               {"type": "wait", "ms": 300}
             ],
@@ -279,7 +279,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearColorMode = 'orientation_identity';"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearColorMode = 'orientation_identity'; }"
               }
             ],
             "assertAppState": {
@@ -317,7 +317,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); const blastp = app.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxUnitGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`);"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); const blastp = app.losat?.blastp; if (Number(blastp?.collinearMinAnchors) !== 3 || Number(blastp?.collinearMaxUnitGap) !== 2 || Number(blastp?.collinearMaxDiagonalDrift) !== 2 || blastp?.collinearColorMode !== 'orientation_identity' || blastp?.collinearSearchScope !== 'adjacent') throw new Error(`Restored collinear settings do not match the tutorial: ${JSON.stringify(blastp)}`); }"
               }
             ],
             "assertAppState": {
@@ -352,7 +352,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearMaxDiagonalDrift = 2;"
+                "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('collinear'); app.losat.blastp.collinearMaxDiagonalDrift = 2; }"
               },
               {
                 "type": "waitForFunction",

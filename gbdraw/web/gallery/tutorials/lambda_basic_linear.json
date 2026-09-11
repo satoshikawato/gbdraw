@@ -142,7 +142,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('none');"
+                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('none'); }"
               }
             ],
             "selector": "[data-linear-comparison-card]",

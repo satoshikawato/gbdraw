@@ -1,9 +1,20 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-09
+Last updated: 2026-09-11
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Comparison commands in History (05A4-02)
+
+Keep the existing comparison-operation media, captions, values, and crops in
+the six Linear tutorials. Their capture scripts now await the comparison
+History transaction before setting LOSAT modes or reading its state. This
+changes execution ordering only; the declared screenshot state is unchanged.
+Replay verified all 23 affected operations. Visual comparison also found
+pre-existing image drift in additional comparison/collinear controls and the
+Vibrio selected-pair count. Those images are retained under this session's
+History-only scope; this entry does not accept them as a completed image refresh.
 
 ## Annotation TSV download reconciliation
 
