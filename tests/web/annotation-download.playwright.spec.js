@@ -29,7 +29,7 @@ const snapshot = (page) => page.evaluate(async () => {
 });
 
 for (const width of [1440, 390]) {
-  test(`@pr-smoke annotation TSV download/re-import and Python round-trip offline (${width}px)`, async ({ page, browser }, testInfo) => {
+  test(`annotation TSV download/re-import and Python round-trip offline (${width}px)`, async ({ page, browser }, testInfo) => {
     test.setTimeout(180000);
     await page.setViewportSize({ width, height: 960 });
     const external = [];

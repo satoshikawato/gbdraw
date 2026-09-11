@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 for (const mode of ['circular', 'linear']) {
-  test(`@pr-smoke ${mode} draft placement capability survives history and dirty session restore`, async ({ browser }, testInfo) => {
+  test(`${mode} draft placement capability survives history and dirty session restore`, async ({ browser }, testInfo) => {
     test.setTimeout(240000);
     const external = [];
     let context;

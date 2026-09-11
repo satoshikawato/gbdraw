@@ -1,69 +1,57 @@
 const freeze = (value) => Object.freeze(value);
 
-export const IMPACT_PLAN_SCHEMA_VERSION = 1;
+export const IMPACT_PLAN_SCHEMA_VERSION = 2;
 
+// Ordered only for the summary label. Routing unions every affected capability.
 export const IMPACT_CLASSES = freeze([
-  'metadata',
-  'documentation',
-  'full'
+  'metadata', 'documentation', 'tests-only', 'python-core', 'renderer',
+  'web-runtime', 'session-persistence', 'gallery', 'losat-integration',
+  'packaging', 'ci-only', 'full'
 ]);
-
 export const IMPACT_DECISIONS = freeze(['selective', 'full']);
-
 export const IMPACT_PLAN_BASES = freeze([
-  'FULL_CHANGE',
-  'UNKNOWN_OR_INVALID_CHANGE',
-  'MANUAL_FULL_RUN',
-  'ARCHITECTURE_CHANGE',
-  'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
-  'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE',
-  'INHERITED_EVIDENCE_UNAVAILABLE'
+  'FULL_CHANGE', 'UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN',
+  'ARCHITECTURE_CHANGE', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
+  'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE'
 ]);
 
+const PR_JOBS = freeze([
+  'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
+  'web-contracts-pr', 'web-pr-smoke'
+]);
+const DEV_JOBS = freeze([
+  'web-change-budget', 'core', 'recipes-standard', 'gallery', 'browser',
+  'playwright-functional', 'playwright-performance', 'lint',
+  'losat-cache-browser-acceptance'
+]);
 const PROFILE_REQUIRED_JOBS = freeze({
-  pr: freeze({
-    selective: freeze({
-      metadata: freeze([]),
-      documentation: freeze(['recipes-standard'])
-    }),
-    full: freeze([
-      'web-change-budget',
-      'core-pr',
-      'recipes-standard',
-      'gallery',
-      'lint',
-      'web-pr-smoke'
-    ])
-  }),
-  dev: freeze({
-    selective: freeze({
-      metadata: freeze([]),
-      documentation: freeze(['recipes-standard'])
-    }),
-    full: freeze([
-      'web-change-budget',
-      'core',
-      'recipes-standard',
-      'gallery',
-      'browser',
-      'playwright-functional',
-      'playwright-performance',
-      'acceptance-supported-main',
-      'slow-main',
-      'lint',
-      'losat-cache-browser-acceptance'
-    ])
-  }),
-  gallery: freeze({
-    selective: freeze({
-      metadata: freeze([]),
-      documentation: freeze([])
-    }),
-    full: freeze(['browser', 'performance'])
-  })
+  pr: PR_JOBS,
+  dev: DEV_JOBS,
+  release: freeze([...DEV_JOBS, 'acceptance-supported-main', 'slow-main']),
+  gallery: freeze(['browser', 'performance'])
+});
+const PR_CAPABILITY_JOBS = freeze({
+  metadata: freeze([]),
+  documentation: freeze(['recipes-standard']),
+  'tests-only': PR_JOBS,
+  'python-core': freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  renderer: freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  'web-runtime': freeze(['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']),
+  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']),
+  'losat-integration': freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  packaging: PR_JOBS,
+  'ci-only': PR_JOBS,
+  full: PR_JOBS
 });
 
-const IMPACT_WEIGHT = freeze({ metadata: 0, documentation: 1, full: 2 });
+// Runtime changes always receive comprehensive integrated-dev/Gallery validation.
+// Control-plane, dependency, and unknown changes cannot inherit a narrower route.
+export const requiresFullCoverage = (profile, capabilities) => profile === 'release'
+  || capabilities.some((capability) => ['full', 'ci-only', 'packaging', 'tests-only'].includes(capability))
+  || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation'].includes(capability)));
+const orderedCapabilities = (capabilities) => IMPACT_CLASSES.filter((capability) => capabilities.includes(capability));
+const primaryImpact = (capabilities) => capabilities.at(-1);
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 const ROOT_MARKDOWN = /^[^/]+\.md$/;
 const METADATA_DIRECTORIES = freeze(['.agents', '.claude', '.codex', '.cursor']);
@@ -80,6 +68,7 @@ const PLAN_KEYS = freeze([
   'schemaVersion',
   'profile',
   'impact',
+  'capabilities',
   'decision',
   'basis',
   'changeBaseSha',
@@ -141,22 +130,59 @@ const isValidRepositoryPath = (path) => typeof path === 'string'
   && path.split('/').every((part) => part && part !== '.' && part !== '..');
 
 export const classifyPath = (path) => {
-  if (!isValidRepositoryPath(path)) {
-    return freeze({ path, impact: 'full', reason: 'INVALID_REPOSITORY_PATH' });
+  const classified = (impact, reason) => freeze({ path, impact, reason });
+  if (!isValidRepositoryPath(path)) return classified('full', 'INVALID_REPOSITORY_PATH');
+  // Policy documents are executable authority even though they are Markdown.
+  if (path.startsWith('.github/workflows/') || path.startsWith('tests/ci/')
+      || /^tools\/(?:ci-impact|check-web|web-(?:architecture|product|change)|check-promotion)/.test(path)
+      || /^tests\/web\/(?:architecture|product-impact|promotion-readiness).*\.test\.mjs$/.test(path)
+      || /^playwright.*\.config\.js$/.test(path)
+      || /^docs\/internal\/(?:WEB_CHANGE_POLICY|ARCHITECTURE_FITNESS_FUNCTION_RATCHET|PRODUCT_|OPTION_INTEGRITY_PRODUCT_CONTRACT|SELECTIVE_CI)/.test(path)) {
+    return classified('ci-only', 'CI_OR_POLICY_AUTHORITY');
   }
-  if (METADATA_FILES.has(path)) {
-    return freeze({ path, impact: 'metadata', reason: 'METADATA_FILE_ALLOWLIST' });
-  }
+  if (METADATA_FILES.has(path)) return classified('metadata', 'METADATA_FILE_ALLOWLIST');
   if (METADATA_DIRECTORIES.some((directory) => path.startsWith(`${directory}/`))) {
-    return freeze({ path, impact: 'metadata', reason: 'METADATA_DIRECTORY_ALLOWLIST' });
+    return classified('metadata', 'METADATA_DIRECTORY_ALLOWLIST');
   }
-  if (ROOT_MARKDOWN.test(path)) {
-    return freeze({ path, impact: 'documentation', reason: 'ROOT_MARKDOWN' });
+  if (ROOT_MARKDOWN.test(path)) return classified('documentation', 'ROOT_MARKDOWN');
+  if (path.startsWith('docs/')) return classified('documentation', 'DOCUMENTATION_TREE');
+  if (['pyproject.toml', 'setup.py', 'MANIFEST.in', 'package.json', 'package-lock.json',
+    'wrangler.toml', 'gbdraw/_build_support.py'].includes(path)
+      || path.startsWith('recipe/') || path.startsWith('gbdraw/web/vendor/')
+      || /^tools\/(?:prepare_browser_wheel|prepare_cloudflare_pages|verify_gui_offline|check_release_source)\.py$/.test(path)) {
+    return classified('packaging', 'PACKAGE_OR_DEPENDENCY_INPUT');
   }
-  if (path.startsWith('docs/')) {
-    return freeze({ path, impact: 'documentation', reason: 'DOCUMENTATION_TREE' });
+  if (path.startsWith('gbdraw/web/wasm/') || /^gbdraw\/web\/js\/.*losat[^/]*\.js$/.test(path)
+      || /^gbdraw\/(?:comparisons|losat)(?:\/|\.)/.test(path)) {
+    return classified('losat-integration', 'LOSAT_OWNER');
   }
-  return freeze({ path, impact: 'full', reason: 'FULL_BY_DEFAULT' });
+  if (path.startsWith('gbdraw/web/gallery/')
+      || /^tools\/(?:build_web_gallery|prepare_interactive_gallery_assets|refresh_gallery_sessions)\.py$/.test(path)) {
+    return classified('gallery', 'GALLERY_INPUT');
+  }
+  if (/^gbdraw\/(?:session[^/]*|api\/session)\.py$/.test(path)
+      || /^gbdraw\/web\/js\/(?:services\/(?:session[^/]*|config)|app\/(?:session[^/]*|history[^/]*))\.js$/.test(path)) {
+    return classified('session-persistence', 'SESSION_OWNER');
+  }
+  if (path === 'gbdraw/web/index.html' || /^gbdraw\/web\/js\/.*\.js$/.test(path)) {
+    return classified('web-runtime', 'WEB_SOURCE');
+  }
+  if (/^gbdraw\/(?:render|svg|diagrams|canvas|features|labels|legend|layout|tracks)\/.*\.py$/.test(path)) {
+    return classified('renderer', 'RENDERER_SOURCE');
+  }
+  if (/^gbdraw\/(?:api|config|configurators|core|io)\/.*\.py$/.test(path)
+      || /^gbdraw\/(?:__init__|cli|circular|linear)\.py$/.test(path)
+      || path.startsWith('gbdraw/data/')) {
+    return classified('python-core', 'PYTHON_SOURCE');
+  }
+  if (/^tests\/web\/.*(?:\.test\.mjs|\.playwright\.spec\.js|\.cjs)$/.test(path)) {
+    if (/\/(?:session|current-session|history)[^/]*\./.test(path)) return classified('session-persistence', 'SESSION_TEST');
+    if (/\/losat[^/]*\./.test(path)) return classified('losat-integration', 'LOSAT_TEST');
+    if (/\/gallery[^/]*\./.test(path)) return classified('gallery', 'GALLERY_TEST');
+    return classified('web-runtime', 'WEB_TEST');
+  }
+  if (path.startsWith('tests/')) return classified('tests-only', 'SHARED_OR_UNCLASSIFIED_TEST');
+  return classified('full', 'FULL_BY_DEFAULT');
 };
 
 const validScoredStatus = (status) => {
@@ -182,6 +208,7 @@ export const classifyChanges = (changes) => {
   if (!Array.isArray(changes) || changes.length === 0) {
     return freeze({
       impact: 'full',
+      capabilities: freeze(['full']),
       valid: false,
       changedPathCount: 0,
       paths: freeze([]),
@@ -195,6 +222,7 @@ export const classifyChanges = (changes) => {
     if (paths === null) {
       return freeze({
         impact: 'full',
+        capabilities: freeze(['full']),
         valid: false,
         changedPathCount: classifiedPaths.length,
         paths: freeze(classifiedPaths),
@@ -205,14 +233,10 @@ export const classifyChanges = (changes) => {
   }
 
   const invalidPath = classifiedPaths.some(({ reason }) => reason === 'INVALID_REPOSITORY_PATH');
-  const impact = classifiedPaths.reduce(
-    (current, entry) => IMPACT_WEIGHT[entry.impact] > IMPACT_WEIGHT[current]
-      ? entry.impact
-      : current,
-    'metadata'
-  );
+  const capabilities = invalidPath ? ['full'] : orderedCapabilities(classifiedPaths.map(({ impact }) => impact));
   return freeze({
-    impact: invalidPath ? 'full' : impact,
+    impact: primaryImpact(capabilities),
+    capabilities: freeze(capabilities),
     valid: !invalidPath,
     changedPathCount: classifiedPaths.length,
     paths: freeze(classifiedPaths),
@@ -220,24 +244,32 @@ export const classifyChanges = (changes) => {
   });
 };
 
-export const requiredJobsFor = ({ profile, impact, decision }) => {
+export const requiredJobsFor = ({ profile, impact, decision, capabilities = [impact] }) => {
   assertProfile(profile);
   assertImpact(impact);
   if (!IMPACT_DECISIONS.includes(decision)) {
     fail('UNKNOWN_DECISION', 'CI impact decision is not supported.', { decision });
   }
-  if (decision === 'selective' && impact === 'full') {
-    fail('INVALID_SELECTIVE_PLAN', 'A full impact cannot use selective execution.');
+  if (!Array.isArray(capabilities) || !capabilities.length
+      || capabilities.some((capability) => !IMPACT_CLASSES.includes(capability))
+      || JSON.stringify(orderedCapabilities(capabilities)) !== JSON.stringify(capabilities)
+      || primaryImpact(capabilities) !== impact) {
+    fail('INVALID_CAPABILITIES', 'Capabilities must be known, ordered, unique, and match the impact.');
   }
-  const jobs = decision === 'full'
-    ? PROFILE_REQUIRED_JOBS[profile].full
-    : PROFILE_REQUIRED_JOBS[profile].selective[impact];
-  return freeze([...jobs]);
+  if (decision === 'selective' && requiresFullCoverage(profile, capabilities)) {
+    fail('INVALID_SELECTIVE_PLAN', 'This impact requires full coverage.');
+  }
+  const all = PROFILE_REQUIRED_JOBS[profile];
+  if (decision === 'full') return freeze([...all]);
+  const selected = profile === 'pr'
+    ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability])
+    : profile === 'dev' && capabilities.includes('documentation') ? ['recipes-standard'] : [];
+  return freeze(all.filter((job) => selected.includes(job)));
 };
 
 export const knownJobsFor = (profile) => {
   assertProfile(profile);
-  return freeze([...PROFILE_REQUIRED_JOBS[profile].full]);
+  return freeze([...PROFILE_REQUIRED_JOBS[profile]]);
 };
 
 const validateInheritedEvidence = (evidence, expectedHeadSha) => {
@@ -271,9 +303,12 @@ const validateBasis = (plan) => {
   ].includes(plan.basis)) {
     fail('BASIS_DECISION_MISMATCH', 'Full decision cannot claim inherited evidence.');
   }
-  if (['FULL_CHANGE', 'UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN'].includes(plan.basis)
+  if (['UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN'].includes(plan.basis)
       && plan.impact !== 'full') {
     fail('BASIS_IMPACT_MISMATCH', 'Full or invalid change basis requires full impact.');
+  }
+  if (plan.basis === 'FULL_CHANGE' && !requiresFullCoverage(plan.profile, plan.capabilities)) {
+    fail('BASIS_IMPACT_MISMATCH', 'Full change basis requires a full-coverage impact.');
   }
   if (plan.basis === 'INHERITED_EVIDENCE_UNAVAILABLE' && plan.impact === 'full') {
     fail('BASIS_IMPACT_MISMATCH', 'Evidence fallback requires a light impact candidate.');
@@ -340,6 +375,7 @@ export const createImpactPlan = (fields) => {
     schemaVersion: IMPACT_PLAN_SCHEMA_VERSION,
     profile: fields.profile,
     impact: fields.impact,
+    capabilities: freeze([...(fields.capabilities ?? [fields.impact])]),
     decision: fields.decision,
     basis: fields.basis,
     changeBaseSha: fields.changeBaseSha,

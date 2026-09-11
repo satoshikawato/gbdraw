@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { classifyPath } from '../../tools/ci-impact-policy.mjs';
 import { PromotionReadinessError } from '../../tools/check-promotion-readiness.mjs';
 import {
   buildImpactPlan,
@@ -216,7 +217,7 @@ test('Gallery-impacting surfaces select the full Gallery profile without evidenc
       verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
     });
     assert.equal(evidenceCalls, 0, path);
-    assert.equal(outcome.plan.impact, 'full', path);
+    assert.equal(outcome.plan.impact, classifyPath(path).impact, path);
     assert.equal(outcome.plan.decision, 'full', path);
     assert.equal(outcome.plan.basis, 'FULL_CHANGE', path);
     assert.deepEqual(outcome.plan.requiredJobs, ['browser', 'performance'], path);
@@ -236,7 +237,7 @@ test('dev control-plane changes run the full profile without inherited evidence'
       verifyWorkflowEvidenceImpl: async () => { evidenceCalls += 1; }
     });
     assert.equal(evidenceCalls, 0, path);
-    assert.equal(outcome.plan.impact, 'full', path);
+    assert.equal(outcome.plan.impact, classifyPath(path).impact, path);
     assert.equal(outcome.plan.decision, 'full', path);
     assert.equal(outcome.plan.basis, 'FULL_CHANGE', path);
   }
@@ -271,8 +272,6 @@ test('dev direct-parent staging failures force the current run to full', async (
       'browser',
       'playwright-functional',
       'playwright-performance',
-      'acceptance-supported-main',
-      'slow-main',
       'lint',
       'losat-cache-browser-acceptance'
     ], code);
@@ -398,6 +397,7 @@ test('evidence verifier failures fall back to the full profile', async () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'web-contracts-pr',
     'web-pr-smoke'
   ]);
   assert.deepEqual(outcome.evidenceFailure, {
@@ -418,7 +418,7 @@ test('full changes never query inherited evidence', async () => {
     }
   });
   assert.equal(evidenceCalls, 0);
-  assert.equal(outcome.plan.impact, 'full');
+  assert.equal(outcome.plan.impact, 'ci-only');
   assert.equal(outcome.plan.basis, 'FULL_CHANGE');
 });
 
@@ -451,8 +451,6 @@ test('manual runs and architecture-change labels force full execution', async ()
       'browser',
       'playwright-functional',
       'playwright-performance',
-      'acceptance-supported-main',
-      'slow-main',
       'lint',
       'losat-cache-browser-acceptance'
     ]],
@@ -503,7 +501,7 @@ test('plan command writes one compact output line and escapes summary paths', as
   assert.equal(status, 0, stderr.value());
   const output = writes.get('/tmp/ci-impact-output');
   assert.equal(output.split('\n').filter(Boolean).length, 1);
-  assert.match(output, /^plan=\{"schemaVersion":1,/);
+  assert.match(output, /^plan=\{"schemaVersion":2,/);
   const summary = writes.get('/tmp/ci-impact-summary');
   assert.match(summary, /docs\/&lt;unsafe&gt;\\nname\.md/);
   assert.doesNotMatch(summary, /docs\/<unsafe>/);
@@ -628,6 +626,7 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
     'recipes-standard',
     'gallery',
     'lint',
+    'web-contracts-pr',
     'web-pr-smoke'
   ]) {
     const job = workflowJob(jobId);
@@ -656,8 +655,6 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
     'browser',
     'playwright-functional',
     'playwright-performance',
-    'acceptance-supported-main',
-    'slow-main',
     'lint',
     'losat-cache-browser-acceptance'
   ];
@@ -695,4 +692,54 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
   assert.match(devGate, /CI_IMPACT_EXPECTED_WORKFLOW_SHA: \$\{\{ github\.sha \}\}/);
   assert.match(devGate, /run: node tools\/ci-impact\.mjs gate/);
   assert.doesNotMatch(devGate, /test "\$\{\{ needs\./);
+});
+
+test('web PR route inherits only exact base evidence and falls back to full on API failure', async () => {
+  for (const available of [true, false]) {
+    const outcome = await buildImpactPlan({
+      configuration: configuration(), token: 'test-token',
+      runGitImpl: () => gitResult('M', 'gbdraw/web/js/app/label-editor.js'),
+      verifyWorkflowEvidenceImpl: async ({ expectedHeadSha }) => {
+        assert.equal(expectedHeadSha, SHA.base);
+        if (!available) throw new PromotionReadinessError('API_REQUEST_FAILED', 'unavailable');
+        return successfulEvidence();
+      }
+    });
+    assert.equal(outcome.plan.decision, available ? 'selective' : 'full');
+    assert.equal(outcome.plan.requiredJobs.includes('core-pr'), !available);
+    assert.ok(outcome.plan.requiredJobs.includes('web-contracts-pr'));
+    assert.ok(outcome.plan.requiredJobs.includes('web-pr-smoke'));
+  }
+});
+
+test('release dispatch is exhaustive and cannot be inferred from a routine push', async () => {
+  const outcome = await buildImpactPlan({
+    configuration: configuration({ CI_IMPACT_PROFILE: 'release', CI_IMPACT_EVENT_NAME: 'workflow_dispatch' }),
+    runGitImpl: () => { throw new Error('manual release must not classify a diff'); },
+    verifyWorkflowEvidenceImpl: () => { throw new Error('manual release cannot inherit evidence'); }
+  });
+  assert.equal(outcome.plan.profile, 'release');
+  assert.equal(outcome.plan.basis, 'MANUAL_FULL_RUN');
+  assert.ok(outcome.plan.requiredJobs.includes('acceptance-supported-main'));
+  assert.ok(outcome.plan.requiredJobs.includes('slow-main'));
+  assert.throws(() => configuration({ CI_IMPACT_PROFILE: 'release', CI_IMPACT_EVENT_NAME: 'push' }), /explicit dispatch/);
+});
+
+test('release workflow binds exhaustive matrices and package/browser contracts to its gate', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const release = job('release-gate');
+  assert.match(release, /CI_IMPACT_EXPECTED_PROFILE: release/);
+  assert.match(release, /inputs\.tier == 'release'/);
+  for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main']) {
+    assert.ok(release.includes(`      - ${id}\n`), `release gate missing ${id}`);
+  }
+  assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12"\]/);
+  assert.match(job('acceptance-supported-main'), /python-version: \["3.10", "3.12"\]/);
+  assert.match(job('acceptance-supported-main'), /surface: \["recipe", "gallery", "browser"\]/);
+  assert.match(job('slow-main'), /python-version: \["3.10", "3.11", "3.12"\]/);
+  assert.match(job('slow-main'), /-m "slow and not browser"/);
+  assert.match(job('browser'), /Run package build integration[\s\S]*-m "slow and not browser"/);
+  assert.match(job('browser'), /Run offline GUI browser contracts[\s\S]*-m "slow and browser"/);
+  assert.match(job('pr-gate'), /sparse-checkout: tools[\s\S]*node \.ci-trusted-base\/tools\/ci-impact.mjs gate/);
 });

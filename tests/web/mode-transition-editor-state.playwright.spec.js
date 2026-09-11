@@ -13,7 +13,7 @@ const labelIntent = state => ({ labels: state.labels, bulk: state.bulkLabels,
   sources: state.labelSources, visibility: state.visibility });
 
 for (const mode of ['circular', 'linear']) {
-  test(`@pr-smoke ${mode} label intent survives mode Undo/Redo and Save/Load/Generate`, async ({ browser }, testInfo) => {
+  test(`${mode} label intent survives mode Undo/Redo and Save/Load/Generate`, async ({ browser }, testInfo) => {
     test.setTimeout(360000);
     const page = await load(browser, seeds[mode]);
     let fresh;

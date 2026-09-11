@@ -1,342 +1,153 @@
-# Selective CI impact planning
-
-Status: pull-request, `dev` staging, and Gallery readiness routing are active.
-
-## Purpose
-
-gbdraw classifies each change before deciding which existing CI jobs are needed. The
-classifier is deliberately coarse and conservative. It can avoid unrelated work only
-when the changed paths are clearly lightweight and the directly preceding trusted
-revision already has successful exact-SHA aggregate evidence.
-
-The `Tests` workflow routes pull-request jobs from a plan produced by the trusted base
-revision. Pushes to `dev` use the planner from the protected branch and inherit only
-successful evidence from the direct parent commit. The `Gallery publication` workflow
-uses the same protected-branch planner and direct-parent rule for its browser and
-performance jobs.
-
-## Impact classes
-
-The three impact classes, from least to most consequential, are:
-
-1. `metadata`: repository and development-support files that do not affect the
-   application, package, Web bundle, Gallery output, or public operating instructions.
-2. `documentation`: root Markdown files and files below `docs/`. These may participate
-   in documented-contract tests, so they are not treated as no-ops.
-3. `full`: runtime, tests, dependencies, build and packaging inputs, Web and Gallery
-   files, workflow and planner control files, and every unknown path.
-
-`tools/ci-impact-policy.mjs` is the only owner of the path allowlist and profile job
-registries. The initial metadata allowlist is:
-
-- `.agents/**`, `.claude/**`, `.codex/**`, and `.cursor/**`
-- `.github/pull_request_template.md`
-- `.dockerignore`, `.gitattributes`, and `.gitignore`
-- `CITATION.cff`, `LICENSE.txt`, and `LICENSE_LIBERATION_FONTS.txt`
-
-Root `*.md` files and `docs/**` are documentation. Everything else is full by default.
-For multiple paths, the strongest class wins:
-
-```text
-metadata < documentation < full
-```
-
-Rename and copy records classify both the old and new path. Deletes classify the old
-path. Unknown Git statuses, invalid paths, malformed or empty diffs, and missing Git
-objects all fail closed to `full`.
-
-## Plans and full fallback
-
-The planner emits one versioned `ImpactPlan` JSON object. It records the profile,
-impact, decision, stable basis code, change and workflow SHAs, required job IDs,
-changed-path count, and inherited evidence when present. Job IDs, not display names or
-human-readable reason text, form the routing contract.
-
-The policy defines three profiles:
-
-- `pr`: the `Tests` workflow for a pull request into `dev`
-- `dev`: the `Tests` workflow for a push to `dev`
-- `gallery`: the `Gallery publication` workflow for a push to `dev`
-
-## Active pull-request routing
-
-When the pull-request base has successful exact-SHA `Dev staging / gate` evidence, the
-`pr` profile selects these project-owned jobs:
-
-| Pull-request impact | Jobs that run |
-| --- | --- |
-| `metadata` | `CI impact plan`, `PR / gate` |
-| `documentation` | `CI impact plan`, `Recipes standard (Python 3.11)`, `PR / gate` |
-| `full` | `CI impact plan`, `Web change budget`, `Core PR (Python 3.11)`, `Recipes standard (Python 3.11)`, `Gallery (Python 3.11)`, `Lint`, `Web PR smoke`, `PR / gate` |
-
-Documentation changes run the recipe suite because it owns documented-contract,
-tutorial, CLI reference, and session compatibility checks. A full plan keeps the six
-existing pull-request test commands unchanged.
-
-`Web base policy (trusted base)` remains a separate required check. It evaluates Web
-change policy from `pull_request_target`; it does not select tests or replace
-`PR / gate`.
-
-A full-impact change always produces a full plan without calling the GitHub Actions
-API. Manual dispatch and a pull request carrying the `architecture-change` label also
-force a full plan.
-
-A metadata or documentation candidate can be selective only after inherited evidence
-is verified. Missing, queued, in-progress, failed, cancelled, or malformed evidence;
-API errors; and insufficient token access produce `decision=full` with
-`basis=INHERITED_EVIDENCE_UNAVAILABLE`. These operational failures do not crash the
-planner. Invalid inputs, malformed schemas, unsafe output writes, and programming errors
-remain control-plane failures and do not get hidden by a full fallback.
-
-## Active dev staging routing
-
-For a push to `dev`, the planner compares `github.event.before` with the current SHA.
-When the direct parent has successful exact-SHA `Dev staging / gate` evidence, the
-`dev` profile selects these project-owned jobs:
-
-| `dev` impact | Jobs that run |
-| --- | --- |
-| `metadata` | `CI impact plan`, `Dev staging / gate` |
-| `documentation` | `CI impact plan`, `Recipes standard (Python 3.11)`, `Dev staging / gate` |
-| `full` | `CI impact plan`, all 11 staging job IDs, `Dev staging / gate` |
-
-The 11 staging job IDs and their existing commands, matrices, timeouts, and artifact
-steps are unchanged. `workflow_dispatch` always produces a full plan.
-
-The direct-parent requirement handles rapid consecutive pushes. If a later push
-cancels the parent's run, or reaches the planner before the parent completes, the
-current run cannot inherit that evidence and runs the full staging profile. This keeps
-`cancel-in-progress: true` without admitting untested runtime changes.
-
-`Dev staging / gate` validates the plan and every result from the current workflow run
-with the protected branch's `tools/ci-impact.mjs`. It always creates aggregate evidence
-for the current SHA. The promotion verifier continues to require that exact current-SHA
-job; it does not accept the parent's job directly.
-
-## Active Gallery readiness routing
-
-For a push to `dev`, the Gallery planner compares `github.event.before` with the current
-SHA. When the direct parent has successful exact-SHA `Gallery readiness / gate`
-evidence, the `gallery` profile selects these jobs:
-
-| Gallery impact | Jobs that run |
-| --- | --- |
-| `metadata` | `CI impact plan`, `Gallery readiness / gate` |
-| `documentation` | `CI impact plan`, `Gallery readiness / gate` |
-| `full` | `CI impact plan`, `Gallery browser (common 9)`, `Gallery publication performance (projection)`, `Gallery readiness / gate` |
-
-Documentation tests remain in the `Tests` workflow's recipe suite. Public Markdown and
-files under `docs/` do not change the packaged Gallery sessions, Web bundle, browser
-generation path, or performance projection, so the Gallery profile does not rerun
-either Gallery test job for those changes.
-
-The blocking `browser` job runs the common 9 Gallery parity suite. The heavyweight
-Vibrio Generate test remains available as `test:web:vibrio-generate` and continues to
-run in the separate exact-SHA main verification workflow as stress and health evidence;
-it is not part of Gallery promotion readiness. The `browser` and `performance` job IDs
-retain their timeouts and performance baseline. Every `workflow_dispatch` run is full.
-When `complete_refresh=true`, the full performance job still runs its three-trial
-projection and complete-refresh gates.
-
-`Gallery readiness / gate` validates the Gallery plan and current-run job results with
-the protected branch's shared gate validator. A selective run therefore still creates
-successful aggregate evidence for the current SHA. Promotion continues to check that
-current-SHA job rather than the inherited parent job.
-
-## Direct evidence only
-
-Selective planning inherits evidence from exactly one revision:
-
-| Profile | Evidence revision | Workflow | Aggregate job |
-| --- | --- | --- | --- |
-| `pr` | pull-request base SHA | `.github/workflows/test.yml` | `Dev staging / gate` |
-| `dev` | `github.event.before` | `.github/workflows/test.yml` | `Dev staging / gate` |
-| `gallery` | `github.event.before` | `.github/workflows/gallery-publication.yml` | `Gallery readiness / gate` |
-
-The planner reuses `verifyWorkflowEvidence()` from
-`tools/check-promotion-readiness.mjs`. It does not copy GitHub API pagination or
-workflow/job identity logic.
-
-Only the direct base or parent is eligible because it proves that every unchanged
-surface in the current revision was covered immediately before the lightweight change.
-Searching for an older green run could cross an intervening unverified runtime change.
-If the direct run was cancelled by concurrency, is still running, or did not succeed,
-the current revision runs the full profile.
-
-## Stable aggregate checks
-
-The following display names are external admission contracts and stay fixed:
-
-- `PR / gate`
-- `Dev staging / gate`
-- `Gallery readiness / gate`
-- `Promotion / gate`
-
-Each workflow continues to start on every relevant event and creates its aggregate job
-for the current SHA. Pull-request, `dev` staging, and Gallery selection happen at job
-level. Keeping the aggregate names and current-SHA jobs stable avoids branch-protection
-changes and allows the existing promotion verifier to continue checking exact staging
-evidence.
-
-Workflow-level `paths` and `paths-ignore` filters are not used. Such filters can prevent
-a required check from being created, leaving a pull request pending, and would remove
-the current-SHA aggregate evidence required for promotion.
-
-## Pull-request trust boundary
-
-A pull request is untrusted input. Candidate code is tested, but it does not decide its
-own admission route. The workflow checks out the pull-request base SHA under
-`.ci-trusted-base` and runs that revision's `tools/ci-impact.mjs` for both planning and
-aggregate validation. The planner reads Git history from the candidate repository root.
-Candidate versions of `tools/ci-impact*.mjs` remain unit-test inputs only.
-
-The bootstrap pull request ran the candidate planner only because its base had no
-helper. That exception is no longer used. If the trusted base helper is absent,
-unusable, or emits an invalid plan, `ci-impact` or `PR / gate` fails instead of guessing
-a lightweight route. Changes below `.github/workflows/**`, `tools/ci-impact*.mjs`, and
-the CI planner tests classify as full.
-
-The `pull_request_target` workflow remains separate. It checks candidate Git data with
-trusted base code and never executes the candidate checkout.
-
-## Dev trust boundary
-
-Code merged to protected `dev` is the staging control plane. Push and manual-dispatch
-plans run the current checkout's helper. A change to a workflow, planner, policy, or
-planner test classifies as `full`, so the commit that changes routing must run the full
-staging and Gallery profiles before their aggregates can succeed.
-
-This trust boundary differs from pull requests, where the candidate helper is tested
-but the base revision decides the route. The Gallery workflow creates its own `gallery`
-plan and gate; it does not consume the `Tests` workflow's `dev` plan.
-
-## Aggregate validation
-
-The shared gate validator fails closed unless:
-
-- the plan schema, profile, required job list, and workflow SHA are valid;
-- `ci-impact` succeeded;
-- every required known job exists and succeeded;
-- every unrequired known job exists and either succeeded or was skipped; and
-- any additional job either succeeded or was skipped.
-
-An unexpected failure or cancellation remains blocking even for a job the plan did not
-require. Malformed plan or `needs` JSON is also blocking.
-
-`PR / gate` runs the validator from `.ci-trusted-base`. `Dev staging / gate` and
-`Gallery readiness / gate` run the same validator from the current protected-branch
-checkout with their expected profile and the current workflow SHA.
-
-## Rollout
-
-Selective CI uses four separately reviewed stages:
-
-1. Implemented: deterministic policy, adapter, validator, tests, documentation, and
-   shadow summary.
-2. Active: selective pull-request routing with the trusted base planner and validator.
-3. Active: evidence-aware selection for exact `dev` staging runs.
-4. Active: evidence-aware selection for exact Gallery readiness runs.
-
-Each stage keeps the aggregate check names stable and can be reverted independently.
-Reverting a routing stage restores the previous full-suite conditions without a
-repository-settings change.
-
-To roll back only Gallery selection, restore the `browser` and `performance` jobs to
-their unconditional event behavior and restore the fixed two-job readiness check.
-`Gallery readiness / gate` keeps the same display name, so repository settings do not
-need to change. The planner and the other two profiles can remain active.
-
-Selective CI does not alter `.github/workflows/deploy_web.yml`, Cloudflare deployment
-triggering, or GitHub's CodeQL setup. The main workflow retains browser verification
-only; Cloudflare Workers Builds is the sole production publisher. Those systems
-remain outside the impact planner.
-
-## Observability
-
-The `CI impact plan` summary includes:
-
-- profile, impact, decision, and stable basis;
-- change base/head and workflow SHAs;
-- changed-path count and a bounded, escaped path sample;
-- planned required job IDs;
-- inherited run and aggregate links when evidence succeeds; and
-- the fallback code and bounded reason when evidence is unavailable.
-
-The `pr`, `dev`, and `gallery` summaries state that routing is active and name the
-applicable trust boundary. Tokens are never included in the plan or summary and are
-redacted from CLI diagnostics.
-
-## Troubleshooting
-
-### A lightweight change produces a full plan
-
-Check `basis` in the `CI impact plan` summary.
-
-- `FULL_CHANGE`: at least one path is outside the two light allowlists.
-- `UNKNOWN_OR_INVALID_CHANGE`: the diff was empty, malformed, unavailable, or contained
-  an unsupported status/path.
-- `MANUAL_FULL_RUN`: manual dispatch is intentionally full.
-- `ARCHITECTURE_CHANGE`: the label intentionally forces full verification.
-- `INHERITED_EVIDENCE_UNAVAILABLE`: inspect the listed evidence code and the direct
-  base/parent workflow run. Do not substitute an older successful run.
-
-### The planner job fails
-
-Run the network-free focused tests first:
-
-```bash
-node --test tests/ci/*.test.mjs
-```
-
-Then verify that every required environment value is a correctly typed string and that
-base, head, and workflow SHAs are complete object IDs. A failure to write
-`GITHUB_OUTPUT` or `GITHUB_STEP_SUMMARY` is a control-plane error, not a reason to emit a
-selective plan.
-
-### The aggregate validator fails
-
-Compare the plan profile and workflow SHA with the gate environment. Confirm that every
-known job is present in `needs`, required jobs succeeded, and unrequired jobs did not
-fail or get cancelled unexpectedly. Do not weaken the validator to accept a missing or
-skipped required job.
-
-### Consecutive dev pushes run a full profile
-
-Inspect `basis` and the evidence failure in `CI impact plan`. If the direct parent's
-`Tests` or `Gallery publication` workflow is queued, running, cancelled, failed, or
-absent, the current push must use `INHERITED_EVIDENCE_UNAVAILABLE` and run the full
-profile for that workflow. Wait for a successful direct parent before using a
-lightweight commit when selective staging is important. Do not replace the direct
-parent with an older green SHA or disable concurrency.
-
-### Pull-request jobs are all skipped
-
-Open `CI impact plan` first. If the planner failed or its `plan` output is missing,
-`PR / gate` must fail even though the six test jobs are skipped. If the plan is valid,
-compare its `requiredJobs` array with each job's result in the aggregate summary.
-
-### The trusted helper cannot run
-
-Confirm that the pull-request base SHA contains `tools/ci-impact.mjs`,
-`tools/ci-impact-policy.mjs`, and `tools/check-promotion-readiness.mjs`. Do not run the
-candidate helper as a fallback. Restore the trusted base prerequisite or keep the
-control job failing.
-
-## Policy-extension review checklist
-
-Before making a path or profile less conservative, verify all of the following:
-
-- The structural reason that the path cannot change runtime, packaging, Web, Gallery,
-  public instructions, or another independently tested surface is documented.
-- Historical changes and failures support the proposed classification.
-- The unchanged surface is covered by the exact direct-parent/base evidence contract.
-- A current-revision test owns every changed surface that will no longer use the full
-  profile.
-- Rename, copy, delete, mixed-change, unknown-path, and API-failure cases still fall back
-  safely.
-- The policy remains in `tools/ci-impact-policy.mjs`; no duplicate YAML or JSON owner is
-  introduced.
-- Existing full-profile commands, aggregate names, and promotion evidence contracts are
-  unchanged.
-- Focused policy, CLI, gate, workflow architecture, and applicable full regression tests
-  pass without network access for unit coverage.
+# CI validation tiers and impact routing
+
+`tools/ci-impact-policy.mjs` owns path classification and required job registries.
+`tools/ci-impact.mjs` reads Git changes, verifies inherited evidence, and validates
+aggregate results. Workflows execute the selected jobs; they do not duplicate the
+classification rules.
+
+## Validation tiers
+
+| Tier | Trigger | Required coverage |
+| --- | --- | --- |
+| PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; Python 3.11 primary |
+| Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in four shards, performance smoke on 3.11 |
+| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, exact-candidate Gallery readiness |
+
+PR feedback targets 5–8 minutes. Integrated functional validation targets 15–20
+minutes where practical. S11 remains intentionally expensive. The separate
+`Gallery publication` workflow retains common-nine browser parity and its
+three-trial performance projection, with the complete-refresh budget available
+through its existing explicit dispatch. Deployment stress checks also remain.
+
+`Release / gate` is CI evidence for S11, not certification of the entire release
+process. S11 still requires its candidate freeze, package install/offline and
+cross-platform evidence, complete-refresh/performance budgets, and source checks.
+The tag publication workflow and `tools/check_release_source.py` are unchanged;
+passing a tier never authorizes tagging, publication, or deployment.
+
+### Python-version coverage
+
+The inexpensive core matrix remains on 3.10/3.11/3.12 because language support,
+TOML loading (`tomli` on 3.10), dependency resolution, and package/Python APIs can
+differ by host interpreter. Browser rendering itself uses the packaged Pyodide
+interpreter, not the runner's Python version. Host-version repetition still tests
+packaging and browser-test adapters, so exhaustive recipe/Gallery/browser version
+coverage remains mandatory in release acceptance. Python 3.11 already runs each
+of those surfaces in the shared functional jobs.
+
+All non-browser slow tests move to S11, except the three package-build integration
+checks in `test_web_packaging.py`, which also run in the dev Browser job. Offline
+GUI browser contracts remain on dev, including real Linear LOSAT generation;
+recent integrated runs found failures uniquely in that path.
+
+## Changed paths → capabilities → required jobs
+
+Plans contain the ordered union of affected `capabilities`. `impact` is the
+highest-ranked display label; it does not discard other capabilities. The job
+registry unions their contributions, then emits unique jobs in registry order.
+
+| Capability | Representative paths | Selective PR jobs |
+| --- | --- | --- |
+| `metadata` | Existing development-tool allowlist, `.gitignore`, citation/licenses | No test job |
+| `documentation` | Root Markdown and `docs/`, excluding policy authority | Recipes |
+| `python-core` | Known Python core/API/config/I/O owners and data | Architecture, core, lint, Web contracts, browser smoke |
+| `renderer` | Render/SVG/diagram/canvas/features/labels/layout owners | Architecture, core, lint, Web contracts, browser smoke |
+| `web-runtime` | `gbdraw/web/index.html`, first-party JS | Architecture, Web contracts, browser smoke |
+| `session-persistence` | Python session codecs; JS session/config/history owners | Architecture, core, recipes, lint, Web contracts, browser smoke |
+| `gallery` | Gallery inputs and their generator owners | Architecture, Gallery, Web contracts, browser smoke |
+| `losat-integration` | Comparison owners, LOSAT JS/workers/Wasm | Architecture, core, lint, Web contracts, browser smoke |
+| `tests-only` | Shared fixtures/harness and unclassified tests | Full PR tier |
+| `packaging` | Dependencies, manifests, vendored runtime, packaging tools | Full PR tier |
+| `ci-only` | Workflows, planner/tests, Playwright configuration, architecture/Product authority | Full PR tier |
+| `full` | Unknown or invalid paths | Full PR tier |
+
+The full PR job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
+`gallery`, `lint`, `web-contracts-pr`, and `web-pr-smoke`.
+
+`web-contracts-pr` groups the existing fast JS contracts and non-slow Python
+browser suite, which together took approximately 65–70 seconds historically.
+`web-pr-smoke` runs only the ten selected Playwright cases. They execute in
+parallel jobs instead of sharing one 15-minute serialized budget. Both jobs keep
+independent working directories, dependency installs, wheels, and browser state.
+The contracts job also runs when the trusted plan requires `web-pr-smoke`, so the
+pre-redesign base planner still requires all three original suites during rollout.
+
+Web unit/browser tests and their helpers route to the Web, session, Gallery, or
+LOSAT capability they exercise. Adding a normal Web regression therefore does not
+force a full PR route. Shared fixtures and unclassified tests remain conservative
+because they can affect several suites. Unknown production roots also remain full;
+recognizing known subsystem owners does not make arbitrary future paths safe.
+Renames/copies classify both endpoints, deletions classify their old path, and
+malformed/empty diffs or missing Git objects fail closed.
+
+### Evidence required for selection
+
+A narrower PR route requires successful exact-SHA `Dev staging / gate` evidence
+at the PR base. No older successful SHA can substitute. API failures, missing or
+unfinished runs, cancellation, and failed/malformed evidence select the complete
+PR tier. `architecture-change`, control-plane changes, dependencies, unknown
+paths, unclassified/shared test inputs, and explicit dispatches also require the full relevant tier.
+
+Every runtime/subsystem change runs complete integrated dev and Gallery coverage.
+Only metadata/documentation changes can inherit direct-parent staging evidence:
+metadata runs no test jobs, documentation runs recipes in `Tests`, and neither
+reruns Gallery publication when exact parent Gallery readiness is successful.
+Consecutive pushes whose direct parent is unfinished/cancelled run the full tier.
+
+## Smoke inventory and regression retention
+
+Smoke retains app/Worker boot and Circular generation, Linear multi-record
+rendering, mounted Feature/Label/Legend edits, export startup, Save/Load/Generate,
+Circular and Linear mode transitions, invalid-annotation preservation, and invalid
+composite-session rejection. Full functional discovery includes every smoke case.
+
+`tests/ci/playwright-inventory.test.mjs` uses Playwright's expanded `--list` output.
+It counts nested and parameterized cases and rejects fewer than 8 or more than 12;
+counting tag strings in source missed the earlier growth to 27 cases. No assertions,
+case bodies, test timeouts, or full-functional exclusions changed in this redesign.
+The exact relocated cases and before/after counts are in the
+[measurement report](CI_TIER_REDESIGN_2026-09-11.md).
+
+The smoke config retains one worker and zero retries. Three local two-worker
+repetitions passed, but these are not repeated GitHub runner evidence. One worker
+already meets the projected target, so CI does not adopt unverified parallelism.
+Full functional CI retains four shards and its existing retry policy.
+
+## Trust and aggregate checks
+
+PR planning and `PR / gate` execute the PR base's helper under `.ci-trusted-base`.
+Candidate helpers are test inputs only. A missing or invalid base helper fails;
+there is no candidate fallback. `Web base policy (trusted base)` remains a separate
+`pull_request_target` check that treats candidate files as Git data.
+
+The redesign PR therefore receives the old base's complete PR route. New selective
+routing can take effect only after reviewed integration into protected `dev`.
+Additional contract failures also block the old gate's unknown-job validation.
+No branch protection or required external status name changes.
+
+`PR / gate`, `Dev staging / gate`, `Gallery readiness / gate`, and `Promotion / gate`
+remain stable. `Release / gate` is separate and requires every release-profile
+job, including both exhaustive matrices, plus exact-candidate Gallery readiness.
+A release dispatch cannot emit ordinary `Dev staging / gate` success.
+
+Plans use schema 2 and include the capability union. The active helper validates
+its own exact schema, profile, workflow SHA, required job list, and inherited
+evidence. It rejects missing/skipped/failed/cancelled required jobs and unexpected
+failures in optional/additional jobs. Matrix aggregates must succeed. Workflows
+start on all relevant events and filter at job level; they never use workflow
+`paths` filters that could omit an aggregate.
+
+## Verification and rollback
+
+Install locked Node dependencies, then run `node --test tests/ci/*.test.mjs` and
+`node --test tests/web/architecture-contracts.test.mjs`. For browser execution,
+prepare the browser wheel and run `npm run test:web:pr-smoke`. Full functional
+coverage remains `npm run test:web:functional-full`.
+
+The [timing CSV](CI_TIER_TIMINGS_2026-09-11.csv) records each historical job's setup,
+dependency, wheel, test, teardown, and wall-clock times with direct job URLs.
+Plans report capabilities, required jobs, evidence links, and fallback reasons.
+
+Rollback this coherent CI change together: policy, adapter, workflow, smoke tags,
+and policy/inventory contracts. Preserve trusted-base evaluation and stable gate
+names. Restoring exhaustive matrices to dev changes cost, not release criteria.
