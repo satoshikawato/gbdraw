@@ -14,7 +14,7 @@ const edit = async (page, label, value) => {
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before + 1);
 };
 
-test('Circular region restores number to Auto @pr-smoke', async ({ browser }) => {
+test('Circular region restores number to Auto', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser);
   try {
@@ -31,7 +31,7 @@ test('Circular region restores number to Auto @pr-smoke', async ({ browser }) =>
   } finally { await page.context().close(); }
 });
 
-test('rejected Circular region can Undo both edits back to valid Auto @pr-smoke', async ({ browser }) => {
+test('rejected Circular region can Undo both edits back to valid Auto', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser);
   try {
