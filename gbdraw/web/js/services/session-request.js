@@ -4168,9 +4168,18 @@ export const projectCanonicalSessionRequest = ({
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
     ? overrides.label_blacklist.join(', ')
     : String(overrides.label_blacklist || '');
+  let inputType = records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb';
+  // CLI rendering can normalize GFF records to GenBank resources. Without a
+  // saved Web draft, initialize the input selector from the original bindings.
+  if (storedConfig == null && explicitBindings) {
+    const source = renderRequest.mode === 'circular'
+      ? { gb: files.c_gb, gff: files.c_gff, fasta: files.c_fasta }
+      : files.linearSeqs[0];
+    if (!source?.gb && source?.gff && source?.fasta) inputType = 'gff';
+  }
   return {
     mode: renderRequest.mode,
-    inputType: records[0]?.source?.kind === 'gffFasta' ? 'gff' : 'gb',
+    inputType,
     files,
     config: {
       form,

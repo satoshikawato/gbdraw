@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
@@ -35,6 +35,7 @@ from gbdraw.session_io import (
     SessionFileBinding,
     _project_web_file_binding,
     build_session_json,
+    get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_persisted_web_state_field_names,
     safe_embedded_filename,
@@ -913,6 +914,7 @@ def collect_embedded_files_from_cli_args(
     files = _empty_files_payload()
     bindings: list[SessionFileBinding] = []
     circular_counts: dict[str, int] = {}
+    circular_genbank_bindings: list[int] = []
     linear_depth_track_index = 0
     circular_depth_index = 0
 
@@ -969,6 +971,8 @@ def collect_embedded_files_from_cli_args(
                     slot = f"files.c_depth[{circular_depth_index}]"
                     circular_depth_index += 1
                 _set_file_slot(files, slot, value, depth=token == "--depth_track")
+                if token == "--gbk":
+                    circular_genbank_bindings.append(len(bindings))
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
@@ -1020,6 +1024,20 @@ def collect_embedded_files_from_cli_args(
             continue
         index += 1
 
+    if len(circular_genbank_bindings) > 1:
+        components = [
+            get_session_slot({"files": files}, bindings[index].slot)
+            for index in circular_genbank_bindings
+        ]
+        files["c_gb"] = {
+            "kind": "composite",
+            "components": components,
+            **{key: components[0][key] for key in ("name", "type", "lastModified")},
+        }
+        for component_index, binding_index in enumerate(circular_genbank_bindings):
+            bindings[binding_index] = replace(
+                bindings[binding_index], slot=f"files.c_gb.components[{component_index}]"
+            )
     return files, tuple(bindings)
 
 
