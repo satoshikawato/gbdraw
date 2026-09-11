@@ -1983,6 +1983,7 @@ export const createAppSetup = () => {
     restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
     state,
+    isCurrentFeature: recordDisplayControls.isCurrentFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
       serializeActiveRenderFiles(state.mode.value, state, {
         comparisonPlan: comparisonPlanSnapshot,

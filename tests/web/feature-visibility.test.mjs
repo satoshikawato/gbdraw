@@ -19,6 +19,11 @@ await writeFile(
   await readFile(selectorSourcePath, 'utf8'),
   'utf8'
 );
+await writeFile(
+  join(tempDir, 'feature-utils.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-utils.js'), 'utf8'),
+  'utf8'
+);
 
 const {
   buildEditorFeatureVisibilityRule,

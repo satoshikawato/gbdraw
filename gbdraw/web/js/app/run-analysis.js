@@ -57,7 +57,12 @@ import {
   normalizePaletteColors
 } from './color-utils.js';
 import { serializeSpecificRules } from './file-imports.js';
-import { serializeFeatureVisibilityRules } from './feature-visibility.js';
+import {
+  buildFeatureVisibilitySelectorCache,
+  preserveFeatureVisibilitySelectorCacheForOverrides,
+  reconcileFeatureVisibilityOverrides,
+  serializeFeatureVisibilityRules
+} from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
 } from './definition-line-style-state.js';
@@ -922,6 +927,7 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 };
 export const createRunAnalysis = ({
   state,
+  isCurrentFeature,
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
@@ -1754,6 +1760,9 @@ export const createRunAnalysis = ({
       ?? extractedFeatures.value;
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
+    const visibilitySourceChanged = !isReflow && Object.keys(featureVisibilityOverrides).length > 0
+      && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
+        .some(feature => !isCurrentFeature(feature));
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -4695,6 +4704,19 @@ export const createRunAnalysis = ({
           }
           await restoreCommittedArtifact();
           return { status: 'stale' };
+        }
+        const removedVisibilityTargets = visibilitySourceChanged && reconcileFeatureVisibilityOverrides(
+          featureVisibilityOverrides,
+          candidateBiologicalFeatures,
+          workingExtractedFeatures,
+          state.featureVisibilitySelectorCache
+        );
+        if (removedVisibilityTargets > 0) {
+          state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
+            buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
+            state.featureVisibilitySelectorCache,
+            featureVisibilityOverrides
+          ));
         }
         if (typeof setGeneratedArtifactIdentity === 'function') {
           setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
