@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import math
+from collections import Counter
 from functools import lru_cache
 
 from ..features.coordinates import get_strand
+from ..features.ids import compute_feature_object_hash
 from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
 from .circular_radial import place_radial_labels
@@ -30,6 +32,7 @@ from ..svg.arrows import (
     calculate_circular_arrow_length,
     resolve_circular_arrow_head_length_bp,
 )
+from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -4559,6 +4562,10 @@ def prepare_label_list(
         if _candidate_cache is not None:
             _candidate_cache["candidates"] = candidates
     candidates_by_id = {candidate.stable_id: candidate for candidate in candidates}
+    feature_ids = {
+        key: compute_feature_object_hash(feature) for key, feature in feature_dict.items()
+    }
+    feature_id_counts = Counter(feature_ids.values())
 
     for input_order, (stable_id, feature_object) in enumerate(feature_dict.items()):
         candidate = candidates_by_id.get(str(stable_id))
@@ -4707,6 +4714,12 @@ def prepare_label_list(
             elif label_rendering == "embedded_only" and not is_embedded:
                 continue
             label_entry["label_text"] = feature_label_text
+            feature_id = feature_ids[stable_id]
+            label_entry["feature_id"] = (
+                instance_svg_id(feature_id, feature_object.source_feature_index)
+                if feature_id and feature_id_counts[feature_id] > 1
+                else feature_id
+            )
             label_entry["stable_id"] = str(stable_id)
             label_entry["input_order"] = int(input_order)
             label_entry["preferred_middle"] = float(label_middle)

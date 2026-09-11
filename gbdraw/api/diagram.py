@@ -287,6 +287,8 @@ def _resolve_diagram_options_config(
         filtering["qualifier_priority_df"] = priority
     if override_given:
         filtering["label_override_df"] = label_override
+        # A previous render may have compiled a different table on this config.
+        filtering.pop("label_override_rules", None)
     cfg = replace(
         cfg,
         labels=replace(
@@ -1026,6 +1028,10 @@ def _uniquify_copied_subtrees_ids(
                 attribs["data-gbdraw-rendered-feature-id"] = instance_svg_id(rendered_id, f"record_{record_index + 1}")
                 attribs["data-gbdraw-stable-feature-id"] = stable_id
                 attribs["data-gbdraw-record-index"] = str(record_index)
+            if bind_record_identity and attribs.get("data-label-feature-id"):
+                attribs["data-label-feature-id"] = instance_svg_id(
+                    attribs["data-label-feature-id"], f"record_{record_index + 1}"
+                )
             raw_id = attribs.get("id")
             if not isinstance(raw_id, str) or not raw_id:
                 continue
