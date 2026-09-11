@@ -95,7 +95,10 @@ outcome or persisted compatibility disposition is selected.
 Schema disposition: unchanged session version 41, request schema 7, feature
 catalog schema 3, and file-binding schema 2. The SVG attribute already exists in
 the current editor and sanitization profile. No required persisted field or
-version is added. No reference SVG or Gallery artifact is regenerated.
+version is added. Tracked geometry reference SVGs remain unchanged. Their existing
+nonvisual-attribute filter now includes the label binding; the new identity tests
+independently require and validate that binding. Gallery and affected recipe
+artifacts are regenerated through their existing owners to include the binding.
 
 ## Verification
 
@@ -115,7 +118,8 @@ full functional discovery; the ten-case PR smoke budget is unchanged.
 
 Final local results:
 
-- Core PR selection: 3,738 passed, 17 skipped (Python 3.13.3, 182 seconds).
+- Core PR selection: 3,738 passed, 17 skipped (Python 3.13.3, 95 seconds), using
+  a dedicated venv with this isolated worktree installed.
 - Focused Python labels/request suite: 142 passed, including the 13 new cases.
 - Existing read-only SVG comparisons: 16 passed; tracked references unchanged.
 - Final browser matrix and recent-fix controls: 31 passed (Chromium, 4.4 minutes).
@@ -123,8 +127,39 @@ Final local results:
   includes both nullable-region History tests.
 - Four focused JavaScript contract files passed. Missing/ambiguous label
   rejection and invalid placement controls remain unchanged.
+- Final recipe selection: 188 passed. Gallery selection: 102 passed. Python
+  browser selection: 24 passed, including the exact-replay dual-hash oracle.
+- All 33 regenerated SVGs preserve their complete previous SVG tree after
+  removing only the added label binding. The Gallery refresh changes only the
+  three affected Circular example sets and their manifest projections; Linear
+  examples and thumbnail bytes reproduce unchanged.
 - Ruff and whitespace checks passed. Local Web policy: Gate PASS, Review CLEAR,
   with no registered architecture or Product delta.
+
+PR #508's first CI run identified snapshot checks affected by the additive
+attribute: geometry references, the retained Issue #469 exact replay hash,
+recipe outputs, and Gallery arrow variants. The existing geometry-only filter
+was extended by one attribute. The exact replay test now pins the full current
+hash and also verifies that removing only the added attributes recovers the
+independently recorded historical byte hash. That browser/CLI test passes.
+The recipe and Gallery producers regenerate their affected artifacts; rendering
+and publication gates are rerun before merge. No CI policy is changed.
+
+The initial local Core/reference run resolved its CLI subprocess through the
+ambient installation, so it did not prove candidate CLI parity. It is superseded
+by `core-final-A-venv.log`, which uses a dedicated editable installation of this
+worktree and reproduces CI's CLI path. The original passing native API and
+generated-wheel browser results remain separate evidence.
+
+Artifact review separates full SVG metadata from appearance. Standard recipe
+SVG trees match their previous trees after removing the added label attributes;
+representative four-record and label-presentation figures are also pixel-identical
+at 1600-pixel width and were visually inspected. Export files whose only changes
+were existing normalized timestamps were excluded. The extended H-CLI-14 and
+H-PY-06 figures already differ in geometry from the starting producer: an isolated
+base-package reproduction matches the candidate after removing label attributes
+but differs from the tracked figure. Their pre-existing drift is out of scope,
+and those generated changes are excluded from this PR.
 
 Browser contexts block all external requests. Tests use the packaged local
 runtime assets and freshly generated browser wheel, cold session loads and

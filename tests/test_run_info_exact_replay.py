@@ -24,8 +24,10 @@ pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sessions/HmmtDNA_basic_circular.issue-469.json.gz"
 SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
-# Independently recorded in Issue #469 before the current producer existed.
-OUTPUT_SHA = "fe022818a9b6a08b52a84fd18293ae318a31b140eb0d2c1c84e847dc5cc2e71d"
+# Keep the independently recorded Issue #469 output as a second byte-level
+# oracle: the current renderer adds only explicit logical label bindings.
+LEGACY_OUTPUT_SHA = "fe022818a9b6a08b52a84fd18293ae318a31b140eb0d2c1c84e847dc5cc2e71d"
+OUTPUT_SHA = "68cb2b7670d84f1010a2a05c55e97574de1eef633354a6e7e8086cc6db2b781d"
 
 
 def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
@@ -171,6 +173,10 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
         output = work / "out.svg"
         assert output.stat().st_size > 0
         assert hashlib.sha256(output.read_bytes()).hexdigest() == OUTPUT_SHA
+        without_label_bindings = re.sub(
+            rb' data-label-feature-id="[^"]+"', b"", output.read_bytes()
+        )
+        assert hashlib.sha256(without_label_bindings).hexdigest() == LEGACY_OUTPUT_SHA
         # DOMPurify removes only this non-rendering SVG profile declaration.
         # Retain every geometry, style, label, and composition attribute.
         tree = ET.parse(output)
