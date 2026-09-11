@@ -379,8 +379,8 @@ const safeDeepMerge = (target, source) => {
       return;
     }
 
-    // 5. Update value only if types match or initial value is null
-    if (typeof targetValue === typeof sourceValue || targetValue === null) {
+    // 5. Null restores an explicit value to Auto, as well as accepting one from Auto.
+    if (typeof targetValue === typeof sourceValue || targetValue === null || sourceValue === null) {
       target[key] = sourceValue;
     }
   });

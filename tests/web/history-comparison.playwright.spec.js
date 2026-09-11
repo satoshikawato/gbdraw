@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { load, generate } = require('./helpers/mode-transition.cjs');
 
-test('comparison off has its own Undo step after a record definition edit @pr-smoke', async ({ browser }) => {
+test('comparison off has its own Undo step after a record definition edit', async ({ browser }) => {
   test.setTimeout(300000);
   const page = await load(browser, 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json');
   try {
