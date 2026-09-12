@@ -73,6 +73,7 @@ export const createDiagramResourceTransport = () => {
   };
 
   const prepare = async ({ request, resources } = {}) => {
+    const previousCachedResources = cachedResources;
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
     const stagedResources = [];
@@ -90,7 +91,7 @@ export const createDiagramResourceTransport = () => {
       const payloadIdentity = typeof descriptor.data === 'string'
         ? descriptor.data
         : owner;
-      const previous = cachedResources.get(resourceId);
+      const previous = previousCachedResources.get(resourceId);
       const cacheHit = Boolean(
         previous
         && previous.payloadIdentity === payloadIdentity
@@ -139,9 +140,11 @@ export const createDiagramResourceTransport = () => {
     return {
       resourceManifest,
       stagedResources,
-      nextCachedResources,
       commit() {
+        // A reset or another acknowledged request supersedes this preparation.
+        if (cachedResources !== previousCachedResources) return false;
         cachedResources = nextCachedResources;
+        return true;
       }
     };
   };

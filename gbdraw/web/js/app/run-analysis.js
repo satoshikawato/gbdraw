@@ -1112,14 +1112,12 @@ export const createRunAnalysis = ({
     }
   };
   const generatedArtifactTransactionOwner = Object.freeze({
-    build(ownerSet, { finalizeResourcePromotion = null, runtimeState = null } = {}) {
+    build(ownerSet, { runtimeState = null } = {}) {
       recordSessionLifecycleEvent('artifact.candidate-completed');
       recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
       return Object.freeze({
         ownerSet: Object.freeze(ownerSet),
-        runtimeState,
-        finalizeResourcePromotion:
-          typeof finalizeResourcePromotion === 'function' ? finalizeResourcePromotion : null
+        runtimeState
       });
     },
     activate(candidate, { selectedResultIndex = 0 } = {}) {
@@ -1134,9 +1132,8 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactActivationCount', 1);
       recordSessionLifecycleEvent('artifact.activation-completed', { selectedResultIndex });
     },
-    finalize(candidate) {
+    finalize() {
       recordSessionLifecycleEvent('artifact.finalization-started');
-      candidate?.finalizeResourcePromotion?.();
       recordStructuralMetric('generatedArtifactFinalizeCount', 1);
       recordSessionLifecycleEvent('artifact.finalization-completed');
     },
@@ -4592,7 +4589,6 @@ export const createRunAnalysis = ({
         const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
           candidateOwnerSet,
           {
-            finalizeResourcePromotion: generationResponse.finalizeResourcePromotion,
             runtimeState: {
               files: candidateCliHelpers?.files,
               archiveName: candidateCliHelpers?.archiveName,
@@ -4738,7 +4734,6 @@ export const createRunAnalysis = ({
           );
         }
       }
-      if (isReflow) generationResponse.finalizeResourcePromotion?.();
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -4839,7 +4834,7 @@ export const createRunAnalysis = ({
           )
         : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
-        generatedArtifactTransactionOwner.finalize(outcome.generatedArtifactCandidate);
+        generatedArtifactTransactionOwner.finalize();
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
