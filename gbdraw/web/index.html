@@ -940,7 +940,7 @@
                 background: rgba(255, 255, 255, 0.96) !important;
                 border-top: 1px solid #e2e8f0 !important;
                 box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.12) !important;
-                z-index: 60 !important;
+                z-index: 40 !important;
             }
 
             .generate-bar .btn {
@@ -4869,6 +4869,7 @@
                         </div>
                     </div>
 
+                    <Teleport to="body">
                     <!-- Feature Editor Popup -->
                     <div v-if="clickedFeature"
                          ref="featurePopupRef"
@@ -4881,8 +4882,8 @@
                          ]"
                          :style="featurePopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
-                            <div class="w-4 h-4 rounded mt-1" :style="{ backgroundColor: clickedFeature.color }"></div>
-                            <div class="min-w-0">
+                            <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
+                            <div class="min-w-0 flex-1">
                                 <div class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5">Location: {{ clickedFeatureLocation }}</div>
                                 <div v-if="clickedFeature.orthogroupId" class="text-xs text-slate-500 mt-0.5">
@@ -4900,12 +4901,12 @@
                                    :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
                                    aria-label="Feature fill color"
                                    :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
-                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl" aria-label="Close feature popup">
+                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl shrink-0" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
                         <label class="block text-xs mb-2">Feature placement
-                            <select data-history-managed aria-label="Feature placement" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="rounded border p-1">
+                            <select data-history-managed aria-label="Feature placement" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="rounded border p-1 max-w-full">
                                 <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                             </select>
                             <span class="block text-slate-500">Applied on the next successful Generate.</span>
@@ -6007,6 +6008,7 @@
                         </div>
                     </div>
 
+                    </Teleport>
                 </div>
 
                 <div v-show="resultPanelTab === 'run-info'" class="run-info-panel flex-grow overflow-auto bg-white p-4 custom-scrollbar">
