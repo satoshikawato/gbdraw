@@ -116,6 +116,16 @@ Presentation rules do not edit the input annotation. Their order is:
 A partial default-color table changes only the listed feature types. Omitted
 feature types retain their values from the selected palette.
 
+The generated feature legend reflects which specific color rules actually match
+features in the diagram. Default-colored CDS are captioned `CDS` when no specific
+CDS rule is used. When a specific CDS rule is used and default-colored CDS remain,
+the legend contains the specific caption and `other proteins` for the remainder.
+An unused rule does not change `CDS`; removing the used rule and regenerating
+restores it. Other feature types use `other <feature type>s` for the same remainder
+(for example, `other genes`). This contract also applies to Web regeneration after
+a **This feature only** color edit creates a specific rule: the default caption
+changes because its category now contains only the remaining members.
+
 Whitelist and blacklist label filters are mutually exclusive. An ordinary
 label override cannot restore a label removed by the active filter. Exact-match
 regular expressions should be anchored when a broader qualifier match would be

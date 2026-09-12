@@ -583,6 +583,57 @@ def test_resolve_candidate_feature_types_wildcard_requests_all_features() -> Non
     assert candidate_types == {"CDS"}
 
 
+@pytest.mark.parametrize(
+    ("feature_type", "rule_value", "expected"),
+    [
+        pytest.param("CDS", None, {"CDS": "#d3d3d3"}, id="L-C1-default-CDS"),
+        pytest.param(
+            "CDS", "^geneA$",
+            {"Specific A": "#b56576", "other proteins": "#d3d3d3"},
+            id="L-C2-matched-CDS-and-remainder",
+        ),
+        pytest.param("CDS", "^absent$", {"CDS": "#d3d3d3"}, id="L-C3-unused-rule"),
+        pytest.param(
+            "gene", "^geneA$",
+            {"Specific A": "#b56576", "other genes": "#d3d3d3"},
+            id="non-CDS-control",
+        ),
+    ],
+)
+def test_legend_partition_tracks_actual_rule_membership(
+    feature_type: str, rule_value: str | None, expected: dict[str, str],
+) -> None:
+    # Recompute membership from biological features, as the renderer does.
+    record = SeqRecord(Seq("A" * 300), id="legend-contract")
+    record.features = [
+        SeqFeature(FeatureLocation(10, 90), type=feature_type, qualifiers={"gene": ["geneA"]}),
+        SeqFeature(FeatureLocation(150, 240), type=feature_type, qualifiers={"gene": ["geneB"]}),
+    ]
+    defaults = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
+    rules = pd.DataFrame(
+        [] if rule_value is None else [[feature_type, "gene", rule_value, "#b56576", "Specific A"]],
+        columns=["feature_type", "qualifier_key", "value", "color", "caption"],
+    )
+
+    def regenerate(color_table: pd.DataFrame) -> dict[str, str]:
+        color_map, default_map = preprocess_color_tables(color_table, defaults)
+        used, remainder = precompute_used_color_rules(
+            record, color_map, default_map, {feature_type},
+        )
+        legend = prepare_legend_table(
+            *_legend_config_stubs(defaults, color_table),
+            [feature_type], used_color_rules=used, default_used_features=remainder,
+            show_gc=False, show_skew=False, show_depth=False,
+        )
+        return {caption: entry["fill"] for caption, entry in legend.items()}
+
+    assert regenerate(rules) == expected
+    # L-C4: removing the specific rule and regenerating restores the plain caption.
+    assert regenerate(rules.iloc[0:0]) == {feature_type: "#d3d3d3"}
+    # Restoring the rule recomputes the same semantic partition.
+    assert regenerate(rules) == expected
+
+
 def test_prepare_legend_table_falls_back_to_default_color_for_gene_other_entry() -> None:
     default_colors = pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"])
     color_table = pd.DataFrame(
