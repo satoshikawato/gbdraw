@@ -2609,7 +2609,8 @@ export const createAppSetup = () => {
   const featurePopupStyle = computed(() => {
     const style = {
       top: `${clickedFeaturePos.y}px`,
-      left: `${clickedFeaturePos.x}px`
+      left: `${clickedFeaturePos.x}px`,
+      maxHeight: `${getFeaturePopupConstraints().maxHeight}px`
     };
     if (featurePopupSize.width > 0) {
       style.width = `${featurePopupSize.width}px`;
@@ -2638,7 +2639,8 @@ export const createAppSetup = () => {
   const pairwiseMatchPopupStyle = computed(() => {
     const style = {
       top: `${clickedPairwiseMatchPos.y}px`,
-      left: `${clickedPairwiseMatchPos.x}px`
+      left: `${clickedPairwiseMatchPos.x}px`,
+      maxHeight: `${getPairwiseMatchPopupConstraints().maxHeight}px`
     };
     if (pairwiseMatchPopupSize.width > 0) {
       style.width = `${pairwiseMatchPopupSize.width}px`;
