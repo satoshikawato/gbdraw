@@ -1,10 +1,14 @@
 # Final 05A4 disposition
 
 Starting `origin/dev`: `532e423cd8404df8748fbc6d309fbeed735408a1`.
-Decision owner: maintainer. Decision date: 2026-09-12.
+Decision owner: `satoshikawato`. Decision date: 2026-09-12.
 
-This record adopts the explicit SESSION 05A12-D maintainer receipt and preserves
-the legend contract established in SESSION 05A11-P. The retained Q01 observation
+The explicit Product Decision Owner receipt is `satoshikawato`'s 2026-09-12
+message following their review of [PR #514](https://github.com/satoshikawato/gbdraw/pull/514)
+at `972967a6d603d8174d6dbee73bc30a4c06db2665`. The earlier SESSION 05A12-D request
+supplied wording for preparation; this post-review message supplies the receipt.
+This record preserves the approved Choice B semantics and the legend contract
+established in SESSION 05A11-P. The retained Q01 observation
 is a known performance limitation, not a release-blocking correctness defect.
 All known 05A4 findings now have a final disposition; confirmed implementation
 bugs remain closed. This is a disposition record, not a new acceptance run.
@@ -67,7 +71,7 @@ Accepted residual risk:
   A user may explicitly request a very dense external-label layout that
   requires a very long computation until completion or cancellation.
   No completion-time guarantee is introduced.
-Owner: maintainer
+Owner: satoshikawato
 Decision date: 2026-09-12
 ```
 
@@ -91,7 +95,7 @@ format and procedural intake. On the starting SHA, the Product Impact map has
 no Circular label-duration concern, `tools/web-product-decisions.json` has no
 active decisions, and the preauthorized Option Integrity Product Contract is
 absent. Web runtime and Session contracts retain their existing authority.
-The explicit receipt above resolves the release-disposition question left
+The post-review receipt above resolves the release-disposition question left
 `PRODUCT_DECISION_REQUIRED` in the SESSION 05A11-P scenario-revision-2 packet.
 
 This is an evidence-specific release disposition with no runtime transition or
@@ -105,7 +109,7 @@ required for Product-decision work under the Product Impact Ratchet and
 The local `gbdraw_v014_session05a11_p_evidence_2026-09-12` archive remains evidence
 input outside this PR. Its report, scenario-revision-2 decision packet and
 reviewed `changes.patch` supplied the prior diagnosis and two legend additions.
-Historical pending classifications are superseded by this explicit receipt;
+Historical pending classifications are superseded by this post-review receipt;
 the raw archive is preserved without rerunning its measurements.
 
 ## Future optimization criteria
