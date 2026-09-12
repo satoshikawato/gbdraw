@@ -783,7 +783,9 @@
             white-space: nowrap;
         }
         .result-pane {
-            --right-drawer-width: min(100vw, 360px);
+            --right-drawer-max-width: 360px;
+            --right-drawer-width: min(100vw, var(--right-drawer-max-width));
+            container-type: inline-size;
         }
         .right-drawer {
             width: var(--right-drawer-width);
@@ -1031,6 +1033,72 @@
                 gap: 0.25rem 0.75rem !important;
                 font-size: 0.75rem !important;
                 line-height: 1.35 !important;
+            }
+        }
+
+        /* Narrow Preview: keep the Editor in a side lane and let search scroll
+           above the naturally wrapped controls, including in landscape. */
+        @container (max-width: 40rem) {
+            .result-pane > [aria-label="Result Preview"] {
+                min-height: 0;
+                overflow: clip;
+                --editor-toggle-width: 2.25rem;
+                --right-drawer-width: min(var(--right-drawer-max-width), calc(100% - var(--editor-toggle-width)));
+            }
+            [aria-label="Result Preview"] > .card-header {
+                padding-right: calc(var(--editor-toggle-width) + 0.75rem);
+            }
+            .preview-viewport {
+                display: grid;
+                grid-template-rows: minmax(0, 1fr) auto;
+                gap: 0.5rem;
+                padding: 0.5rem;
+                min-height: 0;
+                isolation: isolate;
+            }
+            .preview-feature-search {
+                position: relative;
+                grid-area: 1 / 1;
+                inset: auto !important;
+                width: auto;
+                min-height: 0;
+                max-height: 100% !important;
+                overflow: auto;
+                align-self: start;
+            }
+            .preview-viewport .preview-controls {
+                position: relative;
+                grid-area: 2 / 1;
+                inset: auto !important;
+                transform: none !important;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            /* The open drawer covers the underlying controls in this narrow
+               region. Keep whole hit targets behind its edge. */
+            .preview-viewport .preview-controls--drawer-open,
+            .preview-viewport:has(.preview-controls--drawer-open) .preview-feature-search {
+                transform: translateX(max(calc(var(--editor-toggle-width) - 0.5rem), calc(100% - var(--right-drawer-max-width) + 0.5rem))) !important;
+            }
+            .preview-viewport .preview-canvas-padding {
+                position: relative;
+                grid-area: 1 / 1;
+                inset: auto;
+                transform: none;
+                place-self: end center;
+                max-height: 100%;
+                overflow: auto;
+                z-index: 31;
+            }
+            .drawer-toggle {
+                top: 0.5rem !important;
+                bottom: auto !important;
+                width: var(--editor-toggle-width);
+                transform: none !important;
+            }
+            .drawer-toggle[aria-expanded="true"] {
+                right: var(--right-drawer-width);
+                transform: none !important;
             }
         }
 
@@ -4499,7 +4567,7 @@
                     <p>Current changes were not applied.</p>
                 </div>
 
-                <div v-show="resultPanelTab === 'preview'" class="relative flex-grow overflow-hidden bg-slate-50/30">
+                <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <div v-if="svgContent"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
@@ -4751,7 +4819,7 @@
 
                     <!-- Canvas padding controls panel -->
                     <div v-if="showCanvasControls && svgContent"
-                         class="absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
+                         class="preview-canvas-padding absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-bold text-slate-700">Canvas Padding</span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800">Reset</button>
