@@ -40,7 +40,10 @@ export const getFeaturePart = (element) => {
   return CONNECTOR_ID_SUFFIX_RE.test(elementId) ? FEATURE_PART_CONNECTOR : FEATURE_PART_BLOCK;
 };
 
-export const isFeatureFillTarget = (element) => getFeaturePart(element) === FEATURE_PART_BLOCK;
+export const isFeatureFillTarget = (element) => (
+  getFeaturePart(element) === FEATURE_PART_BLOCK
+  && !String(element?.getAttribute?.('id') || element?.id || '').endsWith('__outline')
+);
 
 export const filterFeatureFillTargets = (elements) =>
   Array.from(elements || []).filter(isFeatureFillTarget);

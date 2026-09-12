@@ -304,6 +304,7 @@ export const setupWatchers = ({
     }
   );
 
+  // Batch Result and template-ref changes after the replacement root is mounted.
   watch([svgContent, svgContainer, () => results.value[selectedResultIndex.value]], () => {
     const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
     skipCaptureBaseConfig.value = false;
@@ -343,7 +344,7 @@ export const setupWatchers = ({
         console.error('Could not bind the mounted SVG Result.', error);
       }
     });
-  });
+  }, { flush: 'post' });
 
   // Persisting the current live DOM changes Result text but deliberately leaves the
   // mounted root in place. Consume the old remount-only flags at that boundary.
