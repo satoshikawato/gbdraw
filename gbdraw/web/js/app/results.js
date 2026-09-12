@@ -58,6 +58,7 @@ export const createResultsManager = ({
 }) => {
   const {
     svgContent,
+    svgResultIdentity,
     mode,
     shouldDeferCircularPreviewUpdates,
     svgContainer,
@@ -82,6 +83,7 @@ export const createResultsManager = ({
   const { refreshCompositionGeometry } = legendLayout;
 
   let definitionUpdateTimeout = null;
+  let definitionUpdateRevision = 0;
   const cloneColors = (colors) => ({ ...(colors || {}) });
   const getPaletteMap = () => {
     if (paletteDefinitions.value && Object.keys(paletteDefinitions.value).length > 0) {
@@ -124,6 +126,7 @@ export const createResultsManager = ({
   };
 
   const cancelDefinitionUpdate = () => {
+    definitionUpdateRevision += 1;
     if (definitionUpdateTimeout) {
       clearTimeout(definitionUpdateTimeout);
       definitionUpdateTimeout = null;
@@ -227,6 +230,14 @@ export const createResultsManager = ({
     if (!svg) return;
     if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
 
+    const revision = definitionUpdateRevision;
+    const resultIndex = selectedResultIndex.value;
+    const resultIdentity = svgResultIdentity.value;
+    const isCurrent = () => revision === definitionUpdateRevision
+      && selectedResultIndex.value === resultIndex
+      && svgResultIdentity.value === resultIdentity
+      && svgContainer.value?.querySelector('svg') === svg;
+
     if (mode.value === 'circular') {
       const isMultiRecordCanvasOnSvg = isMultiRecordCanvasSvg(svg);
 
@@ -277,6 +288,7 @@ export const createResultsManager = ({
             keepFullDefinitionWithPlotTitle
           }
         );
+        if (!isCurrent()) return;
         const result = response.result;
 
         if (result.error) {

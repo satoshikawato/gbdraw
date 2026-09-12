@@ -4863,7 +4863,7 @@
                          @lostpointercapture="endPan"
                          @mouseleave="endPan">
                         <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
-                            :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
+                            :key="`svg-${mode}-${selectedResultIndex}-${svgResultIdentity}`"
                             :style="{transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${zoom})`, transformOrigin: 'top center', transition: isPanning ? 'none' : 'transform 0.2s'}"
                             class="gbdraw-preview-surface shadow-xl bg-white m-auto origin-top">
                         </div>
