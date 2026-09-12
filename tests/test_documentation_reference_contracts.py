@@ -89,10 +89,10 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert f"session version {CURRENT_SESSION_VERSION}" in source
     assert f"`renderRequest` schema {CANONICAL_REQUEST_SCHEMA}" in source
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42}
     )
     assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7})
-    assert "27–33 and 39–41" in source
+    assert "27–33 and 39–42" in source
     assert "1, 2, 5, 6, and 7" in source
 
 

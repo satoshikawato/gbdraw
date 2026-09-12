@@ -128,7 +128,7 @@ def test_historical_v40_schema6_typed_promotion_without_render(tmp_path):
         assert all(record.display == api.RecordDisplayOptions() for record in request.records)
         assert not request.options.feature_placements
         promoted = api.build_session_document(request).to_dict()
-    assert promoted["version"] == 41
+    assert promoted["version"] == 42
     assert promoted["renderRequest"]["schema"] == 7
     assert [r["cardinality"] for r in promoted["renderRequest"]["records"]] == [
         r["cardinality"] for r in historical["renderRequest"]["records"]

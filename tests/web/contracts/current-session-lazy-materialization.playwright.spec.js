@@ -1262,7 +1262,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   expect(saveOutcome.result.status, JSON.stringify(saveOutcome.errorLog)).toBe('saved');
   const roundTripPath = await (await downloadPromise).path();
   const roundTrip = JSON.parse(gunzipSync(readFileSync(roundTripPath)).toString('utf8'));
-  expect(roundTrip.version).toBe(41);
+  expect(roundTrip.version).toBe(42);
   expect(roundTrip.results).toHaveLength(1);
   expect(roundTrip.editorState.featureCatalog).toBeTruthy();
 

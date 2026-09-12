@@ -98,7 +98,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         session_path = download_dir / session.suggested_filename
         session.save_as(session_path)
         saved = json.loads(gzip.decompress(session_path.read_bytes()))
-        assert saved['version'] == 41 and saved['renderRequest']['schema'] == 7
+        assert saved['version'] == 42 and saved['renderRequest']['schema'] == 7
         assert saved['renderRequest']['records'][0]['display']['startCoordinate'] == 5500
         assert saved['renderRequest']['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
         assert len(saved['renderRequest']['diagramOptions']['featurePlacements']) == 1

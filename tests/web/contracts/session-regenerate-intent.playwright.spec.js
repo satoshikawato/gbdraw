@@ -207,7 +207,7 @@ const saveCurrentSession = async (page, title) => {
   const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
   expect(session).toMatchObject({
     format: 'gbdraw-session',
-    version: 41,
+    version: 42,
     renderRequest: { schema: 7 }
   });
   return { path, session };

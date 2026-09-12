@@ -37,11 +37,11 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 41
+CURRENT_SESSION_VERSION = 42
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
@@ -555,19 +555,21 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CANONICAL_SESSION_MIN_VERSION:
         render_request = session.get("renderRequest")
         resources = session.get("resources")
-        if not isinstance(render_request, Mapping):
+        settings_only = is_settings_only_session(session)
+        if not settings_only and not isinstance(render_request, Mapping):
             raise ValidationError(
                 f"Session version {version} requires a canonical renderRequest object."
             )
-        request_schema = render_request.get("schema")
-        if not isinstance(request_schema, int) or isinstance(request_schema, bool):
-            raise ValidationError("renderRequest.schema must be an integer.")
-        from .session_request_codec import SUPPORTED_CANONICAL_REQUEST_SCHEMAS
+        if not settings_only:
+            request_schema = render_request.get("schema")
+            if not isinstance(request_schema, int) or isinstance(request_schema, bool):
+                raise ValidationError("renderRequest.schema must be an integer.")
+            from .session_request_codec import SUPPORTED_CANONICAL_REQUEST_SCHEMAS
 
-        if request_schema not in SUPPORTED_CANONICAL_REQUEST_SCHEMAS:
-            raise ValidationError(
-                f"Unsupported canonical renderRequest schema: {request_schema}."
-            )
+            if request_schema not in SUPPORTED_CANONICAL_REQUEST_SCHEMAS:
+                raise ValidationError(
+                    f"Unsupported canonical renderRequest schema: {request_schema}."
+                )
         if not isinstance(resources, Mapping):
             raise ValidationError(
                 f"Session version {version} requires a canonical resources object."
@@ -593,6 +595,59 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_current_feature_catalog_authority(session)
     if version >= 41:
         _validate_display_placement_drafts(session)
+    if is_settings_only_session(session):
+        _validate_settings_only_session(session)
+
+
+def is_settings_only_session(session: Mapping[str, Any]) -> bool:
+    """Recognize the explicit document variant, never a missing-resource error."""
+    return session.get("version") == 42 and "renderRequest" in session and session["renderRequest"] is None
+
+
+def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
+    web_files = session.get("webFiles", {})
+    bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
+    if (not isinstance(bindings, Mapping) or not isinstance(bindings.get("linearSeqs"), list)
+            or not {"c_gb", "c_gff", "c_fasta"} <= bindings.keys()):
+        raise ValidationError("Settings-only Session requires an explicit Web input inventory.")
+
+    def has_input(value: Any) -> bool:
+        return any(map(has_input, value)) if isinstance(value, list) else value is not None
+
+    if (set(web_files) != {"bindings"}
+            or any(has_input(bindings.get(key)) for key in (
+                "c_gb", "c_gff", "c_fasta", "c_conservation_fastas", "c_conservation_sequence_sources"))
+            or any(not isinstance(row, Mapping) or any(has_input(row.get(key))
+                for key in ("gb", "gff", "fasta")) for row in bindings["linearSeqs"])):
+        raise ValidationError("Settings-only Session cannot contain biological sources.")
+    manifest = session.get("proteinIdentityManifest") or {}
+    if (session.get("results") != [] or session.get("editorState", {}).get("featureCatalog") is not None
+            or session.get("cliInvocation") is not None or session.get("runMetadata")
+            or session.get("legacyArtifacts")
+            or any((session.get(key) or {}).get("entries") for key in ("losatCache", "losatDerivedCache"))
+            or any(manifest.get(key) for key in ("proteinSets", "recordAnalyses", "recordInstances"))
+            or bindings.get("c_conservation_blasts_source") == "losat-cache"):
+        raise ValidationError("Settings-only Session cannot contain committed render artifacts.")
+    config, ui = session.get("config"), session.get("ui")
+    if (not isinstance(config, Mapping) or not isinstance(config.get("form"), Mapping)
+            or not isinstance(config.get("adv"), Mapping) or not isinstance(ui, Mapping)
+            or ui.get("mode") not in ("circular", "linear")):
+        raise ValidationError("Settings-only Session requires an active Web configuration and mode.")
+    referenced: set[str] = set()
+
+    def visit(value: Any) -> None:
+        if isinstance(value, Mapping):
+            if "resourceId" in value:
+                referenced.add(value["resourceId"])
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(bindings)
+    if set(session["resources"]) - referenced:
+        raise ValidationError("Settings-only Session contains an unbound resource.")
 
 
 def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
@@ -607,8 +662,8 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") != 41 or "c_gb" not in bindings):
-        raise ValidationError("Web binding schema 2 requires session 41 and c_gb.")
+    if current and (session.get("version") not in (41, 42) or "c_gb" not in bindings):
+        raise ValidationError("Web binding schema 2 requires session 41 or 42 and c_gb.")
     resources = session.get("resources", {})
 
     def metadata(value: Mapping[str, Any]) -> None:
@@ -726,7 +781,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
         for row in rows
     }:
         raise ValidationError("Feature placement draft keys must encode their exact identity as a JSON pair.")
-    mode = session.get("renderRequest", {}).get("mode")
+    mode = (session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode")
     for row in rows:
         row.target.validate_mode(mode)
     adv = config.get("adv", {})

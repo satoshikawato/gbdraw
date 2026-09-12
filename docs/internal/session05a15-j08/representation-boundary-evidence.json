@@ -1,0 +1,12 @@
+[
+  {
+    "version": 41,
+    "exception": "SessionVersionError",
+    "message": "Session version 41 requires a canonical renderRequest object."
+  },
+  {
+    "version": 42,
+    "exception": "SessionVersionError",
+    "message": "Session version 42 is newer than this gbdraw supports (41)."
+  }
+]

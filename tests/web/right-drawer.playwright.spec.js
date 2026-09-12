@@ -834,7 +834,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   const download = await downloadPromise;
   const saved = readFileSync(await download.path());
   const document = JSON.parse(gunzipSync(saved).toString('utf8'));
-  expect(document.version).toBe(41);
+  expect(document.version).toBe(42);
   expect(document.editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
   expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
   expect(await verifyGroups()).toEqual(before);

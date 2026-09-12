@@ -1,0 +1,54 @@
+{
+  "wheel": "gbdraw-0.14.0-py3-none-any.whl",
+  "wheelSha256": "88e59c8f15785948c45790046c3103332623e9b3959c8d4983af7eb5e6e75238",
+  "runtimeFiles": [
+    {
+      "path": "gbdraw/session_io.py",
+      "sha256": "d50fd0196a9ba646d91410f5b41a5c2c423359ab1fa2a8badce8dd741578cfc5",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/session.py",
+      "sha256": "52ddcb01ae31587fa9f55411a649fba1ff9c628e86ced3fdeb41e12e3b946a54",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/cli_utils/session.py",
+      "sha256": "9866b79797559ee997b432bfe895e3b6fd34e01cf285bfc938c2f5daf056f10e",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/web/js/services/config.js",
+      "sha256": "6c450acec40bec52142f1906bd90ad05d3246a520e326074db2c2542393da0f9",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/web/js/services/session-authority.js",
+      "sha256": "b9eaadb05a8543e1a9bc85c4f0384b0a2bef47db827e38539eabb1511f3a9f11",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/web/js/services/session-request.js",
+      "sha256": "36f4a9c9b04d5053dd3b41cca98c79376e78a3469ab1848dc021b9d8e69b6960",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/web/js/services/session-resources.js",
+      "sha256": "b6a61935502194ee6cfc1476e7450cda438ca97b1c6eadb5e0476b16ef292e11",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/web/js/services/gallery-session-publication.js",
+      "sha256": "b8369c4cc688a0477441bc5590ef1350cbe83a29d6ed3c7029a086a47618f80f",
+      "packagedEqual": true
+    },
+    {
+      "path": "gbdraw/web/js/services/gallery-session-migration.js",
+      "sha256": "9f3aa72fbdc0ab034c9cf581f83d75eef6bb9dcff695f90fbd0f05a4039810d0",
+      "packagedEqual": true
+    }
+  ],
+  "nativeInstall": "/tmp/gbdraw-j08-evidence/venv/lib/python3.13/site-packages/gbdraw",
+  "browserPackageRoot": "/tmp/gbdraw-j08-evidence/installed",
+  "comparator": "/tests is served from the candidate test helpers; all app and Worker modules are installed wheel bytes."
+}

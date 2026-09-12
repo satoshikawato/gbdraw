@@ -61,7 +61,7 @@ for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
-  assert.equal(result.session.version, 41, name);
+  assert.equal(result.session.version, 42, name);
   assert.equal(result.session.renderRequest.schema, 7, name);
   assert.equal(result.equivalence.equivalent, true, name);
   assert.equal(JSON.stringify(source.renderRequest), committedBefore, name);
@@ -82,7 +82,7 @@ for (const name of sessionNames) {
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
-assert.equal(admitGallerySession(lambda).version, 41);
+assert.equal(admitGallerySession(lambda).version, 42);
 assert.equal(lambda.version, 41);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
@@ -165,10 +165,10 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   );
 }
 
-for (const version of [27, 30, 34, 38, 42]) {
+for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 41 or historical versions 31-33\/39/
+    /supports current version 42 or historical versions 31-33\/39/
   );
 }
 

@@ -50,6 +50,11 @@ def main():
         # Binding enrichment is directional: selected -> mounted/export.
         expected, actual = (right, left) if left == 'em' else (left, right)
         source = source.replace(f'if {left}!={right}:', f'if not self.visual_equal({expected},{actual},d):')
+    # Session 42 adds a source-free document, not a nullable canonical owner.
+    # Retain the original writer checks for every source-bearing saved Session.
+    old_oracle = "ok=schemas['session']==41 and schemas['request']==7 and schemas['bindings']==2 and (schemas['catalog']==3 or (cat is None and not d.get('results')))"
+    assert old_oracle in source
+    source = source.replace(old_oracle, 'ok=self.saved_session_valid(d,schemas)')
     spec = importlib.util.spec_from_file_location('retained_audit', args.archive / 'audit.py')
     audit = importlib.util.module_from_spec(spec)
     exec(compile(source, str(args.archive / 'audit.py'), 'exec'), audit.__dict__)
@@ -66,6 +71,32 @@ def main():
           return compareVisualSemantics(left,right,{catalogIds:ids}).length===0;
         }""", {'left': left, 'right': right, 'ids': [feature['svgId'] for feature in item.get('features', [])]})
     audit.AuditJourney.visual_equal = visual_equal
+
+    def saved_session_valid(self, document, schemas):
+        if schemas['session'] != 42 or schemas['bindings'] != 2:
+            return False
+        if document.get('renderRequest', 'missing') is not None:
+            return schemas['request'] == 7 and (schemas['catalog'] == 3
+                or (schemas['catalog'] is None and not document.get('results')))
+        # Explicit settings, input/Result absence and honest committed-owner
+        # absence supplement the shared document validator. Empty SVG equality
+        # is never used as the settings-only oracle.
+        return self.page.evaluate('''async document => {
+          const {adoptCurrentSessionDocument,hasBiologicalSessionInputs}=await import('./js/services/session-authority.js');
+          const {buildConfigData,getCommittedCanonicalSession}=await import('./js/services/config.js');
+          const {state:s}=await import('./js/state.js');
+          try {
+            const admitted=adoptCurrentSessionDocument(document,42);
+            return admitted.canonical===null && getCommittedCanonicalSession()===null
+              && document.results.length===0 && s.results.value.length===0
+              && document.editorState.featureCatalog===null && s.featureCatalog.value===null
+              && !hasBiologicalSessionInputs({...s.files,linearSeqs:s.linearSeqs})
+              && document.ui.mode===s.mode.value
+              && JSON.stringify(document.config)===JSON.stringify(buildConfigData());
+          } catch {return false;}
+        }''', document)
+
+    audit.AuditJourney.saved_session_valid = saved_session_valid
     original_edit = audit.AuditJourney.edit
     original_observe = audit.AuditJourney.observe
 

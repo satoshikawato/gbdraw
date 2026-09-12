@@ -1,0 +1,8 @@
+{
+  "testSha256": "02c78e1c3385045d63fc53afe1b6b7aa16baca9b15d39a40c49fb4799add745b",
+  "redBase": "3548fe14baf1fe3f9bfa83dcef5f34337523e8c8",
+  "run": "green-third",
+  "result": "1 passed",
+  "assertionsChanged": false,
+  "production": "Uncommitted candidate in isolated worktree; not integrated acceptance"
+}

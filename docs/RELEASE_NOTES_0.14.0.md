@@ -84,7 +84,10 @@ sessions retain their previous effective repeat shape.
 
 ## Session / replay / save compatibility
 
-Current writers emit session version 41 and canonical `renderRequest` schema 7.
+Current writers emit session version 42 and canonical `renderRequest` schema 7.
+Save Session also preserves settings before the first source is loaded. Supported
+older Sessions and legacy settings JSON remain readable; settings-only Sessions
+need a biological source before rendering.
 These persisted-format numbers are separate from the package version. The
 [session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
 owns the accepted-reader table and migration details.

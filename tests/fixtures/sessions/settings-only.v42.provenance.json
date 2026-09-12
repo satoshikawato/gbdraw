@@ -1,0 +1,10 @@
+{
+  "writer": "gbdraw/web/js/services/config.js::exportSession",
+  "source": "Real ordinary Save Session download from the first same-assertion green run",
+  "base": "3548fe14baf1fe3f9bfa83dcef5f34337523e8c8",
+  "sha256": "bd11fa0406d40d09c72ff20500a49a3c74be781dbfa9253a4c3c696f28b2d34c",
+  "sessionVersion": 42,
+  "renderRequest": null,
+  "bindingSchema": 2,
+  "regenerate": "Run tests/web/settings-only-session.playwright.spec.js and use its first downloaded Session; timestamps and empty-row UIDs may differ."
+}

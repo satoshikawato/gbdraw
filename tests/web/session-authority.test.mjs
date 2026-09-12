@@ -1,21 +1,15 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-authority-'));
-await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-await cp(join(repoRoot, 'gbdraw/web/js/services'), tempRoot, { recursive: true });
-
 const {
   SESSION_TOP_LEVEL_AUTHORITY,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
-} = await import(pathToFileURL(join(tempRoot, 'session-authority.js')));
+} = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
 assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
   'cliInvocation', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
@@ -395,6 +389,6 @@ for (const change of [
   assert.throws(() => validateSessionAuthorityInventory(session, 41));
   assert.deepEqual(session, before);
 }
-for (const version of [27, 33, 39, 40, 42]) {
+for (const version of [27, 33, 39, 40, 43]) {
   assert.throws(() => validateSessionAuthorityInventory(compositeSession(), version), /requires session version 41/);
 }

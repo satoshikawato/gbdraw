@@ -1,6 +1,6 @@
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
-const CURRENT_VERSION = 41, CURRENT_REQUEST_SCHEMA = 7, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CURRENT_VERSION = 42, CURRENT_REQUEST_SCHEMA = 7, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -95,9 +95,9 @@ export const createGallerySessionPublication = (owners) => {
   const admit = (session) => {
     const version = Number(session?.version);
     if (version === CURRENT_VERSION) return validateCurrent(session);
-    if (version === 40) return validateCurrent({ ...session, version: CURRENT_VERSION,
+    if (version === 40 || version === 41) return validateCurrent({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(session.renderRequest, owners.promoteRequest) });
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 41 or historical versions 31-33/39/40; received ${String(session?.version)}.`);
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 42 or historical versions 31-33/39-41; received ${String(session?.version)}.`);
     return validateCurrent(owners.promoteSession(session));
   };
   const rebuild = (session) => rebuildIntent(session, owners);

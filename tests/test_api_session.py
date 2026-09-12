@@ -766,7 +766,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
         "results": web["results"], "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
     })
     reloaded = load_session_document(session_path)
-    assert reloaded.version == saved.version == CURRENT_SESSION_VERSION == 41
+    assert reloaded.version == saved.version == CURRENT_SESSION_VERSION == 42
     assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["metadata"]["featureCatalog"]
     with materialize_session(reloaded, output_directory=tmp_path / "reload") as materialized:
         restored = session_to_request(materialized)
