@@ -2138,7 +2138,7 @@ def _assert_session_roundtrip(
     for payload in (plain, compressed):
         if (
             payload.get("format") != "gbdraw-session"
-            or payload.get("version") != 41
+            or payload.get("version") != 42
             or payload.get("renderRequest", {}).get("schema") != 7
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):

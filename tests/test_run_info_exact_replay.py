@@ -147,7 +147,7 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
     with zipfile.ZipFile(archive) as bundle:
         assert bundle.namelist() == ["out.gbdraw-session.json"]
         session = json.loads(bundle.read("out.gbdraw-session.json"))
-    assert session["version"] == 41
+    assert session["version"] == 42
     assert session["renderRequest"]["schema"] == 7
     assert session["renderRequest"] == generated["committed"]["renderRequest"]
     assert session["resources"] == generated["committed"]["resources"]

@@ -1,5 +1,6 @@
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
+import { validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
@@ -260,14 +261,60 @@ const copyFields = (source, fields) => {
   return projected;
 };
 
+const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value != null;
+
+// The same complete inventory is used before Save and at document admission.
+// An inactive input remains biological even when it cannot render the active mode.
+export const hasBiologicalSessionInputs = (files = {}) => (
+  ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
+    .some(key => hasInput(files[key]))
+  || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
+);
+
+export const isSettingsOnlySessionDocument = data => data?.version === 42
+  && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
+
+const validateSettingsOnlyDocument = data => {
+  const bindings = data.webFiles?.bindings;
+  if (!isPlainObject(data.resources) || !isPlainObject(bindings)
+    || !Array.isArray(bindings.linearSeqs)
+    || ['c_gb', 'c_gff', 'c_fasta'].some(key => !Object.hasOwn(bindings, key))) {
+    throw new Error('Settings-only Session requires resources and an explicit Web input inventory.');
+  }
+  if (hasBiologicalSessionInputs(bindings)
+    || Object.keys(data.webFiles).some(key => key !== 'bindings')) {
+    throw new Error('Settings-only Session cannot contain biological sources.');
+  }
+  if (data.results?.length !== 0 || data.editorState?.featureCatalog !== null
+    || data.cliInvocation != null || Object.keys(data.runMetadata || {}).length
+    || (data.losatCache?.entries || []).length || (data.losatDerivedCache?.entries || []).length
+    || Object.keys(data.legacyArtifacts || {}).length
+    || ['proteinSets', 'recordAnalyses', 'recordInstances']
+      .some(key => Object.keys(data.proteinIdentityManifest?.[key] || {}).length)
+    || bindings.c_conservation_blasts_source === 'losat-cache') {
+    throw new Error('Settings-only Session cannot contain committed render artifacts.');
+  }
+  validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig: data.config });
+  const referenced = new Set();
+  const visit = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Object.hasOwn(value, 'resourceId')) referenced.add(value.resourceId);
+    Object.values(value).forEach(visit);
+  };
+  visit(bindings);
+  if (Object.keys(data.resources).some(id => !referenced.has(id))) {
+    throw new Error('Settings-only Session contains an unbound resource.');
+  }
+};
+
 export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
   }
   assertSafeObjectKeys(sessionData, 'Session');
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
-  if (bindings?.schema === 2 && Number(version) !== 41) {
-    throw new Error('Web binding schema 2 requires session version 41.');
+  if (bindings?.schema === 2 && ![41, 42].includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41 or 42.');
   }
   if (Number(version) < 31) return;
   if (
@@ -373,6 +420,7 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (unknown.length > 0) {
     throw new Error(`Session contains unclassified top-level field(s): ${unknown.join(', ')}`);
   }
+  if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData);
 };
 
 export const adoptRuntimeCanonicalSession = (canonical) => {
@@ -396,7 +444,7 @@ export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
   if (sessionData.version !== currentVersion) {
     throw new Error('Only the current session schema can use adoptive ownership.');
   }
-  const canonical = adoptRuntimeCanonicalSession({
+  const canonical = isSettingsOnlySessionDocument(sessionData) ? null : adoptRuntimeCanonicalSession({
     renderRequest: sessionData.renderRequest,
     resources: sessionData.resources,
     webFiles: isPlainObject(sessionData.webFiles) ? sessionData.webFiles : {}

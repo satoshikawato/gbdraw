@@ -2605,6 +2605,18 @@ const applyWebFileBindings = (
   return restored;
 };
 
+// Called only after Session authority has admitted the explicit source-free
+// document. No canonical request or committed owner is created by this projection.
+export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
+  mode: data.ui.mode,
+  inputType: data.ui.mode === 'linear' ? data.ui.lInputType : data.ui.cInputType,
+  config: cloneCanonicalJsonValue(data.config),
+  files: applyWebFileBindings({}, data.webFiles, data.resources, {
+    sessionResourceTable, adoptCanonicalPayloads: true
+  }),
+  semanticFeatureState: {}
+});
+
 const cloneCanonicalJsonValue = (value) => (
   value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 );

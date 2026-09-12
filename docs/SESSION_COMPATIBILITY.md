@@ -8,20 +8,43 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Session 42: settings before the first source
+
+Web **Save Session** can preserve settings before any biological input is loaded.
+Session 42 adds the explicit `renderRequest: null` document variant with empty
+`results` and a null `editorState.featureCatalog`. The existing config, mode
+profiles, editor preferences and file-binding owners retain the settings and
+auxiliary resources. No empty sequence or synthetic request is persisted.
+
+Both active and inactive biological inputs exclude this variant, as do committed
+render artifacts. Missing requests and missing or dangling resources remain
+errors. Loading settings-only replaces the old Session, including its source,
+Result and committed request, through the existing atomic import transaction.
+After loading a real source, Generate and History use the usual render path.
+
+Request schema 7, catalog schema 3 and bindings schema 2 are unchanged. Bindings
+schema 1 and supported sessions 27–33/39–41 retain their existing reader support;
+session 41 still requires a canonical request. All new full Sessions also use
+version 42. Readers whose maximum version is 41 reject these new files.
+
+Python document loading and materialization accept settings-only documents.
+CLI replay, typed request conversion and rendering require a biological request
+and reject this variant explicitly; they never fall back to legacy argv.
+
 ## Supported versions
 
 Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 41 | 27–33 and 39–41 |
+| gbdraw session | 42 | 27–33 and 39–42 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in session 41 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert session versions 31–33 and 39–41 to
+The public typed-session bridge can convert full session versions 31–33 and 39–42 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -82,7 +105,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–41.
+remain 27–33 and 39–42.
 
 ## Retired inputs
 

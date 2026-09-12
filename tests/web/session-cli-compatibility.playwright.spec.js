@@ -109,7 +109,7 @@ for (const entry of cases) {
       if (phase === 'cli-replay') file = await cli(entry.mode, ['--session', file], testInfo, phase);
       if (phase === 'web-cli-replay') file = await cli(entry.mode, ['--session', webFile], testInfo, phase);
       const session = await readSession(file);
-      expect(session.version).toBe(41);
+      expect(session.version).toBe(42);
       expect(session.renderRequest.schema).toBe(7);
       expect(session.webFiles.bindings.schema).toBe(2);
       if (entry.name === 'composite') {

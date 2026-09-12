@@ -9,7 +9,7 @@ import {
   createSessionResourceFileView,
   sessionResourceSource
 } from './session-resource-backing.js';
-import { isAdoptedCanonicalSession } from './session-authority.js';
+import { hasBiologicalSessionInputs, isAdoptedCanonicalSession } from './session-authority.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
   collectCanonicalResourceIds,
@@ -106,10 +106,13 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
 
 export const buildSessionResources = async (state, committedRequest) => {
   if (
-    !committedRequest
-    || typeof committedRequest !== 'object'
-    || !committedRequest.renderRequest
-    || !committedRequest.resources
+    committedRequest === null
+      ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: state?.linearSeqs })
+        || Boolean(state?.results?.value?.length)
+      : (!committedRequest
+        || typeof committedRequest !== 'object'
+        || !committedRequest.renderRequest
+        || !committedRequest.resources)
   ) {
     throw new Error('A committed canonical render request is required to save a session.');
   }
@@ -118,7 +121,7 @@ export const buildSessionResources = async (state, committedRequest) => {
   const aliases = new Map();
   const reuseEncodedResources = isAdoptedCanonicalSession(committedRequest);
   // A textual ID is canonical only within its own source table.
-  const committedTable = adoptCurrentSessionResources(committedRequest.resources);
+  const committedTable = adoptCurrentSessionResources(committedRequest?.resources || {});
   const candidatesBySize = new Map();
   const candidatesByDescriptor = new WeakMap();
   const usedNames = new Set();
@@ -244,7 +247,7 @@ export const buildSessionResources = async (state, committedRequest) => {
       aliases.set(id, id);
     });
   }
-  for (const id of collectCanonicalResourceIds(committedRequest.renderRequest)) {
+  for (const id of collectCanonicalResourceIds(committedRequest?.renderRequest)) {
     if (!Object.hasOwn(committedRequest.resources, id)) {
       throw new Error(`Committed render resource is missing: ${id}.`);
     }
@@ -328,11 +331,11 @@ export const buildSessionResources = async (state, committedRequest) => {
 
   return {
     renderRequest: identityAliases
-      ? committedRequest.renderRequest
+      ? committedRequest?.renderRequest ?? null
       : rewriteResourceRefs(committedRequest.renderRequest, aliases),
     resources,
     webFiles: {
-      ...rewriteOriginalNameHints(committedRequest.webFiles, aliases),
+      ...rewriteOriginalNameHints(committedRequest?.webFiles, aliases),
       bindings
     }
   };

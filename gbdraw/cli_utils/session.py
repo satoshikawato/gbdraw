@@ -481,6 +481,8 @@ def render_canonical_session_if_present(
     if int(session.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:
         return False
     document = load_session_document(session)
+    if not document.has_canonical_request:
+        raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
     if document.mode != mode:
         raise ValidationError(
             f"Session renderRequest mode is {document.mode!r}; expected {mode!r}."

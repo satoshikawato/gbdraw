@@ -521,9 +521,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 41
+    assert CURRENT_SESSION_VERSION == 42
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -1997,6 +1997,8 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
         (32, 2),
         (33, 2),
         (39, CANONICAL_REQUEST_SCHEMA),
+        (40, CANONICAL_REQUEST_SCHEMA),
+        (41, CANONICAL_REQUEST_SCHEMA),
         (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA),
     ),
 )
@@ -2010,7 +2012,7 @@ def test_main_backed_and_current_canonical_session_schemas_remain_supported(
         "renderRequest": {"schema": request_schema},
         "resources": {},
     }
-    if version == CURRENT_SESSION_VERSION:
+    if version >= 40:
         session["results"] = []
         session["editorState"] = {"featureCatalog": None}
 
@@ -3305,7 +3307,7 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (41, 2, 7)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (42, 2, 7)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()

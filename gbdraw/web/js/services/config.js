@@ -77,7 +77,8 @@ import {
   buildCanonicalRenderRequest,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
-  projectCanonicalSessionRequest
+  projectCanonicalSessionRequest,
+  projectSettingsOnlySession
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -165,6 +166,8 @@ import {
   adoptCurrentSessionDocument,
   adoptRuntimeCanonicalSession,
   isAdoptedCanonicalSession,
+  hasBiologicalSessionInputs,
+  isSettingsOnlySessionDocument,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -205,11 +208,11 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 41;
+export const SESSION_VERSION = 42;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -1088,11 +1091,7 @@ export const applyEditorStateData = (
   }
 };
 
-const normalizeSessionData = (data) => {
-  if (!isPlainObject(data) || data.format !== 'gbdraw-session') {
-    throw new Error('Invalid session file.');
-  }
-  const version = data.version;
+const validateSessionVersion = version => {
   if (!Number.isInteger(version)) {
     throw new Error('Session version is required and must be an integer.');
   }
@@ -1102,6 +1101,14 @@ const normalizeSessionData = (data) => {
   if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
     throw new Error(`Unsupported session version: ${version}.`);
   }
+};
+
+const normalizeSessionData = (data) => {
+  if (!isPlainObject(data) || data.format !== 'gbdraw-session') {
+    throw new Error('Invalid session file.');
+  }
+  const version = data.version;
+  validateSessionVersion(version);
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
     throw new Error(
       `Session version ${version} cannot contain legacy files; use resources and webFiles.`
@@ -1472,6 +1479,7 @@ const validateCurrentWriterFeatureCatalog = (data, { adopt = false } = {}) => {
 
 const preflightSessionImport = (rawData) => {
   const sourceSessionVersion = rawData?.version;
+  validateSessionVersion(sourceSessionVersion);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   let adoptedSession = null;
   let currentResourceTable = null;
@@ -1536,7 +1544,10 @@ const preflightSessionImport = (rawData) => {
       )
     : data.config;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
-  const canonicalProjection = sourceSessionVersion >= 31
+  const settingsOnly = isSettingsOnlySessionDocument(data);
+  const canonicalProjection = settingsOnly
+    ? projectSettingsOnlySession(data, currentResourceTable)
+    : sourceSessionVersion >= 31
     ? projectCanonicalSessionRequest({
         renderRequest: projectionRenderRequest,
         resources: data.resources,
@@ -1750,7 +1761,7 @@ const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
   );
 };
 
-export const applyConfigData = (data) => {
+export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) => {
   requireCurrentWebStateFieldNames(data);
   if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
     requireCurrentLinearTrackLayout(data.form.linear_track_layout);
@@ -1910,56 +1921,58 @@ export const applyConfigData = (data) => {
   state.adv.depth_width_circular = normalizePositiveNumberOrNull(state.adv.depth_width_circular);
   state.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
   state.adv.circular_track_slots_enabled = state.adv.circular_track_slots_enabled === true;
-  {
-    const normalizedSlots = normalizeCircularTrackSlots(
-      state.adv.circular_track_slots,
-      state.adv.nt,
-      state.form.track_type
-    );
-    const importedAxis = clampCircularTrackAxisIndex(
-      state.adv.circular_track_slots_axis_index,
-      normalizedSlots.length
-    );
-    state.adv.circular_track_slots_axis_index = importedAxis === null
-      ? inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)
-      : importedAxis;
-  }
-  state.adv.circular_track_slots.splice(
-    0,
-    state.adv.circular_track_slots.length,
-    ...applyCircularTrackOrderPlacements(
-      state.adv.circular_track_slots,
-      state.adv.nt,
-      state.form.track_type,
-      state.adv.circular_track_slots_axis_index
-    )
-  );
-  state.adv.linear_track_slots_schema_version = LINEAR_TRACK_SLOT_SCHEMA_VERSION;
-  state.adv.linear_track_slots_enabled = state.adv.linear_track_slots_enabled === true;
-  {
-    const normalizedLinearSlots = normalizeLinearTrackSlots(
-      state.adv.linear_track_slots,
-      state.adv.nt,
-      state.form.linear_track_layout
-    );
-    state.adv.linear_track_slots_axis_index = clampLinearTrackAxisIndex(
-      state.adv.linear_track_slots_axis_index,
-      normalizedLinearSlots.length
-    );
-    state.adv.linear_track_slots_axis_index = resolveLinearTrackAxisIndex(
-      normalizedLinearSlots,
-      state.adv.linear_track_slots_axis_index
-    );
-    state.adv.linear_track_slots.splice(
-      0,
-      state.adv.linear_track_slots.length,
-      ...applyLinearTrackOrderPlacements(
-        normalizedLinearSlots,
-        state.adv.linear_track_slots_axis_index,
+  if (resolveTrackPlacements) {
+    {
+      const normalizedSlots = normalizeCircularTrackSlots(
+        state.adv.circular_track_slots,
         state.adv.nt,
-        state.form.linear_track_layout
+        state.form.track_type
+      );
+      const importedAxis = clampCircularTrackAxisIndex(
+        state.adv.circular_track_slots_axis_index,
+        normalizedSlots.length
+      );
+      state.adv.circular_track_slots_axis_index = importedAxis === null
+        ? inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)
+        : importedAxis;
+    }
+    state.adv.circular_track_slots.splice(
+      0,
+      state.adv.circular_track_slots.length,
+      ...applyCircularTrackOrderPlacements(
+        state.adv.circular_track_slots,
+        state.adv.nt,
+        state.form.track_type,
+        state.adv.circular_track_slots_axis_index
       )
     );
+    state.adv.linear_track_slots_schema_version = LINEAR_TRACK_SLOT_SCHEMA_VERSION;
+    state.adv.linear_track_slots_enabled = state.adv.linear_track_slots_enabled === true;
+    {
+      const normalizedLinearSlots = normalizeLinearTrackSlots(
+        state.adv.linear_track_slots,
+        state.adv.nt,
+        state.form.linear_track_layout
+      );
+      state.adv.linear_track_slots_axis_index = clampLinearTrackAxisIndex(
+        state.adv.linear_track_slots_axis_index,
+        normalizedLinearSlots.length
+      );
+      state.adv.linear_track_slots_axis_index = resolveLinearTrackAxisIndex(
+        normalizedLinearSlots,
+        state.adv.linear_track_slots_axis_index
+      );
+      state.adv.linear_track_slots.splice(
+        0,
+        state.adv.linear_track_slots.length,
+        ...applyLinearTrackOrderPlacements(
+          normalizedLinearSlots,
+          state.adv.linear_track_slots_axis_index,
+          state.adv.nt,
+          state.form.linear_track_layout
+        )
+      );
+    }
   }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
@@ -2888,7 +2901,7 @@ export const canonicalRenderArtifactOwner = Object.freeze({
   }
 });
 
-const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
+const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true } = {}) => {
   state.matchSequenceRegistry?.reset?.();
   state.circularRecordList.value = [];
   Object.assign(state.circularRecordDiscovery, {
@@ -2998,20 +3011,22 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false } = {}) => {
       region_reverse: !!seq.region_reverse
     }));
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
-    const collapsed = collapseEmptyLinearSeqList(loadedLinearSeqs);
+    const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
     state.linearSeqs.splice(0, state.linearSeqs.length, ...collapsed);
-    const rowByUid = new Map(state.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
-    state.linearRecordRows.splice(
-      0,
-      state.linearRecordRows.length,
-      ...state.linearSeqs.map((seq, index) => ({
-        uid: seq.uid,
-        row: Number.isInteger(Number(rowByUid.get(seq.uid)?.row)) && Number(rowByUid.get(seq.uid)?.row) > 0
-          ? Number(rowByUid.get(seq.uid).row)
-          : index + 1
-      }))
-    );
+    if (resolveRecordInputs) {
+      const rowByUid = new Map(state.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+      state.linearRecordRows.splice(
+        0,
+        state.linearRecordRows.length,
+        ...state.linearSeqs.map((seq, index) => ({
+          uid: seq.uid,
+          row: Number.isInteger(Number(rowByUid.get(seq.uid)?.row)) && Number(rowByUid.get(seq.uid)?.row) > 0
+            ? Number(rowByUid.get(seq.uid).row)
+            : index + 1
+        }))
+      );
+    }
     const comparisonFiles = new Map(
       (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
         .map((comparison) => [
@@ -3844,6 +3859,9 @@ export const exportSession = async (
   let committed = isAdoptedCanonicalSession(committedCanonicalSession)
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession);
+  const settingsOnly = !committedCanonicalSession && logicalResults.length === 0
+    && !hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs });
+  if (settingsOnly) validateCurrentWriterActiveConfig({ mode: state.mode.value, storedConfig });
   if (committed) {
     try {
       const adoptedCommitted = isAdoptedCanonicalSession(committed);
@@ -3862,7 +3880,7 @@ export const exportSession = async (
       throw new Error(SESSION_ACTIVE_CONFIG_SAVE_ERROR);
     }
   }
-  if (!committed) {
+  if (!committed && !settingsOnly) {
     const comparisonPlanSnapshot = state.mode.value === 'linear'
       ? resolveLinearComparisonPlan({
           plan: state.linearComparisonPlan,
@@ -3888,7 +3906,7 @@ export const exportSession = async (
       comparisonPlanSnapshot
     });
   }
-  if (committed.renderRequest.schema < CANONICAL_REQUEST_SCHEMA) {
+  if (committed && committed.renderRequest.schema < CANONICAL_REQUEST_SCHEMA) {
     const promoted = {
       ...committed,
       renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest)
@@ -3983,7 +4001,6 @@ export const exportSession = async (
   if (legacyArtifacts) {
     sessionData.legacyArtifacts = legacyArtifacts;
   }
-
   try {
     validateSessionAuthorityInventory(sessionData, SESSION_VERSION);
   } catch (error) {
@@ -4047,6 +4064,7 @@ export const importSession = async (e, options = {}) => {
       );
     }
     const canonicalSession = Boolean(projectionResult);
+    const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     rollbackSnapshot = captureSessionImportSnapshot();
     if (typeof rollbackStateExtension?.capture === 'function') {
@@ -4109,7 +4127,7 @@ export const importSession = async (e, options = {}) => {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
         restoredConfig.form
       );
-      applyConfigData(restoredConfig);
+      applyConfigData(restoredConfig, { resolveTrackPlacements: !settingsOnly });
     }
     reconcileImportedLinearTypographyLink({
       adv: state.adv,
@@ -4121,14 +4139,14 @@ export const importSession = async (e, options = {}) => {
 
     const { collapsedLinearSeqs } = applyFiles(
       canonicalSession ? projectionResult.restoredFiles : data.files,
-      { adoptCanonicalPayloads: currentSchemaSession }
+      { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly }
     );
     restoreImportedComparisonIntent(
       state.importedComparisonIntent,
       comparisonClassification,
       restoredConfig?.importedComparisonResolution
     );
-    reconcileDepthTrackStateAfterSessionFiles();
+    if (!settingsOnly) reconcileDepthTrackStateAfterSessionFiles();
     if (canonicalSession) {
       applyLosatCache(
         projectionResult.artifactState.losatCache?.entries,

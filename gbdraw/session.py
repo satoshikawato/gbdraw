@@ -295,6 +295,8 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
         )
     document = materialized.document
     if not document.has_canonical_request:
+        if document.version >= CANONICAL_SESSION_MIN_VERSION:
+            raise SessionConversionError("Settings-only Session has no biological render request; load a source in Web before generating.")
         raise SessionVersionError(
             "Sessions version 27 through 30 support internal CLI replay only and do not "
             "have a public typed-request conversion."

@@ -1,0 +1,20 @@
+[
+  {
+    "file": "journeys.py",
+    "archiveFileSha256": "0ec1adbac279ff7579985e416a269861e7006c6c2aef0c357bb635d84954eb07",
+    "function": "j08",
+    "source": "def j08(s):\n s.open();s.fresh('01-empty');s.roundtrip();s.upload(FIX/'mito.gb');s.gen();a=s.snap('02-generated');s.history();b=s.snap('03-undo');s.history('Redo');c=s.snap('04-redo');assert c['result_semantics']==a['result_semantics'];assert c['request']==a['request']"
+  },
+  {
+    "file": "journeys.py",
+    "archiveFileSha256": "0ec1adbac279ff7579985e416a269861e7006c6c2aef0c357bb635d84954eb07",
+    "function": "j16",
+    "source": "def j16(s):\n s.open();s.upload(FIX/'mito.gb');s.labels(keyboard=True);a=s.snap('01-labels');s.preset();s.history();b=s.snap('02-undone');assert b['form']['track_type']==a['form']['track_type'];assert not b.get('result_hashes');s.fresh('03-before-generate');c=s.snap('04-loaded');assert c['form']['labels_mode']==a['form']['labels_mode'];assert not c.get('result_hashes');s.gen()"
+  },
+  {
+    "file": "disposition-adapters.py",
+    "archiveFileSha256": "30a225fba3ce9bc23eee10dcaf4c1c39ecb8150021bbd4cc3ba93679b78c98a2",
+    "function": "j16",
+    "source": "def j16(s):\n # Retained J16: operate the native select through actual pointer/keyboard events.\n s.open();s.upload(FIX/'mito.gb');s.labels(keyboard=True);a=s.snap('01-labels')\n l=s.reveal(s.page.locator('#circular-track-preset'));options=l.evaluate('(e)=>[...e.options].map(o=>o.value)');l.click();l.press('Home')\n for _ in range(options.index('middle')):l.press('ArrowDown')\n l.press('Enter');l.press('Tab');s.step('native pointer-open dropdown preset middle')\n s.history();b=s.snap('02-undone');assert b['form']['track_type']==a['form']['track_type'];assert not b.get('result_hashes');s.fresh('03-before-generate');c=s.snap('04-loaded');assert c['form']['labels_mode']==a['form']['labels_mode'];assert not c.get('result_hashes');s.gen()"
+  }
+]

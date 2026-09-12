@@ -1,0 +1,20 @@
+{
+  "base": "3548fe14baf1fe3f9bfa83dcef5f34337523e8c8",
+  "tree": "c96c0c273d1ce2432d07fb6ef46253d6e9151cde",
+  "productionDiff": "",
+  "testSha256": "02c78e1c3385045d63fc53afe1b6b7aa16baca9b15d39a40c49fb4799add745b",
+  "test": "tests/web/settings-only-session.playwright.spec.js",
+  "command": "NODE_PATH=/mnt/c/Users/genom/GitHub/gbdraw/node_modules node /mnt/c/Users/genom/GitHub/gbdraw/node_modules/@playwright/test/cli.js test tests/web/settings-only-session.playwright.spec.js --workers=1 --output=/tmp/gbdraw-j08-evidence/red",
+  "exitCode": 1,
+  "failedAssertion": "Ordinary source-free Save must produce a Session download: boundary.error must be null",
+  "observedError": {
+    "summary": "Canonical resource record-1-genbank is missing.",
+    "details": []
+  },
+  "environmentCorrection": "Initial sandbox run could not start local webServer; reran identical command with escalation. No selector or test assertion change. Node Playwright resolved from existing workspace node_modules; source served from isolated worktree.",
+  "fixture": {
+    "path": "tests/fixtures/sessions/cli-web-mito.gb",
+    "sha256": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92",
+    "matchesOriginalJ08": true
+  }
+}
