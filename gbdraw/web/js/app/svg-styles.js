@@ -11,6 +11,7 @@ import {
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
 import {
+  FEATURE_PART_BLOCK,
   FEATURE_PART_CONNECTOR,
   getFeaturePart,
   isFeatureFillTarget
@@ -427,7 +428,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     let updatedCount = 0;
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-      const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).filter(isFeatureFillTarget);
+      const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
+        .filter((element) => getFeaturePart(element) === FEATURE_PART_BLOCK);
       featurePaths.forEach((path) => {
         if (adv.block_stroke_color) {
           path.setAttribute('stroke', adv.block_stroke_color);
@@ -654,6 +656,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
 
   watch(
     () => [
+      mode.value,
       adv.block_stroke_color,
       adv.block_stroke_width,
       adv.line_stroke_color,
@@ -663,9 +666,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
       adv.scale_stroke_color,
       adv.scale_stroke_width
     ],
-    () => {
+    (values, previousValues) => {
+      // Mode profiles and artifact restores retain the saved Result unchanged.
+      if (values[0] !== previousValues[0] || state.semanticFileWatchersSuppressed?.value) return;
       applyStylesToSvg();
-    }
+    },
+    { flush: 'post' }
   );
 
   watch(
