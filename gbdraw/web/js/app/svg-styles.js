@@ -114,7 +114,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
       const feat = featureLookup.get(svgId);
       if (!feat) return;
 
-      const paletteColor = colors[feat.type];
+      const paletteColor = colors[feat.type] || colors.default;
       if (!paletteColor) return;
 
       const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
@@ -399,7 +399,9 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
 
       const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {
-        const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
+        const newColor = matchingRule
+          ? matchingRule.color
+          : appliedPaletteColors.value[feat.type] || appliedPaletteColors.value.default;
         elements.forEach((el) => {
           if (el.getAttribute('fill') !== newColor) {
             el.setAttribute('fill', newColor);
