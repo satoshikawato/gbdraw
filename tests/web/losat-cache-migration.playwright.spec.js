@@ -20,7 +20,7 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 41;
+const CURRENT_SESSION_VERSION = 42;
 const CURRENT_RENDER_REQUEST_SCHEMA = 7;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
 const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
@@ -340,9 +340,8 @@ const generateWithTelemetry = async (page) => page.evaluate(async () => {
 });
 
 const settleAppRender = async (page) => page.evaluate(async () => {
-  await window.Vue.nextTick();
-  await new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
-  await window.Vue.nextTick();
+  const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
+  return contract.settleAppRender();
 });
 
 const migrationUiSnapshot = async (page) => page.evaluate(async () => {
@@ -357,134 +356,13 @@ const migrationUiSnapshot = async (page) => page.evaluate(async () => {
 });
 
 const cancelDuringRender = async (page) => page.evaluate(async () => {
-  const app = window.__GBDRAW_APP__;
-  const { state } = await import('/gbdraw/web/js/state.js');
-  const {
-    CANONICAL_REQUEST_SCHEMA
-  } = await import('/gbdraw/web/js/services/session-request.js');
-  const before = {
-    proteinIdentityManifest: state.proteinIdentityManifest.value,
-    legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-    legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
-    losatCache: Array.from(state.losatCache.value.entries()),
-    losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
-    losatCacheInfo: state.losatCacheInfo.value
-  };
-  const originalWorkerPostMessage = Worker.prototype.postMessage;
-  let releaseRunRequest;
-  const runRequestIssued = new Promise((resolve) => {
-    releaseRunRequest = resolve;
-  });
-  let heldCanonicalRun = null;
-  let cancelInvoked = false;
-  Worker.prototype.postMessage = function holdFirstCanonicalRun(message, ...args) {
-    if (
-      !heldCanonicalRun &&
-      message?.type === 'run' &&
-      message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA
-    ) {
-      heldCanonicalRun = { worker: this, message, args };
-      releaseRunRequest();
-      return;
-    }
-    return originalWorkerPostMessage.call(this, message, ...args);
-  };
-  try {
-    const runPromise = app.runAnalysis();
-    await runRequestIssued;
-    app.cancelGeneration();
-    cancelInvoked = true;
-    const result = await runPromise;
-    const sameMapEntries = (entries, current) => (
-      entries.length === current.size &&
-      entries.every(([key, value]) => current.get(key) === value)
-    );
-    const authorityDomains = {
-      proteinIdentityManifestSame:
-        state.proteinIdentityManifest.value === before.proteinIdentityManifest,
-      legacyProteinRawCandidatesSame:
-        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates,
-      legacyProteinDerivedEvidenceSame:
-        state.legacyProteinDerivedEvidence.value === before.legacyProteinDerivedEvidence,
-      losatCacheValuesSame: sameMapEntries(before.losatCache, state.losatCache.value),
-      losatDerivedCacheValuesSame:
-        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value),
-      losatCacheInfoSame: state.losatCacheInfo.value === before.losatCacheInfo
-    };
-    return {
-      result,
-      runRequestIssued: Boolean(heldCanonicalRun),
-      cancelInvoked,
-      errorSummary: String(app.errorLog?.summary || ''),
-      executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
-      ...authorityDomains,
-      authorityRestored: Object.values(authorityDomains).every(Boolean)
-    };
-  } finally {
-    Worker.prototype.postMessage = originalWorkerPostMessage;
-  }
+  const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
+  return contract.cancelDuringRender();
 });
 
 const failRendererAfterMigration = async (page) => page.evaluate(async () => {
-  const app = window.__GBDRAW_APP__;
-  const { state } = await import('/gbdraw/web/js/state.js');
-  const {
-    CANONICAL_REQUEST_SCHEMA
-  } = await import('/gbdraw/web/js/services/session-request.js');
-  const before = {
-    proteinIdentityManifest: state.proteinIdentityManifest.value,
-    legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-    legacyProteinDerivedEvidence: state.legacyProteinDerivedEvidence.value,
-    losatCache: Array.from(state.losatCache.value.entries()),
-    losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
-    losatCacheInfo: state.losatCacheInfo.value
-  };
-  const originalWorkerPostMessage = Worker.prototype.postMessage;
-  let rendererFailureInjected = false;
-  Worker.prototype.postMessage = function (...args) {
-    const message = args[0];
-    if (
-      !rendererFailureInjected &&
-      message?.type === 'run' &&
-      message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA &&
-      Array.isArray(message?.payload?.resourceManifest) &&
-      Array.isArray(message?.payload?.stagedResources) &&
-      !Object.hasOwn(message.payload, 'resources')
-    ) {
-      rendererFailureInjected = true;
-      message.payload.request = null;
-    }
-    return originalWorkerPostMessage.apply(this, args);
-  };
-  try {
-    const result = await app.runAnalysis();
-    const sameMapEntries = (entries, current) => (
-      entries.length === current.size &&
-      entries.every(([key, value]) => current.get(key) === value)
-    );
-    const authorityDomains = {
-      proteinIdentityManifestSame:
-        state.proteinIdentityManifest.value === before.proteinIdentityManifest,
-      legacyProteinRawCandidatesSame:
-        state.legacyProteinRawCandidates.value === before.legacyProteinRawCandidates,
-      legacyProteinDerivedEvidenceSame:
-        state.legacyProteinDerivedEvidence.value === before.legacyProteinDerivedEvidence,
-      losatCacheValuesSame: sameMapEntries(before.losatCache, state.losatCache.value),
-      losatDerivedCacheValuesSame:
-        sameMapEntries(before.losatDerivedCache, state.losatDerivedCache.value),
-      losatCacheInfoSame: state.losatCacheInfo.value === before.losatCacheInfo
-    };
-    return {
-      result,
-      errorSummary: String(app.errorLog?.summary || ''),
-      executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
-      rendererFailureInjected,
-      ...authorityDomains,
-      authorityRestored: Object.values(authorityDomains).every(Boolean)
-    };
-  } finally {
-    Worker.prototype.postMessage = originalWorkerPostMessage;
-  }
+  const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
+  return contract.failRendererAfterMigration();
 });
 
 const assertExpectedTelemetry = (run, migrationExpected = expected) => {

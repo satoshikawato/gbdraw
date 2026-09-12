@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_request_codec import (
+    CANONICAL_REQUEST_SCHEMA as CURRENT_RENDER_REQUEST_SCHEMA,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -27,7 +30,6 @@ NODE_SPEC = REPO_ROOT / "tests" / "web" / "losat-cache-migration.playwright.spec
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "sessions"
 FIXTURE_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
 EXPECTED_PATH = FIXTURE_DIR / "BGC0000708-BGC0000713.schema-v2.expected.json"
-CURRENT_RENDER_REQUEST_SCHEMA = 6
 CURRENT_PROTEIN_RAW_SCHEMA = 4
 CURRENT_PROTEIN_DERIVED_SCHEMA = 3
 
@@ -569,11 +571,12 @@ def _install_user_uploaded_tsv(
 def _read_first_uploaded_tsv(page: Any) -> dict[str, Any]:
     return page.evaluate(
         """async () => {
+          const { readFileBytes } = await import('/gbdraw/web/js/services/file-content-cache.js');
           const file = window.__GBDRAW_APP__.linearComparisonPlan.edges[0]?.file;
           return {
             name: file?.name || '',
             bytes: file
-              ? Array.from(new Uint8Array(await file.arrayBuffer()))
+              ? Array.from(await readFileBytes(file))
               : []
           };
         }"""
@@ -583,8 +586,6 @@ def _read_first_uploaded_tsv(page: Any) -> dict[str, Any]:
 def _assert_current_session_boundary(
     session: dict[str, Any],
     checks: AcceptanceChecks,
-    *,
-    require_derived: bool,
 ) -> None:
     raw_entries = session.get("losatCache", {}).get("entries", [])
     derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
@@ -616,59 +617,6 @@ def _assert_current_session_boundary(
             for entry in derived_entries
         ),
         "A legacy entry remains in the current derived cache.",
-    )
-    if require_derived:
-        checks.require(
-            bool(derived_entries),
-            "Generation did not persist a current derived cache entry.",
-        )
-
-
-def _assert_legacy_preserved(
-    session: dict[str, Any],
-    source_session: dict[str, Any],
-    expected: dict[str, Any],
-    checks: AcceptanceChecks,
-) -> None:
-    _assert_current_session_boundary(session, checks, require_derived=False)
-    entries = session.get("losatCache", {}).get("entries", [])
-    legacy_artifacts = session.get("legacyArtifacts", {})
-    raw_envelope = legacy_artifacts.get("proteinRawCandidates", {})
-    candidates = raw_envelope.get("entries", [])
-    derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
-    derived_envelope = legacy_artifacts.get("proteinDerivedEvidence", {})
-    checks.require(entries == [], "Legacy protein entries leaked into the current cache.")
-    checks.require(
-        derived_entries == [],
-        "Legacy derived entries leaked into the current derived cache.",
-    )
-    checks.require(
-        raw_envelope.get("schema") == 1,
-        "Legacy protein candidate envelope is not schema 1.",
-    )
-    checks.require(
-        len(candidates) == expected["storedRawEntries"],
-        "Load -> Save lost legacy protein candidates.",
-    )
-    checks.require(
-        all(
-            candidate.get("state") == "pending"
-            and candidate.get("originalEntry", {}).get("schema") == 2
-            and candidate.get("originalEntry", {}).get("program") == "blastp"
-            for candidate in candidates
-        ),
-        "Saved legacy candidate envelope is not lossless schema 2.",
-    )
-    checks.require(
-        [candidate.get("originalEntry") for candidate in candidates]
-        == source_session.get("losatCache", {}).get("entries", []),
-        "Load -> Save changed a legacy raw candidate.",
-    )
-    checks.require(
-        derived_envelope.get("schema") == 1
-        and derived_envelope.get("entries", [])
-        == source_session.get("losatDerivedCache", {}).get("entries", []),
-        "Load -> Save changed the quarantined legacy derived evidence.",
     )
 
 
@@ -704,8 +652,9 @@ def _assert_current_artifacts(
     source_session: dict[str, Any],
     expected: dict[str, Any],
     checks: AcceptanceChecks,
+    runtime_derived_entries: list[dict[str, Any]],
 ) -> None:
-    _assert_current_session_boundary(session, checks, require_derived=True)
+    _assert_current_session_boundary(session, checks)
     manifest = session.get("proteinIdentityManifest", {})
     entries = session.get("losatCache", {}).get("entries", [])
     derived_entries = session.get("losatDerivedCache", {}).get("entries", [])
@@ -727,13 +676,8 @@ def _assert_current_artifacts(
         "The current protein cache contains a non-schema-4 entry.",
     )
     checks.require(
-        all(
-            entry.get("schema") == CURRENT_PROTEIN_DERIVED_SCHEMA
-            and entry.get("kind") == "derived-losatp-payload"
-            and entry.get("idEncoding") == "runtime-handle-v1"
-            for entry in derived_entries
-        ),
-        "The current derived cache contains a non-schema-3 protein payload.",
+        derived_entries == [],
+        "Derived protein payloads must remain runtime-only after Session Save.",
     )
     legacy_candidates = (
         legacy_artifacts.get("proteinRawCandidates", {}).get("entries", [])
@@ -844,7 +788,13 @@ def _assert_current_artifacts(
                 )
             collect_references(item)
 
-    collect_references(derived_entries)
+    checks.require(
+        all(entry.get("schema") == CURRENT_PROTEIN_DERIVED_SCHEMA
+            and entry.get("idEncoding") == "runtime-handle-v1"
+            for entry in runtime_derived_entries),
+        "Runtime derived entries do not use the current protein schema.",
+    )
+    collect_references(runtime_derived_entries)
     checks.require(
         bool(derived_references),
         "No derived protein references were asserted.",
@@ -855,13 +805,13 @@ def _assert_current_artifacts(
         f"Derived protein references do not resolve through the manifest: {unresolved[:3]}",
     )
     checks.require(
-        "p_r_" not in json.dumps(derived_entries, ensure_ascii=False),
+        "p_r_" not in json.dumps(runtime_derived_entries, ensure_ascii=False),
         "A legacy metadata-derived protein ID remains in the derived cache.",
     )
     checks.require(
         re.search(
             r"@.+\|.+~f_[0-9a-f]{64}",
-            json.dumps(derived_entries, ensure_ascii=False),
+            json.dumps(runtime_derived_entries, ensure_ascii=False),
         )
         is None,
         "A branch-internal readable transport ID remains in the derived cache.",
@@ -903,68 +853,20 @@ def _migration_ui_snapshot(page: Any) -> dict[str, Any]:
     )
 
 
+def _settle_app_render(page: Any) -> None:
+    page.evaluate(
+        """async () => {
+          const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
+          await contract.settleAppRender();
+        }"""
+    )
+
+
 def _cancel_during_render(page: Any) -> dict[str, Any]:
     return page.evaluate(
         """async () => {
-          const app = window.__GBDRAW_APP__;
-          const { state } = await import('/gbdraw/web/js/state.js');
-          const before = {
-            proteinIdentityManifest: state.proteinIdentityManifest.value,
-            legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-            legacyProteinDerivedEvidence:
-              state.legacyProteinDerivedEvidence.value,
-            losatCache: Array.from(state.losatCache.value.entries()),
-            losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
-            losatCacheInfo: state.losatCacheInfo.value
-          };
-          let sawRendering = false;
-          let cancelInvoked = false;
-          const cancelPoll = setInterval(() => {
-            if (
-              sawRendering ||
-              String(app.processingStatus || '') !== 'Rendering SVG...'
-            ) return;
-            sawRendering = true;
-            app.cancelGeneration();
-            cancelInvoked = true;
-          }, 0);
-          try {
-            const result = await app.runAnalysis();
-            const sameMapEntries = (entries, current) => (
-              entries.length === current.size &&
-              entries.every(([key, value]) => current.get(key) === value)
-            );
-            const authorityDomains = {
-              proteinIdentityManifestSame:
-                state.proteinIdentityManifest.value === before.proteinIdentityManifest,
-              legacyProteinRawCandidatesSame:
-                state.legacyProteinRawCandidates.value ===
-                  before.legacyProteinRawCandidates,
-              legacyProteinDerivedEvidenceSame:
-                state.legacyProteinDerivedEvidence.value ===
-                  before.legacyProteinDerivedEvidence,
-              losatCacheValuesSame:
-                sameMapEntries(before.losatCache, state.losatCache.value),
-              losatDerivedCacheValuesSame:
-                sameMapEntries(
-                  before.losatDerivedCache,
-                  state.losatDerivedCache.value
-                ),
-              losatCacheInfoSame:
-                state.losatCacheInfo.value === before.losatCacheInfo
-            };
-            return {
-              result,
-              sawRendering,
-              cancelInvoked,
-              errorSummary: String(app.errorLog?.summary || ''),
-              executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
-              ...authorityDomains,
-              authorityRestored: Object.values(authorityDomains).every(Boolean)
-            };
-          } finally {
-            clearInterval(cancelPoll);
-          }
+          const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
+          return contract.cancelDuringRender();
         }"""
     )
 
@@ -972,73 +874,8 @@ def _cancel_during_render(page: Any) -> dict[str, Any]:
 def _fail_renderer_after_migration(page: Any) -> dict[str, Any]:
     return page.evaluate(
         """async () => {
-          const app = window.__GBDRAW_APP__;
-          const { state } = await import('/gbdraw/web/js/state.js');
-          const {
-            CANONICAL_REQUEST_SCHEMA
-          } = await import('/gbdraw/web/js/services/session-request.js');
-          const before = {
-            proteinIdentityManifest: state.proteinIdentityManifest.value,
-            legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
-            legacyProteinDerivedEvidence:
-              state.legacyProteinDerivedEvidence.value,
-            losatCache: Array.from(state.losatCache.value.entries()),
-            losatDerivedCache: Array.from(state.losatDerivedCache.value.entries()),
-            losatCacheInfo: state.losatCacheInfo.value
-          };
-          const originalWorkerPostMessage = Worker.prototype.postMessage;
-          let rendererFailureInjected = false;
-          Worker.prototype.postMessage = function (...args) {
-            const message = args[0];
-            if (
-              !rendererFailureInjected &&
-              message?.type === 'run' &&
-              message?.payload?.request?.schema === CANONICAL_REQUEST_SCHEMA &&
-              message?.payload?.resources &&
-              typeof message.payload.resources === 'object' &&
-              !Array.isArray(message.payload.resources)
-            ) {
-              rendererFailureInjected = true;
-              message.payload.request = null;
-            }
-            return originalWorkerPostMessage.apply(this, args);
-          };
-          try {
-            const result = await app.runAnalysis();
-            const sameMapEntries = (entries, current) => (
-              entries.length === current.size &&
-              entries.every(([key, value]) => current.get(key) === value)
-            );
-            const authorityDomains = {
-              proteinIdentityManifestSame:
-                state.proteinIdentityManifest.value === before.proteinIdentityManifest,
-              legacyProteinRawCandidatesSame:
-                state.legacyProteinRawCandidates.value ===
-                  before.legacyProteinRawCandidates,
-              legacyProteinDerivedEvidenceSame:
-                state.legacyProteinDerivedEvidence.value ===
-                  before.legacyProteinDerivedEvidence,
-              losatCacheValuesSame:
-                sameMapEntries(before.losatCache, state.losatCache.value),
-              losatDerivedCacheValuesSame:
-                sameMapEntries(
-                  before.losatDerivedCache,
-                  state.losatDerivedCache.value
-                ),
-              losatCacheInfoSame:
-                state.losatCacheInfo.value === before.losatCacheInfo
-            };
-            return {
-              result,
-              errorSummary: String(app.errorLog?.summary || ''),
-              executorCalls: Number(window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ || 0),
-              rendererFailureInjected,
-              ...authorityDomains,
-              authorityRestored: Object.values(authorityDomains).every(Boolean)
-            };
-          } finally {
-            Worker.prototype.postMessage = originalWorkerPostMessage;
-          }
+          const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
+          return contract.failRendererAfterMigration();
         }"""
     )
 
@@ -1274,32 +1111,16 @@ def _run_python_adapter() -> int:
                     "Browser File rename/zero-mtime setup failed.",
                 )
 
-                before_generate_path = _save_session(page, checks)
-                before_generate = _read_session(before_generate_path)
-                _assert_legacy_preserved(
-                    before_generate,
-                    fixture,
-                    expected,
-                    checks,
-                )
-                _assert_renamed_resources(before_generate, checks)
-
-                page.reload(wait_until="domcontentloaded")
-                page.wait_for_function("() => window.__GBDRAW_APP__")
-                _import_session(page, before_generate_path, checks)
-                page.wait_for_function(
-                    "() => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0",
-                    timeout=240_000,
-                )
                 legacy_ui_before_cancel = _migration_ui_snapshot(page)
                 canceled_legacy_run = _cancel_during_render(page)
+                _settle_app_render(page)
                 _assert_authority_restored(
                     canceled_legacy_run,
                     "Legacy render cancellation",
                     checks,
                 )
                 checks.require(
-                    canceled_legacy_run.get("sawRendering")
+                    canceled_legacy_run.get("runRequestIssued")
                     and canceled_legacy_run.get("cancelInvoked")
                     and canceled_legacy_run.get("authorityRestored")
                     and canceled_legacy_run.get("result") == {"status": "canceled"},
@@ -1316,6 +1137,7 @@ def _run_python_adapter() -> int:
                 )
                 legacy_ui_before_render_error = _migration_ui_snapshot(page)
                 failed_legacy_run = _fail_renderer_after_migration(page)
+                _settle_app_render(page)
                 _assert_authority_restored(
                     failed_legacy_run,
                     "Legacy renderer failure",
@@ -1335,6 +1157,7 @@ def _run_python_adapter() -> int:
                     "Legacy UI references changed after the failed render.",
                 )
                 _assert_telemetry(_generate(page), expected, checks)
+                _settle_app_render(page)
                 first_layout = _inspect_layout(page)
                 _assert_layout(first_layout, checks)
                 _assert_svg_geometry_parity(
@@ -1345,9 +1168,15 @@ def _run_python_adapter() -> int:
                 _assert_hydrated_downloads(page, expected, checks)
                 _assert_hydrated_utf8_prompt_boundary(page, expected, checks)
 
+                runtime_derived_entries = page.evaluate("""async () => {
+                  const { state } = await import('/gbdraw/web/js/state.js');
+                  return Array.from(state.losatDerivedCache.value.values());
+                }""")
                 migrated_path = _save_session(page, checks)
                 migrated = _read_session(migrated_path)
-                _assert_current_artifacts(migrated, fixture, expected, checks)
+                _assert_current_artifacts(
+                    migrated, fixture, expected, checks, runtime_derived_entries
+                )
                 _assert_renamed_resources(migrated, checks)
 
                 page.reload(wait_until="domcontentloaded")
@@ -1357,7 +1186,20 @@ def _run_python_adapter() -> int:
                     "() => Object.keys(window.__GBDRAW_APP__?.paletteDefinitions || {}).length > 0",
                     timeout=240_000,
                 )
-                _assert_telemetry(_generate(page), expected, checks)
+                regenerated_run = _generate(page)
+                _settle_app_render(page)
+                _assert_telemetry(regenerated_run, expected, checks)
+                checks.require(
+                    regenerated_run["telemetry"].get("proteinDerivedPayloadCacheMisses", 0) > 0,
+                    "Reloaded Session did not rebuild the runtime derived cache.",
+                )
+                checks.require(
+                    page.evaluate("""async () => {
+                      const { state } = await import('/gbdraw/web/js/state.js');
+                      return state.losatDerivedCache.value.size;
+                    }""") > 0,
+                    "Generate did not populate the runtime derived cache.",
+                )
                 second_layout = _inspect_layout(page)
                 _assert_layout(second_layout, checks)
                 checks.require(
@@ -1368,6 +1210,10 @@ def _run_python_adapter() -> int:
 
                 expected_upload_bytes = _install_user_uploaded_tsv(page, expected)
                 uploaded_session_path = _save_session(page, checks)
+                checks.require(
+                    not _read_session(uploaded_session_path).get("losatDerivedCache", {}).get("entries", []),
+                    "Upload Session persisted runtime derived cache entries.",
+                )
                 page.reload(wait_until="domcontentloaded")
                 page.wait_for_function("() => window.__GBDRAW_APP__")
                 _import_session(page, uploaded_session_path, checks)
