@@ -393,6 +393,10 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
         }
         if (data.type !== 'run' || data.requestId !== requestId) return;
         if (data.ok) {
+          // A completed run acknowledges Worker resource staging even when
+          // Python returns a structured render error. Artifact admission is
+          // independent: the live Worker already owns this manifest's bytes.
+          preparedResources.commit();
           const beforeResponse = runtimeTestHooksEnabled()
             ? globalThis.__GBDRAW_TEST_HOOKS__?.beforeDiagramGenerationResponse
             : null;
@@ -412,18 +416,10 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null } = {}) =
             failWorker(error);
             return;
           }
-          let resourcePromotionFinalized = false;
-          const finalizeResourcePromotion = () => {
-            if (resourcePromotionFinalized) return false;
-            preparedResources.commit();
-            resourcePromotionFinalized = true;
-            return true;
-          };
           settleActiveRequest(request, () => {
             resolveRequest(markCurrentWorkerGenerationResponse({
               requestId,
-              ...normalized,
-              finalizeResourcePromotion
+              ...normalized
             }));
           });
           return;
