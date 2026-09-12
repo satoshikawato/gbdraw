@@ -45,7 +45,7 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions, previewRuntime = null }) => {
+export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
   const {
     svgContent,
     extractedFeatures,
@@ -66,9 +66,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
   const { getAllFeatureLegendGroups } = legendActions;
 
-  const persistSvgEdit = (svg, reason) => {
+  const persistSvgEdit = (svg) => {
     skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.markActiveResultDirty?.(reason)) return;
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
       const nextResults = [...results.value];
@@ -360,7 +359,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'palette-style');
+      persistSvgEdit(svg);
     }
   };
 
@@ -411,7 +410,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     });
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'specific-rule-style');
+      persistSvgEdit(svg);
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
   };
@@ -549,7 +548,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'diagram-style');
+      persistSvgEdit(svg);
       console.log(`Applied styles: updated ${updatedCount} elements`);
     }
   };
@@ -617,7 +616,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updated) {
-      persistSvgEdit(svg, 'track-visibility');
+      persistSvgEdit(svg);
       console.log('Track visibility updated');
     }
   };

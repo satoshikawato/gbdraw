@@ -223,6 +223,7 @@ export const createAppSetup = () => {
     pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
+    svgResultIdentity,
     zoom,
     layoutRepositionMode,
     isPanning,
@@ -1091,8 +1092,7 @@ export const createAppSetup = () => {
     state,
     watch,
     nextTick,
-    legendActions,
-    previewRuntime
+    legendActions
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
@@ -3316,6 +3316,7 @@ export const createAppSetup = () => {
     runInfoCopyStatus,
     exactReplayCopyStatus,
     svgContent,
+    svgResultIdentity,
     zoom,
     layoutRepositionMode,
     isPanning,
