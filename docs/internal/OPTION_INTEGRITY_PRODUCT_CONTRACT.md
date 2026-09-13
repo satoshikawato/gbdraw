@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `2`
+- Contract revision: `3`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -22,7 +22,13 @@ Status: active Product authority
   `PD-OI-009`, `PD-OI-010`, `PD-OI-011`, `PD-OI-012`, `PD-OI-013`,
   `PD-OI-014`, `PD-OI-015`, `PD-OI-016`, and `PD-OI-017`
 - Initial candidate modification: `PD-OI-014`, as recorded below
-- Current revision change: `PD-OI-007`, as recorded below
+- Revision 2 change: `PD-OI-007`, as recorded below
+- Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`
+- Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
+  `2026-09-13` after confirming the complete record/search outcome, no feature
+  retirement, and the runtime/memory cost of complete comparisons. The initial
+  approval and its date above continue to describe `PD-OI-001`–`PD-OI-017`.
+  The maintainer subsequently specified the fresh defaults in `PD-OI-019`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -453,6 +459,75 @@ corrected. Passing evidence does not make incorrect behavior normative.
 - Acceptance contracts: `OIC-006`.
 - Owner and decision date: `satoshikawato`, `2026-08-28`.
 
+### PD-OI-018: Complete Linear records, placement, and comparison scope
+
+- Concern key: `diagram-generation.linear-record-universe-and-search-scope`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Normative outcome:
+  1. Without an explicit record selector or crop, Linear includes every record
+     from each GenBank or paired GFF3/FASTA source. Enabling comparisons does
+     not shrink that set or select only the first record.
+  2. Record Layout exposes one independently editable placement per biological
+     record, with an identifiable record label. File count is not record count.
+     Exposing the controls preserves the existing row placement.
+  3. Adjacent comparison selects the Cartesian product between neighboring
+     occupied display rows. Two records above three records means six pairs.
+     This applies to nucleotide, translated-nucleotide, and Pairwise protein
+     comparisons. Explicit selected subsets and uploaded TSV associations
+     retain their meanings.
+  4. Similarity groups and Collinear with scope `all` search every loaded
+     record against every loaded record, including same-row and non-adjacent
+     pairs. Required reverse and within-record evidence is retained. Display
+     placement, including a single occupied row, does not restrict this search.
+  5. Explicit comparison endpoints stay explicit through decoding and
+     rendering, including endpoints whose numeric indices are consecutive.
+  6. Save, fresh Load, regeneration, reordering, and cache reuse preserve the
+     selected record set, endpoints, and independent placements. Explicit
+     selection/cropping, comparison omission, and imported read-only intent
+     remain supported. `OIPC-C07` governs failed, canceled, and stale work.
+  7. Shared source bytes remain shared. Complete comparisons may require more
+     jobs, but no hidden record or pair cap is permitted.
+- Rationale: Prevent recurrence of incomplete-record search and per-record
+  placement regressions reported by the maintainer.
+- Must preserve: All seven outcomes above; `PD-OI-006` keeps the fresh Collinear
+  scope `adjacent`, and `PD-OI-014` continues to govern evidence versus displayed
+  links. A fresh no-comparison document does not gain comparison intent.
+- May retire: none.
+- Accepted residual risk: Increased computation time and memory from complete
+  all-record comparisons. The maintainer explicitly accepted this cost as the
+  original behavior. This does not permit silent truncation or hidden caps.
+- Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`.
+- Decision source: The maintainer explicitly specified Cartesian Adjacent and
+  complete all-record scopes, requested durable regression protection, accepted
+  the computation/memory cost, and confirmed `May retire: none`, the Owner, and
+  the decision date.
+- Owner and decision date: `satoshikawato`, `2026-09-13`.
+
+### PD-OI-019: Fresh Web multi-record layout defaults
+
+- Concern key: `diagram-generation.web-multi-record-layout-defaults`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Normative outcome: In a fresh Web document and after Reset Settings, Linear
+  defaults to Arrange in rows, grouping records from each source file into the
+  same row while retaining independent per-record placement controls. Circular
+  defaults to Multiple records in a single canvas (Multi-Record Canvas).
+  Explicitly saved layout choices take precedence on Session import; disabling
+  either setting remains supported.
+- Rationale: The maintainer explicitly requested these two defaults as part of
+  restoring complete multi-record workflows.
+- Must preserve: All loaded records; independent placement; explicit saved
+  settings; the ability to choose separate rows or disable Circular shared
+  canvas; comparison scope as specified in `PD-OI-018`.
+- May retire: none. Both existing layout choices remain available.
+- Accepted residual risk: Complete all-record comparisons retain the computation
+  and memory cost accepted under `PD-OI-018`.
+- Acceptance contracts: `OIC-004`, `OIC-006`, `OIC-015`.
+- Decision source: Explicit maintainer follow-up requesting same-file Linear
+  rows and Circular shared canvas as defaults in the same decision session.
+- Owner and decision date: `satoshikawato`, `2026-09-13`.
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -471,6 +546,32 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-012` | `grid_column`, deferred direct-link topology, and GUI surface scope are represented accurately. |
 | `OIC-013` | Failed, canceled, or stale Generate preserves the committed request and last successful Result. |
 | `OIC-014` | Product authority, Product Impact mapping, Architecture Ratchet, runtime owners, and evidence remain separate. |
+| `OIC-015` | Linear discovery, per-record placement, actual comparison jobs, explicit request endpoints, Session replay, and SVG endpoints retain the complete selected record universe. Adjacent uses neighboring-row Cartesian products; Similarity and Collinear `all` retain complete directed evidence regardless of display rows. |
+
+### OIC-015 required regression coverage
+
+The normal automated PR gate must observe all of the following:
+
+- Multi-record GenBank and GFF3/FASTA discovery retains every record with
+  comparisons enabled and disabled; explicit selectors remain exact.
+- A two-record source and a three-record source expose five independent
+  placements. The neighboring 2-by-3 rows submit six Pairwise search jobs.
+  Fresh and reset documents use same-file Linear rows and Circular shared
+  canvas; explicit saved opt-outs survive Load.
+- Similarity and Collinear `all` submit the complete directed record-pair
+  matrix, including self, same-row, and non-adjacent evidence. A single-row
+  layout retains analysis even though it has no between-row links.
+- Explicit endpoints survive the typed decoder and reach the intended SVG
+  records, including a numerically consecutive pair beside a multi-record row.
+- Save, fresh Load, regeneration, and reordering preserve record identity,
+  placement, pair mapping, and shared source resources. Repeated execution
+  reuses only semantically equivalent cached searches.
+
+These are observations of jobs, controls, requests, Sessions, and SVG results;
+checking an `All` label or counting uploaded files is insufficient. Restoring
+first-record truncation, zipped Adjacent pairing, or positional endpoint
+coercion must fail the corresponding regression test. Source changes to these
+boundaries require this coverage in the normal PR gate.
 
 ## Residual-risk boundary
 
