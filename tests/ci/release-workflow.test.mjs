@@ -6,9 +6,9 @@ const source = readFileSync(new URL('../../.github/workflows/release.yml', impor
 const build = source.split('  build-release-distributions:\n')[1].split('  pypi-publish:\n')[0];
 const publish = source.split('  pypi-publish:\n')[1];
 
-test('publishing has only a version tag push entry and immutable actions', () => {
-  assert.match(source, /\non:\n  push:\n    tags: \['v\[0-9\]\*\.\[0-9\]\*\.\[0-9\]\*'\]\n\n/);
-  assert.doesNotMatch(source, /workflow_dispatch|workflow_call|pull_request|\n  release:|branches:/);
+test('publishing starts only when a GitHub Release is published and uses immutable actions', () => {
+  assert.match(source, /\non:\n  release:\n    types: \[published\]\n\n/);
+  assert.doesNotMatch(source, /workflow_dispatch|workflow_call|pull_request|\n  push:|branches:/);
   assert.match(source, /\npermissions: \{\}/);
   assert.equal((source.match(/id-token: write/g) || []).length, 1);
   assert.doesNotMatch(source, /secrets\.|password:|username:|user:|PYPI_TOKEN|TWINE_|repository-url:|continue-on-error|retry|always\(\)/);
