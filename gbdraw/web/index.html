@@ -1495,18 +1495,60 @@
                             <span>{{ linearReorderNotice }}</span>
                         </div>
                         <div data-linear-record-list class="min-w-0 space-y-3">
-                            <template v-for="displayRow in linearComparisonTimeline.rows" :key="`linear-display-row-${displayRow.row}`">
-                                <section :data-linear-display-row="displayRow.row" class="min-w-0 space-y-2" :aria-label="`Linear display row ${displayRow.row}`">
-                                    <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Display row {{ displayRow.row }}</div>
-                                    <div
-                                        v-for="({ sequence: seq, index: idx }) in displayRow.records"
-                                        :key="seq.uid"
-                                        :data-linear-record-card="seq.uid"
-                                        :data-linear-record-uid="seq.uid"
-                                        class="min-w-0 p-3 bg-slate-50 rounded-lg border border-slate-200 group text-sm transition-all hover:border-blue-300"
-                                        role="group"
-                                        :aria-label="`Linear sequence ${idx + 1}`"
-                                    >
+                            <section
+                                v-for="(source, sourceIndex) in linearSourceGroups"
+                                :key="source.uid"
+                                :data-linear-source-card="source.uid"
+                                class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
+                                :aria-label="`Linear input file ${sourceIndex + 1}`"
+                            >
+                                <div class="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
+                                    <span>File {{ sourceIndex + 1 }}</span>
+                                    <span v-if="source.records.length > 1">{{ source.records.length }} records</span>
+                                </div>
+                            <div v-if="lInputType === 'gb'" class="space-y-2">
+                                <file-uploader
+                                    label="GenBank File"
+                                    :test-id="`linear-genbank-${sourceIndex + 1}`"
+                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
+                                    :model-value="source.sequence.gb"
+                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)"
+                                ></file-uploader>
+                            </div>
+                            <div v-else class="space-y-2 mb-2">
+                                <file-uploader
+                                    label="GFF3"
+                                    accept=".gff,.gff3,.txt,text/plain,text/*"
+                                    :model-value="source.sequence.gff"
+                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)"
+                                ></file-uploader>
+                                <file-uploader
+                                    label="FASTA"
+                                    accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
+                                    :model-value="source.sequence.fasta"
+                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
+                                ></file-uploader>
+                            </div>
+                                <div
+                                    v-for="({ sequence: seq, index: idx }) in source.records"
+                                    :key="seq.uid"
+                                    :data-linear-record-card="seq.uid"
+                                    :data-linear-record-uid="seq.uid"
+                                    class="min-w-0"
+                                    role="group"
+                                    :aria-label="`Linear sequence ${idx + 1}`"
+                                >
+                            <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
+                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-primary-label">
+                                    <i class="ph ph-sliders-horizontal"></i>
+                                    <span v-if="source.records.length > 1" class="min-w-0 truncate" :title="linearComparisonRecordLabel(seq.uid)">{{ linearComparisonRecordLabel(seq.uid) }}</span>
+                                    <span v-else>Record options</span>
+                                    <span
+                                        v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && !(Number(seq.losat_gencode) >= 1)"
+                                        class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                                    >Gencode required</span>
+                                </summary>
+                                <div class="min-w-0 space-y-2 pt-2">
                             <div class="mb-2 flex items-center justify-between gap-2">
                                 <div class="text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                                 <div class="flex items-center gap-1 shrink-0">
@@ -1528,39 +1570,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div v-if="lInputType === 'gb'" class="space-y-2">
-                                <file-uploader
-                                    label="GenBank File"
-                                    :test-id="`linear-genbank-${idx + 1}`"
-                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
-                                    :model-value="seq.gb"
-                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gb', $event)"
-                                ></file-uploader>
-                            </div>
-                            <div v-else class="space-y-2 mb-2">
-                                <file-uploader
-                                    label="GFF3"
-                                    accept=".gff,.gff3,.txt,text/plain,text/*"
-                                    :model-value="seq.gff"
-                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gff', $event)"
-                                ></file-uploader>
-                                <file-uploader
-                                    label="FASTA"
-                                    accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
-                                    :model-value="seq.fasta"
-                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'fasta', $event)"
-                                ></file-uploader>
-                            </div>
-                            <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
-                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-primary-label">
-                                    <i class="ph ph-sliders-horizontal"></i>
-                                    Record options
-                                    <span
-                                        v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && !(Number(seq.losat_gencode) >= 1)"
-                                        class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
-                                    >Gencode required</span>
-                                </summary>
-                                <div class="min-w-0 space-y-2 pt-2">
+
                                     <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600">Load record rotation controls</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
@@ -1766,13 +1776,12 @@
                             </div>
                                 </div>
                             </details>
-                                    </div>
-                                </section>
-                            </template>
+                                </div>
+                            </section>
                         </div>
                         <div class="flex min-w-0 gap-2">
                             <button type="button" aria-label="Add sequence" @click="addLinearSeq()" class="btn btn-secondary min-w-0 w-full text-xs"><i class="ph ph-plus"></i> Add sequence</button>
-                            <button v-if="linearSeqs.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger min-w-0 w-full text-xs"><i class="ph ph-minus"></i> Remove</button>
+                            <button v-if="linearSourceGroups.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger min-w-0 w-full text-xs"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                         <section data-linear-comparison-card class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
                             <div id="linear-comparison-heading" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700">

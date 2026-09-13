@@ -361,7 +361,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   await expect(page.getByRole('spinbutton', {
     name: /^Linear record row for sequence \d+$/
   })).toHaveCount(4);
-  await expect(page.locator('[data-linear-display-row]')).toHaveCount(2);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(4);
   await expect(page.locator('[data-linear-comparison-boundary]')).toHaveCount(1);
   await expectExactEdgeKeys(boundary, crossProductEdgeKeys);
 
@@ -446,13 +446,10 @@ test('Linear records precede comparison pairs in DOM and keyboard order at narro
     ...uids.slice(0, -1).map((_, index) => `boundary:${index + 1}->${index + 2}`)
   ];
 
-  const rows = page.locator('[data-linear-display-row]');
+  const sources = page.locator('[data-linear-source-card]');
   const boundaries = page.locator('[data-linear-comparison-boundary]');
-  await expect(rows).toHaveCount(5);
+  await expect(sources).toHaveCount(5);
   await expect(boundaries).toHaveCount(4);
-  expect(await rows.evaluateAll((elements) => (
-    elements.map((element) => element.dataset.linearDisplayRow)
-  ))).toEqual(['1', '2', '3', '4', '5']);
   expect(await boundaries.evaluateAll((elements) => (
     elements.map((element) => element.dataset.linearComparisonBoundary)
   ))).toEqual(['1->2', '2->3', '3->4', '4->5']);
@@ -755,8 +752,9 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
     makeComparisonGenbank('NormalizeRecB', 'gct')
   ]);
 
-  await expect(page.locator('[data-linear-display-row="1"]')).toBeVisible();
-  await expect(page.locator('[data-linear-display-row]')).toHaveCount(1);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
+    .toEqual([1, 1]);
   await expect(page.locator('[data-linear-comparison-boundary]')).toHaveCount(0);
   await expect(linearRecordCard(page, sharedRowUids[0])).toBeVisible();
   await expect(linearRecordCard(page, sharedRowUids[1])).toBeVisible();
@@ -1039,6 +1037,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
     sharedResourceCount: 1
   });
 
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(1);
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
   expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
@@ -1087,6 +1087,8 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(await page.evaluate(() => window.__GBDRAW_AUTOMATIC_RELOAD_RUN__.error)).toBe('');
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(1);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(1);
 
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1144,7 +1146,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   ];
   const chooseSource = async (index) => {
     const chooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index === 0 ? 0 : 2).click();
+    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({
       name: sources[index].name,
@@ -2339,6 +2341,8 @@ AAAAAAAAAA
   });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['RecB', 'RecA']);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
+  await expect(page.locator('[data-linear-source-card]').getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
   await page.getByText('Region Annotations', { exact: false }).click();
   await expect(page.getByLabel('Annotation target record').locator('option')).toHaveText([
     'Select target record',
@@ -2637,6 +2641,8 @@ test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preser
   await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
   const controls = page.getByRole('spinbutton', { name: /^Linear record row for sequence \d+$/ });
   await expect(controls).toHaveCount(5);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(2);
   const expectedPairs = [[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]];
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const generated = await completeComparisonSnapshot(page);
@@ -2666,6 +2672,8 @@ test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preser
     .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
   await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
   await expect(controls).toHaveCount(5);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(2);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const restored = await completeComparisonSnapshot(page);
   expect(restored.rows).toEqual([1, 1, 2, 2, 3]);
@@ -2771,4 +2779,57 @@ test('@pr-smoke multi-record defaults render a shared Circular canvas and preser
     circular: window.__GBDRAW_APP__.form.multi_record_canvas,
     linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
   }))).toEqual({ circular: true, linear: true });
+});
+
+test('@pr-smoke one uploaded source stays one file card through record moves, replacement, and removal', async ({ page }, testInfo) => {
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  const sources = page.locator('[data-linear-source-card]');
+  await expect(sources).toHaveCount(2);
+  await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
+  await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await expect(sources.nth(0)).toContainText('UpperA');
+  await expect(sources.nth(0)).toContainText('UpperB');
+  await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gff'; });
+  await expect(sources).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(4);
+  await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gb'; });
+  await expect(sources).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordRow(app.linearSeqs.at(-1).uid, 3);
+  });
+  await expect(sources).toHaveCount(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sources.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('one-file-with-two-records-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await sources.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('source-files-and-records-desktop.png') });
+
+  const chooserPromise = page.waitForEvent('filechooser');
+  await sources.nth(1).getByRole('button', { name: 'Choose GenBank File' }).click();
+  await (await chooserPromise).setFiles({
+    // The name deliberately matches the first source; distinct uploads remain distinct.
+    name: 'upper.gbff', mimeType: 'text/plain',
+    buffer: Buffer.from(makeComparisonGenbank('Replacement'))
+  });
+  await expect.poll(() => page.evaluate(() => ({
+    ids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.region_record_id),
+    discovered: window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs.at(-1))
+      .map((option) => option.value)
+  }))).toEqual({ ids: ['UpperA', 'UpperB', ''], discovered: ['', 'Replacement'] });
+  await expect(sources).toHaveCount(2);
+  await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(1);
+  await sources.nth(1).getByRole('button', { name: /Remove$/ }).click();
+  await expect(sources).toHaveCount(1);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual(['UpperA', 'UpperB']);
+  await sources.first().getByRole('button', { name: /Remove$/ }).click();
+  await expect(sources).toHaveCount(1);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => ({ file: seq.gb, selector: seq.region_record_id }))))
+    .toEqual([{ file: null, selector: '' }]);
 });

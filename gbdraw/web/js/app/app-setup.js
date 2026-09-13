@@ -30,7 +30,7 @@ import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { readFileText } from '../services/file-content-cache.js';
+import { getSessionResourceSource, readFileText } from '../services/file-content-cache.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -555,6 +555,25 @@ export const createAppSetup = () => {
     }
   }));
 
+  const linearSourceGroups = computed(() => {
+    const groups = [];
+    const bySource = new Map();
+    const identity = (file) => getSessionResourceSource(file)?.descriptor || file;
+    linearSeqs.forEach((sequence, index) => {
+      const files = [sequence.gb, sequence.gff, sequence.fasta].map(identity);
+      const key = files.find(Boolean) || sequence.uid;
+      const candidates = bySource.get(key) || [];
+      let group = candidates.find((entry) => entry.files.every((file, position) => file === files[position]));
+      if (!group) {
+        group = { uid: sequence.uid, sequence, index, files, records: [] };
+        candidates.push(group);
+        bySource.set(key, candidates);
+        groups.push(group);
+      }
+      group.records.push({ sequence, index });
+    });
+    return groups;
+  });
   const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
     sequences: linearSeqs,
     layout: effectiveLinearComparisonLayout(),
@@ -3268,7 +3287,9 @@ export const createAppSetup = () => {
 
   const removeLastLinearSeq = () => {
     if (linearSeqs.length <= 1) return;
-    removeLinearSeqAt(linearSeqs.length - 1);
+    const group = linearSourceGroups.value.at(-1);
+    const removed = new Set(group.records.map(({ sequence }) => sequence.uid));
+    applyLinearSeqMutation(linearSeqs.filter((seq) => !removed.has(seq.uid)));
   };
 
   const setLinearSeqPrimaryFile = (index, field, value) => {
@@ -3278,29 +3299,24 @@ export const createAppSetup = () => {
 
     const nextValue = value ?? null;
     const seq = linearSeqs[idx];
-
-    if (field === 'gb') {
-      if (!nextValue) {
-        removeLinearSeqAt(idx);
-        return;
-      }
-      seq.gb = nextValue;
-      pendingLinearRecordExpansions.add(seq.uid);
-      invalidateLinearComparisonArtifacts();
-      linearReorderNotice.value = '';
-      return;
-    }
-
-    const otherField = field === 'gff' ? 'fasta' : 'gff';
-    if (!nextValue && !seq[otherField]) {
-      removeLinearSeqAt(idx);
-      return;
-    }
-
-    seq[field] = nextValue;
-    pendingLinearRecordExpansions.add(seq.uid);
-    invalidateLinearComparisonArtifacts();
-    linearReorderNotice.value = '';
+    if (seq[field] === nextValue) return;
+    const group = linearSourceGroups.value.find((entry) => (
+      entry.records.some(({ sequence }) => sequence.uid === seq.uid)
+    ));
+    const members = new Set(group.records.map(({ sequence }) => sequence.uid));
+    const replacement = createLinearSeq({
+      ...group.sequence,
+      [field]: nextValue,
+      ...(group.records.length > 1 ? {
+        region_record_id: '', region_start: null, region_end: null, region_reverse: false
+      } : {})
+    });
+    const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
+    applyLinearSeqMutation(linearSeqs.flatMap((entry) => (
+      entry.uid === group.uid ? (keepSource ? [replacement] : [])
+        : members.has(entry.uid) ? [] : [entry]
+    )));
+    if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
   };
 
   const canMoveLinearSeqUp = (index) => {
@@ -3438,6 +3454,7 @@ export const createAppSetup = () => {
     getLinearDepthFile,
     setLinearDepthFile,
     linearSeqs,
+    linearSourceGroups,
     linearRecordLayoutEnabled,
     linearRecordGap,
     linearRecordRows,
