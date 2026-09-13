@@ -4,13 +4,13 @@
 
 # Installation
 
-`gbdraw` supports three common ways of working:
+Choose an installation route according to the version and interface you need:
 
 | Method | Best for | Notes |
 | --- | --- | --- |
 | Hosted web app | Making a diagram without a local installation | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
 | Bioconda | Routine command-line use and reproducible environments | Recommended for most users. |
-| PyPI | Installing into an existing Python environment | Uses `python -m pip install gbdraw`. |
+| PyPI | Installing a published version into an existing Python environment | Check [available packages](https://pypi.org/project/gbdraw/) before installing. |
 | Source install | Developing or testing the current checkout | Uses `pip install -e ".[dev]"`. |
 
 ## 1. Hosted web app
@@ -36,11 +36,19 @@ The same UI can also be launched locally after installation with:
 gbdraw gui
 ```
 
-Local `gbdraw gui` analysis runs on your machine. The interactive gallery examples are hosted separately at [https://gbdraw.app/gallery/](https://gbdraw.app/gallery/) and are not bundled into local installs.
+Local `gbdraw gui` analysis runs on your machine. Its packaged Web assets and
+browser wheel have no hosted Google Analytics injection. Prepared local installs
+include the browser runtime assets and GUI palette data needed for offline
+analysis; obtaining the package and its dependencies initially requires network
+access or a local package source. The interactive Gallery examples are hosted
+separately at [gbdraw.app/gallery](https://gbdraw.app/gallery/) and are not bundled
+into local installs.
 
 ## 2. Bioconda installation
 
 Bioconda is the recommended local installation path for routine command-line use.
+The command installs the version available on that channel. Channel availability
+can differ from the source version or other package indexes.
 
 ```bash
 mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
@@ -56,7 +64,13 @@ gbdraw gui
 
 ## 3. PyPI installation
 
-Install the released package into an activated Python 3.10 or newer environment:
+Check the [PyPI project](https://pypi.org/project/gbdraw/) for available versions.
+The source version is `0.14.0`; a version is installable from PyPI only after it
+appears there. If the project or desired version is unavailable, use a source
+install below.
+
+For a version available on PyPI, install in an activated environment using a
+supported Python version (3.10, 3.11, or 3.12):
 
 ```bash
 python -m pip install gbdraw
@@ -64,6 +78,9 @@ gbdraw -h
 ```
 
 Use an isolated virtual environment rather than modifying the system Python installation.
+An unpinned command selects the version available on PyPI, not an unpublished
+candidate. For the release's migration notes, see
+[0.14.0 release notes](./RELEASE_NOTES_0.14.0.md).
 
 ## 4. Source installation for development
 
@@ -85,7 +102,8 @@ pytest tests/ -v -m "not slow"
 
 ## Optional: non-SVG export support
 
-SVG export works with the base install. PNG, PDF, EPS, and PS export require CairoSVG:
+SVG export works with the base install. PNG, PDF, EPS, and PS export require
+CairoSVG. For a version available on PyPI:
 
 ```bash
 python -m pip install "gbdraw[export]"
@@ -93,7 +111,17 @@ python -m pip install "gbdraw[export]"
 
 For an editable source checkout, use `python -m pip install -e ".[dev,export]"` instead.
 
-Depending on your platform, CairoSVG may also require system Cairo/Pango libraries.
+Depending on your platform, CairoSVG may also require system Cairo/Pango
+libraries. On Ubuntu, the tested system packages are `libcairo2-dev` and
+`libpango1.0-dev`.
+
+## Supported and verified environments
+
+The supported Python versions are 3.10, 3.11, and 3.12. The 0.14.0
+package has passed isolated wheel/sdist installation, CLI, Python API, session
+replay, and export checks on Linux across those versions. The installed local
+GUI has also been checked with Chromium. These checks do not establish
+Windows/macOS installation, Edge, or later-Python validation.
 
 ## Related commands
 

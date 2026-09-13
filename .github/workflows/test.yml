@@ -11,17 +11,25 @@ on:
     branches: ["dev"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
+    inputs:
+      tier:
+        description: Integrated dev validation or exhaustive release/S11 acceptance
+        type: choice
+        options: [dev, release]
+        default: dev
+        required: true
 
 concurrency:
   # Promotion accepts only the current remote dev tip, so older dev staging can be canceled.
-  group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tier || 'dev' }}
   cancel-in-progress: true
 
 jobs:
   ci-impact:
     name: CI impact plan
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Full-history checkout can take nearly five minutes before trusted-base setup.
+    timeout-minutes: 10
     outputs:
       plan: ${{ steps.pr_plan.outputs.plan || steps.dev_plan.outputs.plan }}
     steps:
@@ -35,6 +43,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install locked CI test dependencies
+        run: npm ci
+
       - name: Test CI impact policy and adapters
         run: node --test tests/ci/*.test.mjs
 
@@ -44,6 +55,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .ci-trusted-base
+          sparse-checkout: tools
           fetch-depth: 1
           persist-credentials: false
 
@@ -66,7 +78,7 @@ jobs:
         if: github.event_name != 'pull_request'
         id: dev_plan
         env:
-          CI_IMPACT_PROFILE: dev
+          CI_IMPACT_PROFILE: ${{ inputs.tier == 'release' && 'release' || 'dev' }}
           CI_IMPACT_EVENT_NAME: ${{ github.event_name }}
           CI_IMPACT_REPOSITORY: ${{ github.repository }}
           CI_IMPACT_CHANGE_BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.sha }}
@@ -314,10 +326,65 @@ jobs:
           -m "browser and not slow"
           --durations=30
 
+      - name: Run package build integration
+        run: >-
+          python -m pytest tests/test_web_packaging.py
+          -m "slow and not browser"
+          --durations=30
+
       - name: Run offline GUI browser contracts
         run: >-
           python -m pytest tests/test_web_packaging.py
           -m "slow and browser"
+          --durations=30
+
+  web-contracts-pr:
+    name: Web contracts (Python 3.11)
+    needs: ci-impact
+    if: >-
+      github.event_name == 'pull_request' && github.base_ref == 'dev' &&
+      needs.ci-impact.result == 'success' &&
+      (contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-contracts-pr') ||
+      contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Web contract dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          npm ci
+          python -m playwright install --with-deps chromium
+
+      - name: Prepare browser wheel
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Run fast Web JavaScript contracts
+        run: >-
+          find tests/web -maxdepth 1 -type f
+          -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
+          ! -name 'gallery-session-publication.test.mjs'
+          -print0 | xargs -0 node --test
+
+      - name: Run non-slow Python browser tests
+        run: >-
+          python -m pytest tests/
+          -m "browser and not slow"
           --durations=30
 
   web-pr-smoke:
@@ -348,25 +415,12 @@ jobs:
 
       - name: Install Web PR smoke dependencies
         run: |
-          python -m pip install -e ".[dev]"
+          python -m pip install -e . build
           npm ci
           npx playwright install --with-deps chromium
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
-
-      - name: Run fast Web JavaScript contracts
-        run: >-
-          find tests/web -maxdepth 1 -type f
-          -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
-          ! -name 'gallery-session-publication.test.mjs'
-          -print0 | xargs -0 node --test
-
-      - name: Run non-slow Python browser tests
-        run: >-
-          python -m pytest tests/
-          -m "browser and not slow"
-          --durations=30
 
       - name: Run Playwright PR smoke
         run: npm run test:web:pr-smoke
@@ -653,6 +707,7 @@ jobs:
       - recipes-standard
       - gallery
       - lint
+      - web-contracts-pr
       - web-pr-smoke
     if: >-
       always() &&
@@ -666,6 +721,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .ci-trusted-base
+          sparse-checkout: tools
           fetch-depth: 1
           persist-credentials: false
 
@@ -693,7 +749,7 @@ jobs:
       - lint
       - losat-cache-browser-acceptance
     if: >-
-      always() &&
+      always() && inputs.tier != 'release' &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
@@ -713,3 +769,49 @@ jobs:
           CI_IMPACT_EXPECTED_PROFILE: dev
           CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
         run: node tools/ci-impact.mjs gate
+
+  release-gate:
+    name: Release / gate
+    needs:
+      - ci-impact
+      - web-change-budget
+      - core
+      - recipes-standard
+      - gallery
+      - browser
+      - playwright-functional
+      - playwright-performance
+      - acceptance-supported-main
+      - slow-main
+      - lint
+      - losat-cache-browser-acceptance
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/dev' && inputs.tier == 'release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout protected dev CI policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate exhaustive release evidence
+        env:
+          CI_IMPACT_PLAN_JSON: ${{ needs.ci-impact.outputs.plan }}
+          CI_IMPACT_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_IMPACT_EXPECTED_PROFILE: release
+          CI_IMPACT_EXPECTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: node tools/ci-impact.mjs gate
+
+      - name: Require exact candidate Gallery readiness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node tools/check-promotion-readiness.mjs workflow-evidence
+          --repository "$GITHUB_REPOSITORY"
+          --workflow-path .github/workflows/gallery-publication.yml
+          --aggregate-name "Gallery readiness / gate"
+          --head-sha "${{ github.sha }}"

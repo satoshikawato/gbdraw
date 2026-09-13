@@ -57,7 +57,12 @@ import {
   normalizePaletteColors
 } from './color-utils.js';
 import { serializeSpecificRules } from './file-imports.js';
-import { serializeFeatureVisibilityRules } from './feature-visibility.js';
+import {
+  buildFeatureVisibilitySelectorCache,
+  preserveFeatureVisibilitySelectorCacheForOverrides,
+  reconcileFeatureVisibilityOverrides,
+  serializeFeatureVisibilityRules
+} from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
 } from './definition-line-style-state.js';
@@ -922,6 +927,7 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
 };
 export const createRunAnalysis = ({
   state,
+  isCurrentFeature,
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
@@ -1106,14 +1112,12 @@ export const createRunAnalysis = ({
     }
   };
   const generatedArtifactTransactionOwner = Object.freeze({
-    build(ownerSet, { finalizeResourcePromotion = null, runtimeState = null } = {}) {
+    build(ownerSet, { runtimeState = null } = {}) {
       recordSessionLifecycleEvent('artifact.candidate-completed');
       recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
       return Object.freeze({
         ownerSet: Object.freeze(ownerSet),
-        runtimeState,
-        finalizeResourcePromotion:
-          typeof finalizeResourcePromotion === 'function' ? finalizeResourcePromotion : null
+        runtimeState
       });
     },
     activate(candidate, { selectedResultIndex = 0 } = {}) {
@@ -1128,9 +1132,8 @@ export const createRunAnalysis = ({
       recordStructuralMetric('generatedArtifactActivationCount', 1);
       recordSessionLifecycleEvent('artifact.activation-completed', { selectedResultIndex });
     },
-    finalize(candidate) {
+    finalize() {
       recordSessionLifecycleEvent('artifact.finalization-started');
-      candidate?.finalizeResourcePromotion?.();
       recordStructuralMetric('generatedArtifactFinalizeCount', 1);
       recordSessionLifecycleEvent('artifact.finalization-completed');
     },
@@ -1649,7 +1652,10 @@ export const createRunAnalysis = ({
       });
       circularRecordList.value = nextRecords;
       circularRecordDiscovery.status = 'ready';
-      circularRecordDiscovery.canonicalRecordIdentities = [];
+      // Identity belongs to the source, including while its mode is inactive.
+      circularRecordDiscovery.canonicalRecordIdentities = nextRecords
+        .filter((record) => record.recordKey)
+        .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, adv.multi_record_positions);
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...nextPositions);
     } catch (error) {
@@ -1751,6 +1757,12 @@ export const createRunAnalysis = ({
       ?? extractedFeatures.value;
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
+    const hasSourceBoundEditorIntent = Object.keys(featureVisibilityOverrides).length > 0
+      || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
+      || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
+    const sourceReplaced = !isReflow && hasSourceBoundEditorIntent
+      && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
+        .some(feature => !isCurrentFeature(feature));
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -2484,6 +2496,7 @@ export const createRunAnalysis = ({
         circularConservation.enabled = shouldDrawCircularPairwiseComparisons;
 
         if (shouldDrawCircularPairwiseComparisons) {
+          setProcessingStatus('Preparing conservation comparisons...');
           circularConservation.ring_width = normalizePositiveNumberOrNull(
             circularConservation.ring_width
           );
@@ -2601,7 +2614,7 @@ export const createRunAnalysis = ({
             }
 
             if (losatJobs.length > 0) {
-              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
+              setProcessingStatus('Preparing comparison search runtime...');
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
                 console.warn('LOSAT runtime warmup failed; execution will report the error.', error);
                 return null;
@@ -2610,6 +2623,7 @@ export const createRunAnalysis = ({
                 const { wasmModule: _wasmModule, ...threadedStatus } = runtime.threaded;
                 losatThreadingStatus.value = threadedStatus;
               }
+              setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
               const losatResults = await executeLosatJobs(losatJobs, {
                 concurrency: getLosatParallelWorkers(),
                 executionMode,
@@ -2764,6 +2778,7 @@ export const createRunAnalysis = ({
         const useOrthogroupBlastp = useProteinBlastp && blastpMode === 'orthogroup';
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
+          setProcessingStatus('Preparing comparisons...');
           adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
           adv.min_bitscore = normalizeBlastThresholdNumber(
             adv.min_bitscore,
@@ -3274,30 +3289,6 @@ export const createRunAnalysis = ({
           };
         };
 
-        const buildCacheKey = async (metadata) => {
-          if (metadata?.identityKind === 'protein') {
-            const response = await runDiagramHelperOperation(
-              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY,
-              {
-                identityManifest: cloneJsonData(workingProteinIdentityManifest),
-                queryRecordInstanceKey: metadata.queryRecordInstanceKey,
-                subjectRecordInstanceKey: metadata.subjectRecordInstanceKey,
-                expectedOptions: {
-                  program: metadata.program,
-                  outfmt: metadata.outfmt,
-                  args: normalizeLosatArgs(metadata.args)
-                }
-              }
-            );
-            const result = response.result;
-            if (result.error || !result.key) {
-              throw new Error(result.error || 'Protein cache key generation failed.');
-            }
-            return String(result.key);
-          }
-          return hashText(JSON.stringify(buildLosatCachePayload(metadata)));
-        };
-
         const tryPromoteLegacyProteinEntry = async ({
           cacheKey,
           metadata,
@@ -3616,15 +3607,54 @@ export const createRunAnalysis = ({
             }));
           }
 
+          const preparedJobs = [];
           for (const spec of jobSpecs) {
+            throwIfGenerationCanceled();
+            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
+            const cacheMetadata = await buildCacheMetadata(
+              losatArgs, spec.queryIndex, spec.subjectIndex
+            );
+            preparedJobs.push({ spec, losatArgs, cacheMetadata });
+          }
+          let proteinCacheKeys = null;
+          if (useProteinBlastp && preparedJobs.length > 0) {
+            throwIfGenerationCanceled();
+            const response = await runDiagramHelperOperation(
+              DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS,
+              {
+                identityManifest: cloneJsonData(workingProteinIdentityManifest),
+                pairs: preparedJobs.map(({ cacheMetadata }) => ({
+                  queryRecordInstanceKey: cacheMetadata.queryRecordInstanceKey,
+                  subjectRecordInstanceKey: cacheMetadata.subjectRecordInstanceKey,
+                  expectedOptions: {
+                    program: cacheMetadata.program,
+                    outfmt: cacheMetadata.outfmt,
+                    args: normalizeLosatArgs(cacheMetadata.args)
+                  }
+                }))
+              }
+            );
+            throwIfGenerationCanceled();
+            const result = response.result;
+            if (
+              result.error || !Array.isArray(result.keys)
+              || result.keys.length !== preparedJobs.length
+              || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
+            ) {
+              throw new Error(result.error || 'Protein cache key generation failed.');
+            }
+            proteinCacheKeys = result.keys;
+          }
+
+          for (const [jobIndex, { spec, losatArgs, cacheMetadata }] of preparedJobs.entries()) {
             throwIfGenerationCanceled();
             const queryEntry = await getSeqEntry(spec.queryIndex);
             throwIfGenerationCanceled();
             const subjectEntry = await getSeqEntry(spec.subjectIndex);
             throwIfGenerationCanceled();
-            const losatArgs = buildLosatArgs(spec.queryIndex, spec.subjectIndex);
-            const cacheMetadata = await buildCacheMetadata(losatArgs, spec.queryIndex, spec.subjectIndex);
-            const cacheKey = await buildCacheKey(cacheMetadata);
+            const cacheKey = useProteinBlastp
+              ? proteinCacheKeys[jobIndex]
+              : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
             throwIfGenerationCanceled();
             const queryCanonicalHash = await getSeqHash(spec.queryIndex);
             throwIfGenerationCanceled();
@@ -3729,11 +3759,12 @@ export const createRunAnalysis = ({
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (losatJobs.length > 0) {
-            setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
+            setProcessingStatus('Preparing comparison search runtime...');
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
+            setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
             const executionStartedAt = getNow();
             const losatResults = await executeLosatJobs(losatJobs, {
               concurrency: getLosatParallelWorkers(),
@@ -3990,6 +4021,7 @@ export const createRunAnalysis = ({
               }
             }
           } else {
+            setProcessingStatus('Preparing nucleotide comparison results...');
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
@@ -4193,7 +4225,12 @@ export const createRunAnalysis = ({
       }
 
       throwIfGenerationCanceled();
-      setProcessingStatus('Rendering SVG...');
+      setProcessingStatus('Preparing render inputs and session...');
+      if (!isReflow) {
+        await nextTick();
+        await waitForAfterPaint();
+        throwIfGenerationCanceled();
+      }
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
@@ -4332,9 +4369,19 @@ export const createRunAnalysis = ({
       const generationResponse = await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
+      }, {
+        onProgress: ({ stage }) => {
+          const message = {
+            'preparing-runtime': 'Preparing diagram runtime (first use)...',
+            'preparing-resources': 'Preparing diagram input resources...',
+            rendering: 'Rendering diagram...',
+            finalizing: 'Finalizing diagram results...'
+          }[stage];
+          if (message) setProcessingStatus(message);
+        }
       });
       console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
-      setProcessingStatus('Preparing generated diagram...');
+      setProcessingStatus('Preparing preview...');
       await nextTick();
       await waitForAfterPaint();
       throwIfGenerationCanceled();
@@ -4412,6 +4459,7 @@ export const createRunAnalysis = ({
             'run-analysis sanitize and reapply editor overrides',
             () => prepareCandidateCommit({
               generationResponse,
+              sourceReplaced,
               catalogAdmission: candidateCatalogAdmission,
               results: res,
               catalog: candidateCatalog,
@@ -4541,7 +4589,6 @@ export const createRunAnalysis = ({
         const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
           candidateOwnerSet,
           {
-            finalizeResourcePromotion: generationResponse.finalizeResourcePromotion,
             runtimeState: {
               files: candidateCliHelpers?.files,
               archiveName: candidateCliHelpers?.archiveName,
@@ -4658,6 +4705,19 @@ export const createRunAnalysis = ({
           await restoreCommittedArtifact();
           return { status: 'stale' };
         }
+        const removedVisibilityTargets = sourceReplaced && reconcileFeatureVisibilityOverrides(
+          featureVisibilityOverrides,
+          candidateBiologicalFeatures,
+          workingExtractedFeatures,
+          state.featureVisibilitySelectorCache
+        );
+        if (removedVisibilityTargets > 0) {
+          state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
+            buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
+            state.featureVisibilitySelectorCache,
+            featureVisibilityOverrides
+          ));
+        }
         if (typeof setGeneratedArtifactIdentity === 'function') {
           setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
             results: candidateCommit.results
@@ -4674,7 +4734,6 @@ export const createRunAnalysis = ({
           );
         }
       }
-      if (isReflow) generationResponse.finalizeResourcePromotion?.();
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -4775,7 +4834,7 @@ export const createRunAnalysis = ({
           )
         : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
-        generatedArtifactTransactionOwner.finalize(outcome.generatedArtifactCandidate);
+        generatedArtifactTransactionOwner.finalize();
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {

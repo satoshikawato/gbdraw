@@ -91,6 +91,19 @@ selector uses qualifier expressions, with multiple conditions separated by
 semicolons. Explicit `lane` values are zero-based. The renderer selects rows by
 `set_id`, so one table can hold independently placed annotation sets.
 
+In the Web app, **Region Annotations → Download TSV** saves the current editor
+draft as `annotations.tsv`, including edits made since the last Generate.
+It works offline and is disabled until the draft contains an annotation row.
+The file can be loaded with **Import TSV**, Python's `read_annotation_table()`,
+or the CLI's `--annotation_table` option.
+
+The download preserves effective row targets and styles, including explicit
+no-fill, unique record IDs, and one-based `#N` record bindings. A blank `fill`
+cell in a styled row means no fill; omitting the column retains the Web import
+default. TSV does not retain empty sets, metadata, or the distinction between
+an inherited set style and a row override. Tabs and line breaks within cells
+are replaced with spaces.
+
 ## Styling tables
 
 Most styling tables are headerless TSV. Label-override and visibility readers

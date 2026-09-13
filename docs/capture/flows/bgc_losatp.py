@@ -315,7 +315,7 @@ def _configure_losatp(
     )
     losatp_mode.select_option("pairwise")
     expect(losatp_mode).to_have_value("pairwise")
-    match_style = settings.get_by_label("Pairwise Match Style", exact=True)
+    match_style = settings.get_by_label("Comparison match style", exact=True)
     match_style.select_option("curve")
     expect(match_style).to_have_value("curve")
     losatp_mode.select_option(mode)
@@ -658,8 +658,8 @@ def capture_bgc_losatp(
                 exact=True,
             )
             fifth_options.click()
-            reverse_complement.evaluate(
-                "(element) => element.scrollIntoView({ block: 'center' })"
+            fifth_file.evaluate(
+                "(element) => element.scrollIntoView({ block: 'start' })"
             )
             expect(fifth_file).to_contain_text("BGC0000713.gbk")
             expect(fifth_file).to_be_in_viewport()

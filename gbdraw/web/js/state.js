@@ -18,7 +18,10 @@ import {
 } from './app/linear-comparisons.js';
 import { createModeProfileStateManager } from './mode-profiles.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
-import { getCommittedSvgContent } from './services/svg-result-ingestion.js';
+import {
+  getCommittedSvgContent,
+  getCommittedSvgResultRuntimeIdentity
+} from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
 import {
   createDefaultAdv,
@@ -56,6 +59,12 @@ const svgContent = computed(() => {
   if (results.value.length === 0) return null;
   return getCommittedSvgContent(results.value[selectedResultIndex.value]);
 });
+
+// Distinguish a new artifact even when its initial SVG bytes repeat a prior
+// artifact whose mounted DOM has since been edited. Live edits keep this ID.
+const svgResultIdentity = computed(() => (
+  getCommittedSvgResultRuntimeIdentity(results.value[selectedResultIndex.value])
+));
 
 const zoom = ref(1.0);
 const layoutRepositionMode = ref(false);
@@ -789,6 +798,7 @@ export const state = {
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,
+  svgResultIdentity,
   zoom,
   layoutRepositionMode,
   isPanning,

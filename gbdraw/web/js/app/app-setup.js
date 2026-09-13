@@ -15,6 +15,7 @@ import {
   buildOrthogroupStateData,
   buildRunStateData,
   buildUiStateData,
+  canonicalRenderArtifactOwner,
   exportSession,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
@@ -222,6 +223,7 @@ export const createAppSetup = () => {
     pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
+    svgResultIdentity,
     zoom,
     layoutRepositionMode,
     isPanning,
@@ -476,11 +478,11 @@ export const createAppSetup = () => {
     if (invalidate) invalidateLinearComparisonArtifacts();
   };
 
-  const mutateLinearComparisonPlan = (mutator) => {
+  const mutateLinearComparisonPlan = (mutator) => history.runUndoable('Change comparisons', () => {
     const next = normalizeLinearComparisonPlan(linearComparisonPlan);
     mutator(next);
     replaceLinearComparisonPlan(next);
-  };
+  });
 
   const effectiveLinearComparisonLayout = () => (
     linearRecordLayoutEnabled.value ? linearRecordRows : []
@@ -616,7 +618,7 @@ export const createAppSetup = () => {
 
   const setLinearComparisonGlobalAction = (action) => {
     const normalized = String(action || '').trim().toLowerCase();
-    mutateLinearComparisonPlan((next) => {
+    return mutateLinearComparisonPlan((next) => {
       if (normalized === 'none') {
         next.mode = LINEAR_COMPARISON_MODES.NONE;
         return;
@@ -1090,8 +1092,7 @@ export const createAppSetup = () => {
     state,
     watch,
     nextTick,
-    legendActions,
-    previewRuntime
+    legendActions
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
@@ -1902,7 +1903,9 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
-      legendActions.extractLegendEntries();
+      legendActions.extractLegendEntries({
+        replaceGeneratedInventory: !context.bindingOptions.isIncrementalEdit
+      });
     },
     bindComposition(context) {
       if (context.bindingOptions.trustedRestore) return;
@@ -1982,6 +1985,7 @@ export const createAppSetup = () => {
     restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
     state,
+    isCurrentFeature: recordDisplayControls.isCurrentFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
       serializeActiveRenderFiles(state.mode.value, state, {
         comparisonPlan: comparisonPlanSnapshot,
@@ -2018,8 +2022,14 @@ export const createAppSetup = () => {
     }
   });
   historySnapshots.setGeneratedArtifactRuntimeOwner({
-    capture: captureGeneratedArtifactRuntimeState,
-    restore: restoreGeneratedArtifactRuntimeState
+    capture: () => ({
+      ...captureGeneratedArtifactRuntimeState(),
+      canonical: canonicalRenderArtifactOwner.capture()
+    }),
+    restore: (snapshot, options) => {
+      canonicalRenderArtifactOwner.restore(snapshot.canonical);
+      return restoreGeneratedArtifactRuntimeState(snapshot, options);
+    }
   });
   const resultsManager = createResultsManager({
     state,
@@ -2599,7 +2609,8 @@ export const createAppSetup = () => {
   const featurePopupStyle = computed(() => {
     const style = {
       top: `${clickedFeaturePos.y}px`,
-      left: `${clickedFeaturePos.x}px`
+      left: `${clickedFeaturePos.x}px`,
+      maxHeight: `${getFeaturePopupConstraints().maxHeight}px`
     };
     if (featurePopupSize.width > 0) {
       style.width = `${featurePopupSize.width}px`;
@@ -2628,7 +2639,8 @@ export const createAppSetup = () => {
   const pairwiseMatchPopupStyle = computed(() => {
     const style = {
       top: `${clickedPairwiseMatchPos.y}px`,
-      left: `${clickedPairwiseMatchPos.x}px`
+      left: `${clickedPairwiseMatchPos.x}px`,
+      maxHeight: `${getPairwiseMatchPopupConstraints().maxHeight}px`
     };
     if (pairwiseMatchPopupSize.width > 0) {
       style.width = `${pairwiseMatchPopupSize.width}px`;
@@ -3306,6 +3318,7 @@ export const createAppSetup = () => {
     runInfoCopyStatus,
     exactReplayCopyStatus,
     svgContent,
+    svgResultIdentity,
     zoom,
     layoutRepositionMode,
     isPanning,
@@ -3334,6 +3347,8 @@ export const createAppSetup = () => {
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
     importAnnotationTableFile: annotationEditor.importAnnotationTableFile,
+    canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
+    downloadAnnotationTable: annotationEditor.downloadAnnotationTable,
     annotationRecordOptions: annotationEditor.recordOptionsFor,
     annotationRecordValue: annotationEditor.recordValueFor,
     setAnnotationRecord: annotationEditor.setRecordValue,
@@ -3360,6 +3375,7 @@ export const createAppSetup = () => {
     hasCircularDepthFiles,
     hasLinearDepthFiles,
     canShowDepthTrack,
+    enabledOptionClass,
     depthToggleOptionClass,
     depthTrackCountLabel,
     getDepthTrackLabel,

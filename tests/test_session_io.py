@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import copy
 import json
+import hashlib
 import os
 import re
 from datetime import datetime
@@ -520,9 +521,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 41
+    assert CURRENT_SESSION_VERSION == 42
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -859,6 +860,7 @@ def test_current_session_rejects_obsolete_web_state_field_names(
     assert not output_path.exists()
 
     payload["version"] = 33
+    payload.get("webFiles", {}).pop("bindings", None)
     payload["renderRequest"]["schema"] = 2
     validate_session(payload)
 
@@ -1200,7 +1202,9 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
         canonical_request=_canonical_request("linear"),
     )
     source["version"] = 33
+    source.get("webFiles", {}).pop("bindings", None)
     source["renderRequest"]["schema"] = 2
+    source["config"] = {"form": {}, "adv": {}}
     source["config"]["adv"]["depth_tick_interval"] = 10
     source["config"]["adv"]["depth_tracks"] = [{"tick_interval": 5}]
     source["config"]["losat"] = {
@@ -1351,7 +1355,7 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         assert payload["webFiles"]["linearRecords"] == source["webFiles"][
             "linearRecords"
         ]
-        assert payload["webFiles"]["bindings"]["schema"] == 1
+        assert payload["webFiles"]["bindings"]["schema"] == 2
         assert "linearCanonicalComparisons" not in payload["webFiles"]["bindings"]
         assert payload["config"]["linearComparisonPlan"] == {
             "mode": "adjacent",
@@ -1444,6 +1448,8 @@ def test_pre40_web_comparison_draft_migrates_directly_to_final_plan() -> None:
         canonical_request=_canonical_request("linear"),
     )
     source["version"] = 33
+    source.get("webFiles", {}).pop("bindings", None)
+    source["config"] = {"form": {}, "adv": {}}
     source["config"]["blastSource"] = "upload"
     source["config"]["linearRecordLayout"] = {
         "enabled": True,
@@ -1592,7 +1598,7 @@ def test_current_comparison_authority_rejects_retired_version40_shape() -> None:
         generated_at=datetime(2026, 7, 21),
         canonical_request=_canonical_request("linear"),
     )
-    payload["config"]["blastSource"] = "losat"
+    payload["config"] = {"form": {}, "adv": {}, "blastSource": "losat"}
     with pytest.raises(ValidationError, match="retired blastSource"):
         validate_session(payload)
 
@@ -1625,7 +1631,7 @@ def test_current_session_rejects_retired_circular_track_draft_paths(
         generated_at=datetime(2026, 8, 23),
         canonical_request=_canonical_request("circular"),
     )
-    payload["config"]["adv"][field] = []
+    payload["config"] = {"form": {}, "adv": {field: []}}
 
     with pytest.raises(ValidationError, match=rf"config\.adv\.{field}"):
         validate_session(payload)
@@ -1644,6 +1650,7 @@ def test_current_comparison_authority_validates_file_bindings() -> None:
         canonical_request=_canonical_request("linear"),
     )
     resource_id = next(iter(payload["resources"]))
+    payload["config"] = {"form": {}, "adv": {}}
     payload["config"]["linearComparisonPlan"] = {
         "mode": "selected",
         "defaultSource": "losat",
@@ -1671,7 +1678,7 @@ def test_current_comparison_authority_validates_file_bindings() -> None:
     validate_session(payload)
 
     unsupported_schema = copy.deepcopy(payload)
-    unsupported_schema["webFiles"]["bindings"]["schema"] = 2
+    unsupported_schema["webFiles"]["bindings"]["schema"] = 99
     with pytest.raises(ValidationError, match="Unsupported Web file binding schema"):
         validate_session(unsupported_schema)
 
@@ -1719,6 +1726,7 @@ def test_current_writer_quarantines_v27_to_v33_protein_artifacts(
         canonical_request=_canonical_request("linear"),
     )
     source["version"] = 33
+    source.get("webFiles", {}).pop("bindings", None)
     source["losatCache"] = {"entries": [legacy_raw]}
     source["losatDerivedCache"] = {"entries": [legacy_derived]}
     source.pop("proteinIdentityManifest")
@@ -1787,6 +1795,7 @@ def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> N
         validate_session(session)
 
     session["version"] = 39
+    session.get("webFiles", {}).pop("bindings", None)
     validate_session(session)
 
 
@@ -1970,7 +1979,7 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
         canonical_request=_canonical_request(mode),
     )
 
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
     assert payload["cliInvocation"]["args"][-6:] == [
         "--feature_shape",
         "CDS=arrow",
@@ -1988,6 +1997,8 @@ def test_cli_session_keeps_arrow_options_as_cli_provenance_only(
         (32, 2),
         (33, 2),
         (39, CANONICAL_REQUEST_SCHEMA),
+        (40, CANONICAL_REQUEST_SCHEMA),
+        (41, CANONICAL_REQUEST_SCHEMA),
         (CURRENT_SESSION_VERSION, CANONICAL_REQUEST_SCHEMA),
     ),
 )
@@ -2001,7 +2012,7 @@ def test_main_backed_and_current_canonical_session_schemas_remain_supported(
         "renderRequest": {"schema": request_schema},
         "resources": {},
     }
-    if version == CURRENT_SESSION_VERSION:
+    if version >= 40:
         session["results"] = []
         session["editorState"] = {"featureCatalog": None}
 
@@ -2755,7 +2766,7 @@ def test_cli_session_keeps_hidden_scale_in_canonical_request(
         ),
     )
 
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
     assert payload["cliInvocation"]["args"] == args
     assert (
         payload["renderRequest"]["diagramOptions"]["config"]["objects"]["scale"][
@@ -2816,7 +2827,7 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
 
     assert payload["cliInvocation"]["renderFormats"] == ["interactive_svg"]
     assert payload["cliInvocation"]["args"] == list(args)
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
 
 
 def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
@@ -2870,7 +2881,7 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert payload["resources"]
     assert payload["orthogroupState"] == {}
-    assert payload["config"] == {"adv": {}}
+    assert "config" not in payload
     assert payload["cliInvocation"]["args"] == list(args)
 
 
@@ -3083,3 +3094,407 @@ def test_depth_session_entry_materializes_encoded_payload(tmp_path: Path) -> Non
 
     path = materialize_embedded_file(entry, temp_dir=tmp_path, role="depth")
     assert path.read_text(encoding="utf-8") == "seq1\t1\t10\n"
+
+
+def _composite_binding_session():
+    payload = json.loads((Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json').read_text())
+    bindings = payload['webFiles']['bindings']
+    leaf = bindings['c_gb']
+    bindings.update(schema=2, c_gb={
+        'kind': 'composite', 'components': [leaf, {**leaf, 'name': 'second.gb'}],
+        'name': 'logical.gb', 'type': 'text/plain', 'lastModified': 0.5,
+    })
+    return payload
+
+
+def test_schema1_frozen_main_writer_is_preserved(tmp_path):
+    root = Path(__file__).parent / 'fixtures/sessions'
+    fixture = root / 'single.v41-bindings1.json'
+    provenance = json.loads((root / 'single.v41-bindings1.provenance.json').read_text())
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == provenance['sha256']
+    payload = load_session(fixture)
+    output = tmp_path / 'preserved.json'
+    write_session_json(output, payload)
+    assert load_session(output)['webFiles']['bindings'] == payload['webFiles']['bindings']
+    assert payload['webFiles']['bindings']['schema'] == 1
+
+
+@pytest.mark.parametrize("modified", [0, 0.5])
+def test_cli_composite_inventory_preserves_equal_byte_occurrences_and_metadata(
+    tmp_path, monkeypatch, modified
+):
+    import gbdraw.cli_utils.session as cli_session
+
+    first, second = tmp_path / "first.gb", tmp_path / "second.gb"
+    first.write_bytes(b"same bytes\n")
+    second.write_bytes(first.read_bytes())
+    monkeypatch.setattr(cli_session, "serialize_file_entry", lambda path, **_kwargs: {
+        **_file_entry("", Path(path).read_bytes()), "type": "", "lastModified": modified,
+    })
+    files, provenance = collect_embedded_files_from_cli_args(
+        "circular", ["--gbk", str(first), str(second), str(first)]
+    )
+    composite = files["c_gb"]
+    assert len(composite["components"]) == 3
+    assert [binding.name for binding in provenance] == ["first.gb", "second.gb", "first.gb"]
+    for index, binding in enumerate(provenance):
+        assert binding.slot == f"files.c_gb.components[{index}]"
+        assert session_io_module.get_session_slot({"files": files}, binding.slot) == composite["components"][index]
+    payload = build_session_json(
+        SessionBuildContext(mode="circular", output_prefix="out", render_formats=("svg",)),
+        svg_results=[], embedded_files=files, generated_at=datetime(2026, 9, 11),
+        canonical_request=_canonical_request("circular"),
+    )
+    actual = payload["webFiles"]["bindings"]["c_gb"]
+    assert {key: actual[key] for key in ("name", "type", "lastModified")} == {
+        "name": "", "type": "", "lastModified": modified,
+    }
+    assert len(actual["components"]) == 3
+    for component in actual["components"]:
+        assert {key: component[key] for key in ("name", "type", "lastModified")} == {
+            "name": "", "type": "", "lastModified": modified,
+        }
+        assert base64.b64decode(payload["resources"][component["resourceId"]]["data"]) == first.read_bytes()
+
+
+def test_schema2_composite_load_write_preserves_order_and_metadata(tmp_path):
+    payload = _composite_binding_session()
+    output = tmp_path / 'composite.json'
+    write_session_json(output, payload)
+    assert load_session(output)['webFiles']['bindings'] == payload['webFiles']['bindings']
+
+
+@pytest.mark.parametrize('invalid', [
+    'schema', 'kind', 'nested', 'empty', 'singleton', 'missing', 'dangling',
+    'null', 'metadata', 'mixed', 'slot', 'encoding', 'unknown', 'leaf-field',
+    'leaf-metadata', 'old-version',
+])
+def test_schema2_composite_rejects_malformed_bindings(invalid):
+    payload = _composite_binding_session()
+    bindings = payload['webFiles']['bindings']
+    composite = bindings['c_gb']
+    if invalid == 'schema': bindings['schema'] = 99
+    elif invalid == 'kind': composite['kind'] = 'multipart'
+    elif invalid == 'nested': composite['components'][0] = copy.deepcopy(composite)
+    elif invalid == 'empty': composite['components'] = []
+    elif invalid == 'singleton': composite['components'] = composite['components'][:1]
+    elif invalid == 'missing': del bindings['c_gb']
+    elif invalid == 'dangling': composite['components'][0]['resourceId'] = 'missing'
+    elif invalid == 'null': composite['components'][0] = None
+    elif invalid == 'metadata': composite['lastModified'] = -1
+    elif invalid == 'mixed': composite['resourceId'] = composite['components'][0]['resourceId']
+    elif invalid == 'slot': bindings['c_fasta'] = copy.deepcopy(composite)
+    elif invalid == 'encoding': next(iter(payload['resources'].values()))['encoding'] = 'utf8'
+    elif invalid == 'unknown': composite['size'] = 0
+    elif invalid == 'leaf-field': composite['components'][0]['extra'] = True
+    elif invalid == 'leaf-metadata': del composite['components'][0]['type']
+    elif invalid == 'old-version': payload['version'] = 40
+    with pytest.raises(ValidationError):
+        session_io_module.validate_session(payload)
+
+
+def test_composite_sidecar_rebuild_preserves_draft_and_scopes_collisions():
+    source = _composite_binding_session()
+    first = source['webFiles']['bindings']['c_gb']['components'][0]
+    # The new request owns record-1-genbank for different, legitimate bytes.
+    original_id = first['resourceId']
+    source['resources']['record-1-genbank'] = source['resources'].pop(original_id)
+    for part in source['webFiles']['bindings']['c_gb']['components']:
+        part['resourceId'] = 'record-1-genbank'
+    source['renderRequest']['records'][0]['source']['resourceId'] = 'record-1-genbank'
+    before = copy.deepcopy(source)
+    result = build_session_json(
+        SessionBuildContext(mode='circular', output_prefix='composite', render_formats=('svg',), source_session=source),
+        svg_results=[], embedded_files={}, generated_at=datetime(2026, 9, 9),
+        canonical_request=_canonical_request('circular'),
+    )
+    composite = result['webFiles']['bindings']['c_gb']
+    assert composite['components'][0]['resourceId'] != 'record-1-genbank'
+    assert composite['components'][0]['resourceId'] == composite['components'][1]['resourceId']
+    assert len(result['resources']) == 2
+    assert result['renderRequest']['records'][0]['source']['resourceId'] == 'record-1-genbank'
+    assert result['resources'][composite['components'][0]['resourceId']]['data'] == source['resources']['record-1-genbank']['data']
+    for actual, expected in zip(composite['components'], source['webFiles']['bindings']['c_gb']['components']):
+        assert {k: v for k, v in actual.items() if k != 'resourceId'} == {k: v for k, v in expected.items() if k != 'resourceId'}
+    assert {k: v for k, v in composite.items() if k != 'components'} == {k: v for k, v in source['webFiles']['bindings']['c_gb'].items() if k != 'components'}
+    assert source == before
+
+
+def test_composite_sidecar_rejects_contradictory_source_table():
+    source = _composite_binding_session()
+    source['resources'][' resource-0001 '] = {
+        **source['resources']['resource-0001'], 'data': 'eA==', 'size': 1,
+    }
+    before = copy.deepcopy(source)
+    with pytest.raises(ValidationError, match='Invalid canonical resource ID'):
+        build_session_json(
+            SessionBuildContext(mode='circular', output_prefix='composite', render_formats=('svg',), source_session=source),
+            svg_results=[], embedded_files={}, generated_at=datetime(2026, 9, 9),
+            canonical_request=_canonical_request('circular'),
+        )
+    assert source == before
+
+
+def test_composite_sidecar_reads_a_new_repeated_component_once_without_reencoding(monkeypatch):
+    source = _composite_binding_session()
+    payload = {'resources': {}, 'webFiles': {}}
+    reads = []
+    original = session_io_module._embedded_entry_bytes
+    monkeypatch.setattr(session_io_module, '_embedded_entry_bytes', lambda entry: (reads.append(id(entry)), original(entry))[1])
+    def unexpected_encode(_data):
+        raise AssertionError('Existing base64 payload must not be re-encoded')
+    monkeypatch.setattr(session_io_module.base64, 'b64encode', unexpected_encode)
+    load_session_document(source)
+    inventory = session_io_module._project_web_file_binding(
+        source['resources'], source['webFiles']['bindings']['c_gb'], schema=2,
+    )
+    session_io_module._attach_current_web_file_bindings(payload, {'c_gb': inventory})
+    assert len(reads) == 1
+    assert len(payload['resources']) == 1
+    assert len(payload['webFiles']['bindings']['c_gb']['components']) == 2
+
+
+def _cli_composite_source():
+    """Use the candidate writer with six draft sources distinct from the request."""
+    import io
+    from Bio import SeqIO
+
+    parts = []
+    for index in range(6):
+        record = SeqRecord(
+            Seq('ATGC' * (index + 2)), id=f'draft-{index}',
+            annotations={'molecule_type': 'DNA'},
+        )
+        buffer = io.StringIO()
+        SeqIO.write(record, buffer, 'genbank')
+        parts.append({
+            **_file_entry(f'part-{index}.gb', buffer.getvalue().encode()),
+            'encoding': 'base64', 'lastModified': index + 0.5,
+        })
+    return build_session_json(
+        SessionBuildContext(mode='circular', output_prefix='source', render_formats=('svg',)),
+        svg_results=[], generated_at=datetime(2026, 9, 9),
+        embedded_files={'c_gb': {
+            'kind': 'composite', 'name': 'six-originals.gb', 'type': '',
+            'lastModified': 0.25, 'components': parts,
+        }},
+        canonical_request=_canonical_request('circular'),
+    )
+
+
+def _draft_identity(session, value):
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return [_draft_identity(session, item) for item in value]
+    if value.get('kind') == 'composite':
+        return {**value, 'components': [_draft_identity(session, part) for part in value['components']]}
+    return {
+        **{key: val for key, val in value.items() if key != 'resourceId'},
+        'bytes': base64.b64decode(session['resources'][value['resourceId']]['data']),
+    }
+
+
+def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
+    source_path = tmp_path / 'source.json'
+    write_session_json(source_path, source)
+    original = source_path.read_bytes()
+    prefix = tmp_path / 'replayed'
+    sidecar = tmp_path / f'replayed.session{suffix}'
+    circular_main([
+        '--session', str(source_path), '-o', str(prefix),
+        '--session_output', str(sidecar),
+    ])
+    assert source_path.read_bytes() == original
+    result = load_session_document(sidecar).to_dict()
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (42, 2, 7)
+    assert result['renderRequest']['output']['prefix'] == 'replayed'
+    assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
+    assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
+    assert result['results'] != source['results']
+    catalog = result['editorState']['featureCatalog']
+    assert catalog['schema'] == 3 and len(catalog['items']) == 1
+    assert catalog['items'][0]['resultName'] == result['results'][0]['name']
+    return result
+
+
+@pytest.mark.parametrize('suffix', ['.json', '.json.gz'])
+@pytest.mark.parametrize('collision', [False, True])
+def test_cli_i24ab_composite_sidecar_preserves_six_sources(tmp_path, suffix, collision):
+    source = _cli_composite_source()
+    binding = source['webFiles']['bindings']['c_gb']
+    if collision:
+        # The replay encoder will claim this preferred draft ID for committed bytes.
+        committed_id = source['renderRequest']['records'][0]['source']['resourceId']
+        source['resources']['committed-input'] = source['resources'].pop(committed_id)
+        source['renderRequest']['records'][0]['source']['resourceId'] = 'committed-input'
+        part = binding['components'][0]
+        source['resources'][committed_id] = source['resources'].pop(part['resourceId'])
+        part['resourceId'] = committed_id
+    source['resources'] = dict(reversed(list(source['resources'].items())))
+    expected = _draft_identity(source, binding)
+    result = _replay_cli_sidecar(source, tmp_path, suffix)
+    actual = result['webFiles']['bindings']['c_gb']
+    assert len(actual['components']) == 6
+    assert _draft_identity(result, actual) == expected
+    if collision:
+        committed_id = result['renderRequest']['records'][0]['source']['resourceId']
+        assert actual['components'][0]['resourceId'] != committed_id
+        assert base64.b64decode(result['resources'][committed_id]['data']) != expected['components'][0]['bytes']
+
+
+def test_cli_i24a_repeated_component_occurrences_survive_dedup(tmp_path):
+    source = _cli_composite_source()
+    parts = source['webFiles']['bindings']['c_gb']['components']
+    parts[4] = {**parts[0], 'name': 'repeated-with-distinct-name.gb'}
+    expected = _draft_identity(source, source['webFiles']['bindings']['c_gb'])
+    result = _replay_cli_sidecar(source, tmp_path)
+    actual = result['webFiles']['bindings']['c_gb']
+    assert _draft_identity(result, actual) == expected
+    assert actual['components'][0]['resourceId'] == actual['components'][4]['resourceId']
+
+
+def test_cli_i24c_frozen_schema1_replay_emits_current_bindings(tmp_path):
+    source = load_session(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
+    result = _replay_cli_sidecar(source, tmp_path, '.json.gz')
+    assert _draft_identity(result, result['webFiles']['bindings']['c_gb']) == _draft_identity(source, source['webFiles']['bindings']['c_gb'])
+
+
+def test_cli_i24c_schema1_defaults_and_independent_arrays(tmp_path):
+    source = load_session(Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json')
+    bindings = source['webFiles']['bindings']
+    leaf = {'resourceId': bindings['c_gb']['resourceId']}
+    bindings['c_gb'] = leaf
+    bindings['c_depth'] = [None, [leaf, None], []]
+    result = _replay_cli_sidecar(source, tmp_path)
+    actual = result['webFiles']['bindings']
+    descriptor = source['resources'][leaf['resourceId']]
+    assert actual['c_gb']['name'] == descriptor['name']
+    assert actual['c_gb']['type'] == descriptor['type']
+    assert actual['c_gb']['lastModified'] == descriptor['lastModified']
+    assert actual['c_depth'] == [None, [actual['c_gb'], None], []]
+
+
+@pytest.mark.parametrize('modified', [0, 0.125])
+def test_cli_i24d_schema2_ordinary_metadata_is_exact(tmp_path, modified):
+    source = _cli_composite_source()
+    bindings = source['webFiles']['bindings']
+    bindings['c_gb'] = {**bindings['c_gb']['components'][0], 'name': '', 'type': '', 'lastModified': modified}
+    expected = _draft_identity(source, bindings['c_gb'])
+    result = _replay_cli_sidecar(source, tmp_path)
+    assert _draft_identity(result, result['webFiles']['bindings']['c_gb']) == expected
+
+
+@pytest.mark.parametrize('field,slot', [
+    ('conservationLosatFastaSources', 'c_conservation_fastas'),
+    ('conservationSequenceSources', 'c_conservation_sequence_sources'),
+])
+@pytest.mark.parametrize('direct_populated', [False, True])
+@pytest.mark.parametrize('explicit', ['absent', 'ordinary', 'null', 'empty', 'longer'])
+def test_cli_i24e_explicit_slots_override_direct_sources(tmp_path, field, slot, direct_populated, explicit):
+    source = _cli_composite_source()
+    web = source['webFiles']
+    bindings = web['bindings']
+    part = bindings['c_gb']['components'][0]
+    web[field] = [part['resourceId']] if direct_populated else []
+    web['resourceOriginalNames'] = {part['resourceId']: 'historical-name.gb'}
+    if explicit == 'absent':
+        del bindings[slot]
+    else:
+        bindings[slot] = {
+            'ordinary': part, 'null': None, 'empty': [],
+            'longer': [part, {**part, 'name': 'second-occurrence.gb'}],
+        }[explicit]
+    expected = _draft_identity(source, bindings['c_gb'])
+    result = _replay_cli_sidecar(source, tmp_path)
+    rebuilt = result['webFiles']
+    actual = rebuilt['bindings'][slot]
+    assert _draft_identity(result, rebuilt['bindings']['c_gb']) == expected
+    if explicit != 'absent':
+        assert _draft_identity(result, actual) == _draft_identity(source, bindings[slot])
+    elif direct_populated:
+        assert actual[0]['name'] == 'historical-name.gb'
+    else:
+        assert actual == []
+    leaves = actual if isinstance(actual, list) else [actual] if actual else []
+    assert rebuilt[field] == [leaf['resourceId'] for leaf in leaves]
+    assert all(resource_id in result['resources'] for resource_id in rebuilt[field])
+    if explicit in ('ordinary', 'longer'):
+        assert rebuilt['resourceOriginalNames'][leaves[0]['resourceId']] == leaves[0]['name']
+
+
+@pytest.mark.parametrize('invalid', ['missing', 'metadata', 'dangling', 'unsupported', 'nested'])
+@pytest.mark.parametrize('sentinels', [False, True])
+def test_cli_i24f_invalid_bindings_reject_before_render_or_publication(tmp_path, monkeypatch, invalid, sentinels):
+    import gbdraw.cli_utils.session as cli_session
+
+    source = _cli_composite_source()
+    bindings = source['webFiles']['bindings']
+    composite = bindings['c_gb']
+    source['webFiles']['conservationLosatFastaSources'] = [composite['components'][0]['resourceId']]
+    if invalid == 'missing':
+        del bindings['c_gb']
+    elif invalid == 'metadata':
+        composite['components'][0]['lastModified'] = -1
+    elif invalid == 'dangling':
+        composite['components'][0]['resourceId'] = 'missing-resource'
+    elif invalid == 'unsupported':
+        bindings['c_fasta'] = copy.deepcopy(composite)
+    elif invalid == 'nested':
+        composite['components'][0] = copy.deepcopy(composite)
+    source_path = tmp_path / 'invalid.json'
+    source_path.write_text(json.dumps(source))
+    original = source_path.read_bytes()
+    svg, sidecar = tmp_path / 'rejected.svg', tmp_path / 'rejected.json.gz'
+    if sentinels:
+        svg.write_bytes(b'existing diagram')
+        sidecar.write_bytes(b'existing sidecar')
+    calls = []
+    monkeypatch.setattr(cli_session, '_render_request', lambda *a, **kw: calls.append(a))
+    with pytest.raises((ValidationError, SystemExit)):
+        circular_main([
+            '--session', str(source_path), '-o', str(svg.with_suffix('')),
+            '--session_output', str(sidecar), '--overwrite',
+        ])
+    assert calls == []
+    assert source_path.read_bytes() == original
+    if sentinels:
+        assert (svg.read_bytes(), sidecar.read_bytes()) == (b'existing diagram', b'existing sidecar')
+    else:
+        assert not svg.exists() and not sidecar.exists()
+
+
+def test_cli_i24_explicit_null_inventory_survives_without_direct_fields(tmp_path):
+    source = _cli_composite_source()
+    source['webFiles']['bindings'] = {'schema': 2, 'c_gb': None}
+    result = _replay_cli_sidecar(source, tmp_path)
+    assert result['webFiles']['bindings']['c_gb'] is None
+
+
+def test_cli_projection_request_only_session_keeps_no_inventory():
+    from gbdraw.cli_utils.session import _project_web_file_inventory
+
+    source = _cli_composite_source()
+    del source['webFiles']
+    load_session_document(source)
+    assert _project_web_file_inventory(source) is None
+
+
+@pytest.mark.parametrize('invalid', ['mixed-leaf', 'mixed-composite', 'nested', 'null'])
+def test_internal_composite_transport_rejects_unsupported_shapes(invalid):
+    source = _cli_composite_source()
+    from gbdraw.cli_utils.session import _project_web_file_inventory
+
+    load_session_document(source)
+    inventory = _project_web_file_inventory(source)
+    composite = inventory['c_gb']
+    if invalid == 'mixed-leaf':
+        composite['components'][0]['data'] = 'eA=='
+    elif invalid == 'mixed-composite':
+        composite['resourceId'] = 'not-a-leaf'
+    elif invalid == 'nested':
+        composite['components'][0] = copy.deepcopy(composite)
+    else:
+        composite['components'][0] = None
+    with pytest.raises(ValidationError):
+        session_io_module._attach_current_web_file_bindings({'resources': {}}, inventory)

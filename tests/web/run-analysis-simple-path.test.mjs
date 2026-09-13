@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { encodeAnnotationTable, parseAnnotationTable } from '../../gbdraw/web/js/app/annotations/table-codec.js';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -532,6 +533,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const readinessRuntime = createImmediatePreviewRuntime({
     onEvent(name) {
       assert.equal(state.processing.value, true, name);
+      if (name === 'test.preview-mounted' || name === 'test.preview-ready') {
+        assert.equal(state.processingStatus.value, 'Preparing preview...', name);
+      }
       lifecycleEvents.push(name);
       if (cancelDuringPreview && name === 'test.preview-mounted') {
         runner.cancelRunAnalysis();
@@ -562,7 +566,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       generationHistory.runUndoableArtifactReplacement(...args)
     ),
     state,
-    serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
+    serializeCanonicalFiles: () => {
+      assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
+      return serializeActiveRenderFiles(state.mode.value, state);
+    },
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {
       if (failArtifactAdoption) {
@@ -928,7 +935,39 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   releaseCoalescedDiscovery();
   await Promise.all([firstCoalescedDiscovery, secondCoalescedDiscovery]);
   assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  const identities = [{ selector: '#1', record_id: 'audit', recordKey: 'record-1' }];
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+
+  state.mode.value = 'linear';
+  await runner.refreshCircularRecordOrder();
+  assert.equal(state.files.c_gb, fallbackPrimary);
+  assert.deepEqual(state.circularRecordList.value, []);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+  state.mode.value = 'circular';
+  workerHelperResponses.push({ ok: true, result: {
+    records: [{ selector: '#1', record_id: 'audit', record_length: 10 }]
+  } });
+  await runner.refreshCircularRecordOrder();
+  assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+
+  // Equal biological names on a different source cannot inherit the retired key,
+  // even if replacement/removal happens while Circular is inactive.
+  state.mode.value = 'linear';
+  state.files.c_gb = new AuditFile(['LOCUS audit 10 bp DNA circular\n//\n'], 'replacement.gb');
+  await runner.refreshCircularRecordOrder();
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  state.mode.value = 'circular';
+  await runner.refreshCircularRecordOrder();
+  assert.equal(state.circularRecordList.value[0].record_id, 'audit');
+  assert.equal(state.circularRecordList.value[0].recordKey, undefined);
+  state.mode.value = 'linear';
+  state.files.c_gb = null;
+  await runner.refreshCircularRecordOrder();
+  assert.deepEqual(state.circularRecordList.value, []);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  state.mode.value = 'circular';
+  state.files.c_gb = fallbackPrimary;
 
   state.form.multi_record_canvas = true;
   state.files.c_depth = null;
@@ -1682,7 +1721,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       legendLabel: null,
       metadata: {}
     }],
-    defaultStyle: null,
+    defaultStyle: { fill: null },
     legendLabel: null
   });
 
@@ -1751,6 +1790,18 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const linearResult = result('linear-none.svg', 'linear-none');
   workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
+  // Observe the existing internal helper staging boundary. Run Info deliberately
+  // withholds annotation Source recipes because TSV cannot preserve inheritance.
+  const stagedAnnotationTables = [];
+  const NativeMap = globalThis.Map;
+  globalThis.Map = class extends NativeMap {
+    set(key, value) {
+      if (key === '/web_annotations.tsv' && typeof value?.data === 'string') {
+        stagedAnnotationTables.push(value.data);
+      }
+      return super.set(key, value);
+    }
+  };
   try {
     assert.deepEqual(
       await runner.runAnalysis(comparisonPlanSnapshot),
@@ -1758,6 +1809,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       JSON.stringify(state.errorLog.value)
     );
   } finally {
+    globalThis.Map = NativeMap;
     if (previousLosatExecutor === undefined) {
       delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     } else {
@@ -1766,6 +1818,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   }
 
   const workerRunMessages = workerMessages.filter(({ type }) => type === 'run');
+  assert.ok(stagedAnnotationTables.length > 0, 'Generate stages the annotation helper');
+  for (const text of stagedAnnotationTables) {
+    assert.equal(text, encodeAnnotationTable(state.annotationSets));
+    assert.equal(parseAnnotationTable(text)[0].annotations[0].style.fill, null);
+  }
   const payload = workerRunMessages.at(-1).payload;
   assert.equal(workerRunMessages.length, workerRunCountBefore + 1);
   assert.equal(serializedSnapshot, comparisonPlanSnapshot);

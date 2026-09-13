@@ -29,7 +29,8 @@ const styleFromRow = (row) => {
   if (row.stroke_width) style.strokeWidth = Number(row.stroke_width);
   if (row.stroke_dasharray) style.strokeDasharray = row.stroke_dasharray.split(/[ ,]+/).filter(Boolean).map(Number);
   if (row.line_cap) style.lineCap = row.line_cap;
-  if (row.fill) style.fill = row.fill;
+  // The encoder writes explicit no-fill as a blank cell; an omitted column keeps the default.
+  if (row.fill != null) style.fill = row.fill || null;
   if (row.fill_opacity) style.fillOpacity = Number(row.fill_opacity);
   if (row.label_color) style.labelColor = row.label_color;
   if (row.label_font_size) style.labelFontSize = Number(row.label_font_size);

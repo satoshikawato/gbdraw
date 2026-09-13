@@ -183,17 +183,23 @@ export const createDiagramDragActions = ({ state, history = null }) => {
       return;
     }
 
-    const hadLengthBarState = !!lengthBarElement.value;
+    const sameElement = lengthBarElement.value === nextLengthBar;
     lengthBarElement.value = nextLengthBar;
     lengthBarElement.value.style.opacity = '1';
     setElementCursor(lengthBarElement.value, isLayoutRepositionModeEnabled() ? 'grab' : '');
 
-    if (!preserveOffset || !hadLengthBarState) {
-      lengthBarOriginalTransform.value = parseTransform(nextLengthBar.getAttribute('transform'));
-    }
     if (!preserveOffset) {
       lengthBarUserOffset.x = 0;
       lengthBarUserOffset.y = 0;
+    }
+    if (!preserveOffset || !sameElement) {
+      // A replacement SVG already contains its own scale translation. Binding
+      // adopts that geometry; only a later drag applies an additional offset.
+      const current = parseTransform(nextLengthBar.getAttribute('transform'));
+      lengthBarOriginalTransform.value = {
+        x: current.x - lengthBarUserOffset.x,
+        y: current.y - lengthBarUserOffset.y
+      };
     }
     applyLengthBarTransform();
   };

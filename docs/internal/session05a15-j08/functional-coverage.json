@@ -1,0 +1,860 @@
+{
+  "uniqueTests": 212,
+  "allLatestResults": "PASS",
+  "initialFullRun": {
+    "passed": 198,
+    "failed": 11,
+    "didNotRun": 3
+  },
+  "method": "Full discovery run plus final scoped reruns; not a single clean full-suite run. Original failures remain in raw logs.",
+  "tests": {
+    "tests/web/annotation-download.playwright.spec.js :: annotation TSV download/re-import and Python round-trip offline (1440px)": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/annotation-download.playwright.spec.js :: annotation TSV download/re-import and Python round-trip offline (390px)": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/circular-record-presentation.playwright.spec.js :: Circular single-record presentation selects, transforms, titles, and round-trips one record": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: fresh Linear keeps primary input visible and uses command/status semantics": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: uploader, comparison commands, and native summaries work from the keyboard": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: imported comparison resolutions are explicit and create one History entry each": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: preserved imported comparison generates only after explicit inheritance": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/chloroplast-placement.playwright.spec.js :: chloroplast multipart placement survives strand and label changes and session restore": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and filters": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: LOSAT and LOSATP modes own their controls and mixed plans require explicit topology change": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: structured comparison errors open and focus their owning disclosure": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: mobile layout has no overflow, fixed-action overlap, or semantic tab-order drift": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/comparison-ui.playwright.spec.js :: comparison controls drive appearance and current Session round trips": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composite-placement-regeneration.playwright.spec.js :: Circular single P1 placement capability survives generation": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composite-session-resources.playwright.spec.js :: Session export Vibrio composite resources survive minimal Save, fresh Load and Generate": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/composite-session-resources.playwright.spec.js :: Session export Vibrio composite resources survive grid-batch-grid Save, fresh Load and Generate": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/composite-session-resources.playwright.spec.js :: Session CLI sidecar preserves the six-source draft for fresh Web Load and Generate": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/composite-session-resources.playwright.spec.js :: Session import rejects malformed composite bindings without replacing existing work @pr-smoke": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/composition-layout-real.playwright.spec.js :: circular real render preserves composition edits through history, session, reset, and plain SVG export": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composition-layout-real.playwright.spec.js :: linear real render preserves composition edits through history, session, reset, and plain SVG export": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composition-layout-real.playwright.spec.js :: real Circular render without a legend serializes diagram/title drags and Reset": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composition-layout.playwright.spec.js :: schema 1 composition survives browser edit, drag, history, reset, export, and sanitization boundaries": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composition-layout.playwright.spec.js :: legacy normalization is explicit and malformed current metadata never falls back": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/composition-layout.playwright.spec.js :: frozen v39 session is admitted once with usable composition geometry": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/active-result-edit-transaction.playwright.spec.js :: active Result Feature fill transaction \u203a visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/composite-placement-regeneration.playwright.spec.js :: Circular composite P2-P8 placement capability survives generation": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: synthetic current session restores and exports without materializing resources": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: neutral cached conservation session regenerates three ordered rings offline": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/session-custom-skew-colors.playwright.spec.js :: explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load, and continued Generate @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js :: no-draft session preserves preview, active config, canonical request, and catalog": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js :: loaded current preview supports direct edits before the first Generate": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js :: divergent draft and direct editor overrides survive repeated Save, Load, and Generate": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js :: bare legacy configuration drives the next canonical request and SVG": {
+      "result": "PASS",
+      "run": "functional-corrections.log"
+    },
+    "tests/web/definition-replay-visual-state.playwright.spec.js :: B-05 current CLI single replay after definition completion": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: real Vibrio preview is lazy and leaves the Worker idle": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: Generate materializes only required resources and reuses one Worker": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/definition-replay-visual-state.playwright.spec.js :: B-05 current CLI two-source composite replay after definition completion": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: render-only Generate reuses preparation and remains undoable": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: diagram Worker startup leaves no main-thread Python runtime @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Circular GFF3 mode exposes one annotation and one FASTA uploader": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Circular enabled options render without an undefined-property warning @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Show Depth stays disabled until a depth TSV is uploaded": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Linear Depth above Features generates with repeat_region underlays": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Linear depth add, clear, and remove keep global sparse columns aligned": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Linear custom slot panel and enable state preserve the explicit stack": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Custom Track disclosure and editable IDs preserve transient row identity in both modes": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: the real Cancel control restores the committed artifact and leaves no History entry": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Color value controls preserve Auto, None, and named colors": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: preflight and lazy-access failures preserve the committed preview": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Definition line colors preserve raw values and present named, Auto, and None states": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Invalid Annotation slot is rejected before worker startup and preserves committed state @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: preserved Result presentation ignores no-Result Generate failures and non-Generate errors": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js :: a frozen v39 session round-trips through the legacy migration path": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Session preflight rejects invalid canonical data without resetting live state": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: v40 layout preferences and mode profiles survive fresh-page export and import": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Session commit failure restores the pre-import state": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: P3 Custom Track drafts survive fresh-page session re-save and Reset history": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: HmmtDNA middle overlap layout keeps feature, GC, and skew bands disjoint": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Linear sparse diagonal depth generates and survives a session round trip": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: BGC session keeps restored feature metadata selectable in the preview": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: BGC session selected feature Hide undo redo keeps visibility and legend stable": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/depth-track-session.playwright.spec.js :: Circular sparse diagonal depth survives a session round trip and track removal": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/diagram-resource-recovery.playwright.spec.js :: W1/W2/W4/W8/W9: retained M23 recovery succeeds once and resource ownership survives admission and cancellation": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/draft-placement-capability.playwright.spec.js :: circular draft placement capability survives history and dirty session restore": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/export-lazy-loading.playwright.spec.js :: startup and non-PDF exports do not load PDF or interactive payloads @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/export-lazy-loading.playwright.spec.js :: concurrent first PDF exports load each library once and repeated exports reuse them": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/export-lazy-loading.playwright.spec.js :: interactive assets load only for interactive SVG export and the file is standalone": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/export-lazy-loading.playwright.spec.js :: PDF library load failures are shown to the user": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/export-lazy-loading.playwright.spec.js :: export failures are shown to the user": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/feature-fill-scope.playwright.spec.js :: inherited Feature fill uses the existing scope dialog with atomic Undo and Redo": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/feature-fill-scope.playwright.spec.js :: Feature stroke width steppers defer scope selection and stroke changes keep atomic Undo and Redo": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/draft-placement-capability.playwright.spec.js :: linear draft placement capability survives history and dirty session restore": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-session-regeneration.playwright.spec.js :: uncached protein LOSAT helpers and render share one lazy Worker runtime": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Circular Palette Explorer recolors one semantic SVG across all built-in palettes": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery routes a sample path and tab hash while preserving Preview defaults": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Lambda tutorial shows how to disable LOSAT with No comparison": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the Hepatoplasmataceae tutorial and files panels": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-session-regeneration.playwright.spec.js :: Gallery session colors, record labels, and feature labels survive regeneration": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery shows an inline fallback when tutorial media fails to load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders operation media and keeps it inside a mobile viewport": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery opens tutorial images at natural size in a modal": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the Vibrio Harveyi-group multi-record tutorial and media": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery copy link button copies the selected sample URL": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the Hepatoplasmataceae orthogroup tutorial and media": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery uses workflow tags and runnable commands": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery tab controls support keyboard navigation": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the aminoglycoside BGC tutorial and media": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery tutorial media fits a mobile viewport": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery restores the tobacco chloroplast region-annotation example": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery respects tutorialStatus draft and planned states": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery can preview draft tutorials when explicitly enabled": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the human mitochondrial AT skew tutorial and media": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery ignores stale tutorial fetch results after sample changes": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery mobile controls and tutorial text do not overlap or overflow": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the majanivirus orthogroup tutorial and media": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery renders the Vibrio multi-record tutorial and media": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/gallery-tutorial.playwright.spec.js :: Gallery keeps command panel usable when a tutorial fetch fails": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/generation-feedback.playwright.spec.js :: Linear comparison preparation, real search counts, cache reuse, and no-comparison generation use the same status": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/generation-feedback.playwright.spec.js :: Generate reports real cold/warm stages and preserves the successful Result through cancel, error, and retry": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/history-comparison.playwright.spec.js :: comparison off has its own Undo step after a record definition edit": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/history-generated-authority.playwright.spec.js :: Undo Generate restores request A and Result A while preserving draft B through Save and fresh Load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/history-inputs.playwright.spec.js :: Label Mode keyboard edit has one Undo step and survives generation and fresh Load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/history-region.playwright.spec.js :: Circular region restores number to Auto": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/history-inputs.playwright.spec.js :: Label Mode pointer edit has one Undo step and survives generation and fresh Load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/interactive-svg-v3.playwright.spec.js :: browser export embeds the exact selected schema-3 item and expands references": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/interactive-svg-v3.playwright.spec.js :: standalone rejects conflicting compact provenance markers": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/interactive-svg-v3.playwright.spec.js :: Download Interactive SVG forwards live editor overrides without mutating the catalog": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/history-region.playwright.spec.js :: rejected Circular region can Undo both edits back to valid Auto": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: joint rotation placement and saved drafts in circular": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: joint rotation placement and saved drafts in linear": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: historical v40/schema6 saves as the joint format without Generate": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: circular duplicate source records keep independent starts through replacement and Undo": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: linear duplicate source records keep independent starts through replacement and Undo": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: circular real shortcuts topology reset bulk placement and Auto history": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: linear real shortcuts topology reset bulk placement and Auto history": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: paired GFF/FASTA replacement purges source-bound rotation and placement and Undo restores both": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: circular rotation alone exports working Source recipe and Exact replay": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: circular placement alone exports working Source recipe and Exact replay": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: linear rotation alone exports working Source recipe and Exact replay": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: linear placement alone exports working Source recipe and Exact replay": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Pairwise pointer feedback commits selection and preserves keyboard focus": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Linear record rows and N-to-M comparison batches remain keyed by sequence uid": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Linear records precede comparison pairs in DOM and keyboard order at narrow width": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/joint-display-placement.playwright.spec.js :: loaded replacement draft cannot place or take shortcuts from the prior Result source": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Linear region controls do not overlap at supported sidebar widths": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Selected pairs focuses Add and repairs an unplaced draft in its boundary": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Comparison card actions target the active owner of duplicate directional drafts": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Normalize Record Lengths rejects a shared Linear row and remains recoverable": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: No comparison completes a real render without touching dormant comparison work @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Automatic Linear renders every record from one GenBank source and survives session reload": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Automatic Linear source-card rows survive fresh Load with contiguous biological columns": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Existing Gallery session restores edge-owned raw LOSAT cache": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Candidate render post-processing sanitizes and reapplies stable styles before commit": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Sparse upload and mixed selected renders keep snapshots and raw cache identity stable": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Region annotations expose and persist an explicit target-record selection": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Region annotation IDs accept continuous typing without losing focus": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: GFF annotation targets follow FASTA record order": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: Label-scoped feature colors and legends survive linear regeneration": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-multi-record.playwright.spec.js :: derived protein options reach Generate without changing raw search identity": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/linear-typography.playwright.spec.js :: independent Linear typography follows linked, imported, and History journeys": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mobile-feature-popup.playwright.spec.js :: B-03 circular mobile search Edit Apply Label accepts pointer input": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mobile-feature-popup.playwright.spec.js :: B-03 linear mobile search Edit Apply Label accepts pointer input": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-record-identity.playwright.spec.js :: ungenerated Circular placement retains source identity through mode history and Save/Load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-record-identity.playwright.spec.js :: committed Circular placement retains source identity through mode history and Save/Load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-record-identity.playwright.spec.js :: Circular source replacement invalidates old identity and placement after mode inactivity": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-record-identity.playwright.spec.js :: Circular source removal invalidates old identity and placement after mode inactivity": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-record-identity.playwright.spec.js :: no-placement Circular and Linear mode round trips remain generatable": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-editor-state.playwright.spec.js :: circular label intent survives mode Undo/Redo and Save/Load/Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-editor-state.playwright.spec.js :: label visibility intent survives mode inactivity and regeneration": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-editor-state.playwright.spec.js :: linear label intent survives mode Undo/Redo and Save/Load/Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-editor-state.playwright.spec.js :: an applicable bulk label override remains dormant across mode navigation": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-editor-state.playwright.spec.js :: incompatible source replacement reconciles old label intent after a mode round trip": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-editor-state.playwright.spec.js :: feature visibility overrides and qualifier rules survive mode navigation": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-result.playwright.spec.js :: @pr-smoke circular color Result agrees with a fresh mode root and export before regeneration": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-result.playwright.spec.js :: @pr-smoke linear color Result agrees with a fresh mode root and export before regeneration": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-result.playwright.spec.js :: unedited Result and same-mode navigation keep feature presentation unchanged": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/mode-transition-result.playwright.spec.js :: incremental color edits survive mode history, dirty draft, and fresh Save/Load/export": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M1 single-part label remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M2 multipart label remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M3 multipart placement remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M4 multipart placement and label remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M6 multipart mode round trip remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M5 multipart saved label remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/multipart-label-regeneration.playwright.spec.js :: M7 multipart label Undo and Redo remains bound through Generate": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/palette-history-preservation.playwright.spec.js :: B-02 placement History preserves every unrelated feature": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/preview-bind-coalescing.playwright.spec.js :: circular replacement previews bind once and keep stroke editing after mode switches": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/preview-navigation.playwright.spec.js :: background pan preserves screen displacement after text selection and zoom": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/preview-bind-coalescing.playwright.spec.js :: linear replacement previews bind once and keep stroke editing after mode switches": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/preview-navigation.playwright.spec.js :: preview pan leaves feature and match gestures available": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/record-display-discovery.playwright.spec.js :: record topology discovery uses uploaded source and packaged Worker in circular": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/record-display-discovery.playwright.spec.js :: record topology discovery uses uploaded source and packaged Worker in linear": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: zoom controls do not overlap the Editor toggle or drawer at issue-desktop": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: zoom controls do not overlap the Editor toggle or drawer at desktop-common": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: zoom controls do not overlap the Editor toggle or drawer at laptop": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB1 J43": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: zoom controls do not overlap the Editor toggle or drawer at narrow-supported": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB1 J44": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB2 J43": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB2 J44": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB3 J43": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB3 J44": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB4 J43": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile Editor overlays MOB4 J44": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: mobile overlays preserve mode, source replacement, and resize behavior": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: a remembered unavailable Similarity groups tab reopens as Features": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: preview similarity-group copy actions report isolated accessible outcomes": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: individual Feature, Label, and Legend edits update the mounted SVG @pr-smoke": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/right-drawer.playwright.spec.js :: adjacent Collinear mixed groups remain selectable after current-session save/load": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/scale-visibility.playwright.spec.js :: coordinate scale visibility follows simple controls and explicit Circular Ticks slots": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/scale-visibility.playwright.spec.js :: Arrow controls render in both modes and survive a session round trip": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-cli-compatibility.playwright.spec.js :: Session current CLI original single survives Web Generate and bidirectional replay": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-cli-compatibility.playwright.spec.js :: Session current CLI composite survives Web Generate and bidirectional replay": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-cli-compatibility.playwright.spec.js :: Session current CLI linear survives Web Generate and bidirectional replay": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-cli-compatibility.playwright.spec.js :: Session schema-1 Web binding control still loads": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-loading-feedback.playwright.spec.js :: session loading is painted before import work and prevents duplicate adoption": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-cli-compatibility.playwright.spec.js :: Session current CLI gff fasta survives Web Generate and bidirectional replay": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/session-loading-feedback.playwright.spec.js :: failed session loading clears pending state and preserves the prior session": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/settings-only-session.playwright.spec.js :: settings-only Load replaces existing work and rejected candidates preserve the complete prior Session": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/settings-only-session.playwright.spec.js :: both mode profiles and auxiliary file bytes survive settings-only Save Load Save": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/settings-only-session.playwright.spec.js :: settings-only Session preserves non-default Circular and Linear profiles through real Save and fresh Load": {
+      "result": "PASS",
+      "run": "installed-cli-browser.log"
+    },
+    "tests/web/source-legend-reconciliation.playwright.spec.js :: L1-L8 generated legend categories reconcile while valid category and layout preferences survive": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/source-legend-reconciliation.playwright.spec.js :: G1-G3 rejected candidates preserve A and dormant category intent and manual rows survive A-B-A replay": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/source-visibility-reconciliation.playwright.spec.js :: V6/V7 shared biological targets and manual matchers survive while rejected sources preserve A": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/source-visibility-reconciliation.playwright.spec.js :: V1-V5/V8 individual visibility is reconciled on accepted source replacement and History replay": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/source-visibility-reconciliation.playwright.spec.js :: repeated generation of an unchanged source preserves hidden duplicate feature intent": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/unmanaged-config-overrides.playwright.spec.js :: GUI-unmanaged config survives disclosure, Generate, save/reload, reset, and rejects unknown paths": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/visual-state-regressions.playwright.spec.js :: B-01 circular color Redo publishes the completed SVG": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/source-visibility-reconciliation.playwright.spec.js :: composite source replacement and Web-CLI-Web replay do not restore discarded visibility": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/visual-state-regressions.playwright.spec.js :: B-01 linear color Redo publishes the completed SVG": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/visual-state-regressions.playwright.spec.js :: B-04 circular depth OFF and ON publish parent visibility": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/visual-state-regressions.playwright.spec.js :: B-04 linear depth OFF and ON publish parent visibility": {
+      "result": "PASS",
+      "run": "functional.log"
+    },
+    "tests/web/visual-state-regressions.playwright.spec.js :: B-06 J36 rejected FASTA recovery and label regeneration preserve scale geometry": {
+      "result": "PASS",
+      "run": "functional.log"
+    }
+  }
+}

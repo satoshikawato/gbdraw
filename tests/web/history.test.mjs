@@ -35,6 +35,7 @@ for (const filename of [
 for (const filename of [
   'feature-selector.js',
   'feature-visibility.js',
+  'feature-utils.js',
   'layout-preferences.js',
   'plot-title-position.js'
 ]) {

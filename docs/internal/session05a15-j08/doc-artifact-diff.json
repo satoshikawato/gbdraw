@@ -1,0 +1,42 @@
+[
+  {
+    "file": "docs/images/h-py-05/typed_request.session.json",
+    "changedTopLevelFields": [
+      "version"
+    ],
+    "oldVersion": 41,
+    "newVersion": 42
+  },
+  {
+    "file": "docs/images/t-py-08/interactive_handoff.gbdraw-session.json.gz",
+    "changedTopLevelFields": [
+      "version"
+    ],
+    "oldVersion": 41,
+    "newVersion": 42
+  },
+  {
+    "file": "docs/images/h-cli-12/cli_session.json",
+    "semanticChange": [
+      "version"
+    ],
+    "otherChanges": [
+      "createdAt",
+      "resource/binding lastModified from clean-directory inputs"
+    ],
+    "oldVersion": 41,
+    "newVersion": 42
+  },
+  {
+    "file": "docs/images/h-cli-12/cli_session.json.gz",
+    "semanticChange": [
+      "version"
+    ],
+    "otherChanges": [
+      "createdAt",
+      "resource/binding lastModified from clean-directory inputs"
+    ],
+    "oldVersion": 41,
+    "newVersion": 42
+  }
+]

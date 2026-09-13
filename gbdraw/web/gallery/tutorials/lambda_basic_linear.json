@@ -142,7 +142,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.setLinearComparisonGlobalAction('none');"
+                "script": "async () => { const app = window.__GBDRAW_APP__; await app.setLinearComparisonGlobalAction('none'); }"
               }
             ],
             "selector": "[data-linear-comparison-card]",
@@ -448,7 +448,7 @@
   "related": [
     {
       "label": "Arrange linear tracks and record labels",
-      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/7_Linear_Layout.md"
+      "href": "https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#diagram-layout"
     },
     {
       "label": "Open the gbdraw web app",

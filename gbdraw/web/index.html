@@ -783,7 +783,9 @@
             white-space: nowrap;
         }
         .result-pane {
-            --right-drawer-width: min(100vw, 360px);
+            --right-drawer-max-width: 360px;
+            --right-drawer-width: min(100vw, var(--right-drawer-max-width));
+            container-type: inline-size;
         }
         .right-drawer {
             width: var(--right-drawer-width);
@@ -938,7 +940,7 @@
                 background: rgba(255, 255, 255, 0.96) !important;
                 border-top: 1px solid #e2e8f0 !important;
                 box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.12) !important;
-                z-index: 60 !important;
+                z-index: 40 !important;
             }
 
             .generate-bar .btn {
@@ -1034,6 +1036,72 @@
             }
         }
 
+        /* Narrow Preview: keep the Editor in a side lane and let search scroll
+           above the naturally wrapped controls, including in landscape. */
+        @container (max-width: 40rem) {
+            .result-pane > [aria-label="Result Preview"] {
+                min-height: 0;
+                overflow: clip;
+                --editor-toggle-width: 2.25rem;
+                --right-drawer-width: min(var(--right-drawer-max-width), calc(100% - var(--editor-toggle-width)));
+            }
+            [aria-label="Result Preview"] > .card-header {
+                padding-right: calc(var(--editor-toggle-width) + 0.75rem);
+            }
+            .preview-viewport {
+                display: grid;
+                grid-template-rows: minmax(0, 1fr) auto;
+                gap: 0.5rem;
+                padding: 0.5rem;
+                min-height: 0;
+                isolation: isolate;
+            }
+            .preview-feature-search {
+                position: relative;
+                grid-area: 1 / 1;
+                inset: auto !important;
+                width: auto;
+                min-height: 0;
+                max-height: 100% !important;
+                overflow: auto;
+                align-self: start;
+            }
+            .preview-viewport .preview-controls {
+                position: relative;
+                grid-area: 2 / 1;
+                inset: auto !important;
+                transform: none !important;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            /* The open drawer covers the underlying controls in this narrow
+               region. Keep whole hit targets behind its edge. */
+            .preview-viewport .preview-controls--drawer-open,
+            .preview-viewport:has(.preview-controls--drawer-open) .preview-feature-search {
+                transform: translateX(max(calc(var(--editor-toggle-width) - 0.5rem), calc(100% - var(--right-drawer-max-width) + 0.5rem))) !important;
+            }
+            .preview-viewport .preview-canvas-padding {
+                position: relative;
+                grid-area: 1 / 1;
+                inset: auto;
+                transform: none;
+                place-self: end center;
+                max-height: 100%;
+                overflow: auto;
+                z-index: 31;
+            }
+            .drawer-toggle {
+                top: 0.5rem !important;
+                bottom: auto !important;
+                width: var(--editor-toggle-width);
+                transform: none !important;
+            }
+            .drawer-toggle[aria-expanded="true"] {
+                right: var(--right-drawer-width);
+                transform: none !important;
+            }
+        }
+
         .btn { @apply font-bold rounded-lg text-base px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
         .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
         .btn-secondary { @apply text-slate-700 bg-white border border-slate-300 hover:bg-slate-50; }
@@ -1118,7 +1186,7 @@
     <div v-if="processing" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
         <div class="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-6"></div>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">Generating Diagram...</h3>
-        <p v-if="processingStatus" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
+        <p role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
@@ -1750,7 +1818,7 @@
                                     >Clear comparison</button>
                                 </div>
                             </div>
-                            <div role="group" aria-label="Set all adjacent comparisons" data-capture="linear-blast-source" class="linear-comparison-actions">
+                            <div role="group" aria-label="Set all adjacent comparisons" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
                                 <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Upload BLAST TSV</button>
@@ -2245,7 +2313,9 @@
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
                                 <label class="btn btn-secondary text-[10px] flex-1 cursor-pointer"><i class="ph ph-upload-simple"></i> Import TSV<input type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile"></label>
+                                <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> Download TSV</button>
                             </div>
+                            <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="text-[10px] text-slate-500">Add an annotation row to download TSV.</p>
                             <div v-if="annotationSets.length === 0" class="rounded border border-dashed border-slate-200 p-2 text-[10px] text-slate-400">No annotation sets.</div>
                             <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                 <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
@@ -4497,7 +4567,7 @@
                     <p>Current changes were not applied.</p>
                 </div>
 
-                <div v-show="resultPanelTab === 'preview'" class="relative flex-grow overflow-hidden bg-slate-50/30">
+                <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <div v-if="svgContent"
                          :class="['preview-feature-search', { 'is-invalid': previewFeatureSearchError }]"
@@ -4749,7 +4819,7 @@
 
                     <!-- Canvas padding controls panel -->
                     <div v-if="showCanvasControls && svgContent"
-                         class="absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
+                         class="preview-canvas-padding absolute bottom-20 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-3 z-20 border border-slate-200 w-48">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-xs font-bold text-slate-700">Canvas Padding</span>
                             <button @click="resetCanvasPadding" class="text-[10px] text-blue-600 hover:text-blue-800">Reset</button>
@@ -4793,12 +4863,13 @@
                          @lostpointercapture="endPan"
                          @mouseleave="endPan">
                         <div v-if="svgContent" v-html="svgContent" ref="svgContainer"
-                            :key="`svg-${mode}-${selectedResultIndex}-${results.length}`"
+                            :key="`svg-${mode}-${selectedResultIndex}-${svgResultIdentity}`"
                             :style="{transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${zoom})`, transformOrigin: 'top center', transition: isPanning ? 'none' : 'transform 0.2s'}"
                             class="gbdraw-preview-surface shadow-xl bg-white m-auto origin-top">
                         </div>
                     </div>
 
+                    <Teleport to="body">
                     <!-- Feature Editor Popup -->
                     <div v-if="clickedFeature"
                          ref="featurePopupRef"
@@ -4811,8 +4882,8 @@
                          ]"
                          :style="featurePopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
-                            <div class="w-4 h-4 rounded mt-1" :style="{ backgroundColor: clickedFeature.color }"></div>
-                            <div class="min-w-0">
+                            <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
+                            <div class="min-w-0 flex-1">
                                 <div class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5">Location: {{ clickedFeatureLocation }}</div>
                                 <div v-if="clickedFeature.orthogroupId" class="text-xs text-slate-500 mt-0.5">
@@ -4830,12 +4901,12 @@
                                    :title="canEditFeatureColor(clickedFeature.feat) ? 'Change fill color' : 'No stable identifier available'"
                                    aria-label="Feature fill color"
                                    :class="['w-8 h-8 cursor-pointer border-2 border-slate-200 rounded-lg shrink-0', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
-                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl" aria-label="Close feature popup">
+                            <button @click="clickedFeature = null" class="text-slate-400 hover:text-slate-600 ml-auto text-xl shrink-0" aria-label="Close feature popup">
                                 <i class="ph ph-x"></i>
                             </button>
                         </div>
                         <label class="block text-xs mb-2">Feature placement
-                            <select data-history-managed aria-label="Feature placement" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="rounded border p-1">
+                            <select data-history-managed aria-label="Feature placement" :value="featurePlacementActions.valueFor(clickedFeature.feat)" @change="featurePlacementActions.setPlacement([clickedFeature.feat], $event.target.value)" class="rounded border p-1 max-w-full">
                                 <option v-for="choice in featurePlacementActions.choices([clickedFeature.feat])" :key="choice.value" :value="choice.value" :disabled="!choice.enabled">{{ choice.label }}{{ choice.reason ? ' — ' + choice.reason : '' }}</option>
                             </select>
                             <span class="block text-slate-500">Applied on the next successful Generate.</span>
@@ -5937,6 +6008,7 @@
                         </div>
                     </div>
 
+                    </Teleport>
                 </div>
 
                 <div v-show="resultPanelTab === 'run-info'" class="run-info-panel flex-grow overflow-auto bg-white p-4 custom-scrollbar">

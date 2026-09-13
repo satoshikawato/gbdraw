@@ -68,7 +68,7 @@ ORIGIN
 `;
 
 for (const mode of ['circular', 'linear']) {
-  test(`@pr-smoke joint rotation placement and saved drafts in ${mode}`, async ({ page, browser }, testInfo) => {
+  test(`joint rotation placement and saved drafts in ${mode}`, async ({ page, browser }, testInfo) => {
     test.setTimeout(240000);
     await page.addInitScript(() => {
       window.__JOINT_LIFECYCLE__ = [];
@@ -147,7 +147,7 @@ for (const mode of ['circular', 'linear']) {
     await download.saveAs(savedPath);
     const bytes = await fs.readFile(savedPath);
     const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
-    expect(session.version).toBe(41);
+    expect(session.version).toBe(42);
     expect(session.renderRequest.schema).toBe(7);
     expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
     expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
@@ -165,8 +165,8 @@ for (const mode of ['circular', 'linear']) {
     await loaded.locator('.drawer-toggle').click();
     await loaded.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
     const loadedPlacement = loaded.getByRole('combobox', { name: 'Feature placement', exact: true });
-    // Resolved geometry is regenerated; Auto removal only needs the saved source binding.
-    await expect(loadedPlacement.locator('option[value=main]')).toHaveJSProperty('disabled', true);
+    // Saved resolved geometry keeps placement available before regeneration.
+    await expect(loadedPlacement.locator('option[value=main]')).toHaveJSProperty('disabled', false);
     await expect(loadedPlacement.locator('option[value=auto]')).toHaveJSProperty('disabled', false);
     await loadedPlacement.selectOption('auto');
     await loaded.getByRole('button', { name: 'Close feature popup', exact: true }).click();
@@ -194,7 +194,7 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   await download.saveAs(savedPath);
   const bytes = await fs.readFile(savedPath);
   const saved = JSON.parse(zlib.gunzipSync(bytes));
-  expect(saved.version).toBe(41);
+  expect(saved.version).toBe(42);
   expect(saved.renderRequest.schema).toBe(7);
   expect(saved.renderRequest.records.every((record) => record.display.isCircular === null
     && record.display.startCoordinate === null)).toBe(true);

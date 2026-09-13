@@ -459,6 +459,7 @@ test('a requested Legend addition reuses an exact renderer-produced caption', ()
   });
   assert.equal((results[0].content.match(/data-legend-key="CDS"/g) || []).length, 1);
   assert.match(results[0].content, /fill="#556677"/);
+  assert.match(results[0].content, /data-legend-owner="direct-editor"/);
 });
 
 test('a renderer-derived Legend style may be absent when no current binding remains', () => {
@@ -503,6 +504,74 @@ test('an unexplained missing Legend binding remains rejected', () => {
     }),
     /missing a Legend binding/
   );
+});
+
+test('source replacement may retire styled, renamed, or deleted generated Legend categories', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan({
+    ...planOptions.Legend(admission),
+    sourceReplaced: true,
+    legendEntries: [{ caption: 'Genes', originalCaption: 'CDS', color: '#334455' }],
+    originalLegendOrder: ['CDS', 'rRNA'],
+    deletedLegendEntries: [{ caption: 'rRNA', originalCaption: 'rRNA' }],
+    legendColorOverrides: { Genes: '#334455' },
+    legendStrokeOverrides: { Genes: { strokeColor: '#445566', strokeWidth: 3 } }
+  });
+  assert.doesNotThrow(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: value => value },
+    parser: FakeDomParser
+  }));
+});
+
+test('explicit category deletion stays idempotent while the category is absent', () => {
+  const { response, admission } = currentFixture('<svg>missing-legend</svg>');
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    originalLegendOrder: ['rRNA'],
+    deletedLegendEntries: [{ caption: 'rRNA', originalCaption: 'rRNA' }]
+  });
+  assert.doesNotThrow(() => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission, mutationPlan: plan,
+    sanitizer: { sanitize: value => value }, parser: FakeDomParser
+  }));
+});
+
+test('a dormant category style applies on its first returning Result without creating a manual row', () => {
+  const { response, admission } = currentFixture();
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [], originalLegendOrder: [],
+    legendColorOverrides: { CDS: '#224466' }
+  });
+  assert.equal(plan.operationsByResult[0].legendAdds.length, 0);
+  const results = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission, mutationPlan: plan,
+    sanitizer: { sanitize: value => value }, parser: FakeDomParser
+  });
+  assert.match(results[0].content, /fill="#224466"/);
+});
+
+test('category absence capabilities never admit ambiguous Legend bindings', () => {
+  class DuplicateLegendParser extends FakeDomParser {
+    parseFromString(...args) {
+      const document = super.parseFromString(...args);
+      const group = document.documentElement.querySelector('#feature_legend');
+      group.appendChild(group.children[0].cloneNode(true));
+      return document;
+    }
+  }
+  for (const sourceReplaced of [false, true]) {
+    const { response, admission } = currentFixture();
+    const plan = compileDirectEditorMutationPlan({
+      ...planOptions.Legend(admission), sourceReplaced
+    });
+    assert.throws(() => admitCurrentGeneratedResults(response, {
+      catalogAdmission: admission, mutationPlan: plan,
+      sanitizer: { sanitize: value => value }, parser: DuplicateLegendParser
+    }), /ambiguous Legend binding/);
+  }
 });
 
 test('Label replay is deferred until mounted identity binding', () => {

@@ -89,3 +89,25 @@ test('render staging selects references, transfers bytes once, and reuses the ca
     3
   );
 });
+
+test('unacknowledged preparation, replacement, and reset never publish stale ownership', async () => {
+  const transport = createDiagramResourceTransport();
+  const request = { records: [{ source: { kind: 'genbank', resourceId: 'source' } }] };
+  const prepare = text => transport.prepare({ request, resources: { source: descriptor(text) } });
+  const abandoned = await prepare('A');
+  const first = await prepare('A');
+  assert.equal(first.stagedResources.length, 1, 'prepare alone does not acknowledge bytes');
+  assert.equal(first.commit(), true);
+  assert.equal(abandoned.commit(), false, 'older preparation cannot replace an acknowledged state');
+  assert.equal(first.commit(), false);
+  const pending = await prepare('B');
+  assert.equal((await prepare('A')).stagedResources.length, 0);
+  assert.equal((await prepare('B')).stagedResources.length, 1);
+  assert.equal(pending.commit(), true);
+  assert.equal((await prepare('A')).stagedResources.length, 1);
+  assert.equal((await prepare('B')).stagedResources.length, 0);
+  const beforeReset = await prepare('B');
+  transport.reset();
+  assert.equal(beforeReset.commit(), false, 'reset invalidates outstanding preparations');
+  assert.equal((await prepare('B')).stagedResources.length, 1);
+});

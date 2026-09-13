@@ -3,6 +3,7 @@ import {
   exactRegexValue,
   selectFeatureSelector
 } from './feature-selector.js';
+import { getFeatureGenerationHash } from './feature-utils.js';
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -318,6 +319,32 @@ export const preserveFeatureVisibilitySelectorCacheForOverrides = (
   });
 
   return merged;
+};
+
+// Reconcile against the source catalog, including hidden/cropped features.
+// The source-binding owner decides whether a successful Generate replaced a source.
+export const reconcileFeatureVisibilityOverrides = (
+  overrides,
+  biologicalFeatures,
+  previousFeatures = [],
+  selectorCache = {}
+) => {
+  const keys = Object.keys(overrides || {});
+  if (keys.length === 0) return 0;
+  const currentIds = new Set((biologicalFeatures || []).map(getFeatureStableHashValue));
+  const previousById = new Map((previousFeatures || []).map(feature => [getFeatureId(feature), feature]));
+  let removed = 0;
+  keys.forEach(featureId => {
+    const previous = previousById.get(featureId);
+    const cached = getSelectorCacheEntry(selectorCache, featureId);
+    const sourceId = previous
+      ? getFeatureStableHashValue(previous)
+      : (cached?.qualifier === 'hash' ? cached.value : getFeatureGenerationHash({ svg_id: featureId }));
+    if (sourceId && currentIds.has(sourceId)) return;
+    delete overrides[featureId];
+    removed += 1;
+  });
+  return removed;
 };
 
 const buildRuleFromSelectorCacheEntry = (featureIdRaw, modeRaw, selectorCache) => {

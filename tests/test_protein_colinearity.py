@@ -3092,20 +3092,76 @@ def test_web_extract_cds_protein_fasta_uses_coordinate_stable_ids(tmp_path: Path
     assert result["display_binding_hash"].startswith("sha256:")
     boundary_key = json.loads(
         str(
-            namespace["build_protein_losat_cache_key_json"](
+            namespace["build_protein_losat_cache_keys_json"](
                 json.dumps(result["identity_manifest"]),
-                "record_a_region",
-                "record_a_region",
-                json.dumps({"program": "blastp", "outfmt": "6", "args": []}),
+                json.dumps([{
+                    "queryRecordInstanceKey": "record_a_region",
+                    "subjectRecordInstanceKey": "record_a_region",
+                    "expectedOptions": {"program": "blastp", "outfmt": "6", "args": []},
+                }]),
             )
         )
-    )["key"]
+    )["keys"][0]
     expected_identity = build_protein_losat_pair_identity(
         result["identity_manifest"],
         query_record_instance_key="record_a_region",
         subject_record_instance_key="record_a_region",
     )
     assert boundary_key == build_protein_losat_cache_key(expected_identity, args=[])
+
+
+@pytest.mark.linear
+def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options(monkeypatch) -> None:
+    namespace = _load_web_helper_namespace()
+    extraction = extract_protein_identity_manifest(
+        [_record("a", features=[_cds(0, 9, qualifiers={"translation": ["MKT"]})]),
+         _record("b", features=[_cds(0, 9, qualifiers={"translation": ["MGG"]})])],
+        record_instance_keys=("row-a", "row-b"),
+    )
+    manifest = extraction.identity_manifest.to_dict()
+    pairs = [
+        {"queryRecordInstanceKey": query, "subjectRecordInstanceKey": subject,
+         "expectedOptions": {"program": "blastp", "outfmt": "6", "args": args}}
+        for query, subject, args in [
+            ("row-a", "row-b", []), ("row-b", "row-a", []),
+            ("row-a", "row-a", []), ("row-a", "row-b", ["--max-target-seqs", "6"]),
+            ("row-a", "row-b", []),
+        ]
+    ]
+    expected = [
+        build_protein_losat_cache_key(
+            build_protein_losat_pair_identity(
+                manifest, query_record_instance_key=pair["queryRecordInstanceKey"],
+                subject_record_instance_key=pair["subjectRecordInstanceKey"],
+            ), args=pair["expectedOptions"]["args"],
+        ) for pair in pairs
+    ]
+    validation_calls = []
+
+    def validate_once(value):
+        validation_calls.append(1)
+        return validate_protein_identity_manifest(value)
+
+    monkeypatch.setattr(protein_colinearity_module, "validate_protein_identity_manifest", validate_once)
+    result = json.loads(namespace["build_protein_losat_cache_keys_json"](
+        json.dumps(manifest), json.dumps(pairs),
+    ))
+    assert result == {"keys": expected}
+    assert len(set(expected)) == 4
+    assert validation_calls == [1]
+    # A bad later pair must not expose a partial key list.
+    pairs[-1]["subjectRecordInstanceKey"] = "unknown"
+    rejected = json.loads(namespace["build_protein_losat_cache_keys_json"](
+        json.dumps(manifest), json.dumps(pairs),
+    ))
+    assert "error" in rejected and "keys" not in rejected
+    # Validate the full manifest even when a bad record is not in a requested pair.
+    pairs = pairs[2:3]
+    manifest["recordInstances"]["row-b"]["runtimeBindingHash"] = "invalid"
+    rejected = json.loads(namespace["build_protein_losat_cache_keys_json"](
+        json.dumps(manifest), json.dumps(pairs),
+    ))
+    assert "error" in rejected and "keys" not in rejected
 
 
 @pytest.mark.linear

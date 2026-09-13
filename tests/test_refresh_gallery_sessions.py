@@ -345,7 +345,8 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
     assert len(paths) == 11
     for path in paths:
         session = load_cached_gallery_session(path)
-        assert session["version"] == CURRENT_SESSION_VERSION, path
+        # Existing published full Sessions stay on their released format.
+        assert session["version"] == 41, path
         assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
             session["proteinIdentityManifest"]["schema"]

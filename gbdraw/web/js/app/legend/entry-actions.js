@@ -763,7 +763,7 @@ export const createLegendEntryActions = ({
     }
   };
 
-  const extractLegendEntries = () => {
+  const extractLegendEntries = ({ replaceGeneratedInventory = false } = {}) => {
     if (!svgContainer.value) {
       legendEntries.value = [];
       return;
@@ -782,6 +782,7 @@ export const createLegendEntryActions = ({
     }
 
     const entries = [];
+    const generatedCaptions = new Set();
 
     const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
 
@@ -819,6 +820,9 @@ export const createLegendEntryActions = ({
       const showStroke = existingEntry?.showStroke || false;
       const existingFeatureIds = existingEntry?.featureIds || [];
       const originalCaption = existingEntry?.originalCaption || caption;
+      if (entryGroup.getAttribute('data-legend-owner') !== 'direct-editor') {
+        generatedCaptions.add(originalCaption);
+      }
 
       entries.push({
         caption,
@@ -845,8 +849,17 @@ export const createLegendEntryActions = ({
 
     legendEntries.value = visuallySortedEntries;
 
-    if (originalLegendOrder.value.length === 0 && visuallySortedEntries.length > 0) {
-      originalLegendOrder.value = visuallySortedEntries.map((e) => e.caption);
+    if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {
+      // Keep default order and deletion intent; live editor extraction alone
+      // must not advance the accepted generated inventory.
+      const retainedCaptions = new Set([
+        ...generatedCaptions,
+        ...deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
+      ]);
+      originalLegendOrder.value = [...new Set([
+        ...originalLegendOrder.value.filter(caption => retainedCaptions.has(caption)),
+        ...visuallySortedEntries.map(entry => entry.originalCaption).filter(caption => generatedCaptions.has(caption))
+      ])];
     }
 
     if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
@@ -956,7 +969,7 @@ export const createLegendEntryActions = ({
   const addNewLegendEntry = async () => {
     if (!newLegendCaption.value.trim()) return;
 
-    const added = await addLegendEntry(newLegendCaption.value.trim(), newLegendColor.value);
+    const added = await addLegendEntry(newLegendCaption.value.trim(), newLegendColor.value, { owner: 'direct-editor' });
     if (added) {
       newLegendCaption.value = '';
       newLegendColor.value = '#808080';

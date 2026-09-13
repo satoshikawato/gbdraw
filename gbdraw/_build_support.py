@@ -35,6 +35,7 @@ _NATIVE_RUNTIME_PACKAGE_DATA = [
 _WEB_APP_PACKAGE_DATA = [
     "web/index.html",
     "web/open-source-notices.html",
+    "web/gallery/palettes/palettes.json",
     "web/assets/*.ico",
     "web/assets/*.png",
     "web/assets/*.svg",

@@ -97,6 +97,9 @@ Open **Region Annotations** and import
 
 ![Annotation table containing LSC, SSC, IRa, and IRb regions](../../images/t-gui-05/03-annotation-table.png)
 
+To reuse the current annotation table, select **Download TSV**. The file can
+be imported again through **Import TSV**, including any edits made here.
+
 ## Step 5: Build the three-slot Gallery stack
 
 Open **Custom Track Slots**, turn on **Use custom stack**, and remove the

@@ -86,7 +86,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
   await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const saved = await readSessionDownload(await downloadPromise);
-  expect(saved.session.version).toBe(41);
+  expect(saved.session.version).toBe(42);
   expect(saved.session.config.unmanagedConfigOverrides).toEqual({
     [unmanagedPath]: 0.42
   });

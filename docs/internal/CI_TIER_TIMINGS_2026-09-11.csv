@@ -1,0 +1,182 @@
+context,run_id,attempt,job_id,job,conclusion,setup_seconds,dependencies_seconds,wheel_seconds,tests_seconds,teardown_seconds,unattributed_seconds,wall_seconds,url
+PR #502,34543831540,1,103092062814,CI impact plan,success,104,0,0,0,1,3,108,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092062814
+PR #502,34543831540,1,103092460199,Gallery (Python 3.11),success,28,13,0,209,0,3,253,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092460199
+PR #502,34543831540,1,103092460225,Web change budget,success,84,0,0,129,1,4,218,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092460225
+PR #502,34543831540,1,103092460255,Core PR (Python 3.11),success,30,15,0,203,0,5,253,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092460255
+PR #502,34543831540,1,103092460259,Lint,success,32,1,0,1,0,5,39,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092460259
+PR #502,34543831540,1,103092460263,Web PR smoke,success,37,40,3,800,1,6,887,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092460263
+PR #502,34543831540,1,103092460308,Recipes standard (Python 3.11),success,27,14,0,71,0,3,115,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103092460308
+PR #502,34543831540,1,103095680139,PR / gate,success,27,0,0,1,0,4,32,https://github.com/satoshikawato/gbdraw/actions/runs/34543831540/job/103095680139
+PR #503,34548658285,1,103106685361,CI impact plan,success,104,0,0,0,1,2,107,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103106685361
+PR #503,34548658285,1,103107062148,Gallery (Python 3.11),success,28,13,0,210,1,2,254,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103107062148
+PR #503,34548658285,1,103107062180,Web change budget,success,78,0,0,136,0,3,217,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103107062180
+PR #503,34548658285,1,103107062192,Recipes standard (Python 3.11),success,29,18,0,89,1,3,140,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103107062192
+PR #503,34548658285,1,103107062211,Web PR smoke,success,34,38,2,724,1,2,801,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103107062211
+PR #503,34548658285,1,103107062229,Lint,success,30,2,0,0,1,3,36,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103107062229
+PR #503,34548658285,1,103107062230,Core PR (Python 3.11),success,30,14,0,203,1,4,252,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103107062230
+PR #503,34548658285,1,103109914715,PR / gate,success,27,0,0,0,1,3,31,https://github.com/satoshikawato/gbdraw/actions/runs/34548658285/job/103109914715
+PR #503,34547226783,1,103102560676,CI impact plan,success,104,0,0,1,1,4,110,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102560676
+PR #503,34547226783,1,103102959387,Core PR (Python 3.11),success,30,13,0,202,1,4,250,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102959387
+PR #503,34547226783,1,103102959415,Web change budget,success,72,0,0,137,0,2,211,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102959415
+PR #503,34547226783,1,103102959499,Gallery (Python 3.11),success,31,15,0,207,0,4,257,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102959499
+PR #503,34547226783,1,103102959514,Recipes standard (Python 3.11),success,36,21,0,89,0,3,149,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102959514
+PR #503,34547226783,1,103102959636,Lint,success,30,3,0,0,0,3,36,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102959636
+PR #503,34547226783,1,103102959643,Web PR smoke,cancelled,42,43,3,814,0,6,908,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103102959643
+PR #503,34547226783,1,103106162123,PR / gate,failure,34,0,0,2,0,3,39,https://github.com/satoshikawato/gbdraw/actions/runs/34547226783/job/103106162123
+PR #503,34545278484,1,103096433241,CI impact plan,success,101,0,0,1,0,4,106,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103096433241
+PR #503,34545278484,1,103097229270,Core PR (Python 3.11),success,29,16,0,204,0,5,254,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103097229270
+PR #503,34545278484,1,103097229277,Gallery (Python 3.11),success,30,14,0,210,0,5,259,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103097229277
+PR #503,34545278484,1,103097229281,Web PR smoke,cancelled,36,40,3,830,0,3,912,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103097229281
+PR #503,34545278484,1,103097229287,Recipes standard (Python 3.11),success,35,18,0,79,0,4,136,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103097229287
+PR #503,34545278484,1,103097229303,Lint,success,30,1,0,1,0,3,35,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103097229303
+PR #503,34545278484,1,103097229322,Web change budget,success,75,0,0,130,0,2,207,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103097229322
+PR #503,34545278484,1,103100553328,PR / gate,failure,26,0,0,1,0,3,30,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103100553328
+PR #503,34545278484,2,103101026774,Web PR smoke,cancelled,39,42,2,300,1,3,387,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101026774
+PR #503,34545278484,2,103101026935,CI impact plan,success,101,0,0,1,0,4,106,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101026935
+PR #503,34545278484,2,103101027557,Recipes standard (Python 3.11),success,35,18,0,79,0,4,136,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101027557
+PR #503,34545278484,2,103101027772,Web change budget,success,75,0,0,130,0,2,207,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101027772
+PR #503,34545278484,2,103101027894,Lint,success,30,1,0,1,0,3,35,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101027894
+PR #503,34545278484,2,103101027968,Gallery (Python 3.11),success,30,14,0,210,0,5,259,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101027968
+PR #503,34545278484,2,103101059963,Core PR (Python 3.11),success,29,16,0,204,0,5,254,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103101059963
+PR #503,34545278484,2,103102435056,PR / gate,failure,27,0,0,3,0,2,32,https://github.com/satoshikawato/gbdraw/actions/runs/34545278484/job/103102435056
+PR #504,34550113922,1,103111045618,CI impact plan,success,98,0,0,1,1,2,102,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111045618
+PR #504,34550113922,1,103111709502,Gallery (Python 3.11),success,22,14,0,212,1,3,252,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111709502
+PR #504,34550113922,1,103111709556,Web change budget,success,73,0,0,131,1,2,207,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111709556
+PR #504,34550113922,1,103111709558,Core PR (Python 3.11),success,30,14,0,202,0,5,251,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111709558
+PR #504,34550113922,1,103111709560,Web PR smoke,success,33,40,3,766,0,4,846,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111709560
+PR #504,34550113922,1,103111709562,Recipes standard (Python 3.11),success,29,17,0,89,0,3,138,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111709562
+PR #504,34550113922,1,103111709598,Lint,success,30,2,0,0,0,3,35,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103111709598
+PR #504,34550113922,1,103114551631,PR / gate,success,25,0,0,1,0,3,29,https://github.com/satoshikawato/gbdraw/actions/runs/34550113922/job/103114551631
+PR #505,34551490388,1,103115688131,CI impact plan,success,87,0,0,0,1,3,91,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103115688131
+PR #505,34551490388,1,103116085017,Recipes standard (Python 3.11),success,30,17,0,89,0,4,140,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103116085017
+PR #505,34551490388,1,103116085051,Web change budget,success,75,0,0,131,0,2,208,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103116085051
+PR #505,34551490388,1,103116085076,Core PR (Python 3.11),success,30,13,0,205,0,5,253,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103116085076
+PR #505,34551490388,1,103116085167,Gallery (Python 3.11),success,29,14,0,150,1,2,196,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103116085167
+PR #505,34551490388,1,103116085175,Lint,success,28,2,0,0,0,3,33,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103116085175
+PR #505,34551490388,1,103116085632,Web PR smoke,success,35,44,2,777,1,3,862,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103116085632
+PR #505,34551490388,1,103118864282,PR / gate,success,26,0,0,1,0,4,31,https://github.com/satoshikawato/gbdraw/actions/runs/34551490388/job/103118864282
+PR #505,34551490020,1,103115157691,CI impact plan,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115157691
+PR #505,34551490020,1,103115160433,PR / gate,failure,12,0,0,1,0,2,15,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115160433
+PR #505,34551490020,1,103115160810,Browser (Python 3.11),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115160810
+PR #505,34551490020,1,103115160903,Playwright functional (shard ${{ matrix.shard }}/4),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115160903
+PR #505,34551490020,1,103115160912,LOSAT cache browser acceptance,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115160912
+PR #505,34551490020,1,103115161070,${{ matrix.surface }} acceptance (Python ${{ matrix.python-version }}),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161070
+PR #505,34551490020,1,103115161210,Web change budget,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161210
+PR #505,34551490020,1,103115161266,Gallery (Python 3.11),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161266
+PR #505,34551490020,1,103115161294,Recipes standard (Python 3.11),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161294
+PR #505,34551490020,1,103115161340,Core (Python ${{ matrix.python-version }}),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161340
+PR #505,34551490020,1,103115161363,Slow (Python ${{ matrix.python-version }}),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161363
+PR #505,34551490020,1,103115161378,Web PR smoke,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161378
+PR #505,34551490020,1,103115161389,Core PR (Python 3.11),cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161389
+PR #505,34551490020,1,103115161408,Dev staging / gate,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161408
+PR #505,34551490020,1,103115161410,Playwright performance,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161410
+PR #505,34551490020,1,103115161512,Lint,cancelled,0,0,0,0,0,0,0,https://github.com/satoshikawato/gbdraw/actions/runs/34551490020/job/103115161512
+dev,34552818001,1,103119071011,CI impact plan,success,73,0,0,0,0,3,76,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119071011
+dev,34552818001,1,103119324319,Recipes standard (Python 3.11),success,31,20,0,94,1,4,150,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324319
+dev,34552818001,1,103119324321,Browser (Python 3.11),success,19,43,2,154,1,4,223,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324321
+dev,34552818001,1,103119324336,Playwright performance,success,33,40,2,209,1,2,287,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324336
+dev,34552818001,1,103119324339,Web change budget,success,83,0,0,119,0,3,205,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324339
+dev,34552818001,1,103119324367,Core (Python 3.12),success,31,16,0,232,0,6,285,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324367
+dev,34552818001,1,103119324372,Gallery (Python 3.11),success,26,15,0,207,0,2,250,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324372
+dev,34552818001,1,103119324423,Core (Python 3.10),success,14,16,0,226,0,4,260,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324423
+dev,34552818001,1,103119324428,Core (Python 3.11),success,28,13,0,205,0,3,249,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324428
+dev,34552818001,1,103119324530,Slow (Python 3.10),success,33,16,2,75,1,2,129,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324530
+dev,34552818001,1,103119324561,LOSAT cache browser acceptance,success,41,35,2,91,1,4,174,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324561
+dev,34552818001,1,103119324588,Lint,success,30,1,0,0,1,3,35,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324588
+dev,34552818001,1,103119324595,Slow (Python 3.12),success,29,23,3,88,0,2,145,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324595
+dev,34552818001,1,103119324598,Playwright functional (shard 3/4),success,34,37,2,369,1,2,445,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324598
+dev,34552818001,1,103119324600,Playwright functional (shard 4/4),success,27,56,2,487,0,3,575,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324600
+dev,34552818001,1,103119324626,recipe acceptance (Python 3.10),success,18,14,0,73,0,4,109,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324626
+dev,34552818001,1,103119324631,browser acceptance (Python 3.10),success,33,44,0,49,1,3,130,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324631
+dev,34552818001,1,103119324642,browser acceptance (Python 3.12),success,23,46,0,56,0,4,129,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324642
+dev,34552818001,1,103119324643,gallery acceptance (Python 3.10),success,32,19,0,216,1,2,270,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324643
+dev,34552818001,1,103119324648,recipe acceptance (Python 3.12),success,27,20,0,96,0,2,145,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324648
+dev,34552818001,1,103119324677,gallery acceptance (Python 3.12),success,28,20,0,197,0,1,246,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324677
+dev,34552818001,1,103119324713,Playwright functional (shard 1/4),success,37,54,3,664,0,4,762,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324713
+dev,34552818001,1,103119324732,Playwright functional (shard 2/4),success,34,37,2,239,0,5,317,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324732
+dev,34552818001,1,103119324757,Slow (Python 3.11),success,28,19,3,59,0,2,111,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103119324757
+dev,34552818001,1,103122317999,Dev staging / gate,success,27,0,0,2,0,3,32,https://github.com/satoshikawato/gbdraw/actions/runs/34552818001/job/103122317999
+dev,34551383882,1,103114836498,CI impact plan,success,79,0,0,1,0,4,84,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103114836498
+dev,34551383882,1,103115117819,Browser (Python 3.11),success,34,41,2,154,1,3,235,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117819
+dev,34551383882,1,103115117849,Gallery (Python 3.11),success,14,13,0,181,1,2,211,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117849
+dev,34551383882,1,103115117856,Web change budget,success,73,0,0,131,1,2,207,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117856
+dev,34551383882,1,103115117894,Recipes standard (Python 3.11),success,13,18,0,105,0,2,138,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117894
+dev,34551383882,1,103115117910,Core (Python 3.11),success,28,13,0,203,1,3,248,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117910
+dev,34551383882,1,103115117912,Playwright performance,success,27,65,4,149,0,3,248,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117912
+dev,34551383882,1,103115117933,Core (Python 3.10),success,16,15,0,180,0,4,215,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115117933
+dev,34551383882,1,103115118014,Core (Python 3.12),success,28,17,0,229,1,4,279,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118014
+dev,34551383882,1,103115118055,Playwright functional (shard 4/4),success,30,40,2,622,1,2,697,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118055
+dev,34551383882,1,103115118084,Slow (Python 3.11),success,28,17,3,78,0,1,127,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118084
+dev,34551383882,1,103115118099,Slow (Python 3.12),success,28,19,3,81,0,4,135,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118099
+dev,34551383882,1,103115118100,Playwright functional (shard 3/4),success,34,42,2,512,0,4,594,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118100
+dev,34551383882,1,103115118107,LOSAT cache browser acceptance,success,32,43,3,120,0,3,201,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118107
+dev,34551383882,1,103115118117,Slow (Python 3.10),success,31,22,2,66,0,3,124,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118117
+dev,34551383882,1,103115118119,browser acceptance (Python 3.12),success,32,44,0,53,1,2,132,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118119
+dev,34551383882,1,103115118121,browser acceptance (Python 3.10),success,38,45,0,53,1,2,139,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118121
+dev,34551383882,1,103115118139,Playwright functional (shard 1/4),success,35,50,3,663,0,4,755,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118139
+dev,34551383882,1,103115118142,recipe acceptance (Python 3.12),success,30,19,0,97,0,3,149,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118142
+dev,34551383882,1,103115118161,recipe acceptance (Python 3.10),success,32,17,0,94,0,4,147,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118161
+dev,34551383882,1,103115118163,Playwright functional (shard 2/4),success,31,40,2,196,0,2,271,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118163
+dev,34551383882,1,103115118174,Lint,success,28,1,0,0,0,3,32,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118174
+dev,34551383882,1,103115118176,gallery acceptance (Python 3.10),success,29,19,0,237,1,2,288,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118176
+dev,34551383882,1,103115118185,gallery acceptance (Python 3.12),success,13,20,0,208,0,1,242,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103115118185
+dev,34551383882,1,103117584684,Dev staging / gate,success,25,0,0,0,0,4,29,https://github.com/satoshikawato/gbdraw/actions/runs/34551383882/job/103117584684
+dev,34549970407,1,103110607407,CI impact plan,success,74,0,0,0,1,2,77,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110607407
+dev,34549970407,1,103110884080,Gallery (Python 3.11),success,14,11,0,148,1,3,177,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884080
+dev,34549970407,1,103110884097,Recipes standard (Python 3.11),success,27,19,0,91,1,4,142,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884097
+dev,34549970407,1,103110884127,Browser (Python 3.11),failure,22,36,2,115,0,4,179,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884127
+dev,34549970407,1,103110884171,Core (Python 3.12),success,28,16,0,231,0,3,278,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884171
+dev,34549970407,1,103110884177,Core (Python 3.11),success,47,16,0,207,1,4,275,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884177
+dev,34549970407,1,103110884183,Lint,success,27,1,0,0,1,2,31,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884183
+dev,34549970407,1,103110884223,Core (Python 3.10),success,31,15,0,226,1,4,277,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884223
+dev,34549970407,1,103110884225,LOSAT cache browser acceptance,success,36,48,3,118,1,2,208,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884225
+dev,34549970407,1,103110884228,Playwright performance,success,25,46,2,174,0,4,251,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884228
+dev,34549970407,1,103110884229,Web change budget,success,63,0,0,102,1,2,168,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884229
+dev,34549970407,1,103110884350,Playwright functional (shard 3/4),success,36,42,4,482,1,4,569,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884350
+dev,34549970407,1,103110884353,Playwright functional (shard 2/4),success,21,42,2,239,1,2,307,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884353
+dev,34549970407,1,103110884354,Slow (Python 3.12),success,29,19,3,65,0,1,117,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884354
+dev,34549970407,1,103110884382,Slow (Python 3.11),success,31,19,3,82,1,3,139,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884382
+dev,34549970407,1,103110884396,gallery acceptance (Python 3.12),success,27,22,0,203,1,2,255,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884396
+dev,34549970407,1,103110884423,Slow (Python 3.10),success,16,19,3,89,1,1,129,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884423
+dev,34549970407,1,103110884424,browser acceptance (Python 3.12),success,37,48,0,54,0,3,142,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884424
+dev,34549970407,1,103110884426,Playwright functional (shard 1/4),success,26,45,4,863,0,3,941,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884426
+dev,34549970407,1,103110884429,gallery acceptance (Python 3.10),success,29,18,0,212,1,2,262,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884429
+dev,34549970407,1,103110884434,recipe acceptance (Python 3.10),success,25,20,0,98,0,4,147,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884434
+dev,34549970407,1,103110884442,Playwright functional (shard 4/4),success,23,43,2,494,1,3,566,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884442
+dev,34549970407,1,103110884451,recipe acceptance (Python 3.12),success,28,20,0,93,1,3,145,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884451
+dev,34549970407,1,103110884467,browser acceptance (Python 3.10),success,22,46,0,49,1,4,122,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103110884467
+dev,34549970407,1,103114058514,Dev staging / gate,failure,27,0,0,1,0,3,31,https://github.com/satoshikawato/gbdraw/actions/runs/34549970407/job/103114058514
+dev,34545113530,1,103095936660,CI impact plan,success,75,0,0,1,0,4,80,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103095936660
+dev,34545113530,1,103096237619,Browser (Python 3.11),failure,37,41,2,144,0,3,227,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237619
+dev,34545113530,1,103096237641,Recipes standard (Python 3.11),success,30,17,0,88,1,3,139,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237641
+dev,34545113530,1,103096237706,Gallery (Python 3.11),success,12,14,0,207,0,3,236,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237706
+dev,34545113530,1,103096237724,Core (Python 3.12),success,30,15,0,137,0,4,186,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237724
+dev,34545113530,1,103096237753,Web change budget,success,70,0,0,114,0,4,188,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237753
+dev,34545113530,1,103096237774,Playwright functional (shard 2/4),success,29,43,2,265,1,3,343,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237774
+dev,34545113530,1,103096237775,Core (Python 3.11),success,29,15,0,188,0,3,235,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237775
+dev,34545113530,1,103096237781,Core (Python 3.10),success,31,14,0,194,0,2,241,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237781
+dev,34545113530,1,103096237793,Playwright functional (shard 1/4),success,35,39,3,847,1,3,928,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237793
+dev,34545113530,1,103096237802,Playwright functional (shard 4/4),success,22,48,3,605,0,5,683,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237802
+dev,34545113530,1,103096237842,Playwright functional (shard 3/4),success,25,42,2,435,0,3,507,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237842
+dev,34545113530,1,103096237850,Lint,success,31,1,0,0,0,2,34,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237850
+dev,34545113530,1,103096237855,Playwright performance,success,37,45,2,183,1,2,270,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237855
+dev,34545113530,1,103096237872,LOSAT cache browser acceptance,success,48,60,3,121,1,6,239,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237872
+dev,34545113530,1,103096237969,recipe acceptance (Python 3.12),success,29,21,0,102,0,3,155,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237969
+dev,34545113530,1,103096237976,Slow (Python 3.11),success,29,14,2,65,0,4,114,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237976
+dev,34545113530,1,103096237978,Slow (Python 3.12),success,29,16,4,74,1,4,128,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237978
+dev,34545113530,1,103096237983,Slow (Python 3.10),success,33,17,3,74,1,3,131,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096237983
+dev,34545113530,1,103096238005,browser acceptance (Python 3.10),success,34,38,0,37,0,3,112,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096238005
+dev,34545113530,1,103096238008,recipe acceptance (Python 3.10),success,30,13,0,73,0,4,120,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096238008
+dev,34545113530,1,103096238016,gallery acceptance (Python 3.12),success,28,20,0,190,0,2,240,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096238016
+dev,34545113530,1,103096238049,browser acceptance (Python 3.12),success,18,43,0,54,1,2,118,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096238049
+dev,34545113530,1,103096238390,gallery acceptance (Python 3.10),success,32,18,0,176,0,4,230,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103096238390
+dev,34545113530,1,103099643847,Dev staging / gate,failure,26,0,0,3,0,3,32,https://github.com/satoshikawato/gbdraw/actions/runs/34545113530/job/103099643847
+PR #506 initial,34563716800,1,103151443630,CI impact plan,success,104,0,0,4,1,5,114,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151443630
+PR #506 initial,34563716800,1,103151783635,Web contracts (Python 3.11),success,33,47,2,58,0,4,144,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783635
+PR #506 initial,34563716800,1,103151783636,Core PR (Python 3.11),success,29,14,0,205,1,4,253,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783636
+PR #506 initial,34563716800,1,103151783639,Recipes standard (Python 3.11),success,35,21,0,73,0,2,131,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783639
+PR #506 initial,34563716800,1,103151783669,Gallery (Python 3.11),success,28,14,0,205,0,3,250,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783669
+PR #506 initial,34563716800,1,103151783674,Lint,success,27,1,0,1,0,3,32,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783674
+PR #506 initial,34563716800,1,103151783690,Web change budget,success,100,0,0,131,0,5,236,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783690
+PR #506 initial,34563716800,1,103151783698,Web PR smoke,success,34,37,2,140,1,4,218,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103151783698
+PR #506 initial,34563716800,1,103152525832,PR / gate,success,1,0,0,0,1,3,5,https://github.com/satoshikawato/gbdraw/actions/runs/34563716800/job/103152525832

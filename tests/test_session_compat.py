@@ -987,3 +987,12 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
         ]
     )
     assert rerendered_prefix.with_suffix(".svg").is_file()
+
+
+def test_main_schema1_binding_witness_reads_without_promotion():
+    fixture = Path(__file__).parent / 'fixtures/sessions/single.v41-bindings1.json'
+    from gbdraw.api import load_session_document
+    document = load_session_document(fixture)
+    assert document.version == 41
+    assert document.to_dict()['webFiles']['bindings']['schema'] == 1
+    assert document.to_dict()['renderRequest']['schema'] == 7

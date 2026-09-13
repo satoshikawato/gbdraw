@@ -880,9 +880,30 @@ def test_fixed_directional_resolver_matrix_and_distinct_physical_lanes(mode, dir
     assert len(result) == 3  # default repeat underlay is not a placement unit.
 
 
+@pytest.mark.parametrize("side", ["outward", "inward"])
+@pytest.mark.parametrize("resolve", [False, True])
+def test_separate_circular_fixed_placement_uses_the_requested_physical_pool(side, resolve):
+    source = _record()
+    # Opposite biological strands assigned to one lane still share occupancy.
+    source.features[2].location = SimpleLocation(20, 40, -1)
+    table = DataFrame([
+        dict(feature_selector="locus_tag=alpha", placement=side),
+        dict(feature_selector="locus_tag=beta", placement=side),
+    ])
+    plan = plan_request(_request(source, feature_placement_table=table))
+    with pytest.raises(ValidationError, match="Fixed feature placement conflict"):
+        _planned_layers(plan, separate=True, resolve=resolve)
+    plan = plan_request(_request(source, feature_placement_table=table.iloc[:1]))
+    result = _assignments(_planned_layers(plan, separate=True, resolve=resolve))
+    assert (result[1].side, result[1].level) == (side, 1)
+    assert result[1].strand_pool == ("positive" if side == "outward" else "negative")
+    assert result[2].level == 0
+    assert result[2].strand_pool == "negative"
+
+
 @pytest.mark.parametrize("mode,direction,separate", [
     ("circular", "inside", False), ("circular", "outside", False),
-    ("circular", "split", True), ("circular", "inside", True), ("circular", "outside", True),
+    ("circular", "inside", True), ("circular", "outside", True),
     ("linear", "above", False), ("linear", "below", False),
     ("linear", "overlay", True), ("linear", "above", True), ("linear", "below", True),
 ])
@@ -1288,9 +1309,9 @@ def test_final_svg_isolated_secondary_lane_keeps_empty_main(monkeypatch, mode, s
         layout = kwargs["feature_layout"]
         lane = layout.lanes_by_track_id[1 if side == "outward" else -1]
         # Width 20 and the existing axis-derived gap 3.9 give a 23.9 lane step.
-        # Inward stacks retain their existing half-step centering around the slot.
-        main_center = 300 if side == "outward" else 311.95
-        expected_center = 323.9 if side == "outward" else 288.05
+        # An occupied inward lane must not displace the empty Main band.
+        main_center = 300
+        expected_center = 323.9 if side == "outward" else 276.1
         assert lane.center_px == pytest.approx(expected_center)
         assert layout.primary_band_px.center_px == pytest.approx(main_center)
         assert abs(lane.center_px - main_center) == pytest.approx(23.9)

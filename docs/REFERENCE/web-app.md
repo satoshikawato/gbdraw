@@ -296,10 +296,12 @@ Generate rebuilds the final slot geometry before Main/side choices become
 available. Auto removal can use the saved source binding without decoding inputs.
 
 **Run Info** describes the successful Result. **Source recipe** reconstructs it
-from embedded original inputs and public CLI settings; **Exact replay** uses its
+from original input files and public CLI settings; **Exact replay** uses its
 saved canonical session and analysis artifacts. Both downloads refer to the
 successful Result, even when controls hold a newer draft. An unavailable Source
 recipe includes a reason; it does not silently omit unsupported settings.
+See [Replay boundaries](session-and-request-compatibility.md#replay-boundaries)
+for required files and the distinction from saving subsequent editor changes.
 Rotation may split one logical comparison match into several SVG paths. Popups
 and sequence downloads still refer to one source match. Gapped matches are split
 by endpoint interpolation, not by reconstructing their aligned bases.

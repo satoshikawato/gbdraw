@@ -315,7 +315,7 @@ test('Pairwise pointer feedback commits selection and preserves keyboard focus',
 test('Linear record rows and N-to-M comparison batches remain keyed by sequence uid', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  const setup = await page.evaluate(() => {
+  const setup = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.addLinearSeq();
@@ -331,7 +331,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
     app.setLinearRecordRow(app.linearSeqs[1].uid, 1);
     app.setLinearRecordRow(app.linearSeqs[2].uid, 2);
     app.setLinearRecordRow(app.linearSeqs[3].uid, 2);
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     return {
       uids: app.linearSeqs.map((item) => item.uid),
       tokens: app.linearLayoutTokens,
@@ -429,14 +429,14 @@ test('Linear records precede comparison pairs in DOM and keyboard order at narro
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page, { waitForPalette: false });
 
-  const uids = await page.evaluate(() => {
+  const uids = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     while (app.linearSeqs.length < 5) app.addLinearSeq();
     app.linearSeqs.forEach((sequence, index) => {
       sequence.definition = `Timeline record ${index + 1}`;
     });
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     return app.linearSeqs.map((sequence) => sequence.uid);
   });
   const edgeKeys = uids.slice(0, -1).map((uid, index) => `${uid}->${uids[index + 1]}`);
@@ -595,7 +595,7 @@ test('Linear region controls do not overlap at supported sidebar widths', async 
 test('Selected pairs focuses Add and repairs an unplaced draft in its boundary', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  const uids = await page.evaluate(() => {
+  const uids = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.addLinearSeq();
@@ -603,7 +603,7 @@ test('Selected pairs focuses Add and repairs an unplaced draft in its boundary',
     app.linearSeqs.forEach((sequence, index) => {
       sequence.definition = `Advanced record ${index + 1}`;
     });
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.clearSelectedLinearComparisons();
     return app.linearSeqs.map((sequence) => sequence.uid);
   });
@@ -725,7 +725,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
   await openApp(page, { waitForPalette: false });
-  const sharedRowUids = await page.evaluate((records) => {
+  const sharedRowUids = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.lInputType = 'gb';
@@ -744,7 +744,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
       show_labels_linear: 'none',
       normalize_length: true
     });
-    app.setLinearComparisonGlobalAction('none');
+    await app.setLinearComparisonGlobalAction('none');
     app.setLinearRecordLayoutEnabled(true);
     app.setLinearRecordRow(app.linearSeqs[0].uid, 1);
     app.setLinearRecordRow(app.linearSeqs[1].uid, 1);
@@ -839,7 +839,7 @@ test('No comparison completes a real render without touching dormant comparison 
       included: true, fileActive: true, losatFilenameActive: true,
       source: 'upload', file: dormant, losatFilename: 'dormant-losat-name.tsv'
     });
-    app.setLinearComparisonGlobalAction('none');
+    await app.setLinearComparisonGlobalAction('none');
     const rawCache = new Map([['dormant-cache', { text: 'must remain unread' }]]);
     const nativeGet = rawCache.get.bind(rawCache);
     window.__GBDRAW_CACHE_LOOKUPS__ = 0;
@@ -954,7 +954,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await openApp(page);
 
   const sourceName = 'automatic-multi-record.gbk';
-  await page.evaluate(({ content, name }) => {
+  await page.evaluate(async ({ content, name }) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.lInputType = 'gb';
@@ -975,7 +975,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
       show_depth: false,
       show_labels_linear: 'none'
     });
-    app.setLinearComparisonGlobalAction('none');
+    await app.setLinearComparisonGlobalAction('none');
     app.sessionTitle = 'automatic-multi-record';
   }, {
     content: makeComparisonGenbank('AutomaticA', 'atg') +
@@ -1313,7 +1313,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     };
   });
   await openApp(page, { waitForPalette: false });
-  const [uidA, uidB, uidC] = await page.evaluate((records) => {
+  const [uidA, uidB, uidC] = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.lInputType = 'gb';
@@ -1326,7 +1326,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       legend: 'bottom', show_gc: false, show_skew: false,
       show_depth: false, show_labels_linear: 'none'
     });
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.setLinearComparisonLosatMode('blastn');
@@ -1434,8 +1434,8 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
 
   await page.evaluate(() => { window.__GBDRAW_MIXED_RUN__ = window.__GBDRAW_APP__.runAnalysis(); });
   await page.waitForFunction(() => window.__GBDRAW_LOSAT_EXECUTOR_CALLS__ === 1);
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.setLinearComparisonGlobalAction('none');
+  await page.evaluate(async () => {
+    await window.__GBDRAW_APP__.setLinearComparisonGlobalAction('none');
     window.__GBDRAW_RELEASE_LOSAT__();
   });
   const firstMixed = await page.evaluate(async () => {
@@ -2367,7 +2367,7 @@ test('derived protein options reach Generate without changing raw search identit
   });
   await openApp(page, { waitForPalette: false });
 
-  await page.evaluate((records) => {
+  await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.lInputType = 'gb';
@@ -2387,7 +2387,7 @@ test('derived protein options reach Generate without changing raw search identit
       show_depth: false,
       show_labels_linear: 'none'
     });
-    app.setLinearComparisonGlobalAction('losat');
+    await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.losat.executionMode = 'serial';

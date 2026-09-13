@@ -839,7 +839,7 @@ def _fit_circular_ring_preview(page: Page) -> None:
     page.mouse.move(preview_box["x"] + (preview_box["width"] * 0.70), y)
     page.mouse.down()
     page.mouse.move(
-        preview_box["x"] + (preview_box["width"] * 0.22),
+        preview_box["x"] + (preview_box["width"] * 0.26),
         y,
         steps=10,
     )

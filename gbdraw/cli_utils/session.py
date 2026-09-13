@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
@@ -33,7 +33,9 @@ from gbdraw.session_io import (
     CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
     SessionBuildContext,
     SessionFileBinding,
+    _project_web_file_binding,
     build_session_json,
+    get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_persisted_web_state_field_names,
     safe_embedded_filename,
@@ -479,6 +481,8 @@ def render_canonical_session_if_present(
     if int(session.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:
         return False
     document = load_session_document(session)
+    if not document.has_canonical_request:
+        raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
     if document.mode != mode:
         raise ValidationError(
             f"Session renderRequest mode is {document.mode!r}; expected {mode!r}."
@@ -666,27 +670,6 @@ def render_canonical_session_if_present(
     return True
 
 
-def _web_binding_as_embedded_file(
-    resources: Mapping[str, Any],
-    binding: Any,
-) -> dict[str, Any] | None:
-    if not isinstance(binding, Mapping):
-        return None
-    resource_id = str(binding.get("resourceId") or "")
-    resource = resources.get(resource_id)
-    if not isinstance(resource, Mapping):
-        if isinstance(binding.get("data"), (str, Mapping)):
-            return dict(binding)
-        return None
-    embedded = dict(resource)
-    embedded["name"] = str(binding.get("name") or resource.get("name") or "file")
-    embedded["type"] = str(binding.get("type") or resource.get("type") or "")
-    embedded["lastModified"] = int(
-        binding.get("lastModified") or resource.get("lastModified") or 0
-    )
-    return embedded
-
-
 def _project_web_file_inventory(
     session: Mapping[str, Any],
 ) -> dict[str, Any] | None:
@@ -696,7 +679,7 @@ def _project_web_file_inventory(
         return None
     bindings_value = web_files.get("bindings")
     has_current_bindings = (
-        isinstance(bindings_value, Mapping) and bindings_value.get("schema") == 1
+        isinstance(bindings_value, Mapping) and bindings_value.get("schema") in (1, 2)
     )
     bindings = bindings_value if has_current_bindings else {}
     direct_source_fields = {
@@ -715,9 +698,7 @@ def _project_web_file_inventory(
     )
 
     def restore(value: Any) -> Any:
-        if isinstance(value, list):
-            return [restore(item) for item in value]
-        return _web_binding_as_embedded_file(resources, value)
+        return _project_web_file_binding(resources, value, schema=bindings["schema"])
 
     def restore_resource_id(value: Any) -> Any:
         if isinstance(value, list):
@@ -725,12 +706,13 @@ def _project_web_file_inventory(
         resource_id = str(value or "").strip()
         if not resource_id:
             return None
-        return _web_binding_as_embedded_file(
+        return _project_web_file_binding(
             resources,
             {
                 "resourceId": resource_id,
                 "name": original_names.get(resource_id),
             },
+            schema=None,
         )
 
     files: dict[str, Any] = {}
@@ -934,6 +916,7 @@ def collect_embedded_files_from_cli_args(
     files = _empty_files_payload()
     bindings: list[SessionFileBinding] = []
     circular_counts: dict[str, int] = {}
+    circular_genbank_bindings: list[int] = []
     linear_depth_track_index = 0
     circular_depth_index = 0
 
@@ -990,6 +973,8 @@ def collect_embedded_files_from_cli_args(
                     slot = f"files.c_depth[{circular_depth_index}]"
                     circular_depth_index += 1
                 _set_file_slot(files, slot, value, depth=token == "--depth_track")
+                if token == "--gbk":
+                    circular_genbank_bindings.append(len(bindings))
                 bindings.append(_binding(arg_index, slot, value))
             index = next_index
             continue
@@ -1041,6 +1026,20 @@ def collect_embedded_files_from_cli_args(
             continue
         index += 1
 
+    if len(circular_genbank_bindings) > 1:
+        components = [
+            get_session_slot({"files": files}, bindings[index].slot)
+            for index in circular_genbank_bindings
+        ]
+        files["c_gb"] = {
+            "kind": "composite",
+            "components": components,
+            **{key: components[0][key] for key in ("name", "type", "lastModified")},
+        }
+        for component_index, binding_index in enumerate(circular_genbank_bindings):
+            bindings[binding_index] = replace(
+                bindings[binding_index], slot=f"files.c_gb.components[{component_index}]"
+            )
     return files, tuple(bindings)
 
 

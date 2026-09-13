@@ -395,7 +395,7 @@ def test_linear_cli_rejects_circular_corner_legend_before_rendering(
 
 def test_current_request_schema_and_session_envelope_versions() -> None:
     assert CANONICAL_REQUEST_SCHEMA == 7
-    assert CURRENT_SESSION_VERSION == 41
+    assert CURRENT_SESSION_VERSION == 42
 
 
 @pytest.mark.parametrize("mode", ("circular", "linear"))

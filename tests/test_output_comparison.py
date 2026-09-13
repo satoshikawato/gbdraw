@@ -47,6 +47,7 @@ def _strip_additive_semantic_attributes(svg_text: str) -> str:
 
     svg_text = re.sub(r"<g\b[^>]*>", strip_definition_group_metadata, svg_text)
     for attribute in (
+        "data-label-feature-id",
         "data-gbdraw-match-id",
         "data-gbdraw-record-id",
         "data-gbdraw-record-index",

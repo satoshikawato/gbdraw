@@ -66,30 +66,28 @@ test('root Markdown and docs tree are documentation', () => {
   assert.equal(classifyPath('README.MD').impact, 'full');
 });
 
-test('runtime, tests, workflows, dependencies, and unknown paths are full', () => {
-  for (const path of [
-    'gbdraw/core/sequence.py',
-    'tests/test_regression.py',
-    'tools/helper.mjs',
-    '.github/workflows/test.yml',
-    'pyproject.toml',
-    'setup.py',
-    'MANIFEST.in',
-    'package.json',
-    'package-lock.json',
-    'playwright.config.js',
-    'recipe/meta.yaml',
-    'examples/example.gb',
-    '_reproduced/result.svg',
-    'wrangler.toml',
-    'reports/result.json',
-    'future/unknown.file'
-  ]) {
-    assert.equal(classifyPath(path).impact, 'full', path);
-  }
+test('subsystem paths classify without making unknown production paths selective', () => {
+  for (const [path, impact] of [
+    ['gbdraw/core/sequence.py', 'python-core'],
+    ['gbdraw/render/drawers/linear/features.py', 'renderer'],
+    ['gbdraw/web/js/app/label-editor.js', 'web-runtime'],
+    ['gbdraw/session_request_codec.py', 'session-persistence'],
+    ['gbdraw/web/js/services/session-request.js', 'session-persistence'],
+    ['gbdraw/web/gallery/examples.json', 'gallery'],
+    ['gbdraw/web/js/services/losat.js', 'losat-integration'],
+    ['tests/test_regression.py', 'tests-only'],
+    ['.github/workflows/test.yml', 'ci-only'],
+    ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'ci-only'],
+    ['pyproject.toml', 'packaging'],
+    ['package-lock.json', 'packaging'],
+    ['tools/helper.mjs', 'full'],
+    ['gbdraw/future/new_engine.py', 'full'],
+    ['gbdraw/web/new-runtime.bin', 'full'],
+    ['future/unknown.file', 'full']
+  ]) assert.equal(classifyPath(path).impact, impact, path);
 });
 
-test('mixed changes use the strongest impact', () => {
+test('mixed changes preserve the capability union', () => {
   const metadata = classifyChanges([
     { status: 'M', paths: ['.gitignore'] },
     { status: 'A', paths: ['.agents/skills/new/SKILL.md'] }
@@ -106,7 +104,8 @@ test('mixed changes use the strongest impact', () => {
     { status: 'M', paths: ['docs/FAQ.md'] },
     { status: 'M', paths: ['gbdraw/cli.py'] }
   ]);
-  assert.equal(full.impact, 'full');
+  assert.equal(full.impact, 'python-core');
+  assert.deepEqual(full.capabilities, ['documentation', 'python-core']);
 });
 
 test('rename, copy, and delete classify every relevant path', () => {
@@ -152,6 +151,7 @@ test('profile job registries are exact and centralized', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'web-contracts-pr',
     'web-pr-smoke'
   ]);
   assert.deepEqual(knownJobsFor('pr'), [
@@ -160,6 +160,7 @@ test('profile job registries are exact and centralized', () => {
     'recipes-standard',
     'gallery',
     'lint',
+    'web-contracts-pr',
     'web-pr-smoke'
   ]);
   assert.deepEqual(knownJobsFor('dev'), [
@@ -170,8 +171,6 @@ test('profile job registries are exact and centralized', () => {
     'browser',
     'playwright-functional',
     'playwright-performance',
-    'acceptance-supported-main',
-    'slow-main',
     'lint',
     'losat-cache-browser-acceptance'
   ]);
@@ -200,7 +199,7 @@ test('impact plans are strict, policy-derived, and immutable', () => {
   const wrongJobs = { ...plan, requiredJobs: [] };
   assert.throws(() => validateImpactPlan(wrongJobs), /required jobs do not match policy/);
   assert.throws(
-    () => validateImpactPlan({ ...plan, schemaVersion: 2 }),
+    () => validateImpactPlan({ ...plan, schemaVersion: 999 }),
     /schema version is not supported/
   );
   assert.throws(
@@ -217,4 +216,70 @@ test('impact plans are strict, policy-derived, and immutable', () => {
     () => validateImpactPlan({ ...plan, unexpected: true }),
     /invalid schema/
   );
+});
+
+const jobsForPaths = (changes) => {
+  const classification = classifyChanges(changes);
+  return requiredJobsFor({ profile: 'pr', ...classification, decision: 'selective' });
+};
+
+test('representative PR routes require the changed subsystem and cross-layer smoke', () => {
+  for (const [path, expected] of [
+    ['README.md', ['recipes-standard']],
+    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']]
+  ]) assert.deepEqual(jobsForPaths([{ status: 'M', paths: [path] }]), expected, path);
+});
+
+test('mixed capabilities and both rename endpoints contribute independent required jobs', () => {
+  const paths = ['gbdraw/render/drawers/linear/features.py', 'gbdraw/web/gallery/examples.json'];
+  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke'];
+  for (const changes of [
+    paths.map((path) => ({ status: 'M', paths: [path] })),
+    [{ status: 'R100', paths }],
+    [{ status: 'C75', paths }]
+  ]) assert.deepEqual(jobsForPaths(changes), expected);
+  assert.ok(jobsForPaths([{ status: 'D', paths: [paths[0]] }]).includes('core-pr'));
+  assert.throws(() => jobsForPaths([{ status: 'R100', paths: [paths[0], 'future/engine.py'] }]), /full coverage/);
+  assert.throws(() => jobsForPaths([{ status: 'D', paths: ['gbdraw/unknown.py'] }]), /full coverage/);
+});
+
+test('control-plane, dependency, unknown and test-only changes cannot select partial coverage', () => {
+  for (const impact of ['ci-only', 'packaging', 'full', 'tests-only']) {
+    assert.throws(() => requiredJobsFor({ profile: 'pr', impact, decision: 'selective' }), /full coverage/);
+    assert.deepEqual(requiredJobsFor({ profile: 'pr', impact, decision: 'full' }), knownJobsFor('pr'));
+  }
+});
+
+test('release retains every dev functional job plus supported-version and slow acceptance', () => {
+  assert.deepEqual(knownJobsFor('release'), [...knownJobsFor('dev'), 'acceptance-supported-main', 'slow-main']);
+  assert.throws(() => requiredJobsFor({ profile: 'release', impact: 'documentation', decision: 'selective' }), /full coverage/);
+  assert.throws(() => requiredJobsFor({ profile: 'dev', impact: 'web-runtime', decision: 'selective' }), /full coverage/);
+});
+
+test('capability tampering cannot drop an independent contribution', () => {
+  const combined = selectivePlan({ impact: 'web-runtime', capabilities: ['documentation', 'web-runtime'] });
+  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'web-contracts-pr', 'web-pr-smoke']);
+  for (const capabilities of [[], ['web-runtime', 'documentation'], ['documentation', 'documentation'], ['future']]) {
+    assert.throws(() => validateImpactPlan({ ...combined, capabilities }), /Capabilities/);
+  }
+  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke'] }), /required jobs/);
+});
+
+
+test('ordinary Web changes stay selective when accompanied by their regression tests', () => {
+  assert.deepEqual(jobsForPaths([
+    { status: 'M', paths: ['gbdraw/web/js/app/label-editor.js'] },
+    { status: 'A', paths: ['tests/web/label-editor.test.mjs'] },
+    { status: 'M', paths: ['tests/web/right-drawer.playwright.spec.js'] }
+  ]), ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']);
+  for (const path of ['tests/web/session-request.test.mjs', 'tests/web/contracts/current-session-lazy-materialization.playwright.spec.js']) {
+    assert.equal(classifyPath(path).impact, 'session-persistence', path);
+    assert.ok(jobsForPaths([{ status: 'M', paths: [path] }]).includes('core-pr'));
+  }
+  for (const path of ['tests/conftest.py', 'tests/test_inputs/example.gbk', 'tests/web/architecture-ratchet-fixtures.test.mjs']) {
+    assert.throws(() => jobsForPaths([{ status: 'M', paths: [path] }]), /full coverage/, path);
+  }
 });

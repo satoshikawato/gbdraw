@@ -558,22 +558,15 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]);
     }
   },
-  [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEY]: {
-    keys: [
-      'identityManifest',
-      'queryRecordInstanceKey',
-      'subjectRecordInstanceKey',
-      'expectedOptions'
-    ],
+  [DIAGRAM_HELPER_OPERATIONS.BUILD_PROTEIN_LOSAT_CACHE_KEYS]: {
+    keys: ['identityManifest', 'pairs'],
     fileRoles: [],
     run: (pyodide, payload) => callJsonHelper(
       pyodide,
-      'build_protein_losat_cache_key_json',
+      'build_protein_losat_cache_keys_json',
       [
         jsonArgument(payload.identityManifest, {}),
-        String(payload.queryRecordInstanceKey || ''),
-        String(payload.subjectRecordInstanceKey || ''),
-        jsonArgument(payload.expectedOptions, {})
+        jsonArgument(payload.pairs, [])
       ]
     )
   },
@@ -851,6 +844,7 @@ const runGeneration = async ({
       requestId,
       'worker-resource-linking-start'
     );
+    self.postMessage({ type: 'progress', requestId, stage: 'preparing-resources' });
     const resourcePaths = await stageRenderResources(
       pyodide,
       workspace,
@@ -887,6 +881,7 @@ const runGeneration = async ({
       requestId,
       'worker-workspace-preparation-end'
     );
+    self.postMessage({ type: 'progress', requestId, stage: 'rendering' });
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-start');
     pythonWrapperStarted = true;
     resultHandle = runWrapper(
@@ -897,6 +892,7 @@ const runGeneration = async ({
       preparedResourceIdentitiesJson
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
+    self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });
     emitTestLifecycle(testLifecycleEnabled, requestId, 'result-object-conversion-start');
     result = typeof resultHandle?.toJs === 'function'
       ? resultHandle.toJs({ dict_converter: Object.fromEntries })

@@ -172,9 +172,9 @@ def test_h_gui_13_persists_real_edits_and_keeps_group_semantics_distinct() -> No
 
 def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None:
     source = INTERACTIVE_FLOW.read_text(encoding="utf-8")
-    assert CURRENT_SESSION_VERSION == 41
+    assert CURRENT_SESSION_VERSION == 42
     for value in (
-        "CURRENT_SESSION_VERSION = 41",
+        "CURRENT_SESSION_VERSION = 42",
         "CURRENT_RENDER_REQUEST_SCHEMA = 7",
         'SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"',
         'contents[:2] != b"\\x1f\\x8b"',

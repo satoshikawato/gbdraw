@@ -1,6 +1,6 @@
 // Source-bound editable rotation intent. The request service owns serialization.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
-import { getSessionResourceSource } from '../services/file-content-cache.js';
+import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 
 export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
   if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
@@ -122,11 +122,8 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     Object.assign(draft, patch);
   });
   const matchesSavedSource = (file, resourceId) => {
-    const binding = getSessionResourceSource(file);
-    if (!binding) return true; // Native Files are bound by the successful run's object identity.
     const expected = getCommittedSession()?.resources?.[resourceId];
-    return (binding.descriptors || [binding]).some(({ descriptor }) => expected
-      && descriptor?.encoding === expected.encoding && descriptor?.data === expected.data);
+    return matchesSessionResourceDescriptor(file, expected);
   };
   const recordForKey = (key) => getCommittedRequest()?.records.find((record) => record.recordKey === key
     || (record.cardinality === 'all' && key.startsWith(`${record.recordKey}:`)

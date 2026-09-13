@@ -1,0 +1,7 @@
+{
+  "source": "Retained SESSION 05A4-09 M19 fixtures/mito.gb",
+  "sha256": "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92",
+  "recordId": "NC_012920.1",
+  "originalCommand": "python -m gbdraw.cli circular --gbk fixtures/mito.gb --labels out -o fixtures/mito-direct-cli --session_output fixtures/mito-direct-cli.gbdraw-session.json.gz",
+  "reproducedBaseSha": "7c25d02dc49821b522846b9a0e9c8cc1561c5ec1"
+}

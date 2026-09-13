@@ -5,6 +5,7 @@ import math
 from typing import Literal, Tuple
 
 from svgwrite.path import Path  # type: ignore[reportMissingImports]
+from svgwrite.params import Parameter
 from svgwrite.text import Text, TextPath  # type: ignore[reportMissingImports]
 
 from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
@@ -256,6 +257,12 @@ class LabelDrawer:
             )
         else:
             group = self.add_label_on_the_rim(group, label, radius, record_length)
+        # Each branch appends its text last. Bind that label to the same logical
+        # rendered feature as its geometry, irrespective of multipart positions.
+        if label.get("feature_id"):
+            text = group.elements[-1]
+            text.set_parameter(Parameter(debug=False, profile=text.profile))
+            text.attribs["data-label-feature-id"] = label["feature_id"]
         return group
 
 

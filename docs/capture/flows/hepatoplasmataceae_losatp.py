@@ -230,7 +230,7 @@ def _configure_all_record_collinear(
     )
     losatp_mode.select_option("pairwise")
     expect(losatp_mode).to_have_value("pairwise")
-    match_style = settings.get_by_label("Pairwise Match Style", exact=True)
+    match_style = settings.get_by_label("Comparison match style", exact=True)
     match_style.select_option("curve")
     expect(match_style).to_have_value("curve")
     losatp_mode.select_option("collinear")

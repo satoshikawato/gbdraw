@@ -180,7 +180,8 @@ const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
         : endpoints.some((comparison) => comparison.kind === 'precomputedProteinComparison')
           ? 'pairwise'
           : '';
-    if (!inferredMode) return false;
+    // A disabled pipeline can carry CLI settings without any comparison work.
+    if (!inferredMode && (comparisons.length !== 1 || pipeline.pairs.length !== 0)) return false;
   }
   const collinearity = pipeline.settings?.collinearityParams;
   if (!isObject(collinearity) || collinearity.kind !== 'lossless') return false;

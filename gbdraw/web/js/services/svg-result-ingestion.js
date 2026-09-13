@@ -452,14 +452,14 @@ const applyLegendOperations = (index, operations) => {
       if (strokeWidth !== null) setAttributeIfDifferent(swatch, 'stroke-width', strokeWidth);
     });
   });
-  operations.legendRenames.forEach(({ from, to, xPos, yPos }) => {
-    requireLegendEntries(index, from).forEach((entry) => {
+  operations.legendRenames.forEach(({ from, to, xPos, yPos, allowMissing }) => {
+    requireLegendEntries(index, from, { allowMissing }).forEach((entry) => {
       updateLegendCaption(entry, to);
       moveLegendEntryToAnchor(entry, xPos, yPos);
     });
   });
-  operations.legendDeletes.forEach(({ caption }) => {
-    requireLegendEntries(index, caption).forEach((entry) => entry.remove());
+  operations.legendDeletes.forEach(({ caption, allowMissing }) => {
+    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => entry.remove());
   });
   operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
     const { entries, groups } = index.legends();
@@ -469,6 +469,7 @@ const applyLegendOperations = (index, operations) => {
         const swatch = legendSwatch(entry);
         if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
         setAttributeIfDifferent(swatch, 'fill', color);
+        entry.setAttribute('data-legend-owner', 'direct-editor');
         moveLegendEntryToAnchor(entry, xPos, yPos);
       });
       return;

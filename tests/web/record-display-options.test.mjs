@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts,
+  buildRecordDisplayRows, createRecordDisplayControls, parseRecordDisplayStart, reconcileRecordDisplayDrafts,
   recordDisplaySurface, selectedFeatureDisplayStart
 } from '../../gbdraw/web/js/app/record-display-options.js';
 import { parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
+
+import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
+import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
+import { adoptCurrentSessionResources, createCombinedSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
+import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 
 const source = {};
 const records = [
@@ -82,4 +87,74 @@ test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-st
     { selectedFeatures: [{ ...feature, location_parts: [] }] },
     { selectedFeatures: [{ ...feature, location_parts: [{ start: 5, end: 10, strand: '-' }] }] }
   ]) assert.throws(() => selectedFeatureDisplayStart({ ...args, ...changed }));
+});
+
+const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',
+  lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
+const compositeControls = () => {
+  const resources = Object.fromEntries(['first', 'second'].map((id) => [id,
+    descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
+  const table = adoptCurrentSessionResources(resources);
+  const components = Object.keys(resources).map((resourceId) => ({ resourceId }));
+  const makeFile = () => createCombinedSessionResourceFileView(table, components);
+  const file = makeFile();
+  let committed = { resources, renderRequest: { mode: 'circular', records: components.map(({ resourceId }, i) => ({
+    recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
+    selector: null })) } };
+  const state = { mode: { value: 'circular' }, cInputType: { value: 'gb' },
+    lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
+    form: createDefaultForm(), adv: createDefaultAdv('circular'),
+    recordDisplayDrafts: [], featurePlacementOverrides: {},
+    circularRecordList: { value: components.map(({ resourceId }, i) => ({
+      record_id: resourceId, record_length: 100, selector: `#${i + 1}`, detectedTopology: 'circular' })) },
+    featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
+  state.form.track_type = 'middle';
+  const getCommittedRequest = () => committed.renderRequest;
+  const history = { runUndoable: (_label, fn) => fn() };
+  const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
+    watch: () => {}, linearRecordSelector: { recordsFor: () => [] }, history,
+    getCommittedRequest, getCommittedSession: () => committed });
+  const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
+    isCurrentFeature: controls.isCurrentFeature });
+  const feature = { record_key: 'record-2', biological_feature_id: 'logical-feature' };
+  return { state, actions, feature, file, makeFile,
+    enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
+    commitCombined: async () => {
+      const bytes = await readFileBytes(file);
+      const combined = { ...descriptor(file.name, ''), size: bytes.byteLength,
+        data: Buffer.from(bytes).toString('base64') };
+      committed = { resources: { combined }, renderRequest: { ...committed.renderRequest,
+        records: committed.renderRequest.records.map((record, i) => ({ ...record,
+          source: { kind: 'genbank', resourceId: 'combined' }, selector: { kind: 'recordIndex', index: i } })) } };
+    } };
+};
+
+test('same composite retains semantic capability when the committed resource becomes combined', async () => {
+  const model = compositeControls();
+  const all = ['auto', 'main', 'outward', 'inward'];
+  assert.deepEqual(model.enabled(), all);
+  model.actions.setPlacement([model.feature], 'main');
+  assert.equal(model.actions.valueFor(model.feature), 'main');
+  await model.commitCombined();
+  assert.deepEqual(model.enabled(), all);
+  assert.equal(model.actions.valueFor(model.feature), 'main');
+});
+
+test('same-name, same-content source replacement does not retain old feature capability', () => {
+  const model = compositeControls();
+  assert.equal(model.enabled().length, 4);
+  model.state.files.c_gb = model.makeFile();
+  assert.equal(model.state.files.c_gb.name, model.file.name);
+  assert.notEqual(model.state.files.c_gb, model.file);
+  assert.deepEqual(model.enabled(), []);
+  assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /Unavailable/);
+});
+
+test('unsupported draft lanes remain unavailable independently of current placement value', () => {
+  const model = compositeControls();
+  model.actions.setPlacement([model.feature], 'outward');
+  model.state.form.track_type = 'tuckin';
+  assert.equal(model.actions.valueFor(model.feature), 'outward');
+  assert.deepEqual(model.enabled(), ['auto', 'main']);
+  assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /Unavailable/);
 });

@@ -7,6 +7,7 @@ import hashlib
 import html
 import importlib.util
 import json
+import os
 import re
 import shutil
 import socket
@@ -215,7 +216,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
 @pytest.mark.browser
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.14.0b0-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.14.0-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -255,7 +256,9 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
         include_browser_wheel=True
     )
 
-    assert all("web/gallery" not in pattern for pattern in package_data_patterns)
+    assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
+        "web/gallery/palettes/palettes.json"
+    ]
     assert "web/js/services/*.js" in package_data_patterns
     assert "web/tutorial-data/*.json" in package_data_patterns
     assert "web/tutorial-data/*/*.gb" in package_data_patterns
@@ -676,7 +679,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
             re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text)
         )
 
-        assert session.get("version") == CURRENT_SESSION_VERSION, session_name
+        # A new writer does not require rewriting the published full Sessions.
+        assert session.get("version") == 41, session_name
         assert (
             session.get("renderRequest", {}).get("schema")
             in BUNDLED_REQUEST_SCHEMAS
@@ -859,7 +863,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     repo_root = tmp_path / "repo"
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
-    expected_name = "gbdraw-0.14.0b0-py3-none-any.whl"
+    expected_name = "gbdraw-0.14.0-py3-none-any.whl"
     calls: list[object] = []
 
     def fake_run(
@@ -1165,7 +1169,7 @@ def test_wrangler_uses_cloudflare_bundle_directory() -> None:
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:
     readme = README_PATH.read_text(encoding="utf-8")
     assert PREPRINT_DOI in readme
-    assert "./gbdraw/web/assets/gbdraw-logo-title.png" in readme
+    assert "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/assets/gbdraw-logo-title.png" in readme
     assert PREPRINT_DOI in ABOUT_PATH.read_text(encoding="utf-8")
     citation_cff = CITATION_PATH.read_text(encoding="utf-8")
     assert PREPRINT_DOI in citation_cff
@@ -1345,7 +1349,10 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     assert not missing, (
         "build_py did not copy required offline GUI assets:\n" + "\n".join(missing)
     )
-    assert not (build_root / "gbdraw" / "web" / "gallery").exists()
+    assert [
+        path.relative_to(build_root).as_posix()
+        for path in (build_root / "gbdraw/web/gallery").rglob("*") if path.is_file()
+    ] == ["gbdraw/web/gallery/palettes/palettes.json"]
     copied_wheels = sorted(
         path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl")
     )
@@ -1376,7 +1383,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.14.0b0-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.14.0-py3-none-any.whl"
     subprocess.run(
         [
             sys.executable,
@@ -1401,7 +1408,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
             name for name in outer_names if name.startswith("gbdraw/web/gallery/")
         )
         assert browser_wheels == [browser_wheel_member]
-        assert gallery_members == []
+        assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
         assert "gbdraw/web/js/app/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
@@ -1438,12 +1445,54 @@ def test_built_sdist_contains_tutorial_data(tmp_path: Path) -> None:
     )
 
     sdist_path = next(dist_dir.glob("gbdraw-*.tar.gz"))
+    verify_module.inspect_sdist(sdist_path)
+
+    # Rebuild using only the sdist. Local caches and obsolete browser wheels
+    # must not enter a subsequent distribution through broad manifest globs.
+    source_dir = tmp_path / "source"
     with tarfile.open(sdist_path, "r:gz") as sdist:
-        names = set(sdist.getnames())
-    for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES:
-        suffix = f"/gbdraw/web/{path.as_posix()}"
-        assert any(name.endswith(suffix) for name in names), suffix
-    assert any(name.endswith("/tools/build_lambda_gff3_fixture.py") for name in names)
+        sdist.extractall(source_dir, filter="data")
+    source = next(source_dir.iterdir())
+    sentinels = (
+        "gbdraw/web/gbdraw-0.0.0-py3-none-any.whl",
+        "gbdraw/web/vendor/vue/__pycache__/local.pyc",
+        "gbdraw/web/vendor/vue/.DS_Store",
+        "docs/internal/local-evidence.txt",
+    )
+    for name in sentinels:
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("local file; not distribution content\n", encoding="utf-8")
+    rebuilt_dir = tmp_path / "rebuilt"
+    subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(rebuilt_dir)],
+        cwd=source, check=True,
+    )
+    with tarfile.open(next(rebuilt_dir.glob("*.tar.gz")), "r:gz") as sdist:
+        rebuilt_names = {name.split("/", 1)[-1] for name in sdist.getnames()}
+    assert not set(sentinels) & rebuilt_names
+    wheel_path = next(rebuilt_dir.glob("*.whl"))
+    verify_module.inspect_wheel(wheel_path)
+    with zipfile.ZipFile(wheel_path) as wheel:
+        assert not set(sentinels) & set(wheel.namelist())
+
+    # The entry point and resources must work without an editable checkout or
+    # shared site-packages. Copy only the input and standalone assertion script.
+    env = {key: value for key, value in os.environ.items()
+           if key not in {"PYTHONPATH", "PYTHONHOME"}}
+    venv_dir = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, env=env)
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    subprocess.run(
+        [str(python), "-m", "pip", "install", str(wheel_path)],
+        cwd=tmp_path, check=True, env=env,
+    )
+    smoke_dir = tmp_path / "installed-smoke"
+    smoke_dir.mkdir()
+    shutil.copy2(REPO_ROOT / "tests/test_inputs/HmmtDNA.gbk", smoke_dir)
+    script = smoke_dir / "installed_package_smoke.py"
+    shutil.copy2(REPO_ROOT / "tests/utils/installed_package_smoke.py", script)
+    subprocess.run([str(python), "-I", str(script)], cwd=smoke_dir, check=True, env=env)
 
 
 def _run_offline_gui_browser_contract(contract: str) -> None:

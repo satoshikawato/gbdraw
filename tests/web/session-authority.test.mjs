@@ -1,30 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
-const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-session-authority-'));
-await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
-await writeFile(
-  join(tempRoot, 'session-authority.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'session-authority.js'), 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempRoot, 'safe-object-keys.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'safe-object-keys.js'), 'utf8'),
-  'utf8'
-);
-
 const {
   SESSION_TOP_LEVEL_AUTHORITY,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
-} = await import(pathToFileURL(join(tempRoot, 'session-authority.js')));
+} = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
 
 assert.deepEqual(Object.keys(SESSION_TOP_LEVEL_AUTHORITY).sort(), [
   'cliInvocation', 'config', 'createdAt', 'editorState', 'features', 'files', 'format',
@@ -40,6 +25,7 @@ const session = {
   format: 'gbdraw-session', version: 39, createdAt: 'now', title: 'Canonical',
   renderRequest: {}, resources: {}, webFiles: {}, config: {}, files: {},
   ui: {
+    cInputType: 'gff', lInputType: 'gb',
     mode: 'linear', legend: 'left', linearPlotTitlePosition: 'top', zoom: 1.5,
     canvasPan: { x: 3, y: 4 }, generatedLegendPosition: 'right', downloadDpi: 300,
     linearTypographyLinked: false,
@@ -78,6 +64,15 @@ const currentSession = {
 };
 delete currentSession.files;
 assert.doesNotThrow(() => validateSessionAuthorityInventory(currentSession, 40));
+for (const field of ['cInputType', 'lInputType']) {
+  assert.throws(
+    () => validateSessionAuthorityInventory({
+      ...currentSession,
+      ui: { ...currentSession.ui, [field]: 'unknown' }
+    }, 40),
+    new RegExp(`Session ui.${field} must be gb or gff`)
+  );
+}
 const currentWebDraft = {
   ...currentSession,
   resources: {
@@ -117,7 +112,7 @@ assert.throws(
     webFiles: {
       bindings: {
         ...currentWebDraft.webFiles.bindings,
-        schema: 2
+        schema: 99
       }
     }
   }, 40),
@@ -148,7 +143,7 @@ assert.throws(
       }
     }
   }, 40),
-  /references a missing resource/
+  /Missing canonical resource/
 );
 assert.throws(
   () => validateSessionAuthorityInventory({
@@ -308,6 +303,8 @@ assert.throws(
   /requires a feature catalog for saved results/
 );
 assert.deepEqual(projectWebOnlyEditorMetadata(session).ui, {
+  cInputType: 'gff',
+  lInputType: 'gb',
   legend: 'left',
   linearPlotTitlePosition: 'top',
   zoom: 1.5,
@@ -353,3 +350,45 @@ assert.throws(
   /unclassified top-level field.*unknownField/
 );
 assert.doesNotThrow(() => validateSessionAuthorityInventory({ ...session, unknownField: true }, 30));
+
+const { readFile } = await import('node:fs/promises');
+const frozen = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/sessions/single.v41-bindings1.json')));
+assert.doesNotThrow(() => validateSessionAuthorityInventory(frozen, 41));
+const compositeSession = () => {
+  const session = structuredClone(frozen);
+  const leaf = session.webFiles.bindings.c_gb;
+  session.webFiles.bindings = { schema: 2, c_gb: { kind: 'composite',
+    components: [leaf, { ...leaf, name: 'repeat.gb' }], name: '', type: '', lastModified: 0.5 } };
+  return session;
+};
+assert.doesNotThrow(() => validateSessionAuthorityInventory(compositeSession(), 41));
+for (const change of [
+  s => { s.webFiles.bindings.schema = 99; },
+  s => { s.webFiles.bindings.schema = 1; },
+  s => { s.webFiles.bindings.c_gb.kind = 'multipart'; },
+  s => { s.webFiles.bindings.c_gb.components = []; },
+  s => { s.webFiles.bindings.c_gb.components.length = 1; },
+  s => { s.webFiles.bindings.c_gb.components[0] = structuredClone(s.webFiles.bindings.c_gb); },
+  s => { delete s.webFiles.bindings.c_gb; },
+  s => { s.webFiles.bindings.c_gb.components[0] = null; },
+  s => { s.webFiles.bindings.c_gb.components[0].resourceId = 'missing'; },
+  s => { s.webFiles.bindings.c_gb.components[0].type = false; },
+  s => { delete s.webFiles.bindings.c_gb.components[0].name; },
+  s => { s.webFiles.bindings.c_gb.components[0].extra = true; },
+  s => { s.webFiles.bindings.c_gb.resourceId = 'mixed'; },
+  s => { s.webFiles.bindings.c_gb.size = 0; },
+  s => { s.webFiles.bindings.c_gb.lastModified = -1; },
+  s => { s.webFiles.bindings.c_gb.lastModified = Infinity; },
+  s => { s.webFiles.bindings.c_fasta = s.webFiles.bindings.c_gb; },
+  s => { Object.values(s.resources)[0].encoding = 'raw'; },
+  s => { Object.values(s.resources)[0].data = null; }
+]) {
+  const session = compositeSession();
+  change(session);
+  const before = structuredClone(session);
+  assert.throws(() => validateSessionAuthorityInventory(session, 41));
+  assert.deepEqual(session, before);
+}
+for (const version of [27, 33, 39, 40, 43]) {
+  assert.throws(() => validateSessionAuthorityInventory(compositeSession(), version), /requires session version 41/);
+}

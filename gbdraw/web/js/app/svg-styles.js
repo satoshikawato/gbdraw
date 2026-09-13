@@ -11,6 +11,7 @@ import {
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
 import {
+  FEATURE_PART_BLOCK,
   FEATURE_PART_CONNECTOR,
   getFeaturePart,
   isFeatureFillTarget
@@ -45,7 +46,7 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions, previewRuntime = null }) => {
+export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
   const {
     svgContent,
     extractedFeatures,
@@ -66,9 +67,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
   const { getAllFeatureLegendGroups } = legendActions;
 
-  const persistSvgEdit = (svg, reason) => {
+  const persistSvgEdit = (svg) => {
     skipCaptureBaseConfig.value = true;
-    if (previewRuntime?.markActiveResultDirty?.(reason)) return;
     const idx = selectedResultIndex.value;
     if (idx >= 0 && results.value.length > idx) {
       const nextResults = [...results.value];
@@ -115,7 +115,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       const feat = featureLookup.get(svgId);
       if (!feat) return;
 
-      const paletteColor = colors[feat.type];
+      const paletteColor = colors[feat.type] || colors.default;
       if (!paletteColor) return;
 
       const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
@@ -360,7 +360,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'palette-style');
+      persistSvgEdit(svg);
     }
   };
 
@@ -400,7 +400,9 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
       const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {
-        const newColor = matchingRule ? matchingRule.color : appliedPaletteColors.value[feat.type] || '#cccccc';
+        const newColor = matchingRule
+          ? matchingRule.color
+          : appliedPaletteColors.value[feat.type] || appliedPaletteColors.value.default;
         elements.forEach((el) => {
           if (el.getAttribute('fill') !== newColor) {
             el.setAttribute('fill', newColor);
@@ -411,7 +413,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     });
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'specific-rule-style');
+      persistSvgEdit(svg);
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
   };
@@ -426,7 +428,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     let updatedCount = 0;
 
     if (adv.block_stroke_color || adv.block_stroke_width !== null) {
-      const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).filter(isFeatureFillTarget);
+      const featurePaths = Array.from(svg.querySelectorAll(FEATURE_SELECTOR))
+        .filter((element) => getFeaturePart(element) === FEATURE_PART_BLOCK);
       featurePaths.forEach((path) => {
         if (adv.block_stroke_color) {
           path.setAttribute('stroke', adv.block_stroke_color);
@@ -549,7 +552,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updatedCount > 0) {
-      persistSvgEdit(svg, 'diagram-style');
+      persistSvgEdit(svg);
       console.log(`Applied styles: updated ${updatedCount} elements`);
     }
   };
@@ -617,7 +620,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
     }
 
     if (updated) {
-      persistSvgEdit(svg, 'track-visibility');
+      persistSvgEdit(svg);
       console.log('Track visibility updated');
     }
   };
@@ -653,6 +656,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
 
   watch(
     () => [
+      mode.value,
       adv.block_stroke_color,
       adv.block_stroke_width,
       adv.line_stroke_color,
@@ -662,9 +666,12 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions, preview
       adv.scale_stroke_color,
       adv.scale_stroke_width
     ],
-    () => {
+    (values, previousValues) => {
+      // Mode profiles and artifact restores retain the saved Result unchanged.
+      if (values[0] !== previousValues[0] || state.semanticFileWatchersSuppressed?.value) return;
       applyStylesToSvg();
-    }
+    },
+    { flush: 'post' }
   );
 
   watch(

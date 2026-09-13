@@ -2,12 +2,13 @@
 
 # Session and request compatibility
 
-Current writers emit session version 41 and canonical `renderRequest` schema 7.
+Current writers emit session version 42 and canonical `renderRequest` schema 7.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 41 | 27–33 and 39–41 |
+| gbdraw session | 42 | 27–33 and 39–42 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -32,12 +33,61 @@ Generate deliberately preserves the newer draft alongside the earlier Result. Lo
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
 
+Fresh CLI sessions omit `config` because they have no independent Web draft.
+Web initializes their settings from `renderRequest` and restores original input
+files from their bindings. A present `config` must contain valid `form` and `adv`
+objects; a partial draft is rejected. CLI replay preserves a supplied Web draft.
+
+The Web file inventory uses binding schema 2. An explicit composite `c_gb`
+restores one editable GenBank File from ordered component resource bindings.
+Each component retains its own filename, MIME type, modification time and exact
+bytes; duplicate payloads can share storage while retaining every occurrence.
+Combining appends LF to each nonempty component that lacks a final LF. Composition
+is independent of the last committed `renderRequest`, which remains the replay
+authority. Python validates and preserves the draft binding without combining
+its components for rendering.
+
+Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
+without explicit bindings retain their request-derived source initialization;
+original components cannot be recovered if their membership was never saved.
+Schema 2 is accepted with sessions 41–42. Unknown or malformed bindings reject
+before import replaces the current work. Older schema-1 readers reject new
+schema-2 documents; changing the schema number does not convert them.
+
+## Saving settings before loading a source
+
+**Save Session** also works before any biological source is loaded. It preserves
+the full editable configuration, Circular and Linear mode profiles, supported
+editor preferences, and auxiliary files such as colors, filters and qualifier
+priorities. **Load Session** replaces the current Session with those settings,
+clearing any previous sources and Result. A rejected Load restores the previous
+work. Load a real source and Generate to apply the saved settings to a diagram.
+
+This settings-only variant uses session 42 with explicit `renderRequest: null`,
+empty `results`, and a null feature catalog. It has no committed render. Missing
+requests, dangling resources, or biological inputs in either mode cannot select
+this variant. Auxiliary files retain their ordinary resource bindings and bytes.
+
+Python can load and materialize a settings-only Session. CLI replay,
+`session_to_request()` and `render_session()` report that it has no biological
+render request. Existing supported full Sessions remain readable. Readers that
+support only session 41 reject new session-42 files, including full Sessions.
+
+Older settings JSON without a `format` field (containing `form` or `adv`) still
+uses the legacy configuration import. It does not need a render request. This
+is distinct from a malformed `format: "gbdraw-session", version: 41` envelope.
+
 ## Replay boundaries
 
 On the command line, replay a session with the same `circular` or `linear`
 subcommand that created it. Output prefix, format, session-output, and overwrite
 options may replace their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
+
+With `--session_output`, canonical CLI replay writes the regenerated Result and
+preserves the editable draft's component bytes, order and File metadata. Resource
+IDs may change when the output table is rebuilt. Explicit Web bindings, including
+null and empty lists, take precedence over historical direct-source lists.
 
 In Python, `render_session()` is the persisted-session entry point.
 `load_session_document()` validates a document, and `materialize_session()`
@@ -47,9 +97,24 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Canonical schema 6 records each input's cardinality, including
-selectorless `all` inputs. Resolve a typed request before encoding when it still
-contains deferred paths or collection-level transforms.
+envelopes. Public typed session conversion accepts full versions 31–33 and 39–42;
+versions 27–30 are CLI replay inputs only. Canonical schema 7 retains schema 6's
+input cardinality, including selectorless `all` inputs. Resolve a typed request
+before encoding when it still contains deferred paths or collection-level transforms.
+
+In Web **Run Info**, **Source recipe** uses the original input filenames and
+public CLI settings. Keep those original files and download any listed generated
+helpers with **Download reproducibility files**. That bundle also includes the
+canonical session referenced by **Exact replay**, with its embedded resources
+and saved analysis artifacts. An unavailable Source recipe reports why it cannot
+express the committed semantics losslessly.
+
+Both commands target the successful generation represented by Run Info, even
+after Undo/Redo or edits to the current controls. Exact replay reconstructs that
+committed generation; it does not apply later preview-only editor changes or an
+ungenerated draft. **Save Session** is the route for preserving editable work
+alongside the earlier Result. Exact replay does not promise byte-identical SVG
+across gbdraw versions or font environments.
 
 ## Saved comparison results and cache reuse
 

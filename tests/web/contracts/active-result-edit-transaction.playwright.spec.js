@@ -235,7 +235,7 @@ test.describe('active Result Feature fill transaction', () => {
     expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog || null)).toBeNull();
   };
 
-  test('visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export', { tag: '@pr-smoke' }, async ({
+  test('visible tRNA fill scope remains coherent through History, Session, Generate, and SVG export', async ({
     page,
     browser
   }, testInfo) => {
@@ -324,7 +324,7 @@ test.describe('active Result Feature fill transaction', () => {
     const savedSession = readSavedSession(savedSessionPath);
     expect(savedSession).toMatchObject({
       format: 'gbdraw-session',
-      version: 41,
+      version: 42,
       renderRequest: { schema: 7 },
       editorState: {
         legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }

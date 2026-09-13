@@ -355,7 +355,9 @@ class FeaturePlacementSlot:
 
     @property
     def bidirectional(self) -> bool:
-        return not self.separate_strands and self.direction in ("split", "overlay")
+        return self.direction == "split" or (
+            self.direction == "overlay" and not self.separate_strands
+        )
 
     def supported_targets(self) -> list[dict[str, object]]:
         """Expose requested targets using the same resolved-slot validity owner."""
@@ -460,7 +462,7 @@ def plan_feature_placements(
                 and _strand_pool(feature_dict[key].strand) == "negative" else 0
             )
         else:
-            track_id = -1 if target.side in ("inward", "below") else 1
+            track_id = -(1 + int(slot.separate_strands)) if target.side in ("inward", "below") else 1
         targets[key] = target
         fixed[key] = track_id
     arrange_feature_tracks(

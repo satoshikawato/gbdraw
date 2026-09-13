@@ -63,6 +63,85 @@ const validateDescriptor = (resourceId, descriptor) => {
   };
 };
 
+// Binding grammar belongs beside the File backing; envelope/version and
+// comparison-plan authority remain with their existing owners.
+export const validateWebFileBindings = (webFiles, resources = {}) => {
+  if (!webFiles || !Object.hasOwn(webFiles, 'bindings')) return undefined;
+  const bindings = webFiles.bindings;
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!object(bindings)) throw new Error('Session webFiles.bindings must be an object.');
+  if (![1, 2].includes(bindings.schema)) throw new Error('Unsupported Web file binding schema.');
+  const current = bindings.schema === 2;
+  if (current && !Object.hasOwn(bindings, 'c_gb')) {
+    throw new Error('Web binding schema 2 requires c_gb.');
+  }
+  const metadata = value => {
+    if (typeof value.name !== 'string' || typeof value.type !== 'string'
+      || !Number.isFinite(value.lastModified) || value.lastModified < 0) {
+      throw new Error('Invalid Web file binding metadata.');
+    }
+  };
+  const leaf = value => {
+    if (!object(value)) throw new Error('Web file bindings must be objects or null.');
+    if (Object.hasOwn(value, 'kind') || Object.hasOwn(value, 'components')) {
+      throw new Error('A composite component must be an ordinary Web file binding.');
+    }
+    const id = current ? value.resourceId : String(value.resourceId || '').trim();
+    if (typeof id !== 'string' || !id || id !== id.trim()) {
+      throw new Error('A Web file binding requires a canonical resourceId.');
+    }
+    if (!Object.hasOwn(resources, id)) throw new Error(`Missing canonical resource: ${id}`);
+    if (current) {
+      if (Object.keys(value).some(key => !['resourceId', 'name', 'type', 'lastModified'].includes(key))) {
+        throw new Error('Unknown Web file binding field.');
+      }
+      metadata(value);
+      validateDescriptor(id, resources[id]);
+    }
+  };
+  const value = (binding, compositeAllowed = false) => {
+    if (binding === null || binding === undefined) return;
+    if (Array.isArray(binding)) {
+      binding.forEach(item => value(item));
+    } else if (object(binding) && Object.hasOwn(binding, 'kind')) {
+      if (!current || !compositeAllowed || binding.kind !== 'composite') {
+        throw new Error('Unsupported Web composite file binding.');
+      }
+      if (Object.keys(binding).some(key => !['kind', 'components', 'name', 'type', 'lastModified'].includes(key))) {
+        throw new Error('Unknown or mixed composite binding fields.');
+      }
+      metadata(binding);
+      if (!Array.isArray(binding.components) || binding.components.length < 2) {
+        throw new Error('A composite binding requires at least two components.');
+      }
+      binding.components.forEach(component => {
+        leaf(component);
+        if (resources[component.resourceId].encoding !== 'base64') {
+          throw new Error('Composite components require base64 resources.');
+        }
+      });
+    } else {
+      leaf(binding);
+    }
+  };
+  const slots = [
+    'c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts',
+    'c_conservation_fastas', 'c_conservation_sequence_sources', 'd_color',
+    't_color', 'blacklist', 'whitelist', 'qualifier_priority'
+  ];
+  if (current && Object.keys(bindings).some(key => ![
+    'schema', ...slots, 'c_conservation_blasts_source', 'linearSeqs', 'linearComparisons'
+  ].includes(key))) throw new Error('Unknown Web binding inventory field.');
+  slots.forEach(slot => value(bindings[slot], slot === 'c_gb'));
+  (Array.isArray(bindings.linearSeqs) ? bindings.linearSeqs : []).forEach(sequence => {
+    ['gb', 'gff', 'fasta', 'depth', 'blast'].forEach(slot => value(sequence?.[slot]));
+  });
+  ['linearComparisons', 'linearCanonicalComparisons'].forEach(slot => {
+    (Array.isArray(bindings[slot]) ? bindings[slot] : []).forEach(row => value(row?.file));
+  });
+  return bindings;
+};
+
 const requireBacking = (table, resourceId) => {
   const backings = table && tableBackings.get(table);
   if (!backings) {
@@ -159,7 +238,7 @@ export const adoptedSessionResourceDescriptor = (table, resourceId) => (
 export const createSessionResourceFileView = (table, resourceId, metadata = {}) => {
   const backing = requireBacking(table, resourceId);
   const view = Object.freeze({
-    name: String(metadata.name || backing.name),
+    name: metadata.name === undefined ? backing.name : String(metadata.name),
     type: metadata.type === undefined ? backing.type : String(metadata.type || ''),
     size: backing.size,
     lastModified: metadata.lastModified === undefined
@@ -172,14 +251,16 @@ export const createSessionResourceFileView = (table, resourceId, metadata = {}) 
 
 export const createCombinedSessionResourceFileView = (
   table,
-  resourceIds,
+  components,
   metadata = {}
 ) => {
-  const backings = (Array.isArray(resourceIds) ? resourceIds : [])
-    .map((resourceId) => requireBacking(table, resourceId));
+  const views = (Array.isArray(components) ? components : []).map(component => (
+    createSessionResourceFileView(table, component.resourceId, component)
+  ));
+  const backings = views.map(view => fileViewBackings.get(view));
   if (backings.length === 0) return null;
   if (backings.length === 1) {
-    return createSessionResourceFileView(table, backings[0].resourceId, metadata);
+    return createSessionResourceFileView(table, backings[0].resourceId, { ...components[0], ...metadata });
   }
   const appendedLineFeeds = backings.reduce((count, backing) => (
     count + Number(
@@ -189,19 +270,23 @@ export const createCombinedSessionResourceFileView = (
   ), 0);
   const composite = {
     resourceId: backings.map(({ resourceId }) => resourceId).join('+'),
-    name: String(metadata.name || 'canonical-circular-records.gb'),
-    type: String(metadata.type || 'text/plain'),
+    name: metadata.name === undefined ? 'canonical-circular-records.gb' : String(metadata.name),
+    type: metadata.type === undefined ? 'text/plain' : String(metadata.type),
     size: backings.reduce((total, backing) => total + backing.size, 0)
       + appendedLineFeeds,
     lastModified: metadata.lastModified === undefined
-      ? Math.max(0, ...backings.map((backing) => backing.lastModified))
+      ? Math.max(0, ...views.map(view => view.lastModified))
       : Number(metadata.lastModified) || 0,
     checksum: null,
     descriptor: null,
-    descriptors: backings.map((backing) => ({
+    descriptors: Object.freeze(backings.map((backing, index) => Object.freeze({
       resourceId: backing.resourceId,
-      descriptor: backing.descriptor
-    })),
+      descriptor: backing.descriptor,
+      name: views[index].name,
+      type: views[index].type,
+      lastModified: views[index].lastModified,
+      readBytes: () => materializeBytes(backing)
+    }))),
     sourceBackings: backings,
     bytesPromise: null,
     textPromise: null,
@@ -253,6 +338,46 @@ export const isSessionResourceFileView = (file) => Boolean(
   && fileViewBackings.has(file)
 );
 
+export const matchesSessionResourceDescriptor = (file, descriptor) => {
+  const backing = fileViewBackings.get(file);
+  // Native Files remain bound by the successful run's object identity.
+  if (!backing || backing.dirty) return true;
+  if (!descriptor) return false;
+  const matches = (entry) => entry?.encoding === descriptor.encoding
+    && entry?.data === descriptor.data;
+  if (matches(backing.descriptor)) return true;
+  if (!backing.sourceBackings) return false;
+  if (backing.sourceBackings.some((part) => matches(part.descriptor))) return true;
+  if (descriptor.encoding !== 'base64' || descriptor.size !== backing.size) return false;
+
+  const decode = (entry) => {
+    recordStructuralMetric('base64DecodeCount', 1, {
+      resourceId: entry.resourceId, resourceName: entry.name
+    });
+    const binary = atob(entry.descriptor.data);
+    recordStructuralMetric('decodedByteCount', binary.length, {
+      resourceId: entry.resourceId, resourceName: entry.name
+    });
+    return binary;
+  };
+  const combined = decode({ ...backing, descriptor });
+  if (combined.length !== descriptor.size) return false;
+  let offset = 0;
+  for (const part of backing.sourceBackings) {
+    const binary = decode(part);
+    if (binary.length !== part.size || !combined.startsWith(binary, offset)) return false;
+    offset += binary.length;
+    if (binary.length && binary.charCodeAt(binary.length - 1) !== LF_BYTE) {
+      if (combined.charCodeAt(offset++) !== LF_BYTE) return false;
+    }
+  }
+  if (offset !== combined.length) return false;
+  // The immutable composite's existing descriptor slot can now reference its
+  // verified serialized representation, without retaining decoded content.
+  backing.descriptor = descriptor;
+  return true;
+};
+
 export const sessionResourceSource = (file) => {
   const backing = fileViewBackings.get(file);
   if (!backing || backing.dirty) return null;
@@ -261,7 +386,8 @@ export const sessionResourceSource = (file) => {
   }
   return Object.freeze({
     resourceId: backing.resourceId,
-    descriptor: backing.descriptor
+    descriptor: backing.descriptor,
+    readBytes: () => materializeBytes(backing)
   });
 };
 
