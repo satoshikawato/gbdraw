@@ -29,6 +29,10 @@ Status: active Product authority
   retirement, and the runtime/memory cost of complete comparisons. The initial
   approval and its date above continue to describe `PD-OI-001`–`PD-OI-017`.
   The maintainer subsequently specified the fresh defaults in `PD-OI-019`.
+  On the same date, the maintainer replaced the default-five member cap in
+  `PD-OI-004` with an unbounded default and clarified `PD-OI-018` to require
+  source-file execution, reusable raw evidence after display transforms,
+  compact record disclosures, and execution controls in LOSAT Settings.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -177,21 +181,29 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-004: Similarity/Collinear member hits per protein
 
 - Concern key: `diagram-generation.member-hits-per-protein`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-004`, scenario revision `1`.
 - Status: `ACCEPTED`
-- Normative outcome: Member hits per protein has a fresh default of `5` and
-  controls directional hits used to construct Similarity-group and Collinear
-  evidence.
-- Rationale: Group/block construction is derived analysis, distinct from raw
-  search and Pairwise display.
+- Normative outcome: Member hits per protein defaults to `None` (unbounded)
+  in fresh and reset state. A blank Web control means unbounded. Similarity
+  groups and Collinear retain every threshold-qualified directional member
+  hit without substituting a finite cap. An explicit positive integer remains
+  a supported limit. Request, helper execution, provenance, and Session replay
+  must distinguish an unbounded value from an explicit finite value.
+- Rationale: The maintainer requested removal of the default five-hit cap
+  because E-value and the other result thresholds already filter evidence.
+  Member selection remains independent of raw search and Pairwise display.
 - Must preserve: Raw-search cache reuse when only this value changes;
   derived-cache invalidation; explicit Session values.
-- May retire: Aliasing this field to Candidate limit or Pairwise display max
-  hits.
+- May retire: The default five-member cap and blank-to-five coercion; aliasing
+  this field to Candidate limit or Pairwise display max hits.
 - Accepted residual risk: Changing it can change grouping/block output and
-  must be visible in provenance.
-- Acceptance contracts: `OIC-002`, `OIC-005`.
-- Owner and decision date: `satoshikawato`, `2026-08-28`.
+  must be visible in provenance. Unbounded evidence retains the computation
+  and memory cost accepted under `PD-OI-018`.
+- Acceptance contracts: `OIC-002`, `OIC-004`, `OIC-005`, `OIC-006`.
+- Decision source: Explicit maintainer follow-up requesting no default member
+  count cap, while retaining threshold filtering.
+- Owner and decision date: `satoshikawato`, `2026-09-13`.
 
 ### PD-OI-005: Supported Collinear value domains
 
@@ -474,6 +486,9 @@ corrected. Passing evidence does not make incorrect behavior normative.
      source has one file-input card regardless of its record count; GFF3 and its
      paired FASTA remain one source. Per-record controls belong under that
      source or in Record Layout and must not appear as repeated file uploads.
+     Each multi-record source's record list starts collapsed behind a compact, single-line
+     `Number of records: N` disclosure. Expanding it exposes every record's
+     controls; collapsing it changes no record selection or placement.
      Removing or replacing a source updates all of its records without leaving
      hidden records from the former source. Save and fresh Load preserve this
      distinction between source files and biological records.
@@ -494,11 +509,30 @@ corrected. Passing evidence does not make incorrect behavior normative.
      remain supported. `OIPC-C07` governs failed, canceled, and stale work.
   7. Shared source bytes remain shared. Complete comparisons may require more
      jobs, but no hidden record or pair cap is permitted.
+     The LOSAT execution unit is an input source file, not an individual
+     record. A source job searches multi-sequence FASTA inputs containing the
+     selected records, then routes hits to their record endpoints. Two sources
+     in all-vs-all require four directed source jobs, including self and reverse
+     searches; eight total records must not become 64 LOSAT invocations.
+     TLOSATX records with different explicit genetic codes use compatible
+     subsets within each source because each invocation accepts one query and
+     one subject genetic code; records sharing those settings remain batched.
+     Adjacent and explicit selections restrict retained record-pair evidence,
+     not the source-level execution unit. Search arguments, source contents,
+     and the actual searched database scope are part of raw-cache identity.
+     Progress reports actual source jobs separately from biological record
+     pairs. File batching must preserve cancellation and exact hit routing.
+     Drawing-start changes and reverse-complement display reuse raw LOSATP
+     results whenever source contents, selected biological regions, and search
+     settings are unchanged. Only display coordinates and derived presentation
+     are updated; display transforms do not become raw-search identity.
 - Rationale: Prevent recurrence of incomplete-record search and per-record
   placement regressions reported by the maintainer.
 - Must preserve: All seven outcomes above; `PD-OI-006` keeps the fresh Collinear
   scope `adjacent`, and `PD-OI-014` continues to govern evidence versus displayed
   links. A fresh no-comparison document does not gain comparison intent.
+  Existing LOSAT Execution, Total threads, Parallel runs, and Threads per run
+  controls remain editable in Comparison Settings when LOSAT is active.
 - May retire: none.
 - Accepted residual risk: Increased computation time and memory from complete
   all-record comparisons. The maintainer explicitly accepted this cost as the
@@ -519,6 +553,7 @@ corrected. Passing evidence does not make incorrect behavior normative.
   defaults to Arrange in rows, grouping records from each source file into the
   same row while retaining independent per-record placement controls. Circular
   defaults to Multiple records in a single canvas (Multi-Record Canvas).
+  Repeated record accessions retain distinct feature identities on that canvas.
   Explicitly saved layout choices take precedence on Session import; disabling
   either setting remains supported.
 - Rationale: The maintainer explicitly requested these two defaults as part of
@@ -565,17 +600,30 @@ The normal automated PR gate must observe all of the following:
   card and two record controls. Assert both counts after Save/fresh Load,
   source replacement, source removal, and per-record row changes; filenames
   alone must not collapse distinct input sources. The neighboring 2-by-3 rows
-  submit six Pairwise search jobs.
+  retain all six Pairwise record combinations through one source-file search
+  job. The number of record pairs must not be reported as LOSAT job count.
+  The record list initially shows only its single-line count; pointer and
+  keyboard expansion expose every record without changing its state.
   Fresh and reset documents use same-file Linear rows and Circular shared
   canvas; explicit saved opt-outs survive Load.
-- Similarity and Collinear `all` submit the complete directed record-pair
-  matrix, including self, same-row, and non-adjacent evidence. A single-row
+- Similarity and Collinear `all` retain the complete directed record-pair
+  matrix through source-file jobs, including self, same-row, and non-adjacent
+  evidence. Two sources containing five records require four source jobs and
+  cover 25 directed record pairs. A single-row
   layout retains analysis even though it has no between-row links.
 - Explicit endpoints survive the typed decoder and reach the intended SVG
   records, including a numerically consecutive pair beside a multi-record row.
 - Save, fresh Load, regeneration, and reordering preserve record identity,
   placement, pair mapping, and shared source resources. Repeated execution
   reuses only semantically equivalent cached searches.
+- Every LOSAT mode exposes the existing execution and thread controls in
+  Comparison Settings; mode switches and Session replay preserve their values.
+- Changing only a record's drawing start or reverse-complement display issues
+  no additional LOSATP search jobs, updates the rendered coordinates/orientation,
+  and preserves that reuse through Save and fresh Load.
+- Unbounded member selection retains more than five threshold-qualified hits.
+  Explicit finite member limits still apply, and changing only that limit
+  invalidates derived output while preserving raw search cache reuse.
 
 These are observations of jobs, controls, requests, Sessions, and SVG results;
 checking an `All` label or counting uploaded files is insufficient. Restoring
