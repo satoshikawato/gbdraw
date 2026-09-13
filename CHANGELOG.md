@@ -10,7 +10,7 @@ and full feature descriptions) live under `docs/RELEASE_NOTES_*.md`. This
 file is the short, chronological index; follow the links below for the full
 write-up of a release.
 
-## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md) — unreleased
+## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
 - Added circular-record display-start rotation and manual feature lane placement.
 - Improved Run Info / Exact replay, Save Session resource preservation, preview
@@ -18,8 +18,8 @@ write-up of a release.
 - Includes the beta's package-root Python API and current session/request
   compatibility, plus isolated wheel/sdist installation and local GUI packaging fixes.
 - See the [full release notes](./docs/RELEASE_NOTES_0.14.0.md) for migration,
-  compatibility, and installation availability. The source version is `0.14.0`
-  (internal final candidate); the final release has not been published.
+  compatibility, and installation availability. Publication dates are recorded
+  in [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases).
 
 ## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)
 
