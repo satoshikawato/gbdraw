@@ -43,6 +43,10 @@ def _local_target(source: Path, raw_target: str) -> Path | None:
         target = target[1:].split(">", 1)[0]
     else:
         target = target.split(maxsplit=1)[0]
+    repository_prefix = "https://github.com/satoshikawato/gbdraw/blob/main/"
+    if target.startswith(repository_prefix):
+        path_part = target.removeprefix(repository_prefix).split("#", 1)[0].split("?", 1)[0]
+        return (REPO_ROOT / path_part).resolve()
     if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.IGNORECASE) or target.startswith("//"):
         return None
     path_part = target.split("#", 1)[0].split("?", 1)[0]
