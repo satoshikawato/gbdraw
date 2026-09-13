@@ -863,6 +863,7 @@ def build_protein_losat_cache_keys_json(
                 args=options.get("args") or [],
                 program=str(options.get("program") or "blastp"),
                 outfmt=str(options.get("outfmt") or "6"),
+                search_context=options.get("searchContext"),
             ))
         return json.dumps({"keys": keys})
     except Exception:
@@ -974,7 +975,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     collinear_max_paralog_links_per_orthogroup=2,
     collinear_search_scope="adjacent",
     orthogroup_membership_mode="anchor_core_v1",
-    orthogroup_member_max_hits=5,
+    orthogroup_member_max_hits=None,
     collinear_merge_orientation="either",
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
@@ -1020,18 +1021,18 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 raise ValueError("protein_blastp_max_hits must be > 0")
 
         normalized_membership_mode = "anchor_core_v1"
-        normalized_member_max_hits = 5
+        normalized_member_max_hits = None
         if normalized_mode in {"orthogroup", "collinear"}:
             normalized_membership_mode = normalize_orthogroup_membership_mode(
                 str(orthogroup_membership_mode or "anchor_core_v1")
             )
-            normalized_member_max_hits = int(
-                5
+            normalized_member_max_hits = (
+                None
                 if _is_blank_or_js_nullish(orthogroup_member_max_hits)
-                else orthogroup_member_max_hits
+                else int(orthogroup_member_max_hits)
             )
-            if normalized_member_max_hits <= 0:
-                raise ValueError("orthogroup_member_max_hits must be > 0")
+            if normalized_member_max_hits is not None and normalized_member_max_hits <= 0:
+                raise ValueError("orthogroup_member_max_hits must be > 0 or None")
 
         normalized_collinear_unit_mode = "auto"
         normalized_collinear_color_mode = "orientation"
@@ -1221,7 +1222,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             str(normalized_alignment_length),
             (
                 str(normalized_membership_mode),
-                int(normalized_member_max_hits),
+                normalized_member_max_hits,
             ) if normalized_mode in {"orthogroup", "collinear"} else None,
             (
                 int(normalized_collinearity_params.min_anchors),

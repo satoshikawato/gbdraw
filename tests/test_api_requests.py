@@ -427,7 +427,7 @@ def test_linear_protein_option_defaults_match_explicit_typed_values() -> None:
         protein_blastp_max_hits=5,
         protein_blastp_candidate_limit=None,
         orthogroup_membership_mode="anchor_core_v1",
-        orthogroup_member_max_hits=5,
+        orthogroup_member_max_hits=None,
         collinear_max_paralog_links_per_orthogroup=2,
     )
 

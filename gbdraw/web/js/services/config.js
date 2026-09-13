@@ -2063,15 +2063,14 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
       null
     );
     if (
-      (state.losat.blastp.orthogroupMemberMaxHits === null ||
-        state.losat.blastp.orthogroupMemberMaxHits === undefined) &&
+      state.losat.blastp.orthogroupMemberMaxHits === undefined &&
       state.losat.blastp.orthogroupMaxHits !== null &&
       state.losat.blastp.orthogroupMaxHits !== undefined
     ) {
       state.losat.blastp.orthogroupMemberMaxHits = state.losat.blastp.orthogroupMaxHits;
     }
     state.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(state.losat.blastp?.orthogroupMembershipMode);
-    state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, 5);
+    state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, null);
     state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
     {
       const maxGap = Number(state.losat.blastp?.collinearMaxUnitGap);

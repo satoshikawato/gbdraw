@@ -1050,7 +1050,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     orthogroup_membership_mode: str = str(
         _LINEAR_OPTION_DEFAULTS.orthogroup_membership_mode
     )
-    orthogroup_member_max_hits: int = (
+    orthogroup_member_max_hits: int | None = (
         _LINEAR_OPTION_DEFAULTS.orthogroup_member_max_hits
     )
     align_orthogroup_feature: str = str(args.align_orthogroup_feature or "").strip()

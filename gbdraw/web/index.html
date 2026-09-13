@@ -1504,7 +1504,6 @@
                             >
                                 <div class="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
                                     <span>File {{ sourceIndex + 1 }}</span>
-                                    <span v-if="source.records.length > 1">{{ source.records.length }} records</span>
                                 </div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
                                 <file-uploader
@@ -1529,6 +1528,11 @@
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
                                 ></file-uploader>
                             </div>
+                            <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
+                                <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-2 text-xs font-normal text-slate-500">
+                                    Number of records: {{ source.records.length }}
+                                    <span v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && source.records.some(({ sequence }) => !(Number(sequence.losat_gencode) >= 1))" class="ml-1 text-red-700">Gencode required</span>
+                                </summary>
                                 <div
                                     v-for="({ sequence: seq, index: idx }) in source.records"
                                     :key="seq.uid"
@@ -1777,6 +1781,7 @@
                                 </div>
                             </details>
                                 </div>
+                            </details>
                             </section>
                         </div>
                         <div class="flex min-w-0 gap-2">
@@ -1906,6 +1911,43 @@
                                         </select>
                                     </div>
 
+                                    <section v-if="linearComparisonUi.sectionKeys.settings.includes('losat-runtime')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                        <div class="linear-primary-label">Runtime and reproducibility</div>
+                                        <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Execution <help-tip text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></label>
+                                                <select v-model="losat.executionMode" aria-label="LOSAT execution" class="form-input px-2 py-1.5 text-xs">
+                                                    <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
+                                                    <option value="serial">Serial</option>
+                                                    <option value="threaded">Threaded</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Total threads</label>
+                                                <select v-model="losat.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs">
+                                                    <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
+                                                    <option value="available">Available ({{ losatHardwareThreads }})</option>
+                                                    <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Parallel runs</label>
+                                                <select v-model="losat.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs">
+                                                    <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
+                                                    <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Threads per run</label>
+                                                <select v-model="losat.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="losatThreadsPerJobFixed">
+                                                    <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
+                                                    <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
+                                    </section>
+
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
                                         Set the translation table for each sequence in its <strong>Record options</strong>. A missing active TLOSATX code is shown on the closed record summary.
                                     </div>
@@ -1916,8 +1958,8 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
+                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2155,43 +2197,6 @@
                                         <input type="number" min="0" step="1" v-model.number="linearRecordGap" aria-label="Linear record gap" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs">
                                     </label>
                                 </div>
-                            </section>
-
-                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-runtime')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                <div class="linear-primary-label">Runtime and reproducibility</div>
-                                <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Execution <help-tip text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></label>
-                                        <select v-model="losat.executionMode" aria-label="LOSAT execution" class="form-input px-2 py-1.5 text-xs">
-                                            <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
-                                            <option value="serial">Serial</option>
-                                            <option value="threaded">Threaded</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Total threads</label>
-                                        <select v-model="losat.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs">
-                                            <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
-                                            <option value="available">Available ({{ losatHardwareThreads }})</option>
-                                            <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Parallel runs</label>
-                                        <select v-model="losat.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs">
-                                            <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
-                                            <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Threads per run</label>
-                                        <select v-model="losat.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="losatThreadsPerJobFixed">
-                                            <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
-                                            <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losatp-candidate')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">

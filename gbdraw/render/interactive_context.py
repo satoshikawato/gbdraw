@@ -97,7 +97,10 @@ def build_interactive_svg_context(
         include_selector_safety_scope=False,
     )
     features = payload.get("features", [])
-    if mode == "circular" and len(record_list) > 1 and record_transforms and any(t.start_coordinate is not None for t in record_transforms):
+    if mode == "circular" and len(record_list) > 1 and (
+        len({record.id for record in record_list}) != len(record_list)
+        or (record_transforms and any(t.start_coordinate is not None for t in record_transforms))
+    ):
         features = [dict(feature, rendered_feature_svg_id=instance_svg_id(
             feature["rendered_feature_svg_id"], f"record_{int(feature['record_idx']) + 1}"
         )) for feature in features]

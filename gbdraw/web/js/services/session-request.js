@@ -1561,7 +1561,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
       : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
-      : positiveInteger(blastp.orthogroupMemberMaxHits, 5),
+      : optionalPositiveInteger(blastp.orthogroupMemberMaxHits),
     collinearMaxParalogLinksPerOrthogroup:
       blastpMode === 'collinear'
         ? requireCurrentCollinearMaxParalogLinks(

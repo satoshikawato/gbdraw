@@ -30,7 +30,8 @@ import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { getSessionResourceSource, readFileText } from '../services/file-content-cache.js';
+import { readFileText } from '../services/file-content-cache.js';
+import { groupLinearSourceRecords } from './linear-sources.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -555,25 +556,7 @@ export const createAppSetup = () => {
     }
   }));
 
-  const linearSourceGroups = computed(() => {
-    const groups = [];
-    const bySource = new Map();
-    const identity = (file) => getSessionResourceSource(file)?.descriptor || file;
-    linearSeqs.forEach((sequence, index) => {
-      const files = [sequence.gb, sequence.gff, sequence.fasta].map(identity);
-      const key = files.find(Boolean) || sequence.uid;
-      const candidates = bySource.get(key) || [];
-      let group = candidates.find((entry) => entry.files.every((file, position) => file === files[position]));
-      if (!group) {
-        group = { uid: sequence.uid, sequence, index, files, records: [] };
-        candidates.push(group);
-        bySource.set(key, candidates);
-        groups.push(group);
-      }
-      group.records.push({ sequence, index });
-    });
-    return groups;
-  });
+  const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
   const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
     sequences: linearSeqs,
     layout: effectiveLinearComparisonLayout(),

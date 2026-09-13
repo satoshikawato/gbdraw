@@ -1844,7 +1844,7 @@ def _build_current_derived_entries(
         },
         "orthogroup": {
             "membershipMode": str(request.options.orthogroup_membership_mode),
-            "memberMaxHits": int(request.options.orthogroup_member_max_hits),
+            "memberMaxHits": request.options.orthogroup_member_max_hits,
         },
         "records": [
             {

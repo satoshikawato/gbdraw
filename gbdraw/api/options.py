@@ -918,7 +918,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     orthogroup_membership_mode: Literal[
         "anchor_core_v1"
     ] | str = "anchor_core_v1"
-    orthogroup_member_max_hits: int = 5
+    orthogroup_member_max_hits: int | None = None
     collinear_max_paralog_links_per_orthogroup: int = 2
     align_orthogroup_feature: str | None = None
     comparison_table_file: str | None = None
@@ -1023,7 +1023,6 @@ class LinearDiagramOptions(_ModeDiagramOptions):
         )
         for field_name in (
             "protein_blastp_max_hits",
-            "orthogroup_member_max_hits",
             "collinear_max_paralog_links_per_orthogroup",
         ):
             object.__setattr__(
@@ -1034,7 +1033,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
                     field_name=field_name,
                 ),
             )
-        for field_name in ("losatp_threads", "protein_blastp_candidate_limit"):
+        for field_name in ("losatp_threads", "protein_blastp_candidate_limit", "orthogroup_member_max_hits"):
             object.__setattr__(
                 self,
                 field_name,

@@ -108,7 +108,7 @@ Important `LinearComparisonOptions` defaults are:
 | `max_hits` | `5` |
 | `candidate_limit` | `None` |
 | `orthogroup_membership` | `anchor_core_v1` |
-| `orthogroup_member_max_hits` | `5` |
+| `orthogroup_member_max_hits` | `None` (unbounded) |
 | `max_paralog_links` | `2` |
 
 `protein_mode` accepts `none`, `pairwise`, `orthogroup`, or `collinear`. The `orthogroup` token means gbdraw Similarity groups; it does not claim phylogenetic orthology.

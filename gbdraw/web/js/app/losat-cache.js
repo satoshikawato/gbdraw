@@ -37,7 +37,8 @@ export const sameLosatArgs = (left, right) => {
 const hasRawShape = (entry) => (
   isPlainObject(entry) &&
   entry.kind === 'raw-losat' &&
-  typeof entry.text === 'string'
+  typeof entry.text === 'string' &&
+  (entry.searchContext === undefined || /^[0-9a-f]{64}$/.test(entry.searchContext))
 );
 
 export const isProteinRawLosatCacheEntry = (entry) => (
@@ -581,6 +582,7 @@ export const validateDerivedProteinReferences = (
 export const getCurrentRawLosatCacheEntry = (cacheMap, cacheKey, metadata = {}, manifest = null) => {
   if (!(cacheMap instanceof Map) || !cacheKey) return null;
   const entry = cacheMap.get(cacheKey);
+  if ((entry?.searchContext ?? null) !== (metadata.searchContext ?? null)) return null;
   const classification = classifyRawLosatCacheEntry(entry);
   if (classification === 'protein-current') {
     if (String(entry.program || '') !== String(metadata.program || 'blastp')) return null;

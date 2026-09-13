@@ -32,6 +32,7 @@ const LINEAR_COMPARISON_LOSATP_MODE_KEYS = Object.freeze({
 const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   SETTINGS: Object.freeze({
     LOSAT_MODE: 'losat-mode',
+    LOSAT_RUNTIME: 'losat-runtime',
     LOSATP_MODE: 'losatp-mode',
     BLASTN_TASK: 'blastn-task',
     RECORD_GENETIC_CODES: 'record-genetic-codes',
@@ -48,7 +49,6 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   }),
   ADVANCED: Object.freeze({
     RECORD_LAYOUT: 'record-layout',
-    LOSAT_RUNTIME: 'losat-runtime',
     LOSATP_CANDIDATE: 'losatp-candidate',
     LOSAT_CACHE: 'losat-cache',
     RAW_RESULTS: 'raw-results',
@@ -302,7 +302,7 @@ const projectSettingsSectionKeys = ({
 
   const keys = [];
   if (planned.hasLosat) {
-    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_MODE);
+    keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_MODE, LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSAT_RUNTIME);
     if (losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP) {
       keys.push(LINEAR_COMPARISON_SECTION_KEYS.SETTINGS.LOSATP_MODE);
     }
@@ -358,7 +358,6 @@ const projectSectionKeys = ({
 
   const advanced = [LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RECORD_LAYOUT];
   if (planned.hasLosat) {
-    advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_RUNTIME);
     if (losatModeKey === LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATP) {
       advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSATP_CANDIDATE);
     }

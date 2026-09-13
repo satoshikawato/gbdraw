@@ -1640,7 +1640,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       losatpMode: 'collinear',
       summary: expect.stringContaining('LOSATN · 2 selected pairs · 1 LOSAT, 1 upload'),
       settings: [
-        'losat-mode', 'blastn-task', 'upload-readiness',
+        'losat-mode', 'losat-runtime', 'blastn-task', 'upload-readiness',
         'result-filters', 'comparison-appearance'
       ]
     }
@@ -2462,7 +2462,7 @@ test('derived protein options reach Generate without changing raw search identit
 
   await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.losat.blastp, {
     orthogroupMembershipMode: 'anchor_core_v1',
-    orthogroupMemberMaxHits: 5,
+    orthogroupMemberMaxHits: null,
     collinearMinAnchors: 1,
     collinearMaxUnitGap: 0,
     collinearMaxDiagonalDrift: 0,
@@ -2561,9 +2561,11 @@ const installCompleteRecordComparisonExecutor = async (page) => {
   await page.addInitScript(() => {
     window.__GBDRAW_COMPLETE_RECORD_JOBS__ = [];
     window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
-      window.__GBDRAW_COMPLETE_RECORD_JOBS__.push(jobs.map((job) => [
-        job.queryIndex, job.subjectIndex
-      ]));
+      window.__GBDRAW_COMPLETE_RECORD_JOBS__.push(jobs.map((job) => ({
+        query: [...job.queryRecordIndexes].sort((a, b) => a - b),
+        subject: [...job.subjectRecordIndexes].sort((a, b) => a - b),
+        pairs: job.recordPairs
+      })));
       const ids = (key) => [...options.sequences.get(key).matchAll(/^>([^\s]+)/gm)]
         .map((match) => match[1]);
       return jobs.map((job) => ({
@@ -2576,9 +2578,9 @@ const installCompleteRecordComparisonExecutor = async (page) => {
   });
 };
 
-const uploadCompleteRecordSources = async (page) => {
-  const contents = ['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC']
-    .map((id) => makeDerivedOptionGenbank(id));
+const uploadCompleteRecordSources = async (page, contents =
+  ['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC'].map((id) => makeDerivedOptionGenbank(id))
+) => {
   await page.evaluate(async (contents) => {
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
@@ -2628,6 +2630,40 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
   };
 });
 
+test('@pr-smoke real LOSAT Wasm searches two multi-record sources in one job offline', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.context().route('**/*', (route) => (
+    new URL(route.request().url()).hostname === '127.0.0.1'
+      ? route.continue() : route.abort()
+  ));
+  await installDiagramRequestObserver(page);
+  await page.addInitScript(() => {
+    window.__GBDRAW_COMPLETE_RECORD_JOBS__ = [];
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      window.__GBDRAW_COMPLETE_RECORD_JOBS__.push(jobs.map((job) => job.recordPairs));
+      const { runLosatPairsParallel } = await import('/gbdraw/web/js/services/losat.js');
+      return runLosatPairsParallel(jobs, options);
+    };
+  });
+  let seed = 761;
+  const sequence = Array.from({ length: 360 }, () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return 'acgt'[seed >>> 30];
+  }).join('');
+  const contents = ['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC'].map((id) =>
+    makeDerivedOptionGenbank(id).replace(/ORIGIN[\s\S]*$/, `ORIGIN\n        1 ${sequence}\n//\n`));
+  await openApp(page);
+  await uploadCompleteRecordSources(page, contents);
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
+  const result = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+  expect(result, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)))
+    .toEqual({ status: 'ok' });
+  const snapshot = await completeComparisonSnapshot(page);
+  const pairs = [[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]];
+  expect(snapshot.jobs).toEqual([[pairs]]);
+  expect(snapshot.svgPairs).toEqual(pairs.map((pair) => pair.join('->')).sort());
+});
+
 test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preserves independent rows through Save and Load', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await page.context().route('**/*', (route) => (
@@ -2651,10 +2687,10 @@ test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preser
     selectors: ['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC'],
     rows: [1, 1, 2, 2, 2], pairs: expectedPairs,
     svgPairs: expectedPairs.map((pair) => pair.join('->')).sort(),
-    sourceCount: 2, jobs: [expectedPairs]
+    sourceCount: 2, jobs: [[{ query: [0, 1], subject: [2, 3, 4], pairs: expectedPairs }]]
   });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect((await completeComparisonSnapshot(page)).jobs).toEqual([expectedPairs]);
+  expect((await completeComparisonSnapshot(page)).jobs).toEqual(generated.jobs);
 
   // A single placement edit must target a biological record, not its whole file.
   await controls.nth(4).fill('3');
@@ -2702,7 +2738,9 @@ for (const mode of ['orthogroup', 'collinear']) {
     expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     const snapshot = await completeComparisonSnapshot(page);
     expect(snapshot.selectors).toHaveLength(5);
-    const pairs = snapshot.jobs.flat().map((pair) => pair.join('->')).sort();
+    expect(snapshot.jobs).toHaveLength(1);
+    expect(snapshot.jobs[0]).toHaveLength(4);
+    const pairs = snapshot.jobs.flat().flatMap((job) => job.pairs).map((pair) => pair.join('->')).sort();
     const allPairs = Array.from({ length: 5 }, (_, q) => Array.from({ length: 5 }, (_, s) => `${q}->${s}`)).flat().sort();
     expect(pairs).toEqual(allPairs);
     expect(snapshot.sourceCount).toBe(2);
@@ -2728,7 +2766,7 @@ for (const mode of ['orthogroup', 'collinear']) {
     const oneRow = await completeComparisonSnapshot(page);
     expect(oneRow.rows).toEqual([1, 1, 1, 1, 1]);
     expect(oneRow.svgPairs).toEqual([]);
-    expect(oneRow.jobs.flat().map((pair) => pair.join('->')).sort()).toEqual(allPairs);
+    expect(oneRow.jobs.flat().flatMap((job) => job.pairs).map((pair) => pair.join('->')).sort()).toEqual(allPairs);
   });
 }
 
@@ -2789,8 +2827,17 @@ test('@pr-smoke one uploaded source stays one file card through record moves, re
   await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
   await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  const recordList = sources.first().locator('[data-linear-source-records]');
+  const recordSummary = recordList.locator(':scope > summary');
+  await expect(recordSummary).toHaveText('Number of records: 2');
+  await expect(recordList).not.toHaveAttribute('open', '');
+  await expect(sources.first().getByRole('button', { name: 'Record options for sequence 1' })).not.toBeVisible();
+  await recordSummary.press('Enter');
+  await expect(sources.first().getByRole('button', { name: 'Record options for sequence 1' })).toBeVisible();
   await expect(sources.nth(0)).toContainText('UpperA');
   await expect(sources.nth(0)).toContainText('UpperB');
+  await recordSummary.press('Space');
+  await expect(recordList).not.toHaveAttribute('open', '');
   await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gff'; });
   await expect(sources).toHaveCount(2);
   await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(4);
@@ -2832,4 +2879,113 @@ test('@pr-smoke one uploaded source stays one file card through record moves, re
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => ({ file: seq.gb, selector: seq.region_record_id }))))
     .toEqual([{ file: null, selector: '' }]);
+});
+
+test('@pr-smoke LOSAT Settings preserve execution controls and unbounded members through Save and Load', async ({ page }, testInfo) => {
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  const settings = page.locator('[data-linear-comparison-disclosure="settings"]');
+  await settings.locator(':scope > summary').click();
+  const labels = ['LOSAT execution', 'LOSAT total threads', 'LOSAT parallel runs', 'LOSAT threads per run'];
+  for (const mode of ['blastn', 'tblastx', 'blastp']) {
+    await page.evaluate((value) => window.__GBDRAW_APP__.setLinearComparisonLosatMode(value), mode);
+    for (const name of labels) await expect(settings.getByRole('combobox', { name, exact: true })).toBeVisible();
+  }
+  await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption('threaded');
+  await settings.getByRole('combobox', { name: 'LOSAT total threads', exact: true }).selectOption('2');
+  await settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true }).selectOption('1');
+  await settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true }).selectOption('2');
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'));
+  const member = settings.getByRole('spinbutton', { name: 'Member hits per protein', exact: true });
+  await expect(member).toHaveValue('');
+  await expect(member).toHaveAttribute('placeholder', 'Unbounded');
+  await member.fill('7');
+  await member.fill('');
+  for (const mode of ['blastn', 'tblastx', 'blastp']) {
+    await page.evaluate((value) => window.__GBDRAW_APP__.setLinearComparisonLosatMode(value), mode);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('losat-settings-execution-controls.png') });
+  const saved = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'losat-settings';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const path = await (await saved).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await settings.locator(':scope > summary').click();
+  for (const [index, name] of labels.entries()) {
+    await expect(settings.getByRole('combobox', { name, exact: true })).toHaveValue(['threaded', '2', '1', '2'][index]);
+  }
+  await expect(member).toHaveValue('');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits)).toBeNull();
+});
+
+test('@pr-smoke LOSATP source jobs are reused after display start, reverse complement, and fresh Load', async ({ page }) => {
+  test.setTimeout(300000);
+  await installCompleteRecordComparisonExecutor(page);
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('orthogroup');
+  });
+  const run = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(app.results[0]?.content || '', 'image/svg+xml');
+    return {
+      result, error: app.errorLog, firstRecord: request?.records[0],
+      jobCount: window.__GBDRAW_COMPLETE_RECORD_JOBS__.flat().length,
+      geometry: [...svg.querySelectorAll('path')].map((path) => path.getAttribute('d')).join('\n')
+    };
+  });
+  const original = await run();
+  expect(original.result).toEqual({ status: 'ok' });
+  expect(original.jobCount).toBe(4);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const row = app.recordDisplayControls.rowsFor(app.linearSeqs[0].uid)[0];
+    await app.recordDisplayControls.setTopology(row, true);
+    await app.recordDisplayControls.setStart(row, 31);
+  });
+  const shifted = await run();
+  expect(shifted.result).toEqual({ status: 'ok' });
+  expect(shifted.jobCount).toBe(4);
+  expect(shifted.firstRecord.display.startCoordinate).toBe(31);
+  expect(shifted.geometry).not.toBe(original.geometry);
+  await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[0].region_reverse = true; });
+  const reversed = await run();
+  expect(reversed.result, JSON.stringify(reversed.error)).toEqual({ status: 'ok' });
+  expect(reversed.jobCount).toBe(4);
+  expect(reversed.geometry).not.toBe(shifted.geometry);
+  const saved = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'losat-display-cache';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const path = await (await saved).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  const loaded = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  await (await loaded).accept();
+  const restored = await run();
+  expect(restored.result, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
+  expect(restored.jobCount).toBe(0);
+  expect(restored.geometry).toBe(reversed.geometry);
+  expect(restored.firstRecord.display.startCoordinate).toBe(31);
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.linearSeqs[0], {
+    region_start: 1, region_end: 210
+  }));
+  const cropped = await run();
+  expect(cropped.result, JSON.stringify(cropped.error)).toEqual({ status: 'ok' });
+  expect(cropped.jobCount).toBe(3);
+  expect(cropped.firstRecord.region).toMatchObject({ start: 1, end: 210, reverseComplement: true });
 });
