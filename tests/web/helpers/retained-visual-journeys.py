@@ -15,8 +15,6 @@ from pathlib import Path
 # Retained programs are immutable inputs, including their archive directory.
 sys.dont_write_bytecode = True
 
-from playwright.sync_api import sync_playwright
-
 HASHES = {
     'audit.py': 'd24c4627013cde32a57aa157c015788e1b4caabe5a7ac8265041f883bcea85f1',
     'harness.py': '96f49c44fe172d7eeec374bc2e11d19b174daee9199961844ec2aac2ca2efb51',
@@ -27,7 +25,79 @@ HASHES = {
 }
 
 
+def install_operation_adapters(journey_class):
+    """Adapt current completion boundaries without changing archived programs."""
+    original_edit = journey_class.edit
+    original_observe = journey_class.observe
+    original_record = journey_class.record
+
+    def record(self, kind, status, **data):
+        if kind == 'authority' and status == 'PASS' and data.get('phase') == 'IN_PROGRESS':
+            status = 'IN_PROGRESS'
+        return original_record(self, kind, status, **data)
+
+    def edit(self, kind, *params, **options):
+        self.retained_edit_kind = kind
+        try:
+            target = original_edit(self, kind, *params, **options)
+        finally:
+            self.retained_edit_kind = None
+        if self.jid == 'J13' and kind == 'placement':
+            self.placement_target = target['svg_id']
+        return target
+
+    def observe(self, reason):
+        color_boundary = (reason == 'before drawer/popup close'
+                          and getattr(self, 'retained_edit_kind', None) == 'color')
+        if color_boundary:
+            # The original pointer click has returned, but its async owner may
+            # still be applying color/legend changes. Never poll SVG equality.
+            self.page.wait_for_function('''() => {
+              const app = window.__GBDRAW_APP__, history = window.__GBDRAW_HISTORY__;
+              return !app.processing && !history.restoring.value && !history.capturing.value
+                && !app.featureStyleScopeDialog.show && !app.legendRenameDialog?.show;
+            }''', timeout=180000)
+        state = original_observe(self, reason)
+        if color_boundary:
+            assert state and state['observation_phase'] == 'SETTLED', 'Color action was not observed settled before close'
+            assert state['resultCount'] > 0 and not state['failures'], 'Color completion comparison failed before close'
+            assert all(state.get(key, {}).get('uncompressed_bytes', 0) > 4 for key in [
+                'selected_semantics', 'mounted_semantics', 'export_semantics',
+                'export_boundary_selected_semantics', 'export_boundary_mounted_semantics'
+            ]), 'Color completion lacks nonempty selected/mounted/export evidence before close'
+            self.record('completion_boundary', 'PASS', edit='color', reason=reason)
+        if self.jid != 'J13' or not state or not hasattr(self, 'placement_target'):
+            return state
+        if reason.startswith(('before Undo ', 'before Redo ', 'after Undo ', 'after Redo ')):
+            current = json.loads(gzip.decompress((self.folder / state['mounted_semantics']['path']).read_bytes()))
+            if reason.startswith('before '):
+                self.history_non_targets = current
+            else:
+                differences = self.page.evaluate("""async ({before,after,target})=>{
+                  const {nonTargetFeatures,compareVisualSemantics}=await import('/tests/web/helpers/svg-visual-semantics.mjs');
+                  return compareVisualSemantics(nonTargetFeatures(before,[target]),nonTargetFeatures(after,[target]));
+                }""", {'before': self.history_non_targets, 'after': current, 'target': self.placement_target})
+                self.record('non_target_preservation', 'OBSERVATION' if differences else 'PASS',
+                            reason=reason, differences=differences[:5])
+        return state
+
+    journey_class.edit = edit
+    journey_class.observe = observe
+    journey_class.record = record
+    original_load = journey_class.load
+
+    def load(self, seed, valid=True):
+        result = original_load(self, seed, valid=valid)
+        if self.jid == 'C01' and '-03-save' in str(seed):
+            self.page.wait_for_function('window.__DEFINITION_COMPLETED__ > 0', timeout=180000)
+            self.observe('Web Load definition callback completed before Generate')
+        return result
+    journey_class.load = load
+
+
 def main():
+    from playwright.sync_api import sync_playwright
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
@@ -97,48 +167,12 @@ def main():
         }''', document)
 
     audit.AuditJourney.saved_session_valid = saved_session_valid
-    original_edit = audit.AuditJourney.edit
-    original_observe = audit.AuditJourney.observe
-
-    def edit(self, kind, *params, **options):
-        target = original_edit(self, kind, *params, **options)
-        if self.jid == 'J13' and kind == 'placement':
-            self.placement_target = target['svg_id']
-        return target
-
-    def observe(self, reason):
-        state = original_observe(self, reason)
-        if self.jid != 'J13' or not state or not hasattr(self, 'placement_target'):
-            return state
-        if reason.startswith(('before Undo ', 'before Redo ', 'after Undo ', 'after Redo ')):
-            current = json.loads(gzip.decompress((self.folder / state['mounted_semantics']['path']).read_bytes()))
-            if reason.startswith('before '):
-                self.history_non_targets = current
-            else:
-                differences = self.page.evaluate("""async ({before,after,target})=>{
-                  const {nonTargetFeatures,compareVisualSemantics}=await import('/tests/web/helpers/svg-visual-semantics.mjs');
-                  return compareVisualSemantics(nonTargetFeatures(before,[target]),nonTargetFeatures(after,[target]));
-                }""", {'before': self.history_non_targets, 'after': current, 'target': self.placement_target})
-                self.record('non_target_preservation', 'OBSERVATION' if differences else 'PASS',
-                            reason=reason, differences=differences[:5])
-        return state
-
-    audit.AuditJourney.edit = edit
-    audit.AuditJourney.observe = observe
+    install_operation_adapters(audit.AuditJourney)
     harness.ROOT = journeys.ROOT = args.root.resolve()
     harness.OUT = audit.OUT = args.output.resolve()
     harness.LINEAR_FILES = journeys.LINEAR_FILES = [harness.ROOT / 'examples' / name for name in ['MellatMJNV.gb', 'MeenMJNV.gb', 'LvMJNV.gb']]
     # The retained harness uses port 4194 for its local-only request policy.
     harness.INIT = harness.INIT.replace('window.__SWEEP__=', "window.__DEFINITION_COMPLETED__=0;const log=console.log;console.log=(...a)=>{if(a[0]==='Definition text updated')window.__DEFINITION_COMPLETED__++;log(...a)};window.__SWEEP__=")
-    original_load = audit.AuditJourney.load
-
-    def load(self, seed):
-        result = original_load(self, seed)
-        if self.jid == 'C01' and '-03-save' in str(seed):
-            self.page.wait_for_function('window.__DEFINITION_COMPLETED__ > 0', timeout=180000)
-            self.observe('Web Load definition callback completed before Generate')
-        return result
-    audit.AuditJourney.load = load
     manifest = {'archive': str(args.archive.resolve()), 'sourceHashes': HASHES,
                 'comparatorSha256': hashlib.sha256((args.root / 'tests/web/helpers/svg-visual-semantics.mjs').read_bytes()).hexdigest(), 'journeys': args.journeys}
     (args.output / 'runner-inputs.json').write_text(json.dumps(manifest, indent=2))
