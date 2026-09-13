@@ -2,10 +2,10 @@
 
 # gbdraw 0.14.0 release notes
 
-**Status: unreleased.** These notes describe the implemented changes planned for
-the final 0.14.0 release. The source version is `0.14.0` (internal final candidate);
-0.14.0 has not been published to PyPI. Installation availability is documented in
-[Installation](./INSTALL.md).
+These notes describe version `0.14.0` and migration from 0.13. Check
+[GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) for publication
+dates and [PyPI](https://pypi.org/project/gbdraw/) for available packages.
+See [Installation](./INSTALL.md) for distribution and source-install routes.
 
 ## Highlights
 
@@ -135,14 +135,14 @@ remain sequential: earlier completed files survive a later conversion failure.
 
 ## Packaging / installation
 
-Bioconda remains the recommended local installation route. The PyPI Trusted
-Publishing workflow is prepared, but publication has not occurred. The future
-PyPI command and current source-install route are distinguished in
-[Installation](./INSTALL.md); no final package availability is implied here.
+Bioconda remains the recommended local installation route. Each package index
+provides the versions published there; the source version alone does not establish
+package availability. [Installation](./INSTALL.md) explains how to check the
+distribution and install a checkout when the desired version is unavailable.
 
 Wheel and sdist installation has been verified in isolated Linux environments
 on Python 3.10, 3.11, and 3.12, including CLI, Python API, session replay, and
-non-SVG exports. Package contents exclude development tests, private artifacts,
+non-SVG exports. Installed wheel contents exclude development tests, private artifacts,
 and hosted Gallery examples while retaining the GUI palette data and required
 local browser assets. The local GUI was also verified from an installed package.
 SVG needs only the base package; other formats need the `export` extra and
@@ -223,6 +223,10 @@ requirements.
   losslessly as a CLI recipe; Run Info explains the reason.
 - Generate remains explicit for rotation and placement drafts. A new automatic
   redraw scheduler and new zoom-to-selection navigation are not release features.
+- Very dense Circular external-label layouts can require a long computation
+  until completion or cancellation. There is no completion-time guarantee.
+  Existing label selections and controls remain available; cancellation keeps
+  the previous successful Result.
 - The hosted Gallery is not bundled with local installs. Windows/macOS installed
   package verification remains outstanding.
 

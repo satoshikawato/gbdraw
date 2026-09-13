@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./gbdraw/web/assets/gbdraw-logo-title.png" alt="gbdraw" width="420">
+  <img src="https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/assets/gbdraw-logo-title.png" alt="gbdraw" width="420">
 </p>
 
 [![Static Badge](https://img.shields.io/badge/gbdraw%20webapp-8A2BE2)](https://gbdraw.app/)
@@ -15,7 +15,7 @@
 
 # gbdraw
 
-![gbdraw](https://github.com/satoshikawato/gbdraw/blob/main/examples/gbdraw_social_preview.png)
+![gbdraw](https://raw.githubusercontent.com/satoshikawato/gbdraw/main/examples/gbdraw_social_preview.png)
 
 `gbdraw` is a command-line and browser-based tool for publication-quality genome diagrams. It accepts GenBank/DDBJ flatfiles or GFF3 + FASTA pairs and produces circular or linear plots in SVG, PNG, PDF, EPS, or PS.
 
@@ -33,18 +33,18 @@
 
 | Route | Use it for |
 | --- | --- |
-| [Tutorials](./docs/TUTORIALS/README.md) | Build complete, reproducible figures in the web app, on the command line, or from Python. |
-| [Technical documentation](./docs/REFERENCE/README.md) | Look up controls, options, schemas, APIs, compatibility, outputs, and source provenance. |
-| [FAQ](./docs/FAQ.md) | Choose a layout, interface, or comparison method and resolve common problems. |
-| [Gallery](./docs/GALLERY.md) | Inspect finished static and interactive figures before choosing a workflow. |
+| [Tutorials](https://github.com/satoshikawato/gbdraw/blob/main/docs/TUTORIALS/README.md) | Build complete, reproducible figures in the web app, on the command line, or from Python. |
+| [Technical documentation](https://github.com/satoshikawato/gbdraw/blob/main/docs/REFERENCE/README.md) | Look up controls, options, schemas, APIs, compatibility, outputs, and source provenance. |
+| [FAQ](https://github.com/satoshikawato/gbdraw/blob/main/docs/FAQ.md) | Choose a layout, interface, or comparison method and resolve common problems. |
+| [Gallery](https://github.com/satoshikawato/gbdraw/blob/main/docs/GALLERY.md) | Inspect finished static and interactive figures before choosing a workflow. |
 
-The [documentation home](./docs/DOCS.md) links the four routes above. Supporting
-pages cover [installation](./docs/INSTALL.md), [tutorial
-inputs](./docs/GETTING_TUTORIAL_DATA.md), [citation and project
-background](./docs/ABOUT.md), and the [changelog](./CHANGELOG.md).
-See the [0.14.0 release notes (unreleased)](./docs/RELEASE_NOTES_0.14.0.md)
-for the upcoming release and migration from 0.13.
-See [Contributing](./CONTRIBUTING.md) to report a bug, set up a development
+The [documentation home](https://github.com/satoshikawato/gbdraw/blob/main/docs/DOCS.md) links the four routes above. Supporting
+pages cover [installation](https://github.com/satoshikawato/gbdraw/blob/main/docs/INSTALL.md), [tutorial
+inputs](https://github.com/satoshikawato/gbdraw/blob/main/docs/GETTING_TUTORIAL_DATA.md), [citation and project
+background](https://github.com/satoshikawato/gbdraw/blob/main/docs/ABOUT.md), and the [changelog](https://github.com/satoshikawato/gbdraw/blob/main/CHANGELOG.md).
+See the [0.14.0 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.0.md)
+for changes and migration from 0.13.
+See [Contributing](https://github.com/satoshikawato/gbdraw/blob/main/CONTRIBUTING.md) to report a bug, set up a development
 environment, or submit a pull request.
 
 ## Use without local installation
@@ -81,9 +81,11 @@ python -m pip install -e ".[dev,export]"
 ```
 
 Local GUI/Web assets have no hosted Google Analytics injection.
-See [Installation](./docs/INSTALL.md) for details, supported Python versions,
-platform notes, and the PyPI route after publication. The source version is
-`0.14.0` (internal final candidate); 0.14.0 has not been published to PyPI.
+See [Installation](https://github.com/satoshikawato/gbdraw/blob/main/docs/INSTALL.md) for details, supported Python versions,
+platform notes, and the PyPI route. The source version is `0.14.0`; check
+[PyPI](https://pypi.org/project/gbdraw/) for available packages and
+[GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) for publication
+dates. If the desired package is unavailable, use a source install.
 
 ## Bug reports and suggestions
 

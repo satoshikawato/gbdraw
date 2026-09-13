@@ -10,7 +10,7 @@ Choose an installation route according to the version and interface you need:
 | --- | --- | --- |
 | Hosted web app | Making a diagram without a local installation | Runs at [gbdraw.app](https://gbdraw.app/) in your browser. |
 | Bioconda | Routine command-line use and reproducible environments | Recommended for most users. |
-| PyPI (after publication) | Installing into an existing Python environment | Future release route: `python -m pip install gbdraw`. |
+| PyPI | Installing a published version into an existing Python environment | Check [available packages](https://pypi.org/project/gbdraw/) before installing. |
 | Source install | Developing or testing the current checkout | Uses `pip install -e ".[dev]"`. |
 
 ## 1. Hosted web app
@@ -47,8 +47,8 @@ into local installs.
 ## 2. Bioconda installation
 
 Bioconda is the recommended local installation path for routine command-line use.
-The command installs the version available on that channel; it does not select
-the unreleased 0.14.0 checkout.
+The command installs the version available on that channel. Channel availability
+can differ from the source version or other package indexes.
 
 ```bash
 mamba create -n gbdraw -c conda-forge -c bioconda gbdraw
@@ -64,13 +64,13 @@ gbdraw gui
 
 ## 3. PyPI installation
 
-**Not yet published:** the source version is `0.14.0` (internal final candidate);
-0.14.0 has not been published to PyPI. The Trusted Publishing workflow is prepared;
-publisher setup and the release transaction must complete before this route is
-available. To test the current implementation now, use a source install below.
+Check the [PyPI project](https://pypi.org/project/gbdraw/) for available versions.
+The source version is `0.14.0`; a version is installable from PyPI only after it
+appears there. If the project or desired version is unavailable, use a source
+install below.
 
-After publication, install the released package in an activated environment
-using a supported Python version (3.10, 3.11, or 3.12):
+For a version available on PyPI, install in an activated environment using a
+supported Python version (3.10, 3.11, or 3.12):
 
 ```bash
 python -m pip install gbdraw
@@ -80,7 +80,7 @@ gbdraw -h
 Use an isolated virtual environment rather than modifying the system Python installation.
 An unpinned command selects the version available on PyPI, not an unpublished
 candidate. For the release's migration notes, see
-[0.14.0 release notes (unreleased)](./RELEASE_NOTES_0.14.0.md).
+[0.14.0 release notes](./RELEASE_NOTES_0.14.0.md).
 
 ## 4. Source installation for development
 
@@ -103,7 +103,7 @@ pytest tests/ -v -m "not slow"
 ## Optional: non-SVG export support
 
 SVG export works with the base install. PNG, PDF, EPS, and PS export require
-CairoSVG. After PyPI publication:
+CairoSVG. For a version available on PyPI:
 
 ```bash
 python -m pip install "gbdraw[export]"
@@ -117,7 +117,7 @@ libraries. On Ubuntu, the tested system packages are `libcairo2-dev` and
 
 ## Supported and verified environments
 
-The supported Python versions are 3.10, 3.11, and 3.12. The 0.14.0 development
+The supported Python versions are 3.10, 3.11, and 3.12. The 0.14.0
 package has passed isolated wheel/sdist installation, CLI, Python API, session
 replay, and export checks on Linux across those versions. The installed local
 GUI has also been checked with Chromium. These checks do not establish

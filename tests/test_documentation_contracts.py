@@ -90,33 +90,36 @@ def test_release_session_history_and_acceptance_use_current_authority() -> None:
     ) is None
 
 
-def test_release_navigation_retains_beta_history_and_marks_final_unreleased() -> None:
+def test_release_navigation_retains_beta_history_and_delegates_publication_dates() -> None:
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    final_heading = "## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md) — unreleased"
+    final_heading = "## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)\n"
     beta_heading = "## [0.14.0b0](./docs/RELEASE_NOTES_0.14.0b0.md) — unreleased (beta)"
     assert changelog.index(final_heading) < changelog.index(beta_heading)
     for relative_path in ("README.md", "docs/DOCS.md", "docs/ABOUT.md"):
         source = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
         assert re.search(
-            r"\[0\.14\.0 release notes \(unreleased\)\]\([^)]*RELEASE_NOTES_0\.14\.0\.md\)",
+            r"\[0\.14\.0 release notes\]\([^)]*RELEASE_NOTES_0\.14\.0\.md\)",
             source,
         ), relative_path
     for path in (RELEASE_NOTES, REPO_ROOT / "docs/DOCS.md", REPO_ROOT / "docs/ABOUT.md"):
         assert "RELEASE_NOTES_0.14.0b0.md" in path.read_text(encoding="utf-8")
-    assert "**Status: unreleased.**" in RELEASE_NOTES.read_text(encoding="utf-8")
+    for source in (changelog, RELEASE_NOTES.read_text(encoding="utf-8")):
+        assert "https://github.com/satoshikawato/gbdraw/releases" in source
 
 
-def test_installation_distinguishes_current_package_from_future_pypi_route() -> None:
+def test_installation_distinguishes_source_version_from_index_availability() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     install = (REPO_ROOT / "docs/INSTALL.md").read_text(encoding="utf-8")
     for source in (readme, install, RELEASE_NOTES.read_text(encoding="utf-8")):
         prose = " ".join(source.split())
         assert f"`{__version__}`" in prose
-        assert "0.14.0 has not been published to PyPI" in prose
+        assert "https://pypi.org/project/gbdraw/" in prose
+        assert "0.14.0 has not been published to PyPI" not in prose
+        assert "internal final candidate" not in prose
     assert "Bioconda is the main installation path" in readme
     assert "Bioconda is the recommended local installation path" in install
     pypi_section = install.split("## 3. PyPI installation\n", 1)[1].split("\n## ", 1)[0]
-    assert pypi_section.index("After publication") < pypi_section.index(
+    assert pypi_section.index("For a version available on PyPI") < pypi_section.index(
         "python -m pip install gbdraw"
     )
     for command in ('python -m pip install gbdraw', 'python -m pip install "gbdraw[export]"'):

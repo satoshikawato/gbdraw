@@ -1169,7 +1169,7 @@ def test_wrangler_uses_cloudflare_bundle_directory() -> None:
 def test_project_docs_and_citation_metadata_include_preprint_doi() -> None:
     readme = README_PATH.read_text(encoding="utf-8")
     assert PREPRINT_DOI in readme
-    assert "./gbdraw/web/assets/gbdraw-logo-title.png" in readme
+    assert "https://raw.githubusercontent.com/satoshikawato/gbdraw/main/gbdraw/web/assets/gbdraw-logo-title.png" in readme
     assert PREPRINT_DOI in ABOUT_PATH.read_text(encoding="utf-8")
     citation_cff = CITATION_PATH.read_text(encoding="utf-8")
     assert PREPRINT_DOI in citation_cff
