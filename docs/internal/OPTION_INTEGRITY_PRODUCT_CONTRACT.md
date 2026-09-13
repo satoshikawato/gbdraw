@@ -470,7 +470,13 @@ corrected. Passing evidence does not make incorrect behavior normative.
      not shrink that set or select only the first record.
   2. Record Layout exposes one independently editable placement per biological
      record, with an identifiable record label. File count is not record count.
-     Exposing the controls preserves the existing row placement.
+     Exposing the controls preserves the existing row placement. Each uploaded
+     source has one file-input card regardless of its record count; GFF3 and its
+     paired FASTA remain one source. Per-record controls belong under that
+     source or in Record Layout and must not appear as repeated file uploads.
+     Removing or replacing a source updates all of its records without leaving
+     hidden records from the former source. Save and fresh Load preserve this
+     distinction between source files and biological records.
   3. Adjacent comparison selects the Cartesian product between neighboring
      occupied display rows. Two records above three records means six pairs.
      This applies to nucleotide, translated-nucleotide, and Pairwise protein
@@ -554,8 +560,12 @@ The normal automated PR gate must observe all of the following:
 
 - Multi-record GenBank and GFF3/FASTA discovery retains every record with
   comparisons enabled and disabled; explicit selectors remain exact.
-- A two-record source and a three-record source expose five independent
-  placements. The neighboring 2-by-3 rows submit six Pairwise search jobs.
+- A two-record source and a three-record source expose two file-input cards
+  and five independent placements. A single two-record upload has one file
+  card and two record controls. Assert both counts after Save/fresh Load,
+  source replacement, source removal, and per-record row changes; filenames
+  alone must not collapse distinct input sources. The neighboring 2-by-3 rows
+  submit six Pairwise search jobs.
   Fresh and reset documents use same-file Linear rows and Circular shared
   canvas; explicit saved opt-outs survive Load.
 - Similarity and Collinear `all` submit the complete directed record-pair
