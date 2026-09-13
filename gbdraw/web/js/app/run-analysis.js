@@ -3562,13 +3562,14 @@ export const createRunAnalysis = ({
             resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
           );
           const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
-            const edge = edgeForOrdinal(ordinal);
-            if (!edge) return;
+            const edge = resolvedLosatEdges.find((candidate) => (
+              candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
+            )) || edgeForOrdinal(ordinal);
             jobSpecs.push({
-              edgeKey: edge.edgeKey,
-              ordinal: edge.ordinal,
-              queryUid: edge.queryUid,
-              subjectUid: edge.subjectUid,
+              edgeKey: edge?.edgeKey || '',
+              ordinal: edge?.ordinal ?? ordinal,
+              queryUid: linearSeqs[queryIndex].uid,
+              subjectUid: linearSeqs[subjectIndex].uid,
               queryIndex,
               subjectIndex,
               program: losatProgram.value

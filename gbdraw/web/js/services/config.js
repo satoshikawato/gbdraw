@@ -2271,6 +2271,8 @@ const serializeFile = async (file) => {
   const cached = serializedFileDescriptors.get(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
+  const shared = serializedFileDescriptors.get(file);
+  if (shared) return shared;
   recordStructuralMetric('resourceReencodeCount', 1, {
     resourceName: String(file.name || 'file')
   });

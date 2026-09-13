@@ -1491,12 +1491,17 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             pair: item["hits"]
             for pair, item in hits_by_direction.items()
         }
+        display_pair_indices = {
+            (item["query_index"], item["subject_index"]): item["pair_index"]
+            for item in pair_payloads if item["display_pair"]
+        }
         edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
             directional_tables,
             combined_protein_map,
             orthogroup_membership_mode=normalized_membership_mode,
             orthogroup_member_max_hits=normalized_member_max_hits,
             max_related_edges_per_orthogroup=normalized_max_paralog_links,
+            comparison_pairs=tuple(display_pair_indices),
         )
         orthogroups = edge_selection.orthogroups
 
@@ -1522,7 +1527,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             )
             converted_pairs.append(
                 {
-                    "pair_index": min(query_index, subject_index),
+                    "pair_index": display_pair_indices[(query_index, subject_index)],
                     "tsv": handle.getvalue(),
                     "rows": _dataframe_json_rows(converted),
                     "hit_count": int(converted.shape[0]),

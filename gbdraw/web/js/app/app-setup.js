@@ -527,6 +527,7 @@ export const createAppSetup = () => {
     linearRecordLayoutEnabled.value = nextEnabled;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
+    if (nextEnabled) return materializeAutomaticLinearRecords();
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
@@ -571,6 +572,7 @@ export const createAppSetup = () => {
     const sequence = linearSeqs.find((entry) => entry.uid === uid);
     return plainTextLinearRecordLabel(
       sequence?.definition ||
+      sequence?.region_record_id ||
       sequence?.gb?.name ||
       sequence?.gff?.name ||
       sequence?.fasta?.name ||
@@ -904,10 +906,39 @@ export const createAppSetup = () => {
       .map((entry) => [String(entry.edgeKey), entry])
   ));
 
+  const pendingLinearRecordExpansions = new Set();
+  const expandDiscoveredLinearRecords = ({ uid, records }) => {
+    if (!pendingLinearRecordExpansions.delete(uid)) return;
+    const index = linearSeqs.findIndex((seq) => seq.uid === uid);
+    if (index < 0 || records.length < 2) return;
+    const source = linearSeqs[index];
+    if (source.region_record_id || source.region_start != null || source.region_end != null) return;
+    const row = linearRecordRowFor(uid, index + 1);
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => (
+      createLinearSeq({
+        ...source,
+        uid: recordIndex === 0 ? uid : undefined,
+        region_record_id: record.value
+      })
+    ));
+    applyLinearSeqMutation([
+      ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
+    ]);
+    expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
+    return true;
+  };
+  const materializeAutomaticLinearRecords = async () => {
+    if (mode.value !== 'linear') return;
+    linearSeqs.forEach((seq) => {
+      if (!seq.region_record_id) pendingLinearRecordExpansions.add(seq.uid);
+    });
+    await linearRecordSelector.refresh();
+  };
   const paletteLoader = createPaletteLoader({ state });
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
+    onRecordsDiscovered: expandDiscoveredLinearRecords,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -2389,6 +2420,13 @@ export const createAppSetup = () => {
   }
 
   const runAnalysis = async () => {
+    if (mode.value === 'linear') {
+      if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
+        await materializeAutomaticLinearRecords();
+      } else {
+        await linearRecordSelector.refresh();
+      }
+    }
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
       : null;
@@ -3202,6 +3240,10 @@ export const createAppSetup = () => {
       });
     }
     linearSeqs.splice(0, linearSeqs.length, ...next);
+    const activeUids = new Set(next.map((seq) => seq.uid));
+    pendingLinearRecordExpansions.forEach((uid) => {
+      if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
+    });
     const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
     replaceLinearComparisonPlan(
@@ -3243,6 +3285,7 @@ export const createAppSetup = () => {
         return;
       }
       seq.gb = nextValue;
+      pendingLinearRecordExpansions.add(seq.uid);
       invalidateLinearComparisonArtifacts();
       linearReorderNotice.value = '';
       return;
@@ -3255,6 +3298,7 @@ export const createAppSetup = () => {
     }
 
     seq[field] = nextValue;
+    pendingLinearRecordExpansions.add(seq.uid);
     invalidateLinearComparisonArtifacts();
     linearReorderNotice.value = '';
   };

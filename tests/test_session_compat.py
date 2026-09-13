@@ -619,11 +619,11 @@ def test_released_schema_v2_alignment_target_promotes_with_protein_artifacts(
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        comparisons = request.options.protein_comparisons
+        comparisons = request.options.linear_comparisons
         orthogroups = request.options.orthogroups
         assert comparisons
         assert orthogroups is not None
-        legacy_target = str(comparisons[0].iloc[0]["query_protein_id"])
+        legacy_target = str(comparisons[0].matches.iloc[0]["query_protein_id"])
         request = replace(
             request,
             options=replace(
@@ -639,9 +639,9 @@ def test_released_schema_v2_alignment_target_promotes_with_protein_artifacts(
     assert adapted_options.align_orthogroup_feature == current_target
     assert adapted_options.orthogroups is not None
     assert current_target in adapted_options.orthogroups.member_by_protein_id
-    assert adapted_options.protein_comparisons
+    assert adapted_options.linear_comparisons
     assert (
-        adapted_options.protein_comparisons[0].iloc[0]["query_protein_id"]
+        adapted_options.linear_comparisons[0].matches.iloc[0]["query_protein_id"]
         == current_target
     )
 

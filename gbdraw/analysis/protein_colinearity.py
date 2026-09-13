@@ -5584,6 +5584,7 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
     record_count: int | None,
     include_singletons: bool,
     max_related_edges_per_orthogroup: int,
+    comparison_pairs: Sequence[tuple[int, int]] | None,
 ) -> OrthogroupEdgeSelectionResult:
     if int(max_related_edges_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
@@ -5604,25 +5605,31 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         pair: _comparison_columns_only(table)
         for pair, table in anchor_edge_tables.items()
     }
-    adjacent_anchor_edges_by_pair = {
-        pair: _comparison_columns_only(table)
-        for pair, table in anchor_edge_tables.items()
-        if int(pair[1]) == int(pair[0]) + 1
-    }
-    adjacent_candidate_edges_by_pair = {
-        (query_index, query_index + 1): _comparison_columns_only(
-            directional_hits_by_pair.get(
-                (query_index, query_index + 1),
-                _empty_comparison_hits(),
+    display_pairs = (
+        tuple(comparison_pairs) if comparison_pairs is not None else
+        tuple((index, index + 1) for index in range(max(0, int(record_count) - 1)))
+    )
+    if any(
+        not (0 <= query < int(record_count) and 0 <= subject < int(record_count))
+        or query == subject for query, subject in display_pairs
+    ):
+        raise ValidationError("comparison_pairs contains an invalid record-index pair.")
+    if len(set(display_pairs)) != len(display_pairs):
+        raise ValidationError("comparison_pairs must not contain duplicates.")
+    adjacent_anchor_edges_by_pair = {}
+    for query, subject in display_pairs:
+        table = anchor_edge_tables.get(tuple(sorted((query, subject))), _empty_comparison_hits())
+        if query > subject:
+            table = pd.DataFrame.from_records(
+                [_comparison_record_for_ids(row, str(row.subject), str(row.query))
+                 for row in table.itertuples(index=False)],
+                columns=COMPARISON_COLUMNS,
             )
-        )
-        for query_index in range(max(0, int(record_count) - 1))
+        adjacent_anchor_edges_by_pair[(query, subject)] = _comparison_columns_only(table)
+    adjacent_candidate_edges_by_pair = {
+        pair: _comparison_columns_only(directional_hits_by_pair.get(pair, _empty_comparison_hits()))
+        for pair in display_pairs
     }
-    for query_index in range(max(0, int(record_count) - 1)):
-        adjacent_anchor_edges_by_pair.setdefault(
-            (query_index, query_index + 1),
-            _empty_comparison_hits(),
-        )
 
     orthogroups = _build_anchor_core_orthogroups(
         best_by_direction,
@@ -5634,7 +5641,6 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
     adjacent_display_edges_by_pair = _build_adjacent_display_edges_by_pair(
         adjacent_anchor_edges_by_pair,
         orthogroups,
-        record_count=int(record_count),
         max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
         adjacent_candidate_edges_by_pair=adjacent_candidate_edges_by_pair,
     )
@@ -6315,7 +6321,6 @@ def _build_adjacent_display_edges_by_pair(
     adjacent_anchor_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     orthogroups: OrthogroupResult,
     *,
-    record_count: int,
     max_display_edges_per_orthogroup: int,
     adjacent_candidate_edges_by_pair: Mapping[tuple[int, int], DataFrame] | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
@@ -6329,11 +6334,6 @@ def _build_adjacent_display_edges_by_pair(
         (int(pair[0]), int(pair[1])): _orthogroup_display_table(table, orthogroups)
         for pair, table in adjacent_anchor_edges_by_pair.items()
     }
-    for query_index in range(max(0, int(record_count) - 1)):
-        display_edges_by_pair.setdefault(
-            (query_index, query_index + 1),
-            _empty_comparison_hits(),
-        )
 
     all_secondary_edges_by_group = {
         orthogroup_id: tuple(
@@ -6506,8 +6506,13 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     orthogroup_membership_mode: OrthogroupMembershipMode | str = ORTHOGROUP_INFERENCE_VERSION,
     orthogroup_member_max_hits: int = 5,
     max_related_edges_per_orthogroup: int = 2,
+    comparison_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> OrthogroupEdgeSelectionResult:
-    """Select anchor-core orthogroups and their adjacent display edges."""
+    """Infer groups from all evidence and project links onto requested display pairs.
+
+    Omitted comparison_pairs preserves consecutive-record display. An empty
+    sequence produces membership without display links.
+    """
 
     normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     _validate_max_hits(
@@ -6527,6 +6532,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         record_count=record_count,
         include_singletons=include_singletons,
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+        comparison_pairs=comparison_pairs,
     )
 
 

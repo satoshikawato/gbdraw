@@ -51,6 +51,7 @@ export const createLinearRecordSelector = ({
   state,
   reactive,
   recordReader,
+  onRecordsDiscovered = null,
   logger = console
 }) => {
   const selectorStateByUid = reactive({});
@@ -167,6 +168,7 @@ export const createLinearRecordSelector = ({
         replaceState(uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
+        if (onRecordsDiscovered?.({ uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
         logger.warn?.(`Failed to read records for ${uid}:`, error);
@@ -188,7 +190,9 @@ export const createLinearRecordSelector = ({
       return activeRefresh.promise;
     }
     const entry = { fingerprint, promise: null };
-    entry.promise = runRefresh(options).finally(() => {
+    entry.promise = runRefresh(options).then((expanded) => {
+      if (expanded) return refresh(options);
+    }).finally(() => {
       if (activeRefresh === entry) activeRefresh = null;
     });
     activeRefresh = entry;

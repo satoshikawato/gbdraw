@@ -467,7 +467,9 @@ const createResourceBuilder = () => {
     const encodedEntry = adoptedSource?.descriptor || entry;
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
-    const existingResourceId = kindResourceIds.get(entry);
+    const owner = getResourcePayloadOwner(entry);
+    const identity = getSessionResourceSource(owner)?.descriptor || owner;
+    const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
     const descriptor = {
       kind: effectiveKind,
@@ -485,7 +487,7 @@ const createResourceBuilder = () => {
       descriptor,
       getResourcePayloadOwner(entry)
     );
-    kindResourceIds.set(entry, resourceId);
+    kindResourceIds.set(identity, resourceId);
     fileResourceIds.set(effectiveKind, kindResourceIds);
     const originalName = normalizeOriginalResourceName(entry.name);
     if (originalName) resourceOriginalNames[resourceId] = originalName;

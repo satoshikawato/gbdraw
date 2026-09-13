@@ -343,7 +343,6 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   });
 
   const [uidA, uidB, uidC, uidD] = setup.uids;
-  const zippedEdgeKeys = [`${uidA}->${uidC}`, `${uidB}->${uidD}`];
   const crossProductEdgeKeys = [
     `${uidA}->${uidC}`, `${uidA}->${uidD}`,
     `${uidB}->${uidC}`, `${uidB}->${uidD}`
@@ -364,7 +363,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   })).toHaveCount(4);
   await expect(page.locator('[data-linear-display-row]')).toHaveCount(2);
   await expect(page.locator('[data-linear-comparison-boundary]')).toHaveCount(1);
-  await expectExactEdgeKeys(boundary, zippedEdgeKeys);
+  await expectExactEdgeKeys(boundary, crossProductEdgeKeys);
 
   await openLinearSelectedPairs(page);
   const editedPair = linearComparisonPair(page, `${uidA}->${uidC}`);
@@ -381,6 +380,8 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
   expect(materialized.mode).toBe('selected');
   expect(Object.fromEntries(materialized.edges)).toEqual({
     [`${uidA}->${uidC}`]: 'upload',
+    [`${uidA}->${uidD}`]: 'losat',
+    [`${uidB}->${uidC}`]: 'losat',
     [`${uidB}->${uidD}`]: 'losat'
   });
 
@@ -986,8 +987,9 @@ test('Automatic Linear renders every record from one GenBank source and survives
     window.__GBDRAW_APP__.linearRecordOptions(window.__GBDRAW_APP__.linearSeqs[0]).length
   ))).toBe(3);
   await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
-  await page.getByLabel('Arrange linear records in rows').check();
-  await page.getByLabel('Linear record row for sequence 1').fill('1');
+  await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
+    .toEqual([1, 1]);
   await page.getByRole('button', { name: 'Set no comparison' }).click();
 
   await page.evaluate(() => {
@@ -1027,13 +1029,13 @@ test('Automatic Linear renders every record from one GenBank source and survives
     result: { status: 'ok' },
     error: null,
     sourceReads: 1,
-    cardCount: 1,
-    selector: '',
+    cardCount: 2,
+    selector: 'AutomaticA',
     grouping: 'single',
     schema: 7,
-    cardinalities: ['all'],
-    rows: [1],
-    selectors: [null],
+    cardinalities: ['exactly_one', 'exactly_one'],
+    rows: [1, 1],
+    selectors: [{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }],
     sharedResourceCount: 1
   });
 
@@ -1042,11 +1044,11 @@ test('Automatic Linear renders every record from one GenBank source and survives
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
-  expect(session.webFiles.bindings.linearSeqs).toHaveLength(1);
-  expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('');
-  expect(session.renderRequest.records.map((record) => record.cardinality)).toEqual(['all']);
-  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([null]);
-  expect(session.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1]);
+  expect(session.webFiles.bindings.linearSeqs).toHaveLength(2);
+  expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('AutomaticA');
+  expect(session.renderRequest.records.map((record) => record.cardinality)).toEqual(['exactly_one', 'exactly_one']);
+  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }]);
+  expect(session.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
   expect(new Set(
     session.renderRequest.records.map((record) => record.source.resourceId)
   ).size).toBe(1);
@@ -1106,18 +1108,18 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
   expect(restored).toEqual({
     error: null,
-    cardCount: 1,
-    selector: '',
+    cardCount: 2,
+    selector: 'AutomaticA',
     optionCount: 3,
     layoutEnabled: true,
-    layoutRows: [1],
-    cardinalities: ['all'],
-    selectors: [null],
+    layoutRows: [1, 1],
+    cardinalities: ['exactly_one', 'exactly_one'],
+    selectors: [{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }],
     sharedResource: 1
   });
 });
 
-test('Automatic Linear source-card rows survive fresh Load with contiguous biological columns', async ({ page, browser }) => {
+test('Automatic Linear per-record rows survive fresh Load with contiguous biological columns', async ({ page, browser }) => {
   test.setTimeout(420000);
   const browserErrors = [];
   page.on('console', (message) => {
@@ -1142,7 +1144,7 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
   ];
   const chooseSource = async (index) => {
     const chooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index).click();
+    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index === 0 ? 0 : 2).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({
       name: sources[index].name,
@@ -1151,25 +1153,28 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
     });
   };
   await chooseSource(0);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
   await page.getByRole('button', { name: 'Add sequence' }).first().click();
   await chooseSource(1);
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearSeqs.map((sequence) => (
       window.__GBDRAW_APP__.linearRecordOptions(sequence).length
     ))
-  ))).toEqual([3, 3]);
+  ))).toEqual([3, 3, 3, 3]);
 
   await page.getByRole('button', { name: 'Advanced comparison and layout' }).press('Enter');
   await page.getByLabel('Arrange linear records in rows').check();
   await page.getByLabel('Linear record row for sequence 1').fill('1');
-  await page.getByLabel('Linear record row for sequence 2').fill('2');
+  await page.getByLabel('Linear record row for sequence 2').fill('1');
+  await page.getByLabel('Linear record row for sequence 3').fill('2');
+  await page.getByLabel('Linear record row for sequence 4').fill('2');
   await page.getByRole('button', { name: 'Set no comparison' }).click();
   const rowControls = page.getByRole('spinbutton', {
     name: /^Linear record row for sequence \d+$/
   });
   await expect.poll(() => rowControls.evaluateAll((elements) => (
     elements.map((element) => element.value)
-  ))).toEqual(['1', '2']);
+  ))).toEqual(['1', '1', '2', '2']);
 
   await page.getByRole('button', { name: 'Generate Diagram' }).click();
   await expect.poll(() => page.evaluate(() => ({
@@ -1201,7 +1206,7 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
       requestRows: request.records.map((record) => record.presentation.gridRow),
       sourceCount: new Set(request.records.map((record) => record.source.resourceId)).size,
       placements,
-      expectedKeys: recordKeys.flatMap((key) => [`${key}:1`, `${key}:2`])
+      expectedKeys: recordKeys
     };
   });
   const expectedPlacement = (keys) => [
@@ -1214,12 +1219,12 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
   expect(generated).toMatchObject({
     error: null,
     processing: false,
-    cardCount: 2,
-    selectors: ['', ''],
-    layoutRows: [1, 2],
-    requestRecordCount: 2,
-    cardinalities: ['all', 'all'],
-    requestRows: [1, 2],
+    cardCount: 4,
+    selectors: ['CardA1', 'CardA2', 'CardB1', 'CardB2'],
+    layoutRows: [1, 1, 2, 2],
+    requestRecordCount: 4,
+    cardinalities: ['exactly_one', 'exactly_one', 'exactly_one', 'exactly_one'],
+    requestRows: [1, 1, 2, 2],
     sourceCount: 2
   });
   expect(generated.placements).toEqual(expectedPlacement(generated.expectedKeys));
@@ -1248,7 +1253,7 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
   expect(dialog.message()).toBe('Session loaded successfully!');
   await dialog.accept();
 
-  await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(2);
+  await expect(restoredPage.locator('[data-linear-record-card]')).toHaveCount(4);
   await restoredPage.getByRole('button', {
     name: 'Advanced comparison and layout'
   }).press('Enter');
@@ -1257,7 +1262,7 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
   });
   await expect.poll(() => restoredRows.evaluateAll((elements) => (
     elements.map((element) => element.value)
-  ))).toEqual(['1', '2']);
+  ))).toEqual(['1', '1', '2', '2']);
   await restoredPage.getByRole('button', { name: 'Generate Diagram' }).click();
   await expect.poll(() => restoredPage.evaluate(() => ({
     processing: window.__GBDRAW_APP__.processing,
@@ -1269,12 +1274,12 @@ test('Automatic Linear source-card rows survive fresh Load with contiguous biolo
   expect(restored).toMatchObject({
     error: null,
     processing: false,
-    cardCount: 2,
-    selectors: ['', ''],
-    layoutRows: [1, 2],
-    requestRecordCount: 2,
-    cardinalities: ['all', 'all'],
-    requestRows: [1, 2],
+    cardCount: 4,
+    selectors: ['CardA1', 'CardA2', 'CardB1', 'CardB2'],
+    layoutRows: [1, 1, 2, 2],
+    requestRecordCount: 4,
+    cardinalities: ['exactly_one', 'exactly_one', 'exactly_one', 'exactly_one'],
+    requestRows: [1, 1, 2, 2],
     sourceCount: 2
   });
   expect(restored.placements).toEqual(expectedPlacement(restored.expectedKeys));
@@ -1317,6 +1322,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     app.lInputType = 'gb';
+    app.setLinearRecordLayoutEnabled(false);
     app.addLinearSeq();
     app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
@@ -2295,7 +2301,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
   ))).toBe('Repeat');
 });
 
-test('GFF annotation targets follow FASTA record order', async ({ page }) => {
+test('@pr-smoke GFF annotation targets follow FASTA record order', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
   const gff = `##gff-version 3
@@ -2325,6 +2331,14 @@ AAAAAAAAAA
     app.addCoordinateAnnotation(set, { start: 1, end: 3 });
   }, { gffText: gff, fastaText: fasta });
 
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.refreshLinearRecordSelectors();
+    await app.setLinearRecordLayoutEnabled(true);
+    await app.setLinearComparisonGlobalAction('losat');
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual(['RecB', 'RecA']);
   await page.getByText('Region Annotations', { exact: false }).click();
   await expect(page.getByLabel('Annotation target record').locator('option')).toHaveText([
     'Select target record',
@@ -2534,4 +2548,227 @@ test('derived protein options reach Generate without changing raw search identit
     committedResultPreserved: true
   });
   expect(rejected.errorSummary).toMatch(/Pairwise max hits/i);
+});
+
+// OIC-015: observe the jobs submitted to LOSAT and the resulting typed render,
+// so a file-card count or an All label cannot stand in for record coverage.
+const installCompleteRecordComparisonExecutor = async (page) => {
+  await installDiagramRequestObserver(page);
+  await page.addInitScript(() => {
+    window.__GBDRAW_COMPLETE_RECORD_JOBS__ = [];
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      window.__GBDRAW_COMPLETE_RECORD_JOBS__.push(jobs.map((job) => [
+        job.queryIndex, job.subjectIndex
+      ]));
+      const ids = (key) => [...options.sequences.get(key).matchAll(/^>([^\s]+)/gm)]
+        .map((match) => match[1]);
+      return jobs.map((job) => ({
+        cacheKey: job.cacheKey,
+        text: ids(job.querySequenceKey).flatMap((query) => ids(job.subjectSequenceKey)
+          .map((subject) => [query, subject, 99, 10, 0, 0, 1, 10, 1, 10, '1e-30', 150]
+            .join('\t'))).join('\n') + '\n'
+      }));
+    };
+  });
+};
+
+const uploadCompleteRecordSources = async (page) => {
+  const contents = ['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC']
+    .map((id) => makeDerivedOptionGenbank(id));
+  await page.evaluate(async (contents) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    const upload = async (index, chunks, name) => {
+      app.setLinearSeqPrimaryFile(index, 'gb', new File(chunks, name, {
+        type: 'text/plain', lastModified: 1
+      }));
+      await app.refreshLinearRecordSelectors();
+    };
+    await upload(0, contents.slice(0, 2), 'upper.gbff');
+    app.addLinearSeq();
+    await upload(app.linearSeqs.length - 1, contents.slice(2), 'lower.gbff');
+    Object.assign(app.form, {
+      show_gc: false, show_skew: false, show_depth: false,
+      show_labels_linear: 'none', legend: 'bottom'
+    });
+    Object.assign(app.adv, { min_bitscore: 0, evalue: 1, identity: 0, alignment_length: 0 });
+    app.losat.executionMode = 'serial';
+    await app.setLinearRecordLayoutEnabled(true);
+    app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index < 2 ? 1 : 2));
+    await app.setLinearComparisonGlobalAction('losat');
+  }, contents);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual([
+    'UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC'
+  ]);
+};
+
+const completeComparisonSnapshot = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+  const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+  const pairKeys = [...svg.querySelectorAll('[data-pairwise-match-style]')].map((node) => [
+    Number(node.getAttribute('data-query-record-index')),
+    Number(node.getAttribute('data-subject-record-index'))
+  ].join('->'));
+  return {
+    error: app.errorLog,
+    selectors: request.records.map((record) => record.selector.value),
+    rows: request.records.map((record) => record.presentation.gridRow),
+    pairs: request.comparisons.filter((comparison) => comparison.kind === 'nucleotideBlast')
+      .map((comparison) => [comparison.queryRecordIndex, comparison.subjectRecordIndex]),
+    svgPairs: [...new Set(pairKeys)].sort(),
+    sourceCount: new Set(request.records.map((record) => record.source.resourceId)).size,
+    jobs: window.__GBDRAW_COMPLETE_RECORD_JOBS__
+  };
+});
+
+test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preserves independent rows through Save and Load', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await page.context().route('**/*', (route) => (
+    new URL(route.request().url()).hostname === '127.0.0.1'
+      ? route.continue() : route.abort()
+  ));
+  await installCompleteRecordComparisonExecutor(page);
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
+  await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
+  const controls = page.getByRole('spinbutton', { name: /^Linear record row for sequence \d+$/ });
+  await expect(controls).toHaveCount(5);
+  const expectedPairs = [[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]];
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const generated = await completeComparisonSnapshot(page);
+  expect(generated).toMatchObject({
+    error: null,
+    selectors: ['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC'],
+    rows: [1, 1, 2, 2, 2], pairs: expectedPairs,
+    svgPairs: expectedPairs.map((pair) => pair.join('->')).sort(),
+    sourceCount: 2, jobs: [expectedPairs]
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await completeComparisonSnapshot(page)).jobs).toEqual([expectedPairs]);
+
+  // A single placement edit must target a biological record, not its whole file.
+  await controls.nth(4).fill('3');
+  const saved = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'complete-record-comparison';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await saved).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows
+    .map((entry) => entry.row))).toEqual([1, 1, 2, 2, 3]);
+  await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
+  await expect(controls).toHaveCount(5);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const restored = await completeComparisonSnapshot(page);
+  expect(restored.rows).toEqual([1, 1, 2, 2, 3]);
+  expect(restored.pairs).toEqual([[0, 2], [0, 3], [1, 2], [1, 3], [2, 4], [3, 4]]);
+  expect(restored.error).toBeNull();
+  expect(restored.sourceCount).toBe(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await controls.last().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('per-record-layout-mobile.png') });
+});
+
+for (const mode of ['orthogroup', 'collinear']) {
+  test(`@pr-smoke OIC-015: ${mode} all-record evidence includes same-row and non-adjacent records`, async ({ page }) => {
+    test.setTimeout(300000);
+    await installCompleteRecordComparisonExecutor(page);
+    await openApp(page);
+    await uploadCompleteRecordSources(page);
+    await page.evaluate((mode) => {
+      const app = window.__GBDRAW_APP__;
+      app.setLinearComparisonLosatMode('blastp');
+      app.setLinearComparisonLosatpMode(mode);
+      app.losat.blastp.collinearSearchScope = 'all';
+      app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid,
+        index < 2 ? 1 : index === 2 ? 2 : 3));
+    }, mode);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const snapshot = await completeComparisonSnapshot(page);
+    expect(snapshot.selectors).toHaveLength(5);
+    const pairs = snapshot.jobs.flat().map((pair) => pair.join('->')).sort();
+    const allPairs = Array.from({ length: 5 }, (_, q) => Array.from({ length: 5 }, (_, s) => `${q}->${s}`)).flat().sort();
+    expect(pairs).toEqual(allPairs);
+    expect(snapshot.sourceCount).toBe(2);
+    expect(snapshot.error).toBeNull();
+    if (mode === 'orthogroup') {
+      expect(snapshot.svgPairs).toEqual(['0->2', '1->2', '2->3', '2->4']);
+    }
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index < 2 ? 2 : 1));
+    });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    if (mode === 'orthogroup') {
+      expect((await completeComparisonSnapshot(page)).svgPairs).toEqual([
+        '2->0', '2->1', '3->0', '3->1', '4->0', '4->1'
+      ]);
+    }
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.linearSeqs.forEach((seq) => app.setLinearRecordRow(seq.uid, 1));
+    });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const oneRow = await completeComparisonSnapshot(page);
+    expect(oneRow.rows).toEqual([1, 1, 1, 1, 1]);
+    expect(oneRow.svgPairs).toEqual([]);
+    expect(oneRow.jobs.flat().map((pair) => pair.join('->')).sort()).toEqual(allPairs);
+  });
+}
+
+test('@pr-smoke multi-record defaults render a shared Circular canvas and preserve saved opt-outs', async ({ page }) => {
+  test.setTimeout(300000);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  expect(await page.evaluate(() => ({
+    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
+    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
+  }))).toEqual({ circular: true, linear: true });
+  await page.evaluate((content) => {
+    const app = window.__GBDRAW_APP__;
+    app.files.c_gb = new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 });
+    Object.assign(app.form, { suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
+  }, makeComparisonGenbank('CircularA') + makeComparisonGenbank('CircularB'));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => ({
+    grouping: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).grouping,
+    count: window.__GBDRAW_APP__.results.length,
+    both: ['CircularA', 'CircularB'].every((id) => window.__GBDRAW_APP__.results[0].content.includes(id))
+  }))).toEqual({ grouping: 'grid', count: 1, both: true });
+  await uploadCompleteRecordSources(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
+    .toEqual([1, 1, 2, 2, 2]);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.multi_record_canvas = false;
+    await app.setLinearRecordLayoutEnabled(false);
+    app.sessionTitle = 'explicit-layout-opt-outs';
+  });
+  const saved = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const savedPath = await (await saved).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  const loaded = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await (await loaded).accept();
+  expect(await page.evaluate(() => ({
+    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
+    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
+  }))).toEqual({ circular: false, linear: false });
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
+  expect(await page.evaluate(() => ({
+    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
+    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
+  }))).toEqual({ circular: true, linear: true });
 });
