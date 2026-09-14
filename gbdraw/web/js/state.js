@@ -17,6 +17,7 @@ import {
   resolveLinearComparisonPlan
 } from './app/linear-comparisons.js';
 import { createModeProfileStateManager } from './mode-profiles.js';
+import { WEB_UX_PROFILE } from './web-ux-profile.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
@@ -160,7 +161,7 @@ export const collapseEmptyLinearSeqList = (items) => {
 };
 
 const linearSeqs = reactive(normalizeLinearSeqList([]));
-const linearRecordLayoutEnabled = ref(false);
+const linearRecordLayoutEnabled = ref(WEB_UX_PROFILE.linear.arrangeInRowsByDefault);
 const linearRecordGap = ref(24);
 const linearRecordRows = reactive([]);
 const linearComparisonPlan = reactive(createDefaultLinearComparisonPlan());

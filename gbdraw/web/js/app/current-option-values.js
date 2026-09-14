@@ -98,7 +98,7 @@ export const requireCurrentProteinBlastpMaxHits = (value) => (
 );
 
 export const requireCurrentOrthogroupMemberMaxHits = (value) => (
-  requireCurrentInteger(value, 5, 1, 'Protein BLASTP member hits per protein')
+  requireCurrentInteger(value, null, 1, 'Protein BLASTP member hits per protein')
 );
 
 export const requireCurrentCollinearMinAnchors = (value) => (

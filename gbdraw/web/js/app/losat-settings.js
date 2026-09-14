@@ -1,14 +1,8 @@
 import { normalizeCollinearSearchScope } from './losat-normalization.js';
+import { groupLinearSourceRecords } from './linear-sources.js';
+import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 
 const { computed, ref, watch, onMounted } = window.Vue;
-
-const DEFAULT_LOSAT_PAIR_WORKER_AUTO_LIMIT = 4;
-
-const getBrowserHardwareThreads = () =>
-  Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
-
-const getSafeLosatThreadBudget = (hardwareThreads) =>
-  Math.max(1, Math.floor(hardwareThreads / 2));
 
 const parsePositiveInteger = (value) => {
   const parsed = Number(value);
@@ -24,12 +18,12 @@ const createPositiveIntegerOptions = (maxValue) =>
     };
   });
 
-const appendRequestedIntegerOption = (options, requestedValue) => {
+const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) => {
   const requested = parsePositiveInteger(requestedValue);
   if (requested === null) return options;
   const requestedOption = {
     value: String(requested),
-    label: `${requested}`
+    label: requested === effectiveValue ? `${requested}` : `${requested} (${effectiveValue} effective)`
   };
   return options.some((option) => option.value === requestedOption.value)
     ? options
@@ -44,109 +38,81 @@ export const createLosatSettings = ({ state }) => {
     losatProgram
   } = state;
 
-  const losatHardwareThreads = ref(getBrowserHardwareThreads());
+  const losatHardwareThreads = ref(getLosatHardwareThreads());
   onMounted(() => {
-    losatHardwareThreads.value = getBrowserHardwareThreads();
+    losatHardwareThreads.value = getLosatHardwareThreads();
   });
 
-  const losatThreadsPerJobFixed = computed(() => losatProgram.value !== 'blastp');
+  const losatThreadsPerJobFixed = computed(() => losatProgram.value !== 'blastp' || losat.executionMode === 'serial');
 
   const losatEstimatedJobCount = computed(() => {
     const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
-    const losatEdgeCount = (Array.isArray(resolution.edges) ? resolution.edges : [])
-      .filter((edge) => edge?.source === 'losat').length;
-    if (losatEdgeCount === 0) return 0;
-    const recordCount = Math.max(0, Array.isArray(linearSeqs) ? linearSeqs.length : 0);
-    if (recordCount < 2) return 0;
-    if (losatProgram.value !== 'blastp') return losatEdgeCount;
-
+    const sources = new Map();
+    groupLinearSourceRecords(linearSeqs).forEach((group) => {
+      group.records.forEach(({ index }) => sources.set(index, group.uid));
+    });
+    const jobs = new Set();
+    const addPair = (query, subject) => jobs.add(JSON.stringify([
+      sources.get(query), sources.get(subject),
+      ...(losatProgram.value === 'tblastx'
+        ? [linearSeqs[query]?.losat_gencode, linearSeqs[subject]?.losat_gencode] : [])
+    ]));
+    const edges = (resolution.edges || []).filter((edge) => edge.source === 'losat');
+    edges.forEach((edge) => addPair(edge.queryIndex, edge.subjectIndex));
     const blastpMode = String(losat.blastp?.mode || 'orthogroup').trim().toLowerCase();
-    const expandsAllRecords = resolution.mode === 'adjacent' && resolution.defaultSource === 'losat';
-    if (expandsAllRecords && blastpMode === 'orthogroup') return recordCount * recordCount;
-    if (expandsAllRecords && blastpMode === 'collinear') {
-      const scope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
-      const pairCount = scope === 'all'
-        ? Math.floor((recordCount * (recordCount - 1)) / 2)
-        : recordCount - 1;
-      return Math.max(1, recordCount + pairCount * 2);
+    if (losatProgram.value === 'blastp' && ['orthogroup', 'collinear'].includes(blastpMode)
+      && resolution.mode === 'adjacent' && resolution.defaultSource === 'losat') {
+      linearSeqs.forEach((_, index) => addPair(index, index));
+      if (blastpMode === 'orthogroup'
+        || normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope) === 'all') {
+        const representatives = [...new Set(sources.values())].map((uid) =>
+          [...sources].find(([, sourceUid]) => sourceUid === uid)[0]);
+        representatives.forEach((query) => representatives.forEach((subject) => addPair(query, subject)));
+      } else {
+        edges.forEach((edge) => addPair(edge.subjectIndex, edge.queryIndex));
+      }
     }
-    return losatEdgeCount;
+    return jobs.size;
   });
 
+  const losatThreadPlan = computed(() => resolveLosatThreadPlan({
+    hardwareThreads: losatHardwareThreads.value,
+    jobCount: losatEstimatedJobCount.value,
+    totalThreadBudget: losat.totalThreadBudget,
+    threadsPerJob: losatThreadsPerJobFixed.value ? 1 : losat.threadsPerJob,
+    parallelWorkers: losat.parallelWorkers
+  }));
   const losatSafeThreadBudget = computed(() =>
-    getSafeLosatThreadBudget(losatHardwareThreads.value)
+    resolveLosatThreadPlan({ hardwareThreads: losatHardwareThreads.value }).totalBudget
   );
-
-  const losatTotalThreadBudget = computed(() => {
-    const raw = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
-    if (raw === 'available') return losatHardwareThreads.value;
-    const parsed = parsePositiveInteger(raw);
-    if (parsed !== null) return Math.min(parsed, losatHardwareThreads.value);
-    return losatSafeThreadBudget.value;
-  });
-
-  const losatTotalThreadBudgetOptions = computed(() => {
-    return createPositiveIntegerOptions(losatHardwareThreads.value);
-  });
-
-  const getLosatAutoThreadsPerJob = () => {
-    if (losatThreadsPerJobFixed.value) return 1;
-    if (losatEstimatedJobCount.value === 0) return 1;
-    const hardwareBudget = losatSafeThreadBudget.value;
-    if (losatEstimatedJobCount.value !== 1) return Math.max(1, Math.min(2, hardwareBudget));
-    return Math.max(1, hardwareBudget);
-  };
-
-  const losatEffectiveThreadsPerJob = computed(() => {
-    if (losatThreadsPerJobFixed.value) return 1;
-    const raw = String(losat.threadsPerJob || 'auto').trim().toLowerCase();
-    const requested = raw === 'auto'
-      ? getLosatAutoThreadsPerJob()
-      : parsePositiveInteger(raw) || getLosatAutoThreadsPerJob();
-    return Math.max(1, Math.min(requested, Math.max(1, losatTotalThreadBudget.value)));
-  });
+  const losatTotalThreadBudget = computed(() => losatThreadPlan.value.totalBudget);
+  const losatTotalThreadBudgetOptions = computed(() =>
+    createPositiveIntegerOptions(losatHardwareThreads.value)
+  );
+  const losatEffectiveThreadsPerJob = computed(() => losatThreadPlan.value.threadsPerJob);
 
   const losatThreadOptions = computed(() => {
     if (losatThreadsPerJobFixed.value) {
-      return [{ value: '1', label: 'Fixed (1)' }];
+      return appendRequestedIntegerOption([{ value: '1', label: 'Fixed (1)' }], losat.threadsPerJob, 1);
     }
     const maxThreads = Math.max(1, losatTotalThreadBudget.value);
     return appendRequestedIntegerOption(
       createPositiveIntegerOptions(maxThreads),
-      losat.threadsPerJob
+      losat.threadsPerJob,
+      losatEffectiveThreadsPerJob.value
     );
   });
 
-  const losatMaxPairWorkers = computed(() => {
-    if (losatEstimatedJobCount.value === 0) return 0;
-    const perJobSlots = losatEffectiveThreadsPerJob.value;
-    const budgetLimited = Math.max(1, Math.floor(losatTotalThreadBudget.value / perJobSlots));
-    return Math.max(1, Math.min(losatEstimatedJobCount.value, budgetLimited));
-  });
-
-  const losatAutoPairWorkers = computed(() => {
-    if (losatEstimatedJobCount.value === 0) return 0;
-    const budgetMode = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
-    if (!['safe', 'auto'].includes(budgetMode)) return losatMaxPairWorkers.value;
-    const hardwareLimit = Math.max(1, losatHardwareThreads.value);
-    const defaultConcurrency = Math.min(
-      losatEstimatedJobCount.value,
-      hardwareLimit,
-      DEFAULT_LOSAT_PAIR_WORKER_AUTO_LIMIT
-    );
-    return Math.max(1, Math.min(defaultConcurrency, losatMaxPairWorkers.value));
-  });
-
-  const losatPairWorkerOptions = computed(() => {
-    return Array.from({ length: losatMaxPairWorkers.value }, (_, index) => {
-      const value = index + 1;
-      return {
-        value: String(value),
-        label: `${value} ${value === 1 ? 'run' : 'runs'}`
-      };
-    });
-  });
+  const losatMaxPairWorkers = computed(() => losatThreadPlan.value.maxPairWorkers);
+  const losatAutoPairWorkers = computed(() => losatThreadPlan.value.autoPairWorkers);
+  const losatPairWorkerOptions = computed(() => losatEstimatedJobCount.value === 0 ? [] : appendRequestedIntegerOption(
+    createPositiveIntegerOptions(losatMaxPairWorkers.value).map((option) => ({
+      ...option, label: `${option.value} ${option.value === '1' ? 'run' : 'runs'}`
+    })),
+    losat.parallelWorkers,
+    losatThreadPlan.value.pairWorkers
+  ));
 
   const losatEffectiveExecutionMode = computed(() => {
     const raw = String(losat.executionMode || 'auto').trim().toLowerCase();
@@ -179,18 +145,6 @@ export const createLosatSettings = ({ state }) => {
       losat.totalThreadBudget = parsed !== null && parsed >= losatHardwareThreads.value
         ? 'available'
         : 'safe';
-    },
-    { immediate: true }
-  );
-
-  watch(
-    losatPairWorkerOptions,
-    (options) => {
-      if (!hasValidLosatIntent()) return;
-      if (losat.parallelWorkers === undefined || losat.parallelWorkers === null) return;
-      const values = options.map((option) => option.value);
-      if (values.includes(String(losat.parallelWorkers))) return;
-      losat.parallelWorkers = options[options.length - 1]?.value || undefined;
     },
     { immediate: true }
   );

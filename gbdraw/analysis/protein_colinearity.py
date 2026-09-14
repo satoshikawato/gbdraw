@@ -1401,14 +1401,16 @@ def build_protein_losat_cache_key(
     args: Sequence[str],
     program: str = "blastp",
     outfmt: str = "6",
+    search_context: str | None = None,
 ) -> str:
     """Return the Web-compatible directional schema-4 protein raw key."""
 
-    return _hash_text_sha256(
-        _web_json_dumps(
-            pair_identity.cache_payload(args=args, program=program, outfmt=outfmt)
-        )
-    )
+    payload = pair_identity.cache_payload(args=args, program=program, outfmt=outfmt)
+    if search_context is not None:
+        if not re.fullmatch(r"[0-9a-f]{64}", search_context):
+            raise ValidationError("LOSAT search context must be a SHA-256 digest")
+        payload["searchContext"] = search_context
+    return _hash_text_sha256(_web_json_dumps(payload))
 
 
 def parse_losat_fasta_ids(fasta_text: str) -> tuple[str, ...]:
@@ -1600,6 +1602,7 @@ def validate_protein_raw_entry_references(
             args=args,
             program=str(entry.get("program") or "blastp"),
             outfmt=str(entry.get("outfmt") or "6"),
+            search_context=entry.get("searchContext"),
         )
         if str(entry.get("key") or "") != expected_key:
             return False
@@ -2234,6 +2237,8 @@ class LosatpCacheManager:
                 "queryRecordInstanceKey": str(entry.get("queryRecordInstanceKey") or ""),
                 "subjectRecordInstanceKey": str(entry.get("subjectRecordInstanceKey") or ""),
             }
+            if "searchContext" in entry:
+                normalized["searchContext"] = entry["searchContext"]
             if self.identity_manifest is not None and not validate_protein_raw_entry_references(
                 normalized,
                 self.identity_manifest,
@@ -3357,10 +3362,13 @@ def select_top_hits_per_query(
 def _select_member_candidate_hits_per_query(
     hits: DataFrame,
     *,
-    max_hits: int,
+    max_hits: int | None,
 ) -> DataFrame:
     """Keep every HSP for the strongest distinct member candidates."""
 
+    if max_hits is None:
+        _validate_comparison_columns(hits)
+        return hits.copy().reset_index(drop=True)
     selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
     if selected_pairs.empty:
         return hits.iloc[0:0].copy()
@@ -5584,6 +5592,7 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
     record_count: int | None,
     include_singletons: bool,
     max_related_edges_per_orthogroup: int,
+    comparison_pairs: Sequence[tuple[int, int]] | None,
 ) -> OrthogroupEdgeSelectionResult:
     if int(max_related_edges_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
@@ -5604,25 +5613,31 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         pair: _comparison_columns_only(table)
         for pair, table in anchor_edge_tables.items()
     }
-    adjacent_anchor_edges_by_pair = {
-        pair: _comparison_columns_only(table)
-        for pair, table in anchor_edge_tables.items()
-        if int(pair[1]) == int(pair[0]) + 1
-    }
-    adjacent_candidate_edges_by_pair = {
-        (query_index, query_index + 1): _comparison_columns_only(
-            directional_hits_by_pair.get(
-                (query_index, query_index + 1),
-                _empty_comparison_hits(),
+    display_pairs = (
+        tuple(comparison_pairs) if comparison_pairs is not None else
+        tuple((index, index + 1) for index in range(max(0, int(record_count) - 1)))
+    )
+    if any(
+        not (0 <= query < int(record_count) and 0 <= subject < int(record_count))
+        or query == subject for query, subject in display_pairs
+    ):
+        raise ValidationError("comparison_pairs contains an invalid record-index pair.")
+    if len(set(display_pairs)) != len(display_pairs):
+        raise ValidationError("comparison_pairs must not contain duplicates.")
+    adjacent_anchor_edges_by_pair = {}
+    for query, subject in display_pairs:
+        table = anchor_edge_tables.get(tuple(sorted((query, subject))), _empty_comparison_hits())
+        if query > subject:
+            table = pd.DataFrame.from_records(
+                [_comparison_record_for_ids(row, str(row.subject), str(row.query))
+                 for row in table.itertuples(index=False)],
+                columns=COMPARISON_COLUMNS,
             )
-        )
-        for query_index in range(max(0, int(record_count) - 1))
+        adjacent_anchor_edges_by_pair[(query, subject)] = _comparison_columns_only(table)
+    adjacent_candidate_edges_by_pair = {
+        pair: _comparison_columns_only(directional_hits_by_pair.get(pair, _empty_comparison_hits()))
+        for pair in display_pairs
     }
-    for query_index in range(max(0, int(record_count) - 1)):
-        adjacent_anchor_edges_by_pair.setdefault(
-            (query_index, query_index + 1),
-            _empty_comparison_hits(),
-        )
 
     orthogroups = _build_anchor_core_orthogroups(
         best_by_direction,
@@ -5634,7 +5649,6 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
     adjacent_display_edges_by_pair = _build_adjacent_display_edges_by_pair(
         adjacent_anchor_edges_by_pair,
         orthogroups,
-        record_count=int(record_count),
         max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
         adjacent_candidate_edges_by_pair=adjacent_candidate_edges_by_pair,
     )
@@ -6315,7 +6329,6 @@ def _build_adjacent_display_edges_by_pair(
     adjacent_anchor_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     orthogroups: OrthogroupResult,
     *,
-    record_count: int,
     max_display_edges_per_orthogroup: int,
     adjacent_candidate_edges_by_pair: Mapping[tuple[int, int], DataFrame] | None = None,
 ) -> dict[tuple[int, int], DataFrame]:
@@ -6329,11 +6342,6 @@ def _build_adjacent_display_edges_by_pair(
         (int(pair[0]), int(pair[1])): _orthogroup_display_table(table, orthogroups)
         for pair, table in adjacent_anchor_edges_by_pair.items()
     }
-    for query_index in range(max(0, int(record_count) - 1)):
-        display_edges_by_pair.setdefault(
-            (query_index, query_index + 1),
-            _empty_comparison_hits(),
-        )
 
     all_secondary_edges_by_group = {
         orthogroup_id: tuple(
@@ -6504,20 +6512,26 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     record_count: int | None = None,
     include_singletons: bool = False,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = ORTHOGROUP_INFERENCE_VERSION,
-    orthogroup_member_max_hits: int = 5,
+    orthogroup_member_max_hits: int | None = None,
     max_related_edges_per_orthogroup: int = 2,
+    comparison_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> OrthogroupEdgeSelectionResult:
-    """Select anchor-core orthogroups and their adjacent display edges."""
+    """Infer groups from all evidence and project links onto requested display pairs.
+
+    Omitted comparison_pairs preserves consecutive-record display. An empty
+    sequence produces membership without display links.
+    """
 
     normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
-    _validate_max_hits(
-        orthogroup_member_max_hits,
-        option_name="orthogroup_member_max_hits",
-    )
+    if orthogroup_member_max_hits is not None:
+        _validate_max_hits(
+            orthogroup_member_max_hits,
+            option_name="orthogroup_member_max_hits",
+        )
     member_hits = {
         pair: _select_member_candidate_hits_per_query(
             hits,
-            max_hits=int(orthogroup_member_max_hits),
+            max_hits=orthogroup_member_max_hits,
         )
         for pair, hits in directional_hits_by_pair.items()
     }
@@ -6527,6 +6541,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         record_count=record_count,
         include_singletons=include_singletons,
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+        comparison_pairs=comparison_pairs,
     )
 
 
@@ -6615,7 +6630,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = ORTHOGROUP_INFERENCE_VERSION,
-    orthogroup_member_max_hits: int = 5,
+    orthogroup_member_max_hits: int | None = None,
     max_related_edges_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -6634,7 +6649,8 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     _validate_losatp_threads(losatp_threads)
     _validate_candidate_limit(candidate_limit)
     normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
-    _validate_max_hits(orthogroup_member_max_hits, option_name="orthogroup_member_max_hits")
+    if orthogroup_member_max_hits is not None:
+        _validate_max_hits(orthogroup_member_max_hits, option_name="orthogroup_member_max_hits")
     if int(max_related_edges_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     if int(alignment_length) < 0:

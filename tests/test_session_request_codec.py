@@ -803,14 +803,22 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     )
 
     assert isinstance(decoded, LinearDiagramRequest)
-    assert decoded.options.blast_files == (str(nucleotide),)
-    assert isinstance(decoded.options.protein_comparisons[0], pd.DataFrame)
+    assert decoded.options.blast_files is None
+    assert decoded.options.protein_comparisons is None
+    assert [(c.query_record_index, c.subject_record_index)
+            for c in decoded.options.linear_comparisons] == [(0, 1), (0, 1)]
+    pd.testing.assert_frame_equal(decoded.options.linear_comparisons[1].matches, protein_table)
     assert decoded.options.orthogroups == orthogroups
     assert decoded.options.collinearity_blocks == collinearity
     assert decoded.options.collinearity_params == request.options.collinearity_params
     assert decoded.options.output == request.options.output
     assert decoded.output.output_prefix == "canonical-linear"
-    assert encode_canonical_request(decoded).payload == encoded.payload
+    canonical = encode_canonical_request(decoded)
+    assert encode_canonical_request(decode_canonical_request(
+        canonical.payload,
+        resource_paths=_materialize_resources(canonical, tmp_path / "canonical"),
+        output_directory=tmp_path / "replay-again",
+    )).payload == canonical.payload
 
 
 @pytest.mark.parametrize("schema", (1, 2))

@@ -77,7 +77,7 @@ assert.equal(requireCurrentCollinearColorMode('identity'), 'average_identity');
 
 for (const [validator, defaultValue, minimum] of [
   [requireCurrentProteinBlastpMaxHits, 5, 1],
-  [requireCurrentOrthogroupMemberMaxHits, 5, 1],
+  [requireCurrentOrthogroupMemberMaxHits, null, 1],
   [requireCurrentCollinearMinAnchors, 1, 1],
   [requireCurrentCollinearMaxUnitGap, 0, 0],
   [requireCurrentCollinearMaxDiagonalDrift, 0, 0],
@@ -91,6 +91,7 @@ for (const [validator, defaultValue, minimum] of [
 }
 
 for (const omitted of [undefined, null, '']) {
+  assert.equal(requireCurrentOrthogroupMemberMaxHits(omitted), null);
   assert.equal(requireCurrentProteinBlastpCandidateLimit(omitted), null);
 }
 assert.equal(requireCurrentProteinBlastpCandidateLimit(7), 7);

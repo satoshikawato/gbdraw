@@ -502,3 +502,40 @@ def test_current_schema_preserves_record_keys_layout_and_explicit_endpoints(tmp_
     assert decoded.layout == request.layout
     assert decoded.options.linear_comparisons[0].query_record_index == 1
     assert decoded.options.linear_comparisons[0].subject_record_index == 2
+
+
+@pytest.mark.parametrize("kind", ["nucleotideBlast", "precomputedProteinComparison"])
+def test_adjacent_indices_keep_explicit_endpoints_in_multi_record_rows(tmp_path, kind) -> None:
+    from gbdraw.api.request_render import render_request
+
+    request = LinearDiagramRequest(
+        records=tuple(RecordInput(source=InMemoryRecordSource(r)) for r in _records()[:3]),
+        options=LinearDiagramOptions(linear_comparisons=(_comparison(0, 1),)),
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=("#1@1", "#2@2", "#3@2"),
+        ),
+    )
+    encoded = encode_canonical_request(request)
+    paths = {}
+    for resource in encoded.resources:
+        target = tmp_path / resource.name
+        target.write_bytes(resource.content)
+        paths[resource.resource_id] = target
+    comparison = encoded.payload["comparisons"][0]
+    if kind == "nucleotideBlast":
+        comparison["kind"] = kind
+        comparison.pop("encoding")
+        _comparison(0, 1).matches.to_csv(
+            paths[comparison["resourceId"]], sep="\t", header=False, index=False
+        )
+    decoded = decode_canonical_request(
+        encoded.payload, resource_paths=paths, output_directory=tmp_path / "out"
+    )
+    assert decoded.options.blast_files is None
+    assert decoded.options.protein_comparisons is None
+    assert [(c.query_record_index, c.subject_record_index)
+            for c in decoded.options.linear_comparisons] == [(0, 1)]
+    rendered = render_request(decoded)
+    svg = rendered.drawing.tostring()
+    assert 'data-query-record-index="0"' in svg
+    assert 'data-subject-record-index="1"' in svg

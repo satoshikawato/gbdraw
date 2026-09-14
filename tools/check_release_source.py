@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Admit only the exact version-tagged release source on main, before building."""
+"""Admit only a published release's exact version-tagged main source."""
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
@@ -16,11 +17,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def check_release_source() -> str:
     ref = os.environ["GITHUB_REF"]
     if (
-        os.environ["GITHUB_EVENT_NAME"] != "push"
+        os.environ["GITHUB_EVENT_NAME"] != "release"
         or os.environ["GITHUB_REF_TYPE"] != "tag"
         or not re.fullmatch(r"refs/tags/v\d+\.\d+\.\d+(?:rc\d+)?", ref)
     ):
-        raise ValueError("Release source requires a final or RC version tag push")
+        raise ValueError("Release source requires a published final or RC GitHub Release")
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    release = event.get("release") if isinstance(event, dict) else None
+    if (
+        not isinstance(release, dict)
+        or event.get("action") != "published"
+        or release.get("draft") is not False
+        or ref != f"refs/tags/{release.get('tag_name')}"
+    ):
+        raise ValueError("Published GitHub Release and tag ref must agree")
     version = run_path(str(REPO_ROOT / "gbdraw/_build_support.py"))["read_project_version"]()
     if ref != f"refs/tags/v{version}":
         raise ValueError("Release tag does not exactly match the project version")

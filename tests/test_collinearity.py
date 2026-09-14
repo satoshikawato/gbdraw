@@ -2120,7 +2120,7 @@ def test_linear_cli_forwards_collinearity_options(
     assert options.collinearity_anchor_mode == "rbh"
     assert options.collinearity_search_scope == "all"
     assert options.orthogroup_membership_mode == "anchor_core_v1"
-    assert options.orthogroup_member_max_hits == 5
+    assert options.orthogroup_member_max_hits is None
     assert options.collinear_max_paralog_links_per_orthogroup == 2
     assert options.protein_blastp_mode == "collinear"
     assert options.protein_comparisons is None
@@ -2427,7 +2427,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     assert result["provenance"]["upstreamRawKeys"] == ["pair-a-b", "pair-b-a"]
     assert result["provenance"]["orthogroup"] == {
         "membershipMode": "anchor_core_v1",
-        "memberMaxHits": 5,
+        "memberMaxHits": None,
     }
     assert result["provenance"]["collinear"]["unitMode"] == {
         "requested": "cds",

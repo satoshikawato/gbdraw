@@ -84,17 +84,16 @@ test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-
     settledRuns: 0
   });
 
-  await page.evaluate(async (genbankText) => {
-    const app = window.__GBDRAW_APP__;
-    app.mode = 'circular';
-    app.cInputType = 'gb';
-    app.files.c_gb = new File([genbankText], 'simple-worker-only.gbk', {
-      type: 'text/plain',
-      lastModified: 17
-    });
-    await window.Vue.nextTick();
-    await app.refreshCircularRecordOrder();
-  }, genbank);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true }).click();
+  await (await chooser).setFiles({
+    name: 'simple-worker-only.gbk',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(genbank)
+  });
+  await expect.poll(() => page.evaluate(
+    () => window.__GBDRAW_APP__.circularRecordList.length
+  )).toBe(1);
   expect(await page.evaluate(() => ({
     mainLoaderPresent: typeof window.loadPyodide === 'function',
     mainRuntimeStatePresent: Object.prototype.hasOwnProperty.call(

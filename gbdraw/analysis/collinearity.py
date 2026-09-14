@@ -1226,7 +1226,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
     edge_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int = 5,
+    orthogroup_member_max_hits: int | None = None,
     max_paralog_links_per_orthogroup: int = 2,
     comparison_pairs: Sequence[tuple[int, int]] | None = None,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
@@ -1243,8 +1243,8 @@ def build_orthogroup_collinearity_blocks_from_hits(
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
     normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
-    if int(orthogroup_member_max_hits) <= 0:
-        raise ValidationError("orthogroup_member_max_hits must be > 0")
+    if orthogroup_member_max_hits is not None and int(orthogroup_member_max_hits) <= 0:
+        raise ValidationError("orthogroup_member_max_hits must be > 0 or None")
     resolved_max_paralog_links = int(max_paralog_links_per_orthogroup)
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
@@ -1286,7 +1286,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
         extraction.protein_map,
         record_count=record_count,
         orthogroup_membership_mode=normalized_membership_mode,
-        orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+        orthogroup_member_max_hits=orthogroup_member_max_hits,
         max_related_edges_per_orthogroup=resolved_max_paralog_links,
     )
     orthogroups = edge_selection.orthogroups
@@ -1343,7 +1343,7 @@ def build_orthogroup_collinearity_blocks(
     losatp_threads: int | None = None,
     candidate_limit: int | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int = 5,
+    orthogroup_member_max_hits: int | None = None,
     max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -1370,8 +1370,8 @@ def build_orthogroup_collinearity_blocks(
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
     normalized_membership_mode = normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
-    if int(orthogroup_member_max_hits) <= 0:
-        raise ValidationError("orthogroup_member_max_hits must be > 0")
+    if orthogroup_member_max_hits is not None and int(orthogroup_member_max_hits) <= 0:
+        raise ValidationError("orthogroup_member_max_hits must be > 0 or None")
     resolved_max_paralog_links = int(max_paralog_links_per_orthogroup)
     if resolved_max_paralog_links <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
@@ -1468,7 +1468,7 @@ def build_orthogroup_collinearity_blocks(
         edge_mode=normalized_edge_mode,
         search_scope=normalized_search_scope,
         orthogroup_membership_mode=normalized_membership_mode,
-        orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+        orthogroup_member_max_hits=orthogroup_member_max_hits,
         max_paralog_links_per_orthogroup=resolved_max_paralog_links,
         comparison_pairs=comparison_pairs,
     )
@@ -1484,7 +1484,7 @@ def build_collinearity_blocks_from_hits(
     anchor_mode: CollinearityAnchorMode | str = "rbh",
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int = 5,
+    orthogroup_member_max_hits: int | None = None,
     max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:

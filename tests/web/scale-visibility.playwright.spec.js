@@ -23,7 +23,7 @@ const inspectResultSvg = async (page) => page.evaluate(() => {
   const recordGroups = [...svg.querySelectorAll('g[data-gbdraw-record-index]')]
     .filter((group) => String(group.id || '').startsWith('record_group_'));
   return {
-    axis: Boolean(svg.getElementById('Axis')),
+    axis: Boolean(svg.querySelector('[id="Axis"], [id^="Axis_"]')),
     ticks: Boolean(
       svg.getElementById('tick') ||
       svg.getElementById('ticks') ||

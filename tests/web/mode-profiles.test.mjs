@@ -70,11 +70,12 @@ assert.deepEqual(WEB_UX_PROFILE, {
   circular: {
     singleRecordGrouping: 'single',
     multiRecordGrouping: 'batch',
-    gridByDefault: false,
+    gridByDefault: true,
     legend: 'left',
     plotTitlePosition: 'none'
   },
   linear: {
+    arrangeInRowsByDefault: true,
     legend: 'bottom',
     plotTitlePosition: 'bottom'
   }
@@ -262,6 +263,9 @@ assert.equal(
 );
 assert.equal(Object.keys(state.form).includes('legend'), false);
 assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
+assert.equal(state.form.multi_record_canvas, true);
+assert.equal(state.linearRecordLayoutEnabled.value, true);
+state.form.multi_record_canvas = false;
 state.form.legend = 'right';
 state.adv.plot_title_position = 'top';
 assert.deepEqual(state.layoutPreferences.circular.single, {
@@ -415,6 +419,8 @@ assert.deepEqual(
   state.unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
   resetSettings(state);
+  assert.equal(state.form.multi_record_canvas, true);
+  assert.equal(state.linearRecordLayoutEnabled.value, true);
 
   const resetAdvDefaults = createDefaultAdv('linear');
   const resetProfiles = state.modeProfileStateManager.exportState();
@@ -623,9 +629,7 @@ for (const modeName of ['circular', 'linear']) {
   assert.equal(canonical.renderRequest.mode, modeName);
   assert.equal(
     canonical.renderRequest.grouping,
-    modeName === 'circular'
-      ? WEB_UX_PROFILE.circular.singleRecordGrouping
-      : 'single'
+    modeName === 'circular' ? 'grid' : 'single'
   );
   assert.deepEqual({
     evalue: options.evalue,

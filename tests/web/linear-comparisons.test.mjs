@@ -67,13 +67,21 @@ const twoRowCollinear = resolveLinearComparisonPlan({
 assert.deepEqual(twoRowCollinear.edges.map(({ edgeKey }) => edgeKey), [
   'a->c', 'a->d', 'b->c', 'b->d'
 ]);
-assert.deepEqual(resolveLinearComparisonPlan({
-  plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
-  sequences,
-  layout: twoRows,
-  losatProgram: 'blastp',
-  blastpMode: 'pairwise'
-}).edges.map(({ edgeKey }) => edgeKey), ['a->c', 'b->d']);
+for (const losatProgram of ['blastn', 'tblastx', 'blastp']) {
+  const resolution = resolveLinearComparisonPlan({
+    plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+    sequences: [...sequences, { uid: 'e' }],
+    layout: [...twoRows, { uid: 'e', row: 2 }],
+    losatProgram,
+    blastpMode: 'pairwise'
+  });
+  assert.deepEqual(resolution.edges.map(({ edgeKey }) => edgeKey), [
+    'a->c', 'a->d', 'a->e', 'b->c', 'b->d', 'b->e'
+  ]);
+  assert.equal(buildPairwiseLosatJobSpecs({
+    resolution, program: losatProgram, blastpMode: 'pairwise'
+  }).length, 6);
+}
 
 const retained = file('retained.tsv');
 const normalized = normalizeLinearComparisonPlan({
@@ -425,7 +433,9 @@ const zippedTimeline = buildLinearComparisonTimeline({
 });
 assert.equal(zippedTimeline.rows.length, 2);
 assert.deepEqual(zippedTimeline.rows[0].records.map((record) => record.uid), ['a', 'b']);
-assert.deepEqual(zippedTimeline.rows[0].boundaryAfter.pairs.map((pair) => pair.edgeKey), ['a->c', 'b->d']);
+assert.deepEqual(zippedTimeline.rows[0].boundaryAfter.pairs.map((pair) => pair.edgeKey), [
+  'a->c', 'b->d', 'a->d', 'b->c'
+]);
 
 const sparseTimeline = buildLinearComparisonTimeline({
   sequences,
@@ -443,7 +453,7 @@ assert.deepEqual(sparseTimeline.rows.map((row) => ({
   pairs: row.boundaryAfter?.pairs.map((pair) => pair.edgeKey) || []
 })), [
   { row: 2, lowerRow: 7, pairs: ['a->b'] },
-  { row: 7, lowerRow: 20, pairs: ['b->c'] },
+  { row: 7, lowerRow: 20, pairs: ['b->c', 'b->d'] },
   { row: 20, lowerRow: null, pairs: [] }
 ]);
 
@@ -621,3 +631,15 @@ assert.equal(oneRecordNoneTimeline.rows[0].boundaryAfter, null);
 assert.deepEqual(timelinePairs(oneRecordNoneTimeline), []);
 
 console.log('linear-comparisons tests passed');
+
+for (const blastpMode of ['orthogroup', 'collinear']) {
+  const oneRow = resolveLinearComparisonPlan({
+    plan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+    sequences,
+    layout: sequences.map(({ uid }) => ({ uid, row: 1 })),
+    losatProgram: 'blastp', blastpMode
+  });
+  assert.equal(oneRow.hasComparisonIntent, true);
+  assert.equal(oneRow.hasLosatIntent, true);
+  assert.deepEqual(oneRow.edges, []);
+}

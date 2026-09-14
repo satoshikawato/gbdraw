@@ -90,7 +90,7 @@ const catalogStatus = (issues, sources) => {
   return sources.some((source) => source?.status === 'loading') ? 'loading' : 'error';
 };
 
-const buildLinearCatalog = (sources, inputType, loadComparison) => {
+const buildLinearCatalog = (sources) => {
   const normalizedSources = Array.isArray(sources) ? sources : [];
   const records = [];
   const issues = [];
@@ -116,12 +116,7 @@ const buildLinearCatalog = (sources, inputType, loadComparison) => {
       issues.push(`${sourceLabel}: ${selected.error}.`);
       return;
     }
-    let materialized = selected.records;
-    if (!selected.explicit && loadComparison) {
-      const truncate = cleanText(inputType) === 'gff' || normalizedSources.length > 1;
-      if (truncate) materialized = materialized.slice(0, 1);
-    }
-    records.push(...materialized.map((record) => ({ ...record, sourceIndex })));
+    records.push(...selected.records.map((record) => ({ ...record, sourceIndex })));
   });
   const finalized = finalizeRecords(records);
   return {
@@ -166,6 +161,6 @@ export const buildAnnotationRecordCatalog = ({
   linearSources = []
 } = {}) => (
   cleanText(mode) === 'linear'
-    ? buildLinearCatalog(linearSources, inputType, Boolean(loadComparison))
+    ? buildLinearCatalog(linearSources)
     : buildCircularCatalog(circularSource, Boolean(multiRecordCanvas))
 );

@@ -270,12 +270,10 @@ export const resolveLinearComparisonPlan = ({
   if (normalized.mode === LINEAR_COMPARISON_MODES.SELECTED) {
     activeDrafts = normalized.edges.filter((edge) => edge.included === true);
   } else if (normalized.mode === LINEAR_COMPARISON_MODES.ADJACENT) {
-    const useAllAdjacentRowPairs = normalizedProgram === 'blastp'
-      && normalizedBlastpMode !== 'pairwise';
     activeDrafts = adjacentRowPairs(
       sequenceList,
       layout,
-      useAllAdjacentRowPairs
+      true
     ).map(([queryUid, subjectUid]) => {
       const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
       const draft = draftByEdgeKey.get(edgeKey);
@@ -322,7 +320,13 @@ export const resolveLinearComparisonPlan = ({
   }));
   const frozenIssues = Object.freeze(issues.map((issue) => Object.freeze(issue)));
   const frozenEdges = Object.freeze(edges);
-  const hasLosatIntent = edges.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  const hasAnalysisIntent = sequenceList.length > 1
+    && normalized.mode === LINEAR_COMPARISON_MODES.ADJACENT
+    && normalized.defaultSource === LINEAR_COMPARISON_SOURCES.LOSAT
+    && normalizedProgram === 'blastp'
+    && ['orthogroup', 'collinear'].includes(normalizedBlastpMode);
+  const hasLosatIntent = hasAnalysisIntent
+    || edges.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
   const hasUploadIntent = edges.some((edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD);
 
   return Object.freeze({
@@ -332,7 +336,7 @@ export const resolveLinearComparisonPlan = ({
     errors: frozenIssues,
     error: frozenIssues[0]?.message || '',
     valid: frozenIssues.length === 0,
-    hasComparisonIntent: edges.length > 0,
+    hasComparisonIntent: hasAnalysisIntent || edges.length > 0,
     hasLosatIntent,
     hasUploadIntent
   });
