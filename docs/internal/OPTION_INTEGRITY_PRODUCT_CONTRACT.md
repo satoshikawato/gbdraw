@@ -531,6 +531,9 @@ corrected. Passing evidence does not make incorrect behavior normative.
 - Must preserve: All seven outcomes above; `PD-OI-006` keeps the fresh Collinear
   scope `adjacent`, and `PD-OI-014` continues to govern evidence versus displayed
   links. A fresh no-comparison document does not gain comparison intent.
+  Comparison places Run LOSAT across the top, with No comparison on the left
+  and Upload BLAST TSV on the right of the row below. DOM and keyboard Tab
+  order follow that visual order on desktop and narrow screens.
   Existing LOSAT Execution, Total threads, Parallel runs, and Threads per run
   controls remain editable in Comparison Settings when LOSAT is active.
   Selecting Run LOSAT opens Settings immediately, exposing the mode and its
@@ -539,8 +542,9 @@ corrected. Passing evidence does not make incorrect behavior normative.
   Run LOSAT again reopens it without changing the chosen mode or thread values.
   Fresh and reset Web state defaults Execution to `threaded`. Explicit saved
   `auto`, `serial`, or `threaded` choices remain authoritative on Load.
-  These default/disclosure requirements were specified by the maintainer on
-  `2026-09-14`; the existing execution modes and their support checks remain.
+  The maintainer specified these command order, default, and disclosure
+  requirements on `2026-09-14`; the existing execution modes and their support
+  checks remain.
 - May retire: none.
 - Accepted residual risk: Increased computation time and memory from complete
   all-record comparisons. The maintainer explicitly accepted this cost as the
@@ -626,6 +630,9 @@ The normal automated PR gate must observe all of the following:
   reuses only semantically equivalent cached searches.
 - Every LOSAT mode exposes the existing execution and thread controls in
   Comparison Settings; mode switches and Session replay preserve their values.
+  Verify Run LOSAT occupies the full top row, with No comparison and Upload
+  BLAST TSV side by side below it. At desktop and narrow viewport widths,
+  DOM order and actual keyboard Tab traversal match that visual order.
   Pointer and keyboard activation of Run LOSAT open Settings without moving
   focus away from the command; reopening it requires no mode change. Fresh
   and reset Execution is `threaded`, and saved explicit execution modes survive
