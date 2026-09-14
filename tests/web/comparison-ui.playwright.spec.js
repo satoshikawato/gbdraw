@@ -119,7 +119,7 @@ const expectKeyboardFocusIndicator = async (locator) => {
   expect(indicator.outlineWidth).not.toBe('0px');
 };
 
-test('fresh Linear keeps primary input visible and uses command/status semantics', async ({ page }, testInfo) => {
+test('fresh Linear keeps primary input visible and uses command/status semantics', { tag: '@pr-smoke' }, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openLinear(page);
 
@@ -185,14 +185,16 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     const buttons = commands.getByRole('button');
-    const [run, none, upload] = await Promise.all(
-      [0, 1, 2].map((index) => buttons.nth(index).boundingBox())
-    );
-    expect(run.y + run.height).toBeLessThanOrEqual(none.y);
-    expect(none.y).toBeCloseTo(upload.y, 0);
-    expect(none.x + none.width).toBeLessThan(upload.x);
-    expect(run.x).toBeCloseTo(none.x, 0);
-    expect(run.x + run.width).toBeCloseTo(upload.x + upload.width, 0);
+    await expect(async () => {
+      const [run, none, upload] = await buttons.evaluateAll((elements) => (
+        elements.map((element) => element.getBoundingClientRect().toJSON())
+      ));
+      expect(run.y + run.height).toBeLessThanOrEqual(none.y);
+      expect(none.y).toBeCloseTo(upload.y, 0);
+      expect(none.x + none.width).toBeLessThan(upload.x);
+      expect(run.x).toBeCloseTo(none.x, 0);
+      expect(run.x + run.width).toBeCloseTo(upload.x + upload.width, 0);
+    }).toPass();
     await buttons.first().focus();
     for (const [index, name] of expectedNames.entries()) {
       if (index > 0) await page.keyboard.press('Tab');
@@ -202,7 +204,7 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   }
 });
 
-test('uploader, comparison commands, and native summaries work from the keyboard', async ({ page }) => {
+test('uploader, comparison commands, and native summaries work from the keyboard', { tag: '@pr-smoke' }, async ({ page }) => {
   await openLinear(page);
   await inputHeaderAdd(page).click();
 

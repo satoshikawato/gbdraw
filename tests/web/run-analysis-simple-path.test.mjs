@@ -1531,6 +1531,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
     }];
     committedRenderRequest = {
+      records: structuredClone(committedRenderRequest.records),
       diagramOptions: {
         bitscore: Number(state.adv.min_bitscore),
         evalue: Number(state.adv.evalue),

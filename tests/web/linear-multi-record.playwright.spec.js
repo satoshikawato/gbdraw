@@ -2303,7 +2303,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
   ))).toBe('Repeat');
 });
 
-test('@pr-smoke GFF annotation targets follow FASTA record order', async ({ page }) => {
+test('@comparison-contract GFF annotation targets follow FASTA record order', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
   const gff = `##gff-version 3
@@ -2630,7 +2630,7 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
   };
 });
 
-test('@pr-smoke real LOSAT Wasm searches two multi-record sources in one job offline', async ({ page }) => {
+test('@comparison-contract real LOSAT Wasm searches two multi-record sources in one job offline', async ({ page }) => {
   test.setTimeout(300000);
   await page.context().route('**/*', (route) => (
     new URL(route.request().url()).hostname === '127.0.0.1'
@@ -2664,7 +2664,7 @@ test('@pr-smoke real LOSAT Wasm searches two multi-record sources in one job off
   expect(snapshot.svgPairs).toEqual(pairs.map((pair) => pair.join('->')).sort());
 });
 
-test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preserves independent rows through Save and Load', async ({ page }, testInfo) => {
+test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs and preserves independent rows through Save and Load', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await page.context().route('**/*', (route) => (
     new URL(route.request().url()).hostname === '127.0.0.1'
@@ -2722,7 +2722,7 @@ test('@pr-smoke OIC-015: multi-record Adjacent searches all six pairs and preser
 });
 
 for (const mode of ['orthogroup', 'collinear']) {
-  test(`@pr-smoke OIC-015: ${mode} all-record evidence includes same-row and non-adjacent records`, async ({ page }) => {
+  test(`@comparison-contract OIC-015: ${mode} all-record evidence includes same-row and non-adjacent records`, async ({ page }) => {
     test.setTimeout(300000);
     await installCompleteRecordComparisonExecutor(page);
     await openApp(page);
@@ -2770,7 +2770,7 @@ for (const mode of ['orthogroup', 'collinear']) {
   });
 }
 
-test('@pr-smoke multi-record defaults render a shared Circular canvas and preserve saved opt-outs', async ({ page }) => {
+test('@comparison-contract multi-record defaults render a shared Circular canvas and preserve saved opt-outs', async ({ page }) => {
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
   await openApp(page);
@@ -2819,7 +2819,7 @@ test('@pr-smoke multi-record defaults render a shared Circular canvas and preser
   }))).toEqual({ circular: true, linear: true });
 });
 
-test('@pr-smoke one uploaded source stays one file card through record moves, replacement, and removal', async ({ page }, testInfo) => {
+test('@comparison-contract one uploaded source stays one file card through record moves, replacement, and removal', async ({ page }, testInfo) => {
   await openApp(page);
   await uploadCompleteRecordSources(page);
   const sources = page.locator('[data-linear-source-card]');
@@ -2881,7 +2881,7 @@ test('@pr-smoke one uploaded source stays one file card through record moves, re
     .toEqual([{ file: null, selector: '' }]);
 });
 
-test('@pr-smoke LOSAT Settings preserve execution controls and unbounded members through Save and Load', async ({ page }, testInfo) => {
+test('@comparison-contract LOSAT Settings preserve execution controls and unbounded members through Save and Load', async ({ page }, testInfo) => {
   await openApp(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
   await uploadCompleteRecordSources(page);
@@ -2932,7 +2932,7 @@ test('@pr-smoke LOSAT Settings preserve execution controls and unbounded members
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
 });
 
-test('@pr-smoke LOSATP source jobs are reused after display start, reverse complement, and fresh Load', async ({ page }) => {
+test('@comparison-contract LOSATP source jobs are reused after display start, reverse complement, and fresh Load', async ({ page }) => {
   test.setTimeout(300000);
   await installCompleteRecordComparisonExecutor(page);
   await openApp(page);

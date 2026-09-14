@@ -210,3 +210,23 @@ The retained JS contract command passed 390 tests. Python browser checks passed
 (session 40 versus candidate 41). Installing this checkout in an isolated venv
 made that test pass without source edits. All three retained package-build
 integration tests passed (29.68 seconds). Generated artifacts remain uncommitted.
+
+## Comparison contract routing follow-up (2026-09-14)
+
+PR #526 added nine comparison regression cases to `@pr-smoke`, expanding the
+collected smoke inventory to 19 and stopping the CI planner before it could
+select any required jobs. The 8–12 smoke budget remains in force.
+
+Those nine cases now use `@comparison-contract` and run through
+`npm run test:web:comparison-contracts` in the existing required
+`web-contracts-pr` job, through its non-slow Python browser suite and
+`test_linear_comparison_browser_contracts.py`. Python and Node Playwright use
+the same packaged Chromium revision. Their scenario bodies and assertions are unchanged,
+and the full functional suite still includes them. The existing smoke suite
+adds the short Comparison command-layout and keyboard checks, for 12 cases.
+The two PR jobs run in parallel and retain their 10-minute timeouts.
+
+The inventory test checks actual Playwright collection from the contract npm
+command, full-suite inclusion, absence of duplicate smoke execution, and the
+pytest entry point and mandatory workflow invocation. No regression moves
+exclusively to a later tier. The workflow and job-selection policy are unchanged.

@@ -6,6 +6,7 @@
   "scripts": {
     "test:playwright": "playwright test",
     "test:web:functional-full": "playwright test --config=playwright.functional.config.js",
+    "test:web:comparison-contracts": "playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0",
     "test:web:pr-smoke": "playwright test --config=playwright.pr-smoke.config.js",
     "test:web:functional-smoke": "npm run test:web:functional-full",
     "test:web:perf-smoke": "playwright test --config=playwright.perf.config.js",
