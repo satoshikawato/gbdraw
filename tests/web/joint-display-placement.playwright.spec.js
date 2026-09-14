@@ -23,6 +23,19 @@ const generateFromControl = async (page) => {
   }), { timeout: 180000 }).toMatchObject({ generation: before + 1, processing: false, error: '' });
 };
 
+const expandLinearRecordControls = async (page) => {
+  for (const disclosure of await page.locator('[data-linear-source-records]').all()) {
+    if (!await disclosure.evaluate((element) => element.open)) {
+      await disclosure.locator(':scope > summary').click();
+    }
+  }
+  for (const disclosure of await page.locator('[data-linear-record-options]').all()) {
+    if (!await disclosure.evaluate((element) => element.open)) {
+      await disclosure.locator(':scope > summary').click();
+    }
+  }
+};
+
 const svgStructure = (page, content) => page.evaluate((svg) => {
   const tree = new DOMParser().parseFromString(svg, 'image/svg+xml');
   const visit = (node) => node.nodeType === Node.ELEMENT_NODE
@@ -214,7 +227,7 @@ for (const mode of ['circular', 'linear']) {
       : page.getByLabel('GenBank/DDBJ File', { exact: true });
     const bytes = Buffer.from(source + source);
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: bytes });
-    if (mode === 'linear') await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
+    if (mode === 'linear') await expandLinearRecordControls(page);
     const first = page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true });
     const second = page.getByRole('spinbutton', { name: 'Display start shared #2', exact: true });
     await expect(second).toBeEnabled();
@@ -227,9 +240,11 @@ for (const mode of ['circular', 'linear']) {
     expect(new Set(committed.records.map((record) => record.source.resourceId)).size).toBe(1);
     if (mode === 'linear') expect(committed.records.map((record) => record.presentation.gridRow)).toEqual([1, 1]);
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from((source + source).replace('chosen protein', 'replacement protein')) });
+    if (mode === 'linear') await expandLinearRecordControls(page);
     await expect(first).toHaveValue('');
     await expect(second).toHaveValue('');
     await page.getByRole('button', { name: /^Undo/ }).first().click();
+    if (mode === 'linear') await expandLinearRecordControls(page);
     await expect(first).toHaveValue('71');
     await expect(second).toHaveValue('91');
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'Duplicate sources'; });
@@ -240,11 +255,7 @@ for (const mode of ['circular', 'linear']) {
     await saved.saveAs(savedPath);
     await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
-    if (mode === 'linear') {
-      for (const button of await page.getByRole('button', { name: /Record options for sequence/ }).all()) {
-        if (!await button.evaluate((element) => element.parentElement.open)) await button.click();
-      }
-    }
+    if (mode === 'linear') await expandLinearRecordControls(page);
     await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
     await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true }).first()).toHaveValue('71');
     await expect(page.getByRole('spinbutton', { name: 'Display start shared #2', exact: true }).last()).toHaveValue('91');
@@ -284,7 +295,8 @@ for (const mode of ['circular', 'linear']) {
     if (mode === 'circular') await page.locator('#circular-track-preset').selectOption('middle');
     await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).uncheck();
     await generateFromControl(page);
-    const features = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ id: f.svg_id, parts: f.location_parts, strand: f.strand })));
+    const features = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ id: f.svg_id, stableId: f.stable_feature_id, parts: f.location_parts, strand: f.strand })));
+    for (const feature of features) expect(feature.stableId).toBeTruthy();
     const bodies = features.map((feature) => page.locator(`[data-gbdraw-feature-id="${feature.id}"]`).first());
     await selectPaintedFeature(page, bodies[0]);
     await expect(page.getByLabel('Selected feature count')).toContainText('1 selected');
@@ -305,7 +317,12 @@ for (const mode of ['circular', 'linear']) {
     await page.getByRole('button', { name: /^Redo/ }).first().click();
     await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
     await generateFromControl(page);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ id: f.svg_id, parts: f.location_parts, strand: f.strand })))).toEqual(features);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ stableId: f.stable_feature_id, parts: f.location_parts, strand: f.strand })))).toEqual(features.map(({ id, ...biological }) => biological));
+    for (const id of await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => f.svg_id))) {
+      await expect(page.locator('.gbdraw-preview-surface svg').locator(
+        `[data-gbdraw-rendered-feature-id="${id}"], [data-gbdraw-feature-id="${id}"]:not([data-gbdraw-rendered-feature-id])`
+      ).first()).toBeVisible();
+    }
     await page.screenshot({ path: testInfo.outputPath('shortcuts-bulk.png'), fullPage: true });
   });
 }
