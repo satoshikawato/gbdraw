@@ -2996,3 +2996,92 @@ test('@comparison-contract LOSATP source jobs are reused after display start, re
   expect(cropped.jobCount).toBe(3);
   expect(cropped.firstRecord.region).toMatchObject({ start: 1, end: 210, reverseComplement: true });
 });
+
+test('@comparison-contract Total threads reallocates Auto runs and threads in real threaded LOSATP', async ({ page }) => {
+  test.setTimeout(300000);
+  await page.context().route('**/*', async (route) => {
+    if (new URL(route.request().url()).hostname !== '127.0.0.1') return route.abort();
+    const response = await route.fetch();
+    return route.fulfill({ response, headers: {
+      ...response.headers(),
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp'
+    } });
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 64 });
+    window.__THREAD_DISPATCHES__ = [];
+    window.__THREAD_STATUSES__ = [];
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      constructor(url, options) {
+        super(url, options);
+        this.isThreadedLosat = String(url).includes('losat-threaded-worker.js');
+      }
+      postMessage(message, ...rest) {
+        if (this.isThreadedLosat && message.type === 'run') {
+          window.__THREAD_DISPATCHES__.push(message.threadsPerJob);
+        }
+        return super.postMessage(message, ...rest);
+      }
+    };
+    window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
+      const { runLosatPairsParallel } = await import('/gbdraw/web/js/services/losat.js');
+      return runLosatPairsParallel(jobs, { ...options, onRuntimeStatus(status) {
+        window.__THREAD_STATUSES__.push(status);
+        options.onRuntimeStatus?.(status);
+      } });
+    };
+  });
+  await openApp(page);
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastp'));
+  const settings = page.locator('[data-linear-comparison-disclosure="settings"]');
+  const total = settings.getByRole('combobox', { name: 'LOSAT total threads', exact: true });
+  const runs = settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true });
+  const threads = settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true });
+  await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption('threaded');
+  for (const [budget, parallel, perRun] of [['32', 4, 8], ['16', 4, 4], ['2', 2, 1], ['8', 4, 2]]) {
+    await total.selectOption(budget);
+    await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} runs)`);
+    await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
+  }
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([2, 2, 2, 2]);
+  expect(await page.evaluate(() => window.__THREAD_STATUSES__.find(status => status.state === 'running')))
+    .toMatchObject({ mode: 'threaded', pairWorkers: 4, threadsPerJob: 2, totalBudget: 8 });
+
+  await total.selectOption('32');
+  await runs.selectOption('2');
+  await expect(threads.locator('option:checked')).toHaveText('Auto (16)');
+  await threads.selectOption('8');
+  await total.selectOption('4');
+  await expect(runs).toHaveValue('2');
+  await expect(threads).toHaveValue('8');
+  await expect(runs.locator('option:checked')).toContainText('1 effective');
+  await expect(threads.locator('option:checked')).toContainText('4 effective');
+  const pendingSave = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'thread-budget';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await pendingSave).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  await expect(total).toHaveValue('4');
+  await expect(runs).toHaveValue('2');
+  await expect(threads).toHaveValue('8');
+  await expect(runs.locator('option:checked')).toContainText('1 effective');
+  await expect(threads.locator('option:checked')).toContainText('4 effective');
+  await total.selectOption('32');
+  await expect(runs.locator('option:checked')).toHaveText('2 runs');
+  await expect(threads.locator('option:checked')).toHaveText('8');
+  await runs.selectOption({ index: 0 });
+  await threads.selectOption('auto');
+  await total.selectOption('16');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([]);
+});
