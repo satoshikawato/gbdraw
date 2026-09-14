@@ -1133,15 +1133,17 @@
             line-height: 1.25rem;
         }
         .linear-comparison-actions {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.5rem;
             min-width: 0;
+        }
+        .linear-comparison-actions > .btn:first-child {
+            grid-column: 1 / -1;
         }
         .linear-comparison-actions .btn {
             align-items: center;
             display: flex;
-            flex: 1 1 8rem;
             justify-content: center;
             min-height: 2.25rem;
             min-width: 0;
@@ -1149,6 +1151,7 @@
             white-space: normal;
         }
         .linear-losat-mode-actions {
+            display: flex;
             flex-wrap: nowrap;
         }
         .linear-losat-mode-actions .btn {
@@ -1833,8 +1836,8 @@
                                 </div>
                             </div>
                             <div role="group" aria-label="Set all adjacent comparisons" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
-                                <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
+                                <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Upload BLAST TSV</button>
                             </div>
                             <div class="min-w-0 rounded border border-slate-200 bg-white px-2 py-2" role="status" aria-live="polite">

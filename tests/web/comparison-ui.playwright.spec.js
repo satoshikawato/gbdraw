@@ -119,7 +119,7 @@ const expectKeyboardFocusIndicator = async (locator) => {
   expect(indicator.outlineWidth).not.toBe('0px');
 };
 
-test('fresh Linear keeps primary input visible and uses command/status semantics', async ({ page }) => {
+test('fresh Linear keeps primary input visible and uses command/status semantics', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openLinear(page);
 
@@ -132,8 +132,8 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
 
   const commands = comparisonCommands(page);
   const expectedNames = [
-    'Set no comparison',
     'Run LOSAT for all adjacent pairs',
+    'Set no comparison',
     'Use uploaded BLAST TSV for all adjacent pairs'
   ];
   await expect(commands.getByRole('button')).toHaveCount(3);
@@ -181,6 +181,25 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   await expectInside(firstUploader, settingsPane);
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
   await expect(page.locator('[data-linear-record-list] [data-edge-key]')).toHaveCount(0);
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const buttons = commands.getByRole('button');
+    const [run, none, upload] = await Promise.all(
+      [0, 1, 2].map((index) => buttons.nth(index).boundingBox())
+    );
+    expect(run.y + run.height).toBeLessThanOrEqual(none.y);
+    expect(none.y).toBeCloseTo(upload.y, 0);
+    expect(none.x + none.width).toBeLessThan(upload.x);
+    expect(run.x).toBeCloseTo(none.x, 0);
+    expect(run.x + run.width).toBeCloseTo(upload.x + upload.width, 0);
+    await buttons.first().focus();
+    for (const [index, name] of expectedNames.entries()) {
+      if (index > 0) await page.keyboard.press('Tab');
+      await expect(commands.getByRole('button', { name, exact: true })).toBeFocused();
+    }
+    await commands.screenshot({ path: testInfo.outputPath(`comparison-actions-${width}.png`) });
+  }
 });
 
 test('uploader, comparison commands, and native summaries work from the keyboard', async ({ page }) => {
