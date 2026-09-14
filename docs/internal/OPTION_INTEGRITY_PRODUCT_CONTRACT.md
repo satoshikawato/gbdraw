@@ -533,6 +533,14 @@ corrected. Passing evidence does not make incorrect behavior normative.
   links. A fresh no-comparison document does not gain comparison intent.
   Existing LOSAT Execution, Total threads, Parallel runs, and Threads per run
   controls remain editable in Comparison Settings when LOSAT is active.
+  Selecting Run LOSAT opens Settings immediately, exposing the mode and its
+  settings without another disclosure click. Restoring active LOSAT intent
+  also starts with Settings open. Users can collapse it manually; selecting
+  Run LOSAT again reopens it without changing the chosen mode or thread values.
+  Fresh and reset Web state defaults Execution to `threaded`. Explicit saved
+  `auto`, `serial`, or `threaded` choices remain authoritative on Load.
+  These default/disclosure requirements were specified by the maintainer on
+  `2026-09-14`; the existing execution modes and their support checks remain.
 - May retire: none.
 - Accepted residual risk: Increased computation time and memory from complete
   all-record comparisons. The maintainer explicitly accepted this cost as the
@@ -618,6 +626,10 @@ The normal automated PR gate must observe all of the following:
   reuses only semantically equivalent cached searches.
 - Every LOSAT mode exposes the existing execution and thread controls in
   Comparison Settings; mode switches and Session replay preserve their values.
+  Pointer and keyboard activation of Run LOSAT open Settings without moving
+  focus away from the command; reopening it requires no mode change. Fresh
+  and reset Execution is `threaded`, and saved explicit execution modes survive
+  Load with active LOSAT settings immediately exposed.
 - Changing only a record's drawing start or reverse-complement display issues
   no additional LOSATP search jobs, updates the rendered coordinates/orientation,
   and preserves that reuse through Save and fresh Load.
