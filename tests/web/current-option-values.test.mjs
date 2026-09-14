@@ -99,7 +99,7 @@ assert.equal(requireCurrentProteinBlastpCandidateLimit('7'), 7);
 for (const invalid of [0, -1, 1.5, 'unbounded']) {
   assert.throws(
     () => requireCurrentProteinBlastpCandidateLimit(invalid),
-    /Candidate limit/
+    /Max target seqs/
   );
 }
 

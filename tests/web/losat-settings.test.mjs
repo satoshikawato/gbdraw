@@ -167,6 +167,13 @@ assert.equal(
 expansionState.losat.blastp.collinearSearchScope = 'all';
 assert.equal(expansionSettings.losatEstimatedJobCount.value, 25);
 
+expansionState.losat.blastp.collinearInferOrthogroups = false;
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 20);
+expansionState.losat.blastp.collinearSearchScope = 'adjacent';
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 8);
+expansionState.losat.blastp.collinearInferOrthogroups = true;
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 13);
+
 expansionState.linearComparisonResolution.value = {
   ...expansionState.linearComparisonResolution.value,
   valid: false

@@ -1960,10 +1960,20 @@
                                         <input type="number" min="1" step="1" v-model.number="losat.blastp.maxHits" aria-label="Pairwise display max hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
+                                    <div v-if="linearComparisonUi.sectionKeys.settings.includes('losatp-candidate')">
+                                        <label class="linear-primary-label mb-1">Max target seqs <help-tip text="Raw LOSATP search limit per query protein (--max-target-seqs). Leave blank for an unbounded search. Changing this value requires matching raw search results. Defaults: 5 for Collinear, unbounded for Similarity groups. Each mode remembers its own hit limits."></help-tip></label>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Max target seqs" class="form-input px-2 py-1.5 text-xs">
+                                    </div>
+
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
+                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks after result filtering. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
                                         <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
+
+                                    <label v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="flex items-start gap-2 text-xs text-slate-600">
+                                        <input type="checkbox" v-model="losat.blastp.collinearInferOrthogroups" aria-label="Infer orthogroups with self-comparisons" class="form-checkbox mt-0.5">
+                                        <span>Infer orthogroups with self-comparisons <help-tip text="Include within-record searches and infer orthogroups with paralogs before building blocks. Off by default: build blocks from between-record hits without orthogroup inference."></help-tip></span>
+                                    </label>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                                         <div>
@@ -2202,15 +2212,6 @@
                                 </div>
                             </section>
 
-                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losatp-candidate')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                <div class="linear-primary-label">LOSATP Advanced</div>
-                                <div>
-                                    <label class="linear-primary-label mb-1">Candidate limit <help-tip text="Maximum raw LOSATP candidate hits retained per query protein before Pairwise display or Similarity/Collinear construction. Leave blank for an unbounded search."></help-tip></label>
-                                    <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.candidateLimit" aria-label="LOSATP Candidate limit" class="form-input px-2 py-1.5 text-xs">
-                                    <p class="mt-1 text-[10px] leading-snug text-slate-500">Shared by Pairwise, Similarity groups, and Collinear blocks. Blank keeps the candidate search unbounded.</p>
-                                </div>
-                            </section>
-
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">LOSAT cache</div>
                                 <p class="text-[10px] leading-snug text-slate-500">{{ losatCacheInfo.length }} cached raw result{{ losatCacheInfo.length === 1 ? '' : 's' }}. Matching canonical inputs and settings reuse cached TSV data.</p>
@@ -2313,7 +2314,7 @@
                                         <label class="linear-primary-label mb-1">Merge conflicts</label>
                                         <input type="number" min="0" step="1" v-model.number="losat.blastp.collinearMaxConflictsInMergeGap" aria-label="Collinear merge conflicts" class="form-input px-2 py-1.5 text-xs">
                                     </div>
-                                    <div>
+                                    <div v-if="losat.blastp.collinearInferOrthogroups">
                                         <label class="linear-primary-label mb-1">Paralog links per group</label>
                                         <input type="number" min="1" step="1" v-model.number="losat.blastp.collinearMaxParalogLinksPerOrthogroup" aria-label="Collinear paralog links per group" class="form-input px-2 py-1.5 text-xs">
                                     </div>

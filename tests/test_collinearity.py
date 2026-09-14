@@ -3700,3 +3700,53 @@ def test_collinearity_match_group_draws_inversions_above_plus_blocks() -> None:
     assert svg.index('data-collinearity-block-id="block_plus"') < svg.index(
         'data-collinearity-block-id="block_minus"'
     )
+
+
+@pytest.mark.parametrize("scope,pair_count", [("adjacent", 4), ("all", 6)])
+@pytest.mark.parametrize("anchor_mode", ["rbh", "one_to_one", "all"])
+def test_collinear_without_orthogroups_skips_self_search_and_inference(
+    monkeypatch, scope, pair_count, anchor_mode,
+):
+    records = [
+        _record(name, [_cds(0, 9, {"protein_id": [name]})])
+        for name in ["a", "b", "c"]
+    ]
+    observed = []
+
+    def search(query, subject, **kwargs):
+        pair = (_first_fasta_id(query), _first_fasta_id(subject))
+        assert pair[0] != pair[1]
+        assert kwargs["max_hits"] == 5
+        observed.append(pair)
+        return pd.DataFrame([_hit_row(*pair)], columns=COMPARISON_COLUMNS)
+
+    def forbidden_inference(*args, **kwargs):
+        pytest.fail("Collinear OFF must not infer orthogroups")
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", search)
+    monkeypatch.setattr(collinearity_module, "select_rbh_orthogroup_edges_from_directional_hits", forbidden_inference)
+    result = collinearity_module.build_orthogroup_collinearity_blocks(
+        records, infer_orthogroups=False, candidate_limit=5,
+        orthogroup_member_max_hits=5, search_scope=scope, edge_mode=anchor_mode,
+    )
+    assert len(observed) == pair_count
+    assert result.orthogroups is None
+    assert len(result.blocks) == 2
+    assert all(anchor.source == "protein_hit" and not anchor.orthogroup_id
+               for block in result.blocks for anchor in block.anchors)
+
+
+def test_collinear_without_inference_applies_member_limit_after_raw_filters():
+    records = [_record(name, [
+        _cds(index * 15, index * 15 + 9, {"protein_id": [f"{name}{index}"]})
+        for index in range(2)
+    ]) for name in ["a", "b"]]
+    extraction = extract_cds_proteins(records)
+    hits = pd.DataFrame([
+        _hit_row("a0", "b0", bitscore=200), _hit_row("a0", "b1", bitscore=100),
+    ], columns=COMPARISON_COLUMNS)
+    results = [collinearity_module.build_orthogroup_collinearity_blocks_from_hits(
+        {(0, 1): hits}, extraction, records=records, infer_orthogroups=False,
+        edge_mode="all", orthogroup_member_max_hits=limit,
+    ) for limit in [1, None]]
+    assert [sum(len(block.anchors) for block in result.blocks) for result in results] == [1, 2]

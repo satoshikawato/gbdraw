@@ -67,9 +67,24 @@ combination in its raw result. The display-stage `max_hits` setting
 (`--protein_blastp_max_hits` on the command line) is a separate limit: it
 defaults to `5` and retains the strongest distinct subject proteins for each
 query protein after the display thresholds are applied. Similarity-group and
-Collinear construction use a separate member-hits limit, also `5` by default,
-for the directional rows considered during grouping. Changing either derived
-limit does not change raw search jobs or raw cache keys.
+Collinear construction use **Member hits per protein**, a separate limit on
+threshold-qualified directional subject hits. Changing a derived limit does
+not change raw search jobs or raw cache keys.
+
+In Web **Settings**, **Max target seqs** sets the raw LOSATP
+`--max-target-seqs` limit. A blank value leaves the search unbounded. Both
+**Max target seqs** and **Member hits per protein** initially use `5` in
+Collinear blocks and are unbounded in Similarity groups. Each LOSATP mode
+remembers its own values when switching modes, including after a Session
+round trip. An explicitly blank Collinear value stays unbounded.
+
+Web Collinear blocks defaults **Infer orthogroups with self-comparisons** to
+OFF. OFF searches between records and builds blocks from the selected anchors
+without orthogroup inference. ON adds within-record searches and orthogroup
+inference, including paralog evidence. Similarity groups always performs that
+inference. Older Collinear Sessions that lack the checkbox setting retain ON
+for reproducibility. The Python and CLI omission defaults retain their previous
+behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 
 Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
 `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`.

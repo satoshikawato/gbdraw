@@ -226,7 +226,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'pairwise',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'blastp-max-hits',
+        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'blastp-max-hits',
         'result-filters', 'comparison-appearance'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'member-hits', 'collinear-primary']
@@ -237,7 +237,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'orthogroup',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'member-hits',
+        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'member-hits',
         'result-filters', 'comparison-appearance'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'collinear-primary']
@@ -248,7 +248,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'collinear',
       settings: [
-        'losat-mode', 'losat-runtime', 'losatp-mode', 'member-hits', 'collinear-primary',
+        'losat-mode', 'losat-runtime', 'losatp-mode', 'losatp-candidate', 'member-hits', 'collinear-primary',
         'result-filters', 'comparison-appearance'
       ],
       absent: [
@@ -273,7 +273,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       advanced === 'collinear-details'
     );
     assert.equal(
-      projection.sectionKeys.advanced.includes('losatp-candidate'),
+      projection.sectionKeys.settings.includes('losatp-candidate'),
       program === 'blastp'
     );
   });
@@ -339,7 +339,7 @@ test('selected topology blocks only grouping and collinear LOSATP modes without 
   assert(grouping.sectionKeys.settings.includes('losatp-mode'));
   assert(!grouping.sectionKeys.settings.includes('member-hits'));
   assert(grouping.sectionKeys.settings.includes('comparison-appearance'));
-  assert(grouping.sectionKeys.advanced.includes('losatp-candidate'));
+  assert(grouping.sectionKeys.settings.includes('losatp-candidate'));
   assert.equal(grouping.errorDisclosureKey, 'settings');
 
   for (const modeKey of ['orthogroup', 'collinear']) {
