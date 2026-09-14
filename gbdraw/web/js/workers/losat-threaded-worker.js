@@ -22,32 +22,25 @@ const compileLosatModule = async (module, wasmUrl) => {
   return WebAssembly.compile(bytes);
 };
 
+// NCBI c++/src/algo/blast/blastinput/cmdline_flags.cpp:75:
+// const string kArgNumThreads("num_threads");
 const hasNumThreadsArg = (args) =>
-  args.some((arg) => {
-    const text = String(arg || '');
-    return text === '-n' ||
-      text === '--num-threads' ||
-      text === '--num_threads' ||
-      text === '-num_threads' ||
-      text.startsWith('--num-threads=') ||
-      text.startsWith('--num_threads=') ||
-      text.startsWith('-num_threads=');
-  });
+  args.some((arg) => String(arg) === '-num_threads' || String(arg).startsWith('-num_threads='));
 
 const buildLosatArgs = ({ program, outfmt, extraArgs, threadsPerJob }) => {
   const args = [
     'losat',
     program,
-    '--query',
+    '-query',
     'query.fa',
-    '--subject',
+    '-subject',
     'subject.fa',
-    '--outfmt',
+    '-outfmt',
     String(outfmt || '6'),
     ...(Array.isArray(extraArgs) ? extraArgs.map(String) : [])
   ];
   if (!hasNumThreadsArg(args)) {
-    args.push('--num-threads', String(threadsPerJob));
+    args.push('-num_threads', String(threadsPerJob));
   }
   return args;
 };

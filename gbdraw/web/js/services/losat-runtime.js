@@ -41,12 +41,15 @@ export const runLosatPairWasi = async ({
   const args = [
     'losat',
     program,
-    '--query',
+    '-query',
     'query.fa',
-    '--subject',
+    '-subject',
     'subject.fa',
-    '--outfmt',
+    '-outfmt',
     String(outfmt),
+    // The serial command path explicitly requests its one-thread budget.
+    ...(Array.isArray(extraArgs) && extraArgs.some((arg) => String(arg) === '-num_threads' || String(arg).startsWith('-num_threads='))
+      ? [] : ['-num_threads', '1']),
     ...(Array.isArray(extraArgs) ? extraArgs : [])
   ];
   const wasi = new WASI(args, [], [stdin, stdout, stderr, preopen]);

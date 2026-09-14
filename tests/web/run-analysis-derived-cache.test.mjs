@@ -37,7 +37,7 @@ const rawIdentityInput = {
   identityKind: 'protein',
   program: 'blastp',
   outfmt: '6',
-  args: ['--max-target-seqs', '9'],
+  args: ['-max_target_seqs', '9'],
   queryProteinSetHash: 'query-proteins',
   subjectProteinSetHash: 'subject-proteins',
   queryRuntimeBindingHash: 'query-runtime',

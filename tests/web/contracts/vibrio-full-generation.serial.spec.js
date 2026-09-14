@@ -1061,8 +1061,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   );
   expect(first.outcome.rawSearchTelemetry.rawJobs.every(({ cacheKey, args }) => (
     /^[0-9a-f]{64}$/.test(cacheKey)
-      && args.includes('--max-target-seqs')
-      && args[args.indexOf('--max-target-seqs') + 1] === '5'
+      && args.includes('-max_target_seqs')
+      && args[args.indexOf('-max_target_seqs') + 1] === '5'
   ))).toBe(true);
   expect(first.outcome.rawSearchTelemetry.rawTsvBytes).toBeGreaterThan(0);
   expect(first.outcome.rawSearchTelemetry.rawTsvLargestEntryBytes).toBeGreaterThan(0);

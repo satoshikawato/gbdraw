@@ -1158,7 +1158,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       identityKind: 'nucleotide',
       program: 'blastn',
       outfmt: '6',
-      args: ['--task', 'megablast'],
+      args: ['-task', 'megablast'],
       queryCanonicalHash,
       subjectCanonicalHash,
       flow: 'circular-conservation'
@@ -1172,7 +1172,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       program: 'blastn',
       flow: 'circular-conservation',
       outfmt: '6',
-      args: ['--task', 'megablast'],
+      args: ['-task', 'megablast'],
       queryCanonicalHash,
       subjectCanonicalHash
     }]);

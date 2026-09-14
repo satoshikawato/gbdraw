@@ -10,7 +10,7 @@ const sequences = Array.from({ length: 8 }, (_, index) => ({
 assert.deepEqual(groupLinearSourceRecords(sequences).map((source) => source.records.length), [6, 2]);
 const specs = sequences.flatMap((_, queryIndex) => sequences.map((_, subjectIndex) => ({ queryIndex, subjectIndex })));
 const planFor = (records = sequences, jobs = specs, getEntry = async () => ({ fasta: '>duplicate\nACGT\n' })) => prepareLosatSourceBatches({
-  sequences: records, specs: jobs, getEntry, buildArgs: () => ['--task', 'blastn'], hashText, protein: false
+  sequences: records, specs: jobs, getEntry, buildArgs: () => ['-task', 'blastn'], hashText, protein: false
 });
 const plan = await planFor();
 assert.equal(plan.batches.length, 4, 'eight records in two sources require four LOSAT jobs');
@@ -39,7 +39,7 @@ assert.deepEqual(replay.batches.map((batch) => batch.searchContext).sort(), plan
 
 const codePlan = await prepareLosatSourceBatches({
   sequences, specs: adjacentSpecs, getEntry: async () => ({ fasta: '>duplicate\nACGT\n' }),
-  buildArgs: (query) => ['--query-gencode', query === 0 ? '4' : '11', '--db-gencode', '11'],
+  buildArgs: (query) => ['-query_gencode', query === 0 ? '4' : '11', '-db_gencode', '11'],
   hashText, protein: false
 });
 assert.equal(codePlan.batches.length, 2, 'conflicting explicit translation tables require compatible source batches');

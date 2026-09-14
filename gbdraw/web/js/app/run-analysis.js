@@ -2551,17 +2551,19 @@ export const createRunAnalysis = ({
             circularConservation.losat_program = circularLosatProgram;
             const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
             circularConservation.subject_gencode = subjectGencode;
+            // NCBI c++/src/algo/blast/blastinput/cmdline_flags.cpp:69-72:
+            // kTask("task"), kArgQueryGeneticCode("query_gencode"), kArgDbGeneticCode("db_gencode").
             const buildExtraArgs = (comparisonGencode) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
-                  '--query-gencode',
+                  '-query_gencode',
                   String(normalizePositiveInteger(comparisonGencode, 1)),
-                  '--db-gencode',
+                  '-db_gencode',
                   String(subjectGencode)
                 ];
               }
               const normalizedTask = String(losat.blastn?.task || 'megablast').trim() || 'megablast';
-              return ['--task', normalizedTask];
+              return ['-task', normalizedTask];
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
@@ -3444,18 +3446,21 @@ export const createRunAnalysis = ({
           return blastpCandidateLimit;
         };
 
+        // NCBI c++/src/algo/blast/blastinput/cmdline_flags.cpp:69-90,208:
+        // kTask("task"), kArgQueryGeneticCode("query_gencode"), kArgDbGeneticCode("db_gencode"),
+        // kArgMaxTargetSequences("max_target_seqs"), kArgMaxHSPsPerSubject("max_hsps").
         const buildLosatArgs = (queryIdx, subjectIdx) => {
           const args = [];
           if (losatProgram.value === 'blastn') {
-            pushArg(args, '--task', losat.blastn.task);
+            pushArg(args, '-task', losat.blastn.task);
           } else if (losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', getGencode(queryIdx));
-            pushArg(args, '--db-gencode', getGencode(subjectIdx));
+            pushArg(args, '-query_gencode', getGencode(queryIdx));
+            pushArg(args, '-db_gencode', getGencode(subjectIdx));
           } else {
             if (!useOrthogroupBlastp && !useCollinearBlastp) {
-              pushArg(args, '--max-hsps-per-subject', 1);
+              pushArg(args, '-max_hsps', 1);
             }
-            pushArg(args, '--max-target-seqs', getBlastpCandidateLimit());
+            pushArg(args, '-max_target_seqs', getBlastpCandidateLimit());
           }
           return args;
         };
