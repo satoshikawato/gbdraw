@@ -37,6 +37,8 @@ const resetObservations = page => page.evaluate(() => {
   window.feedbackEvents = [];
 });
 const awaitSuccess = async page => {
+  await expect.poll(() => page.evaluate(() => window.feedbackEvents.some(event => event.name === 'generate.completed')),
+    { timeout: 180_000 }).toBe(true);
   await expect.poll(() => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     return { processing: app.processing, error: app.errorLog?.summary || '', results: app.results.length };
@@ -166,13 +168,14 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
     await app.setLinearComparisonGlobalAction('losat');
     await window.Vue.nextTick();
   }, source);
+  await page.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption('serial');
   await generate(page).click();
   await awaitSuccess(page);
   const search = await record(page, testInfo, 'linear-search');
   expectRenderStages(search);
   expect(search.statuses.map(entry => entry.value)).toEqual(expect.arrayContaining([
     'Preparing comparisons...', 'Preparing LOSAT jobs...',
-    'Running LOSAT: 0/1 LOSAT jobs complete', 'Running LOSAT: 1/1 LOSAT jobs complete',
+    'Running LOSAT: 0/1 source jobs complete', 'Running LOSAT: 1/1 source jobs complete',
     'Preparing nucleotide comparison results...'
   ]));
 
