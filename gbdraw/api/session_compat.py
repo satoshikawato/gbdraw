@@ -694,7 +694,11 @@ def _adapt_session_plan(
             plan.request,
             id_map,
         )
-        if plan.request.options.protein_comparisons is not None and promoted:
+        has_protein_tables = plan.request.options.protein_comparisons is not None or any(
+            "query_protein_id" in comparison.matches.columns
+            for comparison in plan.request.options.linear_comparisons or ()
+        )
+        if has_protein_tables and promoted:
             unresolved = ()
 
     if manifest is None and not any(

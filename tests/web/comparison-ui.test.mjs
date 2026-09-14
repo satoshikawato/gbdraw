@@ -203,7 +203,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       blastpMode: 'orthogroup',
       losatKey: 'blastn',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'blastn-task', 'result-filters', 'comparison-appearance'],
+      settings: ['losat-mode', 'losat-runtime', 'blastn-task', 'result-filters', 'comparison-appearance'],
       absent: [
         'losatp-mode', 'record-genetic-codes', 'blastp-max-hits',
         'member-hits', 'collinear-primary'
@@ -214,7 +214,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       blastpMode: 'orthogroup',
       losatKey: 'tblastx',
       losatpKey: 'orthogroup',
-      settings: ['losat-mode', 'record-genetic-codes', 'result-filters', 'comparison-appearance'],
+      settings: ['losat-mode', 'losat-runtime', 'record-genetic-codes', 'result-filters', 'comparison-appearance'],
       absent: [
         'losatp-mode', 'blastn-task', 'blastp-max-hits',
         'member-hits', 'collinear-primary'
@@ -226,7 +226,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'pairwise',
       settings: [
-        'losat-mode', 'losatp-mode', 'blastp-max-hits',
+        'losat-mode', 'losat-runtime', 'losatp-mode', 'blastp-max-hits',
         'result-filters', 'comparison-appearance'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'member-hits', 'collinear-primary']
@@ -237,7 +237,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'orthogroup',
       settings: [
-        'losat-mode', 'losatp-mode', 'member-hits',
+        'losat-mode', 'losat-runtime', 'losatp-mode', 'member-hits',
         'result-filters', 'comparison-appearance'
       ],
       absent: ['blastn-task', 'record-genetic-codes', 'blastp-max-hits', 'collinear-primary']
@@ -248,7 +248,7 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
       losatKey: 'blastp',
       losatpKey: 'collinear',
       settings: [
-        'losat-mode', 'losatp-mode', 'member-hits', 'collinear-primary',
+        'losat-mode', 'losat-runtime', 'losatp-mode', 'member-hits', 'collinear-primary',
         'result-filters', 'comparison-appearance'
       ],
       absent: [

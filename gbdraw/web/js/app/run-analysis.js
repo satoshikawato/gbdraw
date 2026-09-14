@@ -1,4 +1,5 @@
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
+import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -222,7 +223,8 @@ const buildLosatCachePayload = ({
   queryRuntimeBindingHash,
   subjectRuntimeBindingHash,
   queryRecordInstanceKey,
-  subjectRecordInstanceKey
+  subjectRecordInstanceKey,
+  searchContext
 }) => {
   if (identityKind === 'protein') {
     return {
@@ -237,7 +239,8 @@ const buildLosatCachePayload = ({
       queryRuntimeBindingHash: String(queryRuntimeBindingHash || ''),
       subjectRuntimeBindingHash: String(subjectRuntimeBindingHash || ''),
       queryRecordInstanceKey: String(queryRecordInstanceKey || ''),
-      subjectRecordInstanceKey: String(subjectRecordInstanceKey || '')
+      subjectRecordInstanceKey: String(subjectRecordInstanceKey || ''),
+      ...(searchContext ? { searchContext } : {})
     };
   }
   const payload = {
@@ -249,6 +252,7 @@ const buildLosatCachePayload = ({
     subjectCanonicalHash
   };
   if (flow) payload.flow = flow;
+  if (searchContext) payload.searchContext = searchContext;
   return payload;
 };
 
@@ -266,6 +270,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) =>
 
   for (const [key, entry] of cacheMap.entries()) {
     if (classifyRawLosatCacheEntry(entry) !== 'nucleotide-current') continue;
+    if ((entry.searchContext ?? null) !== (metadata.searchContext ?? null)) continue;
     if (String(entry.queryCanonicalHash || '') !== expectedQuery) continue;
     if (String(entry.subjectCanonicalHash || '') !== expectedSubject) continue;
     const entryProgram = String(entry.program || expectedProgram);
@@ -369,7 +374,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   if (['orthogroup', 'collinear'].includes(normalizedMode)) {
     payload.orthogroup = {
       membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
-      memberMaxHits: Number(orthogroupMemberMaxHits) || 5
+      memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
     };
   }
   if (normalizedMode === 'collinear') {
@@ -447,6 +452,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
   committedRequest,
+  sequences,
   active
 }) => {
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
@@ -460,6 +466,21 @@ const canReuseResolvedProteinArtifacts = ({
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
   ));
   if (!persistedMarker || !committedMarker || !active) return false;
+
+  // Derived rows carry view coordinates and feature IDs. Raw LOSATP evidence
+  // remains reusable, but a reversed view needs these rows to be projected again.
+  if (committedRequest.records?.length !== sequences.length || sequences.some((seq, index) => {
+    const record = committedRequest.records[index];
+    const start = Number(seq.region_start) || null;
+    const end = Number(seq.region_end) || null;
+    const reverse = Boolean(seq.region_reverse)
+      || (start !== null && end !== null && start > end);
+    return record.recordKey !== seq.uid
+      || String((record.region?.selector || record.selector)?.value || '') !== String(seq.region_record_id || '').trim()
+      || (record.region?.start ?? null) !== (start !== null && end !== null ? Math.min(start, end) : start)
+      || (record.region?.end ?? null) !== (start !== null && end !== null ? Math.max(start, end) : end)
+      || reverse !== Boolean(record.region?.reverseComplement || record.presentation?.reverseComplement);
+  })) return false;
 
   const persistedMode = inferredResolvedProteinMode(persisted);
   const committedMode = inferredResolvedProteinMode(committed);
@@ -488,7 +509,7 @@ const canReuseResolvedProteinArtifacts = ({
   if (
     String(settings.orthogroupMembershipMode || 'anchor_core_v1')
       !== active.orthogroupMembershipMode
-    || !sameNumber(settings.orthogroupMemberMaxHits ?? 5, active.memberMaxHits)
+    || (settings.orthogroupMemberMaxHits ?? null) !== active.memberMaxHits
   ) {
     return false;
   }
@@ -2811,7 +2832,7 @@ export const createRunAnalysis = ({
           ? requireCurrentOrthogroupMemberMaxHits(
               losat.blastp?.orthogroupMemberMaxHits
             )
-          : 5;
+          : null;
         const collinearMinAnchors = useCollinearBlastp
           ? requireCurrentCollinearMinAnchors(losat.blastp?.collinearMinAnchors)
           : 1;
@@ -2855,6 +2876,7 @@ export const createRunAnalysis = ({
           && !workingLegacyProteinRawCandidates?.entries?.length
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: files.linearCanonicalComparisons,
+            sequences: linearSeqs,
             committedRequest: typeof getCommittedCanonicalRenderRequest === 'function'
               ? getCommittedCanonicalRenderRequest()
               : null,
@@ -3077,6 +3099,7 @@ export const createRunAnalysis = ({
         };
 
         const getSeqEntry = async (idx) => {
+          throwIfGenerationCanceled();
           if (fastaCache.has(idx)) return fastaCache.get(idx);
           const startedAt = getNow();
           const fmt = lInputType.value === 'gb'
@@ -3562,13 +3585,14 @@ export const createRunAnalysis = ({
             resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
           );
           const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
-            const edge = edgeForOrdinal(ordinal);
-            if (!edge) return;
+            const edge = resolvedLosatEdges.find((candidate) => (
+              candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
+            )) || edgeForOrdinal(ordinal);
             jobSpecs.push({
-              edgeKey: edge.edgeKey,
-              ordinal: edge.ordinal,
-              queryUid: edge.queryUid,
-              subjectUid: edge.subjectUid,
+              edgeKey: edge?.edgeKey || '',
+              ordinal: edge?.ordinal ?? ordinal,
+              queryUid: linearSeqs[queryIndex].uid,
+              subjectUid: linearSeqs[subjectIndex].uid,
               queryIndex,
               subjectIndex,
               program: losatProgram.value
@@ -3607,6 +3631,14 @@ export const createRunAnalysis = ({
             }));
           }
 
+          const sourcePlan = await prepareLosatSourceBatches({
+            sequences: linearSeqs,
+            specs: jobSpecs,
+            getEntry: getSeqEntry,
+            buildArgs: buildLosatArgs,
+            hashText,
+            protein: useProteinBlastp
+          });
           const preparedJobs = [];
           for (const spec of jobSpecs) {
             throwIfGenerationCanceled();
@@ -3614,7 +3646,9 @@ export const createRunAnalysis = ({
             const cacheMetadata = await buildCacheMetadata(
               losatArgs, spec.queryIndex, spec.subjectIndex
             );
-            preparedJobs.push({ spec, losatArgs, cacheMetadata });
+            const batch = sourcePlan.bySpec.get(spec);
+            if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
+            preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
           let proteinCacheKeys = null;
           if (useProteinBlastp && preparedJobs.length > 0) {
@@ -3629,7 +3663,8 @@ export const createRunAnalysis = ({
                   expectedOptions: {
                     program: cacheMetadata.program,
                     outfmt: cacheMetadata.outfmt,
-                    args: normalizeLosatArgs(cacheMetadata.args)
+                    args: normalizeLosatArgs(cacheMetadata.args),
+                    ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {})
                   }
                 }))
               }
@@ -3646,7 +3681,7 @@ export const createRunAnalysis = ({
             proteinCacheKeys = result.keys;
           }
 
-          for (const [jobIndex, { spec, losatArgs, cacheMetadata }] of preparedJobs.entries()) {
+          for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
             throwIfGenerationCanceled();
             const queryEntry = await getSeqEntry(spec.queryIndex);
             throwIfGenerationCanceled();
@@ -3671,7 +3706,7 @@ export const createRunAnalysis = ({
               cacheMetadata,
               workingProteinIdentityManifest
             );
-            if (!cached && useProteinBlastp) {
+            if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
               cached = await tryPromoteLegacyProteinEntry({
                 cacheKey,
                 metadata: cacheMetadata,
@@ -3706,12 +3741,6 @@ export const createRunAnalysis = ({
               displayPair: isResolvedDisplayPair
             };
             losatPairs.push(pair);
-            losatTiming.rawJobs.push({
-              queryRecordIndex: spec.queryIndex,
-              subjectRecordIndex: spec.subjectIndex,
-              cacheKey,
-              args: [...losatArgs]
-            });
             if (
               isResolvedDisplayPair &&
               !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
@@ -3747,26 +3776,55 @@ export const createRunAnalysis = ({
                 subjectCanonicalHash,
                 outfmt: losat.outfmt || '6',
                 extraArgs: losatArgs,
-                cacheMetadata
+                cacheMetadata,
+                batch
               });
             }
           }
-          losatTiming.uniqueJobs = losatJobs.length;
+          const sourceJobs = [];
+          for (const batch of sourcePlan.batches) {
+            const members = losatJobs.filter((job) => job.batch === batch);
+            if (members.length === 0) continue;
+            sequenceEntriesByKey.set(batch.query.sequenceKey, batch.query.fasta);
+            sequenceEntriesByKey.set(batch.subject.sequenceKey, batch.subject.fasta);
+            sourceJobs.push({
+              ...members[0],
+              cacheKey: await hashText(JSON.stringify([
+                losatProgram.value, losat.outfmt || '6', batch.args,
+                batch.query.hash, batch.subject.hash
+              ])),
+              querySequenceKey: batch.query.sequenceKey,
+              subjectSequenceKey: batch.subject.sequenceKey,
+              queryRecordIndexes: batch.query.indexes,
+              subjectRecordIndexes: batch.subject.indexes,
+              recordPairs: members.map((job) => [job.queryIndex, job.subjectIndex]),
+              members,
+              batch
+            });
+          }
+          losatTiming.rawJobs = sourceJobs.map((job) => ({
+            queryRecordIndexes: job.queryRecordIndexes,
+            subjectRecordIndexes: job.subjectRecordIndexes,
+            recordPairs: job.recordPairs,
+            cacheKey: job.cacheKey,
+            args: [...job.extraArgs]
+          }));
+          losatTiming.uniqueJobs = sourceJobs.length;
           const jobBuildWallMs = getNow() - jobBuildStartedAt;
           const nestedFastaMs = losatTiming.fastaExtractionMs - fastaExtractionBeforeJobBuild;
           const nestedHashMs = losatTiming.cacheHashMs - cacheHashBeforeJobBuild;
           losatTiming.jobBuildWallMs += jobBuildWallMs;
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
-          if (losatJobs.length > 0) {
+          if (sourceJobs.length > 0) {
             setProcessingStatus('Preparing comparison search runtime...');
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
             throwIfGenerationCanceled();
             losatTiming.runtimeWaitMs += getNow() - runtimeWaitStartedAt;
-            setProcessingStatus(`Running LOSAT: 0/${losatJobs.length} LOSAT jobs complete`);
+            setProcessingStatus(`Running LOSAT: 0/${sourceJobs.length} source jobs complete`);
             const executionStartedAt = getNow();
-            const losatResults = await executeLosatJobs(losatJobs, {
+            const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
               concurrency: getLosatParallelWorkers(),
               executionMode: losatExecutionMode,
               totalThreadBudget: losatRequestedTotalThreadBudget,
@@ -3778,11 +3836,16 @@ export const createRunAnalysis = ({
               },
               onProgress: ({ completed, total }) => {
                 if (generationAbortSignal?.aborted || generationCancelRequested.value) return;
-                setProcessingStatus(`Running LOSAT: ${completed}/${total} LOSAT jobs complete`);
+                setProcessingStatus(`Running LOSAT: ${completed}/${total} source jobs complete`);
               }
             });
             throwIfGenerationCanceled();
             losatTiming.executionMs += getNow() - executionStartedAt;
+            const losatResults = sourceResults.flatMap((result) => {
+              const job = sourceJobs.find((item) => item.cacheKey === result.cacheKey);
+              if (!job) throw new Error('LOSAT returned an unknown source job.');
+              return splitLosatSourceResult(result.text, job.batch, job.members);
+            });
             losatResults.forEach((result) => {
               const job = losatJobs.find((item) => item.cacheKey === result.cacheKey);
               const cacheMetadata = job?.cacheMetadata || {};
@@ -3798,6 +3861,7 @@ export const createRunAnalysis = ({
                 program: losatProgram.value,
                 outfmt: String(losat.outfmt || '6'),
                 args: job?.extraArgs || [],
+                ...(cacheMetadata.searchContext ? { searchContext: cacheMetadata.searchContext } : {}),
                 ...(isProteinEntry
                   ? {
                       queryProteinSetHash: cacheMetadata.queryProteinSetHash,

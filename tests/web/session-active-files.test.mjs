@@ -145,6 +145,15 @@ assert.equal(linear.linearSeqs[0].depth, null);
 assert.equal(linear.c_gb, null);
 
 const multiRecordInput = readableFile('multi-record.gbff', 'LOCUS one\n//\nLOCUS two\n//\n');
+const sharedRecordInput = readableFile('shared.gbff', 'LOCUS one\n//\nLOCUS two\n//\n');
+const sharedRecords = await serializeActiveRenderFiles('linear', {
+  ...linearState,
+  linearSeqs: ['one', 'two'].map((recordId) => ({
+    uid: recordId, gb: sharedRecordInput, region_record_id: recordId
+  }))
+});
+assert.equal(sharedRecordInput.reads(), 1);
+assert.equal(sharedRecords.linearSeqs[0].gb, sharedRecords.linearSeqs[1].gb);
 const automaticLinearState = {
   ...linearState,
   linearSeqs: [{

@@ -425,3 +425,17 @@ def test_duplicate_record_instances_use_their_own_comparison_transform(mode):
     assert len({n.get("id") for n in paths}) == len(paths)
     context = build_interactive_svg_context(plan.records, mode=mode, linear_rendered_feature_ids=mode == "linear", record_transforms=plan.transforms)
     enrich_svg(ET.tostring(root, encoding="unicode"), context)
+
+
+def test_unrotated_circular_grid_keeps_duplicate_record_features_distinct():
+    from gbdraw.api.options import CircularMultiRecordOptions
+    item = record()
+    req = replace(request("circular", [item, item], [None, None]),
+                  grouping="grid", layout=CircularMultiRecordOptions())
+    plan, root = svg(req)
+    context = build_interactive_svg_context(plan.records, mode="circular", record_transforms=plan.transforms)
+    ids = [feature["rendered_feature_svg_id"] for feature in context.features]
+    assert len(ids) == len(set(ids)) == 4
+    enriched = ET.fromstring(enrich_svg(ET.tostring(root, encoding="unicode"), context))
+    rendered = {node.get("data-gbdraw-rendered-feature-id") for node in enriched.iter()}
+    assert set(ids) <= rendered

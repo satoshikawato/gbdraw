@@ -568,6 +568,11 @@ def test_protein_raw_identity_tracks_candidate_limit_args_exactly() -> None:
 
     assert explicit_none == omitted
     assert finite != omitted
+    source_scope = build_protein_losat_cache_key(identity, args=[], search_context="a" * 64)
+    assert source_scope != omitted
+    assert source_scope != build_protein_losat_cache_key(identity, args=[], search_context="b" * 64)
+    with pytest.raises(ValidationError, match="search context"):
+        build_protein_losat_cache_key(identity, args=[], search_context="invalid")
     assert finite == build_protein_losat_cache_key(
         identity,
         args=["--max-target-seqs", "7"],
@@ -2301,14 +2306,16 @@ def test_candidate_and_pairwise_display_limits_reach_independent_consumers(
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("member_limit", [None, 2, 5])
 def test_member_hit_limit_bounds_derived_candidates_and_preserves_their_hsps(
     monkeypatch: pytest.MonkeyPatch,
+    member_limit: int | None,
 ) -> None:
     records = [
         _record("record_a", features=[_cds(0, 9)]),
         _record(
             "record_b",
-            features=[_cds(index * 12, index * 12 + 9) for index in range(3)],
+            features=[_cds(index * 12, index * 12 + 9) for index in range(7)],
         ),
     ]
     extraction = extract_cds_proteins(records)
@@ -2317,10 +2324,9 @@ def test_member_hit_limit_bounds_derived_candidates_and_preserves_their_hsps(
     directional_hits = {
         (0, 1): pd.DataFrame.from_records(
             [
-                _hit_row(query_id, subject_ids[0], bitscore=300),
-                _hit_row(query_id, subject_ids[1], bitscore=250),
-                _hit_row(query_id, subject_ids[1], bitscore=240),
-                _hit_row(query_id, subject_ids[2], bitscore=200),
+                *[_hit_row(query_id, subject_id, bitscore=300 - index * 10)
+                  for index, subject_id in enumerate(subject_ids)],
+                _hit_row(query_id, subject_ids[1], bitscore=280),
             ],
             columns=COMPARISON_COLUMNS,
         ),
@@ -2344,11 +2350,11 @@ def test_member_hit_limit_bounds_derived_candidates_and_preserves_their_hsps(
         directional_hits,
         extraction.protein_map,
         record_count=2,
-        orthogroup_member_max_hits=2,
+        orthogroup_member_max_hits=member_limit,
     )
 
     observed = captured[(0, 1)]
-    assert set(observed["subject"]) == set(subject_ids[:2])
+    assert set(observed["subject"]) == set(subject_ids[:member_limit])
     assert len(observed.loc[observed["subject"] == subject_ids[1]]) == 2
 
 
@@ -3128,12 +3134,14 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
             ("row-a", "row-b", []),
         ]
     ]
+    pairs.append({**pairs[0], "expectedOptions": {**pairs[0]["expectedOptions"], "searchContext": "a" * 64}})
     expected = [
         build_protein_losat_cache_key(
             build_protein_losat_pair_identity(
                 manifest, query_record_instance_key=pair["queryRecordInstanceKey"],
                 subject_record_instance_key=pair["subjectRecordInstanceKey"],
             ), args=pair["expectedOptions"]["args"],
+            search_context=pair["expectedOptions"].get("searchContext"),
         ) for pair in pairs
     ]
     validation_calls = []
@@ -3147,7 +3155,7 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
         json.dumps(manifest), json.dumps(pairs),
     ))
     assert result == {"keys": expected}
-    assert len(set(expected)) == 4
+    assert len(set(expected)) == 5
     assert validation_calls == [1]
     # A bad later pair must not expose a partial key list.
     pairs[-1]["subjectRecordInstanceKey"] = "unknown"
@@ -3311,6 +3319,7 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
             {
                 "pairIndex": 0,
                 "queryIndex": 0,
+                "displayPair": True,
                 "subjectIndex": 1,
                 "cacheKey": "pair-a-b",
                 "blastText": forward_hits.to_csv(
@@ -4033,3 +4042,31 @@ def test_linear_cli_forwards_orthogroup_alignment_option(
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
     assert canonical_request.options.align_orthogroup_feature == "fanchor"
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("reverse", [False, True])
+def test_orthogroup_display_pairs_do_not_restrict_all_record_membership(reverse: bool) -> None:
+    records = [_long_record(f"record_{index}", f"p{index}") for index in range(5)]
+    extraction = extract_cds_proteins(records)
+    hits = {
+        (query, subject): pd.DataFrame.from_records(
+            [_hit_row(f"p{query}", f"p{subject}", alignment_length=1000, qend=1000, send=1000, bitscore=1000)],
+            columns=COMPARISON_COLUMNS,
+        )
+        for query in range(5) for subject in range(5)
+    }
+    expected_pairs = ((0, 2), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4))
+    if reverse:
+        expected_pairs = tuple((subject, query) for query, subject in expected_pairs)
+    result = select_rbh_orthogroup_edges_from_directional_hits(
+        hits, extraction.protein_map, comparison_pairs=expected_pairs,
+    )
+    assert set(result.adjacent_display_edges_by_pair) == set(expected_pairs)
+    for (query, subject), frame in result.adjacent_display_edges_by_pair.items():
+        assert list(zip(frame["query"], frame["subject"])) == [(f"p{query}", f"p{subject}")]
+    without_display = select_rbh_orthogroup_edges_from_directional_hits(
+        hits, extraction.protein_map, comparison_pairs=(),
+    )
+    assert without_display.adjacent_display_edges_by_pair == {}
+    assert without_display.orthogroups == result.orthogroups

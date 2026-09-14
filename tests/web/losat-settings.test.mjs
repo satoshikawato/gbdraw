@@ -36,6 +36,7 @@ const source = await readFile(new URL('losat-settings.js', sourceRoot), 'utf8');
 await writeFile(
   tempModulePath,
   source.replace("./losat-normalization.js", "./losat-normalization.mjs")
+    .replace("./linear-sources.js", new URL("linear-sources.js", sourceRoot).href)
 );
 await writeFile(
   tempNormalizationPath,
@@ -50,12 +51,12 @@ const resolved = ({ mode = 'adjacent', defaultSource = 'losat', sources = [], va
     defaultSource,
     valid,
     hasLosatIntent: sources.includes('losat'),
-    edges: sources.map((source, ordinal) => ({ source, ordinal }))
+    edges: sources.map((source, ordinal) => ({ source, ordinal, queryIndex: ordinal, subjectIndex: ordinal + 1 }))
   }
 });
 
 const state = {
-  linearSeqs: [{}, {}, {}, {}, {}],
+  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   losat: {
     totalThreadBudget: 'safe',
@@ -76,7 +77,7 @@ assert.equal(settings.losatEffectiveThreadsPerJob.value, 4);
 assert(settings.losatThreadOptions.value.some((option) => option.value === '32'));
 
 const loadingOrderState = {
-  linearSeqs: [{}, {}, {}, {}, {}],
+  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   losat: {
     totalThreadBudget: 'safe',
@@ -94,7 +95,7 @@ createLosatSettings({ state: loadingOrderState });
 assert.equal(loadingOrderState.losat.threadsPerJob, '32');
 
 const noneState = {
-  linearSeqs: [{}, {}, {}],
+  linearSeqs: Array.from({ length: 3 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ mode: 'none', sources: [] }),
   losat: {
     totalThreadBudget: '17',
@@ -114,7 +115,7 @@ assert.equal(noneState.losat.threadsPerJob, '32');
 assert.equal(noneState.losat.parallelWorkers, '9');
 
 const mixedState = {
-  linearSeqs: [{}, {}, {}, {}],
+  linearSeqs: Array.from({ length: 4 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({
     mode: 'selected',
     defaultSource: 'upload',
@@ -134,7 +135,7 @@ mixedState.losatProgram.value = 'blastp';
 assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
 
 const expansionState = {
-  linearSeqs: [{}, {}, {}, {}, {}],
+  linearSeqs: Array.from({ length: 5 }, (_, index) => ({ uid: `record-${index}` })),
   linearComparisonResolution: resolved({ sources: ['losat', 'losat', 'losat', 'losat'] }),
   losat: {
     totalThreadBudget: 'safe',
@@ -172,3 +173,19 @@ expansionState.linearComparisonResolution.value = {
 assert.equal(expansionSettings.losatEstimatedJobCount.value, 0);
 
 console.log('losat-settings tests passed');
+
+const sourceFiles = [{ name: 'upper.gb' }, { name: 'lower.gb' }];
+expansionState.linearComparisonResolution.value.valid = true;
+expansionState.linearSeqs.forEach((sequence, index) => { sequence.gb = sourceFiles[index < 2 ? 0 : 1]; });
+expansionState.losat.blastp.mode = 'orthogroup';
+assert.equal(expansionSettings.losatEstimatedJobCount.value, 4);
+expansionState.losat.blastp.mode = 'pairwise';
+expansionState.linearComparisonResolution = { value: {
+  mode: 'adjacent', defaultSource: 'losat', valid: true, hasLosatIntent: true,
+  edges: [0, 1].flatMap((queryIndex) => [2, 3, 4].map((subjectIndex) => ({
+    source: 'losat', queryIndex, subjectIndex
+  })))
+} };
+// The computed owner retains its original resolution ref.
+const batchedSettings = createLosatSettings({ state: expansionState });
+assert.equal(batchedSettings.losatEstimatedJobCount.value, 1);

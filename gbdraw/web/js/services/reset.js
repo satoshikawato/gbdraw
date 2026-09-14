@@ -10,6 +10,7 @@ import {
   createDefaultSpecificRule
 } from '../state.js';
 import { createDefaultLayoutPreferences } from '../app/layout-preferences.js';
+import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
 const clonePlain = (value) => {
   if (Array.isArray(value)) return value.map((entry) => clonePlain(entry));
@@ -144,6 +145,7 @@ const resetLinearComparisonPlan = (state) => {
 
 export const resetSettings = (state) => {
   replaceReactiveObject(state.form, createDefaultForm());
+  state.linearRecordLayoutEnabled.value = WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
   replaceReactiveObject(state.adv, createDefaultAdv(state.mode.value));
   state.linearTypographyLinked.value = true;
   state.modeProfileStateManager?.reset?.(state.mode.value, state.adv);

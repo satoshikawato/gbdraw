@@ -30,6 +30,7 @@ for (const mode of ['circular', 'linear']) {
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank('circular') + genbank('linear')) });
     if (mode === 'linear') {
+      await page.getByRole('button', { name: 'Records for file 1', exact: true }).click();
       await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
       const selector = page.getByRole('combobox', { name: 'Record selector for sequence 1', exact: true });
       await expect(selector).toBeEnabled();

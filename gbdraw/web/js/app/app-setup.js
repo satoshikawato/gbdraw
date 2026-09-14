@@ -31,6 +31,7 @@ import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
+import { groupLinearSourceRecords } from './linear-sources.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -527,6 +528,7 @@ export const createAppSetup = () => {
     linearRecordLayoutEnabled.value = nextEnabled;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
+    if (nextEnabled) return materializeAutomaticLinearRecords();
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
@@ -554,6 +556,7 @@ export const createAppSetup = () => {
     }
   }));
 
+  const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
   const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
     sequences: linearSeqs,
     layout: effectiveLinearComparisonLayout(),
@@ -571,6 +574,7 @@ export const createAppSetup = () => {
     const sequence = linearSeqs.find((entry) => entry.uid === uid);
     return plainTextLinearRecordLabel(
       sequence?.definition ||
+      sequence?.region_record_id ||
       sequence?.gb?.name ||
       sequence?.gff?.name ||
       sequence?.fasta?.name ||
@@ -586,6 +590,10 @@ export const createAppSetup = () => {
     await nextTick();
     return details;
   };
+  watch([mode, hasActiveLinearLosatIntent], ([activeMode, activeLosat]) => {
+    if (activeMode === 'linear' && activeLosat) openLinearComparisonDisclosure('settings');
+  }, { flush: 'post' });
+
   const focusLinearComparisonPair = async (edgeKey) => {
     await openLinearComparisonDisclosure('selected-pairs');
     const container = [...document.querySelectorAll('[data-edge-key]')]
@@ -616,9 +624,9 @@ export const createAppSetup = () => {
     return true;
   };
 
-  const setLinearComparisonGlobalAction = (action) => {
+  const setLinearComparisonGlobalAction = async (action) => {
     const normalized = String(action || '').trim().toLowerCase();
-    return mutateLinearComparisonPlan((next) => {
+    const result = await mutateLinearComparisonPlan((next) => {
       if (normalized === 'none') {
         next.mode = LINEAR_COMPARISON_MODES.NONE;
         return;
@@ -628,6 +636,10 @@ export const createAppSetup = () => {
         ? LINEAR_COMPARISON_SOURCES.UPLOAD
         : LINEAR_COMPARISON_SOURCES.LOSAT;
     });
+    if (normalized === LINEAR_COMPARISON_SOURCES.LOSAT) {
+      await openLinearComparisonDisclosure('settings');
+    }
+    return result;
   };
 
   const setLinearComparisonLosatMode = (modeKey) => {
@@ -904,10 +916,39 @@ export const createAppSetup = () => {
       .map((entry) => [String(entry.edgeKey), entry])
   ));
 
+  const pendingLinearRecordExpansions = new Set();
+  const expandDiscoveredLinearRecords = ({ uid, records }) => {
+    if (!pendingLinearRecordExpansions.delete(uid)) return;
+    const index = linearSeqs.findIndex((seq) => seq.uid === uid);
+    if (index < 0 || records.length < 2) return;
+    const source = linearSeqs[index];
+    if (source.region_record_id || source.region_start != null || source.region_end != null) return;
+    const row = linearRecordRowFor(uid, index + 1);
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => (
+      createLinearSeq({
+        ...source,
+        uid: recordIndex === 0 ? uid : undefined,
+        region_record_id: record.value
+      })
+    ));
+    applyLinearSeqMutation([
+      ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
+    ]);
+    expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
+    return true;
+  };
+  const materializeAutomaticLinearRecords = async () => {
+    if (mode.value !== 'linear') return;
+    linearSeqs.forEach((seq) => {
+      if (!seq.region_record_id) pendingLinearRecordExpansions.add(seq.uid);
+    });
+    await linearRecordSelector.refresh();
+  };
   const paletteLoader = createPaletteLoader({ state });
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
+    onRecordsDiscovered: expandDiscoveredLinearRecords,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -2389,6 +2430,13 @@ export const createAppSetup = () => {
   }
 
   const runAnalysis = async () => {
+    if (mode.value === 'linear') {
+      if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
+        await materializeAutomaticLinearRecords();
+      } else {
+        await linearRecordSelector.refresh();
+      }
+    }
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
       : null;
@@ -3202,6 +3250,10 @@ export const createAppSetup = () => {
       });
     }
     linearSeqs.splice(0, linearSeqs.length, ...next);
+    const activeUids = new Set(next.map((seq) => seq.uid));
+    pendingLinearRecordExpansions.forEach((uid) => {
+      if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
+    });
     const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
     replaceLinearComparisonPlan(
@@ -3226,7 +3278,9 @@ export const createAppSetup = () => {
 
   const removeLastLinearSeq = () => {
     if (linearSeqs.length <= 1) return;
-    removeLinearSeqAt(linearSeqs.length - 1);
+    const group = linearSourceGroups.value.at(-1);
+    const removed = new Set(group.records.map(({ sequence }) => sequence.uid));
+    applyLinearSeqMutation(linearSeqs.filter((seq) => !removed.has(seq.uid)));
   };
 
   const setLinearSeqPrimaryFile = (index, field, value) => {
@@ -3236,27 +3290,24 @@ export const createAppSetup = () => {
 
     const nextValue = value ?? null;
     const seq = linearSeqs[idx];
-
-    if (field === 'gb') {
-      if (!nextValue) {
-        removeLinearSeqAt(idx);
-        return;
-      }
-      seq.gb = nextValue;
-      invalidateLinearComparisonArtifacts();
-      linearReorderNotice.value = '';
-      return;
-    }
-
-    const otherField = field === 'gff' ? 'fasta' : 'gff';
-    if (!nextValue && !seq[otherField]) {
-      removeLinearSeqAt(idx);
-      return;
-    }
-
-    seq[field] = nextValue;
-    invalidateLinearComparisonArtifacts();
-    linearReorderNotice.value = '';
+    if (seq[field] === nextValue) return;
+    const group = linearSourceGroups.value.find((entry) => (
+      entry.records.some(({ sequence }) => sequence.uid === seq.uid)
+    ));
+    const members = new Set(group.records.map(({ sequence }) => sequence.uid));
+    const replacement = createLinearSeq({
+      ...group.sequence,
+      [field]: nextValue,
+      ...(group.records.length > 1 ? {
+        region_record_id: '', region_start: null, region_end: null, region_reverse: false
+      } : {})
+    });
+    const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
+    applyLinearSeqMutation(linearSeqs.flatMap((entry) => (
+      entry.uid === group.uid ? (keepSource ? [replacement] : [])
+        : members.has(entry.uid) ? [] : [entry]
+    )));
+    if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
   };
 
   const canMoveLinearSeqUp = (index) => {
@@ -3394,6 +3445,7 @@ export const createAppSetup = () => {
     getLinearDepthFile,
     setLinearDepthFile,
     linearSeqs,
+    linearSourceGroups,
     linearRecordLayoutEnabled,
     linearRecordGap,
     linearRecordRows,

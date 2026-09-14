@@ -39,9 +39,9 @@ export const createDefaultAdv = (mode = 'circular') => ({
   outer_label_x_offset: null, outer_label_y_offset: null, inner_label_x_offset: null, inner_label_y_offset: null
 });
 export const createDefaultLosat = () => ({
-  outfmt: '6', parallelWorkers: undefined, executionMode: 'auto', totalThreadBudget: 'safe', threadsPerJob: 'auto',
+  outfmt: '6', parallelWorkers: undefined, executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto',
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
-    orthogroupMemberMaxHits: 5, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
+    orthogroupMemberMaxHits: null, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'either', collinearSearchScope: 'adjacent' }
 });

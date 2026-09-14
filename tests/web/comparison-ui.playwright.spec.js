@@ -119,7 +119,7 @@ const expectKeyboardFocusIndicator = async (locator) => {
   expect(indicator.outlineWidth).not.toBe('0px');
 };
 
-test('fresh Linear keeps primary input visible and uses command/status semantics', async ({ page }) => {
+test('fresh Linear keeps primary input visible and uses command/status semantics', { tag: '@pr-smoke' }, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openLinear(page);
 
@@ -132,8 +132,8 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
 
   const commands = comparisonCommands(page);
   const expectedNames = [
-    'Set no comparison',
     'Run LOSAT for all adjacent pairs',
+    'Set no comparison',
     'Use uploaded BLAST TSV for all adjacent pairs'
   ];
   await expect(commands.getByRole('button')).toHaveCount(3);
@@ -181,9 +181,30 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   await expectInside(firstUploader, settingsPane);
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
   await expect(page.locator('[data-linear-record-list] [data-edge-key]')).toHaveCount(0);
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    const buttons = commands.getByRole('button');
+    await expect(async () => {
+      const [run, none, upload] = await buttons.evaluateAll((elements) => (
+        elements.map((element) => element.getBoundingClientRect().toJSON())
+      ));
+      expect(run.y + run.height).toBeLessThanOrEqual(none.y);
+      expect(none.y).toBeCloseTo(upload.y, 0);
+      expect(none.x + none.width).toBeLessThan(upload.x);
+      expect(run.x).toBeCloseTo(none.x, 0);
+      expect(run.x + run.width).toBeCloseTo(upload.x + upload.width, 0);
+    }).toPass();
+    await buttons.first().focus();
+    for (const [index, name] of expectedNames.entries()) {
+      if (index > 0) await page.keyboard.press('Tab');
+      await expect(commands.getByRole('button', { name, exact: true })).toBeFocused();
+    }
+    await commands.screenshot({ path: testInfo.outputPath(`comparison-actions-${width}.png`) });
+  }
 });
 
-test('uploader, comparison commands, and native summaries work from the keyboard', async ({ page }) => {
+test('uploader, comparison commands, and native summaries work from the keyboard', { tag: '@pr-smoke' }, async ({ page }) => {
   await openLinear(page);
   await inputHeaderAdd(page).click();
 
@@ -246,10 +267,18 @@ test('uploader, comparison commands, and native summaries work from the keyboard
 
   await runLosat.focus();
   await page.keyboard.press('Space');
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(runLosat).toBeFocused();
+  for (const name of ['LOSATN', 'LOSATP', 'TLOSATX']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
   const settingsSummary = comparisonSettings(page).locator('summary');
   await settingsSummary.focus();
   await expectKeyboardFocusIndicator(settingsSummary);
   await page.keyboard.press('Enter');
+  await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
+  await runLosat.press('Space');
+  await expect(runLosat).toBeFocused();
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
 
   const losatMode = page.getByRole('group', { name: 'LOSAT Mode' });
@@ -272,8 +301,13 @@ test('uploader, comparison commands, and native summaries work from the keyboard
   await settingsSummary.focus();
   await page.keyboard.press('Space');
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
+  await runLosat.click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(losatpButton).toHaveAttribute('aria-pressed', 'true');
+  await settingsSummary.click();
 
   const selectedSummary = selectedPairs(page).locator('summary');
+  await page.keyboard.press('Tab');
   await selectedSummary.focus();
   await expectKeyboardFocusIndicator(selectedSummary);
   await page.keyboard.press('Space');
@@ -523,7 +557,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     app.addLinearSeq();
     await app.setLinearComparisonGlobalAction('losat');
   });
-  await comparisonSettings(page).locator('summary').click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   const losatMode = page.getByRole('group', { name: 'LOSAT Mode' });
   const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });
 
@@ -806,7 +840,7 @@ test('comparison controls drive appearance and current Session round trips', asy
     app.setLinearComparisonLosatpMode('pairwise');
   }, [makeGenbank('Ui04A', 'atg'), makeGenbank('Ui04B', 'gct')]);
 
-  await comparisonSettings(page).locator('summary').click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   const advanced = page.locator(
     'details[data-linear-comparison-disclosure="advanced"]'
   );
@@ -1067,7 +1101,7 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   }).click();
 
   const settingsSummary = comparisonSettings(page).locator('summary');
-  await settingsSummary.click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   const losatModeGeometry = await page.getByRole('group', {
     name: 'LOSAT Mode'
   }).evaluate((group) => {

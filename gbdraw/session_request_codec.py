@@ -3129,12 +3129,9 @@ def _decode_comparisons(
                 subject_index = _non_negative_index(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
-                if query_index == len(blast_files) and subject_index == query_index + 1:
-                    blast_files.append(str(resource_path))
-                else:
-                    explicit_comparisons.append(
-                        LinearComparison(query_index, subject_index, table)
-                    )
+                explicit_comparisons.append(
+                    LinearComparison(query_index, subject_index, table)
+                )
             else:
                 blast_files.append(str(resource_path))
         elif kind == "precomputedProteinComparison":
@@ -3161,12 +3158,9 @@ def _decode_comparisons(
                 subject_index = _non_negative_index(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
-                if query_index == len(protein_tables) and subject_index == query_index + 1:
-                    protein_tables.append(table)
-                else:
-                    explicit_comparisons.append(
-                        LinearComparison(query_index, subject_index, table)
-                    )
+                explicit_comparisons.append(
+                    LinearComparison(query_index, subject_index, table)
+                )
             else:
                 protein_tables.append(table)
         elif kind == "orthogroupResult":

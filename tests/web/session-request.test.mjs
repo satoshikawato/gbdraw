@@ -4167,7 +4167,7 @@ const inactiveProteinDefaults = {
   proteinBlastpMaxHits: 5,
   proteinBlastpCandidateLimit: null,
   orthogroupMembershipMode: 'anchor_core_v1',
-  orthogroupMemberMaxHits: 5,
+  orthogroupMemberMaxHits: null,
   collinearMinAnchors: 1,
   collinearMaxUnitGap: 0,
   collinearMaxDiagonalDrift: 0,

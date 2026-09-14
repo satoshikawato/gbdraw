@@ -106,9 +106,10 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert (
         'v-for="displayRow in linearComparisonTimeline.rows"' in index
     )
-    assert ':data-linear-display-row="displayRow.row"' in index
+    assert 'v-for="(source, sourceIndex) in linearSourceGroups"' in index
+    assert ':data-linear-source-card="source.uid"' in index
     assert (
-        'v-for="({ sequence: seq, index: idx }) in displayRow.records"'
+        'v-for="({ sequence: seq, index: idx }) in source.records"'
         in index
     )
     assert ':key="seq.uid"' in index
@@ -228,7 +229,7 @@ def test_losatn_tutorial_controls_and_match_popup_are_accessible() -> None:
     assert 'label="BLAST TSV"' in index
     assert ':data-linear-comparison-pair-upload="pair.edgeKey"' in index
     assert ':data-input-aria-label="`BLAST TSV for #' in index
-    assert ':test-id="`linear-genbank-${idx + 1}`"' in index
+    assert ':test-id="`linear-genbank-${sourceIndex + 1}`"' in index
     assert ':data-testid="testId || undefined"' in index
     assert "'testId'" in components
     assert 'role="dialog"' in index

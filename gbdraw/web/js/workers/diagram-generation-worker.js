@@ -653,7 +653,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearMaxParalogLinksPerOrthogroup ?? 2,
         payload.collinearSearchScope ?? 'adjacent',
         payload.orthogroupMembershipMode ?? 'anchor_core_v1',
-        payload.orthogroupMemberMaxHits ?? 5,
+        payload.orthogroupMemberMaxHits ?? null,
         payload.collinearMergeOrientation ?? 'either'
       ]
     )

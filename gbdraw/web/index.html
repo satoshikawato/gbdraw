@@ -1133,15 +1133,17 @@
             line-height: 1.25rem;
         }
         .linear-comparison-actions {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 0.5rem;
             min-width: 0;
+        }
+        .linear-comparison-actions > .btn:first-child {
+            grid-column: 1 / -1;
         }
         .linear-comparison-actions .btn {
             align-items: center;
             display: flex;
-            flex: 1 1 8rem;
             justify-content: center;
             min-height: 2.25rem;
             min-width: 0;
@@ -1149,6 +1151,7 @@
             white-space: normal;
         }
         .linear-losat-mode-actions {
+            display: flex;
             flex-wrap: nowrap;
         }
         .linear-losat-mode-actions .btn {
@@ -1495,18 +1498,64 @@
                             <span>{{ linearReorderNotice }}</span>
                         </div>
                         <div data-linear-record-list class="min-w-0 space-y-3">
-                            <template v-for="displayRow in linearComparisonTimeline.rows" :key="`linear-display-row-${displayRow.row}`">
-                                <section :data-linear-display-row="displayRow.row" class="min-w-0 space-y-2" :aria-label="`Linear display row ${displayRow.row}`">
-                                    <div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Display row {{ displayRow.row }}</div>
-                                    <div
-                                        v-for="({ sequence: seq, index: idx }) in displayRow.records"
-                                        :key="seq.uid"
-                                        :data-linear-record-card="seq.uid"
-                                        :data-linear-record-uid="seq.uid"
-                                        class="min-w-0 p-3 bg-slate-50 rounded-lg border border-slate-200 group text-sm transition-all hover:border-blue-300"
-                                        role="group"
-                                        :aria-label="`Linear sequence ${idx + 1}`"
-                                    >
+                            <section
+                                v-for="(source, sourceIndex) in linearSourceGroups"
+                                :key="source.uid"
+                                :data-linear-source-card="source.uid"
+                                class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
+                                :aria-label="`Linear input file ${sourceIndex + 1}`"
+                            >
+                                <div class="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
+                                    <span>File {{ sourceIndex + 1 }}</span>
+                                </div>
+                            <div v-if="lInputType === 'gb'" class="space-y-2">
+                                <file-uploader
+                                    label="GenBank File"
+                                    :test-id="`linear-genbank-${sourceIndex + 1}`"
+                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
+                                    :model-value="source.sequence.gb"
+                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)"
+                                ></file-uploader>
+                            </div>
+                            <div v-else class="space-y-2 mb-2">
+                                <file-uploader
+                                    label="GFF3"
+                                    accept=".gff,.gff3,.txt,text/plain,text/*"
+                                    :model-value="source.sequence.gff"
+                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)"
+                                ></file-uploader>
+                                <file-uploader
+                                    label="FASTA"
+                                    accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
+                                    :model-value="source.sequence.fasta"
+                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
+                                ></file-uploader>
+                            </div>
+                            <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
+                                <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-2 text-xs font-normal text-slate-500">
+                                    Number of records: {{ source.records.length }}
+                                    <span v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && source.records.some(({ sequence }) => !(Number(sequence.losat_gencode) >= 1))" class="ml-1 text-red-700">Gencode required</span>
+                                </summary>
+                                <div
+                                    v-for="({ sequence: seq, index: idx }) in source.records"
+                                    :key="seq.uid"
+                                    :data-linear-record-card="seq.uid"
+                                    :data-linear-record-uid="seq.uid"
+                                    class="min-w-0"
+                                    role="group"
+                                    :aria-label="`Linear sequence ${idx + 1}`"
+                                >
+                            <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
+                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-primary-label">
+                                    <i class="ph ph-sliders-horizontal"></i>
+                                    <span v-if="source.records.length > 1" class="min-w-0 truncate" :title="linearComparisonRecordLabel(seq.uid)">{{ linearComparisonRecordLabel(seq.uid) }}</span>
+                                    <span v-else>Record options</span>
+                                    <span
+                                        v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && !(Number(seq.losat_gencode) >= 1)"
+                                        class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                                    >Gencode required</span>
+                                </summary>
+                                <div class="min-w-0 space-y-2 pt-2">
                             <div class="mb-2 flex items-center justify-between gap-2">
                                 <div class="text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                                 <div class="flex items-center gap-1 shrink-0">
@@ -1528,39 +1577,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div v-if="lInputType === 'gb'" class="space-y-2">
-                                <file-uploader
-                                    label="GenBank File"
-                                    :test-id="`linear-genbank-${idx + 1}`"
-                                    accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
-                                    :model-value="seq.gb"
-                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gb', $event)"
-                                ></file-uploader>
-                            </div>
-                            <div v-else class="space-y-2 mb-2">
-                                <file-uploader
-                                    label="GFF3"
-                                    accept=".gff,.gff3,.txt,text/plain,text/*"
-                                    :model-value="seq.gff"
-                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'gff', $event)"
-                                ></file-uploader>
-                                <file-uploader
-                                    label="FASTA"
-                                    accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
-                                    :model-value="seq.fasta"
-                                    @update:model-value="setLinearSeqPrimaryFile(idx, 'fasta', $event)"
-                                ></file-uploader>
-                            </div>
-                            <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
-                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-primary-label">
-                                    <i class="ph ph-sliders-horizontal"></i>
-                                    Record options
-                                    <span
-                                        v-if="hasActiveLinearLosatIntent && losatProgram === 'tblastx' && !(Number(seq.losat_gencode) >= 1)"
-                                        class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
-                                    >Gencode required</span>
-                                </summary>
-                                <div class="min-w-0 space-y-2 pt-2">
+
                                     <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600">Load record rotation controls</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
@@ -1766,13 +1783,13 @@
                             </div>
                                 </div>
                             </details>
-                                    </div>
-                                </section>
-                            </template>
+                                </div>
+                            </details>
+                            </section>
                         </div>
                         <div class="flex min-w-0 gap-2">
                             <button type="button" aria-label="Add sequence" @click="addLinearSeq()" class="btn btn-secondary min-w-0 w-full text-xs"><i class="ph ph-plus"></i> Add sequence</button>
-                            <button v-if="linearSeqs.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger min-w-0 w-full text-xs"><i class="ph ph-minus"></i> Remove</button>
+                            <button v-if="linearSourceGroups.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger min-w-0 w-full text-xs"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                         <section data-linear-comparison-card class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
                             <div id="linear-comparison-heading" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700">
@@ -1819,8 +1836,8 @@
                                 </div>
                             </div>
                             <div role="group" aria-label="Set all adjacent comparisons" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
-                                <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
+                                <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Upload BLAST TSV</button>
                             </div>
                             <div class="min-w-0 rounded border border-slate-200 bg-white px-2 py-2" role="status" aria-live="polite">
@@ -1897,6 +1914,43 @@
                                         </select>
                                     </div>
 
+                                    <section v-if="linearComparisonUi.sectionKeys.settings.includes('losat-runtime')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
+                                        <div class="linear-primary-label">Runtime and reproducibility</div>
+                                        <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Execution <help-tip text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></label>
+                                                <select v-model="losat.executionMode" aria-label="LOSAT execution" class="form-input px-2 py-1.5 text-xs">
+                                                    <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
+                                                    <option value="serial">Serial</option>
+                                                    <option value="threaded">Threaded</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Total threads</label>
+                                                <select v-model="losat.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs">
+                                                    <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
+                                                    <option value="available">Available ({{ losatHardwareThreads }})</option>
+                                                    <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Parallel runs</label>
+                                                <select v-model="losat.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs">
+                                                    <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
+                                                    <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="linear-primary-label mb-1">Threads per run</label>
+                                                <select v-model="losat.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="losatThreadsPerJobFixed">
+                                                    <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
+                                                    <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
+                                    </section>
+
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
                                         Set the translation table for each sequence in its <strong>Record options</strong>. A missing active TLOSATX code is shown on the closed record summary.
                                     </div>
@@ -1907,8 +1961,8 @@
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('member-hits')">
-                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
-                                        <input type="number" min="1" step="1" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
+                                        <label class="linear-primary-label mb-1">Member hits per protein <help-tip text="Maximum directional subject hits used to construct Similarity groups and Collinear blocks. Leave blank to keep all hits passing the result filters. This does not limit raw LOSATP candidates or Pairwise display matches."></help-tip></label>
+                                        <input type="number" min="1" step="1" placeholder="Unbounded" v-model.number="losat.blastp.orthogroupMemberMaxHits" aria-label="Member hits per protein" class="form-input px-2 py-1.5 text-xs">
                                     </div>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('collinear-primary')" class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2146,43 +2200,6 @@
                                         <input type="number" min="0" step="1" v-model.number="linearRecordGap" aria-label="Linear record gap" class="form-input mt-1 min-w-0 px-2 py-1.5 text-xs">
                                     </label>
                                 </div>
-                            </section>
-
-                            <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-runtime')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
-                                <div class="linear-primary-label">Runtime and reproducibility</div>
-                                <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Execution <help-tip text="Auto chooses threaded LOSAT only when browser support and workload allow it."></help-tip></label>
-                                        <select v-model="losat.executionMode" aria-label="LOSAT execution" class="form-input px-2 py-1.5 text-xs">
-                                            <option value="auto">Auto ({{ losatEffectiveExecutionMode }})</option>
-                                            <option value="serial">Serial</option>
-                                            <option value="threaded">Threaded</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Total threads</label>
-                                        <select v-model="losat.totalThreadBudget" aria-label="LOSAT total threads" class="form-input px-2 py-1.5 text-xs">
-                                            <option value="safe">Safe ({{ losatSafeThreadBudget }})</option>
-                                            <option value="available">Available ({{ losatHardwareThreads }})</option>
-                                            <option v-for="option in losatTotalThreadBudgetOptions" :key="`losat-budget-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Parallel runs</label>
-                                        <select v-model="losat.parallelWorkers" aria-label="LOSAT parallel runs" class="form-input px-2 py-1.5 text-xs">
-                                            <option :value="undefined">Auto ({{ losatAutoPairWorkers }} {{ losatAutoPairWorkers === 1 ? 'run' : 'runs' }})</option>
-                                            <option v-for="option in losatPairWorkerOptions" :key="`losat-pair-workers-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="linear-primary-label mb-1">Threads per run</label>
-                                        <select v-model="losat.threadsPerJob" aria-label="LOSAT threads per run" class="form-input px-2 py-1.5 text-xs" :disabled="losatThreadsPerJobFixed">
-                                            <option value="auto">Auto ({{ losatEffectiveThreadsPerJob }})</option>
-                                            <option v-for="option in losatThreadOptions" :key="`losat-threads-${option.value}`" :value="option.value">{{ option.label }}</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losatp-candidate')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -2926,7 +2943,7 @@
 
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (opt-in)."></help-tip></span>
+                                        <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (default)."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Content">

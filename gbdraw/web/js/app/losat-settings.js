@@ -1,4 +1,5 @@
 import { normalizeCollinearSearchScope } from './losat-normalization.js';
+import { groupLinearSourceRecords } from './linear-sources.js';
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
@@ -54,24 +55,32 @@ export const createLosatSettings = ({ state }) => {
   const losatEstimatedJobCount = computed(() => {
     const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
-    const losatEdgeCount = (Array.isArray(resolution.edges) ? resolution.edges : [])
-      .filter((edge) => edge?.source === 'losat').length;
-    if (losatEdgeCount === 0) return 0;
-    const recordCount = Math.max(0, Array.isArray(linearSeqs) ? linearSeqs.length : 0);
-    if (recordCount < 2) return 0;
-    if (losatProgram.value !== 'blastp') return losatEdgeCount;
-
+    const sources = new Map();
+    groupLinearSourceRecords(linearSeqs).forEach((group) => {
+      group.records.forEach(({ index }) => sources.set(index, group.uid));
+    });
+    const jobs = new Set();
+    const addPair = (query, subject) => jobs.add(JSON.stringify([
+      sources.get(query), sources.get(subject),
+      ...(losatProgram.value === 'tblastx'
+        ? [linearSeqs[query]?.losat_gencode, linearSeqs[subject]?.losat_gencode] : [])
+    ]));
+    const edges = (resolution.edges || []).filter((edge) => edge.source === 'losat');
+    edges.forEach((edge) => addPair(edge.queryIndex, edge.subjectIndex));
     const blastpMode = String(losat.blastp?.mode || 'orthogroup').trim().toLowerCase();
-    const expandsAllRecords = resolution.mode === 'adjacent' && resolution.defaultSource === 'losat';
-    if (expandsAllRecords && blastpMode === 'orthogroup') return recordCount * recordCount;
-    if (expandsAllRecords && blastpMode === 'collinear') {
-      const scope = normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope);
-      const pairCount = scope === 'all'
-        ? Math.floor((recordCount * (recordCount - 1)) / 2)
-        : recordCount - 1;
-      return Math.max(1, recordCount + pairCount * 2);
+    if (losatProgram.value === 'blastp' && ['orthogroup', 'collinear'].includes(blastpMode)
+      && resolution.mode === 'adjacent' && resolution.defaultSource === 'losat') {
+      linearSeqs.forEach((_, index) => addPair(index, index));
+      if (blastpMode === 'orthogroup'
+        || normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope) === 'all') {
+        const representatives = [...new Set(sources.values())].map((uid) =>
+          [...sources].find(([, sourceUid]) => sourceUid === uid)[0]);
+        representatives.forEach((query) => representatives.forEach((subject) => addPair(query, subject)));
+      } else {
+        edges.forEach((edge) => addPair(edge.subjectIndex, edge.queryIndex));
+      }
     }
-    return losatEdgeCount;
+    return jobs.size;
   });
 
   const losatSafeThreadBudget = computed(() =>

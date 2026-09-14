@@ -1488,7 +1488,7 @@ def _invoke_protein_analysis_helper(
     pairwise_max_hits: int,
     candidate_limit: int | None,
     orthogroup_membership_mode: OrthogroupMembershipMode,
-    orthogroup_member_max_hits: int,
+    orthogroup_member_max_hits: int | None,
     max_paralog_links_per_orthogroup: int,
     evalue: float,
     bitscore: float,
@@ -1595,7 +1595,7 @@ def assemble_linear_diagram_from_records(
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int = 5,
+    orthogroup_member_max_hits: int | None = None,
     collinear_max_paralog_links_per_orthogroup: int = 2,
     align_orthogroup_feature: str | None = None,
     color_table: Optional[DataFrame] = None,
@@ -1725,8 +1725,8 @@ def assemble_linear_diagram_from_records(
             collinearity_comparison_pairs = record_pairs_between_adjacent_rows(collinearity_rows)
     if int(protein_blastp_max_hits) <= 0:
         raise ValidationError("protein_blastp_max_hits must be > 0")
-    if int(orthogroup_member_max_hits) <= 0:
-        raise ValidationError("orthogroup_member_max_hits must be > 0")
+    if orthogroup_member_max_hits is not None and int(orthogroup_member_max_hits) <= 0:
+        raise ValidationError("orthogroup_member_max_hits must be > 0 or None")
     if int(collinear_max_paralog_links_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
     if losatp_threads is not None and int(losatp_threads) <= 0:
@@ -1899,7 +1899,7 @@ def assemble_linear_diagram_from_records(
             pairwise_max_hits=int(protein_blastp_max_hits),
             candidate_limit=protein_blastp_candidate_limit,
             orthogroup_membership_mode=normalized_orthogroup_membership_mode,
-            orthogroup_member_max_hits=int(orthogroup_member_max_hits),
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
             max_paralog_links_per_orthogroup=int(
                 collinear_max_paralog_links_per_orthogroup
             ),
@@ -3214,7 +3214,10 @@ def assemble_circular_diagram_from_records(
             (*copied_definitions, *copied_elements),
             record_index=record_index,
             used_ids=used_ids,
-            bind_record_identity=bool(_record_transforms and any(t.start_coordinate is not None for t in _record_transforms)),
+            bind_record_identity=(
+                len({record.id for record in records}) != len(records)
+                or bool(_record_transforms and any(t.start_coordinate is not None for t in _record_transforms))
+            ),
         )
         for definition in copied_definitions:
             merged_canvas.defs.add(definition)

@@ -31,6 +31,7 @@ assert.deepEqual(CURRENT_WRITER_ADV_FIELDS, [
   'losatProgram'
 ]);
 assert.equal(createDefaultLosat().blastp.candidateLimit, null);
+assert.equal(createDefaultLosat().executionMode, 'threaded');
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
 assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
 

@@ -5,11 +5,12 @@ export const WEB_UX_PROFILE = Object.freeze({
   circular: Object.freeze({
     singleRecordGrouping: 'single',
     multiRecordGrouping: 'batch',
-    gridByDefault: false,
+    gridByDefault: true,
     legend: 'left',
     plotTitlePosition: 'none'
   }),
   linear: Object.freeze({
+    arrangeInRowsByDefault: true,
     legend: 'bottom',
     plotTitlePosition: 'bottom'
   })

@@ -361,7 +361,7 @@ class LinearComparisonOptions:
     orthogroup_membership: OrthogroupMembershipMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.orthogroup_membership_mode
     )
-    orthogroup_member_max_hits: int = (
+    orthogroup_member_max_hits: int | None = (
         _LINEAR_DIAGRAM_DEFAULTS.orthogroup_member_max_hits
     )
     max_paralog_links: int = (
