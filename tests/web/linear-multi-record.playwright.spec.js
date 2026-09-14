@@ -2883,9 +2883,10 @@ test('@pr-smoke one uploaded source stays one file card through record moves, re
 
 test('@pr-smoke LOSAT Settings preserve execution controls and unbounded members through Save and Load', async ({ page }, testInfo) => {
   await openApp(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
   await uploadCompleteRecordSources(page);
   const settings = page.locator('[data-linear-comparison-disclosure="settings"]');
-  await settings.locator(':scope > summary').click();
+  await expect(settings).toHaveAttribute('open', '');
   const labels = ['LOSAT execution', 'LOSAT total threads', 'LOSAT parallel runs', 'LOSAT threads per run'];
   for (const mode of ['blastn', 'tblastx', 'blastp']) {
     await page.evaluate((value) => window.__GBDRAW_APP__.setLinearComparisonLosatMode(value), mode);
@@ -2907,22 +2908,28 @@ test('@pr-smoke LOSAT Settings preserve execution controls and unbounded members
   await page.setViewportSize({ width: 1280, height: 900 });
   await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('losat-settings-execution-controls.png') });
-  const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
-    window.__GBDRAW_APP__.sessionTitle = 'losat-settings';
-    await window.__GBDRAW_APP__.saveSessionWithTitle();
-  });
-  const path = await (await saved).path();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForAppShell(page);
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
-  await settings.locator(':scope > summary').click();
-  for (const [index, name] of labels.entries()) {
-    await expect(settings.getByRole('combobox', { name, exact: true })).toHaveValue(['threaded', '2', '1', '2'][index]);
+  for (const execution of ['auto', 'serial', 'threaded']) {
+    await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption(execution);
+    const saved = page.waitForEvent('download');
+    await page.evaluate(async () => {
+      window.__GBDRAW_APP__.sessionTitle = 'losat-settings';
+      await window.__GBDRAW_APP__.saveSessionWithTitle();
+    });
+    const path = await (await saved).path();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppShell(page);
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+    await expect(settings).toHaveAttribute('open', '');
+    for (const [index, name] of labels.entries()) {
+      await expect(settings.getByRole('combobox', { name, exact: true })).toHaveValue([execution, '2', '1', '2'][index]);
+    }
+    await expect(member).toHaveValue('');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits)).toBeNull();
   }
-  await expect(member).toHaveValue('');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits)).toBeNull();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
 });
 
 test('@pr-smoke LOSATP source jobs are reused after display start, reverse complement, and fresh Load', async ({ page }) => {

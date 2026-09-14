@@ -590,6 +590,10 @@ export const createAppSetup = () => {
     await nextTick();
     return details;
   };
+  watch([mode, hasActiveLinearLosatIntent], ([activeMode, activeLosat]) => {
+    if (activeMode === 'linear' && activeLosat) openLinearComparisonDisclosure('settings');
+  }, { flush: 'post' });
+
   const focusLinearComparisonPair = async (edgeKey) => {
     await openLinearComparisonDisclosure('selected-pairs');
     const container = [...document.querySelectorAll('[data-edge-key]')]
@@ -620,9 +624,9 @@ export const createAppSetup = () => {
     return true;
   };
 
-  const setLinearComparisonGlobalAction = (action) => {
+  const setLinearComparisonGlobalAction = async (action) => {
     const normalized = String(action || '').trim().toLowerCase();
-    return mutateLinearComparisonPlan((next) => {
+    const result = await mutateLinearComparisonPlan((next) => {
       if (normalized === 'none') {
         next.mode = LINEAR_COMPARISON_MODES.NONE;
         return;
@@ -632,6 +636,10 @@ export const createAppSetup = () => {
         ? LINEAR_COMPARISON_SOURCES.UPLOAD
         : LINEAR_COMPARISON_SOURCES.LOSAT;
     });
+    if (normalized === LINEAR_COMPARISON_SOURCES.LOSAT) {
+      await openLinearComparisonDisclosure('settings');
+    }
+    return result;
   };
 
   const setLinearComparisonLosatMode = (modeKey) => {

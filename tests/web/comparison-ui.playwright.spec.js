@@ -246,10 +246,18 @@ test('uploader, comparison commands, and native summaries work from the keyboard
 
   await runLosat.focus();
   await page.keyboard.press('Space');
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(runLosat).toBeFocused();
+  for (const name of ['LOSATN', 'LOSATP', 'TLOSATX']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
   const settingsSummary = comparisonSettings(page).locator('summary');
   await settingsSummary.focus();
   await expectKeyboardFocusIndicator(settingsSummary);
   await page.keyboard.press('Enter');
+  await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
+  await runLosat.press('Space');
+  await expect(runLosat).toBeFocused();
   await expect(comparisonSettings(page)).toHaveAttribute('open', '');
 
   const losatMode = page.getByRole('group', { name: 'LOSAT Mode' });
@@ -272,8 +280,13 @@ test('uploader, comparison commands, and native summaries work from the keyboard
   await settingsSummary.focus();
   await page.keyboard.press('Space');
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
+  await runLosat.click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
+  await expect(losatpButton).toHaveAttribute('aria-pressed', 'true');
+  await settingsSummary.click();
 
   const selectedSummary = selectedPairs(page).locator('summary');
+  await page.keyboard.press('Tab');
   await selectedSummary.focus();
   await expectKeyboardFocusIndicator(selectedSummary);
   await page.keyboard.press('Space');
@@ -523,7 +536,7 @@ test('LOSAT and LOSATP modes own their controls and mixed plans require explicit
     app.addLinearSeq();
     await app.setLinearComparisonGlobalAction('losat');
   });
-  await comparisonSettings(page).locator('summary').click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   const losatMode = page.getByRole('group', { name: 'LOSAT Mode' });
   const losatpMode = page.getByRole('combobox', { name: 'LOSATP mode' });
 
@@ -806,7 +819,7 @@ test('comparison controls drive appearance and current Session round trips', asy
     app.setLinearComparisonLosatpMode('pairwise');
   }, [makeGenbank('Ui04A', 'atg'), makeGenbank('Ui04B', 'gct')]);
 
-  await comparisonSettings(page).locator('summary').click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   const advanced = page.locator(
     'details[data-linear-comparison-disclosure="advanced"]'
   );
@@ -1067,7 +1080,7 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   }).click();
 
   const settingsSummary = comparisonSettings(page).locator('summary');
-  await settingsSummary.click();
+  await expect(comparisonSettings(page)).toHaveAttribute('open', '');
   const losatModeGeometry = await page.getByRole('group', {
     name: 'LOSAT Mode'
   }).evaluate((group) => {
