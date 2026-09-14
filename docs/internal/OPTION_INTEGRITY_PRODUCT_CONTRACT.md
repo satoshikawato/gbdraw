@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `3`
+- Contract revision: `4`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -23,7 +23,7 @@ Status: active Product authority
   `PD-OI-014`, `PD-OI-015`, `PD-OI-016`, and `PD-OI-017`
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
-- Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`
+- Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -33,6 +33,9 @@ Status: active Product authority
   `PD-OI-004` with an unbounded default and clarified `PD-OI-018` to require
   source-file execution, reusable raw evidence after display transforms,
   compact record disclosures, and execution controls in LOSAT Settings.
+- Revision 4 addition: `PD-OI-020`, requested by `satoshikawato` on
+  `2026-09-14` to restore automatic thread allocation when Total threads changes
+  and protect that behavior against regression.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -581,6 +584,49 @@ corrected. Passing evidence does not make incorrect behavior normative.
   rows and Circular shared canvas as defaults in the same decision session.
 - Owner and decision date: `satoshikawato`, `2026-09-13`.
 
+
+### PD-OI-020: LOSAT total-thread allocation and control agreement
+
+- Concern key: `diagram-generation.losat-total-thread-allocation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Normative outcome:
+  1. Total threads sets the effective total budget. Safe uses half the available
+     hardware threads, with a minimum of one; Available uses the hardware
+     count. Explicit numeric budgets cannot exceed the available hardware.
+  2. Auto Parallel runs and Auto Threads per run recalculate when the budget
+     or pending source-job count changes. Auto Threads per run distributes the
+     budget across the selected simultaneous runs; multiple jobs do not impose
+     a hidden fixed two-thread limit. With four pending LOSATP source jobs and
+     both controls on Auto, numeric totals 32, 16, and 2 produce respectively
+     4 runs × 8 threads, 4 × 4, and 2 × 1, when hardware permits those totals.
+  3. The displayed plan and actual execution use the same allocation rules.
+     Before Generate, the controls may use the estimated source-job count;
+     cached jobs are omitted from actual execution. Actual run information
+     reports the effective execution allocation. Simultaneous runs multiplied
+     by threads per run never exceeds the effective total budget.
+  4. Explicit Parallel runs and Threads per run choices remain independent
+     editable intent. Auto adjusts around the manual choice. A temporary
+     effective clamp does not replace the saved manual value or Auto with its
+     computed value; any requested/effective difference is visible. Increasing
+     the budget makes a preserved manual choice effective again when feasible.
+     Save and fresh Load preserve these choices.
+- Rationale: Restore the maintainer-requested linkage between Total threads,
+  simultaneous runs, and threads per run, and prevent the controls from
+  promising an allocation that execution does not use.
+- Must preserve: Existing execution modes, browser support checks, fixed
+  single-thread-per-run constraints for LOSATN and TLOSATX, source-file job
+  batching, cancellation, and explicit saved choices. Scheduling changes do
+  not alter search parameters, member-hit limits, or raw-search identity.
+- May retire: none.
+- Accepted residual risk: The existing computation and memory allowance in
+  `PD-OI-018` remains; this decision grants no exception to the selected total
+  thread budget and does not promise a fixed speedup for every workload.
+- Acceptance contracts: `OIC-005`, `OIC-013`, `OIC-016`.
+- Decision source: Explicit maintainer request to restore or implement linked
+  automatic allocation and record this regression as a Contract.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -600,6 +646,7 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-013` | Failed, canceled, or stale Generate preserves the committed request and last successful Result. |
 | `OIC-014` | Product authority, Product Impact mapping, Architecture Ratchet, runtime owners, and evidence remain separate. |
 | `OIC-015` | Linear discovery, per-record placement, actual comparison jobs, explicit request endpoints, Session replay, and SVG endpoints retain the complete selected record universe. Adjacent uses neighboring-row Cartesian products; Similarity and Collinear `all` retain complete directed evidence regardless of display rows. |
+| `OIC-016` | LOSAT Auto allocation follows Total threads; displayed and executed budgets agree, and manual intent survives temporary clamps and Session replay. |
 
 ### OIC-015 required regression coverage
 
@@ -657,3 +704,18 @@ scientific-output corruption, loss of a must-preserve effect, deterministic
 Architecture Ratchet failure, undocumented unbounded performance regression,
 cache reuse across different execution semantics, artifact provenance that
 disagrees with actual execution, or failure of a required acceptance contract.
+
+
+## OIC-016 acceptance evidence
+
+- With four source jobs, change Total threads between 32, 16, and 2 through the
+  visible control and observe both Auto labels recalculate as specified above.
+- Exercise one explicit concurrency value with automatic per-run threads and
+  one explicit per-run thread value with automatic concurrency. Verify the
+  effective budget bound after decreasing and increasing Total threads.
+- Preserve explicit choices and Auto through Save and fresh Load, including a
+  temporarily clamped value. Show the effective clamp without rewriting intent.
+- Observe real threaded LOSATP dispatch and completion on a small workload;
+  compare the worker allocation and runtime report with the displayed plan.
+- Keep fixed one-thread-per-run programs fixed. Changing only scheduling
+  settings preserves the existing raw-search cache identity.
