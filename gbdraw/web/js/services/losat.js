@@ -1,4 +1,5 @@
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
+import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import {
   hasDirectLosatApi,
   runLosatPairDirect,
@@ -7,10 +8,7 @@ import {
 
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
-const DEFAULT_MAX_WORKERS = 4;
 const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
-const DEFAULT_MAX_TOTAL_THREADS = 16;
-const DEFAULT_MAX_THREADS_PER_JOB = 16;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
@@ -179,47 +177,9 @@ export const runLosatPair = async ({
   });
 };
 
-const getDefaultConcurrency = (jobCount) => {
-  if (!Number.isFinite(jobCount) || jobCount <= 0) return 0;
-  const hardwareLimit = Math.max(1, (globalThis.navigator?.hardwareConcurrency || 4) - 1);
-  return Math.min(jobCount, hardwareLimit, DEFAULT_MAX_WORKERS);
-};
-
-const getHardwareThreadBudget = () =>
-  Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
-
-const normalizeTotalThreadBudget = (value) => {
-  const hardwareBudget = getHardwareThreadBudget();
-  const normalized = String(value ?? 'safe').trim().toLowerCase();
-  if (!normalized || normalized === 'safe' || normalized === 'auto') {
-    return Math.min(DEFAULT_MAX_TOTAL_THREADS, hardwareBudget);
-  }
-  if (normalized === 'available') return hardwareBudget;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return Math.min(DEFAULT_MAX_TOTAL_THREADS, hardwareBudget);
-  }
-  return Math.max(1, Math.min(parsed, hardwareBudget));
-};
-
 const normalizeExecutionMode = (value) => {
   const mode = String(value || 'auto').trim().toLowerCase();
   return ['auto', 'serial', 'threaded'].includes(mode) ? mode : 'auto';
-};
-
-const normalizeThreadsPerJob = (value, { fallback = null, maxThreads = DEFAULT_MAX_THREADS_PER_JOB } = {}) => {
-  if (value === undefined || value === null || String(value).trim().toLowerCase() === 'auto') {
-    return fallback;
-  }
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
-  return Math.min(parsed, Math.max(1, Number(maxThreads) || DEFAULT_MAX_THREADS_PER_JOB));
-};
-
-const getAutoThreadsPerJob = (jobs) => {
-  const budget = Math.min(DEFAULT_MAX_THREADS_PER_JOB, getHardwareThreadBudget());
-  if (!Array.isArray(jobs) || jobs.length !== 1) return Math.max(1, Math.min(2, budget));
-  return Math.max(1, budget);
 };
 
 const getThreadedFastaCharCount = (job, sequenceStore) => {
@@ -253,30 +213,13 @@ const notifyRuntimeStatus = (callback, status) => {
 };
 
 const buildThreadedRuntimePlan = (jobs, options, sequenceStore) => {
-  const hasExplicitTotalBudget = Number.isFinite(options.totalThreadBudget);
-  const requestedPairWorkers = Number.isFinite(options.concurrency)
-    ? Math.max(1, Math.floor(options.concurrency))
-    : hasExplicitTotalBudget
-      ? jobs.length
-      : getDefaultConcurrency(jobs.length);
-  const autoThreadsPerJob = getAutoThreadsPerJob(jobs);
-  const totalBudget = normalizeTotalThreadBudget(options.totalThreadBudget);
-  const requestedThreadsPerJob = normalizeThreadsPerJob(options.threadsPerJob, {
-    fallback: autoThreadsPerJob,
-    maxThreads: Math.max(1, totalBudget)
+  const plan = resolveLosatThreadPlan({
+    jobCount: jobs.length,
+    totalThreadBudget: options.totalThreadBudget,
+    threadsPerJob: jobs.every((job) => job.program === 'blastp') ? options.threadsPerJob : 1,
+    parallelWorkers: options.concurrency
   });
-  const threadsPerJob = Math.max(1, Math.min(requestedThreadsPerJob, Math.max(1, totalBudget)));
-  const workersPerThreadedJob = Math.max(1, threadsPerJob);
-  const pairWorkers = Math.max(
-    1,
-    Math.min(jobs.length, requestedPairWorkers, Math.max(1, Math.floor(totalBudget / workersPerThreadedJob)))
-  );
-  return {
-    pairWorkers,
-    threadsPerJob,
-    useful: shouldUseThreadedLosat(jobs, sequenceStore, threadsPerJob),
-    totalBudget
-  };
+  return { ...plan, useful: shouldUseThreadedLosat(jobs, sequenceStore, plan.threadsPerJob) };
 };
 
 const formatPairErrorPrefix = (job) => {
@@ -410,14 +353,13 @@ const initializeLosatWorker = (worker, payload, signal) =>
 
 const runLosatPairsWithWorkers = async (
   jobs,
-  { concurrency, workerUrl, wasmPath, onProgress, sequences, signal } = {}
+  { concurrency, totalThreadBudget, workerUrl, wasmPath, onProgress, sequences, signal } = {}
 ) => {
   throwIfAborted(signal);
   const sequenceStore = normalizeSequenceStore(sequences);
-  const workerCount = Math.min(
-    jobs.length,
-    Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : getDefaultConcurrency(jobs.length))
-  );
+  const workerCount = resolveLosatThreadPlan({
+    jobCount: jobs.length, totalThreadBudget, parallelWorkers: concurrency, threadsPerJob: 1
+  }).pairWorkers;
   if (workerCount <= 0) return [];
 
   throwIfAborted(signal);
@@ -747,6 +689,10 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
 
   const executionMode = normalizeExecutionMode(options.executionMode);
   const sequenceStore = normalizeSequenceStore(options.sequences);
+  const serialPlan = resolveLosatThreadPlan({
+    jobCount: jobList.length, totalThreadBudget: options.totalThreadBudget,
+    parallelWorkers: options.concurrency, threadsPerJob: 1
+  });
   let threadedFallbackReason = '';
 
   if (executionMode !== 'serial') {
@@ -808,14 +754,14 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
         buildRuntimeStatus(
           'fallback',
           `Using serial LOSAT: ${threadedFallbackReason}`,
-          { mode: 'serial', fallbackReason: threadedFallbackReason }
+          { ...serialPlan, mode: 'serial', fallbackReason: threadedFallbackReason }
         )
       );
     }
   } else {
     notifyRuntimeStatus(
       options.onRuntimeStatus,
-      buildRuntimeStatus('disabled', 'Using serial LOSAT by request.', { mode: 'serial' })
+      buildRuntimeStatus('disabled', 'Using serial LOSAT by request.', { ...serialPlan, mode: 'serial' })
     );
   }
 

@@ -40,7 +40,7 @@ test('comparison browser contracts run in the required PR contract job and full 
   const contracts = collect(...args);
   const full = new Set(collect('test', '--config=playwright.functional.config.js'));
   const smoke = new Set(collect('test', '--config=playwright.pr-smoke.config.js'));
-  assert.equal(contracts.length, 9);
+  assert.equal(contracts.length, 10);
   for (const title of contracts) {
     assert.ok(full.has(title), `missing full regression: ${title}`);
     assert.ok(!smoke.has(title), `duplicated PR execution: ${title}`);
