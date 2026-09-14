@@ -230,6 +230,7 @@ def test_web_losatp_typed_result_separates_stable_view_and_dom_ids(
                 "pairIndex": 3,
                 "queryIndex": 3,
                 "subjectIndex": 4,
+                "displayPair": True,
                 "cacheKey": "forward-cache",
                 "blastText": forward_hit,
             },
