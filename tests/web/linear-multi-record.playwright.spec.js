@@ -2351,7 +2351,7 @@ AAAAAAAAAA
   ], { timeout: 60000 });
 });
 
-test('protein raw cache survives cancellation and derived options preserve search identity', { tag: '@pr-smoke' }, async ({
+test('protein raw cache survives cancellation and derived options preserve search identity', { tag: '@comparison-contract' }, async ({
   page
 }) => {
   test.setTimeout(420000);
