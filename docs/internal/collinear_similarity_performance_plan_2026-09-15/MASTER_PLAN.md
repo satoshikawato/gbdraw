@@ -1,7 +1,7 @@
 # Collinear / Similarity groups 計算量改修 — 総合計画書
 
 - 作成日: 2026-09-15
-- 状態: S01の基準・再現資産を作成・検証済み。S02以降は計画。本番の性能改修やProduct 選択の完了を表すものではない。
+- 状態: S01の基準・再現資産とS02の調査・テスト専用prototype・同値検証・設計が完了。S02のProduct選択は未受領（decision revision 1、baseへの反映なし）。S03以降の本番改修は未実施。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
 ## 1. 目的と完了の意味
@@ -21,7 +21,7 @@
 
 ### 2.1 計画時に確認した状態
 
-- 発端: [report.md](../report.md)。監査対象は旧作業ツリー `51d2ae362ac154a3e360727ad086ad1d27bbc989` と未コミット変更。
+- 発端: 共有作業ツリーの未追跡 `docs/internal/report.md`（このworktreeには含めない）。監査対象は旧作業ツリー `51d2ae362ac154a3e360727ad086ad1d27bbc989` と未コミット変更。
 - 文書保存時に fetch して確認した `origin/dev`: `65f231af175c0dbbbbf9b4674566e84ce5dddac5`。
 - 現在の共有作業ツリーには対象・対象外の未コミット変更がある。旧作業ツリーをそのまま実装ベースにしない。
 - report の `/tmp/gbdraw-mode-audit/` は計画時に存在しなかった。再現コードを利用可能と仮定しない。
@@ -50,6 +50,13 @@ retry 修正（PR #534）。計画済みの性能改修へ重複実装しない�
 [S01 inventory](results/S01_INVENTORY.md)、実測と再現コマンドは
 [S01 handoff](results/S01.md)を参照する。以後のセッションはこの基準との
 差分を確認する。S02 の経路表現の選択と S03 以降の本番改修は別セッションである。
+
+S02開始時のfetchでもbaseは`9a4f7e29`のままで、S01成果は未統合だったため
+新規worktreeへcherry-pickした。調査・検証結果は[S02 handoff](results/S02.md)、
+全consumerと公開履歴は[S02 inventory](results/S02_INVENTORY.md)、具体的な型・
+順位・保存・互換性は[S02 contract](results/S02_PATH_CONTRACT.md)を参照する。
+[Decision Pack](results/PATH_DECISION_PACK.md)は判断待ちの候補でありauthorityではない。
+S06にはS05完了と、選択済みoutcomeを認可するbase authorityが引き続き必要。
 
 [Option Integrity Product Contract revision 5](https://github.com/satoshikawato/gbdraw/blob/9e28581a3d0e7fb9117da0fbc11d46a945b0e59e/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md) は、以下を既に選択している。
 
