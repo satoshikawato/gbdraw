@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/tmp/gbdraw-collinear-s04/tests/run_hsp_browser_acceptance.py", line 17, in <module>
+    from tests.run_losat_cache_browser_acceptance import _run_python_adapter
+ModuleNotFoundError: No module named 'tests.run_losat_cache_browser_acceptance'

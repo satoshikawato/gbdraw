@@ -44,7 +44,8 @@ POLICY = {"warmups": 1, "samples": 7, "regressionPct": 10.0,
 GALLERIES = ("hepatoplasmataceae_collinear", "hepatoplasmataceae_orthogroup",
              "vibrio-harveyi-group-collinear")
 CASES = ("hsp-edges", "hsp-1", "hsp-1000", "hsp-many", "dense-24", "support-edges",
-         "sparse-200", "sparse-400", "sparse-800",
+         "sparse-2", "sparse-200", "sparse-400", "sparse-800",
+         "giant-200", "giant-800", "unrelated-200", "unrelated-800",
          "cache-49", "cache-64", "cache-81", "path-8", "path-12", "path-16",
          "merge-300", "merge-600", "merge-1200", "merge-edges", "manifest",
          "gallery-collinear", "gallery-orthogroup", "render-gallery")
@@ -205,6 +206,24 @@ def synthetic(pc, name, seed):
               for i in range(size) for r, p in enumerate(("q", "s", "u"))}
         return pm, {(0, 1): frame([hit(f"q{i}", f"s{i}") for i in range(size)]),
                     (1, 0): frame([hit(f"s{i}", f"q{i}") for i in range(size)])}
+    if name.startswith("giant-"):
+        # Two star cores: many members, only twenty sparse incoming attachments.
+        # Two records bound the legacy path depth; no large all-record DAG.
+        pm = {}
+        rows = {(0, 1): [], (1, 0): [], (0, 0): []}
+        for group in range(2):
+            subject = f"s{group}"
+            pm[subject] = protein(pc, subject, 1, group)
+            for i in range(size):
+                query = f"q{group}_{i}"
+                pm[query] = protein(pc, query, 0, group * size + i)
+                rows[0, 1].append(hit(query, subject))
+                rows[1, 0].append(hit(subject, query))
+            for i in range(10):
+                pid = f"u{group}_{i}"
+                pm[pid] = protein(pc, pid, 0, 2 * size + group * 10 + i)
+                rows[0, 0].append(hit(f"q{group}_{i}", pid, bitscore=150))
+        return pm, {pair: frame(values) for pair, values in rows.items()}
     if name.startswith("dense-"):
         pm = {f"{p}{i}": protein(pc, f"{p}{i}", r, i)
               for i in range(size) for r, p in enumerate(("q", "s", "u"))}
@@ -401,6 +420,34 @@ def cache_case(root, pc, name):
 
 
 def build_case(root, pc, cc, name, seed):
+    if name.startswith("unrelated-"):
+        import pandas as pd
+        # Membership-stage isolation: adding groups changes neither evidence nor
+        # unassigned proteins. Anchors are an already prepared stage input.
+        size = int(name.split("-")[1])
+        pm = {f"m{i}": protein(pc, f"m{i}", 0, i) for i in range(size)}
+        pm.update({f"u{i}": protein(pc, f"u{i}", 1, i) for i in range(200)})
+        groups = {f"og_{i}": {f"m{i}"} for i in range(size)}
+        mapping = {pid: group for group, members in groups.items() for pid in members}
+        best = {(f"m{i}", f"u{i}"): next(pd.DataFrame([hit(f"m{i}", f"u{i}", normalized_score=1.0, min_coverage=1.0)]).itertuples(index=False))
+                for i in range(200)}
+        def support_scan():
+            index = pc._index_core_support_evidence(best, mapping) if hasattr(pc, "_index_core_support_evidence") else None
+            result = {}
+            for i in range(200):
+                pid = f"u{i}"
+                candidates = []
+                for group, evidence in (index.get(pid, {}) if index is not None else groups).items():
+                    candidate = (pc._build_core_support_candidate(pid, group, evidence, {}, pm)
+                                 if index is not None else
+                                 pc._build_core_support_candidate(pid, group, sorted(evidence), best, {}, pm))
+                    if candidate is not None:
+                        candidates.append(candidate)
+                result[pid] = sorted(candidates, key=pc._core_support_sort_key)
+            return result
+        return {"groups": size, "unassigned": 200, "evidence": len(best), "seed": seed,
+                "inputSha256": digest(json_bytes(canonical((pm, groups, best)))),
+                "boundary": "support candidate stage with precomputed membership; includes index construction"}, {"support_scan": support_scan}
     if name == "render-gallery":
         from gbdraw.api import load_session_document, materialize_session, render_session
         paths = [root / f"gbdraw/web/gallery/sessions/{g}.gbdraw-session.json.gz" for g in GALLERIES[:2]]
@@ -454,6 +501,11 @@ def build_case(root, pc, cc, name, seed):
         return inventory, {"parse": parse, "filter": filter_hits, "hsp_aggregate": aggregate,
             "post_search": analyze,
             "metadata": lambda: serialize_orthogroups_payload(result.orthogroups, records=records),
+            "display_tables": (lambda: cc.convert_collinearity_blocks_to_pair_comparisons(result, records=records))
+                if name.endswith("collinear") else
+                (lambda: [pc.convert_pair_protein_hits_to_genomic_links(
+                    table, extraction.protein_map, extraction.protein_map, result.orthogroups)
+                    for table in result.adjacent_display_edges_by_pair.values()]),
             "typed_serialization": lambda: encode_canonical_typed_resource("result", result if name.endswith("collinear") else result.orthogroups)}
     pm, tables = synthetic(pc, name, seed)
     inventory = {"seed": seed, "generator": name, "proteinCount": len(pm),
@@ -474,6 +526,7 @@ def build_case(root, pc, cc, name, seed):
 
 def operation_probe(pc, cc, fn):
     import pandas as pd
+    from gbdraw.web_support import orthogroup_metadata as metadata
 
     counters = Counter()
     profile = cProfile.Profile()
@@ -496,12 +549,87 @@ def operation_probe(pc, cc, fn):
                     return counted_rows()
                 return result
             stack.enter_context(patch.object(pd.DataFrame, name, pandas_call))
+        if hasattr(metadata, "_index_rbh_groups"):
+            original_rbh_index = metadata._index_rbh_groups
+            def rbh_index(groups):
+                counters["metadata.rbhIndexBuilds"] += 1
+                counters["metadata.rbhIndexInputGroups"] += len(groups)
+                counters["metadata.rbhIndexInputMembers"] += sum(map(len, groups.values()))
+                started = time.perf_counter_ns()
+                ids, index = original_rbh_index(groups)
+                counters["metadata.rbhIndexBuildNanoseconds"] += time.perf_counter_ns() - started
+                counters["metadata.rbhIndexReferences"] += sum(map(len, index.values()))
+                counters["metadata.rbhIndexOwnedContainerBytes"] = max(
+                    counters["metadata.rbhIndexOwnedContainerBytes"],
+                    sys.getsizeof(ids) + sys.getsizeof(index) + sum(map(sys.getsizeof, index.values())))
+                return ids, index
+            stack.enter_context(patch.object(metadata, "_index_rbh_groups", rbh_index))
+        original_text = metadata._text
+        def metadata_text(value):
+            counters["metadata.textNormalizations"] += 1
+            return original_text(value)
+        stack.enter_context(patch.object(metadata, "_text", metadata_text))
+        # The old metadata owner materializes both edge tuples for every lookup.
+        def edge_amount(args, kwargs):
+            if hasattr(pc, "_index_orthogroup_edges"):
+                return 0
+            groups, gid = args[:2]
+            return (len(groups.ortholog_edges_by_orthogroup_id.get(gid, ())) +
+                    len(groups.related_edges_by_orthogroup_id.get(gid, ()))) if groups and gid else 0
+        original_anchor_metadata = cc._orthogroup_edge_metadata_for_anchor
+        def anchor_metadata(*args, **kwargs):
+            counters["metadata.anchorLookups"] += 1
+            if not hasattr(pc, "_index_orthogroup_edges"):
+                counters["metadata.anchorEdgeReferencesMaterialized"] += edge_amount((args[3], args[2]), {})
+            return original_anchor_metadata(*args, **kwargs)
+        stack.enter_context(patch.object(cc, "_orthogroup_edge_metadata_for_anchor", anchor_metadata))
+        original_best = pc._best_evidence_between_protein_and_members
+        def best_visits(*args, **kwargs):
+            legacy = "same_record" in kwargs
+            counters["support.memberVisits" if legacy else "support.evidenceVisits"] += len(args[1])
+            counters["support.reductionCalls"] += 1
+            return original_best(*args, **kwargs)
+        stack.enter_context(patch.object(pc, "_best_evidence_between_protein_and_members", best_visits))
+        for name in ("_index_core_support_evidence", "_index_orthogroup_edges", "_orthogroup_member_counts"):
+            if not hasattr(pc, name):
+                continue
+            original = getattr(pc, name)
+            def index_build(*args, _name=name, _original=original, **kwargs):
+                counters[_name + ".calls"] += 1
+                if _name == "_index_orthogroup_edges":
+                    groups, gid = args[:2]
+                    if args[3][1] == 0:
+                        counters[_name + ".inputItems"] += len(groups.ortholog_edges_by_orthogroup_id.get(gid, ())) + len(groups.related_edges_by_orthogroup_id.get(gid, ()))
+                else:
+                    counters[_name + ".inputItems"] += len(args[0])
+                started = time.perf_counter_ns()
+                index = _original(*args, **kwargs)
+                counters[_name + ".buildNanoseconds"] += time.perf_counter_ns() - started
+                if _name == "_index_orthogroup_edges":
+                    counters[_name + ".edgeVisits"] += index[1] - args[3][1]
+                    return index
+                if _name == "_orthogroup_member_counts":
+                    counters[_name + ".retainedEntries"] += len(index)
+                    counters[_name + ".maxOwnedContainerBytes"] = max(counters[_name + ".maxOwnedContainerBytes"], sys.getsizeof(index))
+                if _name == "_index_core_support_evidence":
+                    buckets = [values for groups in index.values() for values in groups.values()]
+                    counters[_name + ".retainedEvidenceReferences"] += sum(map(len, buckets))
+                    # Owned containers only: existing row/string objects excluded.
+                    owned = sys.getsizeof(index) + sum(sys.getsizeof(groups) for groups in index.values())
+                    owned += sum(sys.getsizeof(values) + sum(sys.getsizeof(item) for item in values) for values in buckets)
+                    counters[_name + ".maxOwnedContainerBytes"] = max(counters[_name + ".maxOwnedContainerBytes"], owned)
+                return index
+            stack.enter_context(patch.object(pc, name, index_build))
+            # Collinearity imports shared metadata functions directly.
+            if hasattr(cc, name):
+                stack.enter_context(patch.object(cc, name, index_build))
         for module, name, amount in (
             (pc, "validate_protein_identity_manifest", None),
             (pc, "_aggregate_hsps_by_protein_pair", lambda a, k: len(a[0])),
             (pc, "parse_losatp_outfmt6", None),
             (pc, "_raw_hsp_representative_rank", None),
             (pc, "_build_core_support_candidate", None),
+            (pc, "_edge_metadata_for_protein_pair", edge_amount),
             (pc, "_build_ortholog_paths", None),
             (cc, "_lossless_conflicts_between_clusters", lambda a, k: len(a[2])),
         ):
@@ -514,10 +642,22 @@ def operation_probe(pc, cc, fn):
                 aggregation = _name == "_aggregate_hsps_by_protein_pair"
                 aggregate_depth += int(aggregation)
                 try:
-                    return _original(*args, **kwargs)
+                    indexes = args[4] if _name == "_edge_metadata_for_protein_pair" and len(args) > 4 else None
+                    state = indexes.get(args[1]) if indexes is not None else None
+                    previous = len(state[0]) if state else 0
+                    result = _original(*args, **kwargs)
+                    state = indexes.get(args[1]) if indexes is not None else None
+                    if state:
+                        indexed = state[0]
+                        counters["_index_orthogroup_edges.retainedEntries"] += len(indexed) - previous
+                        owned = sys.getsizeof(state) + sys.getsizeof(indexed) + sum(map(sys.getsizeof, indexed))
+                        counters["_index_orthogroup_edges.maxOwnedContainerBytes"] = max(counters["_index_orthogroup_edges.maxOwnedContainerBytes"], owned)
+                    return result
                 finally:
                     aggregate_depth -= int(aggregation)
             stack.enter_context(patch.object(module, name, counted))
+            if module is pc and getattr(cc, name, None) is original:
+                stack.enter_context(patch.object(cc, name, counted))
         result = profile.runcall(fn)
     stats = pstats.Stats(profile)
     # Profile details are diagnostic; none of these instrumented times enters the timing gate.
@@ -585,7 +725,8 @@ def measure_stage(pc, cc, fn, args, artifact):
               "sampleSemanticSha256": hashes}
     if samples:
         median = statistics.median(samples)
-        report.update({"median": median, "noisePct": 100 * statistics.median(abs(x-median) for x in samples)/median if median else 0})
+        mad = statistics.median(abs(x-median) for x in samples)
+        report.update({"median": median, "mad": mad, "noisePct": 100 * mad/median if median else 0})
     if counts is not None:
         report.update({"operations": counts, "profile": profile})
     return report

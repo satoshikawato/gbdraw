@@ -299,6 +299,19 @@ def _serialize_member(
     return payload
 
 
+def _index_rbh_groups(
+    rbh_orthogroups: Mapping[object, Sequence[object]],
+) -> tuple[list[str], dict[str, list[int]]]:
+    # Ordinals preserve mapping order and distinct keys with the same text ID.
+    ids: list[str] = []
+    ordinals_by_protein: dict[str, list[int]] = {}
+    for ordinal, (rbh_id, protein_ids) in enumerate(rbh_orthogroups.items()):
+        ids.append(_text(rbh_id))
+        for protein_id in {_text(item) for item in protein_ids}:
+            ordinals_by_protein.setdefault(protein_id, []).append(ordinal)
+    return ids, ordinals_by_protein
+
+
 def serialize_orthogroups_payload(
     orthogroups: Any,
     *,
@@ -324,15 +337,22 @@ def serialize_orthogroups_payload(
     scope_by_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
     source_record_index_by_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
 
+    rbh_ids_by_ordinal, rbh_ordinals_by_protein = (
+        _index_rbh_groups(rbh_orthogroups) if groups else ([], {})
+    )
+
     payload: list[dict[str, object]] = []
     for orthogroup_id, members in groups.items():
         orthogroup_id = _text(orthogroup_id)
         members = list(members or [])
         member_ids = {_text(getattr(member, "protein_id", "")) for member in members}
         rbh_ids = [
-            _text(rbh_id)
-            for rbh_id, protein_ids in rbh_orthogroups.items()
-            if member_ids.intersection({_text(protein_id) for protein_id in protein_ids})
+            rbh_ids_by_ordinal[ordinal]
+            for ordinal in sorted({
+                ordinal
+                for protein_id in member_ids
+                for ordinal in rbh_ordinals_by_protein.get(protein_id, ())
+            })
         ]
         record_coverage_count = len({int(member.record_index) for member in members})
         source_record_index = (

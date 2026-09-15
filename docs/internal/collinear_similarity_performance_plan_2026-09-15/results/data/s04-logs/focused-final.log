@@ -1,0 +1,64 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /tmp/gbdraw-collinear-s04
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 624 items
+
+tests/test_sparse_support.py ........................................... [  6%]
+........FF                                                               [  8%]
+tests/test_protein_comparison_benchmark.py ........                      [  9%]
+tests/test_ortholog_path_contract.py .................                   [ 12%]
+tests/test_protein_colinearity.py ...................................... [ 18%]
+........................................................................ [ 30%]
+............................................................s........... [ 41%]
+......................................                                   [ 47%]
+tests/test_collinearity.py ............................................. [ 54%]
+........................................................................ [ 66%]
+..........                                                               [ 68%]
+tests/test_collinearity_units.py ....                                    [ 68%]
+tests/test_web_feature_catalog.py .............................          [ 73%]
+tests/test_session_request_codec.py .................................... [ 79%]
+........................................................................ [ 90%]
+........                                                                 [ 91%]
+tests/test_session_compat.py ..................................          [ 97%]
+tests/test_output_comparison.py ................                         [100%]
+
+=================================== FAILURES ===================================
+________ test_complete_ties_best_second_confidence_and_related_order[1] ________
+tests/test_sparse_support.py:202: in test_complete_ties_best_second_confidence_and_related_order
+    assert [edge.subject_protein_id for edge in edges] == [f"tie{i}" for i in range(cap)]
+E   AssertionError: assert ['a'] == ['tie0']
+E
+E     At index 0 diff: 'a' != 'tie0'
+E     Use -v to get more diff
+________ test_complete_ties_best_second_confidence_and_related_order[2] ________
+tests/test_sparse_support.py:202: in test_complete_ties_best_second_confidence_and_related_order
+    assert [edge.subject_protein_id for edge in edges] == [f"tie{i}" for i in range(cap)]
+E   AssertionError: assert ['a', 'a'] == ['tie0', 'tie1']
+E
+E     At index 0 diff: 'a' != 'tie0'
+E     Use -v to get more diff
+=============================== warnings summary ===============================
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /tmp/gbdraw-collinear-s04/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+tests/test_session_compat.py::test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders
+tests/test_session_compat.py::test_version_39_typed_replay_retains_dormant_comparison_resource
+  /home/kawato/micromamba/lib/python3.13/site-packages/Bio/SeqIO/InsdcIO.py:404: BiopythonWarning: Feature qualifier key 'candidate_cluster_numbers' is longer than maximum length specified by standard (20 characters).
+    warnings.warn(
+
+tests/test_session_compat.py::test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders
+tests/test_session_compat.py::test_version_39_typed_replay_retains_dormant_comparison_resource
+  /home/kawato/micromamba/lib/python3.13/site-packages/Bio/SeqIO/InsdcIO.py:404: BiopythonWarning: Feature qualifier key 'candidate_cluster_number' is longer than maximum length specified by standard (20 characters).
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_sparse_support.py::test_complete_ties_best_second_confidence_and_related_order[1]
+FAILED tests/test_sparse_support.py::test_complete_ties_best_second_confidence_and_related_order[2]
+ ======= 2 failed, 621 passed, 1 skipped, 5 warnings in 137.63s (0:02:17) =======

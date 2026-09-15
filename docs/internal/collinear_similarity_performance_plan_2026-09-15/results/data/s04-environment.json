@@ -1,0 +1,20 @@
+{
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "benchmarkAffinity": "logical CPU 3 via taskset; no exclusive CPU reservation",
+  "measurementScopes": {
+    "indexBuildNanoseconds": "diagnostic construction time under cProfile; excluded from timing gate",
+    "indexOwnedContainerBytes": "shallow sizes of owned dict/list/tuple containers; row, string and integer objects (RBH ordinals and cursor offsets) excluded",
+    "inputDataFrameDeepBytes": "pandas deep bytes of retained case input frames; excludes protein maps, Bio records, raw buffers and prepared results",
+    "stagePeakBytes": "one tracemalloc invocation after fixture preparation, no warmup; only allocations inside the stage",
+    "processMaxRssKiB": "entire memory-run process including fixtures, retained inputs, imports, serializer and reports"
+  },
+  "dependencies": {
+    "python": "3.13.3",
+    "pandas": "2.3.0",
+    "numpy": "2.2.5",
+    "biopython": "1.85",
+    "svgwrite": "1.4.3"
+  },
+  "hostObservation": "unsandboxed WSL /proc sampled every 10 seconds; Windows processes not visible; background git add and editor load retained"
+}

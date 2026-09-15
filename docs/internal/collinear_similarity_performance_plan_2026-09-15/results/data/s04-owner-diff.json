@@ -1,0 +1,42 @@
+{
+  "gbdraw/analysis/protein_colinearity.py": {
+    "added": [
+      "_index_core_support_evidence",
+      "_index_orthogroup_edges",
+      "_orthogroup_member_counts"
+    ],
+    "removed": [
+      "_orthogroup_member_count"
+    ],
+    "changed": [
+      "_best_evidence_between_protein_and_members",
+      "_build_anchor_core_orthogroups",
+      "_build_core_support_candidate",
+      "_edge_metadata_for_protein_pair",
+      "_record_local_component_has_competing_core_support",
+      "convert_pair_protein_hits_to_genomic_links"
+    ]
+  },
+  "gbdraw/analysis/collinearity.py": {
+    "added": [],
+    "removed": [
+      "_orthogroup_id_for_edge"
+    ],
+    "changed": [
+      "_lossless_anchor_from_edge_row",
+      "_orthogroup_edge_metadata_for_anchor",
+      "_orthogroup_member_counts_by_record",
+      "build_orthogroup_collinearity_blocks_from_hits",
+      "orthogroup_edges_to_lossless_collinearity_anchors"
+    ]
+  },
+  "gbdraw/web_support/orthogroup_metadata.py": {
+    "added": [
+      "_index_rbh_groups"
+    ],
+    "removed": [],
+    "changed": [
+      "serialize_orthogroups_payload"
+    ]
+  }
+}

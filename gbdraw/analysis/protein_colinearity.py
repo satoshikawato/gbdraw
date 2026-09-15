@@ -4801,13 +4801,13 @@ def _record_local_support_by_member(
 
 def _record_local_component_has_competing_core_support(
     member_ids: Sequence[str],
-    group_member_ids: Mapping[str, set[str]],
-    best_by_direction: Mapping[tuple[str, str], object],
+    has_core_groups: bool,
+    evidence_by_protein: Mapping[str, Mapping[str, Sequence[tuple[str, str, object]]]],
     thresholds: Mapping[str, _LocalThreshold],
     protein_map: Mapping[str, CdsProtein],
     local_support_by_member: Mapping[str, float],
 ) -> bool:
-    if not group_member_ids:
+    if not has_core_groups:
         return False
     credible_core_ids: set[str] = set()
     for member_id in member_ids:
@@ -4816,13 +4816,12 @@ def _record_local_component_has_competing_core_support(
             return True
         candidates = [
             candidate
-            for group_id, existing_member_ids in group_member_ids.items()
+            for group_id, evidence in evidence_by_protein.get(member_id, {}).items()
             if (
                 candidate := _build_core_support_candidate(
                     member_id,
                     group_id,
-                    sorted(existing_member_ids, key=lambda item: _protein_sort_key(protein_map[item])),
-                    best_by_direction,
+                    evidence,
                     thresholds,
                     protein_map,
                 )
@@ -5021,63 +5020,81 @@ def _derive_anchor_core_thresholds(
     return thresholds
 
 
+def _index_core_support_evidence(
+    best_by_direction: Mapping[tuple[str, str], object],
+    group_by_protein: Mapping[str, str],
+) -> dict[str, dict[str, list[tuple[str, str, object]]]]:
+    """Snapshot incoming/outgoing evidence from unassigned proteins to members.
+
+    Rows are immutable normalized tuples. Buckets own only references and never
+    alias the mutable membership map; rebuild after membership expansion.
+    """
+    evidence_by_protein: dict[str, dict[str, list[tuple[str, str, object]]]] = {}
+    for (query_id, subject_id), row in best_by_direction.items():
+        query_group = group_by_protein.get(query_id)
+        subject_group = group_by_protein.get(subject_id)
+        if query_group is None and subject_group is not None:
+            evidence_by_protein.setdefault(query_id, {}).setdefault(subject_group, []).append(
+                (query_id, subject_id, row)
+            )
+        elif subject_group is None and query_group is not None:
+            evidence_by_protein.setdefault(subject_id, {}).setdefault(query_group, []).append(
+                (query_id, subject_id, row)
+            )
+    return evidence_by_protein
+
+
 def _best_evidence_between_protein_and_members(
     protein_id: str,
-    member_ids: Sequence[str],
-    best_by_direction: Mapping[tuple[str, str], object],
+    evidence: Sequence[tuple[str, str, object]],
     protein_map: Mapping[str, CdsProtein],
-    *,
-    same_record: bool,
-) -> _BestCoreEvidence:
+) -> tuple[_BestCoreEvidence, _BestCoreEvidence]:
+    """Reduce connected evidence once, returning same-record then cross-record."""
     protein = protein_map[protein_id]
-    best_support: tuple[float, object | None, str, str] = (0.0, None, "", "")
-    best_diagnostic: tuple[float, object | None, str, str] = (0.0, None, "", "")
-    member_set = set(member_ids)
-    for member_id in member_set:
-        if member_id == protein_id or member_id not in protein_map:
+    supports: list[tuple[float, object | None, str, str]] = [(0.0, None, "", "")] * 2
+    diagnostics: list[tuple[float, object | None, str, str]] = [(0.0, None, "", "")] * 2
+    for query_id, subject_id, row in evidence:
+        member_id = subject_id if query_id == protein_id else query_id
+        if member_id == protein_id or member_id not in protein_map or row is None:
             continue
-        member = protein_map[member_id]
-        is_same_record = int(protein.record_index) == int(member.record_index)
-        if is_same_record != bool(same_record):
+        record_kind = int(int(protein.record_index) != int(protein_map[member_id].record_index))
+        score = _normalized_score_from_row(row)
+        if score <= 0.0:
             continue
-        for query_id, subject_id in ((protein_id, member_id), (member_id, protein_id)):
-            row = best_by_direction.get((query_id, subject_id))
-            if row is None:
-                continue
-            score = _normalized_score_from_row(row)
-            if score <= 0.0:
-                continue
-            current_diagnostic_row = best_diagnostic[1]
-            if (
-                current_diagnostic_row is None
-                or score > best_diagnostic[0]
-                or (
-                    score == best_diagnostic[0]
-                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_diagnostic_row, protein_map)
-                )
-            ):
-                best_diagnostic = (float(score), row, query_id, subject_id)
-            if not _row_supports_membership(row):
-                continue
-            current_support_row = best_support[1]
-            if (
-                current_support_row is None
-                or score > best_support[0]
-                or (
-                    score == best_support[0]
-                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_support_row, protein_map)
-                )
-            ):
-                best_support = (float(score), row, query_id, subject_id)
-    return _BestCoreEvidence(
-        support_score=float(best_support[0]),
-        support_row=best_support[1],
-        support_query_id=best_support[2],
-        support_subject_id=best_support[3],
-        diagnostic_score=float(best_diagnostic[0]),
-        diagnostic_row=best_diagnostic[1],
-        diagnostic_query_id=best_diagnostic[2],
-        diagnostic_subject_id=best_diagnostic[3],
+        current_diagnostic_row = diagnostics[record_kind][1]
+        if (
+            current_diagnostic_row is None
+            or score > diagnostics[record_kind][0]
+            or (
+                score == diagnostics[record_kind][0]
+                and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_diagnostic_row, protein_map)
+            )
+        ):
+            diagnostics[record_kind] = (float(score), row, query_id, subject_id)
+        if not _row_supports_membership(row):
+            continue
+        current_support_row = supports[record_kind][1]
+        if (
+            current_support_row is None
+            or score > supports[record_kind][0]
+            or (
+                score == supports[record_kind][0]
+                and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_support_row, protein_map)
+            )
+        ):
+            supports[record_kind] = (float(score), row, query_id, subject_id)
+    return tuple(
+        _BestCoreEvidence(
+            support_score=float(support[0]),
+            support_row=support[1],
+            support_query_id=support[2],
+            support_subject_id=support[3],
+            diagnostic_score=float(diagnostic[0]),
+            diagnostic_row=diagnostic[1],
+            diagnostic_query_id=diagnostic[2],
+            diagnostic_subject_id=diagnostic[3],
+        )
+        for support, diagnostic in zip(supports, diagnostics)
     )
 
 
@@ -5092,24 +5109,12 @@ def _support_gap_ratio(best_support: float, second_support: float) -> float:
 def _build_core_support_candidate(
     protein_id: str,
     group_id: str,
-    member_ids: Sequence[str],
-    best_by_direction: Mapping[tuple[str, str], object],
+    evidence: Sequence[tuple[str, str, object]],
     thresholds: Mapping[str, _LocalThreshold],
     protein_map: Mapping[str, CdsProtein],
 ) -> _CoreSupportCandidate | None:
-    same_evidence = _best_evidence_between_protein_and_members(
-        protein_id,
-        member_ids,
-        best_by_direction,
-        protein_map,
-        same_record=True,
-    )
-    cross_evidence = _best_evidence_between_protein_and_members(
-        protein_id,
-        member_ids,
-        best_by_direction,
-        protein_map,
-        same_record=False,
+    same_evidence, cross_evidence = _best_evidence_between_protein_and_members(
+        protein_id, evidence, protein_map,
     )
     if same_evidence.diagnostic_row is None and cross_evidence.diagnostic_row is None:
         return None
@@ -5368,23 +5373,21 @@ def _build_anchor_core_orthogroups(
             )
         )
 
-    core_member_snapshot = {
-        group_id: set(member_ids)
-        for group_id, member_ids in group_member_ids.items()
-    }
+    # Freeze core membership before any additions; evidence cannot chain through
+    # proteins assigned later in this loop.
+    core_member_snapshot = _index_core_support_evidence(best_by_direction, group_by_protein)
     related_edges_by_group: dict[str, list[OrthologEdge]] = {}
     for protein_id in sorted(protein_map, key=lambda item: _protein_sort_key(protein_map[item])):
         if protein_id in group_by_protein:
             continue
         candidates = [
             candidate
-            for group_id, member_ids in core_member_snapshot.items()
+            for group_id, evidence in core_member_snapshot.get(protein_id, {}).items()
             if (
                 candidate := _build_core_support_candidate(
                     protein_id,
                     group_id,
-                    sorted(member_ids, key=lambda item: _protein_sort_key(protein_map[item])),
-                    best_by_direction,
+                    evidence,
                     thresholds,
                     protein_map,
                 )
@@ -5458,6 +5461,7 @@ def _build_anchor_core_orthogroups(
             )
         )
 
+    del core_member_snapshot
     record_local_edges = _select_record_local_paralog_edges(
         best_by_direction,
         protein_map,
@@ -5467,18 +5471,25 @@ def _build_anchor_core_orthogroups(
     )
     record_local_components = _record_local_components_from_edges(record_local_edges, protein_map)
     local_support_by_member = _record_local_support_by_member(record_local_edges)
+    # Expanded cross-record membership is stable throughout component screening.
+    # All components are screened before any record-local groups are appended.
+    expanded_core_evidence = (
+        _index_core_support_evidence(best_by_direction, group_by_protein)
+        if record_local_components and group_member_ids else {}
+    )
     accepted_record_local_components = tuple(
         component
         for component in record_local_components
         if not _record_local_component_has_competing_core_support(
             component,
-            group_member_ids,
-            best_by_direction,
+            bool(group_member_ids),
+            expanded_core_evidence,
             thresholds,
             protein_map,
             local_support_by_member,
         )
     )
+    del expanded_core_evidence
     _append_record_local_orthogroups(
         group_member_ids=group_member_ids,
         group_by_protein=group_by_protein,
@@ -5728,18 +5739,40 @@ def _protein_metadata_value(value: object | None) -> object:
     return "" if value is None else value
 
 
-def _orthogroup_member_count(
-    orthogroups: OrthogroupResult | None,
+def _orthogroup_member_counts(members: Sequence[OrthogroupMember]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for member in members:
+        record_index = int(member.record_index)
+        counts[record_index] = counts.get(record_index, 0) + 1
+    return counts
+
+
+_OrthogroupEdgeIndex = tuple[
+    dict[tuple[str, str], OrthologEdge],
+    int,
+]
+
+
+def _index_orthogroup_edges(
+    orthogroups: OrthogroupResult,
     orthogroup_id: str,
-    record_index: int,
-) -> int:
-    if orthogroups is None or not orthogroup_id:
-        return 0
-    return sum(
-        1
-        for member in orthogroups.orthogroups.get(orthogroup_id, [])
-        if int(member.record_index) == int(record_index)
-    )
+    requested: tuple[str, str],
+    index: _OrthogroupEdgeIndex,
+) -> _OrthogroupEdgeIndex:
+    """Extend an endpoint index to the requested edge without rereading a prefix."""
+    indexed, offset = index
+    membership = orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ())
+    related = orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ())
+    boundary = len(membership)
+    total = boundary + len(related)
+    for position in range(offset, total):
+        edge = membership[position] if position < boundary else related[position - boundary]
+        query_id, subject_id = edge.query_protein_id, edge.subject_protein_id
+        key = (query_id, subject_id) if query_id <= subject_id else (subject_id, query_id)
+        indexed.setdefault(key, edge)
+        if key == requested:
+            return indexed, position + 1
+    return indexed, total
 
 
 def _edge_metadata_for_protein_pair(
@@ -5747,6 +5780,7 @@ def _edge_metadata_for_protein_pair(
     orthogroup_id: str,
     query_id: str,
     subject_id: str,
+    edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> dict[str, object]:
     metadata = {
         "rbh_orthogroup_id": "",
@@ -5756,33 +5790,29 @@ def _edge_metadata_for_protein_pair(
     }
     if orthogroups is None or not orthogroup_id:
         return metadata
-    candidate_edges = [
-        *orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ()),
-        *orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ()),
-    ]
-    for edge in candidate_edges:
-        if (
-            edge.query_protein_id == query_id
-            and edge.subject_protein_id == subject_id
-        ) or (
-            edge.query_protein_id == subject_id
-            and edge.subject_protein_id == query_id
-        ):
-            source_group = str(edge.source_rbh_orthogroup_id or "")
-            target_group = str(edge.target_rbh_orthogroup_id or "")
-            if source_group and target_group and source_group != target_group:
-                rbh_group = f"{source_group};{target_group}"
-            else:
-                rbh_group = source_group or target_group
-            metadata.update(
-                {
-                    "rbh_orthogroup_id": rbh_group,
-                    "ortholog_path_id": str(edge.path_id or ""),
-                    "edge_kind": edge.edge_kind,
-                    "render_role": edge.render_role,
-                }
-            )
-            return metadata
+    index = edge_indexes.get(orthogroup_id)
+    if index is None:
+        index = ({}, 0)
+    key = (query_id, subject_id) if query_id <= subject_id else (subject_id, query_id)
+    if key not in index[0]:
+        index = _index_orthogroup_edges(orthogroups, orthogroup_id, key, index)
+    edge_indexes[orthogroup_id] = index
+    edge = index[0].get(key)
+    if edge is not None:
+        source_group = str(edge.source_rbh_orthogroup_id or "")
+        target_group = str(edge.target_rbh_orthogroup_id or "")
+        if source_group and target_group and source_group != target_group:
+            rbh_group = f"{source_group};{target_group}"
+        else:
+            rbh_group = source_group or target_group
+        metadata.update(
+            {
+                "rbh_orthogroup_id": rbh_group,
+                "ortholog_path_id": str(edge.path_id or ""),
+                "edge_kind": edge.edge_kind,
+                "render_role": edge.render_role,
+            }
+        )
     return metadata
 
 
@@ -5797,6 +5827,9 @@ def convert_pair_protein_hits_to_genomic_links(
     if hits.empty:
         return pd.DataFrame(columns=LOSATP_COMPARISON_COLUMNS)
 
+    # Build each touched group once, preserving lazy handling of unused groups.
+    edge_indexes: dict[str, _OrthogroupEdgeIndex] = {}
+    member_counts: dict[str, dict[int, int]] = {}
     rows: list[dict[str, object]] = []
     missing_ids: set[str] = set()
     for row in hits.itertuples(index=False):
@@ -5832,7 +5865,13 @@ def convert_pair_protein_hits_to_genomic_links(
             orthogroup_id,
             query_id,
             subject_id,
+            edge_indexes,
         )
+        if orthogroup_id and orthogroup_id not in member_counts:
+            member_counts[orthogroup_id] = _orthogroup_member_counts(
+                orthogroups.orthogroups.get(orthogroup_id, [])
+            )
+        counts = member_counts.get(orthogroup_id, {})
         rows.append(
             {
                 "query": query_protein.record_id,
@@ -5878,16 +5917,8 @@ def convert_pair_protein_hits_to_genomic_links(
                 "subject_orthogroup_representative": (
                     bool(subject_member.representative) if subject_member is not None else False
                 ),
-                "query_orthogroup_member_count": _orthogroup_member_count(
-                    orthogroups,
-                    orthogroup_id,
-                    query_protein.record_index,
-                ),
-                "subject_orthogroup_member_count": _orthogroup_member_count(
-                    orthogroups,
-                    orthogroup_id,
-                    subject_protein.record_index,
-                ),
+                "query_orthogroup_member_count": counts.get(int(query_protein.record_index), 0) if counts else 0,
+                "subject_orthogroup_member_count": counts.get(int(subject_protein.record_index), 0) if counts else 0,
                 "query_orthogroup_role": (
                     str(query_member.role) if query_member is not None else ""
                 ),

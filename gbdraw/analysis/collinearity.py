@@ -26,6 +26,9 @@ from gbdraw.analysis.protein_colinearity import (
     LosatpRunner,
     OrthogroupMembershipMode,
     OrthogroupResult,
+    _OrthogroupEdgeIndex,
+    _edge_metadata_for_protein_pair,
+    _orthogroup_member_counts,
     ProteinExtractionResult,
     _execute_losatp_search,
     _select_member_candidate_hits_per_query,
@@ -414,35 +417,20 @@ def _orthogroup_member_counts_by_record(
     if orthogroups is None:
         return counts
     for orthogroup_id, members in orthogroups.orthogroups.items():
-        for member in members:
-            key = (str(orthogroup_id), int(member.record_index))
-            counts[key] = counts.get(key, 0) + 1
+        for record_index, count in _orthogroup_member_counts(members).items():
+            key = (str(orthogroup_id), record_index)
+            counts[key] = counts.get(key, 0) + count
     return counts
-
-
-def _orthogroup_id_for_edge(
-    query_id: str,
-    subject_id: str,
-    orthogroups: OrthogroupResult | None,
-) -> str:
-    if orthogroups is None:
-        return ""
-    query_member = orthogroups.member_by_protein_id.get(query_id)
-    subject_member = orthogroups.member_by_protein_id.get(subject_id)
-    if query_member is None or subject_member is None:
-        return ""
-    if query_member.orthogroup_id != subject_member.orthogroup_id:
-        return ""
-    return str(query_member.orthogroup_id)
 
 
 def _orthogroup_edge_metadata_for_anchor(
     query_id: str,
     subject_id: str,
-    orthogroup_id: str,
     orthogroups: OrthogroupResult | None,
+    edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> dict[str, object]:
     metadata = {
+        "orthogroup_id": "",
         "rbh_orthogroup_id": "",
         "ortholog_path_id": "",
         "edge_kind": "",
@@ -458,35 +446,14 @@ def _orthogroup_edge_metadata_for_anchor(
         metadata["query_orthogroup_representative"] = bool(query_member.representative)
     if subject_member is not None:
         metadata["subject_orthogroup_representative"] = bool(subject_member.representative)
-    if not orthogroup_id:
-        return metadata
-    candidate_edges = [
-        *orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ()),
-        *orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ()),
-    ]
-    for edge in candidate_edges:
-        if (
-            edge.query_protein_id == query_id
-            and edge.subject_protein_id == subject_id
-        ) or (
-            edge.query_protein_id == subject_id
-            and edge.subject_protein_id == query_id
-        ):
-            source_group = str(edge.source_rbh_orthogroup_id or "")
-            target_group = str(edge.target_rbh_orthogroup_id or "")
-            if source_group and target_group and source_group != target_group:
-                rbh_group = f"{source_group};{target_group}"
-            else:
-                rbh_group = source_group or target_group
-            metadata.update(
-                {
-                    "rbh_orthogroup_id": rbh_group,
-                    "ortholog_path_id": str(edge.path_id or ""),
-                    "edge_kind": edge.edge_kind,
-                    "render_role": edge.render_role,
-                }
-            )
-            return metadata
+    orthogroup_id = ""
+    if query_member is not None and subject_member is not None:
+        if query_member.orthogroup_id == subject_member.orthogroup_id:
+            orthogroup_id = str(query_member.orthogroup_id)
+    metadata["orthogroup_id"] = orthogroup_id
+    metadata.update(_edge_metadata_for_protein_pair(
+        orthogroups, orthogroup_id, query_id, subject_id, edge_indexes,
+    ))
     return metadata
 
 
@@ -508,6 +475,7 @@ def _lossless_anchor_from_edge_row(
     unit_index: CollinearityUnitIndex | None,
     orthogroups: OrthogroupResult | None,
     member_counts_by_record: Mapping[tuple[str, int], int],
+    edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> CollinearityAnchor | None:
     query_id = str(getattr(row, "query"))
     subject_id = str(getattr(row, "subject"))
@@ -535,13 +503,13 @@ def _lossless_anchor_from_edge_row(
         if subject_unit is not None
         else subject_protein
     )
-    orthogroup_id = _orthogroup_id_for_edge(query_id, subject_id, orthogroups)
     edge_metadata = _orthogroup_edge_metadata_for_anchor(
         query_id,
         subject_id,
-        orthogroup_id,
         orthogroups,
+        edge_indexes,
     )
+    orthogroup_id = str(edge_metadata["orthogroup_id"])
     qstart, qend = (
         _unit_genomic_link_coordinates(query_unit)
         if query_unit is not None
@@ -639,6 +607,7 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
 
     order_by_id = _protein_order_by_id(protein_map)
     member_counts_by_record = _orthogroup_member_counts_by_record(orthogroups)
+    edge_indexes: dict[str, _OrthogroupEdgeIndex] = {}
     anchors: list[CollinearityAnchor] = []
     missing_ids: set[str] = set()
     for query_record_index, subject_record_index in sorted(adjacent_edges_by_pair):
@@ -661,6 +630,7 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
                 unit_index=unit_index,
                 orthogroups=orthogroups,
                 member_counts_by_record=member_counts_by_record,
+                edge_indexes=edge_indexes,
             )
             if anchor is not None:
                 anchors.append(anchor)
@@ -1300,6 +1270,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
             orthogroup_membership_mode=normalized_membership_mode,
             orthogroup_member_max_hits=orthogroup_member_max_hits,
             max_related_edges_per_orthogroup=resolved_max_paralog_links,
+            comparison_pairs=(),
         )
         orthogroups = edge_selection.orthogroups
         if normalized_edge_mode == "rbh":
