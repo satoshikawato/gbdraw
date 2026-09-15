@@ -1,3 +1,4 @@
+import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
@@ -660,6 +661,12 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (losat.blastp?.mode === nextBlastpMode) return true;
+    const hitLimits = losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
+    hitLimits[losat.blastp.mode] = {
+      candidateLimit: losat.blastp.candidateLimit,
+      orthogroupMemberMaxHits: losat.blastp.orthogroupMemberMaxHits
+    };
+    Object.assign(losat.blastp, hitLimits[nextBlastpMode]);
     losat.blastp.mode = nextBlastpMode;
     invalidateLinearComparisonArtifacts();
     return true;

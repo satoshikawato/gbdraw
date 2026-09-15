@@ -919,6 +919,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
         "anchor_core_v1"
     ] | str = "anchor_core_v1"
     orthogroup_member_max_hits: int | None = None
+    collinear_infer_orthogroups: bool = True
     collinear_max_paralog_links_per_orthogroup: int = 2
     align_orthogroup_feature: str | None = None
     comparison_table_file: str | None = None
@@ -1021,6 +1022,8 @@ class LinearDiagramOptions(_ModeDiagramOptions):
                 str(self.orthogroup_membership_mode)
             ),
         )
+        if not isinstance(self.collinear_infer_orthogroups, bool):
+            raise ValidationError("collinear_infer_orthogroups must be a boolean")
         for field_name in (
             "protein_blastp_max_hits",
             "collinear_max_paralog_links_per_orthogroup",

@@ -85,6 +85,7 @@ import {
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
+  requireCurrentCollinearInferOrthogroups,
   requireCurrentCollinearSearchScope,
   requireCurrentCollinearUnitMode,
   requireCurrentLinearLabelPlacement,
@@ -1540,6 +1541,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
       }
     },
     collinearityUnitMode,
+    collinearInferOrthogroups: requireCurrentCollinearInferOrthogroups(blastp.collinearInferOrthogroups),
     collinearityAnchorMode: blastpMode === 'collinear'
       ? requireCurrentCollinearAnchorMode(blastp.collinearAnchorMode)
       : normalizeCollinearAnchorMode(blastp.collinearAnchorMode),
@@ -2714,6 +2716,7 @@ const projectGeneratedProteinPipeline = (
           collinearUnitMode: settings.collinearityUnitMode,
           collinearAnchorMode: settings.collinearityAnchorMode,
           collinearMergeOrientation: parameters.mergeOrientation,
+          collinearInferOrthogroups: settings.collinearInferOrthogroups ?? ['collinear', 'none'].includes(mode),
           collinearSearchScope: settings.collinearitySearchScope
         }
       }

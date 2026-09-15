@@ -23,7 +23,7 @@ export const groupLinearSourceRecords = (sequences) => {
 // Record-pair evidence and source-file execution have different cardinalities.
 // Explicit translation tables may require compatible subsets within one source.
 export const prepareLosatSourceBatches = async ({
-  sequences, specs, getEntry, buildArgs, hashText, protein
+  sequences, specs, getEntry, buildArgs, hashText, protein, excludeSelfComparisons = false
 }) => {
   const byRecord = new Map();
   groupLinearSourceRecords(sequences).forEach((source) => {
@@ -63,13 +63,15 @@ export const prepareLosatSourceBatches = async ({
     const argsText = JSON.stringify(args);
     const querySource = byRecord.get(spec.queryIndex);
     const subjectSource = byRecord.get(spec.subjectIndex);
-    const key = JSON.stringify([querySource.uid, subjectSource.uid, args]);
+    const separateRecords = excludeSelfComparisons && querySource === subjectSource;
+    const key = JSON.stringify([querySource.uid, subjectSource.uid, args,
+      ...(separateRecords ? [spec.queryIndex, spec.subjectIndex] : [])]);
     let batch = batches.get(key);
     if (!batch) {
-      const query = await prepareSide(querySource.records.map(({ index }) => index).filter(
+      const query = await prepareSide((separateRecords ? [spec.queryIndex] : querySource.records.map(({ index }) => index)).filter(
         (index) => JSON.stringify(buildArgs(index, spec.subjectIndex)) === argsText
       ));
-      const subject = await prepareSide(subjectSource.records.map(({ index }) => index).filter(
+      const subject = await prepareSide((separateRecords ? [spec.subjectIndex] : subjectSource.records.map(({ index }) => index)).filter(
         (index) => JSON.stringify(buildArgs(spec.queryIndex, index)) === argsText
       ));
       const searchContext = query.indexes.length > 1 || subject.indexes.length > 1

@@ -52,9 +52,12 @@ export const createLosatSettings = ({ state }) => {
     groupLinearSourceRecords(linearSeqs).forEach((group) => {
       group.records.forEach(({ index }) => sources.set(index, group.uid));
     });
+    const excludeSelfComparisons = losatProgram.value === 'blastp'
+      && losat.blastp?.mode === 'collinear' && losat.blastp?.collinearInferOrthogroups === false;
     const jobs = new Set();
     const addPair = (query, subject) => jobs.add(JSON.stringify([
       sources.get(query), sources.get(subject),
+      ...(excludeSelfComparisons && sources.get(query) === sources.get(subject) ? [query, subject] : []),
       ...(losatProgram.value === 'tblastx'
         ? [linearSeqs[query]?.losat_gencode, linearSeqs[subject]?.losat_gencode] : [])
     ]));
@@ -63,12 +66,13 @@ export const createLosatSettings = ({ state }) => {
     const blastpMode = String(losat.blastp?.mode || 'orthogroup').trim().toLowerCase();
     if (losatProgram.value === 'blastp' && ['orthogroup', 'collinear'].includes(blastpMode)
       && resolution.mode === 'adjacent' && resolution.defaultSource === 'losat') {
-      linearSeqs.forEach((_, index) => addPair(index, index));
+      const includeSelf = blastpMode === 'orthogroup' || losat.blastp?.collinearInferOrthogroups !== false;
+      if (includeSelf) linearSeqs.forEach((_, index) => addPair(index, index));
       if (blastpMode === 'orthogroup'
         || normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope) === 'all') {
-        const representatives = [...new Set(sources.values())].map((uid) =>
-          [...sources].find(([, sourceUid]) => sourceUid === uid)[0]);
-        representatives.forEach((query) => representatives.forEach((subject) => addPair(query, subject)));
+        linearSeqs.forEach((_, query) => linearSeqs.forEach((__, subject) => {
+          if (includeSelf || query !== subject) addPair(query, subject);
+        }));
       } else {
         edges.forEach((edge) => addPair(edge.subjectIndex, edge.queryIndex));
       }

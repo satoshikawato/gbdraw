@@ -85,6 +85,7 @@ import {
   requireCurrentCollinearMaxUnitGap,
   requireCurrentCollinearMergeOrientation,
   requireCurrentCollinearMinAnchors,
+  requireCurrentCollinearInferOrthogroups,
   requireCurrentCollinearSearchScope,
   requireCurrentCollinearUnitMode,
   requireCurrentLinearLabelPlacement,
@@ -329,6 +330,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   collinearMaxConflictsInMergeGap,
   collinearMaxParalogLinksPerOrthogroup,
   collinearSearchScope,
+  collinearInferOrthogroups = true,
   orthogroupMembershipMode,
   orthogroupMemberMaxHits,
   recordPayloads,
@@ -389,6 +391,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
       maxDiagonalDrift: String(collinearMaxDiagonalDrift),
       maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
       maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
+      inferOrthogroups: requireCurrentCollinearInferOrthogroups(collinearInferOrthogroups),
       searchScope: String(collinearSearchScope || 'adjacent')
     };
   }
@@ -524,6 +527,7 @@ const canReuseResolvedProteinArtifacts = ({
     && String(parameters.mergeOrientation || 'either') === active.mergeOrientation
     && String(settings.collinearityUnitMode || 'auto') === active.unitMode
     && String(settings.collinearityAnchorMode || 'rbh') === active.anchorMode
+    && (settings.collinearInferOrthogroups ?? true) === active.inferOrthogroups
     && String(settings.collinearitySearchScope || 'adjacent') === active.searchScope
     && String(settings.collinearityColorMode || 'orientation') === active.colorMode
     && sameNumber(
@@ -2868,6 +2872,7 @@ export const createRunAnalysis = ({
               losat.blastp?.collinearMergeOrientation
             )
           : 'either';
+        const collinearInferOrthogroups = requireCurrentCollinearInferOrthogroups(losat.blastp?.collinearInferOrthogroups);
         const collinearSearchScope = useCollinearBlastp
           ? requireCurrentCollinearSearchScope(losat.blastp?.collinearSearchScope)
           : 'adjacent';
@@ -2899,6 +2904,7 @@ export const createRunAnalysis = ({
               unitMode: collinearUnitMode,
               anchorMode: collinearAnchorMode,
               mergeOrientation: collinearMergeOrientation,
+              inferOrthogroups: collinearInferOrthogroups,
               searchScope: collinearSearchScope
             }
           });
@@ -3607,8 +3613,10 @@ export const createRunAnalysis = ({
               }
             }
           } else if (useCollinearBlastp) {
-            for (let i = 0; i < linearSeqs.length; i++) {
-              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+            if (collinearInferOrthogroups) {
+              for (let i = 0; i < linearSeqs.length; i++) {
+                pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
+              }
             }
             if (collinearSearchScope === 'all') {
               for (let i = 0; i < linearSeqs.length - 1; i++) {
@@ -3637,7 +3645,8 @@ export const createRunAnalysis = ({
             getEntry: getSeqEntry,
             buildArgs: buildLosatArgs,
             hashText,
-            protein: useProteinBlastp
+            protein: useProteinBlastp,
+            excludeSelfComparisons: useCollinearBlastp && !collinearInferOrthogroups
           });
           const preparedJobs = [];
           for (const spec of jobSpecs) {
@@ -3959,6 +3968,7 @@ export const createRunAnalysis = ({
                 collinearMaxConflictsInMergeGap,
                 collinearMaxParalogLinksPerOrthogroup,
                 collinearSearchScope,
+                collinearInferOrthogroups,
                 orthogroupMembershipMode,
                 orthogroupMemberMaxHits,
                 recordPayloads,
@@ -4017,6 +4027,7 @@ export const createRunAnalysis = ({
                   collinearMaxConflictsInMergeGap,
                   collinearMaxParalogLinksPerOrthogroup,
                   collinearSearchScope,
+                  collinearInferOrthogroups,
                   orthogroupMembershipMode,
                   orthogroupMemberMaxHits
                 }

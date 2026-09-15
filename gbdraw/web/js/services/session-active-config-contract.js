@@ -1,6 +1,6 @@
 import { createDefaultLinearDefinitionLineStyles } from '../app/definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from '../app/circular-track-slots.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from '../app/linear-track-slots.js'; import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
-import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
+import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateRecordDisplayDrafts } from '../app/record-display-options.js';
@@ -38,10 +38,15 @@ export const createDefaultAdv = (mode = 'circular') => ({
   circular_track_slots_schema_version: CIRCULAR_TRACK_SLOT_SCHEMA_VERSION, circular_track_slots_axis_index: null, circular_track_slots: createDefaultCircularTrackSlots(),
   outer_label_x_offset: null, outer_label_y_offset: null, inner_label_x_offset: null, inner_label_y_offset: null
 });
+export const createDefaultLosatpHitLimits = () => ({
+  pairwise: { candidateLimit: null, orthogroupMemberMaxHits: null },
+  orthogroup: { candidateLimit: null, orthogroupMemberMaxHits: null },
+  collinear: { candidateLimit: 5, orthogroupMemberMaxHits: 5 }
+});
 export const createDefaultLosat = () => ({
   outfmt: '6', parallelWorkers: undefined, executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto',
-  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
-    orthogroupMemberMaxHits: null, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
+  blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
+    orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
     collinearUnitMode: 'auto', collinearAnchorMode: 'rbh', collinearMergeOrientation: 'either', collinearSearchScope: 'adjacent' }
 });
@@ -150,6 +155,16 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (isObject(config.losat?.blastp)) {
     const blastp = config.losat.blastp;
     if (has(blastp, 'mode')) requireCurrentProteinBlastpMode(blastp.mode);
+    if (has(blastp, 'hitLimitsByMode')) {
+      if (!isObject(blastp.hitLimitsByMode)) throw new Error('LOSATP mode hit limits must be an object.');
+      for (const [mode, limits] of Object.entries(blastp.hitLimitsByMode)) {
+        requireCurrentProteinBlastpMode(mode);
+        if (!isObject(limits)) throw new Error('LOSATP mode hit limits must be an object.');
+        assertFields(limits, new Set(['candidateLimit', 'orthogroupMemberMaxHits']), `losat.blastp.hitLimitsByMode.${mode}`);
+        requireCurrentProteinBlastpCandidateLimit(limits.candidateLimit);
+        requireCurrentOrthogroupMemberMaxHits(limits.orthogroupMemberMaxHits);
+      }
+    }
     if (has(blastp, 'candidateLimit')) {
       requireCurrentProteinBlastpCandidateLimit(blastp.candidateLimit);
     }
@@ -168,6 +183,7 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
     requireCurrentCollinearMergeOrientation(blastp.collinearMergeOrientation);
     requireCurrentCollinearColorMode(blastp.collinearColorMode);
     requireCurrentCollinearSearchScope(blastp.collinearSearchScope);
+    requireCurrentCollinearInferOrthogroups(blastp.collinearInferOrthogroups);
   }
   if (has(config, 'filterMode') && !['None', 'Whitelist', 'Blacklist'].includes(config.filterMode)) throw new Error('Current session active configuration config.filterMode is invalid.');
   if (has(config, 'palette') && !config.palette.trim()) throw new Error('Current session active configuration config.palette cannot be empty.');

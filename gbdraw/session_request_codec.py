@@ -382,6 +382,7 @@ _PIPELINE_FIELDS = (
     "protein_blastp_candidate_limit",
     "orthogroup_membership_mode",
     "orthogroup_member_max_hits",
+    "collinear_infer_orthogroups",
     "collinear_max_paralog_links_per_orthogroup",
     "align_orthogroup_feature",
 )
@@ -3248,7 +3249,11 @@ def _decode_pipeline(
     settings = _object(item["settings"], path=f"{path}.settings")
     setting_fields = tuple(name for name in _PIPELINE_FIELDS if name != "protein_blastp_mode")
     field_map = {_camel(name): name for name in setting_fields}
-    _require_exact_fields(settings, path=f"{path}.settings", required=set(field_map))
+    _require_exact_fields(
+        settings, path=f"{path}.settings",
+        required=set(field_map) - {"collinearInferOrthogroups"},
+        optional={"collinearInferOrthogroups"},
+    )
     mode = item["mode"]
     result = {"protein_blastp_mode": mode}
     legacy_max_paralog_links: int | None = None
@@ -3279,7 +3284,7 @@ def _decode_pipeline(
             tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
         )
     for key, name in field_map.items():
-        raw = settings[key]
+        raw = settings.get(key, True) if name == "collinear_infer_orthogroups" else settings[key]
         if name == "collinearity_params":
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
                 raw,
