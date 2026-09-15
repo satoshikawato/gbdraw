@@ -43,7 +43,7 @@ POLICY = {"warmups": 1, "samples": 7, "regressionPct": 10.0,
           "semanticGate": "exact ordered stage digest, including types and errors"}
 GALLERIES = ("hepatoplasmataceae_collinear", "hepatoplasmataceae_orthogroup",
              "vibrio-harveyi-group-collinear")
-CASES = ("hsp-edges", "hsp-1000", "dense-24", "support-edges",
+CASES = ("hsp-edges", "hsp-1", "hsp-1000", "hsp-many", "dense-24", "support-edges",
          "sparse-200", "sparse-400", "sparse-800",
          "cache-49", "cache-64", "cache-81", "path-8", "path-12", "path-16",
          "merge-300", "merge-600", "merge-1200", "merge-edges", "manifest",
@@ -168,12 +168,15 @@ def synthetic(pc, name, seed):
     rng = random.Random(seed)
     if name.startswith("hsp-"):
         pm = {p: protein(pc, p, i, length=1000) for i, p in enumerate(("q", "s"))}
+        if name == "hsp-many":
+            size = 10
         if size:
             pm = {f"{p}{i}": protein(pc, f"{p}{i}", r, i, 1000)
                   for i in range(size) for r, p in enumerate(("q", "s"))}
-            rows = [hit(f"q{i}", f"s{i}", qstart=j * 150 + 1, qend=j * 150 + 300,
-                        sstart=j * 150 + 1, send=j * 150 + 300,
-                        alignment_length=300, bitscore=500 - j) for i in range(size) for j in range(3)]
+            rows = [hit(f"q{i}", f"s{i}", qstart=(j % 5) * 150 + 1, qend=(j % 5) * 150 + 300,
+                        sstart=(j % 5) * 150 + 1, send=(j % 5) * 150 + 300,
+                        alignment_length=300, bitscore=500 - j % 3) for i in range(size)
+                    for j in range(1000 if name == "hsp-many" else 3)]
             rng.shuffle(rows)
             tables = {"multi_hsp": frame(rows)}
         else:
@@ -431,7 +434,8 @@ def build_case(root, pc, cc, name, seed):
                           "inference": True, "scope": "adjacent" if name.endswith("collinear") else "all",
                           "blockParameters": canonical(cc.LosslessCollinearityParameters()) if name.endswith("collinear") else None,
                           "unitMode": "auto", "edgeMode": "rbh", "maxRelatedEdges": 2,
-                          "filteredRows": sum(len(x) for x in tables.values())})
+                          "filteredRows": sum(len(x) for x in tables.values()),
+                          "inputDataFrameDeepBytes": sum(int(x.memory_usage(deep=True).sum()) for x in tables.values())})
         def aggregate():
             return {k: pc._aggregate_hsps_by_protein_pair(v, extraction.protein_map) for k, v in tables.items()}
         if name.endswith("collinear"):
@@ -455,6 +459,7 @@ def build_case(root, pc, cc, name, seed):
     inventory = {"seed": seed, "generator": name, "proteinCount": len(pm),
                  "inputSha256": digest(json_bytes(canonical((pm, tables)))),
                  "tableCount": len(tables), "rows": sum(len(x) for x in tables.values()),
+                 "inputDataFrameDeepBytes": sum(int(x.memory_usage(deep=True).sum()) for x in tables.values()),
                  "memberMaxHits": None, "inference": True}
     if name.startswith("hsp-"):
         return inventory, {k: lambda v=v: safe_call(lambda: pc._aggregate_hsps_by_protein_pair(v, pm)) for k, v in tables.items()}
@@ -468,9 +473,29 @@ def build_case(root, pc, cc, name, seed):
 
 
 def operation_probe(pc, cc, fn):
+    import pandas as pd
+
     counters = Counter()
     profile = cProfile.Profile()
+    aggregate_depth = 0
     with ExitStack() as stack:
+        # Scope pandas observations to the actual aggregation call, excluding
+        # fixture preparation, normalization and the semantic serializer.
+        for name in ("itertuples", "groupby", "copy", "_constructor_from_mgr"):
+            original = getattr(pd.DataFrame, name)
+            def pandas_call(df, *args, _name=name, _original=original, **kwargs):
+                observed = aggregate_depth > 0
+                if observed:
+                    counters["hsp.pandas." + _name + ".calls"] += 1
+                result = _original(df, *args, **kwargs)
+                if observed and _name == "itertuples":
+                    def counted_rows():
+                        for row in result:
+                            counters["hsp.itertuples.rows"] += 1
+                            yield row
+                    return counted_rows()
+                return result
+            stack.enter_context(patch.object(pd.DataFrame, name, pandas_call))
         for module, name, amount in (
             (pc, "validate_protein_identity_manifest", None),
             (pc, "_aggregate_hsps_by_protein_pair", lambda a, k: len(a[0])),
@@ -482,10 +507,16 @@ def operation_probe(pc, cc, fn):
         ):
             original = getattr(module, name)
             def counted(*args, _name=name, _original=original, _amount=amount, **kwargs):
+                nonlocal aggregate_depth
                 counters[_name + ".calls"] += 1
                 if _amount:
                     counters[_name + ".inputItems"] += _amount(args, kwargs)
-                return _original(*args, **kwargs)
+                aggregation = _name == "_aggregate_hsps_by_protein_pair"
+                aggregate_depth += int(aggregation)
+                try:
+                    return _original(*args, **kwargs)
+                finally:
+                    aggregate_depth -= int(aggregation)
             stack.enter_context(patch.object(module, name, counted))
         result = profile.runcall(fn)
     stats = pstats.Stats(profile)

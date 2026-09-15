@@ -1,0 +1,129 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "ca0ef3aa38a7e366aae7c76b97b1c9bcd25de576",
+  "currentHead": "e6410a8166db7839bc7ca5c2398c32c97185c82b",
+  "semanticOnly": false,
+  "comparisons": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "semanticEqual": true,
+      "timeDeltaPct": -4.388353944588963,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.9504993671154871,
+      "decision": "pass"
+    },
+    "hsp-edges/unknown_missing": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.077260761689592,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/bad_coordinates": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.021809955197182873,
+      "decision": "pass"
+    },
+    "hsp-edges/pair_row_order": {
+      "semanticEqual": true,
+      "timeDeltaPct": -17.435164253423952,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/nan_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": -2.5850438416956223,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.52537368799499,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_length": {
+      "semanticEqual": true,
+      "timeDeltaPct": 6.151391709592158,
+      "decision": "pass"
+    },
+    "hsp-edges/empty": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.7551421027659941,
+      "decision": "pass"
+    },
+    "hsp-1/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": 8.018106516811386,
+      "decision": "inconclusive"
+    },
+    "hsp-1000/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -92.68004907723089,
+      "decision": "pass"
+    },
+    "hsp-many/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -5.806626856270869,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -3.6708191856367645,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -4.575386443712681,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": -95.24348850070434,
+      "decision": "pass"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -50.08387564434997,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.5892057827047843,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.6730082908918078,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -2.4750216645496814,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -4.544461389753584,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": -95.10940025446494,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -60.98595926731486,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.11054525649641,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.035933465193660474,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 2
+}

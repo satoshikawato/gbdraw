@@ -1,7 +1,7 @@
 # Collinear / Similarity groups 計算量改修 — 総合計画書
 
 - 作成日: 2026-09-15
-- 状態: S01の基準・再現資産とS02の調査・テスト専用prototype・同値検証・設計が完了。S02のProduct選択はPATH-Bとして受領済み（decision revision 1、authority文書化済み、review・base統合は未完了）。S03以降の本番改修は未実施。
+- 状態: S01の基準・再現資産とS02の調査・テスト専用prototype・同値検証・設計が完了。S02のProduct選択はPATH-Bとして受領済み（decision revision 1、authority文書化済み、review・base統合は未完了）。S03のHSP集計実装・同値検証・広いgate・観測測定と引き継ぎが完了。独立再測定はユーザーの最終指示で省略し、他benchmarkとの重複を測定条件の未達として記録。S04以降の本番改修は未実施。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
 ## 1. 目的と完了の意味
@@ -60,6 +60,13 @@ S02開始時のfetchでもbaseは`9a4f7e29`のままで、S01成果は未統合�
 [Decision Pack](results/PATH_DECISION_PACK.md)は判断時の比較記録でありauthorityではない。
 受領したPATH-Bの文書化・review・base統合状態は[判断引き継ぎ](results/S02_PRODUCT_DECISION.md)を参照する。
 S06にはS05完了と、選択済みoutcomeを認可するbase authorityが引き続き必要。
+
+S03開始時のfetchでもbaseは`9a4f7e29`。未統合のS01/S02成果を依存順に
+新規worktreeへ引き継ぎ、authority-only commitは適用しなかった。
+[S03 handoff](results/S03.md)に処理owner、同値結果、測定・環境条件、S04の
+実在APIを記録する。S03の実装・検証・観測測定と引き継ぎは完了。ユーザーの
+最終指示で独立再測定を省略したため、性能の数値判定24 passと、他benchmarkとの
+重複による測定条件未達を分けて報告する。独立測定の性能合格とは扱わない。S04は未着手。
 
 [Option Integrity Product Contract revision 5](https://github.com/satoshikawato/gbdraw/blob/9e28581a3d0e7fb9117da0fbc11d46a945b0e59e/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md) は、以下を既に選択している。
 
@@ -213,7 +220,7 @@ query order を一度整列し、二分探索で conflict 判定区間を狭め�
 |---|---|---|---|
 | S01 | [基準・再現・契約確認](SESSION_01_BASELINE.md) | なし | baseline、入力hash、観測とauthorityの対応、測定スクリプト |
 | S02 | [経路契約と設計判断](SESSION_02_PATH_CONTRACT.md) | S01 | consumer inventory、比較設計、必要なら Product Decision Pack |
-| S03 | [HSP集計](SESSION_03_HSP_AGGREGATION.md) | S01 | 同値な一回走査集計、性能・メモリ比較 |
+| S03 | [HSP集計](SESSION_03_HSP_AGGREGATION.md) | S01 | [完了報告](results/S03.md)：同値な一回走査集計、時間・メモリの観測比較。独立再測定は最終指示で省略、測定条件未達を明記 |
 | S04 | [疎な候補探索とmetadata](SESSION_04_SPARSE_SUPPORT_AND_METADATA.md) | S03 | evidence索引、全結果一致、不要走査の削減 |
 | S05 | [共通解析境界と容量付きcache](SESSION_05_SHARED_ANALYSIS_AND_CACHE.md) | S04 | 段階依存表、bounded reuse、Web lifecycle 検証 |
 | S06 | [経路表現の実装](SESSION_06_PATH_REPRESENTATION.md) | S05、S02の選択を認可するbase authority | 選択済み契約の runtime / reader / writer、性能検証 |

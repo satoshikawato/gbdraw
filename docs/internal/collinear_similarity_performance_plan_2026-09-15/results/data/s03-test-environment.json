@@ -1,0 +1,9 @@
+{
+  "installedModule": "/tmp/gbdraw-s03-cli-venv/lib/python3.13/site-packages/gbdraw/analysis/protein_colinearity.py",
+  "sha256": "eee79913b0bf8aabf7bb274fe73c63e9b79f1f0c29e4c4498cf90155de197ed6",
+  "matchesS03Source": true,
+  "isolatedEnvironment": "/tmp/gbdraw-s03-cli-venv",
+  "nodePlaywrightVersion": "1.61.1",
+  "nodePlaywrightOrigin": "copied existing installed node_modules; version matches root package-lock.json",
+  "globalEnvironmentModified": false
+}

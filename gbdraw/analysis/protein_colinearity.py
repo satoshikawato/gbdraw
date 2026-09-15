@@ -3611,6 +3611,19 @@ def _raw_hsp_representative_rank(row: object, row_index: int) -> tuple[float, fl
     )
 
 
+@dataclass(slots=True)
+class _HspPairAccumulator:
+    query_length: int
+    subject_length: int
+    representative_row: object = None
+    representative_rank: tuple[float | int, ...] = ()
+    rank_error: ValueError | OverflowError | None = None
+    query_intervals: list[tuple[int, int]] = field(default_factory=list)
+    subject_intervals: list[tuple[int, int]] = field(default_factory=list)
+    hsp_count: int = 0
+    total_alignment_length: int = 0
+
+
 def _aggregate_hsps_by_protein_pair(
     hits: DataFrame,
     protein_map: Mapping[str, CdsProtein],
@@ -3619,8 +3632,12 @@ def _aggregate_hsps_by_protein_pair(
         columns = tuple(hits.columns) if hits is not None else tuple(COMPARISON_COLUMNS)
         return _empty_normalized_hit_table(columns)
 
-    rows: list[dict[str, object]] = []
-    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+    # Table-level grouping retains pandas' ID coercion, missing-ID handling
+    # and pair order. It does not construct a DataFrame for each pair.
+    pairs: dict[tuple[object, object], _HspPairAccumulator] = {}
+    for (query_id, subject_id), hsp_count in hits.groupby(
+        ["query", "subject"], sort=False, observed=True,
+    ).size().items():
         query_protein = protein_map.get(str(query_id))
         subject_protein = protein_map.get(str(subject_id))
         if query_protein is None or subject_protein is None:
@@ -3629,42 +3646,59 @@ def _aggregate_hsps_by_protein_pair(
         subject_length = int(subject_protein.protein_length)
         if query_length <= 0 or subject_length <= 0:
             continue
-        hsp_rows = list(group.itertuples(index=False))
-        if not hsp_rows:
-            continue
-        representative_index, representative_row = min(
-            enumerate(hsp_rows),
-            key=lambda item: _raw_hsp_representative_rank(item[1], item[0]),
+        pairs[(query_id, subject_id)] = _HspPairAccumulator(
+            query_length, subject_length, hsp_count=int(hsp_count),
         )
+
+    for row_index, hsp_row in enumerate(hits.itertuples(index=False)):
+        accumulator = pairs.get((hsp_row.query, hsp_row.subject))
+        if accumulator is None or accumulator.rank_error is not None:
+            continue
+        try:
+            rank = _raw_hsp_representative_rank(hsp_row, row_index)
+        except (ValueError, OverflowError) as error:
+            # Direct private callers can bypass numeric validation. Preserve
+            # the old first-pair error order even when HSPs are interleaved.
+            accumulator.rank_error = error
+            continue
+        if accumulator.representative_row is None or rank < accumulator.representative_rank:
+            accumulator.representative_row = hsp_row
+            accumulator.representative_rank = rank
+
+        alignment_length = _row_float(hsp_row, "alignment_length", 0.0)
+        if math.isfinite(alignment_length) and alignment_length > 0:
+            accumulator.total_alignment_length += int(alignment_length)
+        query_interval = _coverage_interval_from_hsp(
+            getattr(hsp_row, "qstart", None),
+            getattr(hsp_row, "qend", None),
+            accumulator.query_length,
+        )
+        if query_interval is not None:
+            accumulator.query_intervals.append(query_interval)
+        subject_interval = _coverage_interval_from_hsp(
+            getattr(hsp_row, "sstart", None),
+            getattr(hsp_row, "send", None),
+            accumulator.subject_length,
+        )
+        if subject_interval is not None:
+            accumulator.subject_intervals.append(subject_interval)
+
+    rows: list[dict[str, object]] = []
+    # Dict insertion order retains pair appearance; global row ranks retain
+    # pair-local order on complete ties. Interval sorting remains in the helper.
+    for accumulator in pairs.values():
+        if accumulator.rank_error is not None:
+            raise accumulator.rank_error
+        query_length = accumulator.query_length
+        subject_length = accumulator.subject_length
+        representative_row = accumulator.representative_row
         bitscore = _row_float(representative_row, "bitscore", 0.0)
         representative_alignment_length = int(_row_float(representative_row, "alignment_length", 0.0))
         if bitscore <= 0.0 or representative_alignment_length <= 0:
             continue
 
-        query_intervals: list[tuple[int, int]] = []
-        subject_intervals: list[tuple[int, int]] = []
-        total_hsp_alignment_length = 0
-        for hsp_row in hsp_rows:
-            alignment_length = _row_float(hsp_row, "alignment_length", 0.0)
-            if math.isfinite(alignment_length) and alignment_length > 0:
-                total_hsp_alignment_length += int(alignment_length)
-            query_interval = _coverage_interval_from_hsp(
-                getattr(hsp_row, "qstart", None),
-                getattr(hsp_row, "qend", None),
-                query_length,
-            )
-            if query_interval is not None:
-                query_intervals.append(query_interval)
-            subject_interval = _coverage_interval_from_hsp(
-                getattr(hsp_row, "sstart", None),
-                getattr(hsp_row, "send", None),
-                subject_length,
-            )
-            if subject_interval is not None:
-                subject_intervals.append(subject_interval)
-
-        query_covered_length = _covered_length(query_intervals)
-        subject_covered_length = _covered_length(subject_intervals)
+        query_covered_length = _covered_length(accumulator.query_intervals)
+        subject_covered_length = _covered_length(accumulator.subject_intervals)
         query_coverage = min(1.0, float(query_covered_length) / float(query_length))
         subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
         min_hit_coverage = min(query_coverage, subject_coverage)
@@ -3675,19 +3709,20 @@ def _aggregate_hsps_by_protein_pair(
                 "query_length": query_length,
                 "subject_length": subject_length,
                 "length_product": float(query_length * subject_length),
-                "hsp_count": int(len(hsp_rows)),
+                "hsp_count": int(accumulator.hsp_count),
                 "query_covered_length": int(query_covered_length),
                 "subject_covered_length": int(subject_covered_length),
                 "query_coverage": query_coverage,
                 "subject_coverage": subject_coverage,
                 "min_coverage": min_hit_coverage,
                 "representative_alignment_length": int(representative_alignment_length),
-                "total_hsp_alignment_length": int(total_hsp_alignment_length),
+                "total_hsp_alignment_length": int(accumulator.total_alignment_length),
                 "coverage_source": "hsp_union",
             }
         )
         rows.append(record)
 
+    pairs.clear()
     if not rows:
         return _empty_normalized_hit_table(tuple(hits.columns))
     return pd.DataFrame.from_records(rows)

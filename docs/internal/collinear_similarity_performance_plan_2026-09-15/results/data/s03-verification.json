@@ -1,0 +1,540 @@
+{
+  "sourceBase": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "sourceBeforeS03": "e6410a8166db7839bc7ca5c2398c32c97185c82b",
+  "baselineHead": "ca0ef3aa38a7e366aae7c76b97b1c9bcd25de576",
+  "currentSourceSha256": {
+    "gbdraw/analysis/protein_colinearity.py": "eee79913b0bf8aabf7bb274fe73c63e9b79f1f0c29e4c4498cf90155de197ed6"
+  },
+  "policy": {
+    "warmups": 1,
+    "samples": 7,
+    "regressionPct": 10.0,
+    "maxNoisePct": 5.0,
+    "noise": "100 * MAD / median",
+    "noisyDecision": "inconclusive; repeat both trees, never waive",
+    "semanticGate": "exact ordered stage digest, including types and errors"
+  },
+  "timingSelection": "Latest entire small-case repeat replaces all ten small stages; fourteen others retain acceptance timing. No stage-wise best-sample selection.",
+  "timing": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.319099,
+      "currentMedianMs": 1.450406,
+      "baselineNoisePct": 0.7652192898334429,
+      "currentNoisePct": 2.093344897911343,
+      "semanticEqual": true,
+      "timeDeltaPct": 9.954294560150533,
+      "decision": "pass"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.451685,
+      "currentMedianMs": 1.437102,
+      "baselineNoisePct": 4.513926919407434,
+      "currentNoisePct": 2.2719333770323935,
+      "semanticEqual": true,
+      "timeDeltaPct": -1.0045567736802208,
+      "decision": "pass"
+    },
+    "hsp-edges/unknown_missing": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.330238,
+      "currentMedianMs": 1.419491,
+      "baselineNoisePct": 1.6711295271973865,
+      "currentNoisePct": 2.5719078176614,
+      "semanticEqual": true,
+      "timeDeltaPct": 6.709551223164589,
+      "decision": "pass"
+    },
+    "hsp-edges/bad_coordinates": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.399275,
+      "currentMedianMs": 1.433365,
+      "baselineNoisePct": 2.314770148827065,
+      "currentNoisePct": 1.4685722059628925,
+      "semanticEqual": true,
+      "timeDeltaPct": 2.4362616354898003,
+      "decision": "pass"
+    },
+    "hsp-edges/pair_row_order": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.65738,
+      "currentMedianMs": 1.40199,
+      "baselineNoisePct": 1.9492813959381592,
+      "currentNoisePct": 0.7875234488120355,
+      "semanticEqual": true,
+      "timeDeltaPct": -15.409260398942914,
+      "decision": "pass"
+    },
+    "hsp-edges/nan_score": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.522661,
+      "currentMedianMs": 1.356696,
+      "baselineNoisePct": 4.699929925308388,
+      "currentNoisePct": 1.155454132687059,
+      "semanticEqual": true,
+      "timeDeltaPct": -10.899668409448992,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_score": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.561445,
+      "currentMedianMs": 1.427264,
+      "baselineNoisePct": 3.7338490949088876,
+      "currentNoisePct": 1.6895262544280658,
+      "semanticEqual": true,
+      "timeDeltaPct": -8.593386254398961,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_length": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 0.980207,
+      "currentMedianMs": 1.015543,
+      "baselineNoisePct": 4.4728307388133395,
+      "currentNoisePct": 3.8410978166360303,
+      "semanticEqual": true,
+      "timeDeltaPct": 3.60495283139175,
+      "decision": "pass"
+    },
+    "hsp-edges/empty": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 0.719268,
+      "currentMedianMs": 0.76067,
+      "baselineNoisePct": 1.692276036192361,
+      "currentNoisePct": 0.6736166800320648,
+      "semanticEqual": true,
+      "timeDeltaPct": 5.756129843118263,
+      "decision": "pass"
+    },
+    "hsp-1/multi_hsp": {
+      "reports": "small-repeat",
+      "baselineMedianMs": 1.333902,
+      "currentMedianMs": 1.386806,
+      "baselineNoisePct": 1.4366122848604934,
+      "currentNoisePct": 1.2205744711228474,
+      "semanticEqual": true,
+      "timeDeltaPct": 3.966108454744055,
+      "decision": "pass"
+    },
+    "hsp-1000/multi_hsp": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 288.444147,
+      "currentMedianMs": 21.11397,
+      "baselineNoisePct": 1.6707262220855401,
+      "currentNoisePct": 0.8944599239271331,
+      "semanticEqual": true,
+      "timeDeltaPct": -92.68004907723089,
+      "decision": "pass"
+    },
+    "hsp-many/multi_hsp": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 46.468097,
+      "currentMedianMs": 43.769868,
+      "baselineNoisePct": 1.4086976705760093,
+      "currentNoisePct": 0.743988992610166,
+      "semanticEqual": true,
+      "timeDeltaPct": -5.806626856270869,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 545.714866,
+      "currentMedianMs": 525.68266,
+      "baselineNoisePct": 0.39080683574414893,
+      "currentNoisePct": 0.48858811511873956,
+      "semanticEqual": true,
+      "timeDeltaPct": -3.6708191856367645,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 109.714361,
+      "currentMedianMs": 104.694505,
+      "baselineNoisePct": 0.8660343015624007,
+      "currentNoisePct": 2.486999675866465,
+      "semanticEqual": true,
+      "timeDeltaPct": -4.575386443712681,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 3157.55774,
+      "currentMedianMs": 150.189597,
+      "baselineNoisePct": 0.34419326248013515,
+      "currentNoisePct": 3.3045857363875877,
+      "semanticEqual": true,
+      "timeDeltaPct": -95.24348850070434,
+      "decision": "pass"
+    },
+    "gallery-collinear/post_search": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 5725.829038,
+      "currentMedianMs": 2858.111943,
+      "baselineNoisePct": 0.9612195130999626,
+      "currentNoisePct": 0.4035362935397828,
+      "semanticEqual": true,
+      "timeDeltaPct": -50.08387564434997,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 195.741066,
+      "currentMedianMs": 200.809205,
+      "baselineNoisePct": 0.3462589705115875,
+      "currentNoisePct": 1.3362614527556131,
+      "semanticEqual": true,
+      "timeDeltaPct": 2.5892057827047843,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 396.272087,
+      "currentMedianMs": 398.939031,
+      "baselineNoisePct": 1.2193011212520755,
+      "currentNoisePct": 0.4741195654029714,
+      "semanticEqual": true,
+      "timeDeltaPct": 0.6730082908918078,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 1033.507519,
+      "currentMedianMs": 1007.927984,
+      "baselineNoisePct": 0.6644866992980254,
+      "currentNoisePct": 0.5442520782318031,
+      "semanticEqual": true,
+      "timeDeltaPct": -2.4750216645496814,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 210.408279,
+      "currentMedianMs": 200.846356,
+      "baselineNoisePct": 0.7383692349862268,
+      "currentNoisePct": 2.2252776146956723,
+      "semanticEqual": true,
+      "timeDeltaPct": -4.544461389753584,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 5286.06403,
+      "currentMedianMs": 258.520234,
+      "baselineNoisePct": 0.33574568713651803,
+      "currentNoisePct": 1.4039755975154993,
+      "semanticEqual": true,
+      "timeDeltaPct": -95.10940025446494,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 8014.943844,
+      "currentMedianMs": 3126.953456,
+      "baselineNoisePct": 0.19092348365554232,
+      "currentNoisePct": 0.34542381752675505,
+      "semanticEqual": true,
+      "timeDeltaPct": -60.98595926731486,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 215.909798,
+      "currentMedianMs": 220.466672,
+      "baselineNoisePct": 0.5914242946955046,
+      "currentNoisePct": 1.581991041258155,
+      "semanticEqual": true,
+      "timeDeltaPct": 2.11054525649641,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "reports": "acceptance-timing",
+      "baselineMedianMs": 407.180324,
+      "currentMedianMs": 407.326638,
+      "baselineNoisePct": 0.9992445018045676,
+      "currentNoisePct": 1.0120555876829211,
+      "semanticEqual": true,
+      "timeDeltaPct": 0.035933465193660474,
+      "decision": "pass"
+    }
+  },
+  "equivalence": {
+    "cases": 23,
+    "stages": 44,
+    "allOrderedDigestsEqual": true,
+    "allOverlappingMeasurementsAndSamplesEqual": true,
+    "fixtureIdentityEqualAcrossAllSelectedReports": true
+  },
+  "operations": [
+    {
+      "case": "hsp-1",
+      "stage": "multi_hsp",
+      "baseline": {
+        "_aggregate_hsps_by_protein_pair.calls": 1,
+        "_aggregate_hsps_by_protein_pair.inputItems": 3,
+        "hsp.pandas.groupby.calls": 1,
+        "hsp.pandas._constructor_from_mgr.calls": 2,
+        "hsp.pandas.itertuples.calls": 1,
+        "hsp.itertuples.rows": 3,
+        "_raw_hsp_representative_rank.calls": 3
+      },
+      "current": {
+        "_aggregate_hsps_by_protein_pair.calls": 1,
+        "_aggregate_hsps_by_protein_pair.inputItems": 3,
+        "hsp.pandas.groupby.calls": 1,
+        "hsp.pandas.itertuples.calls": 1,
+        "hsp.itertuples.rows": 3,
+        "_raw_hsp_representative_rank.calls": 3
+      }
+    },
+    {
+      "case": "hsp-1000",
+      "stage": "multi_hsp",
+      "baseline": {
+        "_aggregate_hsps_by_protein_pair.calls": 1,
+        "_aggregate_hsps_by_protein_pair.inputItems": 3000,
+        "hsp.pandas.groupby.calls": 1,
+        "hsp.pandas._constructor_from_mgr.calls": 1001,
+        "hsp.pandas.itertuples.calls": 1000,
+        "hsp.itertuples.rows": 3000,
+        "_raw_hsp_representative_rank.calls": 3000
+      },
+      "current": {
+        "_aggregate_hsps_by_protein_pair.calls": 1,
+        "_aggregate_hsps_by_protein_pair.inputItems": 3000,
+        "hsp.pandas.groupby.calls": 1,
+        "hsp.pandas.itertuples.calls": 1,
+        "hsp.itertuples.rows": 3000,
+        "_raw_hsp_representative_rank.calls": 3000
+      }
+    },
+    {
+      "case": "hsp-many",
+      "stage": "multi_hsp",
+      "baseline": {
+        "_aggregate_hsps_by_protein_pair.calls": 1,
+        "_aggregate_hsps_by_protein_pair.inputItems": 10000,
+        "hsp.pandas.groupby.calls": 1,
+        "hsp.pandas._constructor_from_mgr.calls": 11,
+        "hsp.pandas.itertuples.calls": 10,
+        "hsp.itertuples.rows": 10000,
+        "_raw_hsp_representative_rank.calls": 10000
+      },
+      "current": {
+        "_aggregate_hsps_by_protein_pair.calls": 1,
+        "_aggregate_hsps_by_protein_pair.inputItems": 10000,
+        "hsp.pandas.groupby.calls": 1,
+        "hsp.pandas.itertuples.calls": 1,
+        "hsp.itertuples.rows": 10000,
+        "_raw_hsp_representative_rank.calls": 10000
+      }
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "hsp_aggregate",
+      "baseline": {
+        "_aggregate_hsps_by_protein_pair.calls": 13,
+        "_aggregate_hsps_by_protein_pair.inputItems": 13720,
+        "hsp.pandas.groupby.calls": 13,
+        "hsp.pandas._constructor_from_mgr.calls": 10805,
+        "hsp.pandas.itertuples.calls": 10792,
+        "hsp.itertuples.rows": 13720,
+        "_raw_hsp_representative_rank.calls": 13720
+      },
+      "current": {
+        "_aggregate_hsps_by_protein_pair.calls": 13,
+        "_aggregate_hsps_by_protein_pair.inputItems": 13720,
+        "hsp.pandas.groupby.calls": 13,
+        "hsp.pandas.itertuples.calls": 13,
+        "hsp.itertuples.rows": 13720,
+        "_raw_hsp_representative_rank.calls": 13720
+      }
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "hsp_aggregate",
+      "baseline": {
+        "_aggregate_hsps_by_protein_pair.calls": 25,
+        "_aggregate_hsps_by_protein_pair.inputItems": 21935,
+        "hsp.pandas.groupby.calls": 25,
+        "hsp.pandas._constructor_from_mgr.calls": 18169,
+        "hsp.pandas.itertuples.calls": 18144,
+        "hsp.itertuples.rows": 21935,
+        "_raw_hsp_representative_rank.calls": 21935
+      },
+      "current": {
+        "_aggregate_hsps_by_protein_pair.calls": 25,
+        "_aggregate_hsps_by_protein_pair.inputItems": 21935,
+        "hsp.pandas.groupby.calls": 25,
+        "hsp.pandas.itertuples.calls": 25,
+        "hsp.itertuples.rows": 21935,
+        "_raw_hsp_representative_rank.calls": 21935
+      }
+    }
+  ],
+  "memory": [
+    {
+      "case": "hsp-1",
+      "stage": "multi_hsp",
+      "inputDataFrameDeepBytes": 678,
+      "baselinePeakBytes": 80701,
+      "currentPeakBytes": 68479
+    },
+    {
+      "case": "hsp-1000",
+      "stage": "multi_hsp",
+      "inputDataFrameDeepBytes": 557472,
+      "baselinePeakBytes": 2832042,
+      "currentPeakBytes": 2620074
+    },
+    {
+      "case": "hsp-many",
+      "stage": "multi_hsp",
+      "inputDataFrameDeepBytes": 1820132,
+      "baselinePeakBytes": 2585598,
+      "currentPeakBytes": 2429250
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "hsp_aggregate",
+      "inputDataFrameDeepBytes": 3212196,
+      "baselinePeakBytes": 4967830,
+      "currentPeakBytes": 4214638
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "hsp_aggregate",
+      "inputDataFrameDeepBytes": 5136090,
+      "baselinePeakBytes": 6181328,
+      "currentPeakBytes": 5832406
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "post_search",
+      "inputDataFrameDeepBytes": 3212196,
+      "baselinePeakBytes": 18107173,
+      "currentPeakBytes": 18146556
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "post_search",
+      "inputDataFrameDeepBytes": 5136090,
+      "baselinePeakBytes": 27923924,
+      "currentPeakBytes": 27955318
+    }
+  ],
+  "processMaxRssKiB": {
+    "baseline": 457340,
+    "current": 456452
+  },
+  "inputRetentionLimit": "DataFrame deep bytes exclude protein maps, Bio records, raw buffers and other harness input ownership.",
+  "memoryLimit": "Stage tracemalloc is one invocation after fixture preparation. Process RSS includes the complete memory-run harness. Neither is browser/Wasm peak.",
+  "timingLimit": "Native stage time, no raw search or whole Web Generate timing. Interval union sorting remains.",
+  "filesSha256": {
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md": "a3331e3b7712a9b23227d93449368c2f819804cedccd463b32b8829e01dc95ad",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S03.md": "175b36bcb77168f646e3506c7aa5ade61d30d55dc5b5cff651adb0bb0252b435",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-acceptance-memory-comparison.json": "f3a73afd1eb37346cc5ea868c9a4a96b518e728b041c1eba2f4a0cd70a2d2aef",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-acceptance-probe-comparison.json": "8034b1712e2198b65ce02e30888d38d01b7fd8397b9317787ea4a95592b0363b",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-acceptance-timing-comparison.json": "dd6f64bf4ca49ebe2419f8a8b31ac62a51449c366eb332ed990fab15dff44289",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-memory.json.gz": "d89e7c2182bafbd7891b7024cadb3d2e68eaced56be424d51395c71f30a3b771",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-probe.json.gz": "bf95ec7df40681655b7c8d048526209fb7f19fc68fa8067b61b1000df6a0ccf1",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-timing.json.gz": "2a86b4b59bc7d3bce27a75854f217f427b3f4c7c7e58d1faa7d14d027a4b3ba3",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-final.json.gz": "b81078a3ec2588a9c6e99a6626d1b6e734f17eb3637325f179683a43c9b7f4ea",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-memory.json.gz": "5e407aa0a230da2165bfab1deca06630985642c789fe72afed98d9f6121e6d20",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-probe.json.gz": "874ed8bc3cca404417e09ff6f3a88ea787fa0b4be8a7960b1854d214f4a461b1",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-repeat.json.gz": "05497bd2efe5274dbf9468cc0bae5b8f341b33392e2b695b9fd00735de10b943",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-small-repeat.json.gz": "07a3d4a7951a63521664416e8521bb8f01270a5242b65333120bcbde4fece90f",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-timing.json.gz": "fe457899165234dab516780913dd8c84ff1f2f0a8454d91b577b0bbec51ea9bd",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-browser-sandbox-failure.json": "b8d16eefe4e389e24da1adf95d01934db7e726904a64a42518fda9489af52032",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-browser.json": "429e677aba2913c954c962cf806b29f8888668f2b119f7c8038a66ff5a25ed96",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-commands.json": "dbce8fed67ce54e3410d71f40cc2aca3da7f9a6f71db8edcf4431e6580d77e3a",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-memory.json.gz": "ce12cfb22d1c1d80cbec4b5758056f2662d6b3ef99a3103c52cbbad980cf5461",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-probe.json.gz": "f82847899bb55733485f0a997ed3ea14999b7ce1d9c2b5680f248d8658ddce12",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-timing.json.gz": "edd6d04dc6ad396d4438c7dd14f9a768fabe5a21c4d60209fc15fdcf5185657c",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-final.json.gz": "c2323c124ef90fbacb97aa908ebd95774174debc8c48d27a996c85db52495b39",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-memory.json.gz": "053bd60f484ff664390dab1254248ff8a16544a724ac20ee0b73535e0825bc72",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-probe.json.gz": "79094fa724dd4eebe376d156f885d38686c92392ae7984d4b4ab9e43361972e4",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-repeat.json.gz": "5d3faf56ac1639e2bdb50372ca748e454813b14c844345bab798e6ab85c3cd28",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-small-repeat.json.gz": "49b740797de26521d5d55a3cbfdf1b8414b9ad425bb316f78f9a4ee0a03e26af",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-timing.json.gz": "a36a2efaaee61d40208719c42c76793b8f524e22ce5e82e7cc746d59a1864b9a",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-host-contention.json": "b22112262f6aae7f040d20db1004a99c5b5d8a6369e4689979e889b857e5f78f",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-hsp-final-comparison.json": "af1d453ca211396693392342cbc63a1cdc349c4ea57b075fa5aa24d0b4b725fe",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-hsp-repeat-comparison.json": "14b6b8942ddbf4f972b3e8d594d2bc560657a7214179d0260d50714dcd493cc4",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-isolation-wait.json": "3f99827a2afa00baa0c63fe01478efe8a659babbc4ff274444ded90de90b2879",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/acceptance-memory-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/acceptance-probe-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/acceptance-timing-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/architecture-gate-escalated.log": "384027490a1bf23f7efcf1e1134cb36e49839552a128b44282adaf6a88428e56",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/architecture-gate.log": "bbe286ec7fbb49f0a290440abeb17e1c46faabc64f10bfa0768f7ee03a09a6a0",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-acceptance-memory.log": "6ff7359f398bc054e4e8feae0eba15207e7eb03ac9b0ea8736acca5b876b4105",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-acceptance-probe.log": "e18033cee9d04f5782cca5ab019a75c3807a1d10321b0167e012049b41fcd800",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-acceptance-timing.log": "8584be05a4c904182a3fee58bd7f265046420806849eeb5c0bfcae3d74697c6c",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-hsp-final.log": "a1ace76e51aad1fcddfbdcd16c2b89ab3568e2c729a728e49e1c25ae988266e6",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-hsp-memory.log": "3449a990a9aff2f946a119b305388c90ab19eb9f3484173e5336ab48adcb7a61",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-hsp-probe.log": "4816c617eded61bb659f02d3beecbfe46442b61a690509a8277f020fc499f16d",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-hsp-repeat.log": "a1ace76e51aad1fcddfbdcd16c2b89ab3568e2c729a728e49e1c25ae988266e6",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-small-repeat.log": "1ce04232a88a8f918da333f6bd2c4d7ecea852046dfeef78e97d7ea7f9b83841",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/baseline-timing.log": "17440cb08b1fbe4c9458f3fd61e0ec48966b5b33d74eab7df29bd5cf315b84db",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/browser-acceptance-escalated.log": "4297b9825ee19c9f809a7df18dca315490015a47fc853a6df488c3eacc8c700d",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/browser-acceptance.log": "f82903696217864cc2cc25bcc449096b174cdbadf387ad5e7502a0f67298f1b4",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/browser-wheel.log": "d27067e417894d70abcf6e77f463b59899d75e1f1295d55ee25c9c38eb3af84d",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-acceptance-memory.log": "6ff7359f398bc054e4e8feae0eba15207e7eb03ac9b0ea8736acca5b876b4105",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-acceptance-probe.log": "e18033cee9d04f5782cca5ab019a75c3807a1d10321b0167e012049b41fcd800",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-acceptance-timing.log": "8584be05a4c904182a3fee58bd7f265046420806849eeb5c0bfcae3d74697c6c",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-hsp-final.log": "a1ace76e51aad1fcddfbdcd16c2b89ab3568e2c729a728e49e1c25ae988266e6",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-hsp-memory.log": "3449a990a9aff2f946a119b305388c90ab19eb9f3484173e5336ab48adcb7a61",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-hsp-probe.log": "4816c617eded61bb659f02d3beecbfe46442b61a690509a8277f020fc499f16d",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-hsp-repeat.log": "a1ace76e51aad1fcddfbdcd16c2b89ab3568e2c729a728e49e1c25ae988266e6",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-small-repeat.log": "1ce04232a88a8f918da333f6bd2c4d7ecea852046dfeef78e97d7ea7f9b83841",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/current-timing.log": "17440cb08b1fbe4c9458f3fd61e0ec48966b5b33d74eab7df29bd5cf315b84db",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/focused-after-profile.log": "3b256d9e2db96d417b1ee6f856bf848c5e6c4ebdac793c8986d032a467469b80",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/focused-final.log": "6f150da51d5cb1b8e4392e54e786c67e7206b91d25d6931c0b9ff0abc70e857b",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/focused-key-groups.log": "e6ee35afd96bdbb3f5f9f589a002c27856aa5a788373ff2b8f2a9c694b24a932",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/hsp-final-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/hsp-repeat-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/install-cli.log": "465732ed7796a6e4cff073e4b28a8d01494436d5078093149aaef51589f920c9",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/metadata-svg.log": "9e92d8069c3c63bb43d1e5f95b09d4fc2383660bfab52597fc69d4543f7c1de2",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/node-focused-escalated.log": "97dbf6550c882fe284a127a69a8f4179dc8ad81821b13ed2d823e1356443fcde",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/node-focused.log": "be6c51bf6a3e555eac7ca55d3cf60f131dac2d4a4f2a240a9108cf73aedf9f03",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/python-browser-retry.log": "2b1023e8a06ec1d67be9a27535192a2ff32fd9fe6ebbb02432f0d095e31ceb40",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/python-cli-replay-retry-quoted.log": "1ab4fc513b8ba30885b72c7d90ff20de2ad590998aa222383e3c9d37bc232a06",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/python-cli-replay-retry.log": "33c8aa5d8e19edbe114b1cf618da897f4ae57131a1e349cfbba36a6530d72287",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/python-comparison-contract-retry.log": "1bf8bee320603285b9d24d08ea79b42d05debad8246087f9e4843cbc2533ca1d",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/python-fast.log": "32ade916539ed143d37ed4410f0d922b4293d451836ea7811e420327e201dfad",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/python-focused.log": "5a73798293d710755f4d5f577278721100c502f0d4f3faa8a48dd0f39d0d1b5a",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/small-repeat-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-logs/timing-compare.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-oracles/hsp-1.multi_hsp.json.gz": "a88b0a20586fe5207350b2b0a6242e6ce2bf454887aba8a80548bbdd69c96134",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-oracles/hsp-many.multi_hsp.json.gz": "816b0b68215c4368bbde61e92ecd2593d9242cb0b2947d95d98fd9316af882dc",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-small-repeat-comparison.json": "24e4b7d0fc509976a135bb9ec8fd40b2385e2f0115a1b2310c55a9d54c16a0a3",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-test-environment.json": "58d1258f8a603b39d5c028a47bdcfa75de21360982d95ed52b0ae315c2e58c4c",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-tests.json": "e730f468e4382a78f1c67b9fe1ab3177808827fbcf9f9fd9ba9c1b619c44e2ba",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-timing-comparison.json": "a82e64a56e763d4f2a43b3aeb88980199f6ef5b3f6670155c24c24a191764051",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-wheel-source-verification.json": "296c3d4b45d38ce6a42ebc72218e2bbe5df8ca25919b16a4a67d6b6782067b04",
+    "gbdraw/analysis/protein_colinearity.py": "eee79913b0bf8aabf7bb274fe73c63e9b79f1f0c29e4c4498cf90155de197ed6",
+    "tests/prototypes/hsp_aggregation.py": "00bad21eb97ac181c1edbfb18908e54ca9469947d99d81c4bdab31aa62e3ce7a",
+    "tests/run_hsp_browser_acceptance.py": "6b1ac11e1427ede5a7c3759cb26e1d4ab18cba15277d78977de577bd6c1e9440",
+    "tests/test_protein_colinearity.py": "f331d8a13cae491962de7c3166cfa14cee1b849fdbfed9b94f8cb373b741c58c",
+    "tools/benchmark_protein_comparison.py": "603e793ee48ac2f05c82a6ffef3f2378d6c92930db7d214aae0f648d973696d5",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-original-logs.tar.gz": "16522644ce2e72581ea80761520a71d50eff0025424535f972bf1d786d5c266c"
+  },
+  "acceptance": {
+    "exactness": "pass: 23 cases / 44 stages",
+    "requiredTests": "pass; see s03-tests.json",
+    "numericalTimingDecisions": "24 pass / 0 regression / 0 noise-inconclusive under unchanged thresholds",
+    "hostIsolation": "unmet: separate benchmark overlapped measurements",
+    "isolatedRerun": "canceled by explicit final user instruction",
+    "overallIsolatedPerformancePass": false,
+    "authorizedScopeComplete": true
+  },
+  "review": {
+    "production": "only private aggregation and its accumulator; old loop removed",
+    "tests": "frozen old loop in tests only, boundary/structural tests and existing runner extensions",
+    "documentation": "S03 report and MASTER progress; no authority/schema changes",
+    "generated": "all samples/operations/memory and failures retained; ignored wheels/environments excluded",
+    "sharedWorkingTree": "git status --short matched start inventory",
+    "referenceOutputs": "unchanged",
+    "futureSessions": "S04 not started; PATH-B authority not cherry-picked"
+  },
+  "logStorage": "Text copies trim trailing whitespace; s03-original-logs.tar.gz preserves original stdout/stderr bytes."
+}
