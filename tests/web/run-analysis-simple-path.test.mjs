@@ -1504,6 +1504,15 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'the failed candidate must execute without becoming committed evidence');
 
+    state.losat.blastn.task = 'blastn';
+    workerHelperResponses.push({
+      ok: true,
+      result: { tsv: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n' }
+    });
+    workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
+    assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'ok' });
+    assert.equal(losatCalls, 2, 'retry after artifact rollback must reuse completed raw searches');
+
     const warmCacheInfo = [{
       key: 'warm-cache', edgeKey: 'multi->third', queryUid: 'multi', subjectUid: 'third',
       queryIndex: 0, subjectIndex: 1, ordinal: 0, display: true
