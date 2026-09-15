@@ -1,0 +1,10 @@
+Processing /tmp/gbdraw-collinear-s01
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: gbdraw
+  Building wheel for gbdraw (pyproject.toml): started
+  Building wheel for gbdraw (pyproject.toml): finished with status 'done'
+  Created wheel for gbdraw: filename=gbdraw-0.14.0-py3-none-any.whl size=3193961 sha256=7b74e8d7f16853acca06aa6bb242ddc01876cf5a5f28ed0c414f490fdb302551
+  Stored in directory: /tmp/pip-ephem-wheel-cache-ew8j5fb_/wheels/63/f3/48/f2726c2b59ce363a7538449f55a72dc970052a52fd290e4751
+Successfully built gbdraw
+Prepared browser wheel: gbdraw/web/gbdraw-0.14.0-py3-none-any.whl

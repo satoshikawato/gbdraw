@@ -1,0 +1,219 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "currentHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "semanticOnly": false,
+  "comparisons": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "semanticEqual": true,
+      "timeDeltaPct": 3.6662833233229497,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "semanticEqual": true,
+      "timeDeltaPct": 19.63965938776444,
+      "decision": "regression"
+    },
+    "hsp-edges/unknown_missing": {
+      "semanticEqual": true,
+      "timeDeltaPct": 6.689752441200203,
+      "decision": "pass"
+    },
+    "hsp-edges/bad_coordinates": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.977763302975478,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/pair_row_order": {
+      "semanticEqual": true,
+      "timeDeltaPct": 5.787565590281973,
+      "decision": "pass"
+    },
+    "hsp-edges/nan_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": 9.583037226985436,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": 13.84395349878531,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/infinite_length": {
+      "semanticEqual": true,
+      "timeDeltaPct": 7.449489834127032,
+      "decision": "pass"
+    },
+    "hsp-edges/empty": {
+      "semanticEqual": true,
+      "timeDeltaPct": 17.01706711632578,
+      "decision": "inconclusive"
+    },
+    "hsp-1000/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.9921627584864812,
+      "decision": "pass"
+    },
+    "dense-24/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 4.01739669571517,
+      "decision": "pass"
+    },
+    "support-edges/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 16.29020407840811,
+      "decision": "regression"
+    },
+    "sparse-200/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 7.754573683852595,
+      "decision": "pass"
+    },
+    "sparse-400/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 6.294523257632645,
+      "decision": "pass"
+    },
+    "sparse-800/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -4.069338441556769,
+      "decision": "inconclusive"
+    },
+    "cache-49/cache_cycle": {
+      "semanticEqual": true,
+      "timeDeltaPct": -6.04943539647903,
+      "decision": "pass"
+    },
+    "cache-64/cache_cycle": {
+      "semanticEqual": true,
+      "timeDeltaPct": -8.532375847524353,
+      "decision": "pass"
+    },
+    "cache-81/cache_cycle": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.17745059886554726,
+      "decision": "pass"
+    },
+    "path-8/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -6.456999448267431,
+      "decision": "pass"
+    },
+    "path-12/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.1613239937248276,
+      "decision": "pass"
+    },
+    "path-16/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -14.224277386143392,
+      "decision": "inconclusive"
+    },
+    "merge-300/cluster": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.6706085178313725,
+      "decision": "pass"
+    },
+    "merge-600/cluster": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.5078365219412628,
+      "decision": "pass"
+    },
+    "merge-1200/cluster": {
+      "semanticEqual": true,
+      "timeDeltaPct": 18.069122893921353,
+      "decision": "inconclusive"
+    },
+    "merge-edges/max_conflicts_0": {
+      "semanticEqual": true,
+      "timeDeltaPct": 5.986428334988414,
+      "decision": "inconclusive"
+    },
+    "merge-edges/max_conflicts_1": {
+      "semanticEqual": true,
+      "timeDeltaPct": 16.994516494037782,
+      "decision": "inconclusive"
+    },
+    "merge-edges/reverse": {
+      "semanticEqual": true,
+      "timeDeltaPct": 4.745118915730262,
+      "decision": "pass"
+    },
+    "manifest/batch_identity": {
+      "semanticEqual": true,
+      "timeDeltaPct": -3.9222612316677896,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.7356361734477188,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -37.03193186539712,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": -7.250395660303443,
+      "decision": "pass"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -6.91382529736938,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": 33.45146573385072,
+      "decision": "regression"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": -6.710429078680025,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -18.109441939877325,
+      "decision": "inconclusive"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -44.28900172177741,
+      "decision": "inconclusive"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": -47.47486472282273,
+      "decision": "inconclusive"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -44.42907877736144,
+      "decision": "inconclusive"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -3.6704385902304515,
+      "decision": "inconclusive"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": -38.69044882964744,
+      "decision": "inconclusive"
+    },
+    "render-gallery/hepatoplasmataceae_collinear": {
+      "semanticEqual": true,
+      "timeDeltaPct": -12.843048934866664,
+      "decision": "pass"
+    },
+    "render-gallery/hepatoplasmataceae_orthogroup": {
+      "semanticEqual": true,
+      "timeDeltaPct": -5.379766142939058,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 1
+}
