@@ -1,7 +1,7 @@
 # Collinear / Similarity groups 計算量改修 — 総合計画書
 
 - 作成日: 2026-09-15
-- 状態: S01の基準・再現資産とS02の調査・テスト専用prototype・同値検証・設計が完了。S02のProduct選択は未受領（decision revision 1、baseへの反映なし）。S03以降の本番改修は未実施。
+- 状態: S01の基準・再現資産とS02の調査・テスト専用prototype・同値検証・設計が完了。S02のProduct選択はPATH-Bとして受領済み（decision revision 1、authority文書化済み、review・base統合は未完了）。S03以降の本番改修は未実施。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
 ## 1. 目的と完了の意味
@@ -15,7 +15,9 @@
 3. 有限のキャッシュ予算で、設定変更時に再利用できる解析段階を保持する。
 4. 経路情報を失わないグラフ表現によって、通常処理が全経路数に比例して増える問題を解消する。
 
-グラフ表現は工学的推奨であり、この計画書による Product 承認ではない。全経路配列の維持が選択された場合、他の性能改善は完了できるが、指数的な出力量の解消は未達と記録する。
+2026-09-15にProduct Decision OwnerがPATH-B / lossless-graphを選択した。
+根拠は[完全なhuman receiptとauthority引き継ぎ](results/S02_PRODUCT_DECISION.md)であり、
+この計画書の推奨ではない。authorityのbase統合前に依存runtimeを実装しない。
 
 ## 2. 調査の基準と更新手順
 
@@ -55,7 +57,8 @@ S02開始時のfetchでもbaseは`9a4f7e29`のままで、S01成果は未統合�
 新規worktreeへcherry-pickした。調査・検証結果は[S02 handoff](results/S02.md)、
 全consumerと公開履歴は[S02 inventory](results/S02_INVENTORY.md)、具体的な型・
 順位・保存・互換性は[S02 contract](results/S02_PATH_CONTRACT.md)を参照する。
-[Decision Pack](results/PATH_DECISION_PACK.md)は判断待ちの候補でありauthorityではない。
+[Decision Pack](results/PATH_DECISION_PACK.md)は判断時の比較記録でありauthorityではない。
+受領したPATH-Bの文書化・review・base統合状態は[判断引き継ぎ](results/S02_PRODUCT_DECISION.md)を参照する。
 S06にはS05完了と、選択済みoutcomeを認可するbase authorityが引き続き必要。
 
 [Option Integrity Product Contract revision 5](https://github.com/satoshikawato/gbdraw/blob/9e28581a3d0e7fb9117da0fbc11d46a945b0e59e/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md) は、以下を既に選択している。
@@ -190,7 +193,7 @@ S02 の決定対象:
 | `PATH-A` / `exhaustive-current` | 現在の全経路配列の公開・保存契約を維持 | 全量要求の指数コストは残る |
 | `PATH-B` / `lossless-graph` | 関係グラフを通常の公開・保存経路に採用。必要な既存 consumer の経路取得契約を明示 | 通常経路は全列挙を回避。明示的な全量取得は出力量に比例 |
 
-`PATH-B` を推奨するが未選択。S02 は受理可能な API、exact count、path ID、shared情報、互換読込、保存形式、失敗時継続を具体化する。DAG でない到達可能入力を勝手に切り落としたり、edge 方向を変えたりしない。循環への対応が未決なら影響部分を判断へ戻す。
+`PATH-B` はscenario revision 1の完全なhuman receiptで選択済み。S02 は API、exact count、path ID、shared情報、互換読込、保存形式、失敗時継続を具体化した。authorityのreview・base統合は未完了。DAG でない到達可能入力を勝手に切り落としたり、edge 方向を変えたりしない。循環への対応が未決なら影響部分を判断へ戻す。
 
 `OrthogroupResult`、`OrthologPath`、`OrthologEdge`、typed resource、SVG属性、catalog、popup、persisted raw/derived/session を consumer ごとに追跡する。catalog が最後に配列を count へ縮約しても、前段の encode が全量展開していれば未解決である。
 

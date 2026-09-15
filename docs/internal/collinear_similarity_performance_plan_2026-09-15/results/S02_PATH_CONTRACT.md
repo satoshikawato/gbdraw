@@ -1,8 +1,12 @@
 # S02 — concrete alternatives and S06 implementation contract
 
-**Candidate design, not accepted Product authority.** Concern
-`protein-comparison.path-representation`, scenario revision **1**. Neither
-choice is selected. Base and observations: [inventory](S02_INVENTORY.md).
+**Engineering design for the selected PATH-B outcome; not Product authority.**
+Concern `protein-comparison.path-representation`, scenario revision **1**.
+The complete PATH-B receipt was received on 2026-09-15. Authority review and
+base integration remain pending; see [decision handoff](S02_PRODUCT_DECISION.md).
+Implementation names/schema allocations remain proposals, not new human
+commitments. PATH-A below is the unselected comparison alternative.
+Base and observations: [inventory](S02_INVENTORY.md).
 
 ## 1. Common requirements
 

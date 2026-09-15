@@ -1,8 +1,11 @@
 # Product Decision Pack — complete protein paths during render and save
 
-**Status: awaiting Product selection. Non-normative candidate.**
-Independent S02 investigation, test-only prototype and small-input evidence are
-complete; neither option is accepted and no authority record/runtime is changed.
+**Status: PATH-B selected by complete human receipt; authority review/base
+integration pending. Non-normative decision-preparation record.**
+The comparison and intake status below preserve what was presented before the
+decision. The 2026-09-15 receipt and its exact serialization are recorded in the
+[decision handoff](S02_PRODUCT_DECISION.md). Independent S02 investigation,
+prototype and evidence are complete. No dependent runtime is implemented.
 
 ## Identity
 
@@ -296,5 +299,7 @@ Decision date: <YYYY-MM-DD>
 After a complete receipt, serialize **only** that outcome through the applicable
 existing authority route and show the generated representation for review.
 Keep decision revision, receipt completeness and base integration as separate
-states. At this handoff: revision 1; receipt absent; accepted representation
-absent; base integration absent; **S06 dependent runtime not authorized**.
+states. At the original investigation handoff: revision 1; receipt absent;
+accepted representation absent; base integration absent. The follow-up receipt
+now selects PATH-B and has been serialized; review and base integration remain
+pending. **S06 dependent runtime is not yet authorized.**

@@ -5,6 +5,11 @@ Evidence base: `9a4f7e29ab1b99676bb783321f8a9f40f969d04c`; fetched main:
 not Product authority. [Design](S02_PATH_CONTRACT.md),
 [decision](PATH_DECISION_PACK.md), [handoff](S02.md).
 
+Follow-up: the complete PATH-B receipt was received on 2026-09-15; see
+[decision handoff](S02_PRODUCT_DECISION.md). The authority search and preflight
+below remain the observations on the named base before that receipt, not a
+claim that Product selection is still missing.
+
 ## 1. Exact current enumeration
 
 Owner: `gbdraw/analysis/protein_colinearity.py::_build_ortholog_paths`.
