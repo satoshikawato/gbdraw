@@ -716,6 +716,7 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastn');
     app.losat.blastn.task = 'dc-megablast';
+    app.setLinearComparisonLosatpMode('collinear');
     Object.assign(app.losat.blastp, {
       candidateLimit: 37,
       maxHits: 41,
@@ -814,7 +815,7 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
   }
 });
 
-test('comparison controls drive appearance and current Session round trips', async ({ page }) => {
+test('comparison controls drive appearance and current Session round trips', { tag: '@comparison-contract' }, async ({ page }) => {
   test.setTimeout(600000);
   await openLinear(page);
   await page.evaluate(async (records) => {
@@ -844,9 +845,7 @@ test('comparison controls drive appearance and current Session round trips', asy
   const advanced = page.locator(
     'details[data-linear-comparison-disclosure="advanced"]'
   );
-  await advanced.locator('summary').click();
-
-  const candidate = page.getByRole('spinbutton', { name: 'LOSATP Candidate limit' });
+  const candidate = page.getByRole('spinbutton', { name: 'LOSATP Max target seqs' });
   const pairwiseMax = page.getByRole('spinbutton', {
     name: 'Pairwise display max hits per protein'
   });
@@ -870,14 +869,23 @@ test('comparison controls drive appearance and current Session round trips', asy
 
   await losatpMode.selectOption('orthogroup');
   await expect(candidate).toBeVisible();
-  await expect(memberHits).toBeVisible();
+  await expect(candidate).toHaveValue('');
+  await expect(memberHits).toHaveValue('');
+  await candidate.fill('19');
   await memberHits.fill('7');
   await expect(matchStyle).toHaveValue('curve');
   await expect(matchHeight).toHaveValue('45');
 
   await losatpMode.selectOption('collinear');
   await expect(candidate).toBeVisible();
-  await expect(memberHits).toHaveValue('7');
+  await expect(candidate).toHaveValue('5');
+  await expect(memberHits).toHaveValue('5');
+  const inference = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  await expect(inference).not.toBeChecked();
+  await candidate.fill('23');
+  await memberHits.fill('11');
+  await inference.check();
+  await advanced.locator('summary').click();
   await page.getByRole('combobox', { name: 'Collinear evidence scope' }).selectOption('all');
   await page.getByRole('combobox', { name: 'Collinear color mode' })
     .selectOption('orientation_identity');
@@ -889,8 +897,13 @@ test('comparison controls drive appearance and current Session round trips', asy
   await losatpMode.selectOption('pairwise');
   await expect(pairwiseMax).toHaveValue('3');
   await expect(candidate).toHaveValue('17');
-  await losatpMode.selectOption('collinear');
+  await losatpMode.selectOption('orthogroup');
+  await expect(candidate).toHaveValue('19');
   await expect(memberHits).toHaveValue('7');
+  await losatpMode.selectOption('collinear');
+  await expect(candidate).toHaveValue('23');
+  await expect(memberHits).toHaveValue('11');
+  await expect(inference).toBeChecked();
   await expect(page.getByRole('combobox', { name: 'Collinear unit mode' })).toHaveValue('locus');
   await expect(page.getByRole('combobox', { name: 'Collinear anchor mode' })).toHaveValue('all');
   await expect(page.getByRole('combobox', {
@@ -961,9 +974,11 @@ test('comparison controls drive appearance and current Session round trips', asy
   const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
   expect(session.config.losat.blastp).toMatchObject({
     mode: 'collinear',
-    candidateLimit: 17,
+    candidateLimit: 23,
     maxHits: 3,
-    orthogroupMemberMaxHits: 7,
+    orthogroupMemberMaxHits: 11,
+    collinearInferOrthogroups: true,
+    hitLimitsByMode: { orthogroup: { candidateLimit: 19, orthogroupMemberMaxHits: 7 } },
     collinearUnitMode: 'locus',
     collinearAnchorMode: 'all',
     collinearMergeOrientation: 'strand',
@@ -1010,9 +1025,9 @@ test('comparison controls drive appearance and current Session round trips', asy
       height: app.adv.comparison_height
     };
   })).toEqual({
-    candidate: 17,
+    candidate: 23,
     pairwise: 3,
-    member: 7,
+    member: 11,
     unit: 'locus',
     anchor: 'all',
     merge: 'strand',
@@ -1021,6 +1036,35 @@ test('comparison controls drive appearance and current Session round trips', asy
     style: 'curve',
     height: 85
   });
+  await losatpMode.selectOption('orthogroup');
+  await expect(candidate).toHaveValue('19');
+  await expect(memberHits).toHaveValue('7');
+  await losatpMode.selectOption('collinear');
+  await expect(candidate).toHaveValue('23');
+  await expect(memberHits).toHaveValue('11');
+  await expect(inference).toBeChecked();
+  await candidate.fill('');
+  await memberHits.fill('');
+  await losatpMode.selectOption('orthogroup');
+  await expect(candidate).toHaveValue('19');
+  await losatpMode.selectOption('collinear');
+  await expect(candidate).toHaveValue('');
+  await expect(memberHits).toHaveValue('');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+  });
+  await expect(losatpMode).toHaveValue('orthogroup');
+  await expect(candidate).toHaveValue('');
+  await expect(memberHits).toHaveValue('');
+  await losatpMode.selectOption('collinear');
+  await expect(candidate).toHaveValue('5');
+  await expect(memberHits).toHaveValue('5');
+  await expect(inference).not.toBeChecked();
 });
 
 test('structured comparison errors open and focus their owning disclosure', async ({ page }) => {

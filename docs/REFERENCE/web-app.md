@@ -162,7 +162,16 @@ LOSATP, its presentation. LOSATN shows **LOSATN task**. TLOSATX keeps each recor
 active genetic code in that record's **Record options**. LOSATP **Pairwise
 matches** shows **Max hits per protein**; **Similarity groups** shows **Member
 hits per protein**; **Collinear blocks** shows its primary block, scope, and
-color controls. Shared result filters appear in the same disclosure. LOSATN,
+color controls. **Max target seqs** is visible in **Settings** for every LOSATP
+mode and controls the raw search limit. Both it and **Member hits per protein**
+initially use `5` in Collinear and are unbounded in Similarity groups. Each mode
+remembers its own edited values. Blank means unbounded.
+
+Collinear also shows **Infer orthogroups with self-comparisons**, initially
+OFF. Enable it to add within-record searches and paralog-aware orthogroup
+inference. OFF builds blocks from between-record evidence. **Paralog links per
+group** appears in Advanced only when inference is enabled. Shared result
+filters appear in the same disclosure. LOSATN,
 TLOSATX, LOSATP Pairwise matches, and uploaded evidence also show **Comparison
 appearance**, with **Match style** and **Match height**. Similarity groups and
 Collinear blocks keep those appearance drafts but hide the controls. To
@@ -174,7 +183,7 @@ control does not rewrite the saved style.
 Similarity groups always computes all-vs-all protein-search evidence across
 the loaded records; it has no evidence-scope selector. Collinear blocks uses
 **Evidence scope**. Fresh pages and **Reset Settings** default that control to
-**All records**. A session that explicitly saved **Adjacent pairs** restores
+**Adjacent pairs**. A session that explicitly saved **All records** restores
 that value. Evidence scope controls the search expansion, not which record
 pairs receive displayed links.
 

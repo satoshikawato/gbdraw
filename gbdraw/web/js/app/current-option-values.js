@@ -74,11 +74,19 @@ export const requireCurrentCollinearSearchScope = (value) => (
   )
 );
 
+// Older saved pipelines omit this field; fresh Web state explicitly supplies false.
+export const requireCurrentCollinearInferOrthogroups = (value = true) => {
+  if (typeof value !== 'boolean') {
+    throw new Error('Collinear orthogroup inference must be a boolean.');
+  }
+  return value;
+};
+
 export const requireCurrentProteinBlastpCandidateLimit = (value) => {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric <= 0) {
-    throw new Error('Protein BLASTP Candidate limit must be a positive integer or None.');
+    throw new Error('Protein BLASTP Max target seqs must be a positive integer or None.');
   }
   return numeric;
 };

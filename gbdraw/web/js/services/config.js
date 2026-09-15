@@ -192,6 +192,7 @@ import {
 import {
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
+  createDefaultLosatpHitLimits,
   LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
@@ -2057,6 +2058,10 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
       ? (rawTotalThreadBudget === 'auto' ? 'safe' : rawTotalThreadBudget)
       : 'safe';
     state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
+    state.losat.blastp.collinearInferOrthogroups = data.losat.blastp?.collinearInferOrthogroups ?? (state.losat.blastp.mode === 'collinear');
+    state.losat.blastp.hitLimitsByMode = {
+      ...createDefaultLosatpHitLimits(), ...cloneJsonData(data.losat.blastp?.hitLimitsByMode || {})
+    };
     state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
     state.losat.blastp.candidateLimit = normalizePositiveInteger(
       state.losat.blastp?.candidateLimit,

@@ -28,6 +28,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
     ProteinExtractionResult,
     _execute_losatp_search,
+    _select_member_candidate_hits_per_query,
     extract_cds_proteins,
     filter_protein_hits_by_thresholds,
     normalize_orthogroup_membership_mode,
@@ -407,9 +408,11 @@ def _protein_order_by_id(protein_map: Mapping[str, CdsProtein]) -> dict[str, int
 
 
 def _orthogroup_member_counts_by_record(
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | None,
 ) -> dict[tuple[str, int], int]:
     counts: dict[tuple[str, int], int] = {}
+    if orthogroups is None:
+        return counts
     for orthogroup_id, members in orthogroups.orthogroups.items():
         for member in members:
             key = (str(orthogroup_id), int(member.record_index))
@@ -420,8 +423,10 @@ def _orthogroup_member_counts_by_record(
 def _orthogroup_id_for_edge(
     query_id: str,
     subject_id: str,
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | None,
 ) -> str:
+    if orthogroups is None:
+        return ""
     query_member = orthogroups.member_by_protein_id.get(query_id)
     subject_member = orthogroups.member_by_protein_id.get(subject_id)
     if query_member is None or subject_member is None:
@@ -435,7 +440,7 @@ def _orthogroup_edge_metadata_for_anchor(
     query_id: str,
     subject_id: str,
     orthogroup_id: str,
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | None,
 ) -> dict[str, object]:
     metadata = {
         "rbh_orthogroup_id": "",
@@ -445,6 +450,8 @@ def _orthogroup_edge_metadata_for_anchor(
         "query_orthogroup_representative": False,
         "subject_orthogroup_representative": False,
     }
+    if orthogroups is None:
+        return metadata
     query_member = orthogroups.member_by_protein_id.get(query_id)
     subject_member = orthogroups.member_by_protein_id.get(subject_id)
     if query_member is not None:
@@ -499,7 +506,7 @@ def _lossless_anchor_from_edge_row(
     protein_map: Mapping[str, CdsProtein],
     order_by_id: Mapping[str, int],
     unit_index: CollinearityUnitIndex | None,
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | None,
     member_counts_by_record: Mapping[tuple[str, int], int],
 ) -> CollinearityAnchor | None:
     query_id = str(getattr(row, "query"))
@@ -580,7 +587,7 @@ def _lossless_anchor_from_edge_row(
         subject_view_feature_svg_id=_view_feature_svg_id(subject_representative),
         query_feature_index=query_representative.feature_index,
         subject_feature_index=subject_representative.feature_index,
-        source="orthogroup_display_edge",
+        source="orthogroup_display_edge" if orthogroups is not None else "protein_hit",
         query_unit_id=query_unit.unit_id if query_unit is not None else query_id,
         subject_unit_id=subject_unit.unit_id if subject_unit is not None else subject_id,
         query_unit_kind=query_unit.unit_kind if query_unit is not None else "cds",
@@ -624,7 +631,7 @@ def _lossless_anchor_from_edge_row(
 def orthogroup_edges_to_lossless_collinearity_anchors(
     adjacent_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     protein_map: Mapping[str, CdsProtein],
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | None,
     *,
     unit_index: CollinearityUnitIndex | None = None,
 ) -> tuple[CollinearityAnchor, ...]:
@@ -1227,12 +1234,15 @@ def build_orthogroup_collinearity_blocks_from_hits(
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
+    infer_orthogroups: bool = True,
     max_paralog_links_per_orthogroup: int = 2,
     comparison_pairs: Sequence[tuple[int, int]] | None = None,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:
-    """Call lossless Orthogroup-sourced collinearity blocks from filtered hits."""
+    """Call lossless blocks from filtered hits, optionally inferring orthogroups."""
 
+    if not isinstance(infer_orthogroups, bool):
+        raise ValidationError("infer_orthogroups must be a boolean")
     lossless_params = _resolve_lossless_params(params)
     unit_index = build_collinearity_unit_index(
         extraction,
@@ -1281,24 +1291,34 @@ def build_orthogroup_collinearity_blocks_from_hits(
         for pair, hits in semantic_hit_tables.items()
         if pair[0] != pair[1]
     }
-    edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
-        semantic_hit_tables,
-        extraction.protein_map,
-        record_count=record_count,
-        orthogroup_membership_mode=normalized_membership_mode,
-        orthogroup_member_max_hits=orthogroup_member_max_hits,
-        max_related_edges_per_orthogroup=resolved_max_paralog_links,
-    )
-    orthogroups = edge_selection.orthogroups
-    if normalized_edge_mode == "rbh":
-        edge_tables = {
-            pair: edges
-            for pair, edges in edge_selection.all_edges_by_pair.items()
-            if pair in geometry_hit_tables or pair[::-1] in geometry_hit_tables
-        }
+    orthogroups = None
+    if infer_orthogroups:
+        edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
+            semantic_hit_tables,
+            extraction.protein_map,
+            record_count=record_count,
+            orthogroup_membership_mode=normalized_membership_mode,
+            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            max_related_edges_per_orthogroup=resolved_max_paralog_links,
+        )
+        orthogroups = edge_selection.orthogroups
+        if normalized_edge_mode == "rbh":
+            edge_tables = {
+                pair: edges
+                for pair, edges in edge_selection.all_edges_by_pair.items()
+                if pair in geometry_hit_tables or pair[::-1] in geometry_hit_tables
+            }
+        else:
+            edge_tables = _select_orthogroup_edges(
+                geometry_hit_tables, edge_mode=normalized_edge_mode,
+            )
     else:
         edge_tables = _select_orthogroup_edges(
-            geometry_hit_tables, edge_mode=normalized_edge_mode,
+            {
+                pair: _select_member_candidate_hits_per_query(hits, max_hits=orthogroup_member_max_hits)
+                for pair, hits in geometry_hit_tables.items()
+            },
+            edge_mode=normalized_edge_mode,
         )
     comparison_edges_by_pair = {
         pair: edge_tables.get(pair, _empty_hits())
@@ -1344,6 +1364,7 @@ def build_orthogroup_collinearity_blocks(
     candidate_limit: int | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
+    infer_orthogroups: bool = True,
     max_paralog_links_per_orthogroup: int = 2,
     evalue: float = 1e-5,
     bitscore: float = 50.0,
@@ -1360,12 +1381,14 @@ def build_orthogroup_collinearity_blocks(
     feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
 ) -> CollinearityResult:
-    """Run scoped LOSATP blastp evidence searches, infer orthogroups, and call blocks."""
+    """Run scoped LOSATP searches and call blocks, with optional orthogroup inference."""
 
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='collinear' requires at least two records")
     if losatp_threads is not None and int(losatp_threads) <= 0:
         raise ValidationError("losatp_threads must be > 0 or None")
+    if not isinstance(infer_orthogroups, bool):
+        raise ValidationError("infer_orthogroups must be a boolean")
     lossless_params = _resolve_lossless_params(params)
     normalized_edge_mode = normalize_collinearity_anchor_mode(str(edge_mode))
     normalized_search_scope = normalize_collinearity_search_scope(str(search_scope))
@@ -1383,27 +1406,28 @@ def build_orthogroup_collinearity_blocks(
 
     search_candidate_limit = candidate_limit
     directional_tables: dict[tuple[int, int], DataFrame] = {}
-    for record_index in range(len(records)):
-        record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
-        same_record_hits = _execute_losatp_search(
-            record_fasta,
-            record_fasta,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=search_candidate_limit,
-            max_hsps_per_subject=None,
-            runner=runner,
-            losatp_cache=losatp_cache,
-            display=False,
-        )
-        directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
-            same_record_hits,
-            evalue=evalue,
-            bitscore=bitscore,
-            identity=identity,
-            alignment_length=alignment_length,
-        )
+    if infer_orthogroups:
+        for record_index in range(len(records)):
+            record_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
+            same_record_hits = _execute_losatp_search(
+                record_fasta,
+                record_fasta,
+                losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
+                losatp_threads=losatp_threads,
+                candidate_limit=search_candidate_limit,
+                max_hsps_per_subject=None,
+                runner=runner,
+                losatp_cache=losatp_cache,
+                display=False,
+            )
+            directional_tables[(record_index, record_index)] = filter_protein_hits_by_thresholds(
+                same_record_hits,
+                evalue=evalue,
+                bitscore=bitscore,
+                identity=identity,
+                alignment_length=alignment_length,
+            )
     search_pairs = (
         tuple(
             tuple(sorted((int(query_index), int(subject_index))))
@@ -1469,6 +1493,7 @@ def build_orthogroup_collinearity_blocks(
         search_scope=normalized_search_scope,
         orthogroup_membership_mode=normalized_membership_mode,
         orthogroup_member_max_hits=orthogroup_member_max_hits,
+        infer_orthogroups=infer_orthogroups,
         max_paralog_links_per_orthogroup=resolved_max_paralog_links,
         comparison_pairs=comparison_pairs,
     )
@@ -1485,10 +1510,11 @@ def build_collinearity_blocks_from_hits(
     search_scope: CollinearitySearchScope | str = "adjacent",
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
     orthogroup_member_max_hits: int | None = None,
+    infer_orthogroups: bool = True,
     max_paralog_links_per_orthogroup: int = 2,
     reverse_hits_by_pair: Sequence[DataFrame] | None = None,
 ) -> CollinearityResult:
-    """Call orthogroup-first blocks from already filtered directional hit tables."""
+    """Call blocks from filtered directional hits, with optional orthogroup inference."""
 
     return build_orthogroup_collinearity_blocks_from_hits(
         hits_by_pair,
@@ -1500,6 +1526,7 @@ def build_collinearity_blocks_from_hits(
         search_scope=search_scope,
         orthogroup_membership_mode=orthogroup_membership_mode,
         orthogroup_member_max_hits=orthogroup_member_max_hits,
+        infer_orthogroups=infer_orthogroups,
         max_paralog_links_per_orthogroup=max_paralog_links_per_orthogroup,
         reverse_hits_by_pair=reverse_hits_by_pair,
     )

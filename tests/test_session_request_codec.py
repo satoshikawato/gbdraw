@@ -2430,3 +2430,19 @@ def test_encode_rejects_noncanonical_option_values(tmp_path: Path) -> None:
 
 def test_schema_one_unknown_field_policy_is_explicit() -> None:
     assert UNKNOWN_FIELD_POLICY == "reject"
+
+
+@pytest.mark.parametrize("inference", [False, True])
+def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessions(tmp_path, inference):
+    encoded = encode_canonical_request(LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(_source_file(tmp_path / "source.gbk"))),),
+        options=LinearDiagramOptions(protein_blastp_mode="collinear", collinear_infer_orthogroups=inference),
+    ))
+    resource_paths = _materialize_resources(encoded, tmp_path / "resources")
+    settings = encoded.payload["comparisons"][0]["settings"]
+    assert settings["collinearInferOrthogroups"] is inference
+    decoded = decode_canonical_request(encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "out")
+    assert decoded.options.collinear_infer_orthogroups is inference
+    del settings["collinearInferOrthogroups"]
+    legacy = decode_canonical_request(encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "legacy")
+    assert legacy.options.collinear_infer_orthogroups is True

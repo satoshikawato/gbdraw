@@ -2351,13 +2351,22 @@ AAAAAAAAAA
   ], { timeout: 60000 });
 });
 
-test('derived protein options reach Generate without changing raw search identity', async ({
+test('protein raw cache survives cancellation and derived options preserve search identity', { tag: '@comparison-contract' }, async ({
   page
 }) => {
   test.setTimeout(420000);
   await installDiagramRequestObserver(page);
   await page.addInitScript(() => {
     window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ = 0;
+    const nativePostMessage = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, transfer) {
+      if (message?.operation === 'convertLosatpPairsToGenomicPayload'
+          && window.__GBDRAW_PAUSE_PROTEIN_CONVERSION__) {
+        window.__GBDRAW_PROTEIN_CONVERSION_PAUSED__ = true;
+        return;
+      }
+      return nativePostMessage.call(this, message, transfer);
+    };
     window.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs, options) => {
       window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ += 1;
       const fastaIds = (text) => [...String(text || '').matchAll(/^>([^\s]+)/gm)]
@@ -2409,6 +2418,7 @@ test('derived protein options reach Generate without changing raw search identit
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.losat.executionMode = 'serial';
+    app.losat.blastp.collinearInferOrthogroups = true;
     for (const field of [
       'orthogroupMembershipMode',
       'orthogroupMemberMaxHits',
@@ -2448,6 +2458,77 @@ test('derived protein options reach Generate without changing raw search identit
       matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length
     };
   });
+
+  const cancelAfterRawSearch = async () => {
+    await page.evaluate(() => {
+      window.__GBDRAW_PROTEIN_CONVERSION_PAUSED__ = false;
+      window.__GBDRAW_PAUSE_PROTEIN_CONVERSION__ = true;
+      window.__GBDRAW_CANCELED_PROTEIN_RUN__ = window.__GBDRAW_APP__.runAnalysis();
+    });
+    await page.waitForFunction(() => window.__GBDRAW_PROTEIN_CONVERSION_PAUSED__);
+    await page.getByRole('button', { name: /Cancel$/ }).click();
+    const outcome = await page.evaluate(async () => {
+      window.__GBDRAW_PAUSE_PROTEIN_CONVERSION__ = false;
+      return window.__GBDRAW_CANCELED_PROTEIN_RUN__;
+    });
+    expect(outcome).toEqual({ status: 'canceled' });
+  };
+
+  // A completed raw search must survive cancellation before the first Result.
+  await cancelAfterRawSearch();
+  expect(await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return {
+      calls: window.__GBDRAW_DERIVED_EXECUTOR_CALLS__,
+      committedRaw: state.losatCache.value.size,
+      results: state.results.value.length,
+      processing: state.processing.value
+    };
+  })).toEqual({ calls: 1, committedRaw: 0, results: 0, processing: false });
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.losat.blastp.orthogroupMemberMaxHits = 5;
+  });
+  // Repeated cancellation must not consume the retained raw entries either.
+  await cancelAfterRawSearch();
+  const recovered = await runAndInspect();
+  expect(recovered.result, recovered.errorSummary).toEqual({ status: 'ok' });
+  expect(recovered.executorCalls).toBe(1);
+  expect(recovered.rawKeys).toHaveLength(4);
+  expect(recovered.matchCount).toBeGreaterThan(0);
+  expect(recovered.provenance.orthogroup.memberMaxHits).toBe(5);
+  expect(recovered.telemetry).toMatchObject({ cacheMisses: 0, proteinDerivedPayloadCacheMisses: 1 });
+
+  // A changed search setting must miss; canceling it preserves the prior Result.
+  await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.candidateLimit = 7; });
+  await cancelAfterRawSearch();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(recovered.svg);
+  const changedSearch = await runAndInspect();
+  expect(changedSearch.result, changedSearch.errorSummary).toEqual({ status: 'ok' });
+  expect(changedSearch.executorCalls).toBe(2);
+
+  // Explicit clearing invalidates both committed and unfinished-generation reuse.
+  await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.candidateLimit = 9; });
+  await cancelAfterRawSearch();
+  await page.evaluate(() => window.__GBDRAW_APP__.clearLosatCache());
+  const cleared = await runAndInspect();
+  expect(cleared.result, cleared.errorSummary).toEqual({ status: 'ok' });
+  expect(cleared.executorCalls).toBe(4);
+
+  // A different protein input cannot inherit the canceled run's raw evidence.
+  await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.candidateLimit = 11; });
+  await cancelAfterRawSearch();
+  await page.evaluate((content) => {
+    window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File(
+      [content], 'changed-proteins.gbk', { type: 'text/plain', lastModified: 3 }
+    ));
+  }, makeDerivedOptionGenbank('DerivedA', 'atg').replaceAll('MKKKKKKKKK', 'MAAAAAAAAA'));
+  const changedInput = await runAndInspect();
+  expect(changedInput.result, changedInput.errorSummary).toEqual({ status: 'ok' });
+  expect(changedInput.executorCalls).toBe(6);
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.losat.blastp, {
+    candidateLimit: null,
+    orthogroupMemberMaxHits: null
+  }));
 
   const omittedDefaults = await runAndInspect();
   expect(omittedDefaults.result).toEqual({ status: 'ok' });
@@ -2731,6 +2812,7 @@ for (const mode of ['orthogroup', 'collinear']) {
       const app = window.__GBDRAW_APP__;
       app.setLinearComparisonLosatMode('blastp');
       app.setLinearComparisonLosatpMode(mode);
+      app.losat.blastp.collinearInferOrthogroups = true;
       app.losat.blastp.collinearSearchScope = 'all';
       app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid,
         index < 2 ? 1 : index === 2 ? 2 : 3));
@@ -3084,4 +3166,51 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await total.selectOption('16');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([]);
+});
+
+
+test('Collinear inference checkbox skips self searches and reuses matching evidence', { tag: '@comparison-contract' }, async ({ page }) => {
+  test.setTimeout(300000);
+  await installCompleteRecordComparisonExecutor(page);
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.losat.blastp.collinearSearchScope = 'all';
+  });
+  const checkbox = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  await expect(checkbox).not.toBeChecked();
+  const run = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const status = await app.runAnalysis();
+    const provenance = [...state.losatDerivedCache.value.values()].at(-1)?.payload?.provenance;
+    return { status, error: app.errorLog, provenance,
+      calls: window.__GBDRAW_COMPLETE_RECORD_JOBS__.length,
+      cache: app.lastRunInfo?.losatTelemetry };
+  });
+  const off = await run();
+  expect(off.status, JSON.stringify(off.error)).toEqual({ status: 'ok' });
+  expect(off.provenance.collinear.inferOrthogroups).toBe(false);
+  const snapshot = await completeComparisonSnapshot(page);
+  for (const job of snapshot.jobs.flat()) {
+    expect(job.query.some((record) => job.subject.includes(record))).toBe(false);
+  }
+  const pairs = snapshot.jobs.flat().flatMap((job) => job.pairs);
+  expect(pairs).toHaveLength(20);
+  expect(pairs.every(([query, subject]) => query !== subject)).toBe(true);
+  await checkbox.check();
+  const on = await run();
+  expect(on.status, JSON.stringify(on.error)).toEqual({ status: 'ok' });
+  expect(on.provenance.collinear.inferOrthogroups).toBe(true);
+  expect(on.calls).toBe(off.calls + 1);
+  const selfJobs = await page.evaluate(() => window.__GBDRAW_COMPLETE_RECORD_JOBS__.at(-1));
+  expect(selfJobs.some((job) => job.pairs.some(([query, subject]) => query === subject))).toBe(true);
+  await checkbox.uncheck();
+  const restored = await run();
+  expect(restored.status, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
+  expect(restored.calls).toBe(on.calls);
+  expect(restored.cache.proteinDerivedPayloadCacheHits).toBe(1);
 });

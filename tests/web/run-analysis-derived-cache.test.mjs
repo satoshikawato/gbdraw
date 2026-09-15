@@ -15,8 +15,8 @@ assert.equal(resolveProteinBlastpCandidateLimit(5), 5);
 assert.equal(resolveProteinBlastpCandidateLimit('7'), 7);
 assert.equal(resolveProteinBlastpCandidateLimit(null), null);
 assert.equal(resolveProteinBlastpCandidateLimit(undefined), null);
-assert.throws(() => resolveProteinBlastpCandidateLimit(0), /Candidate limit/);
-assert.throws(() => resolveProteinBlastpCandidateLimit('invalid'), /Candidate limit/);
+assert.throws(() => resolveProteinBlastpCandidateLimit(0), /Max target seqs/);
+assert.throws(() => resolveProteinBlastpCandidateLimit('invalid'), /Max target seqs/);
 
 const runAnalysisPath = resolve('gbdraw/web/js/app/run-analysis.js');
 const runAnalysisUrl = pathToFileURL(runAnalysisPath);
