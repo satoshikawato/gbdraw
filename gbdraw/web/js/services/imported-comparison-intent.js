@@ -26,6 +26,7 @@ const PIPELINE_SETTING_FIELDS = new Set([
   'collinearityUnitMode',
   'collinearityAnchorMode',
   'collinearitySearchScope',
+  'collinearInferOrthogroups',
   'collinearityColorMode',
   'losatpBin',
   'ncbiBlastpBin',
@@ -122,7 +123,7 @@ const pipelineIssue = (comparison, recordCount) => {
   }
   const settingKeys = Object.keys(comparison.settings);
   if (
-    settingKeys.length !== PIPELINE_SETTING_FIELDS.size
+    settingKeys.length !== PIPELINE_SETTING_FIELDS.size - (Object.prototype.hasOwnProperty.call(comparison.settings, 'collinearInferOrthogroups') ? 0 : 1)
     || settingKeys.some((key) => !PIPELINE_SETTING_FIELDS.has(key))
   ) {
     return 'The saved protein comparison pipeline is incomplete or unsupported.';

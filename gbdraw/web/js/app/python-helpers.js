@@ -977,6 +977,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     orthogroup_membership_mode="anchor_core_v1",
     orthogroup_member_max_hits=None,
     collinear_merge_orientation="either",
+    collinear_infer_orthogroups=True,
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
@@ -1041,6 +1042,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         normalized_max_paralog_links = 2
         normalized_collinearity_params = LosslessCollinearityParameters()
         if normalized_mode == "collinear":
+            if not isinstance(collinear_infer_orthogroups, bool):
+                raise ValueError("collinear_infer_orthogroups must be a boolean")
             normalized_collinear_unit_mode = normalize_collinearity_unit_mode(
                 str(collinear_unit_mode or "auto")
             )
@@ -1197,6 +1200,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 },
                 "anchorMode": normalized_collinear_anchor_mode,
                 "searchScope": normalized_collinear_search_scope,
+                "inferOrthogroups": collinear_infer_orthogroups,
                 "colorMode": normalized_collinear_color_mode,
                 "parameters": {
                     "minAnchors": int(normalized_collinearity_params.min_anchors),
@@ -1235,6 +1239,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 int(normalized_collinearity_params.max_conflicts),
                 int(normalized_max_paralog_links),
                 normalized_collinear_search_scope,
+                collinear_infer_orthogroups,
             ) if normalized_mode == "collinear" else None,
             tuple(
                 (
@@ -1388,6 +1393,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 unit_mode=normalized_collinear_unit_mode,
                 edge_mode=anchor_mode,
                 search_scope=search_scope,
+                infer_orthogroups=collinear_infer_orthogroups,
                 orthogroup_membership_mode=normalized_membership_mode,
                 orthogroup_member_max_hits=normalized_member_max_hits,
                 max_paralog_links_per_orthogroup=max_paralog_links,

@@ -1904,6 +1904,7 @@ def _build_current_derived_entries(
             "colorMode": str(request.options.collinearity_color_mode),
             "anchorMode": str(request.options.collinearity_anchor_mode),
             "searchScope": str(request.options.collinearity_search_scope),
+            "inferOrthogroups": request.options.collinear_infer_orthogroups,
             "maxParalogLinksPerOrthogroup": int(
                 request.options.collinear_max_paralog_links_per_orthogroup
             ),

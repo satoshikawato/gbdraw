@@ -133,7 +133,10 @@ Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived
 result while retaining eligible raw search rows. Current derived artifacts
 record their upstream raw keys and requested settings. Collinear provenance
-also records the effective `cds` or `locus` unit kinds produced by `auto`.
+also records the effective `cds` or `locus` unit kinds produced by `auto` and
+whether orthogroup inference was enabled. Sessions preserve each LOSATP mode's
+hit-limit drafts. A saved Collinear pipeline without `collinearInferOrthogroups`
+uses its historical inference behavior (ON); new Web state defaults to OFF.
 
 **Save Raw LOSAT TSV** resolves generated protein handles to stable readable
 aliases. Uploaded comparison TSV is never rewritten. Export raw results for a

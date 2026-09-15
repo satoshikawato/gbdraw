@@ -2418,6 +2418,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.losat.executionMode = 'serial';
+    app.losat.blastp.collinearInferOrthogroups = true;
     for (const field of [
       'orthogroupMembershipMode',
       'orthogroupMemberMaxHits',
@@ -2811,6 +2812,7 @@ for (const mode of ['orthogroup', 'collinear']) {
       const app = window.__GBDRAW_APP__;
       app.setLinearComparisonLosatMode('blastp');
       app.setLinearComparisonLosatpMode(mode);
+      app.losat.blastp.collinearInferOrthogroups = true;
       app.losat.blastp.collinearSearchScope = 'all';
       app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid,
         index < 2 ? 1 : index === 2 ? 2 : 3));
@@ -3164,4 +3166,51 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await total.selectOption('16');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([]);
+});
+
+
+test('Collinear inference checkbox skips self searches and reuses matching evidence', { tag: '@comparison-contract' }, async ({ page }) => {
+  test.setTimeout(300000);
+  await installCompleteRecordComparisonExecutor(page);
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('collinear');
+    app.losat.blastp.collinearSearchScope = 'all';
+  });
+  const checkbox = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
+  await expect(checkbox).not.toBeChecked();
+  const run = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const status = await app.runAnalysis();
+    const provenance = [...state.losatDerivedCache.value.values()].at(-1)?.payload?.provenance;
+    return { status, error: app.errorLog, provenance,
+      calls: window.__GBDRAW_COMPLETE_RECORD_JOBS__.length,
+      cache: app.lastRunInfo?.losatTelemetry };
+  });
+  const off = await run();
+  expect(off.status, JSON.stringify(off.error)).toEqual({ status: 'ok' });
+  expect(off.provenance.collinear.inferOrthogroups).toBe(false);
+  const snapshot = await completeComparisonSnapshot(page);
+  for (const job of snapshot.jobs.flat()) {
+    expect(job.query.some((record) => job.subject.includes(record))).toBe(false);
+  }
+  const pairs = snapshot.jobs.flat().flatMap((job) => job.pairs);
+  expect(pairs).toHaveLength(20);
+  expect(pairs.every(([query, subject]) => query !== subject)).toBe(true);
+  await checkbox.check();
+  const on = await run();
+  expect(on.status, JSON.stringify(on.error)).toEqual({ status: 'ok' });
+  expect(on.provenance.collinear.inferOrthogroups).toBe(true);
+  expect(on.calls).toBe(off.calls + 1);
+  const selfJobs = await page.evaluate(() => window.__GBDRAW_COMPLETE_RECORD_JOBS__.at(-1));
+  expect(selfJobs.some((job) => job.pairs.some(([query, subject]) => query === subject))).toBe(true);
+  await checkbox.uncheck();
+  const restored = await run();
+  expect(restored.status, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
+  expect(restored.calls).toBe(on.calls);
+  expect(restored.cache.proteinDerivedPayloadCacheHits).toBe(1);
 });

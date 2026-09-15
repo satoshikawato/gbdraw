@@ -626,6 +626,7 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       'collinearMaxConflictsInMergeGap',
       'collinearMaxParalogLinksPerOrthogroup',
       'collinearSearchScope',
+      'collinearInferOrthogroups',
       'orthogroupMembershipMode',
       'orthogroupMemberMaxHits',
       'collinearMergeOrientation'
@@ -654,7 +655,8 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         payload.collinearSearchScope ?? 'adjacent',
         payload.orthogroupMembershipMode ?? 'anchor_core_v1',
         payload.orthogroupMemberMaxHits ?? null,
-        payload.collinearMergeOrientation ?? 'either'
+        payload.collinearMergeOrientation ?? 'either',
+        payload.collinearInferOrthogroups ?? true
       ]
     )
   },

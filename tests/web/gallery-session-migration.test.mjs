@@ -46,6 +46,7 @@ const {
   assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
+  compareCanonicalRenderRequests,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } = await import(
@@ -637,6 +638,25 @@ assert.deepEqual(
 
 const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz');
 const promotedMajani = (await prepareGallerySessionForPublication(majani)).session;
+const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
+const promotedVibrio = (await prepareGallerySessionForPublication(vibrio)).session;
+assert.equal(promotedVibrio.config.losat.blastp.collinearInferOrthogroups, true);
+for (const source of [majani, vibrio]) {
+  const originalRequest = JSON.stringify(source.renderRequest);
+  for (const inference of [true, false]) {
+    const explicitRequest = structuredClone(source.renderRequest);
+    const pipeline = explicitRequest.comparisons.find(({ kind }) => kind === 'generatedProteinComparison');
+    assert.equal(Object.hasOwn(pipeline.settings, 'collinearInferOrthogroups'), false);
+    pipeline.settings.collinearInferOrthogroups = inference;
+    const comparison = await compareCanonicalRenderRequests({
+      expectedRequest: source.renderRequest, expectedResources: source.resources,
+      actualRequest: explicitRequest, actualResources: source.resources
+    });
+    assert.equal(comparison.equivalent, inference);
+    if (!inference) assert.match(comparison.differences[0].path, /\.settings\.collinearInferOrthogroups$/);
+  }
+  assert.equal(JSON.stringify(source.renderRequest), originalRequest);
+}
 assert.equal(promotedMajani.renderRequest.diagramOptions.output.legend, 'right');
 assert.deepEqual(
   promotedMajani.renderRequest.records.map((record) => record.presentation.label),

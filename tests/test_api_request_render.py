@@ -322,6 +322,7 @@ def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> 
         LinearDiagramOptions(collinearity_search_scope="all"),
         LinearDiagramOptions(collinearity_color_mode="orientation_identity"),
         LinearDiagramOptions(collinear_max_paralog_links_per_orthogroup=3),
+        LinearDiagramOptions(collinear_infer_orthogroups=False),
     ),
     ids=(
         "member-hits",
@@ -330,6 +331,7 @@ def test_omitted_and_explicit_collinearity_defaults_share_derived_identity() -> 
         "search-scope",
         "color-mode",
         "paralog-links",
+        "inference",
     ),
 )
 def test_collinear_derived_identity_changes_with_each_active_option(

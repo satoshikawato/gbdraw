@@ -44,3 +44,16 @@ const codePlan = await prepareLosatSourceBatches({
 });
 assert.equal(codePlan.batches.length, 2, 'conflicting explicit translation tables require compatible source batches');
 assert.deepEqual(codePlan.batches.map((batch) => batch.query.indexes.length).sort(), [1, 5]);
+
+const noSelf = await prepareLosatSourceBatches({
+  sequences, specs: specs.filter(({ queryIndex, subjectIndex }) => queryIndex !== subjectIndex),
+  getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
+  buildArgs: () => ['--max-target-seqs', '5'], hashText, protein: true,
+  excludeSelfComparisons: true
+});
+for (const batch of noSelf.batches) {
+  assert(!batch.query.indexes.some((index) => batch.subject.indexes.includes(index)),
+    'Collinear OFF must never submit a within-record search, including multi-record sources');
+}
+assert.equal(noSelf.batches.length, 34);
+assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 56);
