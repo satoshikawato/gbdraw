@@ -815,7 +815,7 @@ test('LOSAT and LOSATP mode setters preserve inactive drafts, appearance, and fi
   }
 });
 
-test('comparison controls drive appearance and current Session round trips', { tag: '@pr-smoke' }, async ({ page }) => {
+test('comparison controls drive appearance and current Session round trips', { tag: '@comparison-contract' }, async ({ page }) => {
   test.setTimeout(600000);
   await openLinear(page);
   await page.evaluate(async (records) => {

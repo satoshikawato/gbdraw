@@ -3089,7 +3089,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
 });
 
 
-test('Collinear inference checkbox skips self searches and reuses matching evidence', { tag: '@pr-smoke' }, async ({ page }) => {
+test('Collinear inference checkbox skips self searches and reuses matching evidence', { tag: '@comparison-contract' }, async ({ page }) => {
   test.setTimeout(300000);
   await installCompleteRecordComparisonExecutor(page);
   await openApp(page);
