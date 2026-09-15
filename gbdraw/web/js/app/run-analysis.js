@@ -3912,7 +3912,10 @@ export const createRunAnalysis = ({
             setProcessingStatus('Using cached LOSAT results...');
           }
           throwIfGenerationCanceled();
-          retainCompletedLosatSearch(cacheMap, losatPairs);
+          // Legacy promotions must repeat their transaction until a Result commits.
+          retainCompletedLosatSearch(cacheMap, losatPairs.filter(({ cacheKey }) => (
+            !legacyPromotionTransaction.some((promotion) => promotion.cacheKey === cacheKey)
+          )));
 
           const blastWriteStartedAt = getNow();
           throwIfGenerationCanceled();
