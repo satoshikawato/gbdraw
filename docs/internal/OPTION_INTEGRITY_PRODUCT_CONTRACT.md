@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `4`
+- Contract revision: `5`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -23,7 +23,8 @@ Status: active Product authority
   `PD-OI-014`, `PD-OI-015`, `PD-OI-016`, and `PD-OI-017`
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
-- Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`
+- Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
+  `PD-OI-021`, `PD-OI-022`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -36,6 +37,14 @@ Status: active Product authority
 - Revision 4 addition: `PD-OI-020`, requested by `satoshikawato` on
   `2026-09-14` to restore automatic thread allocation when Total threads changes
   and protect that behavior against regression.
+- Revision 5 changes: `PD-OI-001`, `PD-OI-002`, `PD-OI-004`, and `PD-OI-018`
+  are replaced for the maintainer's `2026-09-14` LOSATP follow-up. New
+  `PD-OI-021` records optional Collinear self-search and inference;
+  `PD-OI-022` records reuse after cancellation. The final clarification requires
+  each mode's edited limits to return when that mode is selected again, not a
+  reset on every switch. The maintainer explicitly requested these decisions
+  and contracts be recorded to prevent regression. Earlier approvals above
+  retain their original scope; this amendment records the new instructions.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -126,43 +135,59 @@ corrected. Passing evidence does not make incorrect behavior normative.
 
 ## Product Decision records
 
-### PD-OI-001: LOSATP Candidate limit fresh default
+### PD-OI-001: LOSATP raw-search limit fresh defaults
 
 - Concern key: `diagram-generation.losatp-candidate-limit-default`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-001`, scenario revision `1`.
 - Status: `ACCEPTED`
-- Normative outcome: The fresh Candidate limit is `None`. An unbounded request
-  executes without an undocumented finite cap.
-- Rationale: Raw candidate evidence must not vary because one surface
-  substituted a hidden limit.
-- Must preserve: Explicit finite values; truthful requested/effective
-  metadata; deterministic cancellation and errors.
-- May retire: Hidden browser-only finite caps and documentation that calls
-  them the Product default.
-- Accepted residual risk: Unbounded browser work can be expensive. A
-  deterministic warning may request explicit continuation but must not rewrite
-  the requested value.
-- Acceptance contracts: `OIC-001`, `OIC-005`, `OIC-013`.
-- Owner and decision date: `satoshikawato`, `2026-08-28`.
+- Normative outcome: Web exposes the raw LOSATP `max_target_seqs` limit as
+  **Max target seqs**. Fresh and reset Collinear starts at `5`; Similarity
+  groups starts unbounded (`None`). Pairwise, CLI, and Python omission defaults
+  retain their existing meanings. A blank Web value explicitly means unbounded,
+  including in Collinear. No hidden cap substitutes for an unbounded request.
+- Rationale: The maintainer requested exposure of the actual raw-search limit
+  and distinct Collinear/Similarity defaults, with regression protection.
+- Must preserve: Explicit finite and unbounded values; truthful requested and
+  effective metadata; raw-cache identity; cancellation and errors; saved values.
+- May retire: The unbounded fresh Web Collinear default. Unbounded search itself
+  remains available.
+- Accepted residual risk: The existing unbounded-work cost remains. This
+  amendment adds no performance guarantee or additional risk waiver.
+- Acceptance contracts: `OIC-001`, `OIC-005`, `OIC-013`, `OIC-017`.
+- Decision source: Explicit maintainer instruction to expose Max target seqs,
+  default Collinear to `5`, and leave Similarity groups unbounded.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
 
-### PD-OI-002: Candidate-limit scope and GUI placement
+### PD-OI-002: LOSATP mode-specific limit retention and GUI placement
 
 - Concern key: `diagram-generation.losatp-candidate-limit-scope`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-002`, scenario revision `1`.
 - Status: `ACCEPTED`
-- Normative outcome: Candidate limit is one common LOSATP Advanced setting.
-  Pairwise, Similarity-group, and Collinear presentation modes do not own,
-  duplicate, reset, or rewrite it.
-- Rationale: Candidate limit controls raw search evidence rather than one
-  presentation.
-- Must preserve: One value across presentation changes and Session round
-  trips.
-- May retire: Presentation-specific Candidate-limit state and duplicate
-  controls.
-- Accepted residual risk: Advanced placement is less prominent than a
-  mode-specific field.
-- Acceptance contracts: `OIC-001`, `OIC-002`, `OIC-006`.
-- Owner and decision date: `satoshikawato`, `2026-08-28`.
+- Normative outcome: **Max target seqs** is directly editable in LOSATP
+  Settings, alongside **Member hits per protein** when member selection applies.
+  Each mode remembers its own raw and member limits. The first visit to
+  Collinear uses `5`/`5`; the first visit to Similarity groups uses unbounded/
+  unbounded. After editing either mode, switching away and back restores its
+  edited values. This works repeatedly in both directions and preserves blanks.
+  Switching modes neither resets the returning mode to defaults nor copies the
+  departing mode's limits into it. Save and fresh Load preserve active and
+  inactive limits; Reset Settings clears the drafts to their declared defaults.
+- Rationale: The maintainer clarified the required sequence as edit Similarity,
+  edit Collinear, return to Similarity's values, then return to Collinear's values.
+- Must preserve: Independently edited limits; existing Session values;
+  Pairwise display-limit independence; discoverability and keyboard operation.
+- May retire: A single raw-limit value shared across presentations and
+  Advanced-only placement. There must not be duplicate controls for one active
+  raw-search setting.
+- Accepted residual risk: No additional risk waiver was supplied. Search
+  changes caused by selecting a different saved raw limit remain visible;
+  matching raw evidence remains reusable.
+- Acceptance contracts: `OIC-001`, `OIC-002`, `OIC-006`, `OIC-017`.
+- Decision source: Explicit maintainer correction to remember each mode's
+  settings, superseding the earlier same-session request to reset on every switch.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
 
 ### PD-OI-003: Pairwise display max hits
 
@@ -184,29 +209,31 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-004: Similarity/Collinear member hits per protein
 
 - Concern key: `diagram-generation.member-hits-per-protein`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-004`, scenario revision `1`.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-004`, scenario revision `2`.
 - Status: `ACCEPTED`
-- Normative outcome: Member hits per protein defaults to `None` (unbounded)
-  in fresh and reset state. A blank Web control means unbounded. Similarity
-  groups and Collinear retain every threshold-qualified directional member
-  hit without substituting a finite cap. An explicit positive integer remains
-  a supported limit. Request, helper execution, provenance, and Session replay
-  must distinguish an unbounded value from an explicit finite value.
-- Rationale: The maintainer requested removal of the default five-hit cap
-  because E-value and the other result thresholds already filter evidence.
-  Member selection remains independent of raw search and Pairwise display.
-- Must preserve: Raw-search cache reuse when only this value changes;
-  derived-cache invalidation; explicit Session values.
-- May retire: The default five-member cap and blank-to-five coercion; aliasing
-  this field to Candidate limit or Pairwise display max hits.
-- Accepted residual risk: Changing it can change grouping/block output and
-  must be visible in provenance. Unbounded evidence retains the computation
-  and memory cost accepted under `PD-OI-018`.
-- Acceptance contracts: `OIC-002`, `OIC-004`, `OIC-005`, `OIC-006`.
-- Decision source: Explicit maintainer follow-up requesting no default member
-  count cap, while retaining threshold filtering.
-- Owner and decision date: `satoshikawato`, `2026-09-13`.
+- Normative outcome: Fresh and reset Web **Member hits per protein** starts at
+  `5` in Collinear and unbounded (`None`) in Similarity groups. CLI/Python
+  omission semantics remain unchanged. A blank Web control always means
+  unbounded, including in Collinear; an explicit positive integer limits the
+  distinct directional subject candidates retained after result filtering.
+  Member selection remains independent of raw Max target seqs and Pairwise
+  display matches. Collinear consumes it with inference both OFF and ON.
+  Per-mode retention follows `PD-OI-002`. Request, helper execution, provenance,
+  and Session replay distinguish unbounded and finite choices.
+- Rationale: The maintainer requested the same mode defaults and retention for
+  both exposed limits, while preserving their distinct scientific roles.
+- Must preserve: Raw-search reuse when only member hits changes; correct
+  derived invalidation; explicit saved values; threshold filtering.
+- May retire: The unbounded fresh Web Collinear member default. Blank-to-five
+  coercion and aliasing this field to the raw or Pairwise limits remain prohibited.
+- Accepted residual risk: Member selection can change blocks or groups and
+  remains visible in provenance. The existing unbounded computation/memory
+  allowance is unchanged; no additional waiver is recorded.
+- Acceptance contracts: `OIC-002`, `OIC-004`, `OIC-005`, `OIC-006`, `OIC-017`.
+- Decision source: Explicit maintainer instruction that Member hits per protein
+  receive the same mode defaults and remembered-value behavior as Max target seqs.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
 
 ### PD-OI-005: Supported Collinear value domains
 
@@ -477,7 +504,8 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-018: Complete Linear records, placement, and comparison scope
 
 - Concern key: `diagram-generation.linear-record-universe-and-search-scope`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-018`, scenario revision `1`.
 - Status: `ACCEPTED`
 - Normative outcome:
   1. Without an explicit record selector or crop, Linear includes every record
@@ -500,10 +528,12 @@ corrected. Passing evidence does not make incorrect behavior normative.
      This applies to nucleotide, translated-nucleotide, and Pairwise protein
      comparisons. Explicit selected subsets and uploaded TSV associations
      retain their meanings.
-  4. Similarity groups and Collinear with scope `all` search every loaded
-     record against every loaded record, including same-row and non-adjacent
-     pairs. Required reverse and within-record evidence is retained. Display
-     placement, including a single occupied row, does not restrict this search.
+  4. Similarity groups and Collinear with scope `all` retain every ordered
+     between-record comparison, including same-row and non-adjacent pairs.
+     Similarity groups always includes within-record evidence. Collinear
+     includes it only when **Infer orthogroups with self-comparisons** is ON,
+     as specified by `PD-OI-021`; OFF excludes it. Display placement, including
+     a single occupied row, does not restrict the selected search scope.
   5. Explicit comparison endpoints stay explicit through decoding and
      rendering, including endpoints whose numeric indices are consecutive.
   6. Save, fresh Load, regeneration, reordering, and cache reuse preserve the
@@ -512,16 +542,20 @@ corrected. Passing evidence does not make incorrect behavior normative.
      remain supported. `OIPC-C07` governs failed, canceled, and stale work.
   7. Shared source bytes remain shared. Complete comparisons may require more
      jobs, but no hidden record or pair cap is permitted.
-     The LOSAT execution unit is an input source file, not an individual
-     record. A source job searches multi-sequence FASTA inputs containing the
-     selected records, then routes hits to their record endpoints. Two sources
-     in all-vs-all require four directed source jobs, including self and reverse
-     searches; eight total records must not become 64 LOSAT invocations.
+     LOSAT batches compatible records by input source file. A source job searches
+     multi-sequence FASTA inputs containing the selected records, then routes
+     hits to their record endpoints. Two sources
+     in all-vs-all with within-record evidence enabled require four directed
+     source jobs, including self and reverse searches; eight total records must
+     not become 64 LOSAT invocations merely because records are expanded.
      TLOSATX records with different explicit genetic codes use compatible
      subsets within each source because each invocation accepts one query and
      one subject genetic code; records sharing those settings remain batched.
-     Adjacent and explicit selections restrict retained record-pair evidence,
-     not the source-level execution unit. Search arguments, source contents,
+     Adjacent and explicit selections restrict retained record-pair evidence.
+     When Collinear inference is OFF, batching must not search any record
+     against itself, even inside a multi-record source. Comparisons within one
+     source may therefore require separate jobs; compatible between-source
+     comparisons remain batched. Search arguments, source contents,
      and the actual searched database scope are part of raw-cache identity.
      Progress reports actual source jobs separately from biological record
      pairs. File batching must preserve cancellation and exact hit routing.
@@ -548,16 +582,19 @@ corrected. Passing evidence does not make incorrect behavior normative.
   The maintainer specified these command order, default, and disclosure
   requirements on `2026-09-14`; the existing execution modes and their support
   checks remain.
-- May retire: none.
+- May retire: Mandatory Collinear within-record evidence when inference is OFF.
+  Other record coverage, placement, and comparison capabilities remain supported.
 - Accepted residual risk: Increased computation time and memory from complete
   all-record comparisons. The maintainer explicitly accepted this cost as the
   original behavior. This does not permit silent truncation or hidden caps.
 - Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`.
-- Decision source: The maintainer explicitly specified Cartesian Adjacent and
+- Original decision source: The maintainer explicitly specified Cartesian Adjacent and
   complete all-record scopes, requested durable regression protection, accepted
   the computation/memory cost, and confirmed `May retire: none`, the Owner, and
   the decision date.
-- Owner and decision date: `satoshikawato`, `2026-09-13`.
+- Amendment source: The maintainer requested Collinear self-comparison and
+  orthogroup inference be optional and default OFF on `2026-09-14`.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
 
 ### PD-OI-019: Fresh Web multi-record layout defaults
 
@@ -627,6 +664,66 @@ corrected. Passing evidence does not make incorrect behavior normative.
   automatic allocation and record this regression as a Contract.
 - Owner and decision date: `satoshikawato`, `2026-09-14`.
 
+### PD-OI-021: Optional Collinear self-search and orthogroup inference
+
+- Concern key: `diagram-generation.collinear-optional-orthogroup-inference`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Normative outcome: Web Collinear exposes **Infer orthogroups with
+  self-comparisons** as a checkbox, OFF in fresh and reset state. OFF submits
+  only between-record searches and builds blocks without orthogroup or paralog
+  inference. This exclusion applies even when query and subject records share
+  one source file. The chosen anchor, unit, member-hit, threshold, scope, and
+  block settings still apply. ON enables within-record evidence and the existing
+  orthogroup/paralog inference. Similarity groups retains its inference behavior.
+  Session save/load preserves explicit ON/OFF. Older Collinear Sessions that
+  omit the choice preserve their historical ON behavior; their saved preview
+  and explicit limits are not reinterpreted as fresh defaults. Typed request,
+  actual helper call, derived identity, and provenance agree on the choice.
+  Matching raw evidence can be reused; inference changes cannot reuse an
+  incompatible derived result.
+- Rationale: The maintainer identified mandatory self-search and paralog-aware
+  grouping during Collinear work and requested a default-OFF checkbox.
+- Must preserve: Direct block construction when OFF; existing inference when
+  ON; complete cross-record scope; explicit saved choices; raw/derived cache
+  correctness. An inactive paralog-link setting does not claim an effect in OFF.
+- May retire: Mandatory self-search and orthogroup inference in Web Collinear.
+  Both remain available through the checkbox.
+- Accepted residual risk: No additional risk waiver was supplied. ON retains
+  the existing complete-evidence computation and memory allowance in `PD-OI-018`.
+- Acceptance contracts: `OIC-003`, `OIC-005`, `OIC-006`, `OIC-015`, `OIC-018`.
+- Decision source: Explicit maintainer request to make Collinear self-comparison
+  and orthogroup inference optional with default `false`/OFF.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
+
+### PD-OI-022: Reuse completed LOSAT searches after cancellation
+
+- Concern key: `diagram-generation.completed-losat-search-retry`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Normative outcome: After LOSAT raw search completes, canceling downstream
+  Collinear work does not require the same raw search to run again on Generate.
+  A member-only change recomputes the dependent analysis and reuses matching
+  completed raw evidence. Cache reuse still validates the actual inputs and
+  raw search settings; changing Max target seqs can require a new search.
+  Clear Cache invalidates retained evidence. Session/History replacement must
+  not revive unrelated retry data. Failure or cancellation preserves the last
+  successful Result and committed request under `OIPC-C07`.
+- Rationale: The maintainer reported a completed LOSATP search restarting after
+  canceling Collinear work and changing only member hits, and requested a fix
+  with durable regression protection.
+- Must preserve: Correct raw and derived identities; deterministic cancellation;
+  explicit clearing; last successful output. Partial raw batches are not falsely
+  admitted as completed searches.
+- May retire: Unnecessary raw reruns caused solely by downstream cancellation
+  or a member-limit edit.
+- Accepted residual risk: No new persistence or cross-reload guarantee is
+  introduced; no additional risk waiver was supplied.
+- Acceptance contracts: `OIC-002`, `OIC-005`, `OIC-013`, `OIC-019`.
+- Decision source: Explicit maintainer request to fix the reported cancellation
+  cache behavior and add Product Decisions/Contracts against regression.
+- Owner and decision date: `satoshikawato`, `2026-09-14`.
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -634,7 +731,7 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-001` | Candidate limit is truthful; `None` remains unbounded and no hidden cap is applied. |
 | `OIC-002` | Candidate, Pairwise display, and member-hit limits are independent and invalidate only the correct stages. |
 | `OIC-003` | Every supported Collinear enum reaches the real typed Python analysis path. |
-| `OIC-004` | Fresh defaults are consistent across surfaces and explicit imported values win. |
+| `OIC-004` | Fresh defaults follow the declared surface and mode rules; explicit imported values win. |
 | `OIC-005` | Canonical request, resolved values, actual helper invocation, stage cache identities, and artifact provenance agree. |
 | `OIC-006` | Required controls are discoverable, operable, mode-safe, persistent, and accessible. |
 | `OIC-007` | Imported comparison intent is never silently cleared; unresolved state has explicit actions. |
@@ -645,8 +742,11 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-012` | `grid_column`, deferred direct-link topology, and GUI surface scope are represented accurately. |
 | `OIC-013` | Failed, canceled, or stale Generate preserves the committed request and last successful Result. |
 | `OIC-014` | Product authority, Product Impact mapping, Architecture Ratchet, runtime owners, and evidence remain separate. |
-| `OIC-015` | Linear discovery, per-record placement, actual comparison jobs, explicit request endpoints, Session replay, and SVG endpoints retain the complete selected record universe. Adjacent uses neighboring-row Cartesian products; Similarity and Collinear `all` retain complete directed evidence regardless of display rows. |
+| `OIC-015` | Linear discovery, per-record placement, actual comparison jobs, explicit request endpoints, Session replay, and SVG endpoints retain the complete selected record universe. Adjacent uses neighboring-row Cartesian products; Similarity and Collinear `all` retain complete directed between-record evidence regardless of display rows; Collinear within-record evidence follows the inference checkbox. |
 | `OIC-016` | LOSAT Auto allocation follows Total threads; displayed and executed budgets agree, and manual intent survives temporary clamps and Session replay. |
+| `OIC-017` | Web raw/member defaults are 5/5 in Collinear and unbounded/unbounded in Similarity. Each mode restores its own edits repeatedly, including blanks; Session round trips retain both modes; Reset Settings restores defaults. |
+| `OIC-018` | Collinear inference defaults OFF; actual raw jobs exclude every self-comparison, including within multi-record source batches, and the real Python path skips orthogroup inference. ON retains the existing inference; request, cache, provenance, and legacy Session interpretation agree. |
+| `OIC-019` | Completed raw searches survive downstream cancellation for matching retries; member-only edits do not rerun LOSAT. Raw-setting/input changes, Clear Cache, and Session/History replacement prevent incompatible reuse; the committed Result remains intact. |
 
 ### OIC-015 required regression coverage
 
@@ -665,11 +765,13 @@ The normal automated PR gate must observe all of the following:
   keyboard expansion expose every record without changing its state.
   Fresh and reset documents use same-file Linear rows and Circular shared
   canvas; explicit saved opt-outs survive Load.
-- Similarity and Collinear `all` retain the complete directed record-pair
-  matrix through source-file jobs, including self, same-row, and non-adjacent
-  evidence. Two sources containing five records require four source jobs and
-  cover 25 directed record pairs. A single-row
-  layout retains analysis even though it has no between-row links.
+- Similarity and Collinear `all` with inference ON retain the complete directed
+  record-pair matrix through source-file jobs, including self, same-row, and
+  non-adjacent evidence. Two sources containing five records require four
+  source jobs and cover 25 directed record pairs. Collinear `all` with inference
+  OFF retains all 20 between-record directions and searches no record against
+  itself, including within multi-record sources. A single-row layout retains
+  the selected analysis even though it has no between-row links.
 - Explicit endpoints survive the typed decoder and reach the intended SVG
   records, including a numerically consecutive pair beside a multi-record row.
 - Save, fresh Load, regeneration, and reordering preserve record identity,
@@ -719,3 +821,16 @@ disagrees with actual execution, or failure of a required acceptance contract.
   compare the worker allocation and runtime report with the displayed plan.
 - Keep fixed one-thread-per-run programs fixed. Changing only scheduling
   settings preserves the existing raw-search cache identity.
+
+## OIC-017–OIC-019 regression evidence owners
+
+These tests protect the outcomes; they do not supply Product authority.
+The mode-restoration, inference-toggle, and cancellation/retry browser
+observations below must run in the normal automated PR gate. Full dev staging
+provides additional coverage and does not replace this pre-merge requirement.
+
+| Contract | Executable regression owners |
+| --- | --- |
+| `OIC-017` | [`comparison-ui.playwright.spec.js`](../../tests/web/comparison-ui.playwright.spec.js), `comparison controls drive appearance and current Session round trips`: initial values, repeated mode restoration, saved inactive values, blanks, and Reset Settings. |
+| `OIC-018` | [`linear-multi-record.playwright.spec.js`](../../tests/web/linear-multi-record.playwright.spec.js), `Collinear inference checkbox skips self searches and reuses matching evidence`; [`linear-sources.test.mjs`](../../tests/web/linear-sources.test.mjs); [`losat-settings.test.mjs`](../../tests/web/losat-settings.test.mjs); [`test_collinearity.py`](../../tests/test_collinearity.py); [`test_session_request_codec.py`](../../tests/test_session_request_codec.py); [`test_api_request_render.py`](../../tests/test_api_request_render.py). Protect actual job endpoints, no inference call when OFF, member selection, both scopes, all anchor modes, and request/derived identities. |
+| `OIC-019` | [`linear-multi-record.playwright.spec.js`](../../tests/web/linear-multi-record.playwright.spec.js), `protein raw cache survives cancellation and derived options preserve search identity`; [`run-analysis-simple-path.test.mjs`](../../tests/web/run-analysis-simple-path.test.mjs). Protect cancellation, repeated retry, member edits, raw-setting/input changes, clearing, and late artifact failure. |
