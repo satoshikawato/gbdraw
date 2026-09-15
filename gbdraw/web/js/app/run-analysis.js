@@ -287,6 +287,7 @@ const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) =>
 const promoteRawLosatCacheEntry = (cacheMap, cacheKey, found, metadata) => {
   if (!cacheMap || !found?.entry) return found?.entry || null;
   if (classifyRawLosatCacheEntry(found.entry) !== 'nucleotide-current') {
+    cacheMap.set(cacheKey, found.entry);
     return found.entry;
   }
   const promoted = {
@@ -1265,6 +1266,22 @@ export const createRunAnalysis = ({
   };
 
   const formatJsError = (err) => normalizeUserFacingError(err);
+
+  // Raw searches finish before the artifact transaction. Keep only the latest
+  // search's entries for retry, without changing the saved Result. Cache owner
+  // replacement (Clear Cache, Session load, or History) invalidates the retry.
+  let completedLosatSearch = null;
+  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
+    if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
+    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest)
+      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest);
+  };
+  const retainCompletedLosatSearch = (cacheMap, pairs) => {
+    completedLosatSearch = {
+      owner: losatCache.value,
+      entries: new Map(pairs.map(({ cacheKey }) => [cacheKey, cacheMap.get(cacheKey)]))
+    };
+  };
 
   const getGenerationCancelReason = (signal) =>
     signal?.reason instanceof Error ? signal.reason : new DiagramGenerationCanceledError();
@@ -2615,7 +2632,7 @@ export const createRunAnalysis = ({
                 filename: fallbackName,
                 display: true
               });
-              const cached = getRawLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
+              const cached = getReusableLosatCacheEntry(cacheMap, cacheKey, cacheMetadata);
               const hasCachedText = Boolean(cached);
               if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
               if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
@@ -2678,6 +2695,8 @@ export const createRunAnalysis = ({
             } else {
               setProcessingStatus('Using cached LOSAT conservation results...');
             }
+            throwIfGenerationCanceled();
+            retainCompletedLosatSearch(cacheMap, losatPairs);
 
             const resolved = [];
             for (const pair of losatPairs) {
@@ -3700,7 +3719,7 @@ export const createRunAnalysis = ({
             }
             sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
             sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
-            let cached = getRawLosatCacheEntry(
+            let cached = getReusableLosatCacheEntry(
               cacheMap,
               cacheKey,
               cacheMetadata,
@@ -3883,6 +3902,8 @@ export const createRunAnalysis = ({
           } else {
             setProcessingStatus('Using cached LOSAT results...');
           }
+          throwIfGenerationCanceled();
+          retainCompletedLosatSearch(cacheMap, losatPairs);
 
           const blastWriteStartedAt = getNow();
           throwIfGenerationCanceled();
@@ -4899,6 +4920,7 @@ export const createRunAnalysis = ({
         : await execute(generatedArtifactHandle || await captureGeneratedArtifactHandle());
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
+        completedLosatSearch = null;
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
@@ -4986,6 +5008,7 @@ export const createRunAnalysis = ({
   };
 
   const clearLosatCache = () => {
+    completedLosatSearch = null;
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();
     proteinIdentityManifest.value = emptyProteinIdentityManifest();
