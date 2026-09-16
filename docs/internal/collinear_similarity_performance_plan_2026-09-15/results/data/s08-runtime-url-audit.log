@@ -1,0 +1,16 @@
+gbdraw/web/js/workers/diagram-generation-worker.js:239:    const { loadPyodide } = await import(pyodideModuleUrl);
+gbdraw/web/js/workers/diagram-generation-worker.js:240:    const pyodide = await loadPyodide({
+gbdraw/web/js/services/svg-serialization.js:74:    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+gbdraw/web/js/services/svg-serialization.js:77:    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+gbdraw/web/js/services/svg-serialization.js:85:    defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+gbdraw/web/js/services/svg-result-normalization.js:78:      const group = documentOwner.createElementNS('http://www.w3.org/2000/svg', 'g');
+gbdraw/web/js/services/standalone-interactivity.js:5:const SVG_NS = 'http://www.w3.org/2000/svg';
+gbdraw/web/js/services/standalone-interactivity-assets.js:743:  var SVG_NS = 'http://www.w3.org/2000/svg';
+gbdraw/web/js/services/standalone-interactivity-assets.js:744:  var XHTML_NS = 'http://www.w3.org/1999/xhtml';
+gbdraw/web/js/services/pyodide-assets.js:2:  GBDRAW_WHEEL_CACHE_BUST,
+gbdraw/web/js/services/pyodide-assets.js:32:  if (GBDRAW_WHEEL_CACHE_BUST) {
+gbdraw/web/js/services/pyodide-assets.js:33:    wheelUrl.searchParams.set('v', GBDRAW_WHEEL_CACHE_BUST);
+gbdraw/web/js/services/export.js:7:const SVG_NS = 'http://www.w3.org/2000/svg';
+gbdraw/web/js/services/export.js:71:      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+gbdraw/web/js/services/export.js:74:      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+gbdraw/web/js/services/export.js:284:    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');

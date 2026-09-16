@@ -2450,7 +2450,21 @@ const serializeLosatCache = () => {
     entries.push(buildEntry(key, value));
   });
 
-  return entries;
+  // A replaced source can leave earlier bindings in the live cache. Persist
+  // only protein evidence that the Session's current manifest can resolve.
+  const manifest = state.proteinIdentityManifest.value;
+  const identityIndex = buildValidatedProteinIdentityIndex(manifest);
+  try {
+    return entries.filter((entry) => {
+      if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
+      if (!identityIndex) {
+        throw new Error('Save Session requires a valid protein identity manifest.');
+      }
+      return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
+    });
+  } finally {
+    releaseValidatedProteinIdentityIndex(identityIndex);
+  }
 };
 
 const applyLosatCache = (

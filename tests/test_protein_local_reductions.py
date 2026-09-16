@@ -355,13 +355,16 @@ def test_evidence_sorts_and_rank_evaluations_reduced(scenario):
     assert before['ranks'] - after['ranks'] == 2 * after['evidence'] + after['cross']
 
 
+@pytest.mark.parametrize('baseline', ['s076', 's077'])
 @pytest.mark.parametrize('scope', ['adjacent', 'all'])
 @pytest.mark.parametrize('infer', [False, True])
 @pytest.mark.parametrize('limit', [1, 5, None])
 @pytest.mark.parametrize('mode', ['auto', 'cds', 'locus'])
 @pytest.mark.parametrize('anchor', ['rbh', 'one_to_one', 'all'])
 @pytest.mark.parametrize('scenario,reverse', [('sparse-2', False), ('dense-4', True), ('support-edges', False)])
-def test_complete_collinear_result_s076_differential(scope, infer, limit, mode, anchor, scenario, reverse):
+def test_complete_collinear_result_differential(scope, infer, limit, mode, anchor, scenario, reverse, baseline):
+    from tests.prototypes import protein_s078
+    baseline_callers = frozen_collinear_callers if baseline == "s076" else protein_s078.frozen_collinear_callers
     pm, tables = benchmark.synthetic(pc, scenario, 20260916)
     pm = {pid: replace(p, locus_tag=f'L{p.feature_index // 2}',
                       start=4000 - p.end if reverse else p.start,
@@ -376,16 +379,19 @@ def test_complete_collinear_result_s076_differential(scope, infer, limit, mode, 
             unit_mode=mode, edge_mode=anchor)
         return benchmark.canonical((result, cc.convert_collinearity_blocks_to_pair_comparisons(result, records=records),
                                     encode_canonical_typed_resource('result', result)))
-    with frozen_collinear_callers():
+    with baseline_callers():
         expected = run()
     assert run() == expected
     assert benchmark.canonical((ex, tables)) == before
 
 
+@pytest.mark.parametrize('baseline', ['s076', 's077'])
 @pytest.mark.parametrize('limit', [1, 5, None])
 @pytest.mark.parametrize('scenario', ['sparse-2', 'dense-4', 'support-edges'])
 @pytest.mark.parametrize('reverse', [False, True])
-def test_complete_similarity_result_s076_differential(limit, scenario, reverse):
+def test_complete_similarity_result_differential(limit, scenario, reverse, baseline):
+    from tests.prototypes import protein_s078
+    baseline_module = frozen if baseline == "s076" else protein_s078.frozen
     pm, tables = benchmark.synthetic(pc, scenario, 20260916)
     if reverse:
         pm = {pid: replace(p, start=4000 - p.end, end=4000 - p.start, strand=-1) for pid, p in pm.items()}
@@ -394,5 +400,5 @@ def test_complete_similarity_result_s076_differential(limit, scenario, reverse):
         result = module.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3,
             orthogroup_member_max_hits=limit, include_singletons=True)
         return benchmark.canonical((result, encode_canonical_typed_resource('result', result.orthogroups)))
-    assert run(pc) == run(frozen)
+    assert run(pc) == run(baseline_module)
     assert benchmark.canonical((pm, tables)) == before

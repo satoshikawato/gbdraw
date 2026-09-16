@@ -1,0 +1,49 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
+
+  [
++   'old-displayed',
+    'current',
++   'old-dormant',
++   'removed-record',
+    'valid-dormant',
+    'nucleotide'
+  ]
+
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/session-export-validation.test.mjs:231:10
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: [
+    'old-displayed',
+    'current',
+    'old-dormant',
+    'removed-record',
+    'valid-dormant',
+    'nucleotide'
+  ],
+  expected: [ 'current', 'valid-dormant', 'nucleotide' ],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.8.2
+✖ tests/web/session-export-validation.test.mjs (591.466243ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 600.743883
+
+✖ failing tests:
+
+test at tests/web/session-export-validation.test.mjs:1:1
+✖ tests/web/session-export-validation.test.mjs (591.466243ms)
+  'test failed'

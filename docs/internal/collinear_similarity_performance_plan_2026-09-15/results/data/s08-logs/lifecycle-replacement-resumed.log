@@ -1,0 +1,18 @@
+1280 saved-raw passed
+1280 changed-source passed
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 678, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 58, in main
+    return run_integration(args)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 434, in run_integration
+    run_integration_lifecycle(args, report, context_for, close_context, save)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 659, in run_integration_lifecycle
+    integration_import(page, target)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 299, in integration_import
+    assert dialog.message == 'Session loaded successfully!', dialog.message
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Failed to load session: Session version 42 contains an unresolved protein raw entry.

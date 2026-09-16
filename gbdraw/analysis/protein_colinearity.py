@@ -3748,7 +3748,7 @@ def _aggregate_hsps_by_protein_pair(
         subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
         min_hit_coverage = min(query_coverage, subject_coverage)
 
-        record = dict(representative_row._asdict())
+        record = representative_row._asdict()
         record.update(
             {
                 "query_length": query_length,
@@ -5256,6 +5256,11 @@ def _build_anchor_core_orthogroups(
         for protein_id in member_ids
     }
     scope_by_group.update({group_id: "cross_record" for group_id in group_member_ids})
+
+    def representative_member_key(member_id: str) -> tuple[float, float, float, float, str]:
+        rank = member_ranks[member_id]
+        return (-rank[0], rank[1], -rank[2], -rank[3], str(member_id))
+
     representative_ids_by_group: dict[str, set[str]] = {}
     for group_id, member_ids in group_member_ids.items():
         members_by_record: dict[int, list[str]] = {}
@@ -5265,13 +5270,7 @@ def _build_anchor_core_orthogroups(
         for record_member_ids in members_by_record.values():
             representative_id = min(
                 record_member_ids,
-                key=lambda member_id: (
-                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[0],
-                    member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[1],
-                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[2],
-                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[3],
-                    str(member_id),
-                ),
+                key=representative_member_key,
             )
             representative_ids_by_group.setdefault(group_id, set()).add(representative_id)
 
@@ -5498,23 +5497,19 @@ def _build_anchor_core_orthogroups(
         },
         protein_map,
     )
-    anchor_members_by_group = {
-        group_id: [
+    rbh_orthogroups: dict[str, tuple[str, ...]] = {}
+    for group_id, member_ids in group_member_ids.items():
+        anchor_member_ids = [
             member_id
             for member_id in member_ids
             if member_roles.get(member_id) == "anchor"
         ]
-        for group_id, member_ids in group_member_ids.items()
-    }
-    rbh_orthogroups = {
-        group_id: tuple(
+        rbh_orthogroups[group_id] = tuple(
             sorted(
-                anchor_members_by_group.get(group_id) or list(member_ids),
+                anchor_member_ids or member_ids,
                 key=lambda member_id: _protein_sort_key(protein_map[member_id]),
             )
         )
-        for group_id, member_ids in group_member_ids.items()
-    }
     return _orthogroup_result_from_member_ids(
         group_member_ids,
         representative_ids_by_group,

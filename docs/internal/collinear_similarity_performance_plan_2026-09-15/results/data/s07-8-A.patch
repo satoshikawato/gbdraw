@@ -1,0 +1,13 @@
+diff --git a/gbdraw/analysis/protein_colinearity.py b/gbdraw/analysis/protein_colinearity.py
+index e2786054..0ee11ca8 100644
+--- a/gbdraw/analysis/protein_colinearity.py
++++ b/gbdraw/analysis/protein_colinearity.py
+@@ -3748,7 +3748,7 @@ def _aggregate_hsps_by_protein_pair(
+         subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
+         min_hit_coverage = min(query_coverage, subject_coverage)
+ 
+-        record = dict(representative_row._asdict())
++        record = representative_row._asdict()
+         record.update(
+             {
+                 "query_length": query_length,

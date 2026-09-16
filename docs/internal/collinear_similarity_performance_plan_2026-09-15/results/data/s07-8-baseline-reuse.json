@@ -1,0 +1,199 @@
+{
+  "cases": {
+    "gallery-collinear": {
+      "productionMismatchNow": [
+        "gbdraw/analysis/protein_colinearity.py"
+      ],
+      "baselineOwnersMatchSpecified": true,
+      "fixtureEqual": true,
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "settings": {
+        "policy": {
+          "warmups": 1,
+          "samples": 7,
+          "regressionPct": 10.0,
+          "maxNoisePct": 5.0,
+          "noise": "100 * MAD / median",
+          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "semanticGate": "exact ordered stage digest, including types and errors"
+        },
+        "seed": 20260915,
+        "warmups": 1,
+        "samples": 21
+      },
+      "historicalMedianMs": 403.596031,
+      "allBaselinePythonFilesMatched": 208,
+      "archivedReportSha256": "b4e8a91ffc03f70f50f6bd26064c2de94aa7cc262cdf1873644479f77cf1dc7e"
+    },
+    "gallery-collinear-off": {
+      "productionMismatchNow": [
+        "gbdraw/analysis/protein_colinearity.py"
+      ],
+      "baselineOwnersMatchSpecified": true,
+      "fixtureEqual": true,
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "settings": {
+        "policy": {
+          "warmups": 1,
+          "samples": 7,
+          "regressionPct": 10.0,
+          "maxNoisePct": 5.0,
+          "noise": "100 * MAD / median",
+          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "semanticGate": "exact ordered stage digest, including types and errors"
+        },
+        "seed": 20260915,
+        "warmups": 1,
+        "samples": 21
+      },
+      "historicalMedianMs": 93.750162,
+      "allBaselinePythonFilesMatched": 208,
+      "archivedReportSha256": "1df9b92f99318ecc63e88f18e6f997f8fb7c0eb0794b3a61d6ea009c5a365d92"
+    },
+    "gallery-collinear-vibrio": {
+      "productionMismatchNow": [
+        "gbdraw/analysis/protein_colinearity.py"
+      ],
+      "baselineOwnersMatchSpecified": true,
+      "fixtureEqual": true,
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "settings": {
+        "policy": {
+          "warmups": 1,
+          "samples": 7,
+          "regressionPct": 10.0,
+          "maxNoisePct": 5.0,
+          "noise": "100 * MAD / median",
+          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "semanticGate": "exact ordered stage digest, including types and errors"
+        },
+        "seed": 20260915,
+        "warmups": 1,
+        "samples": 7
+      },
+      "historicalMedianMs": 3415.264843,
+      "allBaselinePythonFilesMatched": 208,
+      "archivedReportSha256": "f6b7c413b60b242b14da5ccbe6f884ae625662ecf2c7a992c04d03b030fb0dce"
+    },
+    "gallery-collinear-vibrio-off": {
+      "productionMismatchNow": [
+        "gbdraw/analysis/protein_colinearity.py"
+      ],
+      "baselineOwnersMatchSpecified": true,
+      "fixtureEqual": true,
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "settings": {
+        "policy": {
+          "warmups": 1,
+          "samples": 7,
+          "regressionPct": 10.0,
+          "maxNoisePct": 5.0,
+          "noise": "100 * MAD / median",
+          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "semanticGate": "exact ordered stage digest, including types and errors"
+        },
+        "seed": 20260915,
+        "warmups": 1,
+        "samples": 7
+      },
+      "historicalMedianMs": 405.850003,
+      "allBaselinePythonFilesMatched": 208,
+      "archivedReportSha256": "48f2c66c1da7696baa1330d0eb636b99586a659ed1c3d9b87f2219e615e8a5c6"
+    },
+    "gallery-orthogroup": {
+      "productionMismatchNow": [
+        "gbdraw/analysis/protein_colinearity.py"
+      ],
+      "baselineOwnersMatchSpecified": true,
+      "fixtureEqual": true,
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "settings": {
+        "policy": {
+          "warmups": 1,
+          "samples": 7,
+          "regressionPct": 10.0,
+          "maxNoisePct": 5.0,
+          "noise": "100 * MAD / median",
+          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "semanticGate": "exact ordered stage digest, including types and errors"
+        },
+        "seed": 20260915,
+        "warmups": 1,
+        "samples": 21
+      },
+      "historicalMedianMs": 753.802539,
+      "allBaselinePythonFilesMatched": 208,
+      "archivedReportSha256": "0944226e22c2719a55065a59753e2b82e4fc886c18daa7337fa3f86afd1baec8"
+    },
+    "gallery-orthogroup-unbounded": {
+      "productionMismatchNow": [
+        "gbdraw/analysis/protein_colinearity.py"
+      ],
+      "baselineOwnersMatchSpecified": true,
+      "fixtureEqual": true,
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "settings": {
+        "policy": {
+          "warmups": 1,
+          "samples": 7,
+          "regressionPct": 10.0,
+          "maxNoisePct": 5.0,
+          "noise": "100 * MAD / median",
+          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "semanticGate": "exact ordered stage digest, including types and errors"
+        },
+        "seed": 20260915,
+        "warmups": 1,
+        "samples": 21
+      },
+      "historicalMedianMs": 622.511017,
+      "allBaselinePythonFilesMatched": 208,
+      "archivedReportSha256": "e3bb8b278ef9d3c5a1d33f83bfabeace6ed441fa1ac399309ee7d66c315b80e1"
+    }
+  },
+  "currentDependencies": {
+    "python": "3.13.3",
+    "pandas": "2.3.0",
+    "numpy": "2.2.5",
+    "biopython": "1.85",
+    "svgwrite": "1.4.3"
+  },
+  "decision": "Reuse archived S07.7 current timing and memory as descriptive baseline. Same reached source, fixture, settings and dependencies; archived policy/sample count differs. Do not bypass compare_reports guard or call comparisons acceptance. No new baseline timing needed. Current each case three samples, one warmup; current memory each case once.",
+  "runnerReachedPreparationAndStageDefinitions": "All function ASTs identical except compare_reports and main sampling/report logic; build_case and timed stages unchanged."
+}

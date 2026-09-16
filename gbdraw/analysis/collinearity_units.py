@@ -93,11 +93,12 @@ def _representative_sort_key(protein: CdsProtein) -> tuple[int, bool, int, int, 
 
 
 def _unit_sort_key(proteins: Sequence[CdsProtein]) -> tuple[int, int, int, str]:
-    starts = [int(protein.start) for protein in proteins]
-    ends = [int(protein.end) for protein in proteins]
-    feature_indices = [int(protein.feature_index) for protein in proteins]
-    protein_ids = [str(protein.protein_id) for protein in proteins]
-    return (min(starts), min(ends), min(feature_indices), min(protein_ids))
+    return (
+        min(int(protein.start) for protein in proteins),
+        min(int(protein.end) for protein in proteins),
+        min(int(protein.feature_index) for protein in proteins),
+        min(str(protein.protein_id) for protein in proteins),
+    )
 
 
 def _unit_strand(proteins: Sequence[CdsProtein]) -> int | None:
@@ -107,10 +108,10 @@ def _unit_strand(proteins: Sequence[CdsProtein]) -> int | None:
     return None
 
 
-def _add_alias(aliases: list[str], value: object | None) -> None:
+def _add_alias(aliases: dict[str, None], value: object | None) -> None:
     text = str(value or "").strip()
-    if text and text not in aliases:
-        aliases.append(text)
+    if text:
+        aliases[text] = None
 
 
 def _unit_aliases(
@@ -121,7 +122,7 @@ def _unit_aliases(
     locus_id: str | None,
     display_name: str,
 ) -> tuple[str, ...]:
-    aliases: list[str] = []
+    aliases: dict[str, None] = {}
     _add_alias(aliases, unit_id)
     _add_alias(aliases, representative.protein_id)
     _add_alias(aliases, representative.source_protein_id)

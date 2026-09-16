@@ -1,0 +1,5591 @@
+{
+  "evidenceSha256": "0b490cc76977e8af6458aced82429672b22dbe1b5ed02bc718542cf685df2e9f",
+  "artifactLedgerSha256": "7d1d4a1cdba13a9d22b249835a015a4e22ae42e8f8b7292c246a3e4ab77bf0e7",
+  "sourceAndInstalledFilesReverified": true,
+  "units": "seconds",
+  "boundary": "Generate action through SVG DOM and two animation frames",
+  "nestedIntervalsAreNotAdded": true,
+  "browserBaseline": null,
+  "caseDefinitions": {
+    "hep-on": {
+      "fixtureSha256": "8d4069026221d85c3ca4cac5bfae42f13d3ab38e7f01ae8e458de1be38a33ea7",
+      "records": 5,
+      "settings": {
+        "outfmt": "6",
+        "executionMode": "serial",
+        "totalThreadBudget": "safe",
+        "threadsPerJob": "32",
+        "blastn": {
+          "task": "megablast"
+        },
+        "blastp": {
+          "mode": "collinear",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": 5
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": null,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": 5,
+          "collinearInferOrthogroups": true,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation_identity",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        }
+      },
+      "rawAndSavedGeometryEqual": true
+    },
+    "hep-off": {
+      "fixtureSha256": "8d4069026221d85c3ca4cac5bfae42f13d3ab38e7f01ae8e458de1be38a33ea7",
+      "records": 5,
+      "settings": {
+        "outfmt": "6",
+        "executionMode": "serial",
+        "totalThreadBudget": "safe",
+        "threadsPerJob": "32",
+        "blastn": {
+          "task": "megablast"
+        },
+        "blastp": {
+          "mode": "collinear",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": 5
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": null,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": 5,
+          "collinearInferOrthogroups": false,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation_identity",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        }
+      },
+      "rawAndSavedGeometryEqual": true
+    },
+    "hep-similarity": {
+      "fixtureSha256": "fabd91df737270d2ffaf24030e3489658f016f305108bd399ce3bbd220c81399",
+      "records": 5,
+      "settings": {
+        "outfmt": "6",
+        "executionMode": "serial",
+        "totalThreadBudget": "safe",
+        "threadsPerJob": "32",
+        "blastn": {
+          "task": "megablast"
+        },
+        "blastp": {
+          "mode": "orthogroup",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": null,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": 5,
+          "collinearInferOrthogroups": true,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        }
+      },
+      "rawAndSavedGeometryEqual": true
+    },
+    "vibrio-on": {
+      "fixtureSha256": "f42953f63067a373a7ea11bdf07b05cd2b7514480c3f94e91a0eb5c4d379dfb4",
+      "records": 11,
+      "settings": {
+        "outfmt": "6",
+        "executionMode": "serial",
+        "totalThreadBudget": "safe",
+        "threadsPerJob": "16",
+        "blastn": {
+          "task": "megablast"
+        },
+        "blastp": {
+          "mode": "collinear",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": 5,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": 5,
+          "collinearInferOrthogroups": true,
+          "collinearMinAnchors": 3,
+          "collinearMaxUnitGap": 2,
+          "collinearMaxDiagonalDrift": 2,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation_identity",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        }
+      },
+      "rawAndSavedGeometryEqual": true
+    }
+  },
+  "cases": {
+    "hep-on": {
+      "raw-cold": {
+        "samples": [
+          170.0822999999989
+        ],
+        "median": 170.0822999999989,
+        "mad": null,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 7.734599999999627,
+            "rawSearchBatch": 149.72519999999926,
+            "rawPacking": 0.2235,
+            "conversionRoundTrip": 3.019,
+            "typedToRenderRequest": 0.4705,
+            "renderRoundTrip": 7.115200000001118,
+            "resultHistoryDomFrames": 1.7942999999988825
+          },
+          "total": 170.0822999999989,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.353,
+              "startAfterGenerateSeconds": 0.7110999999996275
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10590000000037253,
+              "startAfterGenerateSeconds": 7.735699999999255
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10109999999962747,
+              "startAfterGenerateSeconds": 7.735699999999255
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10259999999962748,
+              "startAfterGenerateSeconds": 7.735699999999255
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11669999999925494,
+              "startAfterGenerateSeconds": 7.735699999999255
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 13,
+            "cacheHits": 0,
+            "cacheMisses": 13,
+            "uniqueJobs": 13,
+            "workerCalls": 13,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "collinear",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 13,
+            "rawTsvBytes": 9631591,
+            "rawTsvLargestEntryBytes": 900225,
+            "simultaneousParsedTables": 13,
+            "helperRequestMetadataBytes": 4272526,
+            "helperRequestRawTransferBytes": 9631591,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": [
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "cacheKey": "03fbaf91e24ea417e42eea72e65bb20bf3f9b2220bb9fa8a1cb76595e50724e9",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "cacheKey": "5743730e00ba368bdfbe3e3206221dcd771d7425f51d925d7d3d52441f4f506f",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    2
+                  ]
+                ],
+                "cacheKey": "6ef9aff6abbe44ea8d720981392c04a05d4c735a6372b676e64c36724c9813ee",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    3
+                  ]
+                ],
+                "cacheKey": "76eb8c2ca2c8602820b4262b7446f2e47cfdc7356a989cc0154d9e7870ca0b59",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    4
+                  ]
+                ],
+                "cacheKey": "dd97577cb175833086a64837895d49246e5b3f9da978d1635de6c5df9473f66c",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                "cacheKey": "20673c48096b938e40ca32e3a2670b4e01e7cd6e131e3e801a26ac087ae92aa7",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    0
+                  ]
+                ],
+                "cacheKey": "276b67a68fe24f47f52a2af1717bdb70262d3497f2ba9841a33a7de95984c126",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    2
+                  ]
+                ],
+                "cacheKey": "915fc230d83ae3bbbfd25da47c09ef325e83eab7b98ece1d430dca4698e8b6de",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    1
+                  ]
+                ],
+                "cacheKey": "7705a2cdf0f7d814d224304dc7aba286df4e42774bb99e5065fa5a8c73af6e54",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    3
+                  ]
+                ],
+                "cacheKey": "6143984034ff2934e2a067414da8f1ee1e020ad4b398a36740a22737a2ea82a2",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    2
+                  ]
+                ],
+                "cacheKey": "aff03dfa3c4e999b16d5c5db16eae8052850306047648e240ba0cdb027245fea",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    4
+                  ]
+                ],
+                "cacheKey": "99becf054b4b9086514ad75eed7b90c90f8af650da88529410a595d31ddc1755",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    3
+                  ]
+                ],
+                "cacheKey": "be456ddf0b0a00f578406e1a7efb1614d541d5e962613a895f4dfcfb63c8dea0",
+                "args": []
+              }
+            ]
+          },
+          "sourceJobs": 13,
+          "completedJobs": 13,
+          "observedLosatRunMessages": 13,
+          "contextWorkersConstructed": 5
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 7.734599999999627,
+              "rawSearchBatch": 149.72519999999926,
+              "rawPacking": 0.2235,
+              "conversionRoundTrip": 3.019,
+              "typedToRenderRequest": 0.4705,
+              "renderRoundTrip": 7.115200000001118,
+              "resultHistoryDomFrames": 1.7942999999988825
+            },
+            "total": 170.0822999999989,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.353,
+                "startAfterGenerateSeconds": 0.7110999999996275
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10590000000037253,
+                "startAfterGenerateSeconds": 7.735699999999255
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10109999999962747,
+                "startAfterGenerateSeconds": 7.735699999999255
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10259999999962748,
+                "startAfterGenerateSeconds": 7.735699999999255
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11669999999925494,
+                "startAfterGenerateSeconds": 7.735699999999255
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 0,
+              "cacheMisses": 13,
+              "uniqueJobs": 13,
+              "workerCalls": 13,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 13,
+              "helperRequestMetadataBytes": 4272526,
+              "helperRequestRawTransferBytes": 9631591,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": [
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "03fbaf91e24ea417e42eea72e65bb20bf3f9b2220bb9fa8a1cb76595e50724e9",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "5743730e00ba368bdfbe3e3206221dcd771d7425f51d925d7d3d52441f4f506f",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "6ef9aff6abbe44ea8d720981392c04a05d4c735a6372b676e64c36724c9813ee",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "76eb8c2ca2c8602820b4262b7446f2e47cfdc7356a989cc0154d9e7870ca0b59",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "dd97577cb175833086a64837895d49246e5b3f9da978d1635de6c5df9473f66c",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "20673c48096b938e40ca32e3a2670b4e01e7cd6e131e3e801a26ac087ae92aa7",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "276b67a68fe24f47f52a2af1717bdb70262d3497f2ba9841a33a7de95984c126",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "915fc230d83ae3bbbfd25da47c09ef325e83eab7b98ece1d430dca4698e8b6de",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "7705a2cdf0f7d814d224304dc7aba286df4e42774bb99e5065fa5a8c73af6e54",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "6143984034ff2934e2a067414da8f1ee1e020ad4b398a36740a22737a2ea82a2",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "aff03dfa3c4e999b16d5c5db16eae8052850306047648e240ba0cdb027245fea",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "99becf054b4b9086514ad75eed7b90c90f8af650da88529410a595d31ddc1755",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "be456ddf0b0a00f578406e1a7efb1614d541d5e962613a895f4dfcfb63c8dea0",
+                  "args": []
+                }
+              ]
+            },
+            "sourceJobs": 13,
+            "completedJobs": 13,
+            "observedLosatRunMessages": 13,
+            "contextWorkersConstructed": 5
+          }
+        ]
+      },
+      "saved-raw": {
+        "samples": [
+          20.042299999998882,
+          20.35979999999888,
+          19.604700000001117
+        ],
+        "median": 20.042299999998882,
+        "mad": 0.317499999999999,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 8.196,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 2.80239999999851,
+            "typedToRenderRequest": 0.4159000000003725,
+            "renderRoundTrip": 6.881900000000373,
+            "resultHistoryDomFrames": 1.7460999999996274
+          },
+          "total": 20.042299999998882,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.317799999998883,
+              "startAfterGenerateSeconds": 0.6875
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 13,
+            "cacheHits": 13,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "collinear",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 13,
+            "rawTsvBytes": 9631591,
+            "rawTsvLargestEntryBytes": 900225,
+            "simultaneousParsedTables": 13,
+            "helperRequestMetadataBytes": 4272526,
+            "helperRequestRawTransferBytes": 9631591,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 8.196,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 2.80239999999851,
+              "typedToRenderRequest": 0.4159000000003725,
+              "renderRoundTrip": 6.881900000000373,
+              "resultHistoryDomFrames": 1.7460999999996274
+            },
+            "total": 20.042299999998882,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.317799999998883,
+                "startAfterGenerateSeconds": 0.6875
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 13,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 13,
+              "helperRequestMetadataBytes": 4272526,
+              "helperRequestRawTransferBytes": 9631591,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 8.10989999999851,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 2.8195,
+              "typedToRenderRequest": 0.4247000000011176,
+              "renderRoundTrip": 6.965400000000373,
+              "resultHistoryDomFrames": 2.0402999999988825
+            },
+            "total": 20.35979999999888,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.240300000000745,
+                "startAfterGenerateSeconds": 0.7016999999992549
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 13,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 13,
+              "helperRequestMetadataBytes": 4272526,
+              "helperRequestRawTransferBytes": 9631591,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 8.092700000001118,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 2.7257999999988822,
+              "typedToRenderRequest": 0.4121000000014901,
+              "renderRoundTrip": 6.657699999999255,
+              "resultHistoryDomFrames": 1.7164000000003725
+            },
+            "total": 19.604700000001117,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.254099999999627,
+                "startAfterGenerateSeconds": 0.6983000000007451
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 13,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 13,
+              "helperRequestMetadataBytes": 4272526,
+              "helperRequestRawTransferBytes": 9631591,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      },
+      "derived-warm": {
+        "samples": [
+          6.672,
+          7.142800000000745,
+          6.420300000000745
+        ],
+        "median": 6.672,
+        "mad": 0.2516999999992544,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 2.0975,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 0,
+            "typedToRenderRequest": 0,
+            "renderRoundTrip": 2.79360000000149,
+            "resultHistoryDomFrames": 1.7808999999985098
+          },
+          "total": 6.672,
+          "nestedInitializations": [],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 13,
+            "cacheHits": 13,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 1,
+            "proteinDerivedPayloadCacheMisses": 0,
+            "mode": "collinear",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 13,
+            "rawTsvBytes": 9631591,
+            "rawTsvLargestEntryBytes": 900225,
+            "simultaneousParsedTables": 0,
+            "helperRequestMetadataBytes": 0,
+            "helperRequestRawTransferBytes": 0,
+            "helperRequestFileCount": 0,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 2.0975,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 2.79360000000149,
+              "resultHistoryDomFrames": 1.7808999999985098
+            },
+            "total": 6.672,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 13,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 2.5305999999996276,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 2.793300000000745,
+              "resultHistoryDomFrames": 1.8189000000003726
+            },
+            "total": 7.142800000000745,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 13,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 2.0465999999996276,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 2.70360000000149,
+              "resultHistoryDomFrames": 1.6700999999996275
+            },
+            "total": 6.420300000000745,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 13,
+              "cacheHits": 13,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 13,
+              "rawTsvBytes": 9631591,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      }
+    },
+    "hep-off": {
+      "raw-cold": {
+        "samples": [
+          108.11240000000038
+        ],
+        "median": 108.11240000000038,
+        "mad": null,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 7.6475,
+            "rawSearchBatch": 93.138,
+            "rawPacking": 0.12620000000111758,
+            "conversionRoundTrip": 1.1947999999988823,
+            "typedToRenderRequest": 0.28520000000111756,
+            "renderRoundTrip": 4.833799999998883,
+            "resultHistoryDomFrames": 0.8869000000003725
+          },
+          "total": 108.11240000000038,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.2755,
+              "startAfterGenerateSeconds": 0.679
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10780000000074506,
+              "startAfterGenerateSeconds": 7.649
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11030000000074505,
+              "startAfterGenerateSeconds": 7.649
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.114,
+              "startAfterGenerateSeconds": 7.649
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11570000000111759,
+              "startAfterGenerateSeconds": 7.649
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 8,
+            "cacheHits": 0,
+            "cacheMisses": 8,
+            "uniqueJobs": 8,
+            "workerCalls": 8,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "collinear",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 8,
+            "rawTsvBytes": 5768154,
+            "rawTsvLargestEntryBytes": 790520,
+            "simultaneousParsedTables": 8,
+            "helperRequestMetadataBytes": 4271361,
+            "helperRequestRawTransferBytes": 5768154,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": [
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                "cacheKey": "20673c48096b938e40ca32e3a2670b4e01e7cd6e131e3e801a26ac087ae92aa7",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    0
+                  ]
+                ],
+                "cacheKey": "276b67a68fe24f47f52a2af1717bdb70262d3497f2ba9841a33a7de95984c126",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    2
+                  ]
+                ],
+                "cacheKey": "915fc230d83ae3bbbfd25da47c09ef325e83eab7b98ece1d430dca4698e8b6de",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    1
+                  ]
+                ],
+                "cacheKey": "7705a2cdf0f7d814d224304dc7aba286df4e42774bb99e5065fa5a8c73af6e54",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    3
+                  ]
+                ],
+                "cacheKey": "6143984034ff2934e2a067414da8f1ee1e020ad4b398a36740a22737a2ea82a2",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    2
+                  ]
+                ],
+                "cacheKey": "aff03dfa3c4e999b16d5c5db16eae8052850306047648e240ba0cdb027245fea",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    4
+                  ]
+                ],
+                "cacheKey": "99becf054b4b9086514ad75eed7b90c90f8af650da88529410a595d31ddc1755",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    3
+                  ]
+                ],
+                "cacheKey": "be456ddf0b0a00f578406e1a7efb1614d541d5e962613a895f4dfcfb63c8dea0",
+                "args": []
+              }
+            ]
+          },
+          "sourceJobs": 8,
+          "completedJobs": 8,
+          "observedLosatRunMessages": 8,
+          "contextWorkersConstructed": 5
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 7.6475,
+              "rawSearchBatch": 93.138,
+              "rawPacking": 0.12620000000111758,
+              "conversionRoundTrip": 1.1947999999988823,
+              "typedToRenderRequest": 0.28520000000111756,
+              "renderRoundTrip": 4.833799999998883,
+              "resultHistoryDomFrames": 0.8869000000003725
+            },
+            "total": 108.11240000000038,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.2755,
+                "startAfterGenerateSeconds": 0.679
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10780000000074506,
+                "startAfterGenerateSeconds": 7.649
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11030000000074505,
+                "startAfterGenerateSeconds": 7.649
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.114,
+                "startAfterGenerateSeconds": 7.649
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11570000000111759,
+                "startAfterGenerateSeconds": 7.649
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 0,
+              "cacheMisses": 8,
+              "uniqueJobs": 8,
+              "workerCalls": 8,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 8,
+              "helperRequestMetadataBytes": 4271361,
+              "helperRequestRawTransferBytes": 5768154,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": [
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "20673c48096b938e40ca32e3a2670b4e01e7cd6e131e3e801a26ac087ae92aa7",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "276b67a68fe24f47f52a2af1717bdb70262d3497f2ba9841a33a7de95984c126",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "915fc230d83ae3bbbfd25da47c09ef325e83eab7b98ece1d430dca4698e8b6de",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "7705a2cdf0f7d814d224304dc7aba286df4e42774bb99e5065fa5a8c73af6e54",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "6143984034ff2934e2a067414da8f1ee1e020ad4b398a36740a22737a2ea82a2",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "aff03dfa3c4e999b16d5c5db16eae8052850306047648e240ba0cdb027245fea",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "99becf054b4b9086514ad75eed7b90c90f8af650da88529410a595d31ddc1755",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "be456ddf0b0a00f578406e1a7efb1614d541d5e962613a895f4dfcfb63c8dea0",
+                  "args": []
+                }
+              ]
+            },
+            "sourceJobs": 8,
+            "completedJobs": 8,
+            "observedLosatRunMessages": 8,
+            "contextWorkersConstructed": 5
+          }
+        ]
+      },
+      "saved-raw": {
+        "samples": [
+          14.948,
+          14.798,
+          14.669699999999255
+        ],
+        "median": 14.798,
+        "mad": 0.12830000000074548,
+        "representativeSampleIndex": 1,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 7.967199999999255,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 1.1417000000011175,
+            "typedToRenderRequest": 0.2467999999988824,
+            "renderRoundTrip": 4.601200000001118,
+            "resultHistoryDomFrames": 0.8410999999996275
+          },
+          "total": 14.798,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.330599999999627,
+              "startAfterGenerateSeconds": 0.726
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 8,
+            "cacheHits": 8,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "collinear",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 8,
+            "rawTsvBytes": 5768154,
+            "rawTsvLargestEntryBytes": 790520,
+            "simultaneousParsedTables": 8,
+            "helperRequestMetadataBytes": 4271361,
+            "helperRequestRawTransferBytes": 5768154,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 8.0285,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 1.1699000000003725,
+              "typedToRenderRequest": 0.2686999999992549,
+              "renderRoundTrip": 4.644400000000372,
+              "resultHistoryDomFrames": 0.8365
+            },
+            "total": 14.948,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.3437000000011174,
+                "startAfterGenerateSeconds": 0.7215999999996274
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 8,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 8,
+              "helperRequestMetadataBytes": 4271361,
+              "helperRequestRawTransferBytes": 5768154,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 7.967199999999255,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 1.1417000000011175,
+              "typedToRenderRequest": 0.2467999999988824,
+              "renderRoundTrip": 4.601200000001118,
+              "resultHistoryDomFrames": 0.8410999999996275
+            },
+            "total": 14.798,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.330599999999627,
+                "startAfterGenerateSeconds": 0.726
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 8,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 8,
+              "helperRequestMetadataBytes": 4271361,
+              "helperRequestRawTransferBytes": 5768154,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 7.994599999999627,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 1.168300000000745,
+              "typedToRenderRequest": 0.2666999999992549,
+              "renderRoundTrip": 4.478599999999627,
+              "resultHistoryDomFrames": 0.7615
+            },
+            "total": 14.669699999999255,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.301800000000745,
+                "startAfterGenerateSeconds": 0.6980999999996275
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 8,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 8,
+              "helperRequestMetadataBytes": 4271361,
+              "helperRequestRawTransferBytes": 5768154,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      },
+      "derived-warm": {
+        "samples": [
+          4.536099999999627,
+          4.3640999999996275,
+          4.1214000000003725
+        ],
+        "median": 4.3640999999996275,
+        "mad": 0.1719999999999997,
+        "representativeSampleIndex": 1,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 1.2122000000011175,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 0,
+            "typedToRenderRequest": 0,
+            "renderRoundTrip": 2.450199999999255,
+            "resultHistoryDomFrames": 0.7016999999992549
+          },
+          "total": 4.3640999999996275,
+          "nestedInitializations": [],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 8,
+            "cacheHits": 8,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 1,
+            "proteinDerivedPayloadCacheMisses": 0,
+            "mode": "collinear",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 8,
+            "rawTsvBytes": 5768154,
+            "rawTsvLargestEntryBytes": 790520,
+            "simultaneousParsedTables": 0,
+            "helperRequestMetadataBytes": 0,
+            "helperRequestRawTransferBytes": 0,
+            "helperRequestFileCount": 0,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 1.2625,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 2.5285999999996274,
+              "resultHistoryDomFrames": 0.745
+            },
+            "total": 4.536099999999627,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 8,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 1.2122000000011175,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 2.450199999999255,
+              "resultHistoryDomFrames": 0.7016999999992549
+            },
+            "total": 4.3640999999996275,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 8,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 1.0950999999996274,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 2.3796000000014903,
+              "resultHistoryDomFrames": 0.646699999999255
+            },
+            "total": 4.1214000000003725,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 8,
+              "cacheHits": 8,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 8,
+              "rawTsvBytes": 5768154,
+              "rawTsvLargestEntryBytes": 790520,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      }
+    },
+    "hep-similarity": {
+      "raw-cold": {
+        "samples": [
+          284.6481000000015
+        ],
+        "median": 284.6481000000015,
+        "mad": null,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 7.613800000000745,
+            "rawSearchBatch": 262.90609999999964,
+            "rawPacking": 0.25430000000074504,
+            "conversionRoundTrip": 4.131400000000372,
+            "typedToRenderRequest": 0.48689999999850986,
+            "renderRoundTrip": 7.398900000000372,
+            "resultHistoryDomFrames": 1.8567000000011176
+          },
+          "total": 284.6481000000015,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.243699999999255,
+              "startAfterGenerateSeconds": 0.7013000000007451
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10479999999888241,
+              "startAfterGenerateSeconds": 7.614700000001117
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10469999999925494,
+              "startAfterGenerateSeconds": 7.614700000001117
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11359999999962747,
+              "startAfterGenerateSeconds": 7.614700000001117
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11359999999962747,
+              "startAfterGenerateSeconds": 7.614700000001117
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 25,
+            "cacheHits": 0,
+            "cacheMisses": 25,
+            "uniqueJobs": 25,
+            "workerCalls": 25,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "orthogroup",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": null,
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 25,
+            "rawTsvBytes": 17869560,
+            "rawTsvLargestEntryBytes": 900225,
+            "simultaneousParsedTables": 25,
+            "helperRequestMetadataBytes": 4275332,
+            "helperRequestRawTransferBytes": 17869560,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": [
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "cacheKey": "03fbaf91e24ea417e42eea72e65bb20bf3f9b2220bb9fa8a1cb76595e50724e9",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                "cacheKey": "20673c48096b938e40ca32e3a2670b4e01e7cd6e131e3e801a26ac087ae92aa7",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    0
+                  ]
+                ],
+                "cacheKey": "276b67a68fe24f47f52a2af1717bdb70262d3497f2ba9841a33a7de95984c126",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    2
+                  ]
+                ],
+                "cacheKey": "160eaacad36994531ad90caea15984f8f1c6d5a143859a6a143fc97e4e2803e1",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    0
+                  ]
+                ],
+                "cacheKey": "546c576e0b608cc7d66564228691a2b27920a5a6d21c43ab3c64df9000690639",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    3
+                  ]
+                ],
+                "cacheKey": "e05aea7e6acb2fb384cd941bd2be7364fb8d23bb0bf34cdb8ddd7ee62db6ed55",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    0
+                  ]
+                ],
+                "cacheKey": "4d3449e1c694fe05dbf653acef0a16404221acda1e5f679ec614f3a0e9cc0b8f",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    4
+                  ]
+                ],
+                "cacheKey": "3a780e66b21fb009fb74ffc32893b02520140293f0e04d84a036fa7246bda37c",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    0
+                  ]
+                ],
+                "cacheKey": "f1727791d8d20804efe6055b74f7d8d7823965d35faaf2dde799a3b4b21865da",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "cacheKey": "5743730e00ba368bdfbe3e3206221dcd771d7425f51d925d7d3d52441f4f506f",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    2
+                  ]
+                ],
+                "cacheKey": "915fc230d83ae3bbbfd25da47c09ef325e83eab7b98ece1d430dca4698e8b6de",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    1
+                  ]
+                ],
+                "cacheKey": "7705a2cdf0f7d814d224304dc7aba286df4e42774bb99e5065fa5a8c73af6e54",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    3
+                  ]
+                ],
+                "cacheKey": "887550369d4488bbc0c16f445c9b872a238418f8fc14dcc37b1ae0cd8746a132",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    1
+                  ]
+                ],
+                "cacheKey": "572b64f5d6b0bf93d96c3bc7f4d674d86cdbe627c08cce1ed29936f17c7d501c",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    4
+                  ]
+                ],
+                "cacheKey": "28ea354310fece32695311c6a3546bc7a35272fdd8ade02b8797cf307dc13c31",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    1
+                  ]
+                ],
+                "cacheKey": "147025597a34522c804cb1fb2812629506178d0f649a05a8682f99a1f22b80e1",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    2
+                  ]
+                ],
+                "cacheKey": "6ef9aff6abbe44ea8d720981392c04a05d4c735a6372b676e64c36724c9813ee",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    3
+                  ]
+                ],
+                "cacheKey": "6143984034ff2934e2a067414da8f1ee1e020ad4b398a36740a22737a2ea82a2",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    2
+                  ]
+                ],
+                "cacheKey": "aff03dfa3c4e999b16d5c5db16eae8052850306047648e240ba0cdb027245fea",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    4
+                  ]
+                ],
+                "cacheKey": "2c8108f508496228b431b0a5021916225473659ac3b9de0690c2469a2d08de81",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    2
+                  ]
+                ],
+                "cacheKey": "c0f1bf841a6cb73049a3430506bb50304378d2419bd7dc50f291ec26a79320a7",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    3
+                  ]
+                ],
+                "cacheKey": "76eb8c2ca2c8602820b4262b7446f2e47cfdc7356a989cc0154d9e7870ca0b59",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    4
+                  ]
+                ],
+                "cacheKey": "99becf054b4b9086514ad75eed7b90c90f8af650da88529410a595d31ddc1755",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    3
+                  ]
+                ],
+                "cacheKey": "be456ddf0b0a00f578406e1a7efb1614d541d5e962613a895f4dfcfb63c8dea0",
+                "args": []
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    4
+                  ]
+                ],
+                "cacheKey": "dd97577cb175833086a64837895d49246e5b3f9da978d1635de6c5df9473f66c",
+                "args": []
+              }
+            ]
+          },
+          "sourceJobs": 25,
+          "completedJobs": 25,
+          "observedLosatRunMessages": 25,
+          "contextWorkersConstructed": 5
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 7.613800000000745,
+              "rawSearchBatch": 262.90609999999964,
+              "rawPacking": 0.25430000000074504,
+              "conversionRoundTrip": 4.131400000000372,
+              "typedToRenderRequest": 0.48689999999850986,
+              "renderRoundTrip": 7.398900000000372,
+              "resultHistoryDomFrames": 1.8567000000011176
+            },
+            "total": 284.6481000000015,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.243699999999255,
+                "startAfterGenerateSeconds": 0.7013000000007451
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10479999999888241,
+                "startAfterGenerateSeconds": 7.614700000001117
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10469999999925494,
+                "startAfterGenerateSeconds": 7.614700000001117
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11359999999962747,
+                "startAfterGenerateSeconds": 7.614700000001117
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11359999999962747,
+                "startAfterGenerateSeconds": 7.614700000001117
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 0,
+              "cacheMisses": 25,
+              "uniqueJobs": 25,
+              "workerCalls": 25,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 25,
+              "helperRequestMetadataBytes": 4275332,
+              "helperRequestRawTransferBytes": 17869560,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": [
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "03fbaf91e24ea417e42eea72e65bb20bf3f9b2220bb9fa8a1cb76595e50724e9",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "20673c48096b938e40ca32e3a2670b4e01e7cd6e131e3e801a26ac087ae92aa7",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "276b67a68fe24f47f52a2af1717bdb70262d3497f2ba9841a33a7de95984c126",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "160eaacad36994531ad90caea15984f8f1c6d5a143859a6a143fc97e4e2803e1",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "546c576e0b608cc7d66564228691a2b27920a5a6d21c43ab3c64df9000690639",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "e05aea7e6acb2fb384cd941bd2be7364fb8d23bb0bf34cdb8ddd7ee62db6ed55",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "4d3449e1c694fe05dbf653acef0a16404221acda1e5f679ec614f3a0e9cc0b8f",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "3a780e66b21fb009fb74ffc32893b02520140293f0e04d84a036fa7246bda37c",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "f1727791d8d20804efe6055b74f7d8d7823965d35faaf2dde799a3b4b21865da",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "5743730e00ba368bdfbe3e3206221dcd771d7425f51d925d7d3d52441f4f506f",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "915fc230d83ae3bbbfd25da47c09ef325e83eab7b98ece1d430dca4698e8b6de",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "7705a2cdf0f7d814d224304dc7aba286df4e42774bb99e5065fa5a8c73af6e54",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "887550369d4488bbc0c16f445c9b872a238418f8fc14dcc37b1ae0cd8746a132",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "572b64f5d6b0bf93d96c3bc7f4d674d86cdbe627c08cce1ed29936f17c7d501c",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "28ea354310fece32695311c6a3546bc7a35272fdd8ade02b8797cf307dc13c31",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "147025597a34522c804cb1fb2812629506178d0f649a05a8682f99a1f22b80e1",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "6ef9aff6abbe44ea8d720981392c04a05d4c735a6372b676e64c36724c9813ee",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "6143984034ff2934e2a067414da8f1ee1e020ad4b398a36740a22737a2ea82a2",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "aff03dfa3c4e999b16d5c5db16eae8052850306047648e240ba0cdb027245fea",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "2c8108f508496228b431b0a5021916225473659ac3b9de0690c2469a2d08de81",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "c0f1bf841a6cb73049a3430506bb50304378d2419bd7dc50f291ec26a79320a7",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "76eb8c2ca2c8602820b4262b7446f2e47cfdc7356a989cc0154d9e7870ca0b59",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "99becf054b4b9086514ad75eed7b90c90f8af650da88529410a595d31ddc1755",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "be456ddf0b0a00f578406e1a7efb1614d541d5e962613a895f4dfcfb63c8dea0",
+                  "args": []
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "dd97577cb175833086a64837895d49246e5b3f9da978d1635de6c5df9473f66c",
+                  "args": []
+                }
+              ]
+            },
+            "sourceJobs": 25,
+            "completedJobs": 25,
+            "observedLosatRunMessages": 25,
+            "contextWorkersConstructed": 5
+          }
+        ]
+      },
+      "saved-raw": {
+        "samples": [
+          23.622299999998884,
+          22.731,
+          22.731
+        ],
+        "median": 22.731,
+        "mad": 0.0,
+        "representativeSampleIndex": 1,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 8.623300000000745,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 4.211699999999255,
+            "typedToRenderRequest": 0.502300000000745,
+            "renderRoundTrip": 7.543400000000372,
+            "resultHistoryDomFrames": 1.8502999999988825
+          },
+          "total": 22.731,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.336200000001117,
+              "startAfterGenerateSeconds": 0.7155999999996274
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 25,
+            "cacheHits": 25,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "orthogroup",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": null,
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 25,
+            "rawTsvBytes": 17869560,
+            "rawTsvLargestEntryBytes": 900225,
+            "simultaneousParsedTables": 25,
+            "helperRequestMetadataBytes": 4275332,
+            "helperRequestRawTransferBytes": 17869560,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 9.160799999998883,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 4.330900000000373,
+              "typedToRenderRequest": 0.49930000000074504,
+              "renderRoundTrip": 7.711699999999255,
+              "resultHistoryDomFrames": 1.9195999999996274
+            },
+            "total": 23.622299999998884,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.6685,
+                "startAfterGenerateSeconds": 0.737
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 25,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 25,
+              "helperRequestMetadataBytes": 4275332,
+              "helperRequestRawTransferBytes": 17869560,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 8.623300000000745,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 4.211699999999255,
+              "typedToRenderRequest": 0.502300000000745,
+              "renderRoundTrip": 7.543400000000372,
+              "resultHistoryDomFrames": 1.8502999999988825
+            },
+            "total": 22.731,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.336200000001117,
+                "startAfterGenerateSeconds": 0.7155999999996274
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 25,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 25,
+              "helperRequestMetadataBytes": 4275332,
+              "helperRequestRawTransferBytes": 17869560,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 8.461300000000746,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 4.278900000000372,
+              "typedToRenderRequest": 0.514699999999255,
+              "renderRoundTrip": 7.625300000000745,
+              "resultHistoryDomFrames": 1.8507999999988825
+            },
+            "total": 22.731,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.22789999999851,
+                "startAfterGenerateSeconds": 0.7157000000011176
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 25,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 25,
+              "helperRequestMetadataBytes": 4275332,
+              "helperRequestRawTransferBytes": 17869560,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      },
+      "derived-warm": {
+        "samples": [
+          8.13889999999851,
+          7.922400000000373,
+          8.049
+        ],
+        "median": 8.049,
+        "mad": 0.08989999999850973,
+        "representativeSampleIndex": 2,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 2.4779000000003726,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 0,
+            "typedToRenderRequest": 0,
+            "renderRoundTrip": 3.6720999999996273,
+            "resultHistoryDomFrames": 1.899
+          },
+          "total": 8.049,
+          "nestedInitializations": [],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 25,
+            "cacheHits": 25,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 1,
+            "proteinDerivedPayloadCacheMisses": 0,
+            "mode": "orthogroup",
+            "candidateLimitRequested": null,
+            "candidateLimitEffective": null,
+            "collinearSearchScope": null,
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 25,
+            "rawTsvBytes": 17869560,
+            "rawTsvLargestEntryBytes": 900225,
+            "simultaneousParsedTables": 0,
+            "helperRequestMetadataBytes": 0,
+            "helperRequestRawTransferBytes": 0,
+            "helperRequestFileCount": 0,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 2.523699999999255,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 3.671699999999255,
+              "resultHistoryDomFrames": 1.9435
+            },
+            "total": 8.13889999999851,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 25,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 2.4137000000011177,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 3.6237999999988824,
+              "resultHistoryDomFrames": 1.8849000000003726
+            },
+            "total": 7.922400000000373,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 25,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 2.4779000000003726,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 3.6720999999996273,
+              "resultHistoryDomFrames": 1.899
+            },
+            "total": 8.049,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 25,
+              "cacheHits": 25,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "orthogroup",
+              "candidateLimitRequested": null,
+              "candidateLimitEffective": null,
+              "collinearSearchScope": null,
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 25,
+              "rawTsvBytes": 17869560,
+              "rawTsvLargestEntryBytes": 900225,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      }
+    },
+    "vibrio-on": {
+      "raw-cold": {
+        "samples": [
+          741.8949000000003
+        ],
+        "median": 741.8949000000003,
+        "mad": null,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 31.940200000001116,
+            "rawSearchBatch": 558.0905,
+            "rawPacking": 1.198699999999255,
+            "conversionRoundTrip": 25.5345,
+            "typedToRenderRequest": 4.766599999999627,
+            "renderRoundTrip": 59.49970000000112,
+            "resultHistoryDomFrames": 60.86469999999925
+          },
+          "total": 741.8949000000003,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.256199999999255,
+              "startAfterGenerateSeconds": 10.62210000000149
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11009999999962747,
+              "startAfterGenerateSeconds": 31.94110000000149
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.10159999999962747,
+              "startAfterGenerateSeconds": 31.94110000000149
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11609999999962747,
+              "startAfterGenerateSeconds": 31.94110000000149
+            },
+            {
+              "worker": "losat-worker.js",
+              "seconds": 0.11289999999850989,
+              "startAfterGenerateSeconds": 31.94110000000149
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 47,
+            "cacheHits": 0,
+            "cacheMisses": 47,
+            "uniqueJobs": 47,
+            "workerCalls": 47,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "collinear",
+            "candidateLimitRequested": 5,
+            "candidateLimitEffective": 5,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 47,
+            "rawTsvBytes": 51883691,
+            "rawTsvLargestEntryBytes": 1531209,
+            "simultaneousParsedTables": 47,
+            "helperRequestMetadataBytes": 39117032,
+            "helperRequestRawTransferBytes": 51883691,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": [
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "cacheKey": "581f033babff21941e94973e5724d05298b5fa29b70d58d9c6afcb15fd5a0743",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "cacheKey": "bc89879bd8a271df366035f7ada2e73db81a2750c1f63ff755b4bab20e0cb013",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    2
+                  ]
+                ],
+                "cacheKey": "325a6ac731bda0317a17f811e688d5a2b5a21734199fe348f2c7f824198aafb5",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    3
+                  ]
+                ],
+                "cacheKey": "660cad60a5d3dcbba392462102e4465e45cde7e802d1f76a6c406f34e3866c3f",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    4
+                  ]
+                ],
+                "cacheKey": "206def05b3d3c85545eb00681ff4b834001600388259779998aca2f2d408d1b9",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  5
+                ],
+                "subjectRecordIndexes": [
+                  5
+                ],
+                "recordPairs": [
+                  [
+                    5,
+                    5
+                  ]
+                ],
+                "cacheKey": "4c4d8090a0a3971f6660953279de0ac100a0d9566f3137fb6ea48b6bff3452af",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  6
+                ],
+                "subjectRecordIndexes": [
+                  6
+                ],
+                "recordPairs": [
+                  [
+                    6,
+                    6
+                  ]
+                ],
+                "cacheKey": "4ab3bd6602b52a1a25eda3261c14f692e57b4ce46fc7cf334a5c392dc733ff4c",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  7
+                ],
+                "subjectRecordIndexes": [
+                  7
+                ],
+                "recordPairs": [
+                  [
+                    7,
+                    7
+                  ]
+                ],
+                "cacheKey": "74ad4f9790ec9ff5f5b8da5ba825df7d08701a7228f8e9f7d7b252cc131db64f",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  8
+                ],
+                "subjectRecordIndexes": [
+                  8
+                ],
+                "recordPairs": [
+                  [
+                    8,
+                    8
+                  ]
+                ],
+                "cacheKey": "99a09b3a6b4845ddccd98d31ef3aa3bc97723807f54bf54142f6fe8e31152b9b",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  9
+                ],
+                "subjectRecordIndexes": [
+                  9
+                ],
+                "recordPairs": [
+                  [
+                    9,
+                    9
+                  ]
+                ],
+                "cacheKey": "8b323efb6336b1201142fe66e030c730e87bb706636f8a3253e10caabb83bdde",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  10
+                ],
+                "subjectRecordIndexes": [
+                  10
+                ],
+                "recordPairs": [
+                  [
+                    10,
+                    10
+                  ]
+                ],
+                "cacheKey": "e31ad96799828844b5f16698db35f8f8b5e5c5c05637dfc23c5e9470dae8c992",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    3
+                  ]
+                ],
+                "cacheKey": "e4e0c1ab1864de5ffd0f1ac500f4dbdb21f652d7690d8c690799cb5ce0bbca2c",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    0
+                  ]
+                ],
+                "cacheKey": "ec04734d783712e317ffe09e27d84d1f51a5b94ca72371d7715704a1e34ef5e1",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  0
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    0,
+                    4
+                  ]
+                ],
+                "cacheKey": "ebaa0501542dc381ba8ae63b3393c4019860d5f254f068652305961a43c7c05c",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  0
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    0
+                  ]
+                ],
+                "cacheKey": "97b31153c59cd3aa78ccbcbdeb8e2d14a029fb36ec932c042d3cee3b88e7848b",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    3
+                  ]
+                ],
+                "cacheKey": "804bb4f864c49125a7d0bd3f4c3951902e0fe528126a5859717058ba0b4a3bdd",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    1
+                  ]
+                ],
+                "cacheKey": "64f4aab16f1f6c7cb2e32c9b5331e357d0742fa6836a8e7ba05540e37ce2697b",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  1
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    1,
+                    4
+                  ]
+                ],
+                "cacheKey": "e2df7993971717d4d0a454e99df28e771ac0bfc4f661328924ed03b566293b31",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  1
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    1
+                  ]
+                ],
+                "cacheKey": "d25728c415bece609a45adfa09e5022d2b7a06aa896fa4938560b7748b72a99b",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    3
+                  ]
+                ],
+                "cacheKey": "9db37eb815b91b09d5154ea0b015a9149b1edef4fec9fbd3d627d01c8d37a587",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    2
+                  ]
+                ],
+                "cacheKey": "e73e886b8cee5f61ef2b8c3e1d7c174127e9dd07039da64341538f6ebe58fda8",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  2
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    2,
+                    4
+                  ]
+                ],
+                "cacheKey": "c8b382c4353d73582a329ac42b21c6c708a5391051bcefe408677862d8dfca00",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  2
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    2
+                  ]
+                ],
+                "cacheKey": "c2a3f51358264a527ac4402d89d7ad1144d76c151e56ec88e12be344a01b328b",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  5
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    5
+                  ]
+                ],
+                "cacheKey": "464eb1020f6ae28acdce5d08649c2fe7f809c0c7e0ae57fb82cec202b7d59582",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  5
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    5,
+                    3
+                  ]
+                ],
+                "cacheKey": "33acdada7374989b5560600141db453c3c8eab1ed3ed62c49890f607bc9ae8c5",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  3
+                ],
+                "subjectRecordIndexes": [
+                  6
+                ],
+                "recordPairs": [
+                  [
+                    3,
+                    6
+                  ]
+                ],
+                "cacheKey": "717bbd5441f637ddf56c90537e5ec12389e6b12f41de40abb957e4075515ca8c",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  6
+                ],
+                "subjectRecordIndexes": [
+                  3
+                ],
+                "recordPairs": [
+                  [
+                    6,
+                    3
+                  ]
+                ],
+                "cacheKey": "cb5673660f52fd20962c4d30a1444a7d958b7d4962f8f5a284094da0748eec95",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  5
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    5
+                  ]
+                ],
+                "cacheKey": "d9a8388f92b871bd208138f2264494077b678e045dc5390ab37356df6d9e0965",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  5
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    5,
+                    4
+                  ]
+                ],
+                "cacheKey": "56081234aa37f11476c48bad46fa50455e3b35e3cc3abbd947a06cb5b5cc222a",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  4
+                ],
+                "subjectRecordIndexes": [
+                  6
+                ],
+                "recordPairs": [
+                  [
+                    4,
+                    6
+                  ]
+                ],
+                "cacheKey": "f7c017b461a7a39356b12ef3c90e8208385b0e6a38557e3b833dfcff2308abe6",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  6
+                ],
+                "subjectRecordIndexes": [
+                  4
+                ],
+                "recordPairs": [
+                  [
+                    6,
+                    4
+                  ]
+                ],
+                "cacheKey": "0b489cfca9373cf82088b3b66cf766a862dca1b5d08de064324b5e0e28f9261d",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  5
+                ],
+                "subjectRecordIndexes": [
+                  7
+                ],
+                "recordPairs": [
+                  [
+                    5,
+                    7
+                  ]
+                ],
+                "cacheKey": "403fcdf6a3f465e5047c49b11cfe601a20a9fe50e31d513adfa5daee34d94af3",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  7
+                ],
+                "subjectRecordIndexes": [
+                  5
+                ],
+                "recordPairs": [
+                  [
+                    7,
+                    5
+                  ]
+                ],
+                "cacheKey": "f56b0a0e7956469c9a5cfc12c2787ed83ffba0994a0d5d9707617a622d43a764",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  5
+                ],
+                "subjectRecordIndexes": [
+                  8
+                ],
+                "recordPairs": [
+                  [
+                    5,
+                    8
+                  ]
+                ],
+                "cacheKey": "78c5a68ff43f897e8dfee33228b91ef5139855b6ef82c1f21a058550dff9f938",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  8
+                ],
+                "subjectRecordIndexes": [
+                  5
+                ],
+                "recordPairs": [
+                  [
+                    8,
+                    5
+                  ]
+                ],
+                "cacheKey": "266c1d13e2f9b5f15336b9734ebce7a896563bf7b62087bc7f6ac2da1b203de4",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  6
+                ],
+                "subjectRecordIndexes": [
+                  7
+                ],
+                "recordPairs": [
+                  [
+                    6,
+                    7
+                  ]
+                ],
+                "cacheKey": "9f8bbd7f7dbe0d81f1e87d270a733f34e9cb4b2ca7af8f819431db7168807bc2",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  7
+                ],
+                "subjectRecordIndexes": [
+                  6
+                ],
+                "recordPairs": [
+                  [
+                    7,
+                    6
+                  ]
+                ],
+                "cacheKey": "f1e4f01f4b0248cd0287cff9413d0ffd35ee1953e91426808316be26dc01c123",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  6
+                ],
+                "subjectRecordIndexes": [
+                  8
+                ],
+                "recordPairs": [
+                  [
+                    6,
+                    8
+                  ]
+                ],
+                "cacheKey": "5a55c0cfdfb3e4092a728ddd8bcad574c7fb5c8a09398f8bf01057441370c8f4",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  8
+                ],
+                "subjectRecordIndexes": [
+                  6
+                ],
+                "recordPairs": [
+                  [
+                    8,
+                    6
+                  ]
+                ],
+                "cacheKey": "6b8f5ec4a18797298e6ac41dbee8dbcfb3d2f62adac84a61c39f0ff82d28ac8c",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  7
+                ],
+                "subjectRecordIndexes": [
+                  9
+                ],
+                "recordPairs": [
+                  [
+                    7,
+                    9
+                  ]
+                ],
+                "cacheKey": "301166924c9936857a61074c088352349b178f7773465c101fb2c17816c7bfdf",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  9
+                ],
+                "subjectRecordIndexes": [
+                  7
+                ],
+                "recordPairs": [
+                  [
+                    9,
+                    7
+                  ]
+                ],
+                "cacheKey": "e653c577fd6a5f7a252bb527bae80b6188de3e599cd21b7bfeb146c61d6c048c",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  7
+                ],
+                "subjectRecordIndexes": [
+                  10
+                ],
+                "recordPairs": [
+                  [
+                    7,
+                    10
+                  ]
+                ],
+                "cacheKey": "4eef56a7be26870153ba18cd74077188ce03f64c54c39c0544363aac86e630a5",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  10
+                ],
+                "subjectRecordIndexes": [
+                  7
+                ],
+                "recordPairs": [
+                  [
+                    10,
+                    7
+                  ]
+                ],
+                "cacheKey": "2023c991b49d43390e65f82f571d605a9cf4b7cbf07edfb87b91db687c551a43",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  8
+                ],
+                "subjectRecordIndexes": [
+                  9
+                ],
+                "recordPairs": [
+                  [
+                    8,
+                    9
+                  ]
+                ],
+                "cacheKey": "6fa98483c58f63bb93b0e90ad82bfcfddfac71c4011f6af1c081db5d81315990",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  9
+                ],
+                "subjectRecordIndexes": [
+                  8
+                ],
+                "recordPairs": [
+                  [
+                    9,
+                    8
+                  ]
+                ],
+                "cacheKey": "8226ed386313245b2dcbb7c7294185937e9872e46a2c4a6ca774bfc1ec0aae52",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  8
+                ],
+                "subjectRecordIndexes": [
+                  10
+                ],
+                "recordPairs": [
+                  [
+                    8,
+                    10
+                  ]
+                ],
+                "cacheKey": "0c519b6c0347b67dedb43a7e27426bc9ded8381738bada75014601d5e877bf99",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              },
+              {
+                "queryRecordIndexes": [
+                  10
+                ],
+                "subjectRecordIndexes": [
+                  8
+                ],
+                "recordPairs": [
+                  [
+                    10,
+                    8
+                  ]
+                ],
+                "cacheKey": "5e84cbd45f2776ed6fdfe16db565324ad24cc92c4695bf80262b89a578764add",
+                "args": [
+                  "--max-target-seqs",
+                  "5"
+                ]
+              }
+            ]
+          },
+          "sourceJobs": 47,
+          "completedJobs": 47,
+          "observedLosatRunMessages": 47,
+          "contextWorkersConstructed": 5
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 31.940200000001116,
+              "rawSearchBatch": 558.0905,
+              "rawPacking": 1.198699999999255,
+              "conversionRoundTrip": 25.5345,
+              "typedToRenderRequest": 4.766599999999627,
+              "renderRoundTrip": 59.49970000000112,
+              "resultHistoryDomFrames": 60.86469999999925
+            },
+            "total": 741.8949000000003,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.256199999999255,
+                "startAfterGenerateSeconds": 10.62210000000149
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11009999999962747,
+                "startAfterGenerateSeconds": 31.94110000000149
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.10159999999962747,
+                "startAfterGenerateSeconds": 31.94110000000149
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11609999999962747,
+                "startAfterGenerateSeconds": 31.94110000000149
+              },
+              {
+                "worker": "losat-worker.js",
+                "seconds": 0.11289999999850989,
+                "startAfterGenerateSeconds": 31.94110000000149
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 0,
+              "cacheMisses": 47,
+              "uniqueJobs": 47,
+              "workerCalls": 47,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883691,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 47,
+              "helperRequestMetadataBytes": 39117032,
+              "helperRequestRawTransferBytes": 51883691,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": [
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "581f033babff21941e94973e5724d05298b5fa29b70d58d9c6afcb15fd5a0743",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "bc89879bd8a271df366035f7ada2e73db81a2750c1f63ff755b4bab20e0cb013",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "325a6ac731bda0317a17f811e688d5a2b5a21734199fe348f2c7f824198aafb5",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "660cad60a5d3dcbba392462102e4465e45cde7e802d1f76a6c406f34e3866c3f",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "206def05b3d3c85545eb00681ff4b834001600388259779998aca2f2d408d1b9",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    5
+                  ],
+                  "subjectRecordIndexes": [
+                    5
+                  ],
+                  "recordPairs": [
+                    [
+                      5,
+                      5
+                    ]
+                  ],
+                  "cacheKey": "4c4d8090a0a3971f6660953279de0ac100a0d9566f3137fb6ea48b6bff3452af",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    6
+                  ],
+                  "subjectRecordIndexes": [
+                    6
+                  ],
+                  "recordPairs": [
+                    [
+                      6,
+                      6
+                    ]
+                  ],
+                  "cacheKey": "4ab3bd6602b52a1a25eda3261c14f692e57b4ce46fc7cf334a5c392dc733ff4c",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    7
+                  ],
+                  "subjectRecordIndexes": [
+                    7
+                  ],
+                  "recordPairs": [
+                    [
+                      7,
+                      7
+                    ]
+                  ],
+                  "cacheKey": "74ad4f9790ec9ff5f5b8da5ba825df7d08701a7228f8e9f7d7b252cc131db64f",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    8
+                  ],
+                  "subjectRecordIndexes": [
+                    8
+                  ],
+                  "recordPairs": [
+                    [
+                      8,
+                      8
+                    ]
+                  ],
+                  "cacheKey": "99a09b3a6b4845ddccd98d31ef3aa3bc97723807f54bf54142f6fe8e31152b9b",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    9
+                  ],
+                  "subjectRecordIndexes": [
+                    9
+                  ],
+                  "recordPairs": [
+                    [
+                      9,
+                      9
+                    ]
+                  ],
+                  "cacheKey": "8b323efb6336b1201142fe66e030c730e87bb706636f8a3253e10caabb83bdde",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    10
+                  ],
+                  "subjectRecordIndexes": [
+                    10
+                  ],
+                  "recordPairs": [
+                    [
+                      10,
+                      10
+                    ]
+                  ],
+                  "cacheKey": "e31ad96799828844b5f16698db35f8f8b5e5c5c05637dfc23c5e9470dae8c992",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "e4e0c1ab1864de5ffd0f1ac500f4dbdb21f652d7690d8c690799cb5ce0bbca2c",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "ec04734d783712e317ffe09e27d84d1f51a5b94ca72371d7715704a1e34ef5e1",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    0
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      0,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "ebaa0501542dc381ba8ae63b3393c4019860d5f254f068652305961a43c7c05c",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    0
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      0
+                    ]
+                  ],
+                  "cacheKey": "97b31153c59cd3aa78ccbcbdeb8e2d14a029fb36ec932c042d3cee3b88e7848b",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "804bb4f864c49125a7d0bd3f4c3951902e0fe528126a5859717058ba0b4a3bdd",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "64f4aab16f1f6c7cb2e32c9b5331e357d0742fa6836a8e7ba05540e37ce2697b",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    1
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      1,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "e2df7993971717d4d0a454e99df28e771ac0bfc4f661328924ed03b566293b31",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    1
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      1
+                    ]
+                  ],
+                  "cacheKey": "d25728c415bece609a45adfa09e5022d2b7a06aa896fa4938560b7748b72a99b",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "9db37eb815b91b09d5154ea0b015a9149b1edef4fec9fbd3d627d01c8d37a587",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "e73e886b8cee5f61ef2b8c3e1d7c174127e9dd07039da64341538f6ebe58fda8",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    2
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      2,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "c8b382c4353d73582a329ac42b21c6c708a5391051bcefe408677862d8dfca00",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    2
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      2
+                    ]
+                  ],
+                  "cacheKey": "c2a3f51358264a527ac4402d89d7ad1144d76c151e56ec88e12be344a01b328b",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    5
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      5
+                    ]
+                  ],
+                  "cacheKey": "464eb1020f6ae28acdce5d08649c2fe7f809c0c7e0ae57fb82cec202b7d59582",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    5
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      5,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "33acdada7374989b5560600141db453c3c8eab1ed3ed62c49890f607bc9ae8c5",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    3
+                  ],
+                  "subjectRecordIndexes": [
+                    6
+                  ],
+                  "recordPairs": [
+                    [
+                      3,
+                      6
+                    ]
+                  ],
+                  "cacheKey": "717bbd5441f637ddf56c90537e5ec12389e6b12f41de40abb957e4075515ca8c",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    6
+                  ],
+                  "subjectRecordIndexes": [
+                    3
+                  ],
+                  "recordPairs": [
+                    [
+                      6,
+                      3
+                    ]
+                  ],
+                  "cacheKey": "cb5673660f52fd20962c4d30a1444a7d958b7d4962f8f5a284094da0748eec95",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    5
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      5
+                    ]
+                  ],
+                  "cacheKey": "d9a8388f92b871bd208138f2264494077b678e045dc5390ab37356df6d9e0965",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    5
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      5,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "56081234aa37f11476c48bad46fa50455e3b35e3cc3abbd947a06cb5b5cc222a",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    4
+                  ],
+                  "subjectRecordIndexes": [
+                    6
+                  ],
+                  "recordPairs": [
+                    [
+                      4,
+                      6
+                    ]
+                  ],
+                  "cacheKey": "f7c017b461a7a39356b12ef3c90e8208385b0e6a38557e3b833dfcff2308abe6",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    6
+                  ],
+                  "subjectRecordIndexes": [
+                    4
+                  ],
+                  "recordPairs": [
+                    [
+                      6,
+                      4
+                    ]
+                  ],
+                  "cacheKey": "0b489cfca9373cf82088b3b66cf766a862dca1b5d08de064324b5e0e28f9261d",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    5
+                  ],
+                  "subjectRecordIndexes": [
+                    7
+                  ],
+                  "recordPairs": [
+                    [
+                      5,
+                      7
+                    ]
+                  ],
+                  "cacheKey": "403fcdf6a3f465e5047c49b11cfe601a20a9fe50e31d513adfa5daee34d94af3",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    7
+                  ],
+                  "subjectRecordIndexes": [
+                    5
+                  ],
+                  "recordPairs": [
+                    [
+                      7,
+                      5
+                    ]
+                  ],
+                  "cacheKey": "f56b0a0e7956469c9a5cfc12c2787ed83ffba0994a0d5d9707617a622d43a764",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    5
+                  ],
+                  "subjectRecordIndexes": [
+                    8
+                  ],
+                  "recordPairs": [
+                    [
+                      5,
+                      8
+                    ]
+                  ],
+                  "cacheKey": "78c5a68ff43f897e8dfee33228b91ef5139855b6ef82c1f21a058550dff9f938",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    8
+                  ],
+                  "subjectRecordIndexes": [
+                    5
+                  ],
+                  "recordPairs": [
+                    [
+                      8,
+                      5
+                    ]
+                  ],
+                  "cacheKey": "266c1d13e2f9b5f15336b9734ebce7a896563bf7b62087bc7f6ac2da1b203de4",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    6
+                  ],
+                  "subjectRecordIndexes": [
+                    7
+                  ],
+                  "recordPairs": [
+                    [
+                      6,
+                      7
+                    ]
+                  ],
+                  "cacheKey": "9f8bbd7f7dbe0d81f1e87d270a733f34e9cb4b2ca7af8f819431db7168807bc2",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    7
+                  ],
+                  "subjectRecordIndexes": [
+                    6
+                  ],
+                  "recordPairs": [
+                    [
+                      7,
+                      6
+                    ]
+                  ],
+                  "cacheKey": "f1e4f01f4b0248cd0287cff9413d0ffd35ee1953e91426808316be26dc01c123",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    6
+                  ],
+                  "subjectRecordIndexes": [
+                    8
+                  ],
+                  "recordPairs": [
+                    [
+                      6,
+                      8
+                    ]
+                  ],
+                  "cacheKey": "5a55c0cfdfb3e4092a728ddd8bcad574c7fb5c8a09398f8bf01057441370c8f4",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    8
+                  ],
+                  "subjectRecordIndexes": [
+                    6
+                  ],
+                  "recordPairs": [
+                    [
+                      8,
+                      6
+                    ]
+                  ],
+                  "cacheKey": "6b8f5ec4a18797298e6ac41dbee8dbcfb3d2f62adac84a61c39f0ff82d28ac8c",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    7
+                  ],
+                  "subjectRecordIndexes": [
+                    9
+                  ],
+                  "recordPairs": [
+                    [
+                      7,
+                      9
+                    ]
+                  ],
+                  "cacheKey": "301166924c9936857a61074c088352349b178f7773465c101fb2c17816c7bfdf",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    9
+                  ],
+                  "subjectRecordIndexes": [
+                    7
+                  ],
+                  "recordPairs": [
+                    [
+                      9,
+                      7
+                    ]
+                  ],
+                  "cacheKey": "e653c577fd6a5f7a252bb527bae80b6188de3e599cd21b7bfeb146c61d6c048c",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    7
+                  ],
+                  "subjectRecordIndexes": [
+                    10
+                  ],
+                  "recordPairs": [
+                    [
+                      7,
+                      10
+                    ]
+                  ],
+                  "cacheKey": "4eef56a7be26870153ba18cd74077188ce03f64c54c39c0544363aac86e630a5",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    10
+                  ],
+                  "subjectRecordIndexes": [
+                    7
+                  ],
+                  "recordPairs": [
+                    [
+                      10,
+                      7
+                    ]
+                  ],
+                  "cacheKey": "2023c991b49d43390e65f82f571d605a9cf4b7cbf07edfb87b91db687c551a43",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    8
+                  ],
+                  "subjectRecordIndexes": [
+                    9
+                  ],
+                  "recordPairs": [
+                    [
+                      8,
+                      9
+                    ]
+                  ],
+                  "cacheKey": "6fa98483c58f63bb93b0e90ad82bfcfddfac71c4011f6af1c081db5d81315990",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    9
+                  ],
+                  "subjectRecordIndexes": [
+                    8
+                  ],
+                  "recordPairs": [
+                    [
+                      9,
+                      8
+                    ]
+                  ],
+                  "cacheKey": "8226ed386313245b2dcbb7c7294185937e9872e46a2c4a6ca774bfc1ec0aae52",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    8
+                  ],
+                  "subjectRecordIndexes": [
+                    10
+                  ],
+                  "recordPairs": [
+                    [
+                      8,
+                      10
+                    ]
+                  ],
+                  "cacheKey": "0c519b6c0347b67dedb43a7e27426bc9ded8381738bada75014601d5e877bf99",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                },
+                {
+                  "queryRecordIndexes": [
+                    10
+                  ],
+                  "subjectRecordIndexes": [
+                    8
+                  ],
+                  "recordPairs": [
+                    [
+                      10,
+                      8
+                    ]
+                  ],
+                  "cacheKey": "5e84cbd45f2776ed6fdfe16db565324ad24cc92c4695bf80262b89a578764add",
+                  "args": [
+                    "--max-target-seqs",
+                    "5"
+                  ]
+                }
+              ]
+            },
+            "sourceJobs": 47,
+            "completedJobs": 47,
+            "observedLosatRunMessages": 47,
+            "contextWorkersConstructed": 5
+          }
+        ]
+      },
+      "saved-raw": {
+        "samples": [
+          199.6412000000011,
+          216.96170000000112,
+          199.37820000000113
+        ],
+        "median": 199.6412000000011,
+        "mad": 0.2629999999999768,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 42.872400000000376,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 26.245900000000372,
+            "typedToRenderRequest": 4.882599999999628,
+            "renderRoundTrip": 61.8795,
+            "resultHistoryDomFrames": 63.76080000000074
+          },
+          "total": 199.6412000000011,
+          "nestedInitializations": [
+            {
+              "worker": "diagram-generation-worker.js",
+              "seconds": 5.2155,
+              "startAfterGenerateSeconds": 10.269900000000373
+            }
+          ],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 47,
+            "cacheHits": 47,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 0,
+            "proteinDerivedPayloadCacheMisses": 1,
+            "mode": "collinear",
+            "candidateLimitRequested": 5,
+            "candidateLimitEffective": 5,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 47,
+            "rawTsvBytes": 51883784,
+            "rawTsvLargestEntryBytes": 1531209,
+            "simultaneousParsedTables": 47,
+            "helperRequestMetadataBytes": 39117032,
+            "helperRequestRawTransferBytes": 51883784,
+            "helperRequestFileCount": 2,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 42.872400000000376,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 26.245900000000372,
+              "typedToRenderRequest": 4.882599999999628,
+              "renderRoundTrip": 61.8795,
+              "resultHistoryDomFrames": 63.76080000000074
+            },
+            "total": 199.6412000000011,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.2155,
+                "startAfterGenerateSeconds": 10.269900000000373
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 47,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883784,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 47,
+              "helperRequestMetadataBytes": 39117032,
+              "helperRequestRawTransferBytes": 51883784,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 52.12680000000074,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 28.065699999999254,
+              "typedToRenderRequest": 5.954,
+              "renderRoundTrip": 65.4825,
+              "resultHistoryDomFrames": 65.33270000000111
+            },
+            "total": 216.96170000000112,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 6.36760000000149,
+                "startAfterGenerateSeconds": 14.349099999999627
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 47,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883784,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 47,
+              "helperRequestMetadataBytes": 39117032,
+              "helperRequestRawTransferBytes": 51883784,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 45.97509999999963,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 25.17520000000112,
+              "typedToRenderRequest": 4.752199999999255,
+              "renderRoundTrip": 59.77380000000075,
+              "resultHistoryDomFrames": 63.70190000000037
+            },
+            "total": 199.37820000000113,
+            "nestedInitializations": [
+              {
+                "worker": "diagram-generation-worker.js",
+                "seconds": 5.4161000000014905,
+                "startAfterGenerateSeconds": 12.839099999999627
+              }
+            ],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 47,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 0,
+              "proteinDerivedPayloadCacheMisses": 1,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883784,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 47,
+              "helperRequestMetadataBytes": 39117032,
+              "helperRequestRawTransferBytes": 51883784,
+              "helperRequestFileCount": 2,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      },
+      "derived-warm": {
+        "samples": [
+          118.76709999999963,
+          123.54630000000074,
+          115.0985
+        ],
+        "median": 118.76709999999963,
+        "mad": 3.6685999999996284,
+        "representativeSampleIndex": 0,
+        "representative": {
+          "seconds": {
+            "runtimeInputIdentityPreparation": 32.20579999999888,
+            "rawSearchBatch": 0,
+            "rawPacking": 0,
+            "conversionRoundTrip": 0,
+            "typedToRenderRequest": 0,
+            "renderRoundTrip": 20.060800000000746,
+            "resultHistoryDomFrames": 66.5005
+          },
+          "total": 118.76709999999963,
+          "nestedInitializations": [],
+          "telemetry": {
+            "schema": 1,
+            "totalPairs": 47,
+            "cacheHits": 47,
+            "cacheMisses": 0,
+            "uniqueJobs": 0,
+            "workerCalls": 0,
+            "proteinDerivedPayloadCacheHits": 1,
+            "proteinDerivedPayloadCacheMisses": 0,
+            "mode": "collinear",
+            "candidateLimitRequested": 5,
+            "candidateLimitEffective": 5,
+            "collinearSearchScope": "adjacent",
+            "program": "blastp",
+            "outfmt": "6",
+            "rawTsvEntryCount": 47,
+            "rawTsvBytes": 51883784,
+            "rawTsvLargestEntryBytes": 1531209,
+            "simultaneousParsedTables": 0,
+            "helperRequestMetadataBytes": 0,
+            "helperRequestRawTransferBytes": 0,
+            "helperRequestFileCount": 0,
+            "rawIdentitySchema": 4,
+            "rawJobs": []
+          },
+          "sourceJobs": 0,
+          "completedJobs": 0,
+          "observedLosatRunMessages": 0,
+          "contextWorkersConstructed": 1
+        },
+        "allPartitions": [
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 32.20579999999888,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 20.060800000000746,
+              "resultHistoryDomFrames": 66.5005
+            },
+            "total": 118.76709999999963,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 47,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883784,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 34.65930000000075,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 19.715799999998882,
+              "resultHistoryDomFrames": 69.17120000000112
+            },
+            "total": 123.54630000000074,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 47,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883784,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          },
+          {
+            "seconds": {
+              "runtimeInputIdentityPreparation": 31.5935,
+              "rawSearchBatch": 0,
+              "rawPacking": 0,
+              "conversionRoundTrip": 0,
+              "typedToRenderRequest": 0,
+              "renderRoundTrip": 18.435,
+              "resultHistoryDomFrames": 65.07
+            },
+            "total": 115.0985,
+            "nestedInitializations": [],
+            "telemetry": {
+              "schema": 1,
+              "totalPairs": 47,
+              "cacheHits": 47,
+              "cacheMisses": 0,
+              "uniqueJobs": 0,
+              "workerCalls": 0,
+              "proteinDerivedPayloadCacheHits": 1,
+              "proteinDerivedPayloadCacheMisses": 0,
+              "mode": "collinear",
+              "candidateLimitRequested": 5,
+              "candidateLimitEffective": 5,
+              "collinearSearchScope": "adjacent",
+              "program": "blastp",
+              "outfmt": "6",
+              "rawTsvEntryCount": 47,
+              "rawTsvBytes": 51883784,
+              "rawTsvLargestEntryBytes": 1531209,
+              "simultaneousParsedTables": 0,
+              "helperRequestMetadataBytes": 0,
+              "helperRequestRawTransferBytes": 0,
+              "helperRequestFileCount": 0,
+              "rawIdentitySchema": 4,
+              "rawJobs": []
+            },
+            "sourceJobs": 0,
+            "completedJobs": 0,
+            "observedLosatRunMessages": 0,
+            "contextWorkersConstructed": 1
+          }
+        ]
+      }
+    }
+  }
+}

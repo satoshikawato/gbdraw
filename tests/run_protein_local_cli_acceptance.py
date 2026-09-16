@@ -1,4 +1,5 @@
 """Run with the dedicated installed interpreter outside the checkout, no PYTHONPATH."""
+import argparse
 from dataclasses import replace
 import hashlib
 import json
@@ -20,18 +21,21 @@ DATA = ROOT / 'docs/internal/collinear_similarity_performance_plan_2026-09-15/re
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args()
     assert 'PYTHONPATH' not in os.environ
     assert not Path.cwd().is_relative_to(ROOT)
     installed = Path(gbdraw.__file__).resolve().parent
-    assert installed.is_relative_to(ROOT / '.venv/s07-7-cli')
+    assert installed.is_relative_to(ROOT / '.venv')
     wheel, = (ROOT / 'gbdraw/web').glob('gbdraw-*-py3-none-any.whl')
     with zipfile.ZipFile(wheel) as archive:
         names = [n for n in archive.namelist() if n.startswith('gbdraw/') and n.endswith('.py')]
         for name in names:
             assert archive.read(name) == (installed.parent / name).read_bytes(), name
     runner = runpy.run_path(str(ROOT / 'tools/benchmark_protein_comparison.py'))
-    frozen = runpy.run_path(str(ROOT / 'tests/prototypes/protein_local_reductions.py'))
-    artifacts = ROOT / '.venv/s07-7-cli-artifacts'
+    frozen = runpy.run_path(str(ROOT / 'tests/prototypes/protein_s078.py'))
+    artifacts = ROOT / '.venv' / (args.output.stem + '-artifacts')
     artifacts.mkdir(parents=True, exist_ok=True)
     report = {'installedPackage': str(installed), 'packagedPythonFilesMatched': len(names),
               'cwdOutsideCheckout': True, 'pythonpathUnset': True, 'preparedRawGeneration': [], 'replays': []}
@@ -48,7 +52,7 @@ def main():
         assert runner['canonical'](result) == runner['canonical'](expected)
         gallery = runner['GALLERIES'][0 if name == 'gallery-collinear' else 1]
         document = load_session_document(ROOT / f'gbdraw/web/gallery/sessions/{gallery}.gbdraw-session.json.gz')
-        with tempfile.TemporaryDirectory(prefix='gbdraw-s077-fresh-') as directory:
+        with tempfile.TemporaryDirectory(prefix='gbdraw-s078-fresh-') as directory:
             with materialize_session(document, output_directory=directory) as materialized:
                 request = session_to_request(materialized)
                 options = replace(request.options, orthogroups=result.orthogroups,
@@ -65,11 +69,11 @@ def main():
                 replay_inputs.append((name, saved))
     replay_inputs.append(('released-v2', ROOT / 'tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz'))
     for label, source in replay_inputs:
-        with tempfile.TemporaryDirectory(prefix='gbdraw-s077-replay-') as directory:
+        with tempfile.TemporaryDirectory(prefix='gbdraw-s078-replay-') as directory:
             argv = [str(Path(sys.executable).parent / 'gbdraw'), 'linear', '--session', str(source),
                     '-o', 'replayed', '-f', 'svg']
             completed = subprocess.run(argv, cwd=directory, capture_output=True, text=True, check=False)
-            log = DATA / f's07-7-cli-{label}.log'
+            log = args.output.with_name(f'{args.output.stem}-{label}.log')
             log.write_text(completed.stdout + completed.stderr)
             assert completed.returncode == 0, log.read_text()
             output = Path(directory) / 'replayed.svg'
@@ -79,7 +83,7 @@ def main():
                 'inputSha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'argv': argv,
                 'exitCode': completed.returncode, 'svgSha256': hashlib.sha256(output.read_bytes()).hexdigest()})
             print(label, 'replayed', flush=True)
-    (DATA / 's07-7-cli.json').write_text(json.dumps(report, indent=2) + '\n')
+    args.output.write_text(json.dumps(report, indent=2) + '\n')
 
 
 if __name__ == '__main__':

@@ -1,0 +1,1035 @@
+{
+  "baseline": "Archived S07.7 current-side results; all 208 Python files match 02ca8f95",
+  "current": "S07.8 final source",
+  "boundary": "prepared filtered hit tables -> complete native post-search result",
+  "excluded": [
+    "raw search",
+    "fixture preparation",
+    "output hashing",
+    "typed export",
+    "render",
+    "browser startup/transport",
+    "save"
+  ],
+  "status": "Practical performance improvement NOT established; no performance acceptance",
+  "cases": {
+    "gallery-collinear": {
+      "label": "Hep Collinear ON",
+      "semanticEqual": true,
+      "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+      "comparisonGuard": "incomparable reports: settings",
+      "timing": {
+        "baselineSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 7,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; repeat both trees, never waive",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 21
+        },
+        "currentSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 3,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; no automatic repeat",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 3
+        },
+        "baseline": {
+          "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+          "semanticBytes": 8810614,
+          "summary": {
+            "groups": 587,
+            "members": 2509,
+            "edges": 1935,
+            "paths": 620,
+            "nodes": 2405,
+            "transitions": 1860,
+            "blocks": 500,
+            "anchors": 1832
+          },
+          "samples": [
+            393.755856,
+            414.926026,
+            440.292453,
+            401.898798,
+            397.32848,
+            403.596031,
+            401.799171,
+            398.793375,
+            422.232769,
+            407.691727,
+            404.011478,
+            393.119628,
+            410.974466,
+            428.439642,
+            418.277139,
+            392.949379,
+            400.809643,
+            406.206374,
+            398.471702,
+            437.904626,
+            403.110947
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e"
+          ],
+          "median": 403.596031,
+          "mad": 6.267550999999969,
+          "noisePct": 1.5529268175583146
+        },
+        "current": {
+          "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+          "semanticBytes": 8810614,
+          "summary": {
+            "groups": 587,
+            "members": 2509,
+            "edges": 1935,
+            "paths": 620,
+            "nodes": 2405,
+            "transitions": 1860,
+            "blocks": 500,
+            "anchors": 1832
+          },
+          "samples": [
+            512.396093,
+            509.27273,
+            511.951403
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e"
+          ],
+          "median": 511.951403,
+          "mad": 0.4446899999999232,
+          "noisePct": 0.08686176019717308
+        },
+        "secondsRemoved": -0.10835537200000005,
+        "deltaPct": 26.847482055639958
+      },
+      "memory": {
+        "baseline": {
+          "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+          "semanticBytes": 8810614,
+          "summary": {
+            "groups": 587,
+            "members": 2509,
+            "edges": 1935,
+            "paths": 620,
+            "nodes": 2405,
+            "transitions": 1860,
+            "blocks": 500,
+            "anchors": 1832
+          },
+          "samples": [
+            19483897
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e"
+          ],
+          "median": 19483897,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 10285022
+        },
+        "current": {
+          "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+          "semanticBytes": 8810614,
+          "summary": {
+            "groups": 587,
+            "members": 2509,
+            "edges": 1935,
+            "paths": 620,
+            "nodes": 2405,
+            "transitions": 1860,
+            "blocks": 500,
+            "anchors": 1832
+          },
+          "samples": [
+            19410752
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e"
+          ],
+          "median": 19410752,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 10285656
+        },
+        "peakDeltaPct": -0.37541257788419324,
+        "retainedDeltaBytes": 634
+      }
+    },
+    "gallery-collinear-off": {
+      "label": "Hep Collinear OFF",
+      "semanticEqual": true,
+      "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+      "comparisonGuard": "incomparable reports: settings",
+      "timing": {
+        "baselineSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 7,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; repeat both trees, never waive",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 21
+        },
+        "currentSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 3,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; no automatic repeat",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 3
+        },
+        "baseline": {
+          "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+          "semanticBytes": 2359179,
+          "summary": {
+            "blocks": 462,
+            "anchors": 1789
+          },
+          "samples": [
+            92.078412,
+            96.663917,
+            91.396606,
+            92.410332,
+            94.108413,
+            93.72414,
+            91.901791,
+            100.111636,
+            95.711326,
+            98.113239,
+            98.581682,
+            96.752741,
+            96.194302,
+            89.052071,
+            91.701742,
+            93.817737,
+            93.750162,
+            97.908001,
+            92.0603,
+            90.64391,
+            93.007475
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf"
+          ],
+          "median": 93.750162,
+          "mad": 2.0484200000000072,
+          "noisePct": 2.1849775576921213
+        },
+        "current": {
+          "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+          "semanticBytes": 2359179,
+          "summary": {
+            "blocks": 462,
+            "anchors": 1789
+          },
+          "samples": [
+            132.257811,
+            120.824646,
+            109.274139
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf"
+          ],
+          "median": 120.824646,
+          "mad": 11.433165000000002,
+          "noisePct": 9.462609971147776
+        },
+        "secondsRemoved": -0.027074484,
+        "deltaPct": 28.87939969639732
+      },
+      "memory": {
+        "baseline": {
+          "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+          "semanticBytes": 2359179,
+          "summary": {
+            "blocks": 462,
+            "anchors": 1789
+          },
+          "samples": [
+            6590763
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf"
+          ],
+          "median": 6590763,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 4861531
+        },
+        "current": {
+          "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+          "semanticBytes": 2359179,
+          "summary": {
+            "blocks": 462,
+            "anchors": 1789
+          },
+          "samples": [
+            6590817
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf"
+          ],
+          "median": 6590817,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 4861585
+        },
+        "peakDeltaPct": 0.0008193285056634636,
+        "retainedDeltaBytes": 54
+      }
+    },
+    "gallery-collinear-vibrio": {
+      "label": "Vibrio Collinear ON",
+      "semanticEqual": true,
+      "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+      "comparisonGuard": "incomparable reports: settings",
+      "timing": {
+        "baselineSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 7,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; repeat both trees, never waive",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 7
+        },
+        "currentSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 3,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; no automatic repeat",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 3
+        },
+        "baseline": {
+          "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+          "semanticBytes": 35834247,
+          "summary": {
+            "groups": 2437,
+            "members": 10385,
+            "edges": 8422,
+            "paths": 15436,
+            "nodes": 7324,
+            "transitions": 6507,
+            "blocks": 4395,
+            "anchors": 4908
+          },
+          "samples": [
+            3739.969179,
+            3624.967102,
+            2983.18997,
+            2799.409052,
+            2913.370622,
+            3415.264843,
+            3475.807465
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb"
+          ],
+          "median": 3415.264843,
+          "mad": 324.70433600000024,
+          "noisePct": 9.507442348593294
+        },
+        "current": {
+          "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+          "semanticBytes": 35834247,
+          "summary": {
+            "groups": 2437,
+            "members": 10385,
+            "edges": 8422,
+            "paths": 15436,
+            "nodes": 7324,
+            "transitions": 6507,
+            "blocks": 4395,
+            "anchors": 4908
+          },
+          "samples": [
+            2904.635847,
+            3400.043809,
+            3010.780381
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb"
+          ],
+          "median": 3010.780381,
+          "mad": 106.14453400000002,
+          "noisePct": 3.525482451986259
+        },
+        "secondsRemoved": 0.4044844619999999,
+        "deltaPct": -11.84342885820524
+      },
+      "memory": {
+        "baseline": {
+          "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+          "semanticBytes": 35834247,
+          "summary": {
+            "groups": 2437,
+            "members": 10385,
+            "edges": 8422,
+            "paths": 15436,
+            "nodes": 7324,
+            "transitions": 6507,
+            "blocks": 4395,
+            "anchors": 4908
+          },
+          "samples": [
+            118284725
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb"
+          ],
+          "median": 118284725,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 31880594
+        },
+        "current": {
+          "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+          "semanticBytes": 35834247,
+          "summary": {
+            "groups": 2437,
+            "members": 10385,
+            "edges": 8422,
+            "paths": 15436,
+            "nodes": 7324,
+            "transitions": 6507,
+            "blocks": 4395,
+            "anchors": 4908
+          },
+          "samples": [
+            118043375
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb"
+          ],
+          "median": 118043375,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 31879880
+        },
+        "peakDeltaPct": -0.20404156157948217,
+        "retainedDeltaBytes": -714
+      }
+    },
+    "gallery-collinear-vibrio-off": {
+      "label": "Vibrio Collinear OFF",
+      "semanticEqual": true,
+      "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+      "comparisonGuard": "incomparable reports: settings",
+      "timing": {
+        "baselineSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 7,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; repeat both trees, never waive",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 7
+        },
+        "currentSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 3,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; no automatic repeat",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 3
+        },
+        "baseline": {
+          "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+          "semanticBytes": 5344221,
+          "summary": {
+            "blocks": 3092,
+            "anchors": 3600
+          },
+          "samples": [
+            443.921035,
+            418.568302,
+            405.850003,
+            405.906011,
+            385.241463,
+            382.493011,
+            404.398136
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce"
+          ],
+          "median": 405.850003,
+          "mad": 12.718299000000002,
+          "noisePct": 3.1337437245257336
+        },
+        "current": {
+          "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+          "semanticBytes": 5344221,
+          "summary": {
+            "blocks": 3092,
+            "anchors": 3600
+          },
+          "samples": [
+            396.235287,
+            403.322234,
+            401.024039
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce"
+          ],
+          "median": 401.024039,
+          "mad": 2.2981949999999642,
+          "noisePct": 0.5730816052151837
+        },
+        "secondsRemoved": 0.004825963999999999,
+        "deltaPct": -1.189100397764442
+      },
+      "memory": {
+        "baseline": {
+          "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+          "semanticBytes": 5344221,
+          "summary": {
+            "blocks": 3092,
+            "anchors": 3600
+          },
+          "samples": [
+            26255523
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce"
+          ],
+          "median": 26255523,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 9689175
+        },
+        "current": {
+          "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+          "semanticBytes": 5344221,
+          "summary": {
+            "blocks": 3092,
+            "anchors": 3600
+          },
+          "samples": [
+            26256480
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce"
+          ],
+          "median": 26256480,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 9690133
+        },
+        "peakDeltaPct": 0.0036449473887811834,
+        "retainedDeltaBytes": 958
+      }
+    },
+    "gallery-orthogroup": {
+      "label": "Hep Similarity member 5",
+      "semanticEqual": true,
+      "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+      "comparisonGuard": "incomparable reports: settings",
+      "timing": {
+        "baselineSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 7,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; repeat both trees, never waive",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 21
+        },
+        "currentSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 3,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; no automatic repeat",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 3
+        },
+        "baseline": {
+          "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+          "semanticBytes": 9790779,
+          "summary": {
+            "groups": 577,
+            "members": 2565,
+            "edges": 4382,
+            "paths": 3423,
+            "nodes": 2474,
+            "transitions": 4315
+          },
+          "samples": [
+            726.937442,
+            785.399185,
+            745.454459,
+            721.667061,
+            773.019992,
+            702.404361,
+            749.579602,
+            773.979171,
+            809.490014,
+            752.768716,
+            778.089897,
+            809.961907,
+            732.604053,
+            753.802539,
+            787.990821,
+            794.323946,
+            764.50076,
+            714.916247,
+            844.045026,
+            713.586913,
+            720.51753
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa"
+          ],
+          "median": 753.802539,
+          "mad": 31.596645999999964,
+          "noisePct": 4.191634329318697
+        },
+        "current": {
+          "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+          "semanticBytes": 9790779,
+          "summary": {
+            "groups": 577,
+            "members": 2565,
+            "edges": 4382,
+            "paths": 3423,
+            "nodes": 2474,
+            "transitions": 4315
+          },
+          "samples": [
+            937.103314,
+            916.248216,
+            779.869196
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa"
+          ],
+          "median": 916.248216,
+          "mad": 20.855097999999998,
+          "noisePct": 2.276140639164966
+        },
+        "secondsRemoved": -0.16244567699999993,
+        "deltaPct": 21.550163152209812
+      },
+      "memory": {
+        "baseline": {
+          "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+          "semanticBytes": 9790779,
+          "summary": {
+            "groups": 577,
+            "members": 2565,
+            "edges": 4382,
+            "paths": 3423,
+            "nodes": 2474,
+            "transitions": 4315
+          },
+          "samples": [
+            29999278
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa"
+          ],
+          "median": 29999278,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 9338686
+        },
+        "current": {
+          "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+          "semanticBytes": 9790779,
+          "summary": {
+            "groups": 577,
+            "members": 2565,
+            "edges": 4382,
+            "paths": 3423,
+            "nodes": 2474,
+            "transitions": 4315
+          },
+          "samples": [
+            29924454
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa"
+          ],
+          "median": 29924454,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 9337956
+        },
+        "peakDeltaPct": -0.24941933602535826,
+        "retainedDeltaBytes": -730
+      }
+    },
+    "gallery-orthogroup-unbounded": {
+      "label": "Hep Similarity unlimited",
+      "semanticEqual": true,
+      "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+      "comparisonGuard": "incomparable reports: settings",
+      "timing": {
+        "baselineSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 7,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; repeat both trees, never waive",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 21
+        },
+        "currentSettings": {
+          "policy": {
+            "warmups": 1,
+            "samples": 3,
+            "regressionPct": 10.0,
+            "maxNoisePct": 5.0,
+            "noise": "100 * MAD / median",
+            "noisyDecision": "inconclusive; no automatic repeat",
+            "semanticGate": "exact ordered stage digest, including types and errors"
+          },
+          "seed": 20260915,
+          "warmups": 1,
+          "samples": 3
+        },
+        "baseline": {
+          "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+          "semanticBytes": 9796262,
+          "summary": {
+            "groups": 577,
+            "members": 2566,
+            "edges": 4386,
+            "paths": 3415,
+            "nodes": 2474,
+            "transitions": 4316
+          },
+          "samples": [
+            640.674346,
+            699.977108,
+            650.206645,
+            680.564842,
+            612.999177,
+            618.202433,
+            637.5031,
+            609.593583,
+            620.999069,
+            613.988738,
+            645.296323,
+            606.881158,
+            607.748393,
+            609.232348,
+            661.169219,
+            622.511017,
+            678.218181,
+            605.470578,
+            619.465695,
+            626.296018,
+            699.210302
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1"
+          ],
+          "median": 622.511017,
+          "mad": 14.99208299999998,
+          "noisePct": 2.408324124486937
+        },
+        "current": {
+          "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+          "semanticBytes": 9796262,
+          "summary": {
+            "groups": 577,
+            "members": 2566,
+            "edges": 4386,
+            "paths": 3415,
+            "nodes": 2474,
+            "transitions": 4316
+          },
+          "samples": [
+            854.403012,
+            806.956009,
+            754.190889
+          ],
+          "unit": "ms",
+          "sampleSemanticSha256": [
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1"
+          ],
+          "median": 806.956009,
+          "mad": 47.447002999999995,
+          "noisePct": 5.879750874994723
+        },
+        "secondsRemoved": -0.18444499199999995,
+        "deltaPct": 29.629193213137928
+      },
+      "memory": {
+        "baseline": {
+          "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+          "semanticBytes": 9796262,
+          "summary": {
+            "groups": 577,
+            "members": 2566,
+            "edges": 4386,
+            "paths": 3415,
+            "nodes": 2474,
+            "transitions": 4316
+          },
+          "samples": [
+            31868790
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1"
+          ],
+          "median": 31868790,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 9246440
+        },
+        "current": {
+          "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+          "semanticBytes": 9796262,
+          "summary": {
+            "groups": 577,
+            "members": 2566,
+            "edges": 4386,
+            "paths": 3415,
+            "nodes": 2474,
+            "transitions": 4316
+          },
+          "samples": [
+            31794256
+          ],
+          "unit": "tracemalloc bytes",
+          "sampleSemanticSha256": [
+            "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1"
+          ],
+          "median": 31794256,
+          "mad": 0,
+          "noisePct": 0.0,
+          "retainedBytes": 9239884
+        },
+        "peakDeltaPct": -0.23387772174594534,
+        "retainedDeltaBytes": -6556
+      }
+    }
+  },
+  "rawReportsSha256": {
+    "s07-7-current-gallery-collinear-timing.json.gz": "b4e8a91ffc03f70f50f6bd26064c2de94aa7cc262cdf1873644479f77cf1dc7e",
+    "s07-7-current-gallery-collinear-memory.json.gz": "fa18d65d7d42fad571d79b6fcf1bdecc8035781a6ac1465ed77623d3b7218192",
+    "s07-8-current-gallery-collinear-timing.json.gz": "b54af61560221c2d22f966f6b10887b95b78b9db7dc9994050e02658bbfe3495",
+    "s07-8-current-gallery-collinear-memory.json.gz": "8541aa035d3bdee7699b649f04bc99ee1b37a78b217f45a7438216c1033c9b58",
+    "s07-7-current-gallery-collinear-off-timing.json.gz": "1df9b92f99318ecc63e88f18e6f997f8fb7c0eb0794b3a61d6ea009c5a365d92",
+    "s07-7-current-gallery-collinear-off-memory.json.gz": "c94cf1c8a7bb846722c7552c95523e09a69d32f8bba6412eb6bb785090fe569b",
+    "s07-8-current-gallery-collinear-off-timing.json.gz": "96388db637fb032c6980a7a3ec508af376273414468b05c3436bb5623a3632ec",
+    "s07-8-current-gallery-collinear-off-memory.json.gz": "520650780a7e370534d20e3dfcf4b9e6c6df209f1f01710369efb23c3ecbca97",
+    "s07-7-current-gallery-collinear-vibrio-timing.json.gz": "f6b7c413b60b242b14da5ccbe6f884ae625662ecf2c7a992c04d03b030fb0dce",
+    "s07-7-current-gallery-collinear-vibrio-memory.json.gz": "5361af7cf59336873be727dddb1488aa06b56f3d33676a23eedcaab70009cc68",
+    "s07-8-current-gallery-collinear-vibrio-timing.json.gz": "95d1d02800afe19e49e85ca52dded9fad346a43b41790f2a25f62412ed130e20",
+    "s07-8-current-gallery-collinear-vibrio-memory.json.gz": "a477700ad48a5d148bbdb4715d8fa051c77acd79ad32523ec9f299ea97d33a5f",
+    "s07-7-current-gallery-collinear-vibrio-off-timing.json.gz": "48f2c66c1da7696baa1330d0eb636b99586a659ed1c3d9b87f2219e615e8a5c6",
+    "s07-7-current-gallery-collinear-vibrio-off-memory.json.gz": "6c380d1ed4d4ac66b014de83c9021a2c624bddd81ccc6f2ca6c50ee6b88abc11",
+    "s07-8-current-gallery-collinear-vibrio-off-timing.json.gz": "95be68552ef78575dce3b51021215177dc43926f63d285919f1c215d4e1791ff",
+    "s07-8-current-gallery-collinear-vibrio-off-memory.json.gz": "6eae4d169dc34f0534bd5fd8ad84c754b66edd3b39752d63c48dec9bbdeef059",
+    "s07-7-current-gallery-orthogroup-timing.json.gz": "0944226e22c2719a55065a59753e2b82e4fc886c18daa7337fa3f86afd1baec8",
+    "s07-7-current-gallery-orthogroup-memory.json.gz": "18ca033859a753a27778375c38bb90f14d89a9fa8eb163d837f17cffca17f2e0",
+    "s07-8-current-gallery-orthogroup-timing.json.gz": "ccc5b14125a388a8cec528e18f57d3c8ed885b3c1c6a10a83e6758bfcc5a6139",
+    "s07-8-current-gallery-orthogroup-memory.json.gz": "5fa12c9077f0c2d65c6944cedd156dc997052131faed0b7bcbd60e4431951d1d",
+    "s07-7-current-gallery-orthogroup-unbounded-timing.json.gz": "e3bb8b278ef9d3c5a1d33f83bfabeace6ed441fa1ac399309ee7d66c315b80e1",
+    "s07-7-current-gallery-orthogroup-unbounded-memory.json.gz": "e6e8fbcb0898fb67cc2b396d4e4ac82334862fb4d9d205f0f4dcc2138a890926",
+    "s07-8-current-gallery-orthogroup-unbounded-timing.json.gz": "d7f57628b12fb03c3c5a8a521f6d13f5505a9451fbcaec6e528fdce8f8f56b63",
+    "s07-8-current-gallery-orthogroup-unbounded-memory.json.gz": "a8c6bd161dff4ca64e29ce70b56356bf932c69138a4d18fbc2b474b496045ae2"
+  },
+  "limits": [
+    "Archived timing policy requires 7 samples; Hep recorded 21 and Vibrio 7. Current policy/samples 3. Existing compare_reports rejects settings mismatch; not bypassed.",
+    "No fresh baseline timing or automatic repeat. Observed worsening is not attributed to code alone.",
+    "One independent tracemalloc run per case; retained output live, prepared inputs excluded.",
+    "Memory runs overlapped the correctness browser runner; timing started only after browser, build, CLI and all tests and memory runs completed.",
+    "CPU 3 / PYTHONHASHSEED=0, fresh process per case/measure. Host snapshots show GUI/editor background work; no continuous isolation or thermal control.",
+    "Combined A/B/C only; no local-function timing or full search-to-SVG timing."
+  ]
+}

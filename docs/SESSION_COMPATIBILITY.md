@@ -136,6 +136,10 @@ gaps before saving a migrated session.
 
 ## Saved protein-comparison results
 
+After a source replacement, the Web writer saves only protein raw cache entries
+that resolve through the saved identity manifest. Valid entries for inactive
+search settings remain eligible; saving does not clear the live cache or History.
+
 A protein-search cache hit requires the same amino-acid sequences, selected
 protein set, record-instance and feature bindings, query/subject direction,
 program, and meaningful search arguments. Upload filenames, modification times,
