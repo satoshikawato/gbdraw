@@ -1,0 +1,522 @@
+{
+  "baseline": "ec16110cf08b894b6dce16aa973e1d6112554ac9",
+  "branch": "perf/collinear-s07-cluster-merge-20260916",
+  "upstream": null,
+  "productionDiffSha256": "27287fb04482fe196288aa25be693fce1f1fa5f7487686e04b4f05d60bd5d9a6",
+  "frozenOracleAstEqual": {
+    "_lossless_conflicts_between_clusters": true,
+    "_lossless_clusters_can_merge": true,
+    "_merge_lossless_clusters": true
+  },
+  "sourceWheelInstalledPythonFilesRechecked": 208,
+  "measuredSourceMatches": {
+    "s07-current-cluster-timing.json.gz": {
+      "pythonSourceHashMatches": 208,
+      "runnerHashMatches": true
+    },
+    "s07-current-isolated-timing.json.gz": {
+      "pythonSourceHashMatches": 208,
+      "runnerHashMatches": true
+    },
+    "s07-current-gallery-timing.json.gz": {
+      "pythonSourceHashMatches": 208,
+      "runnerHashMatches": true
+    },
+    "s07-vibrio-current-timing.json.gz": {
+      "pythonSourceHashMatches": 208,
+      "runnerHashMatches": true
+    },
+    "s07-current-final-counters.json.gz": {
+      "pythonSourceHashMatches": 208,
+      "runnerHashMatches": true
+    }
+  },
+  "timingOverlapWithLoggedCommands": {
+    "baseline-isolated-timing": [],
+    "current-cluster-timing": [],
+    "current-isolated-timing": [],
+    "current-gallery-timing": [],
+    "vibrio-baseline-timing": [],
+    "vibrio-current-timing": []
+  },
+  "performanceAcceptance": "accepted-by-user",
+  "acceptanceReceipt": "s07-acceptance.json",
+  "s07ArchitectureGate": "PASS",
+  "s07WebArchitectureReview": "CLEAR",
+  "s06CompatibilityReviewBeforeFutureMerge": "REQUIRED",
+  "productionReview": "One owner and canonical path; equivalent strict-index count, sorted endpoints and one final block construction; old production implementation removed.",
+  "testReview": "Frozen old functions, complete result/typed/DataFrame differential checks, strict boundaries and sorted chain scores, real Collinear browser execution.",
+  "toolReview": "Probe and memory separated from timing; original stage boundaries preserved; new isolated inputs captured outside measurement.",
+  "documentationReview": "S05 rejected, S06 accepted objective preserved; S07 performance accepted by user; next session S07.5 is planning only; S08 not implemented.",
+  "generatedEvidenceReview": "Raw observations retained, including noisy microcases and initial browser mode correction; generated packages/environments excluded.",
+  "entries": [
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "category": "documentation",
+      "bytes": 34713,
+      "sha256": "84c8e3b4e0c7c5ee19bae39b12a02f364ab7260ba54169af2052feb117fa97e7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/SESSION_07_CLUSTER_MERGE.md",
+      "category": "documentation",
+      "bytes": 4660,
+      "sha256": "da0310a84cba8652d8476feeee21ef5ae88e1ec756ef2518ccddef0e8fd4e438"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07.md",
+      "category": "documentation",
+      "bytes": 27461,
+      "sha256": "7d46304ad4dd927e4e672eb0fa0585b58d637e6098c2f819b3b92a3d264178ae"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-acceptance.json",
+      "category": "generated-evidence",
+      "bytes": 444,
+      "sha256": "eeda1aa491f2f577a4673a20c7e5e773a0acf322f5968a959f1ccc8cfc0cafa4"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-artifacts.json",
+      "category": "generated-evidence",
+      "bytes": 22386,
+      "sha256": "6816016f4fd5d00310b22ab7ab22300e59b26076b53c4b7ff0f8ea344dc92716"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-baseline-final-counters.json.gz",
+      "category": "generated-evidence",
+      "bytes": 216044,
+      "sha256": "c674bcdf7a94a6dd66f5af2dfeaa07a9573c1d9d71fcb61d2c4505d416a0b5a5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-baseline-isolated-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 195374,
+      "sha256": "8349c5664533e5ec9db4789b4f8cf85b1db3d713b05907b03fba8ad2b40224eb"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-baseline-isolated-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 195870,
+      "sha256": "4f9c8e5887a28c3712a85384ffd02a4eeb5e209118ae92723a111bf1c4675e60"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-baseline-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 211663,
+      "sha256": "e8c9cb9c95199d087f240f19dc571b843639df37aa0d4b4824dfddd1b4b43461"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-baseline-reuse.json",
+      "category": "generated-evidence",
+      "bytes": 1983,
+      "sha256": "3df7d021d66b16c4ff7440d4ae249ac69532f791bc4879f8d7193a41964b4dfd"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-browser-acceptance.json",
+      "category": "generated-evidence",
+      "bytes": 25472,
+      "sha256": "a8688508d491f6775c21c18c5a0c1eebd2723b8f7652f4a1e93aadd01c7278fa"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-browser-initial-unverified-mode.json",
+      "category": "generated-evidence",
+      "bytes": 22614,
+      "sha256": "a3b7ae4074ac86908a997370099e0ea79c24d3fa8c281b0f601f14a45deb8d35"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-cli-replay.json",
+      "category": "generated-evidence",
+      "bytes": 896,
+      "sha256": "d345c1630916ba791b63b04ebae99371345f7c009e9624d09897b6ae502e9dda"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-commands.jsonl",
+      "category": "generated-evidence",
+      "bytes": 63697,
+      "sha256": "48b9433ce5ef06faf1104d2866a0e097712ab0b67ea26dea6589d3902bb57472"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-comparison.json",
+      "category": "generated-evidence",
+      "bytes": 36787,
+      "sha256": "e7c39c0b6c05b0807641dde0598e642d4279f3188dd2037b8771bd5df11107c1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-current-cluster-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 192962,
+      "sha256": "f64aeab543e46589fab90f7f3e5f949514128236d687ecbf1946738820251ae6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-current-final-counters.json.gz",
+      "category": "generated-evidence",
+      "bytes": 217916,
+      "sha256": "83dbb92e8ccc863d21b24c20a06e3a978d8b1aa489ce113778fe72360a587e19"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-current-gallery-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62062,
+      "sha256": "171a5f7c67c15878a04434ef0053c47839760005628cc08a0399f95ac5c3a609"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-current-isolated-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 196472,
+      "sha256": "aeb2c69e4ce00a4de55c2b33990b059d236ac30507d2aaccf9362322e1c1cd73"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-current-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 196710,
+      "sha256": "5b478f9e2ec2c1114468ed437771bf779175e7e30e33f0bb008f047371af9e14"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-current-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 212736,
+      "sha256": "086a7064763e3ebb4bb61d27cae24578a9160af8d80f81533372cf1d33bc14c2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/architecture-retry.log",
+      "category": "generated-evidence",
+      "bytes": 6126,
+      "sha256": "0f3669cbe71590bbd2e846e7ce96c31fe04c4bd37df8855f49924a80696d01ff"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/architecture.log",
+      "category": "generated-evidence",
+      "bytes": 1289,
+      "sha256": "ed7bd0fd93d747c5b4675a4cbaeaaaeb728c62543646e590fa67ec0f1f90e318"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/baseline-final-counters.log",
+      "category": "generated-evidence",
+      "bytes": 1070,
+      "sha256": "f07860a17af793905a16b9b16a672b23a531dbcb2c5b327bf3a9ca4f9ba7325d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/baseline-isolated-memory.log",
+      "category": "generated-evidence",
+      "bytes": 390,
+      "sha256": "7714af3683b01f2a4735ca6c652e8cecc0ffab46cb452d87f667d9838f76a233"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/baseline-isolated-timing.log",
+      "category": "generated-evidence",
+      "bytes": 390,
+      "sha256": "65a0003f1175c1e9e09cd73961aef9125d630831cee3bec1e954dbccd076a84d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/baseline-probe.log",
+      "category": "generated-evidence",
+      "bytes": 595,
+      "sha256": "489e1e55ab87b7b8ae6baebe43b4d06a11809c4271daa9a4e852b42cd57cc3af"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/browser-acceptance-retry.log",
+      "category": "generated-evidence",
+      "bytes": 30,
+      "sha256": "9b3c0c88a4d846db93d9924297e23c5a9321286f501feef737685de562a8b94e"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/browser-acceptance.log",
+      "category": "generated-evidence",
+      "bytes": 1311,
+      "sha256": "80c52a9fe48052d6f60ad6141bf4c4cc6f0a3b0e5ec5c036ee3b37f848557819"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/browser-collinear-final.log",
+      "category": "generated-evidence",
+      "bytes": 30,
+      "sha256": "47919b821d8e8b25a7b63c62d23178faccdc90190ea82872cd2d0a2af3b6d953"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/browser-wheel.log",
+      "category": "generated-evidence",
+      "bytes": 801,
+      "sha256": "bd52d08794b322688f1a6435b54cc03932b985ff0f90bfbf9d8b69226ab89482"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/cli-install.log",
+      "category": "generated-evidence",
+      "bytes": 725,
+      "sha256": "36f9efe926786327ca1b92050aa6984f4588ff25f4177c5927360653ed685012"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/cli-replay.log",
+      "category": "generated-evidence",
+      "bytes": 1494,
+      "sha256": "06b1a3896ed8a963f80bcf33d8ec3912c94d71cf59f4f9d6018911b0b1d62edf"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/cli-venv.log",
+      "category": "generated-evidence",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/comparison-accepted.log",
+      "category": "generated-evidence",
+      "bytes": 1185,
+      "sha256": "cde5eb97d83e0a42ff8176ea4172857264fb5baeba3ae3a4286e828116d5e5c0"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/comparison-with-hotspots.log",
+      "category": "generated-evidence",
+      "bytes": 1185,
+      "sha256": "cde5eb97d83e0a42ff8176ea4172857264fb5baeba3ae3a4286e828116d5e5c0"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/comparison.log",
+      "category": "generated-evidence",
+      "bytes": 1185,
+      "sha256": "cde5eb97d83e0a42ff8176ea4172857264fb5baeba3ae3a4286e828116d5e5c0"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/current-cluster-timing.log",
+      "category": "generated-evidence",
+      "bytes": 218,
+      "sha256": "417074b60e4de890b695d26e3e9d9899bb50b8bf8eccaebc6f8a994074ae845b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/current-final-counters.log",
+      "category": "generated-evidence",
+      "bytes": 1070,
+      "sha256": "f07860a17af793905a16b9b16a672b23a531dbcb2c5b327bf3a9ca4f9ba7325d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/current-gallery-timing.log",
+      "category": "generated-evidence",
+      "bytes": 124,
+      "sha256": "fc03cfbab9f92289fdd825b94477a16f792bc4cfad6a6412dc934c2124a9177a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/current-isolated-timing.log",
+      "category": "generated-evidence",
+      "bytes": 390,
+      "sha256": "65a0003f1175c1e9e09cd73961aef9125d630831cee3bec1e954dbccd076a84d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/current-memory.log",
+      "category": "generated-evidence",
+      "bytes": 601,
+      "sha256": "5b4dd9406500352e8443b566d5541c1dcd103c3af6690a1d07153df1e9bedbba"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/current-probe.log",
+      "category": "generated-evidence",
+      "bytes": 595,
+      "sha256": "489e1e55ab87b7b8ae6baebe43b4d06a11809c4271daa9a4e852b42cd57cc3af"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/focused.log",
+      "category": "generated-evidence",
+      "bytes": 2859,
+      "sha256": "7fe16f2c7dba05feac28d26f4951120c25c02868f54a90bd9457522975adb216"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-after-current-cluster-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4312,
+      "sha256": "9e7f139a3c94c9244ce51b1ff4f80a55d9fe671c86653b7e8ef1327366f27fae"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-after-current-gallery-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4208,
+      "sha256": "7ac772351edcd705e1d4c1f958b715b0d792e9e7e5c037bce0d1bdd8ed178518"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-after-current-isolated-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4312,
+      "sha256": "6ea13b5ff5faad72b161b339295b88a6d1ce94d24b078929da5152f7523a2eb1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-after-vibrio-baseline-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4275,
+      "sha256": "225abcc60e5e015164c632de204edd98db6fb9d6b774f90d501c6d996bab4910"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-after-vibrio-current-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4267,
+      "sha256": "ab956a95ca48a44a348eac6ab988d35e336e0772994919045ed01e02178609a8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-before-current-cluster-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4312,
+      "sha256": "2c0044177ec924404afdd2896ff9f97fbbcf5a5491607c65a81a3d2307043607"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-before-current-gallery-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4312,
+      "sha256": "f3c1aea3352f10366440566fc02f7315a94ffac9dd0941a68b3dcc6d5fb9093b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-before-current-isolated-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4312,
+      "sha256": "c22b49c426b34a4683205a393da10e6d2ebb600812a958b3f62a597a98d4994f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-before-current-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 1054,
+      "sha256": "18428901b5a51686a249dba082c851da55f7a33cd85b974286e0e0226ee976fb"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-before-vibrio-baseline-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4208,
+      "sha256": "44027184553d297145713ced3f170b8f48c1741e7bb71909f5abccc24871d985"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/host-before-vibrio-current-timing.txt",
+      "category": "generated-evidence",
+      "bytes": 4275,
+      "sha256": "cb347b0e2f7fe1f4aa37b7aac2c6e233c381a6d73b18e979964fe5b8db3bf7f5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/python-fast.log",
+      "category": "generated-evidence",
+      "bytes": 519720,
+      "sha256": "6668e7685cd031c9c7d3d26d6d6e74b16a4fe82a2207a459baac35d19030a27f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/ruff-final.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/ruff.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/typed-session-reference.log",
+      "category": "generated-evidence",
+      "bytes": 2287,
+      "sha256": "91f294c75dcea0caf0f41323cc6c413fccad0a53ef5e0e7f03ca83baf680b4c0"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/vibrio-baseline-memory.log",
+      "category": "generated-evidence",
+      "bytes": 770,
+      "sha256": "946c78b00e65690f7ee885897496a2b86b532fe072cb4cb7efd6f1cf03910fa3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/vibrio-baseline-probe.log",
+      "category": "generated-evidence",
+      "bytes": 768,
+      "sha256": "8f7ca4f07cd3a560e51f41d29823b804b25be798f722a4b30d20220dc323adc7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/vibrio-baseline-timing.log",
+      "category": "generated-evidence",
+      "bytes": 770,
+      "sha256": "9aee0d95f9dec9ceaa0b0847cd891872159ea4db7c38d3556fc5539082d1c3e9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/vibrio-current-memory.log",
+      "category": "generated-evidence",
+      "bytes": 770,
+      "sha256": "946c78b00e65690f7ee885897496a2b86b532fe072cb4cb7efd6f1cf03910fa3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/vibrio-current-probe.log",
+      "category": "generated-evidence",
+      "bytes": 768,
+      "sha256": "8f7ca4f07cd3a560e51f41d29823b804b25be798f722a4b30d20220dc323adc7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-logs/vibrio-current-timing.log",
+      "category": "generated-evidence",
+      "bytes": 770,
+      "sha256": "9aee0d95f9dec9ceaa0b0847cd891872159ea4db7c38d3556fc5539082d1c3e9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-start.json",
+      "category": "generated-evidence",
+      "bytes": 1139,
+      "sha256": "d1017a27fb3836c0ab160fc97f99ac8e3ec9629e18ff11b711892f5d7df17cd6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-summarize.py",
+      "category": "tools",
+      "bytes": 7328,
+      "sha256": "6d3ed0605aabb210b2cb2e602c6494c6c98addf89e54ed652776d578bbef3947"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-vibrio-baseline-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 70636,
+      "sha256": "211a93e22f50f9293f1fa0d61520023b9e43c4f9aa4ab2b8e486277db9e142b6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-vibrio-baseline-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 75995,
+      "sha256": "244d0ae562e57a3eb068d25fef23f805fe30ed8d7869403eba1895988c199411"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-vibrio-baseline-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 70894,
+      "sha256": "0506e091cfaf638d0d9e2e696a6937ee4ce22bcda6133483de07d1ae3426178d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-vibrio-current-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 71258,
+      "sha256": "5a9ec9c6165b4358129a34c141d14fec7e2179da1fa5d9c257660c1fe680b018"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-vibrio-current-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 76597,
+      "sha256": "a9fec4b3ede18db59ff5032a47eaa3d27d72c666ce6521e3896a48d28b13e23c"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-vibrio-current-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 71609,
+      "sha256": "938d7439763c4ae7c35425471db8ad89f70ff2fd34b51ca90f92fce7a21ef736"
+    },
+    {
+      "path": "gbdraw/analysis/collinearity.py",
+      "category": "production",
+      "bytes": 68943,
+      "sha256": "700063652c3016ac00361a19938eab18972b0bb6e705bb865781366179803741"
+    },
+    {
+      "path": "tests/prototypes/cluster_merge.py",
+      "category": "tests",
+      "bytes": 3470,
+      "sha256": "db0b7d739ef0dae7b6bd5a9aad52dbfb70f918baa0a4cfc7e9b48dfde552889b"
+    },
+    {
+      "path": "tests/run_cluster_merge_browser_acceptance.py",
+      "category": "tests",
+      "bytes": 5967,
+      "sha256": "8223db8fa17a1bfbe45dbd5eeba55025e1d1dd88775f955e7d7b3ad78efea5cb"
+    },
+    {
+      "path": "tests/test_collinearity.py",
+      "category": "tests",
+      "bytes": 135263,
+      "sha256": "b126eb8f4491c607d9b0f55dcc31c12417025f6951b82abe6e566c94354e1164"
+    },
+    {
+      "path": "tools/benchmark_protein_comparison.py",
+      "category": "tools",
+      "bytes": 61777,
+      "sha256": "5421bd1f28c5656fc4c074bbc0e5fbdf70087459431a36fd7baf586ca8fcedda"
+    }
+  ]
+}

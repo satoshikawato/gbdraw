@@ -1,7 +1,7 @@
 # Collinear / Similarity groups 計算量改修 — 総合計画書
 
 - 作成日: 2026-09-15
-- 状態: S01の基準・再現資産とS02の調査・テスト専用prototype・同値検証・設計が完了。S02のProduct選択はPATH-Bとして受領済み（decision revision 1、authority文書化済み、review・base統合は未完了）。S03のHSP集計実装・同値検証・広いgate・観測測定と引き継ぎが完了。独立再測定はユーザーの最終指示で省略し、他benchmarkとの重複を測定条件の未達として記録。S04の疎な所属探索・metadata索引の本番改修、同値検証、広いgate、測定と引き継ぎが完了。最終時間判定は22 pass / 2 inconclusive / 0 regressionで、時間gateの全項目合格ではない。S05以降の本番改修は未実施。
+- 状態: S01〜S04とS06の実装・検証・測定・引き継ぎは完了。S05は2026-09-15に却下済み。PATH-B authorityはPR #536でbase統合済み。S03/S04/S06の測定上の留保とS06のmerge前の互換性Reviewは維持する。S07もS04→S06→S07の順で実装・検証・測定・引き継ぎを完了した。S07の性能評価はユーザー指示「合格でいいです」により合格。次セッションはS07.5としてGallery主要処理の追加改修計画を立てる。S07.5の計画立案とS08は未実施。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
 ## S06開始時の更新（2026-09-16）
@@ -10,17 +10,27 @@ S05は却下済み。未コミット候補・cache owner・共通解析class・W
 S04→S06として実装する。PATH-B authorityは独立したPR #536で統合済み（OIPC revision 6 / PD-OI-023）。
 今回のruntime差分にauthority変更を含めない。S04の最終current側測定を、入力・設定・sourceが一致する比較のbaselineに再利用する。
 変更のないS04を再測定しない。過去のnoise、外部競合、未測定項目は引き継ぐ。
-実装・必要な検証・測定・引き継ぎは完了し、結果は[results/S06.md](results/S06.md)に記録した。独立した性能合格は未達で、merge前の互換性Reviewが残る。S07以降は実装していない。
+実装・必要な検証・測定・引き継ぎは完了し、結果は[results/S06.md](results/S06.md)に記録した。独立した性能合格は未達で、merge前の互換性Reviewが残る。これはS06完了時点の記録である。S07の結果は下記を参照する。
+
+## S07完了時の更新（2026-09-16）
+
+S06成果を別のローカルcommitに固定し、最新dev由来のS07 worktreeでcluster mergeを改修した。
+1200 anchorsのchainではconflict訪問数478,800→399、isolated merge 712.03→1.90 ms、
+peak 180,848→153,152 bytes。結果は一致し、全体gateは4,361 passed。
+時間の数値判定は14 pass / 6 inconclusive / 0 confirmed regression。外部競合と既存baselineの
+測定記録は維持する。ユーザーは「合格とします」「合格でいいです」と明示し、S07の性能評価を合格とした。独立再測定は実施していない。Galleryではmergeの寄与が小さく、索引分のpeak増加もある。
+完全な測定・counter・memory・制限とS08への検証引き継ぎは[results/S07.md](results/S07.md)を参照。
+S05は却下のままで、S08以降は実装していない。
 
 ## 1. 目的と完了の意味
 
-共通の解析処理を再利用できる構造に整理し、総当たりを evidence の索引参照へ置き換え、全経路の列挙を通常の解析・描画・保存から切り離す。
+総当たりを evidence の索引参照へ置き換え、全経路の列挙を通常の解析・描画・保存から切り離す。S05の共通解析class・cache owner・Worker transactionは却下済みで実装対象に含めない。
 
 目標は次の四つである。
 
 1. 同じ入力を繰り返し転送・検証・parse・集計しない。
 2. 疎な入力の所属候補探索を、全タンパク質と全グループの積から実在 evidence に基づく処理へ変える。
-3. 有限のキャッシュ予算で、設定変更時に再利用できる解析段階を保持する。
+3. （S05却下により対象外）有限のキャッシュ予算で解析段階を保持する案。
 4. 経路情報を失わないグラフ表現によって、通常処理が全経路数に比例して増える問題を解消する。
 
 2026-09-15にProduct Decision OwnerがPATH-B / lossless-graphを選択した。
@@ -43,9 +53,9 @@ S04→S06として実装する。PATH-B authorityは独立したPR #536で統合
 | HSP ペアごとの DataFrame / 行イテレータ処理 | 構造が残存 | S03 |
 | 全経路の列挙 | 構造が残存 | S02 で契約調査、S06 で承認済み結果を実装 |
 | 未所属タンパク質と全 core group の総当たり | 構造が残存 | S04 |
-| filtered / converted の64件共有LRU | 構造が残存 | S05 |
-| 不要な表示 projection、メタデータ線形検索 | 改善余地あり。selector に `comparison_pairs=()` が追加済み | S04・S05で既存境界を利用 |
-| Collinear cluster 結合 | 構造が残存 | S07、再測定で必要性を判定 |
+| filtered / converted の64件共有LRU | 構造が残存 | S05却下により対象外 |
+| 不要な表示 projection、メタデータ線形検索 | S04で既存境界を改善済み | S04。S05は却下・対象外 |
+| Collinear cluster 結合 | S07で不要な走査・sort・copyを削減 | 結果同値、実測と残る計算量はS07報告 |
 | downstream cancel 後の raw 検索再実行 | `7db0539a` で対応済み | 回帰を防ぐ |
 | optional Collinear inference、mode別limit記憶 | `65f231af` でruntimeも統合済み | ON/OFF・旧Session・mode切替を回帰検証 |
 
@@ -83,7 +93,7 @@ S04開始時もfetch後のbaseは`9a4f7e29`。未統合のS01〜S03を一度ず�
 4,295 Python testsと214 Node tests、実browser、時間・操作回数・メモリの証拠を記録する。
 最終の21-sample測定は22 pass / 2 inconclusive / 0 regression。sparse-200とunrelated-200は
 MAD/中央値が5%を超え、数値上の性能合格にはしない。S03の省略指示や観測値は流用していない。
-authority-only commitは未統合のままS04へ混ぜていない。S05は未実施。
+authority-only commitは未統合のままS04へ混ぜていない。S05は2026-09-15に却下済み。
 
 [Option Integrity Product Contract revision 5](https://github.com/satoshikawato/gbdraw/blob/9e28581a3d0e7fb9117da0fbc11d46a945b0e59e/docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md) は、以下を既に選択している。
 
@@ -177,7 +187,9 @@ incoming/outgoing evidence と protein→group の逆引きから候補を得る
 
 protein→RBH group、protein→member、endpoint→edge metadata の逆引きも必要な consumer で一度作る。多対多、重複、最初に選ばれる edge と出力順を保持する。最新 selector の `comparison_pairs=()` が要件を満たす場合、不要な表示生成の抑止に利用する。
 
-### 5.4 解析段階とキャッシュ（S05）
+### 5.4 解析段階とキャッシュ（S05、却下済みの設計記録）
+
+以下は却下された案の記録であり、S06/S07以降への依存や実装指示ではない。
 
 | 段階 | identity に必要な主な情報 | 再利用可能な例 |
 |---|---|---|
@@ -217,7 +229,7 @@ S02 の決定対象:
 | `PATH-A` / `exhaustive-current` | 現在の全経路配列の公開・保存契約を維持 | 全量要求の指数コストは残る |
 | `PATH-B` / `lossless-graph` | 関係グラフを通常の公開・保存経路に採用。必要な既存 consumer の経路取得契約を明示 | 通常経路は全列挙を回避。明示的な全量取得は出力量に比例 |
 
-`PATH-B` はscenario revision 1の完全なhuman receiptで選択済み。S02 は API、exact count、path ID、shared情報、互換読込、保存形式、失敗時継続を具体化した。authorityのreview・base統合は未完了。DAG でない到達可能入力を勝手に切り落としたり、edge 方向を変えたりしない。循環への対応が未決なら影響部分を判断へ戻す。
+`PATH-B` はscenario revision 1の完全なhuman receiptで選択済み。S02 は API、exact count、path ID、shared情報、互換読込、保存形式、失敗時継続を具体化した。authorityはPR #536でbase統合済み。DAG でない到達可能入力を勝手に切り落としたり、edge 方向を変えたりしない。循環への対応が未決なら影響部分を判断へ戻す。
 
 `OrthogroupResult`、`OrthologPath`、`OrthologEdge`、typed resource、SVG属性、catalog、popup、persisted raw/derived/session を consumer ごとに追跡する。catalog が最後に配列を count へ縮約しても、前段の encode が全量展開していれば未解決である。
 
@@ -239,12 +251,13 @@ query order を一度整列し、二分探索で conflict 判定区間を狭め�
 | S02 | [経路契約と設計判断](SESSION_02_PATH_CONTRACT.md) | S01 | consumer inventory、比較設計、必要なら Product Decision Pack |
 | S03 | [HSP集計](SESSION_03_HSP_AGGREGATION.md) | S01 | [完了報告](results/S03.md)：同値な一回走査集計、時間・メモリの観測比較。独立再測定は最終指示で省略、測定条件未達を明記 |
 | S04 | [疎な候補探索とmetadata](SESSION_04_SPARSE_SUPPORT_AND_METADATA.md) | S03 | [完了報告](results/S04.md)：evidence・metadata索引、全結果一致。時間22 pass / 2 inconclusive、全項目合格は未達 |
-| S05 | [共通解析境界と容量付きcache](SESSION_05_SHARED_ANALYSIS_AND_CACHE.md) | S04 | 段階依存表、bounded reuse、Web lifecycle 検証 |
+| S05 | [共通解析境界と容量付きcache](SESSION_05_SHARED_ANALYSIS_AND_CACHE.md) | 対象外 | 2026-09-15却下済み。復活させない |
 | S06 | [経路表現の実装](SESSION_06_PATH_REPRESENTATION.md) | S04、S02の選択を認可するbase authority | 選択済み契約の runtime / reader / writer、性能検証 |
-| S07 | [Cluster merge評価・必要な改修](SESSION_07_CLUSTER_MERGE.md) | S05。S06完了時はその結果も含む | 改修または実測に基づく見送り判断 |
-| S08 | [統合・性能・回帰検証](SESSION_08_INTEGRATION.md) | S03〜S05、S07。全体完了にはS06の扱い確定 | 正確な達成範囲、最終 gate、残課題 |
+| S07 | [Cluster merge評価・必要な改修](SESSION_07_CLUSTER_MERGE.md) | S04→S06。S06の独立性能合格は開始条件にしない | 完了・性能合格（ユーザー承認）。[結果・測定記録](results/S07.md) |
+| S07.5 | Gallery主要処理の追加改修計画（次セッション） | S07の既存profile・計測結果 | 正規化・unit索引・group構築の残る負担を比較し、改修対象と検証方法を計画する。今回は未着手 |
+| S08 | [統合・性能・回帰検証](SESSION_08_INTEGRATION.md) | S03、S04、S06、S07。S05は含めない | 正確な達成範囲、最終 gate、残課題 |
 
-今回の実行順序は S01 → S02 → S03 → S04 → S06。S05は却下済み。S07/S08の旧S05依存は後続作業の開始時に見直し、今回は実装しない。これらは依存関係の説明であり、sub-agent の自動起動を要求しない。
+今回の実行順序は S01 → S02 → S03 → S04 → S06 → S07。S05は却下済み。S06の全path列挙除去はユーザー了承済みで、Galleryの一律高速化や独立性能合格をS07開始条件にしない。S08以降は今回実装しない。これらは依存関係の説明であり、sub-agent の自動起動を要求しない。
 
 optional inference と limit retention は統合済みの回帰対象である。開始時のbaseにその変更が欠ける場合はcheckout/依存revisionを特定する。OFF の期待動作を仮実装した test stub で最終合格にせず、統合された実経路で確認する。
 

@@ -1,0 +1,14 @@
+timing: merge-300
+  merge-300/cluster_merge
+timing: merge-600
+  merge-600/cluster_merge
+timing: merge-1200
+  merge-1200/cluster_merge
+timing: merge-edges
+  merge-edges/max_conflicts_0_merge
+  merge-edges/max_conflicts_1_merge
+  merge-edges/reverse_merge
+timing: gallery-collinear
+  gallery-collinear/post_search_merge
+timing: gallery-collinear-off
+  gallery-collinear-off/post_search_merge

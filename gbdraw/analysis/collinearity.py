@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 import math
 import sys
@@ -822,55 +823,62 @@ def _lossless_initial_clusters_for_pair(
 
 
 def _lossless_conflicts_between_clusters(
-    left: CollinearityBlock,
-    right: CollinearityBlock,
+    left: Sequence[CollinearityAnchor],
+    right: Sequence[CollinearityAnchor],
     anchors: Sequence[CollinearityAnchor],
+    *,
+    max_conflicts: int | None = None,
 ) -> int:
-    left_path = _path_sorted_anchors(left.anchors, left.orientation)
-    right_path = _path_sorted_anchors(right.anchors, right.orientation)
-    if not left_path or not right_path:
+    """Count the strict gap in query-sorted anchors between path-sorted clusters.
+
+    Without a limit this returns the exact count. Only the boolean merge
+    consumer supplies a limit; exceeding it suffices to reject that merge.
+    """
+    if not left or not right:
         return 0
-    left_end = left_path[-1]
-    right_start = right_path[0]
+    left_end, right_start = left[-1], right[0]
     query_min = min(int(left_end.query_order), int(right_start.query_order))
     query_max = max(int(left_end.query_order), int(right_start.query_order))
     subject_min = min(int(left_end.subject_order), int(right_start.subject_order))
     subject_max = max(int(left_end.subject_order), int(right_start.subject_order))
-    cluster_anchors = {*left.anchors, *right.anchors}
-    return sum(
-        1
-        for anchor in anchors
-        if anchor not in cluster_anchors
-        and query_min < int(anchor.query_order) < query_max
-        and subject_min < int(anchor.subject_order) < subject_max
-    )
+    start = bisect_right(anchors, query_min, key=lambda anchor: int(anchor.query_order))
+    end = bisect_left(anchors, query_max, key=lambda anchor: int(anchor.query_order))
+    cluster_anchors = None
+    conflicts = 0
+    for index in range(start, end):
+        anchor = anchors[index]
+        if not subject_min < int(anchor.subject_order) < subject_max:
+            continue
+        if cluster_anchors is None:
+            cluster_anchors = {*left, *right}
+        if anchor not in cluster_anchors:
+            conflicts += 1
+            if max_conflicts is not None and conflicts > max_conflicts:
+                break
+    return conflicts
 
 
 def _lossless_clusters_can_merge(
-    left: CollinearityBlock,
+    left: Sequence[CollinearityAnchor],
     right: CollinearityBlock,
     *,
+    orientation: CollinearityOrientation,
     anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> bool:
-    if left.kind != "cluster" or right.kind != "cluster":
-        return False
-    if left.orientation != right.orientation:
-        return False
-    left_path = _path_sorted_anchors(left.anchors, left.orientation)
-    right_path = _path_sorted_anchors(right.anchors, right.orientation)
-    if not left_path or not right_path:
+    # Initial clusters and the accumulated path are already path-sorted.
+    if orientation != right.orientation or not left or not right.anchors:
         return False
     if not _lossless_anchors_are_compatible(
-        left_path[-1],
-        right_path[0],
-        orientation=left.orientation,
+        left[-1],
+        right.anchors[0],
+        orientation=orientation,
         params=params,
     ):
         return False
-    return _lossless_conflicts_between_clusters(left, right, anchors) <= int(
-        params.max_conflicts
-    )
+    return _lossless_conflicts_between_clusters(
+        left, right.anchors, anchors, max_conflicts=int(params.max_conflicts)
+    ) <= int(params.max_conflicts)
 
 
 def _merge_lossless_clusters(
@@ -882,22 +890,42 @@ def _merge_lossless_clusters(
     merged: list[CollinearityBlock] = []
     singleton_blocks = [block for block in blocks if block.kind == "singleton"]
     cluster_blocks = [block for block in blocks if block.kind == "cluster"]
+    ordered_anchors = (
+        sorted(anchors, key=lambda anchor: int(anchor.query_order))
+        if len(cluster_blocks) > 1 else ()
+    )
+    previous: CollinearityBlock | None = None
+    current: tuple[CollinearityAnchor, ...] | list[CollinearityAnchor] = ()
+
+    def flush() -> None:
+        if previous is None:
+            return
+        merged.append(
+            _lossless_block_from_anchors(
+                block_id=previous.block_id,
+                pair=(previous.query_record_index, previous.subject_record_index),
+                orientation=previous.orientation,
+                anchors=current,
+            ) if isinstance(current, list) else previous
+        )
+
     for block in sorted(cluster_blocks, key=_final_block_sort_key):
-        if not merged or not _lossless_clusters_can_merge(
-            merged[-1],
+        if previous is None or not _lossless_clusters_can_merge(
+            current,
             block,
-            anchors=anchors,
+            orientation=previous.orientation,
+            anchors=ordered_anchors,
             params=params,
         ):
-            merged.append(block)
+            flush()
+            previous, current = block, block.anchors
             continue
-        previous = merged[-1]
-        merged[-1] = _lossless_block_from_anchors(
-            block_id=previous.block_id,
-            pair=(previous.query_record_index, previous.subject_record_index),
-            orientation=previous.orientation,
-            anchors=(*previous.anchors, *block.anchors),
-        )
+        if isinstance(current, tuple):
+            current = list(current)
+        # Compatible endpoints strictly increase query order. Appending a
+        # sorted right path therefore preserves the entire path's tie order.
+        current.extend(block.anchors)
+    flush()
     return tuple(sorted((*merged, *singleton_blocks), key=_final_block_sort_key))
 
 

@@ -1,0 +1,14 @@
+memory: merge-300
+  merge-300/cluster_merge
+memory: merge-600
+  merge-600/cluster_merge
+memory: merge-1200
+  merge-1200/cluster_merge
+memory: merge-edges
+  merge-edges/max_conflicts_0_merge
+  merge-edges/max_conflicts_1_merge
+  merge-edges/reverse_merge
+memory: gallery-collinear
+  gallery-collinear/post_search_merge
+memory: gallery-collinear-off
+  gallery-collinear-off/post_search_merge

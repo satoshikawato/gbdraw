@@ -1,0 +1,40 @@
+{
+  "baseline": "ec16110cf08b894b6dce16aa973e1d6112554ac9",
+  "s01Revision": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "mergeTransitiveDefinitionsEqual": {
+    "CollinearityAnchor": true,
+    "CollinearityBlock": true,
+    "CollinearityResult": false,
+    "LosslessCollinearityParameters": true,
+    "_anchor_sort_key": true,
+    "_anchor_strand_orientation": true,
+    "_anchors_are_path_compatible": true,
+    "_filter_blocks_by_min_anchors": true,
+    "_final_block_sort_key": true,
+    "_lossless_anchor_supports_orientation": true,
+    "_lossless_anchors_are_compatible": true,
+    "_lossless_block_from_anchors": true,
+    "_lossless_block_score": true,
+    "_lossless_boundary_orientation": true,
+    "_lossless_clusters_can_merge": true,
+    "_lossless_conflicts_between_clusters": true,
+    "_lossless_initial_clusters_for_pair": true,
+    "_lossless_singleton_orientation": true,
+    "_merge_lossless_clusters": true,
+    "_normalized_strand": true,
+    "_orientation_diagonal": true,
+    "_orientation_subject_value": true,
+    "_path_gap": true,
+    "_path_sorted_anchors": true,
+    "_renumber_lossless_blocks": true,
+    "cluster_lossless_collinearity_anchors": true
+  },
+  "annotationOnlyDifference": "CollinearityResult.orthogroups adds OrthogroupGraphResult; clustering leaves this field None. All merge executable functions and anchor/block definitions match.",
+  "reuse": {
+    "mergeTiming": "baseline-timing.json.gz (7 samples; inherited across-run drift limits attribution)",
+    "mergeMemory": "memory.json.gz (S01 peak only; retained-at-return was not recorded there)",
+    "mergeOracle": "s04-current-probe-final.json.gz and oracles/merge-*.json.gz",
+    "galleryTimingMemoryOracle": "s06-current-timing-final.json.gz (21 samples), s06-current-memory-final.json.gz, s06-current-probe.json.gz"
+  },
+  "newBaselineMeasurements": "Only newly isolated merge stages and expanded sort/copy/visit counters. No full cluster/post_search baseline timing rerun."
+}
