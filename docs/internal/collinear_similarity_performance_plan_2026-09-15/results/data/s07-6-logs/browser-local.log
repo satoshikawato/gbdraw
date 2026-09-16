@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_unit_index_browser_acceptance.py", line 129, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_unit_index_browser_acceptance.py", line 108, in main
+    assert science(value) == expected[case['name']], case['name']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: gallery-collinear

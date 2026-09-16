@@ -1,0 +1,11 @@
+✔ tests/web/orthogroups-stable-identity.test.mjs (147.300721ms)
+✔ tests/web/run-analysis-derived-cache.test.mjs (579.916699ms)
+✔ tests/web/session-request.test.mjs (745.808843ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 772.357497

@@ -1,0 +1,422 @@
+{
+  "baseline": "S07.6 final dirty source; not HEAD alone",
+  "candidate": "S07.7 plus local member/RBH/rank reductions; final source",
+  "boundary": "prepared filtered raw hit tables -> complete ordered native post-search result",
+  "excluded": [
+    "raw search",
+    "parse/filter",
+    "fixture preparation",
+    "result hashing",
+    "render",
+    "browser Generate"
+  ],
+  "policy": {
+    "warmups": 1,
+    "samples": 7,
+    "regressionPct": 10.0,
+    "maxNoisePct": 5.0,
+    "noise": "100 * MAD / median",
+    "noisyDecision": "inconclusive; repeat both trees, never waive",
+    "semanticGate": "exact ordered stage digest, including types and errors"
+  },
+  "measuredRunnerSha256": "49b436acc17782ce007ba46da08147213735a1e481270dc74cb131723aae7cd8",
+  "futureSampling": "Three samples by default; no automatic noise repeats; archived decisions use their recorded policy",
+  "affinity": [
+    3
+  ],
+  "PYTHONHASHSEED": "0",
+  "timingDecisions": {
+    "pass": 5,
+    "inconclusive": 1
+  },
+  "allSemanticEqual": true,
+  "cases": {
+    "gallery-collinear": {
+      "timing": {
+        "semanticEqual": true,
+        "timeDeltaPct": -13.418919401540197,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 466.148064,
+        "currentMedian": 403.596031,
+        "baselineNoisePct": 2.3879423427145254,
+        "currentNoisePct": 1.5529268175583146,
+        "sampleCount": 21,
+        "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+        "semanticBytes": 8810614,
+        "summary": {
+          "groups": 587,
+          "members": 2509,
+          "edges": 1935,
+          "paths": 620,
+          "nodes": 2405,
+          "transitions": 1860,
+          "blocks": 500,
+          "anchors": 1832
+        },
+        "medianRegression": false
+      },
+      "memory": {
+        "semanticEqual": true,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 19001717,
+        "currentMedian": 19483897,
+        "baselineNoisePct": 0.0,
+        "currentNoisePct": 0.0,
+        "sampleCount": 1,
+        "semanticSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+        "semanticBytes": 8810614,
+        "summary": {
+          "groups": 587,
+          "members": 2509,
+          "edges": 1935,
+          "paths": 620,
+          "nodes": 2405,
+          "transitions": 1860,
+          "blocks": 500,
+          "anchors": 1832
+        },
+        "peakDeltaPct": 2.5375601583793816,
+        "baselineRetainedBytes": 10230410,
+        "currentRetainedBytes": 10285022
+      }
+    },
+    "gallery-collinear-off": {
+      "timing": {
+        "semanticEqual": true,
+        "timeDeltaPct": -4.743006678006656,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 98.418141,
+        "currentMedian": 93.750162,
+        "baselineNoisePct": 2.8600530058782616,
+        "currentNoisePct": 2.1849775576921213,
+        "sampleCount": 21,
+        "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+        "semanticBytes": 2359179,
+        "summary": {
+          "blocks": 462,
+          "anchors": 1789
+        },
+        "medianRegression": false
+      },
+      "memory": {
+        "semanticEqual": true,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 6589310,
+        "currentMedian": 6590763,
+        "baselineNoisePct": 0.0,
+        "currentNoisePct": 0.0,
+        "sampleCount": 1,
+        "semanticSha256": "740e760f625c846187c0be13c61b56e989d94ad5de1d9dd3eaf850f723917ecf",
+        "semanticBytes": 2359179,
+        "summary": {
+          "blocks": 462,
+          "anchors": 1789
+        },
+        "peakDeltaPct": 0.022050867237988214,
+        "baselineRetainedBytes": 4860128,
+        "currentRetainedBytes": 4861531
+      }
+    },
+    "gallery-collinear-vibrio": {
+      "timing": {
+        "semanticEqual": true,
+        "timeDeltaPct": 10.167957555920214,
+        "decision": "inconclusive",
+        "comparisonExitCode": 2,
+        "baselineMedian": 3100.052791,
+        "currentMedian": 3415.264843,
+        "baselineNoisePct": 0.2598059627688452,
+        "currentNoisePct": 9.507442348593294,
+        "sampleCount": 7,
+        "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+        "semanticBytes": 35834247,
+        "summary": {
+          "groups": 2437,
+          "members": 10385,
+          "edges": 8422,
+          "paths": 15436,
+          "nodes": 7324,
+          "transitions": 6507,
+          "blocks": 4395,
+          "anchors": 4908
+        },
+        "medianRegression": true
+      },
+      "memory": {
+        "semanticEqual": true,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 115078215,
+        "currentMedian": 118284725,
+        "baselineNoisePct": 0.0,
+        "currentNoisePct": 0.0,
+        "sampleCount": 1,
+        "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+        "semanticBytes": 35834247,
+        "summary": {
+          "groups": 2437,
+          "members": 10385,
+          "edges": 8422,
+          "paths": 15436,
+          "nodes": 7324,
+          "transitions": 6507,
+          "blocks": 4395,
+          "anchors": 4908
+        },
+        "peakDeltaPct": 2.786374467139585,
+        "baselineRetainedBytes": 31993524,
+        "currentRetainedBytes": 31880594
+      }
+    },
+    "gallery-collinear-vibrio-off": {
+      "timing": {
+        "semanticEqual": true,
+        "timeDeltaPct": -8.682028871594449,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 444.436071,
+        "currentMedian": 405.850003,
+        "baselineNoisePct": 4.082071682251012,
+        "currentNoisePct": 3.1337437245257336,
+        "sampleCount": 7,
+        "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+        "semanticBytes": 5344221,
+        "summary": {
+          "blocks": 3092,
+          "anchors": 3600
+        },
+        "medianRegression": false
+      },
+      "memory": {
+        "semanticEqual": true,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 26243499,
+        "currentMedian": 26255523,
+        "baselineNoisePct": 0.0,
+        "currentNoisePct": 0.0,
+        "sampleCount": 1,
+        "semanticSha256": "5c3e9139a433b0db23b224af99af27b3d10d555e665dfdca5f3b9b9b97690bce",
+        "semanticBytes": 5344221,
+        "summary": {
+          "blocks": 3092,
+          "anchors": 3600
+        },
+        "peakDeltaPct": 0.045817061208186516,
+        "baselineRetainedBytes": 9667284,
+        "currentRetainedBytes": 9689175
+      }
+    },
+    "gallery-orthogroup": {
+      "timing": {
+        "semanticEqual": true,
+        "timeDeltaPct": -10.519428622632054,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 842.420346,
+        "currentMedian": 753.802539,
+        "baselineNoisePct": 2.616089948995599,
+        "currentNoisePct": 4.191634329318697,
+        "sampleCount": 21,
+        "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+        "semanticBytes": 9790779,
+        "summary": {
+          "groups": 577,
+          "members": 2565,
+          "edges": 4382,
+          "paths": 3423,
+          "nodes": 2474,
+          "transitions": 4315
+        },
+        "medianRegression": false
+      },
+      "memory": {
+        "semanticEqual": true,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 29028311,
+        "currentMedian": 29999278,
+        "baselineNoisePct": 0.0,
+        "currentNoisePct": 0.0,
+        "sampleCount": 1,
+        "semanticSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+        "semanticBytes": 9790779,
+        "summary": {
+          "groups": 577,
+          "members": 2565,
+          "edges": 4382,
+          "paths": 3423,
+          "nodes": 2474,
+          "transitions": 4315
+        },
+        "peakDeltaPct": 3.344896642453632,
+        "baselineRetainedBytes": 9246990,
+        "currentRetainedBytes": 9338686
+      }
+    },
+    "gallery-orthogroup-unbounded": {
+      "timing": {
+        "semanticEqual": true,
+        "timeDeltaPct": -23.40140091694788,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 812.692431,
+        "currentMedian": 622.511017,
+        "baselineNoisePct": 1.9092668281538259,
+        "currentNoisePct": 2.408324124486937,
+        "sampleCount": 21,
+        "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+        "semanticBytes": 9796262,
+        "summary": {
+          "groups": 577,
+          "members": 2566,
+          "edges": 4386,
+          "paths": 3415,
+          "nodes": 2474,
+          "transitions": 4316
+        },
+        "medianRegression": false
+      },
+      "memory": {
+        "semanticEqual": true,
+        "decision": "pass",
+        "comparisonExitCode": 0,
+        "baselineMedian": 30407856,
+        "currentMedian": 31868790,
+        "baselineNoisePct": 0.0,
+        "currentNoisePct": 0.0,
+        "sampleCount": 1,
+        "semanticSha256": "2840417ed5b34c3868d57b0bb05e0fdfa7ef2eef920f5de5caf866d28e6b7ba1",
+        "semanticBytes": 9796262,
+        "summary": {
+          "groups": 577,
+          "members": 2566,
+          "edges": 4386,
+          "paths": 3415,
+          "nodes": 2474,
+          "transitions": 4316
+        },
+        "peakDeltaPct": 4.8044623731446245,
+        "baselineRetainedBytes": 8772144,
+        "currentRetainedBytes": 9246440
+      }
+    }
+  },
+  "reportSha256": {
+    "s07-7-baseline-gallery-collinear-timing.json.gz": "55ee8ff2667a35b630e1236f57fca03c4b016c8155765bc098a392407c67f2d2",
+    "s07-7-current-gallery-collinear-timing.json.gz": "b4e8a91ffc03f70f50f6bd26064c2de94aa7cc262cdf1873644479f77cf1dc7e",
+    "s07-7-baseline-gallery-collinear-memory.json.gz": "d1ce84d58a88291f26d556eebaccb417afcda29873e7163d30d0bee1e94955f5",
+    "s07-7-current-gallery-collinear-memory.json.gz": "fa18d65d7d42fad571d79b6fcf1bdecc8035781a6ac1465ed77623d3b7218192",
+    "s07-7-baseline-gallery-collinear-off-timing.json.gz": "72fa4ec2f18ab2ceed1cbcff48e970c4593039bf82105cde9ab8af681ce73dfa",
+    "s07-7-current-gallery-collinear-off-timing.json.gz": "1df9b92f99318ecc63e88f18e6f997f8fb7c0eb0794b3a61d6ea009c5a365d92",
+    "s07-7-baseline-gallery-collinear-off-memory.json.gz": "45684e93aa591adf94fb1b07c81f96000202573a3f2f31746b329cf4210d8bcf",
+    "s07-7-current-gallery-collinear-off-memory.json.gz": "c94cf1c8a7bb846722c7552c95523e09a69d32f8bba6412eb6bb785090fe569b",
+    "s07-7-baseline-gallery-collinear-vibrio-timing.json.gz": "78e513c819a7a085c1d63aa8c19a5537cf61e36083178bab454babfa6812109d",
+    "s07-7-current-gallery-collinear-vibrio-timing.json.gz": "f6b7c413b60b242b14da5ccbe6f884ae625662ecf2c7a992c04d03b030fb0dce",
+    "s07-7-baseline-gallery-collinear-vibrio-memory.json.gz": "79a5d43fd9131d354bcfe0bde45c8067561b3eae94d0249fb45e58a2492977b2",
+    "s07-7-current-gallery-collinear-vibrio-memory.json.gz": "5361af7cf59336873be727dddb1488aa06b56f3d33676a23eedcaab70009cc68",
+    "s07-7-baseline-gallery-collinear-vibrio-off-timing.json.gz": "a6a0794b4bca05c3dcf1832322f46b852d2137e984e9b666b84408a533246957",
+    "s07-7-current-gallery-collinear-vibrio-off-timing.json.gz": "48f2c66c1da7696baa1330d0eb636b99586a659ed1c3d9b87f2219e615e8a5c6",
+    "s07-7-baseline-gallery-collinear-vibrio-off-memory.json.gz": "a6cd1b31d708e7dd29ea8b25158b3be0e2c214c5d38651832c955f242374dfd8",
+    "s07-7-current-gallery-collinear-vibrio-off-memory.json.gz": "6c380d1ed4d4ac66b014de83c9021a2c624bddd81ccc6f2ca6c50ee6b88abc11",
+    "s07-7-baseline-gallery-orthogroup-timing.json.gz": "b734a4539bc1242283df2fc5615ae3396ebb32a0d13422e14c808faf6e4be76d",
+    "s07-7-current-gallery-orthogroup-timing.json.gz": "0944226e22c2719a55065a59753e2b82e4fc886c18daa7337fa3f86afd1baec8",
+    "s07-7-baseline-gallery-orthogroup-memory.json.gz": "fb5160c62ca94fc0010267744ef8eefe31ec52c0acd006dcfbaf4d98f5cab7f5",
+    "s07-7-current-gallery-orthogroup-memory.json.gz": "18ca033859a753a27778375c38bb90f14d89a9fa8eb163d837f17cffca17f2e0",
+    "s07-7-baseline-gallery-orthogroup-unbounded-timing.json.gz": "67471325eb202ca09b73e207a9b6d4b1f43a69a756f03c7e87ef80112c61f34f",
+    "s07-7-current-gallery-orthogroup-unbounded-timing.json.gz": "e3bb8b278ef9d3c5a1d33f83bfabeace6ed441fa1ac399309ee7d66c315b80e1",
+    "s07-7-baseline-gallery-orthogroup-unbounded-memory.json.gz": "a524372162874424bbb1324bd1e4fc434839512e62ae83f14d940787d8c12cb3",
+    "s07-7-current-gallery-orthogroup-unbounded-memory.json.gz": "e6e8fbcb0898fb67cc2b396d4e4ac82334862fb4d9d205f0f4dcc2138a890926",
+    "s07-7-baseline-gallery-collinear-vibrio-timing-quick3.json.gz": "c70c1ef2db2d128bb587716e27b5a8078c81e39446967836ff9bc7feeec176f5",
+    "s07-7-current-gallery-collinear-vibrio-timing-quick3.json.gz": "3c6ae5197493fc6ed37e63f5610f526986b66d247160a859478718d49cc3f014"
+  },
+  "commandLedger": "s07-7-benchmark-commands.jsonl",
+  "limitations": [
+    "one independent tracemalloc observation per source/case; prepared inputs excluded, output retained",
+    "host snapshots before/after each command; no continuous contention or thermal monitoring",
+    "combined A+B+C effects; no per-change timing attribution",
+    "does not assess S07.6 unit speedup relative to S07 or Web end-to-end latency",
+    "The initial noisy Vibrio ON pair remains inconclusive; the three-sample check does not replace it"
+  ],
+  "quickComparison": {
+    "case": "gallery-collinear-vibrio",
+    "samplesPerSource": 3,
+    "reason": "User requested three samples and stopping the 21-sample repeat",
+    "comparison": {
+      "benchmark": "gbdraw-protein-comparison",
+      "baselineHead": "f52ed68e15e527b08e4d9247b990684040fe4270",
+      "currentHead": "f52ed68e15e527b08e4d9247b990684040fe4270",
+      "semanticOnly": false,
+      "comparisons": {
+        "gallery-collinear-vibrio/post_search": {
+          "semanticEqual": true,
+          "timeDeltaPct": -6.634689024624752,
+          "decision": "inconclusive"
+        }
+      },
+      "exitCode": 2
+    },
+    "comparisonExitCode": 2,
+    "baseline": {
+      "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+      "semanticBytes": 35834247,
+      "summary": {
+        "groups": 2437,
+        "members": 10385,
+        "edges": 8422,
+        "paths": 15436,
+        "nodes": 7324,
+        "transitions": 6507,
+        "blocks": 4395,
+        "anchors": 4908
+      },
+      "samples": [
+        3017.936798,
+        3080.025096,
+        3238.793897
+      ],
+      "unit": "ms",
+      "sampleSemanticSha256": [
+        "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+        "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+        "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb"
+      ],
+      "median": 3080.025096,
+      "mad": 62.08829799999967,
+      "noisePct": 2.015837406020917
+    },
+    "current": {
+      "semanticSha256": "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+      "semanticBytes": 35834247,
+      "summary": {
+        "groups": 2437,
+        "members": 10385,
+        "edges": 8422,
+        "paths": 15436,
+        "nodes": 7324,
+        "transitions": 6507,
+        "blocks": 4395,
+        "anchors": 4908
+      },
+      "samples": [
+        2875.675009,
+        2952.900884,
+        2827.62217
+      ],
+      "unit": "ms",
+      "sampleSemanticSha256": [
+        "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+        "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb",
+        "8b63649e9cb19bbb14b98062b7036a7dfbdf9bc917f6a347b7249b2c2d6218bb"
+      ],
+      "median": 2875.675009,
+      "mad": 48.05283899999995,
+      "noisePct": 1.6710107661543456
+    },
+    "status": "Descriptive only; fewer than seven samples cannot pass the unchanged gate"
+  }
+}

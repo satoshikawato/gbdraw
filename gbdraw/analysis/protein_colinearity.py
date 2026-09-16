@@ -3416,12 +3416,12 @@ def _select_member_candidate_hits_per_query(
 
     if max_hits is None:
         _validate_comparison_columns(hits)
-        return hits.copy().reset_index(drop=True)
+        return hits.reset_index(drop=True)
     selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
     if selected_pairs.empty:
         return hits.iloc[0:0].copy()
-    pair_index = pd.MultiIndex.from_frame(selected_pairs[["query", "subject"]])
-    hit_index = pd.MultiIndex.from_frame(hits[["query", "subject"]])
+    pair_index = pd.MultiIndex.from_arrays([selected_pairs["query"], selected_pairs["subject"]])
+    hit_index = pd.MultiIndex.from_arrays([hits["query"], hits["subject"]])
     return hits.loc[hit_index.isin(pair_index)].reset_index(drop=True)
 
 
@@ -3435,22 +3435,20 @@ def select_reciprocal_best_hits(hits: DataFrame) -> DataFrame:
     coerced_hits = _coerce_outfmt6_numeric_columns(hits)
     query_best = (
         _sort_hits_for_query_best(coerced_hits)
-        .drop_duplicates(["query", "subject"], keep="first")
         .drop_duplicates("query", keep="first")
     )
     subject_best = (
         _sort_hits_for_subject_best(coerced_hits)
-        .drop_duplicates(["query", "subject"], keep="first")
         .drop_duplicates("subject", keep="first")
     )
     reciprocal_pairs = {
-        (str(row.query), str(row.subject))
-        for row in subject_best.itertuples(index=False)
+        (str(query), str(subject))
+        for query, subject in zip(subject_best["query"], subject_best["subject"])
     }
     return query_best.loc[
         [
-            (str(row.query), str(row.subject)) in reciprocal_pairs
-            for row in query_best.itertuples(index=False)
+            (str(query), str(subject)) in reciprocal_pairs
+            for query, subject in zip(query_best["query"], query_best["subject"])
         ]
     ].reset_index(drop=True)
 
@@ -3466,7 +3464,6 @@ def select_best_hits_per_query(
 
     return (
         _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits))
-        .drop_duplicates(["query", "subject"], keep="first")
         .drop_duplicates("query", keep="first")
         .reset_index(drop=True)
     )
@@ -3487,12 +3484,12 @@ def select_reciprocal_best_hit_edges(
     forward_best = select_best_hits_per_query(forward_hits)
     reverse_best = select_best_hits_per_query(reverse_hits)
     reverse_best_by_query = {
-        str(row.query): str(row.subject)
-        for row in reverse_best.itertuples(index=False)
+        str(query): str(subject)
+        for query, subject in zip(reverse_best["query"], reverse_best["subject"])
     }
     keep_mask = [
-        reverse_best_by_query.get(str(row.subject)) == str(row.query)
-        for row in forward_best.itertuples(index=False)
+        reverse_best_by_query.get(str(subject)) == str(query)
+        for query, subject in zip(forward_best["query"], forward_best["subject"])
     ]
     return forward_best.loc[keep_mask].reset_index(drop=True)
 
@@ -3509,7 +3506,7 @@ def _select_normalized_fit_rows(
 ) -> list[tuple[float, float]]:
     if normalized_hits.empty:
         return []
-    sorted_hits = normalized_hits.sort_values(
+    sorted_hits = normalized_hits[["length_product", "query", "subject", "bitscore"]].sort_values(
         ["length_product", "query", "subject"],
         ascending=[True, True, True],
         kind="mergesort",
@@ -4421,22 +4418,20 @@ def _dedupe_anchor_core_directional_rows(
     return best_by_direction
 
 
-def _best_rows_by_query_target_record(
-    best_by_direction: Mapping[tuple[str, str], object],
+def _best_row_by_query_target_record(
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
     protein_map: Mapping[str, CdsProtein],
-) -> dict[tuple[str, int], list[object]]:
-    rows_by_query_record: dict[tuple[str, int], list[object]] = {}
-    for (query_id, subject_id), row in best_by_direction.items():
+) -> dict[tuple[str, int], object]:
+    best_by_query_record: dict[tuple[str, int], object] = {}
+    for (query_id, subject_id), row in ranked_direction_rows:
         query_protein = protein_map.get(query_id)
         subject_protein = protein_map.get(subject_id)
         if query_protein is None or subject_protein is None:
             continue
         if int(query_protein.record_index) == int(subject_protein.record_index):
             continue
-        rows_by_query_record.setdefault((query_id, int(subject_protein.record_index)), []).append(row)
-    for rows in rows_by_query_record.values():
-        rows.sort(key=lambda row: _anchor_core_hit_rank(row, protein_map))
-    return rows_by_query_record
+        best_by_query_record.setdefault((query_id, int(subject_protein.record_index)), row)
+    return best_by_query_record
 
 
 def _comparison_record_for_ids(row: object, query_id: str, subject_id: str) -> dict[str, object]:
@@ -4469,23 +4464,19 @@ def _anchor_core_edge_sort_key(
 def _select_anchor_core_edges(
     best_by_direction: Mapping[tuple[str, str], object],
     protein_map: Mapping[str, CdsProtein],
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
-    rows_by_query_record = _best_rows_by_query_target_record(best_by_direction, protein_map)
+    best_by_query_record = _best_row_by_query_target_record(ranked_direction_rows, protein_map)
     best_subject_by_query_record = {
-        key: str(rows[0].subject)
-        for key, rows in rows_by_query_record.items()
-        if rows
+        key: str(row.subject)
+        for key, row in best_by_query_record.items()
     }
     best_score_by_query_record = {
-        key: _normalized_score_from_row(rows[0])
-        for key, rows in rows_by_query_record.items()
-        if rows
+        key: _normalized_score_from_row(row)
+        for key, row in best_by_query_record.items()
     }
     selected_by_pair: dict[tuple[str, str], _AnchorCoreEvidenceEdge] = {}
-    for (query_id, subject_id), row in sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    ):
+    for (query_id, subject_id), row in ranked_direction_rows:
         query_protein = protein_map.get(query_id)
         subject_protein = protein_map.get(subject_id)
         if query_protein is None or subject_protein is None:
@@ -4593,6 +4584,7 @@ def _select_record_local_paralog_edges(
     thresholds: Mapping[str, _LocalThreshold],
     group_member_ids: Mapping[str, set[str]],
     group_by_protein: Mapping[str, str],
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
     _ = group_member_ids
     best_same_record_score_by_query = _best_same_record_unassigned_score_by_query(
@@ -4601,10 +4593,7 @@ def _select_record_local_paralog_edges(
         group_by_protein,
     )
     selected_by_pair: dict[tuple[str, str], _AnchorCoreEvidenceEdge] = {}
-    for (query_id, subject_id), row in sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    ):
+    for (query_id, subject_id), row in ranked_direction_rows:
         if query_id == subject_id:
             continue
         query_protein = protein_map.get(query_id)
@@ -5207,6 +5196,7 @@ def _build_anchor_core_orthogroups(
     anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
     protein_map: Mapping[str, CdsProtein],
     *,
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
     include_singletons: bool,
     max_related_edges_per_orthogroup: int,
 ) -> OrthogroupGraphResult:
@@ -5398,6 +5388,7 @@ def _build_anchor_core_orthogroups(
         thresholds,
         group_member_ids,
         group_by_protein,
+        ranked_direction_rows,
     )
     record_local_components = _record_local_components_from_edges(record_local_edges, protein_map)
     local_support_by_member = _record_local_support_by_member(record_local_edges)
@@ -5446,10 +5437,7 @@ def _build_anchor_core_orthogroups(
         for edge in edges
     }
     seen_related_pairs: set[tuple[str, str, OrthologEdgeKind]] = set()
-    for (query_id, subject_id), row in sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    ):
+    for (query_id, subject_id), row in ranked_direction_rows:
         if query_id not in protein_map or subject_id not in protein_map or query_id == subject_id:
             continue
         canonical_query_id, canonical_subject_id = _canonical_edge_endpoint_ids(query_id, subject_id, protein_map)
@@ -5578,7 +5566,13 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         min_coverage=0.0,
     )
     best_by_direction = _dedupe_anchor_core_directional_rows(normalized_tables, protein_map)
-    anchor_edges = _select_anchor_core_edges(best_by_direction, protein_map)
+    # Rank fields are immutable across the three membership phases. Keep the
+    # original mapping order for support accumulation; share only this traversal.
+    ranked_direction_rows = sorted(
+        best_by_direction.items(),
+        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
+    )
+    anchor_edges = _select_anchor_core_edges(best_by_direction, protein_map, ranked_direction_rows)
     anchor_edge_tables = _anchor_core_edge_tables(anchor_edges, protein_map)
     if record_count is None:
         record_count = 0
@@ -5619,6 +5613,7 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         best_by_direction,
         anchor_edges,
         protein_map,
+        ranked_direction_rows=ranked_direction_rows,
         include_singletons=include_singletons,
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
     )

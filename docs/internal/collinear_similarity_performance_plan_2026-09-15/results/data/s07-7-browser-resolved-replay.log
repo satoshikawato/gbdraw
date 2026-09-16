@@ -1,0 +1,7 @@
+flow 1280-orthogroup-True-5 passed
+flow 1280-orthogroup-True-None passed
+flow 390-collinear-True-5 passed
+flow 390-collinear-False-5 passed
+flow 390-orthogroup-True-5 passed
+flow 390-orthogroup-True-None passed
+{"helperRuns": 8, "flows": 8, "exactParity": true}

@@ -1,0 +1,4 @@
+    PID    PPID %CPU ELAPSED COMMAND
+      2       1 25.0       0 python
+      1       0  0.0       0 codex
+      8       2  0.0       0 ps

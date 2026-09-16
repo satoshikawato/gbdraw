@@ -39,6 +39,15 @@ def test_comparison_rejects_scientific_differences_and_reports_noise():
     assert benchmark.compare_reports(base, changed)[1] == 2
 
 
+def test_comparison_preserves_archived_sampling_policy():
+    current = report()
+    current["cases"]["case"]["stages"]["stage"]["samples"] = [100.] * 3
+    assert benchmark.compare_reports(current, current)[1] == 0
+    archived = copy.deepcopy(current)
+    archived["settings"]["policy"]["samples"] = 7
+    assert benchmark.compare_reports(archived, archived)[1] == 2
+
+
 @pytest.mark.parametrize("key", ["fixture", "dependencies", "settings"])
 def test_comparison_refuses_different_input_or_environment(key):
     base = report()

@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_unit_index_browser_acceptance.py", line 129, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_unit_index_browser_acceptance.py", line 69, in main
+    with acceptance._serve_repo() as base, sync_playwright() as playwright:
+         ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/kawato/micromamba/lib/python3.13/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_losat_cache_browser_acceptance.py", line 275, in _serve_repo
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+  File "/home/kawato/micromamba/lib/python3.13/socketserver.py", line 453, in __init__
+    self.socket = socket.socket(self.address_family,
+                  ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+                                self.socket_type)
+                                ^^^^^^^^^^^^^^^^^
+  File "/home/kawato/micromamba/lib/python3.13/socket.py", line 233, in __init__
+    _socket.socket.__init__(self, family, type, proto, fileno)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted

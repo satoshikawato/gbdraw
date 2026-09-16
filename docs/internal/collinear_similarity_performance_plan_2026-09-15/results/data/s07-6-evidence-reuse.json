@@ -1,0 +1,93 @@
+{
+  "head": "f52ed68e15e527b08e4d9247b990684040fe4270",
+  "reports": {
+    "s07-current-gallery-timing.json.gz": {
+      "sha256": "171a5f7c67c15878a04434ef0053c47839760005628cc08a0399f95ac5c3a609",
+      "changedProduction": [
+        "gbdraw/analysis/collinearity_units.py"
+      ],
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "cases": [
+        "gallery-collinear",
+        "gallery-collinear-off"
+      ]
+    },
+    "s07-vibrio-current-timing.json.gz": {
+      "sha256": "938d7439763c4ae7c35425471db8ad89f70ff2fd34b51ca90f92fce7a21ef736",
+      "changedProduction": [
+        "gbdraw/analysis/collinearity_units.py"
+      ],
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "cases": [
+        "gallery-collinear-vibrio",
+        "gallery-collinear-vibrio-off"
+      ]
+    },
+    "s07-current-memory.json.gz": {
+      "sha256": "5b478f9e2ec2c1114468ed437771bf779175e7e30e33f0bb008f047371af9e14",
+      "changedProduction": [
+        "gbdraw/analysis/collinearity_units.py"
+      ],
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "cases": [
+        "merge-300",
+        "merge-600",
+        "merge-1200",
+        "merge-edges",
+        "gallery-collinear",
+        "gallery-collinear-off"
+      ]
+    },
+    "s07-vibrio-current-memory.json.gz": {
+      "sha256": "5a9ec9c6165b4358129a34c141d14fec7e2179da1fa5d9c257660c1fe680b018",
+      "changedProduction": [
+        "gbdraw/analysis/collinearity_units.py"
+      ],
+      "dependencies": {
+        "python": "3.13.3",
+        "pandas": "2.3.0",
+        "numpy": "2.2.5",
+        "biopython": "1.85",
+        "svgwrite": "1.4.3"
+      },
+      "cases": [
+        "gallery-collinear-vibrio",
+        "gallery-collinear-vibrio-off"
+      ]
+    }
+  },
+  "measurementFunctionsAstEqual": {
+    "canonical": true,
+    "json_bytes": true,
+    "digest": true,
+    "gallery_input": true,
+    "measure_stage": true,
+    "parse": true,
+    "filter_hits": true,
+    "analyze": true
+  },
+  "addedRunnerScope": "Optional unit_index stage, synthetic multi-CDS fixture, probe-only unit counters, optional helper input selection; existing post_search callable and fixture unchanged",
+  "similarity": "No unit owner call; no timing requested or performed",
+  "unitIsolated": "No prior baseline; baseline/current require new one-warmup seven-sample runs",
+  "initialMeasuredProductionSha256": "2c8d68a3b7b8cd079c55e72173177cbebd5c66b9a6607e5481f8b7bd61457c8c",
+  "finalProductionSha256": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da",
+  "finalBenchmarkDisposition": "deferred by user; earlier measurement values are not final-candidate acceptance"
+}

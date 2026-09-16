@@ -1,0 +1,888 @@
+{
+  "createdUtc": "2026-09-16T12:20:49.883779+00:00",
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "head": "f52ed68e15e527b08e4d9247b990684040fe4270",
+  "branch": "perf/collinear-s07-7-local-reductions-20260916",
+  "upstream": null,
+  "newImplementationCommitCreated": false,
+  "baseline": "S07.6 final source, including dirty/untracked work; never HEAD alone",
+  "baselineProteinSha256": "4c1f819aa88b9869fb707883ee5695df5e661f819089b6e22d52b98c31486c14",
+  "finalProteinSha256": "608abd7f9e0ff266e0746c7a961712c74d358ae85c27653355aa8ccce4fbc17d",
+  "preservedUnitSha256": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da",
+  "preflight": "IMPLEMENT_EXISTING_AUTHORITY",
+  "implementationComplete": true,
+  "correctnessComplete": true,
+  "benchmarkDisposition": "Authorized follow-up completed: six paired timing/memory cases; user stopped 21-sample retry; three-sample quick comparison and three one-call current diagnostic profiles. No further measurements.",
+  "performanceAcceptance": "5 pass / 1 inconclusive at native post-search; noisy Vibrio ON +10.17% initial, quick3 -6.63% descriptive. ON/Similarity traced peaks +2.54 to +4.80%. No full-workflow acceptance.",
+  "s07Acceptance": "Preserved: user-approved, 14 pass / 6 inconclusive with reservations",
+  "s06CompatibilityReview": "Future merge requirement; main purpose accepted; not a local blocker",
+  "s05": "Rejected; no prepared class/cache owner/runtime restoration",
+  "s08": "Not executed",
+  "productionChangedDefinitions": [
+    "_best_row_by_query_target_record",
+    "_best_rows_by_query_target_record",
+    "_build_anchor_core_orthogroups",
+    "_select_anchor_core_edges",
+    "_select_anchor_core_orthogroup_edges_from_directional_hits",
+    "_select_member_candidate_hits_per_query",
+    "_select_normalized_fit_rows",
+    "_select_record_local_paralog_edges",
+    "select_best_hits_per_query",
+    "select_reciprocal_best_hit_edges",
+    "select_reciprocal_best_hits"
+  ],
+  "checks": {
+    "stageA": "510 pass, 1 existing skip",
+    "stageB": "532 pass, 1 existing skip",
+    "finalLocalSupport": "718 pass",
+    "fitFullTieOrdinalFollowup": "6 pass",
+    "native": "882 pass, 1 existing external-smoke skip, 1 benchmark-runner test deselected",
+    "typedSessionSvg": "195 pass including 16 read-only SVG comparisons",
+    "node": "3 test files pass",
+    "browserHelpers": "8 baseline/current runs, each cold/repeat; complete ordered payload parity",
+    "browserFlows": "8 desktop/narrow flows, 24 successful generations, 8 saves, 8 fresh-context imports; exact geometry parity; zero external requests/page errors/raw executor calls",
+    "cli": "208 installed Python files match wheel; 2 fresh prepared-raw analyses match frozen; current Session 42 x2 and released Session 33 x1 replay",
+    "ruff": "pass",
+    "architecture": "Gate PASS / Review CLEAR vs f52ed68e",
+    "diffCheck": "Production/tests/tooling/docs pass. Full staged check flags only blank context lines in AB/ABC patch artifacts and whitespace in the inherited S07.6 wheel stdout log; exact evidence bytes preserved.",
+    "benchmarkRunner": "8 pass before measurements; 8 selected pass after sampling-policy change; original profiling test not rerun",
+    "finalSource": "208 wheel Python files rechecked; only protein owner differs from S07.6; original S07.6 production/inherited ledger hashes still match"
+  },
+  "audit": {
+    "production": "One new production owner file; 39 added / 44 removed lines. Inherited unit implementation unchanged. Numeric calculation and validation boundaries retained.",
+    "tests": "Separate frozen namespace and independent list/brute-force oracles; exact ordered/typed/table results and structural counters. Two private callers updated. No wall-clock assertions.",
+    "documentation": "S07_7.md, S07_LOCAL_REDUCTIONS.md, MASTER_PLAN.md and future-sampling requirements in S07_5_PLAN.md; historical numbers retained.",
+    "generatedEvidence": "Command/source/stage/structural/browser/CLI ledgers and patches plus 24 paired reports, quick3 pair, interrupted retry, three single-call profiles, cumulative observations and measured runner archive.",
+    "preserved": "S07/S07.6 worktree files re-hashed; root dev not edited. No public Gallery, social preview, reference SVG, runtime JS, authority or generated tracked distribution edits.",
+    "unexecuted": "No whole-Web before/after latency measurement, complete S08 or deployable-site bundle; no new production optimization beyond A/B/C.",
+    "benchmarkTooling": "One Similarity unlimited case, future defaults three, no automatic noisy repeats. Comparisons read saved policy to avoid retroactive changes. Exact measured runner archived."
+  },
+  "inheritedLedger": "s07-7-start.json",
+  "entries": [
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "category": "documentation",
+      "bytes": 42033,
+      "sha256": "d31e007c6ad92650b4027c7bf548928a652881603a08585cc5c235de6f68351e",
+      "modifiesInheritedFile": true
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_5_PLAN.md",
+      "category": "documentation",
+      "bytes": 48341,
+      "sha256": "6423e3bbc9393753db58652b4edfe32ded72a7b33a6e97c4a7ba88183af3a798",
+      "modifiesInheritedFile": true
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_7.md",
+      "category": "documentation",
+      "bytes": 19649,
+      "sha256": "6e84845f70959a4ad20e2476d79824a4e669bc438dab076ec9211a189d083002",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_LOCAL_REDUCTIONS.md",
+      "category": "documentation",
+      "bytes": 16613,
+      "sha256": "2ecb9e74472a53874c08cdc5c310d6a38c9b319875191cbb4587a63487053fec",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-A-tests.log",
+      "category": "generated-evidence",
+      "bytes": 1956,
+      "sha256": "942576e7222cbfe1be05942216007edcfccdffb310db424ae7e07498f05589d3",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-A.patch",
+      "category": "generated-evidence",
+      "bytes": 616,
+      "sha256": "eacb26159ce859fd93ee3fe1a0785b521f6065882ed32872a461f92413c278df",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-AB.patch",
+      "category": "generated-evidence",
+      "bytes": 3623,
+      "sha256": "b5d97799eb8510feb7e9cf504d1d6f7928fe7d152c299252890da04fc820fb7e",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-ABC.patch",
+      "category": "generated-evidence",
+      "bytes": 9998,
+      "sha256": "5f788b9b3ce6f314d87dce02b7749cda6b0fb4c14d77174036d79b0332d75a67",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-B-tests.log",
+      "category": "generated-evidence",
+      "bytes": 3453,
+      "sha256": "66c49aa493d2e736a8ce1e602a2624f17a6a64730e9a8ccf1adbd48883050a15",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-C-tests.log",
+      "category": "generated-evidence",
+      "bytes": 3163,
+      "sha256": "3507c4e5e3c9c57bf4b39ef2e7ed85cb221d9b27f98fa502d1b939716f17b6a1",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-architecture-final.log",
+      "category": "generated-evidence",
+      "bytes": 6126,
+      "sha256": "2af10cde3714a4409460eb6ada314bf72fdff8cb242784b94982c31b7eee501d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-architecture.log",
+      "category": "generated-evidence",
+      "bytes": 1299,
+      "sha256": "6621be8248d533ff3792c43a2c3f7d2174e9e3eefc4b8b8ca2885e7fafa37f35",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-artifact-check.json",
+      "category": "generated-evidence",
+      "bytes": 3203,
+      "sha256": "b33d95fd6e594744ee9894dc6da7044f57e0fa76defa647ddaa4475b603122c1",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61820,
+      "sha256": "d1ce84d58a88291f26d556eebaccb417afcda29873e7163d30d0bee1e94955f5",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-off-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61782,
+      "sha256": "45684e93aa591adf94fb1b07c81f96000202573a3f2f31746b329cf4210d8bcf",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-off-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61935,
+      "sha256": "72fa4ec2f18ab2ceed1cbcff48e970c4593039bf82105cde9ab8af681ce73dfa",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61996,
+      "sha256": "55ee8ff2667a35b630e1236f57fca03c4b016c8155765bc098a392407c67f2d2",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-vibrio-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65722,
+      "sha256": "79a5d43fd9131d354bcfe0bde45c8067561b3eae94d0249fb45e58a2492977b2",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-vibrio-off-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65669,
+      "sha256": "a6cd1b31d708e7dd29ea8b25158b3be0e2c214c5d38651832c955f242374dfd8",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-vibrio-off-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65727,
+      "sha256": "a6a0794b4bca05c3dcf1832322f46b852d2137e984e9b666b84408a533246957",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-vibrio-timing-quick3.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65753,
+      "sha256": "c70c1ef2db2d128bb587716e27b5a8078c81e39446967836ff9bc7feeec176f5",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-collinear-vibrio-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65782,
+      "sha256": "78e513c819a7a085c1d63aa8c19a5537cf61e36083178bab454babfa6812109d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-orthogroup-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62460,
+      "sha256": "fb5160c62ca94fc0010267744ef8eefe31ec52c0acd006dcfbaf4d98f5cab7f5",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-orthogroup-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62641,
+      "sha256": "b734a4539bc1242283df2fc5615ae3396ebb32a0d13422e14c808faf6e4be76d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-orthogroup-unbounded-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62484,
+      "sha256": "a524372162874424bbb1324bd1e4fc434839512e62ae83f14d940787d8c12cb3",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-baseline-gallery-orthogroup-unbounded-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62656,
+      "sha256": "67471325eb202ca09b73e207a9b6d4b1f43a69a756f03c7e87ef80112c61f34f",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-command.py",
+      "category": "generated-evidence",
+      "bytes": 4428,
+      "sha256": "8a99cc9aee1d5fcbf7b2bdb4d6327ac540be73760bbfc147b524b6c5803e2b0c",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-commands.jsonl",
+      "category": "generated-evidence",
+      "bytes": 194062,
+      "sha256": "f33bd90b6d45cd03e6530ea94bb7b2b13f9c713b57becf4b2624b922757cd755",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-memory.log",
+      "category": "generated-evidence",
+      "bytes": 58,
+      "sha256": "c10a832a4e0d01218e5c5e7c9b125d97fbd0873225f30682fcbb4782d77b7a7c",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-off-memory.log",
+      "category": "generated-evidence",
+      "bytes": 66,
+      "sha256": "9587bb024b91411c5536659b43741dba4e1b3c7ace57f05185e90ef6c1dffd26",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-off-timing.log",
+      "category": "generated-evidence",
+      "bytes": 66,
+      "sha256": "9ff741417bb54b458f434ff090727cf2f03aadcf202b1764f2f4b6eb3f5be3cc",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-timing.log",
+      "category": "generated-evidence",
+      "bytes": 58,
+      "sha256": "6f434f318d5f2fc125c4a233a7c25bf4aef48d9a4dc458b97c1604f9f41c0180",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-vibrio-memory.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "638d8012693821f68945032d99c58398092b6e1cfcca34b1b9a1282fc6bb4de4",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-vibrio-off-memory.log",
+      "category": "generated-evidence",
+      "bytes": 342,
+      "sha256": "f8638d4d82a66246a5505e7e24bead5a4e84083aeab6ea934f027aef351d8129",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-vibrio-off-timing.log",
+      "category": "generated-evidence",
+      "bytes": 342,
+      "sha256": "df957fd4758a1dbff9cc365c0c582707c8bef6398328c5aa8965bc189c183925",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-vibrio-timing-quick3.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "2c2b86f4b1ca198a61b2aad01848826bfe3ffeb7c7e401382d349a968a50a602",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-vibrio-timing-repeat1.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "2c2b86f4b1ca198a61b2aad01848826bfe3ffeb7c7e401382d349a968a50a602",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-collinear-vibrio-timing.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "2c2b86f4b1ca198a61b2aad01848826bfe3ffeb7c7e401382d349a968a50a602",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-orthogroup-memory.log",
+      "category": "generated-evidence",
+      "bytes": 60,
+      "sha256": "b16024dff83ae6b6c96dd6ef6420780df4007812c74b27c6af7e911145d87bcd",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-orthogroup-timing.log",
+      "category": "generated-evidence",
+      "bytes": 60,
+      "sha256": "223c9f8f0034d571c73ff64780133e7b580ce840a609b260a1eb74ea67b6b255",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-orthogroup-unbounded-memory.log",
+      "category": "generated-evidence",
+      "bytes": 80,
+      "sha256": "5038bf4d3b1556540879d0e678f32527fe60fb055abce603545808eb678f0890",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/baseline-gallery-orthogroup-unbounded-timing.log",
+      "category": "generated-evidence",
+      "bytes": 80,
+      "sha256": "366bdb15cb1d9266610aeaee5534ad70bdf7d0041070a97892cb12daf1ea9e39",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-memory.log",
+      "category": "generated-evidence",
+      "bytes": 58,
+      "sha256": "c10a832a4e0d01218e5c5e7c9b125d97fbd0873225f30682fcbb4782d77b7a7c",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-off-memory.log",
+      "category": "generated-evidence",
+      "bytes": 66,
+      "sha256": "9587bb024b91411c5536659b43741dba4e1b3c7ace57f05185e90ef6c1dffd26",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-off-timing.log",
+      "category": "generated-evidence",
+      "bytes": 66,
+      "sha256": "9ff741417bb54b458f434ff090727cf2f03aadcf202b1764f2f4b6eb3f5be3cc",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-timing.log",
+      "category": "generated-evidence",
+      "bytes": 58,
+      "sha256": "6f434f318d5f2fc125c4a233a7c25bf4aef48d9a4dc458b97c1604f9f41c0180",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-memory.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "638d8012693821f68945032d99c58398092b6e1cfcca34b1b9a1282fc6bb4de4",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-off-memory.log",
+      "category": "generated-evidence",
+      "bytes": 342,
+      "sha256": "f8638d4d82a66246a5505e7e24bead5a4e84083aeab6ea934f027aef351d8129",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-off-probe.log",
+      "category": "generated-evidence",
+      "bytes": 341,
+      "sha256": "a903291bf7023ca828c421a422ca94d41b7d40090dbd6e5aa529226f68386889",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-off-timing.log",
+      "category": "generated-evidence",
+      "bytes": 342,
+      "sha256": "df957fd4758a1dbff9cc365c0c582707c8bef6398328c5aa8965bc189c183925",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-probe.log",
+      "category": "generated-evidence",
+      "bytes": 333,
+      "sha256": "d3d2ce0f74db00904f93b03b838600324ab48f19ff7c96b285a29b4d83cb4d30",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-timing-quick3.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "2c2b86f4b1ca198a61b2aad01848826bfe3ffeb7c7e401382d349a968a50a602",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-collinear-vibrio-timing.log",
+      "category": "generated-evidence",
+      "bytes": 334,
+      "sha256": "2c2b86f4b1ca198a61b2aad01848826bfe3ffeb7c7e401382d349a968a50a602",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-orthogroup-memory.log",
+      "category": "generated-evidence",
+      "bytes": 60,
+      "sha256": "b16024dff83ae6b6c96dd6ef6420780df4007812c74b27c6af7e911145d87bcd",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-orthogroup-probe.log",
+      "category": "generated-evidence",
+      "bytes": 59,
+      "sha256": "84086beb51ef443b792d4009efe2169d3fed53da7ab78b47ada5d315dded91f3",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-orthogroup-timing.log",
+      "category": "generated-evidence",
+      "bytes": 60,
+      "sha256": "223c9f8f0034d571c73ff64780133e7b580ce840a609b260a1eb74ea67b6b255",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-orthogroup-unbounded-memory.log",
+      "category": "generated-evidence",
+      "bytes": 80,
+      "sha256": "5038bf4d3b1556540879d0e678f32527fe60fb055abce603545808eb678f0890",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-logs/current-gallery-orthogroup-unbounded-timing.log",
+      "category": "generated-evidence",
+      "bytes": 80,
+      "sha256": "366bdb15cb1d9266610aeaee5534ad70bdf7d0041070a97892cb12daf1ea9e39",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-runner-tests.log",
+      "category": "generated-evidence",
+      "bytes": 551,
+      "sha256": "2bd1ced28a84b168a97c5c4ce2bf717da6ce3637115570a09f9a9a66194100fb",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-summary.json",
+      "category": "generated-evidence",
+      "bytes": 16047,
+      "sha256": "1d39a8a0eade904fe4fa92944db309d4f0c1eefc13fd66e974416e1b0c11b3e0",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-summary.py",
+      "category": "generated-evidence",
+      "bytes": 5737,
+      "sha256": "687adc01d080f29ecc584773cbf78ef2869735929ec328a5babed4c7d0d26e22",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser-derived-hit.log",
+      "category": "generated-evidence",
+      "bytes": 929,
+      "sha256": "911348745640ae592d4caefd9396b6e74d0831572a01a839929b1a2b9ebfdb68",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser-resolved-replay.log",
+      "category": "generated-evidence",
+      "bytes": 262,
+      "sha256": "c2ef1dda2ac7cabade5de764148c5788df61ffe4e4b2e7776097274c8cde5c1d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser-resume.log",
+      "category": "generated-evidence",
+      "bytes": 560,
+      "sha256": "af2425cf6a77316cf36bd6d4e2e3c5de50ac6522d68b85019219e04c11d10aa4",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser-reuse-check.log",
+      "category": "generated-evidence",
+      "bytes": 51,
+      "sha256": "3c9988eb673eeadc527e383046a6bfe98861bd0d09ad0275bc858318647cb784",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser-sandbox-denied.log",
+      "category": "generated-evidence",
+      "bytes": 1327,
+      "sha256": "eb182c7f9fe016d13bd108c5b151991418698ecebb885495d6a5ad71f3e89dbe",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser.json.gz",
+      "category": "generated-evidence",
+      "bytes": 15438,
+      "sha256": "de925f16e098dd83111f4584cb02591e72bae7d82d3154e4948bdf660b4f0626",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser.log",
+      "category": "generated-evidence",
+      "bytes": 929,
+      "sha256": "911348745640ae592d4caefd9396b6e74d0831572a01a839929b1a2b9ebfdb68",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cli-gallery-collinear.log",
+      "category": "generated-evidence",
+      "bytes": 1421,
+      "sha256": "f363854241bd1443ff0de6b9353b82032a620be1e1e5fdfccf6402b173d9a6d5",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cli-gallery-orthogroup.log",
+      "category": "generated-evidence",
+      "bytes": 3361,
+      "sha256": "eae3536ca9a77c4aaa49a8f7b6552f1866807f43a6a67957c13f9cd4eea07184",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cli-install.log",
+      "category": "generated-evidence",
+      "bytes": 395,
+      "sha256": "3e5838f1ee111e7df03fade23bc6f0e420635d1a8484eabab608a0cb9d56534b",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cli-released-v2.log",
+      "category": "generated-evidence",
+      "bytes": 1426,
+      "sha256": "187c22789f11e9e0c055778750b8675bba24672eef88a34074fee47aa56f7716",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cli.json",
+      "category": "generated-evidence",
+      "bytes": 2870,
+      "sha256": "966a07d7bee771e30232eb50c4673b3e27bc1a84669e899127fd8f52b2d301b2",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cli.log",
+      "category": "generated-evidence",
+      "bytes": 2016,
+      "sha256": "909f2b75b9aea51d0d8de22d14ada4a75bc472eeee01e29158f8a4c1344a78f7",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-commands.json",
+      "category": "generated-evidence",
+      "bytes": 6473,
+      "sha256": "1f744699d07d1e78ade676f7b29460e99fb68fc9302cf55687948adff4860139",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-cumulative-observations.json",
+      "category": "generated-evidence",
+      "bytes": 2490,
+      "sha256": "4178896044cd59cd04f4add66d17cbe169af39524012ad9dad13cd791b356291",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62539,
+      "sha256": "fa18d65d7d42fad571d79b6fcf1bdecc8035781a6ac1465ed77623d3b7218192",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-off-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62514,
+      "sha256": "c94cf1c8a7bb846722c7552c95523e09a69d32f8bba6412eb6bb785090fe569b",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-off-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62514,
+      "sha256": "1df9b92f99318ecc63e88f18e6f997f8fb7c0eb0794b3a61d6ea009c5a365d92",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62559,
+      "sha256": "b4e8a91ffc03f70f50f6bd26064c2de94aa7cc262cdf1873644479f77cf1dc7e",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 66495,
+      "sha256": "5361af7cf59336873be727dddb1488aa06b56f3d33676a23eedcaab70009cc68",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-off-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 66455,
+      "sha256": "6c380d1ed4d4ac66b014de83c9021a2c624bddd81ccc6f2ca6c50ee6b88abc11",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-off-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 68119,
+      "sha256": "e9aeda7efe7c9bab89d1e03e1c9f6a0d85f86a859c12f995a978462442c22256",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-off-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 66358,
+      "sha256": "48f2c66c1da7696baa1330d0eb636b99586a659ed1c3d9b87f2219e615e8a5c6",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 68704,
+      "sha256": "667cf4aeabc946f27e2e24cf4e9a9ed8d1e31089ff9f4a5075ad42226fe32c70",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-timing-quick3.json.gz",
+      "category": "generated-evidence",
+      "bytes": 66615,
+      "sha256": "3c6ae5197493fc6ed37e63f5610f526986b66d247160a859478718d49cc3f014",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 66406,
+      "sha256": "f6b7c413b60b242b14da5ccbe6f884ae625662ecf2c7a992c04d03b030fb0dce",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-orthogroup-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 63267,
+      "sha256": "18ca033859a753a27778375c38bb90f14d89a9fa8eb163d837f17cffca17f2e0",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-orthogroup-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65186,
+      "sha256": "9e54a8e5539990b80666f5e156881193305d894de7f3c4659f8f59585158583d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-orthogroup-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 63303,
+      "sha256": "0944226e22c2719a55065a59753e2b82e4fc886c18daa7337fa3f86afd1baec8",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-orthogroup-unbounded-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 63299,
+      "sha256": "e6e8fbcb0898fb67cc2b396d4e4ac82334862fb4d9d205f0f4dcc2138a890926",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-orthogroup-unbounded-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 63346,
+      "sha256": "e3bb8b278ef9d3c5a1d33f83bfabeace6ed441fa1ac399309ee7d66c315b80e1",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-fit-tie-tests.log",
+      "category": "generated-evidence",
+      "bytes": 583,
+      "sha256": "1d9a1d26601e3da5440c90caa1192649cc3e82ef29edf258445711ae5db9246e",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-measured-runner.py.gz",
+      "category": "generated-evidence",
+      "bytes": 17013,
+      "sha256": "60d15cdf1d86245249c747b03177993803268cb8e22bdd0d6fcb4e9864527b38",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-native-tests.log",
+      "category": "generated-evidence",
+      "bytes": 3455,
+      "sha256": "458cdff02119dc17b98c211757910cda0723d4d941629a00664205d3eb1357db",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-node-corrected.log",
+      "category": "generated-evidence",
+      "bytes": 300,
+      "sha256": "161c5a10acc2ddce288e2a99fc9dd0cd7954f01110564ab6f5b81fe9ee92d2fc",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-node.log",
+      "category": "generated-evidence",
+      "bytes": 53,
+      "sha256": "171f2f6b13e384130db2e468f6df7e9297e7b1c2c3c3f90847657050c2eca377",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-remaining-costs.json",
+      "category": "generated-evidence",
+      "bytes": 3682,
+      "sha256": "20edb505860f64c47d23492d0bacb5ba807b6ef3369e37e5e588ecadce1cdf14",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-ruff-final.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-ruff.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-sampling-policy-tests.log",
+      "category": "generated-evidence",
+      "bytes": 579,
+      "sha256": "b8bfca5d0b7320ba81e2def7f41bee4670c31400faa46ea4bec4ffd1007c9f3e",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-stages.json",
+      "category": "generated-evidence",
+      "bytes": 231,
+      "sha256": "06c96207c20f6502818ec87eae641cf401fe0476bbcd7bb8f747ed4da10c058d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-start.json",
+      "category": "generated-evidence",
+      "bytes": 46187,
+      "sha256": "a84242f16054c161359705a7fbaac0c84596850d820b2fc236ef84209204ed5c",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-structural.json",
+      "category": "generated-evidence",
+      "bytes": 1380,
+      "sha256": "f7efe800c50177545b2ecc268353b23e19ae2cfb3c6a9915dc90dae2c00c2a57",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-typed-reference-tests.log",
+      "category": "generated-evidence",
+      "bytes": 1969,
+      "sha256": "b906492fe3fa8b5970b9c4ed22b86a9a85109353f66901df6ecaa4b4c8d8aa03",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-wheel.log",
+      "category": "generated-evidence",
+      "bytes": 740,
+      "sha256": "cb4ac013dcbf49d327f06238971a2213843ca99b48a42cc6a602b30544fd5466",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "gbdraw/analysis/protein_colinearity.py",
+      "category": "production",
+      "bytes": 269019,
+      "sha256": "608abd7f9e0ff266e0746c7a961712c74d358ae85c27653355aa8ccce4fbc17d",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/prototypes/protein_colinearity_s076.py.gz",
+      "category": "tests",
+      "bytes": 49614,
+      "sha256": "e5d12ea0df885bd3596bc827812f13b4d71abc0d73ceb6bbbafebcbca758c9c9",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/prototypes/protein_local_reductions.py",
+      "category": "tests",
+      "bytes": 3733,
+      "sha256": "12ed48e49d704657702f8a48d8879b5cdddc13dbcf77eaa03edef7791e95a4cf",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/run_protein_local_browser_acceptance.py",
+      "category": "tests",
+      "bytes": 14202,
+      "sha256": "3d92b230a551f1edbbac38f3cfe0796d93c650fcdb5d4a0774de1ed93258dc70",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/run_protein_local_cli_acceptance.py",
+      "category": "tests",
+      "bytes": 5040,
+      "sha256": "786d211a9fe49cd0c8cee2dac0c6f530953c9782ccb1cc305336d45c6dbe0bb7",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/test_protein_comparison_benchmark.py",
+      "category": "tests",
+      "bytes": 5055,
+      "sha256": "346c2869e2f6a11bbcc55b9f466025505189665f090ea7efea64cb6ef571b77a",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/test_protein_local_reductions.py",
+      "category": "tests",
+      "bytes": 20920,
+      "sha256": "356cc30ad173e61fb2fc3bf4edf7994f7b51c1112407574926508a73d1f1410e",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tests/test_sparse_support.py",
+      "category": "tests",
+      "bytes": 14582,
+      "sha256": "f1b2ef08822023aca15edf61d8e66dad388f64335b9df04096dc30b397792609",
+      "modifiesInheritedFile": false
+    },
+    {
+      "path": "tools/benchmark_protein_comparison.py",
+      "category": "benchmark-tooling",
+      "bytes": 65280,
+      "sha256": "ecd26c0a10b6b6a53c82229afe561fa8402afbd3817ec2b02974db94ca1af891",
+      "modifiesInheritedFile": true
+    }
+  ],
+  "proposedCommitTitle": "Reduce repeated fit, member and evidence ranking work",
+  "englishSummary": "Restrict fit selection to four columns, remove redundant member/RBH work, and reuse one stable evidence traversal. Preserve exact results and Session replay, measure native changes with noise and memory tradeoffs, and default future timing to three samples.",
+  "futureSampling": "Three samples by user instruction, no automatic repeat; archived policy governs archived decisions.",
+  "categoryCounts": {
+    "documentation": 4,
+    "generated-evidence": 102,
+    "production": 1,
+    "tests": 7,
+    "benchmark-tooling": 1
+  },
+  "verifiedInheritedOriginalEntries": 109,
+  "commitPreparation": {
+    "scope": "222 verified files including inherited S07.6 results",
+    "stagedWhitespaceExceptions": [
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel.log",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-AB.patch",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-ABC.patch"
+    ],
+    "reason": "Patch blank-context prefixes are required for reconstruction; inherited raw logs retain their original hashes."
+  }
+}

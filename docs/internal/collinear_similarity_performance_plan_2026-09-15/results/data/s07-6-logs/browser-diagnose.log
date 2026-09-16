@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_unit_index_browser_acceptance.py", line 134, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tests/run_unit_index_browser_acceptance.py", line 113, in main
+    raise AssertionError(f"{case['name']}: complete outputs saved at {debug}")
+AssertionError: gallery-collinear: complete outputs saved at /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/.venv/s07-6-browser-debug

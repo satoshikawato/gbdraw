@@ -1,0 +1,100 @@
+{
+  "createdUtc": "2026-09-16T08:09:17.718762+00:00",
+  "head": "f52ed68e15e527b08e4d9247b990684040fe4270",
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "branch": "perf/collinear-s07-5-gallery-plan-20260916",
+  "upstream": null,
+  "taskStatus": "planning-complete",
+  "newCommitCreated": false,
+  "productionDiff": [],
+  "testDiff": [],
+  "publicGeneratedArtifactDiff": [],
+  "sharedTreeHandling": "No task write targeted shared dirty files; only isolated worktree files and authorized Git worktree/branch metadata were changed. External Git work was observed; no claim of exclusive ownership of the shared tree.",
+  "s07Acceptance": "accepted; original numerical outcomes and conditions unchanged",
+  "s06CompatibilityReview": "required before a future merge; not a local planning blocker",
+  "s05": "rejected; excluded",
+  "additionalMeasurements": "Only fit-row selection original vs planning prototype and unit allocation inventory; no full stage or prior-session rerun",
+  "timingNumericalDecisions": {
+    "hep": "pass",
+    "similarity": "pass",
+    "vibrio": "pass"
+  },
+  "timingAcceptance": "NOT_ESTABLISHED: unrelated LOSAT and Git processes observed before and after; measurements retained as exploratory observations only",
+  "checks": {
+    "independentListOracleCases": 48,
+    "galleryFitPointsAndModelExactParity": 3,
+    "timingAndMemoryOutputHashParity": true,
+    "sevenSamplesEachSource": true,
+    "medianMadRecomputed": true,
+    "fixtureEqualAcrossNewRuns": true,
+    "sourceHashesMatch": true,
+    "ruffDiagnostic": "PASS",
+    "gitDiffCheck": "PASS",
+    "broadPytestWheelBrowserCli": "not run; planning only",
+    "localLinkTargets": 49,
+    "pythonSyntax": "PASS",
+    "newTextWhitespace": "PASS",
+    "planSections": 12
+  },
+  "scriptRevision": {
+    "measuredSha256": "6eb8f0253f95bd2ce0db8d8e9ec7cd42c11624d4dca6b4540257134f4c47b334",
+    "finalSha256": "9b8e0599693d79afcacf83c07f8b255bee6d1db9cdce2c4ffef4bae7454e7fd8",
+    "onlyChange": "Remove unused from contextlib import ExitStack; reconstructing measured bytes from final script reproduces all three report hashes."
+  },
+  "entries": [
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "category": "documentation",
+      "bytes": 37298,
+      "sha256": "14d44fd35d55f8c282f4dad4782b3e56162e7a1ce30fa48c2a417fff1cf4e7fc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_5_PLAN.md",
+      "category": "documentation",
+      "bytes": 47650,
+      "sha256": "3a96ae370c0ecd065aa37df5e9371506cc4b8107749cf73235167d5602a89716"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-diagnose.py",
+      "category": "diagnostic",
+      "bytes": 11473,
+      "sha256": "9b8e0599693d79afcacf83c07f8b255bee6d1db9cdce2c4ffef4bae7454e7fd8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-evidence-reuse.json",
+      "category": "generated-evidence",
+      "bytes": 281171,
+      "sha256": "11938a9d51e87fb37257692f1263a087ba33acec56c9cb45d48f8411e65c40e6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 10929,
+      "sha256": "fae819f3a6b4f118bf50ba9c16bf9d1785b9594bd8bc84f9e19035122708f1ca"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing-command.json",
+      "category": "generated-evidence",
+      "bytes": 6017,
+      "sha256": "ab6b8caf0a4b4eb0ae94b2f117cecbd2b2370b1dfe8ca2c9b23e981af2d91ded"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 11564,
+      "sha256": "c92964b297d828eb1bb7d9c031b950f10af3be3df4fa0a8ee53b92a5fea06d29"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing.log",
+      "category": "generated-evidence",
+      "bytes": 5783,
+      "sha256": "cbcc062aff665c3924f693a9a0263b5f28eb65bd9dc3edc2ee831eea38908d90"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-inventory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 11517,
+      "sha256": "cc17928dc421db93a486f9378c57cd13717eef0f22466c03c97393ac2b39f97d"
+    }
+  ]
+}

@@ -90,7 +90,7 @@ def test_fixed_core_then_expanded_competition_and_local_addition():
         snapshots.append(dict(mapping))
         return original(evidence, mapping)
     with patch.object(pc, "_index_core_support_evidence", observe):
-        result = pc._build_anchor_core_orthogroups(best, anchors, pm, include_singletons=False, max_related_edges_per_orthogroup=2)
+        result = pc._build_anchor_core_orthogroups(best, anchors, pm, ranked_direction_rows=sorted(best.items(), key=lambda item: pc._anchor_core_hit_rank(item[1], pm)), include_singletons=False, max_related_edges_per_orthogroup=2)
     assert "u" not in snapshots[0] and snapshots[1]["u"] == "og_1"
     assert result.member_by_protein_id["u"].role == "inparalog"
     # v cannot chain through u during assignment; u competes in the later local phase.
@@ -194,7 +194,7 @@ def test_complete_ties_best_second_confidence_and_related_order(cap):
         for member in ["a", "c"]:
             best[pid, member] = row(pid, member, .8)
     anchors = [pc._AnchorCoreEvidenceEdge(q, s, best[q, s], 1., 1., "rbh") for q, s in [("a", "b"), ("c", "d")]]
-    result = pc._build_anchor_core_orthogroups(best, anchors, pm, include_singletons=False, max_related_edges_per_orthogroup=cap)
+    result = pc._build_anchor_core_orthogroups(best, anchors, pm, ranked_direction_rows=sorted(best.items(), key=lambda item: pc._anchor_core_hit_rank(item[1], pm)), include_singletons=False, max_related_edges_per_orthogroup=cap)
     assert (result.member_by_protein_id["high"].role, result.member_by_protein_id["high"].confidence) == ("inparalog", "high")
     assert (result.member_by_protein_id["low"].role, result.member_by_protein_id["low"].confidence) == ("low_confidence", "low")
     assert result.member_by_protein_id["low"].best_core_support == .15

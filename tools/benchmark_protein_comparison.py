@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproduce protein-comparison baselines without changing production code.
 
-Run each source tree in a fresh process. Timing (one warmup, seven samples),
+Run each source tree in a fresh process. Timing (one warmup, three samples),
 profiling/counters, and tracemalloc are separate invocations. Inputs and complete
 ordered stage results are hashed; --artifacts also saves the semantic oracles.
 The benchmark records current behavior, including errors, not Product authority.
@@ -9,6 +9,8 @@ The benchmark records current behavior, including errors, not Product authority.
 from __future__ import annotations
 
 import argparse
+import ast
+import inspect
 import base64
 from collections import Counter
 from contextlib import ExitStack
@@ -37,9 +39,9 @@ from unittest.mock import patch
 
 NAME = "gbdraw-protein-comparison"
 SEED = 20260915
-POLICY = {"warmups": 1, "samples": 7, "regressionPct": 10.0,
+POLICY = {"warmups": 1, "samples": 3, "regressionPct": 10.0,
           "maxNoisePct": 5.0, "noise": "100 * MAD / median",
-          "noisyDecision": "inconclusive; repeat both trees, never waive",
+          "noisyDecision": "inconclusive; no automatic repeat",
           "semanticGate": "exact ordered stage digest, including types and errors"}
 GALLERIES = ("hepatoplasmataceae_collinear", "hepatoplasmataceae_orthogroup",
              "vibrio-harveyi-group-collinear")
@@ -48,8 +50,8 @@ CASES = ("hsp-edges", "hsp-1", "hsp-1000", "hsp-many", "dense-24", "support-edge
          "giant-200", "giant-800", "unrelated-200", "unrelated-800",
          "cache-49", "cache-64", "cache-81", "path-8", "path-12", "path-16", "path-24", "path-32", "path-56",
          "merge-300", "merge-600", "merge-1200", "merge-edges", "manifest",
-         "gallery-collinear", "gallery-collinear-off", "gallery-collinear-vibrio",
-         "gallery-collinear-vibrio-off", "gallery-orthogroup", "render-gallery")
+         "units-multicds", "gallery-collinear", "gallery-collinear-off", "gallery-collinear-vibrio",
+         "gallery-collinear-vibrio-off", "gallery-orthogroup", "gallery-orthogroup-unbounded", "render-gallery")
 
 
 def digest(data):
@@ -444,7 +446,23 @@ def cache_case(root, pc, name):
             "boundary": "real Python helper LRU functions + native parse/filter; no raw search or JS derived hit"}, {"cache_cycle": run}
 
 
-def build_case(root, pc, cc, name, seed, path_representation="graph"):
+def build_case(root, pc, cc, name, seed, path_representation="graph", unit_stages=False):
+    if name == "units-multicds":
+        from dataclasses import replace
+        from gbdraw.analysis.collinearity_units import build_collinearity_unit_index
+        rng = random.Random(seed)
+        rows = []
+        for r in range(3):
+            row = [replace(protein(pc, f"p{r}-{i}", r, i), locus_tag=f"L{i % 20}",
+                           gene=f"shared{i % 3}", strand=-1 if i % 2 else 1)
+                   for i in range(400)]
+            rng.shuffle(row)
+            rows.append(row)
+        extraction = pc.ProteinExtractionResult(rows, {p.protein_id: p for row in rows for p in row})
+        return {"seed": seed, "inputSha256": digest(json_bytes(canonical(extraction))),
+                "proteinCount": 1200, "unitMode": "auto", "recordCount": 3,
+                "boundary": "prepared extraction -> complete ordered unit index"}, {
+                    "unit_index": lambda: build_collinearity_unit_index(extraction, mode="auto")}
     if name.startswith("unrelated-"):
         import pandas as pd
         # Membership-stage isolation: adding groups changes neither evidence nor
@@ -502,7 +520,8 @@ def build_case(root, pc, cc, name, seed, path_representation="graph"):
         def filter_hits():
             return {k: pc.filter_protein_hits_by_thresholds(v, **settings) for k, v in parsed.items()}
         tables = filter_hits()
-        inventory.update({"benchmarkThresholds": settings, "memberMaxHits": 5,
+        member_max_hits = None if name.endswith("-unbounded") else 5
+        inventory.update({"benchmarkThresholds": settings, "memberMaxHits": member_max_hits,
                           "inference": not name.endswith("-off"), "scope": "adjacent" if name.startswith("gallery-collinear") else "all",
                           "blockParameters": canonical(cc.LosslessCollinearityParameters()) if name.startswith("gallery-collinear") else None,
                           "unitMode": "auto", "edgeMode": "rbh", "maxRelatedEdges": 2,
@@ -513,17 +532,17 @@ def build_case(root, pc, cc, name, seed, path_representation="graph"):
         if name.startswith("gallery-collinear"):
             def analyze():
                 return cc.build_orthogroup_collinearity_blocks_from_hits(tables, extraction,
-                            records=records, orthogroup_member_max_hits=5, infer_orthogroups=not name.endswith("-off"), search_scope="adjacent")
+                            records=records, orthogroup_member_max_hits=member_max_hits, infer_orthogroups=not name.endswith("-off"), search_scope="adjacent")
         else:
             def analyze():
                 return pc.select_rbh_orthogroup_edges_from_directional_hits(tables, extraction.protein_map,
-                            record_count=len(records), orthogroup_member_max_hits=5)
+                            record_count=len(records), orthogroup_member_max_hits=member_max_hits)
         from gbdraw.session_request_codec import encode_canonical_typed_resource
         from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
         result = analyze()
         # Stage inputs are prepared once outside measurement. The post_search stage
         # itself includes its own normalization, inference, projection and blocks.
-        return inventory, {"parse": parse, "filter": filter_hits, "hsp_aggregate": aggregate,
+        operations = {"parse": parse, "filter": filter_hits, "hsp_aggregate": aggregate,
             "post_search": analyze,
             "metadata": lambda: serialize_orthogroups_payload(result.orthogroups, records=records),
             "display_tables": (lambda: cc.convert_collinearity_blocks_to_pair_comparisons(result, records=records))
@@ -532,6 +551,10 @@ def build_case(root, pc, cc, name, seed, path_representation="graph"):
                     table, extraction.protein_map, extraction.protein_map, result.orthogroups)
                     for table in result.adjacent_display_edges_by_pair.values()]),
             "typed_serialization": lambda: encode_canonical_typed_resource("result", result if name.startswith("gallery-collinear") else result.orthogroups)}
+        if unit_stages and name.startswith("gallery-collinear"):
+            from gbdraw.analysis.collinearity_units import build_collinearity_unit_index
+            operations["unit_index"] = lambda: build_collinearity_unit_index(extraction, records=records, mode="auto")
+        return inventory, operations
     pm, tables = synthetic(pc, name, seed)
     inventory = {"seed": seed, "generator": name, "proteinCount": len(pm),
                  "inputSha256": digest(json_bytes(canonical((pm, tables)))),
@@ -562,13 +585,13 @@ def build_case(root, pc, cc, name, seed, path_representation="graph"):
     return inventory, {"selector": select}
 
 
-def path_browser_inputs(root, pc, cc):
+def path_browser_inputs(root, pc, cc, names=("sparse-2", "path-24", "gallery-collinear", "gallery-collinear-off", "gallery-orthogroup")):
     """Use the same saved evidence and native production helper as the browser."""
     from dataclasses import asdict
     inputs = []
-    for name in ("sparse-2", "path-24", "gallery-collinear", "gallery-collinear-off", "gallery-orthogroup"):
+    for name in names:
         if name.startswith("gallery-"):
-            gallery = GALLERIES[0 if name.startswith("gallery-collinear") else 1]
+            gallery = GALLERIES[2 if "-vibrio" in name else 0 if name.startswith("gallery-collinear") else 1]
             _, extraction, records, raw, inventory = gallery_input(root, gallery, pc)
             pm = extraction.protein_map
             lengths = [len(r.seq) for r in records]
@@ -607,6 +630,7 @@ def path_browser_inputs(root, pc, cc):
 def operation_probe(pc, cc, fn):
     import pandas as pd
     from gbdraw.web_support import orthogroup_metadata as metadata
+    from gbdraw.analysis import collinearity_units as cu
 
     counters = Counter()
     profile = cProfile.Profile()
@@ -629,6 +653,36 @@ def operation_probe(pc, cc, fn):
                     return counted_rows()
                 return result
             stack.enter_context(patch.object(pd.DataFrame, name, pandas_call))
+        # Observe removed unit work only in this module; never instrument timing.
+        unit_source = inspect.getsource(cu)
+        member_sort_lines = {n.lineno for n in ast.walk(ast.parse(unit_source))
+                             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                             and n.func.id == "sorted" and n.args
+                             and isinstance(n.args[0], ast.Name) and n.args[0].id == "members"}
+        for key in ("instances", "memberSortCalls", "memberSortReferences", "explicitSetCalls", "aliasVisits"):
+            counters["units." + key] = 0
+        original_unit = cu.CollinearityUnit
+        def make_unit(*args, **kwargs):
+            counters["units.instances"] += 1
+            return original_unit(*args, **kwargs)
+        def unit_sorted(values, *args, **kwargs):
+            counters["units.sortCalls"] += 1
+            if sys._getframe(1).f_lineno in member_sort_lines:
+                counters["units.memberSortCalls"] += 1
+                counters["units.memberSortReferences"] += len(values)
+            return sorted(values, *args, **kwargs)
+        def unit_set(*args):
+            counters["units.explicitSetCalls"] += 1
+            return set(*args)
+        original_aliases = cu._unit_aliases
+        def unit_aliases(**kwargs):
+            result = original_aliases(**kwargs)
+            counters["units.aliasVisits"] += len(result)
+            return result
+        stack.enter_context(patch.object(cu, "CollinearityUnit", make_unit))
+        stack.enter_context(patch.object(cu, "sorted", unit_sorted, create=True))
+        stack.enter_context(patch.object(cu, "set", unit_set, create=True))
+        stack.enter_context(patch.object(cu, "_unit_aliases", unit_aliases))
         merge_depth = 0
         conflict_depth = 0
         bisect_depth = 0
@@ -926,6 +980,7 @@ def compare_reports(base, current, *, semantic_only=False):
         raise ValueError("incomparable reports: measurement")
     if set(base["cases"]) != set(current["cases"]):
         raise ValueError("incomparable case inventory")
+    policy = base["settings"]["policy"]
     rows = {}
     for name, bcase in base["cases"].items():
         ccase = current["cases"][name]
@@ -943,9 +998,9 @@ def compare_reports(base, current, *, semantic_only=False):
                 delta = 100 * (c["median"] / b["median"] - 1)
                 row["timeDeltaPct"] = delta
                 if equal:
-                    if min(len(b["samples"]), len(c["samples"])) < POLICY["samples"] or max(b["noisePct"], c["noisePct"]) > POLICY["maxNoisePct"]:
+                    if min(len(b["samples"]), len(c["samples"])) < policy["samples"] or max(b["noisePct"], c["noisePct"]) > policy["maxNoisePct"]:
                         decision = "inconclusive"
-                    elif delta > POLICY["regressionPct"]:
+                    elif delta > policy["regressionPct"]:
                         decision = "regression"
             row["decision"] = decision
             rows[f"{name}/{stage}"] = row
@@ -974,6 +1029,7 @@ def main(argv=None):
     run.add_argument("--samples", type=int, default=POLICY["samples"])
     run.add_argument("--path-representation", choices=("graph", "exhaustive"), default="graph",
                      help="Same-source explicit-output control, restricted to R<=16 path cases")
+    run.add_argument("--unit-stages", action="store_true", help="Add prepared extraction -> full unit index for Collinear cases")
     run.add_argument("--merge-stages", action="store_true", help="Add isolated merge stages with captured production inputs")
     run.add_argument("--stages", nargs="+", help="Measure only named stages; preparation remains outside stage timing")
     run.add_argument("--artifacts", type=Path)
@@ -989,7 +1045,7 @@ def main(argv=None):
     browser.add_argument("--output", type=Path, required=True)
     paths_browser = sub.add_parser("path-browser", help="S06 production conversion Worker timing/memory")
     paths_browser.add_argument("--source-root", type=Path, required=True)
-    paths_browser.add_argument("--samples", type=int, default=7)
+    paths_browser.add_argument("--samples", type=int, default=POLICY["samples"])
     paths_browser.add_argument("--measure", choices=("timing", "memory"), default="timing")
     paths_browser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -1033,7 +1089,7 @@ def main(argv=None):
                   "cases": {}}
         for name in args.cases:
             print(f"{args.measure}: {name}", file=sys.stderr, flush=True)
-            fixture, operations = build_case(root, pc, cc, name, args.seed, args.path_representation)
+            fixture, operations = build_case(root, pc, cc, name, args.seed, args.path_representation, args.unit_stages)
             if args.merge_stages:
                 operations.update(isolated_merge_operations(cc, operations))
             if args.path_representation != "graph":

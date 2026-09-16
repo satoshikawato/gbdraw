@@ -129,9 +129,10 @@ def _unit_aliases(
     _add_alias(aliases, locus_id)
     _add_alias(aliases, display_name)
     for protein in proteins:
-        _add_alias(aliases, protein.protein_id)
-        _add_alias(aliases, protein.source_protein_id)
-        _add_alias(aliases, protein.feature_svg_id)
+        if protein is not representative:
+            _add_alias(aliases, protein.protein_id)
+            _add_alias(aliases, protein.source_protein_id)
+            _add_alias(aliases, protein.feature_svg_id)
         _add_alias(aliases, getattr(protein, "locus_tag", None))
         _add_alias(aliases, getattr(protein, "gene_id", None))
         _add_alias(aliases, getattr(protein, "old_locus_tag", None))
@@ -199,7 +200,7 @@ def build_collinearity_unit_index(
                 ("locus", locus_id, members)
                 for locus_id, members in locus_groups.items()
             )
-            grouped.extend(("cds", strong_locus_id(protein), [protein]) for protein in fallback_proteins)
+            grouped.extend(("cds", None, [protein]) for protein in fallback_proteins)
 
         grouped = sorted(grouped, key=lambda item: _unit_sort_key(item[2]))
         if normalized_mode == "auto":
@@ -231,31 +232,15 @@ def build_collinearity_unit_index(
                 strand=_unit_strand(members),
                 locus_id=locus_id,
                 display_name=display_name,
-                cds_members=tuple(
-                    protein.protein_id
-                    for protein in sorted(
-                        members,
-                        key=lambda protein: (
-                            int(protein.start),
-                            int(protein.end),
-                            int(protein.feature_index),
-                            str(protein.protein_id),
-                        ),
-                    )
+                # Each group is a subsequence of sorted_proteins.
+                cds_members=tuple(protein.protein_id for protein in members),
+                aliases=_unit_aliases(
+                    unit_id=unit_id,
+                    proteins=members,
+                    representative=representative,
+                    locus_id=locus_id,
+                    display_name=display_name,
                 ),
-                aliases=(),
-            )
-            unit = CollinearityUnit(
-                **{
-                    **unit.__dict__,
-                    "aliases": _unit_aliases(
-                        unit_id=unit.unit_id,
-                        proteins=members,
-                        representative=representative,
-                        locus_id=locus_id,
-                        display_name=display_name,
-                    ),
-                }
             )
             record_units.append(unit)
             unit_by_id[unit.unit_id] = unit
@@ -266,20 +251,18 @@ def build_collinearity_unit_index(
     aliases_by_record: list[dict[str, str]] = []
     ambiguous_aliases_by_record: list[set[str]] = []
     for record_units in units_by_record:
-        alias_targets: dict[str, set[str]] = {}
+        unique_aliases: dict[str, str] = {}
+        ambiguous_aliases: set[str] = set()
         for unit in record_units:
             for alias in unit.aliases:
-                alias_targets.setdefault(alias, set()).add(unit.unit_id)
-        aliases_by_record.append(
-            {
-                alias: next(iter(unit_ids))
-                for alias, unit_ids in alias_targets.items()
-                if len(unit_ids) == 1
-            }
-        )
-        ambiguous_aliases_by_record.append(
-            {alias for alias, unit_ids in alias_targets.items() if len(unit_ids) > 1}
-        )
+                if alias in ambiguous_aliases:
+                    continue
+                previous = unique_aliases.setdefault(alias, unit.unit_id)
+                if previous != unit.unit_id:
+                    del unique_aliases[alias]
+                    ambiguous_aliases.add(alias)
+        aliases_by_record.append(unique_aliases)
+        ambiguous_aliases_by_record.append(ambiguous_aliases)
 
     if mixed_fallback_counts:
         preview = ", ".join(f"{record_id}: {count}" for record_id, count in mixed_fallback_counts[:5])

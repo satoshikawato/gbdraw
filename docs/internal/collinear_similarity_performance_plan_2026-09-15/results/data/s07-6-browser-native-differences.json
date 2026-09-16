@@ -1,0 +1,48 @@
+{
+  "count": 122,
+  "allDifferencesAreFloatLeaves": true,
+  "maxAbsoluteDifference": 6.661338147750939e-16,
+  "examples": [
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_2cye5z6xo7hendokvqhqil5gnu/fields/bestCoreSupport",
+      0.38956386773856555,
+      0.3895638677385659
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_2nexyfhlr5wgswm3crdnbts4sq/fields/bestCoreSupport",
+      0.3510932156137406,
+      0.35109321561374096
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_2s4d4ipdtwasxuby4txftpxcmu/fields/bestCoreSupport",
+      0.20019459733752812,
+      0.20019459733752834
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_3v2c447ge3evaycwjq4mg6yzgy/fields/bestCoreSupport",
+      0.4209401896168543,
+      0.4209401896168547
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_4fc5hr5qtnal2ovmhztjl7avxi/fields/bestCoreSupport",
+      0.34495931582477607,
+      0.3449593158247759
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_4pqh3gcpfsijrpdpiabwwcpygy/fields/bestCoreSupport",
+      0.45329925351888983,
+      0.45329925351889
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_4ydtcppknqgqqwzhxisegkncx4/fields/bestCoreSupport",
+      0.3510932156137406,
+      0.35109321561374096
+    ],
+    [
+      "/collinearityResult/value/fields/orthogroups/fields/memberByProteinId/h_5bpwbyzrnk2tqwrce6rapatcz4/fields/bestCoreSupport",
+      0.163023759001406,
+      0.16302375900140617
+    ]
+  ],
+  "diagnosis": "Both native frozen/current and same-Pyodide old/current are exactly equal; no tolerance introduced"
+}

@@ -1,0 +1,81 @@
+diff --git a/gbdraw/analysis/protein_colinearity.py b/gbdraw/analysis/protein_colinearity.py
+index 65c6e05f..9238e037 100644
+--- a/gbdraw/analysis/protein_colinearity.py
++++ b/gbdraw/analysis/protein_colinearity.py
+@@ -3416,12 +3416,12 @@ def _select_member_candidate_hits_per_query(
+ 
+     if max_hits is None:
+         _validate_comparison_columns(hits)
+-        return hits.copy().reset_index(drop=True)
++        return hits.reset_index(drop=True)
+     selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
+     if selected_pairs.empty:
+         return hits.iloc[0:0].copy()
+-    pair_index = pd.MultiIndex.from_frame(selected_pairs[["query", "subject"]])
+-    hit_index = pd.MultiIndex.from_frame(hits[["query", "subject"]])
++    pair_index = pd.MultiIndex.from_arrays([selected_pairs["query"], selected_pairs["subject"]])
++    hit_index = pd.MultiIndex.from_arrays([hits["query"], hits["subject"]])
+     return hits.loc[hit_index.isin(pair_index)].reset_index(drop=True)
+ 
+ 
+@@ -3435,22 +3435,20 @@ def select_reciprocal_best_hits(hits: DataFrame) -> DataFrame:
+     coerced_hits = _coerce_outfmt6_numeric_columns(hits)
+     query_best = (
+         _sort_hits_for_query_best(coerced_hits)
+-        .drop_duplicates(["query", "subject"], keep="first")
+         .drop_duplicates("query", keep="first")
+     )
+     subject_best = (
+         _sort_hits_for_subject_best(coerced_hits)
+-        .drop_duplicates(["query", "subject"], keep="first")
+         .drop_duplicates("subject", keep="first")
+     )
+     reciprocal_pairs = {
+-        (str(row.query), str(row.subject))
+-        for row in subject_best.itertuples(index=False)
++        (str(query), str(subject))
++        for query, subject in zip(subject_best["query"], subject_best["subject"])
+     }
+     return query_best.loc[
+         [
+-            (str(row.query), str(row.subject)) in reciprocal_pairs
+-            for row in query_best.itertuples(index=False)
++            (str(query), str(subject)) in reciprocal_pairs
++            for query, subject in zip(query_best["query"], query_best["subject"])
+         ]
+     ].reset_index(drop=True)
+ 
+@@ -3466,7 +3464,6 @@ def select_best_hits_per_query(
+ 
+     return (
+         _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits))
+-        .drop_duplicates(["query", "subject"], keep="first")
+         .drop_duplicates("query", keep="first")
+         .reset_index(drop=True)
+     )
+@@ -3487,12 +3484,12 @@ def select_reciprocal_best_hit_edges(
+     forward_best = select_best_hits_per_query(forward_hits)
+     reverse_best = select_best_hits_per_query(reverse_hits)
+     reverse_best_by_query = {
+-        str(row.query): str(row.subject)
+-        for row in reverse_best.itertuples(index=False)
++        str(query): str(subject)
++        for query, subject in zip(reverse_best["query"], reverse_best["subject"])
+     }
+     keep_mask = [
+-        reverse_best_by_query.get(str(row.subject)) == str(row.query)
+-        for row in forward_best.itertuples(index=False)
++        reverse_best_by_query.get(str(subject)) == str(query)
++        for query, subject in zip(forward_best["query"], forward_best["subject"])
+     ]
+     return forward_best.loc[keep_mask].reset_index(drop=True)
+ 
+@@ -3509,7 +3506,7 @@ def _select_normalized_fit_rows(
+ ) -> list[tuple[float, float]]:
+     if normalized_hits.empty:
+         return []
+-    sorted_hits = normalized_hits.sort_values(
++    sorted_hits = normalized_hits[["length_product", "query", "subject", "bitscore"]].sort_values(
+         ["length_product", "query", "subject"],
+         ascending=[True, True, True],
+         kind="mergesort",

@@ -1,7 +1,7 @@
 # Collinear / Similarity groups 計算量改修 — 総合計画書
 
 - 作成日: 2026-09-15
-- 状態: S01〜S04とS06の実装・検証・測定・引き継ぎは完了。S05は2026-09-15に却下済み。PATH-B authorityはPR #536でbase統合済み。S03/S04/S06の測定上の留保とS06のmerge前の互換性Reviewは維持する。S07もS04→S06→S07の順で実装・検証・測定・引き継ぎを完了した。S07の性能評価はユーザー指示「合格でいいです」により合格。次セッションはS07.5としてGallery主要処理の追加改修計画を立てる。S07.5の計画立案とS08は未実施。
+- 状態: S01〜S04、S06、S07、S07.5、S07.6の成果を引き継ぎ、S07.7のfit 4列化と、今回明示的に再許可されたmember/RBH/rankの局所削減を実装した。S07.6最終sourceを固定baselineとして正確性検証を実施。その後のユーザー許可でS07.6最終sourceとのnative post-search比較6条件を測定し、5 pass / 1 inconclusive。Vibrio ONの3回簡易比較は参考値で、元の判定保留を維持する。ON/SimilarityのPython割当peakは2.54〜4.80%増加。S07のユーザー承認による合格（14 pass / 6 inconclusiveと留保）、S06の主目的了承・将来のmerge前互換性Review、S05却下を維持する。S08は未実施。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
 ## S06開始時の更新（2026-09-16）
@@ -21,6 +21,60 @@ peak 180,848→153,152 bytes。結果は一致し、全体gateは4,361 passed。
 測定記録は維持する。ユーザーは「合格とします」「合格でいいです」と明示し、S07の性能評価を合格とした。独立再測定は実施していない。Galleryではmergeの寄与が小さく、索引分のpeak増加もある。
 完全な測定・counter・memory・制限とS08への検証引き継ぎは[results/S07.md](results/S07.md)を参照。
 S05は却下のままで、S08以降は実装していない。
+
+## S07.5計画完了時の更新（2026-09-16）
+
+[追加改修計画](results/S07_5_PLAN.md)に優先順位、変更owner、同値性oracle、測定境界、
+実装session用プロンプトを固定した。S07の合格と数値判定は変更せず、独立再測定を開始条件にしない。
+S07のCollinear ON/OFFと、到達依存が一致するS06のSimilarity測定を再利用した。
+追加検証はunit構築量とfit用4列投影prototypeだけで、本番コードは変更していない。
+
+1. **S07.6:** `build_collinearity_unit_index`の二重instance生成、同じmember順の再sort、
+   per-alias一時setを削減する。Collinear ON/OFFに有効で、Similarityはこのownerを通らない。
+2. **S07.7:** `_select_normalized_fit_rows`の一時frameを24列から必要な4列へ絞る。
+   Collinear ON/Similarityに有効、OFFは不通過。scalar計算順とpandasの選択順を保つ。
+3. **S08:** 採用した上記変更を統合検証する。numeric/member/RBH/rankの追加案は、
+   計画に明記した証拠が得られるまで見送り、S08への必須依存にしない。
+
+fit局所prototypeの時間は約27–32%短縮したが、別のLOSAT作業との競合を観測したため、
+独立した性能合格やWeb全体改善率には使わない。既存native benchmarkは固定設定であり、
+Vibrio保存recipeのblock条件やHepのactive draft modeとは異なる。この区別を後続測定で維持する。
+S08旧promptのS05前提・共有LRU置換を示唆する記述は本更新で適用除外する。
+S05のclass/cache owner/Worker transactionを復活させず、S06のmerge前互換性Reviewは残す。
+
+## S07.6実装時の更新（2026-09-16）
+
+[結果とhandoff](results/S07_6.md)。既存unit owner内で二重instance、member再sort、
+per-alias一時setを削除した。独立oracle・凍結differential・324-case結果matrixを含む
+関連native gateは883 passed / 1 skipped、typed/Session/SVG gateは195 passed。
+実WorkerはCollinear ON/OFF、desktop/narrow、旧/新wheelの全出力hashが一致した。
+当初の三変更候補ではunit単体のPython peakがHepで30.07%、Vibrioで20.96%減少し、post-search全体はほぼ不変だった。
+実hostの外部LOSAT benchmarkを確認したため、受入timingを開始せず保留した。
+実装・正確性検証完了と**性能判定未確立**を分ける。速度改善や性能合格は主張しない。
+その後、ユーザーの「Benchmarkは後でいい」に従い、最終測定を延期した。
+alias初出登録の二段処理、fallback locus ID再取得、代表aliasの重複追加も削減した。
+追加削減後もunit/Collinear gate 622 passed、最終wheelの旧版との全出力一致を確認した。
+最終候補と先行測定候補のsource hashを分け、再測定範囲・baseline・rollbackを結果文書に固定した。
+S07の合格、S06のmerge前Review、S05却下を維持し、S07.7/S08は実行していない。
+
+## S07.7・局所削減の更新（2026-09-16）
+
+今回の明示依頼により、旧S07.5のmember/RBH/rank見送りを限定的に解除した。
+[fit結果](results/S07_7.md)と[member/RBH/rank結果](results/S07_LOCAL_REDUCTIONS.md)を参照。
+S07.6のHEADだけでなく未コミットの最終unit実装・tests・証拠をhash照合して引き継いだ。
+新規production差分は`protein_colinearity.py`だけで、A→B→Cを順に比較・検証した。
+
+- A: fit選択の一時frameを4列に投影。同じstable sort、bin、scalar計算順を保持。
+- B: unlimited memberの余分なcopy、pair索引前の2列frame、best-hit直前の冗長なpair dedup、reciprocityの全列行変換を除去。必要な数値変換・pair distinctness・元HSP保持は維持。
+- C: direction evidenceの全体sortを3回から1回へ集約。各record bucketで実際に読む先頭行だけを保持し、同じ順位の再計算を削除。core/拡張後所属の二snapshotは維持。
+
+独立oracleとS07.6凍結sourceの完全一致比較を実施し、局所/support 718 passed、
+関連native 882 passed / 1 skipped / 1 benchmark-runner test deselected、typed/Session/SVG 195 passed。
+最終wheelの208 Python filesはsourceと一致。旧/新wheelの実helper 8 runsで完全一致し、desktop/narrowの8ケースでGenerate/save/fresh-load/regenerateを確認した。専用installからprepared rawの新規生成2件、新旧SessionのCLI replay 3件が成功。記録はfit結果文書に集約した。
+後からbenchmarkが許可され、S07.6最終sourceと今回の6条件を同一入力・設定で比較した。Hep ON/OFF、Vibrio OFF、Similarity member=5/無制限の5条件は基準内。Vibrio ONは初回noise 9.51%でinconclusive。21回への増加は分散等から算出した値ではなくHep規定の流用で、ユーザー指示により停止。3回ずつの簡易比較は3.080→2.876秒だが合格判定には使わない。関連runner全8 testsも通過した。memory増加と全sampleは結果文書に記録した。
+S03前の記録との累積観測はHep Collinear 5.73→0.40秒、Similarity 8.01→0.75秒。旧host競合があるため厳密な累積合格ではなく、検索開始からSVG完成までの改善率は未測定。残る処理の診断と測定境界はlocal reductions文書を参照。
+後続のユーザー指示により、今後の時間測定は原則3回。7回・21回という計画上の要求を外し、noiseによる自動追加測定を行わない。runnerのdefaultも3回へ変更し、過去のreportは保存policyで判定して履歴を維持する。
+S08は別依頼であり、今回の実装・正確性確認を計画全体の完了とは扱わない。
 
 ## 1. 目的と完了の意味
 
@@ -254,10 +308,12 @@ query order を一度整列し、二分探索で conflict 判定区間を狭め�
 | S05 | [共通解析境界と容量付きcache](SESSION_05_SHARED_ANALYSIS_AND_CACHE.md) | 対象外 | 2026-09-15却下済み。復活させない |
 | S06 | [経路表現の実装](SESSION_06_PATH_REPRESENTATION.md) | S04、S02の選択を認可するbase authority | 選択済み契約の runtime / reader / writer、性能検証 |
 | S07 | [Cluster merge評価・必要な改修](SESSION_07_CLUSTER_MERGE.md) | S04→S06。S06の独立性能合格は開始条件にしない | 完了・性能合格（ユーザー承認）。[結果・測定記録](results/S07.md) |
-| S07.5 | Gallery主要処理の追加改修計画（次セッション） | S07の既存profile・計測結果 | 正規化・unit索引・group構築の残る負担を比較し、改修対象と検証方法を計画する。今回は未着手 |
-| S08 | [統合・性能・回帰検証](SESSION_08_INTEGRATION.md) | S03、S04、S06、S07。S05は含めない | 正確な達成範囲、最終 gate、残課題 |
+| S07.5 | [Gallery主要処理の追加改修計画](results/S07_5_PLAN.md) | S07の既存profile・計測結果、Similarityは同一依存のS06証拠 | 計画完了。二局所案を選択し、oracle・測定・次sessionプロンプトを固定。本番変更なし |
+| S07.6 | [unit索引の実装プロンプト](results/S07_5_PLAN.md#11-次の実装session用プロンプト) | S07とS07.5 | unit二重生成・member再sort・alias一時setを除去。全index一致、counter/memory・real helper完了。[結果](results/S07_6.md)。追加削減と正確性検証完了。当初の最終benchmarkは延期。S07.7で最終sourceを比較baselineとして測定したが、S07→S07.6単独改善率は未評価 |
+| S07.7 + local reductions | [fit結果](results/S07_7.md) / [member・RBH・rank結果](results/S07_LOCAL_REDUCTIONS.md) | S07.6最終source、今回の限定的再許可 | A/B/C実装・完全一致gate・実browser 8ケース・CLI replay完了。後日の許可で6条件のtime/memory比較：5 pass / 1 inconclusive、出力完全一致、memory増加を記録。Vibrio ONの3回比較は参考値 |
+| S08 | [統合・性能・回帰検証](SESSION_08_INTEGRATION.md) | S03、S04、S06、S07とS07.6/S07.7の採用・見送り判断。S05は含めない | 採用sourceで正確な達成範囲、最終gate、Web実待ち時間への寄与、残課題。未実施 |
 
-今回の実行順序は S01 → S02 → S03 → S04 → S06 → S07。S05は却下済み。S06の全path列挙除去はユーザー了承済みで、Galleryの一律高速化や独立性能合格をS07開始条件にしない。S08以降は今回実装しない。これらは依存関係の説明であり、sub-agent の自動起動を要求しない。
+実施順は S01 → S02 → S03 → S04 → S06 → S07 → S07.5（計画）→ S07.6（実装・正確性）→ S07.7・局所member/RBH/rank削減。当初benchmarkは延期されたが、後日の許可によりS07.6最終→今回の比較を実施した。S07.6単独改善率やWeb全workflowの改善率は未確立。S08は別途依頼で開始する。各sessionは別途依頼に従って開始し、本計画の完成だけで一括実行しない。S05は却下済み。S06の全path列挙除去はユーザー了承済みで、Galleryの一律高速化や独立性能合格を開始条件にしない。S07の性能合格を再び未達にしない。これらは依存関係の説明であり、sub-agent の自動起動を要求しない。
 
 optional inference と limit retention は統合済みの回帰対象である。開始時のbaseにその変更が欠ける場合はcheckout/依存revisionを特定する。OFF の期待動作を仮実装した test stub で最終合格にせず、統合された実経路で確認する。
 
