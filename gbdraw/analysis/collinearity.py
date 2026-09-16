@@ -26,6 +26,7 @@ from gbdraw.analysis.protein_colinearity import (
     LosatpRunner,
     OrthogroupMembershipMode,
     OrthogroupResult,
+    OrthogroupGraphResult,
     _OrthogroupEdgeIndex,
     _edge_metadata_for_protein_pair,
     _orthogroup_member_counts,
@@ -151,7 +152,7 @@ class CollinearityBlock:
 class CollinearityResult:
     blocks: tuple[CollinearityBlock, ...]
     unblocked_anchors: tuple[CollinearityAnchor, ...] = ()
-    orthogroups: OrthogroupResult | None = None
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
 
 
 @dataclass(frozen=True)
@@ -411,7 +412,7 @@ def _protein_order_by_id(protein_map: Mapping[str, CdsProtein]) -> dict[str, int
 
 
 def _orthogroup_member_counts_by_record(
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
 ) -> dict[tuple[str, int], int]:
     counts: dict[tuple[str, int], int] = {}
     if orthogroups is None:
@@ -426,7 +427,7 @@ def _orthogroup_member_counts_by_record(
 def _orthogroup_edge_metadata_for_anchor(
     query_id: str,
     subject_id: str,
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
     edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> dict[str, object]:
     metadata = {
@@ -473,7 +474,7 @@ def _lossless_anchor_from_edge_row(
     protein_map: Mapping[str, CdsProtein],
     order_by_id: Mapping[str, int],
     unit_index: CollinearityUnitIndex | None,
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
     member_counts_by_record: Mapping[tuple[str, int], int],
     edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> CollinearityAnchor | None:
@@ -599,7 +600,7 @@ def _lossless_anchor_from_edge_row(
 def orthogroup_edges_to_lossless_collinearity_anchors(
     adjacent_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     protein_map: Mapping[str, CdsProtein],
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
     *,
     unit_index: CollinearityUnitIndex | None = None,
 ) -> tuple[CollinearityAnchor, ...]:

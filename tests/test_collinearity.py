@@ -1150,7 +1150,7 @@ def test_anchor_core_unions_connected_near_reciprocal_groups() -> None:
     }
     path_sets = {
         tuple(path.protein_ids)
-        for path in result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]
+        for path in tuple(result.orthogroups.path_indexes_by_orthogroup_id["og_1"].iter_paths())
     }
     assert ("a0", "b0") in path_sets
     assert ("a1", "b1") in path_sets
@@ -1734,7 +1734,7 @@ def test_shared_node_paths_are_serialized_without_collapsing_to_one_to_one() -> 
     )
 
     assert result.orthogroups is not None
-    paths = result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]
+    paths = tuple(result.orthogroups.path_indexes_by_orthogroup_id["og_1"].iter_paths())
     path_sets = {tuple(path.protein_ids): tuple(path.shared_protein_ids) for path in paths}
     assert path_sets[("a0", "b0", "c0")] == ("c0",)
     assert path_sets[("a1", "b1", "c0")] == ("c0",)
@@ -2399,7 +2399,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["collinearityResult"]["schema"] == 2
+    assert result["collinearityResult"]["schema"] == 3
     assert result["collinearityResult"]["kind"] == "result"
     assert result["collinearityResult"]["value"]["type"] == "CollinearityResult"
     typed_fields = result["collinearityResult"]["value"]["fields"]

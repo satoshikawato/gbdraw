@@ -1,0 +1,82 @@
+{
+  "rows": [
+    {
+      "report": "s06-current-timing-final.json.gz",
+      "wholeProductionSnapshotMatchesFinal": true,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [],
+      "explanation": "All checked final production owners match."
+    },
+    {
+      "report": "s06-current-memory-final.json.gz",
+      "wholeProductionSnapshotMatchesFinal": false,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [
+        "gbdraw/api/session_compat.py"
+      ],
+      "explanation": "Legacy Session promotion was corrected after these analysis/metadata/encoding stages were measured; those stages do not call session_compat."
+    },
+    {
+      "report": "s06-current-probe.json.gz",
+      "wholeProductionSnapshotMatchesFinal": false,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [
+        "gbdraw/api/session_compat.py"
+      ],
+      "explanation": "Legacy Session promotion was corrected after these analysis/metadata/encoding stages were measured; those stages do not call session_compat."
+    },
+    {
+      "report": "s06-browser-memory-final.json.gz",
+      "wholeProductionSnapshotMatchesFinal": true,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [],
+      "explanation": "All checked final production owners match."
+    },
+    {
+      "report": "s06-browser-timing.json.gz",
+      "wholeProductionSnapshotMatchesFinal": true,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [],
+      "explanation": "All checked final production owners match."
+    },
+    {
+      "report": "s06-render-timing.json.gz",
+      "wholeProductionSnapshotMatchesFinal": true,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [],
+      "explanation": "All checked final production owners match."
+    },
+    {
+      "report": "s06-explicit-control-memory.json.gz",
+      "wholeProductionSnapshotMatchesFinal": true,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [],
+      "explanation": "All checked final production owners match."
+    },
+    {
+      "report": "s06-explicit-control-timing.json.gz",
+      "wholeProductionSnapshotMatchesFinal": true,
+      "measuredOwnersMatchFinal": true,
+      "unmeasuredFileChanges": [],
+      "explanation": "All checked final production owners match."
+    }
+  ],
+  "finalBrowserAcceptanceWheelSha256": "1b2e4f65736e38d53637d40a7c0cd1524c6da37b23466212c68bed59a2073704",
+  "checkedFinalProductionFiles": [
+    "gbdraw/analysis/collinearity.py",
+    "gbdraw/analysis/ortholog_paths.py",
+    "gbdraw/analysis/protein_colinearity.py",
+    "gbdraw/api/__init__.py",
+    "gbdraw/api/diagram.py",
+    "gbdraw/api/options.py",
+    "gbdraw/api/request_render.py",
+    "gbdraw/api/session_compat.py",
+    "gbdraw/diagrams/linear/assemble.py",
+    "gbdraw/diagrams/linear/orthogroup_alignment.py",
+    "gbdraw/interface.py",
+    "gbdraw/session_request_codec.py",
+    "gbdraw/web/js/app/run-analysis.js",
+    "gbdraw/web/js/services/session-request.js",
+    "gbdraw/web_support/orthogroup_metadata.py"
+  ]
+}

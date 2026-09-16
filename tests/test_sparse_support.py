@@ -125,7 +125,8 @@ def test_sparse_visits_and_giant_groups():
 def metadata_fixture():
     pm, tables = bench.synthetic(pc, "support-edges", bench.SEED)
     selection = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3)
-    return pm, selection.orthogroups
+    # These metadata fixtures deliberately replace edges with arbitrary legacy data.
+    return pm, pc.materialize_ortholog_paths(selection.orthogroups)
 
 
 def test_endpoint_first_match_counts_and_unknown_errors():

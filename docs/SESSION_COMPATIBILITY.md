@@ -149,6 +149,15 @@ Current sessions use these independent payload schemas:
 | Derived protein comparison | 3 |
 | Protein identity manifest | 2 |
 | Nucleotide raw search result | 2 |
+| Canonical typed analysis resource | 3 |
+
+Typed resource readers 1 and 2 preserve their saved ortholog path tuples as
+explicit collections in the current model. Schema 3 writers store lossless DAGs
+for newly inferred paths and explicit collections for supplied legacy corpora.
+Counts are exact decimal strings. Session 42, request 7, and derived envelope 3
+remain unchanged; derived identity includes `pathRepresentation` to prevent
+reusing an old analysis payload as a current helper result. Older releases that
+only support typed schemas 1 and 2 cannot read the new typed resources.
 
 Generated protein FASTA, raw QUERY/SUBJECT fields, protein maps, and derived
 references use deterministic session-internal handles of the form

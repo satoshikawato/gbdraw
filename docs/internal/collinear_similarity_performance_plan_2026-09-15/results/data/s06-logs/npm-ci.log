@@ -1,0 +1,5 @@
+npm error code EAI_AGAIN
+npm error syscall getaddrinfo
+npm error errno EAI_AGAIN
+npm error request to https://registry.npmjs.org/undici-types/-/undici-types-8.3.0.tgz failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+npm error A complete log of this run can be found in: /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/npm-cache/_logs/2026-09-16T01_44_27_276Z-debug-0.log

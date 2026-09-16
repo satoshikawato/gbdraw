@@ -50,6 +50,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     LosatpCacheManager,
     OrthogroupMembershipMode,
     OrthogroupResult,
+    OrthogroupGraphResult,
     ProteinBlastpResult,
     ProteinExtractionResult,
     ProteinBlastpMode,
@@ -174,7 +175,7 @@ class LinearDiagramMetadata:
 
     protein_comparisons: tuple[DataFrame, ...] | None = None
     linear_comparisons: tuple[LinearComparison, ...] = ()
-    orthogroups: OrthogroupResult | None = None
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     collinearity_result: CollinearityResult | None = None
 
 
@@ -1579,7 +1580,7 @@ def assemble_linear_diagram_from_records(
     linear_comparisons: Sequence[LinearComparison] | None = None,
     layout: LinearMultiRecordOptions | None = None,
     protein_comparisons: Sequence[DataFrame] | None = None,
-    orthogroups: OrthogroupResult | None = None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
     protein_blastp_mode: ProteinBlastpMode | str = "none",
     protein_comparison_pairs: Sequence[tuple[int, int]] | None = None,
     pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
@@ -1858,7 +1859,7 @@ def assemble_linear_diagram_from_records(
         selected_features_set = DEFAULT_SELECTED_FEATURES
     resolved_protein_comparisons: list[DataFrame] | None = None
     resolved_linear_comparisons: list[LinearComparison] = list(linear_comparisons or ())
-    resolved_orthogroups: OrthogroupResult | None = orthogroups
+    resolved_orthogroups: OrthogroupResult | OrthogroupGraphResult | None = orthogroups
     resolved_collinearity_result: CollinearityResult | None = None
     losat_cache_filenames = _linear_losat_cache_filenames(records)
 

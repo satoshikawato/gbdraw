@@ -60,6 +60,27 @@ The shorter `gbdraw.api.CircularTrackOptions` and `gbdraw.api.LinearTrackOptions
 
 `PreparedDiagramRequest.linear_metadata` and `RequestRenderResult.linear_metadata` use `LinearDiagramMetadata`. It contains computed comparisons, the compatibility `orthogroups` field for Similarity-group membership, and the collinearity result.
 
+### Ortholog path representation
+
+Protein comparison inference returns `OrthogroupGraphResult`. Its
+`path_indexes_by_orthogroup_id` maps group IDs to `OrthologPathCollection` values.
+Each collection provides an exact integer `count`, one-based `path_at(rank)`,
+`path_by_id(id)`, `rank_of(protein_ids)`, and `containing_count(protein_id)`.
+Normal analysis, metadata, and saved resources do not expand all paths.
+
+`materialize_ortholog_paths(result)` explicitly returns the original
+`OrthogroupResult` with tuple-valued `ortholog_paths_by_orthogroup_id`. The protein
+comparison producers also accept `path_representation="exhaustive"`.
+`collection.iter_paths()` explicitly traverses every path. All three operations
+take time proportional to their output; retaining the complete output can require
+exponential memory. Collections deliberately have no implicit iterator or `len`.
+
+The legacy `OrthogroupResult` constructor and supplied path tuples remain
+supported. Saving or reading a legacy corpus preserves its exact contents,
+order, IDs, and shared information; it does not infer additional paths from its
+edges. Graph payloads store decimal count strings to avoid JavaScript integer
+rounding. Typed analysis resource schema 3 is required to read newly saved data.
+
 ## Depth tracks
 
 One `DepthTrackInput` represents one logical series. `source` accepts a path or `DataFrame` shared by all displayed records, or one path, `DataFrame`, or `None` per record. Linear entries may set `height`.

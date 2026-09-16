@@ -3511,9 +3511,9 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["orthogroupResult"]["schema"] == 2
+    assert result["orthogroupResult"]["schema"] == 3
     assert result["orthogroupResult"]["kind"] == "orthogroupResult"
-    assert result["orthogroupResult"]["value"]["type"] == "OrthogroupResult"
+    assert result["orthogroupResult"]["value"]["type"] == "OrthogroupGraphResult"
     typed_fields = result["orthogroupResult"]["value"]["fields"]
     group_id = next(iter(typed_fields["orthogroups"]))
     group_members = typed_fields["orthogroups"][group_id]

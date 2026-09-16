@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 29 items
+
+tests/test_lossless_ortholog_paths.py ...........F                       [ 41%]
+tests/test_ortholog_path_contract.py .................                   [100%]
+
+=================================== FAILURES ===================================
+______ test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order ______
+tests/test_lossless_ortholog_paths.py:204: in test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order
+    assert actual == expected
+           ^^^^^^^^^^^^^^^^^^
+<string>:14: in __eq__
+    ???
+/home/kawato/micromamba/lib/python3.13/site-packages/pandas/core/generic.py:1577: in __nonzero__
+    raise ValueError(
+E   ValueError: The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().
+=========================== short test summary info ============================
+FAILED tests/test_lossless_ortholog_paths.py::test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order
+======================== 1 failed, 28 passed in 21.98s =========================

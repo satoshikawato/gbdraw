@@ -1,3 +1,8 @@
+> 2026-09-16 task override: S05 is rejected; execute S06 from S04. PATH-B authority
+> is integrated in origin/dev `5e0cb0fa` through PR #536. Reuse matching S04 final
+> current-side measurements; do not rerun unchanged S04 benchmarks. This override
+> replaces the rejected S05 dependency. Implement S06 only; do not publish it.
+
 # INSTRUCTION PROMPT — S06: 選択済みの経路表現を実装
 
 S02で具体化され、適用可能なbase authorityとして受理された経路契約を実装してください。推奨案と承認済みoutcomeを区別し、未選択の公開・保存挙動を実装しないでください。
@@ -6,10 +11,10 @@ S02で具体化され、適用可能なbase authorityとして受理された経
 
 - [総合計画書](MASTER_PLAN.md)、特に §3、§5.5、§7〜§9。
 - `results/S02.md`、存在する場合は `results/PATH_DECISION_PACK.md` と完全なProduct response / authority。
-- `results/S05.md` と実装済みの共通解析境界。
+- `results/S04.md` と実在する解析・consumer境界。S05は却下済みで依存に含めない。
 - 最新API、typed resource/session/catalog形式、compatibility履歴、Product/architecture ratchet。
 
-S05が実装済みで、選択されたoutcomeを適用可能なbase authorityが認可していることが開始条件です。authority-only候補とdependent runtimeを同じ変更で自己認可しないでください。既存authorityだけで完全に決まるとS02が証明した場合は、その根拠で進めてください。
+S04を基準とし、選択されたoutcomeを適用可能なbase authorityが認可していることが開始条件です。authority-only候補とdependent runtimeを同じ変更で自己認可しないでください。既存authorityだけで完全に決まるとS02が証明した場合は、その根拠で進めてください。
 
 条件不足なら、不足するdecision/統合を具体的に記録し、実装を推測して進めないでください。独立したconsumer確認や既存fixtureの検証は進められます。
 

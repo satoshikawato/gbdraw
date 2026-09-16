@@ -14,7 +14,7 @@ from typing import NamedTuple, Sequence
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
-from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
+from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...core.record_metadata import (
     _mapped_feature_location_parts,
@@ -206,7 +206,7 @@ def _collect_alignment_members(
 
 
 def _collect_alignment_members_from_orthogroups(
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
 ) -> dict[str, list[OrthogroupAlignmentMember]]:
     members_by_orthogroup: dict[str, list[OrthogroupAlignmentMember]] = {}
     for orthogroup_id, members in orthogroups.orthogroups.items():
@@ -308,7 +308,7 @@ def _member_label_identity(
 
 
 def build_orthogroup_label_eligibility(
-    orthogroups: OrthogroupResult | None = None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
     comparisons: Sequence[DataFrame] | None = None,
     records: Sequence[SeqRecord] | None = None,
 ) -> OrthogroupLabelEligibility:
@@ -518,7 +518,7 @@ def calculate_orthogroup_alignment_offsets(
     canvas_config: LinearCanvasConfigurator,
     align_orthogroup_feature: str | None,
     *,
-    orthogroups: OrthogroupResult | None = None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> dict[int, float]:
     """Return per-record x offsets that align representatives to the selected member."""

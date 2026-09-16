@@ -375,6 +375,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
     payload.pairwise = { maxHits: Number(maxHits) || 5 };
   }
   if (['orthogroup', 'collinear'].includes(normalizedMode)) {
+    payload.pathRepresentation = 'lossless-graph-v1';
     payload.orthogroup = {
       membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
       memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
@@ -419,12 +420,12 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
     ? payload?.collinearityResult
     : payload?.orthogroupResult;
   const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
-  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupResult';
+  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupGraphResult';
   return Boolean(
     resource
     && typeof resource === 'object'
     && !Array.isArray(resource)
-    && [1, 2].includes(resource.schema)
+    && resource.schema === 3
     && resource.kind === expectedKind
     && resource.value?.type === expectedType
     && resource.value.fields

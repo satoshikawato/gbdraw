@@ -27,10 +27,13 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupMember,
     OrthogroupNameCandidate,
     OrthogroupResult,
+    OrthogroupGraphResult,
+    compact_ortholog_paths,
     OrthologEdge,
     OrthologPath,
 )
@@ -438,6 +441,7 @@ _TYPED_TREE_CLASSES = {
         OrthogroupMember,
         OrthogroupNameCandidate,
         OrthogroupResult,
+        OrthogroupGraphResult,
         OrthologEdge,
         OrthologPath,
     )
@@ -3176,7 +3180,7 @@ def _decode_comparisons(
             result["orthogroups"] = _read_typed_json_resource(
                 item["resourceId"],
                 value_kind="orthogroupResult",
-                expected=OrthogroupResult,
+                expected=OrthogroupResult | OrthogroupGraphResult,
                 path=path,
                 resource_paths=resource_paths,
             )
@@ -3509,7 +3513,7 @@ def encode_canonical_typed_resource(value_kind: str, value: object) -> bytes:
             "Canonical typed resources require a non-empty value kind."
         )
     body = {
-        "schema": 2,
+        "schema": 3,
         "kind": value_kind,
         "value": _encode_typed_tree(value),
     }
@@ -3550,7 +3554,7 @@ def _read_typed_json_resource(
             raw, path=f"{path} resource", required={"schema", "kind", "value"}
         )
         resource_schema = payload["schema"]
-        if resource_schema not in {1, 2} or payload["kind"] != value_kind:
+        if resource_schema not in {1, 2, 3} or payload["kind"] != value_kind:
             raise CanonicalRequestDecodingError(
                 f"Canonical JSON resource metadata does not match {path}."
             )
@@ -3571,6 +3575,13 @@ def _read_typed_json_resource(
 
 
 def _encode_typed_tree(value: object) -> Any:
+    if isinstance(value, OrthogroupResult):
+        value = compact_ortholog_paths(value)
+    if isinstance(value, OrthologPathCollection):
+        body = value.to_payload()
+        if value.kind == "explicit":
+            body["paths"] = _encode_typed_tree(body["paths"])
+        return {"type": "OrthologPathCollection", "fields": body}
     if is_dataclass(value) and not isinstance(value, type):
         cls = type(value)
         if cls.__name__ not in _TYPED_TREE_CLASSES:
@@ -3602,6 +3613,18 @@ def _decode_typed_tree(
     path: str,
     resource_schema: int,
 ) -> Any:
+    if hint is OrthologPathCollection:
+        tagged = _object(value, path=path, required={"type", "fields"})
+        if resource_schema != 3 or tagged["type"] != "OrthologPathCollection":
+            raise CanonicalRequestDecodingError(f"Invalid path collection at {path}.")
+        body = dict(_object(tagged["fields"], path=f"{path}.fields"))
+        if body.get("kind") == "explicit" and "paths" in body:
+            body["paths"] = _decode_typed_tree(body["paths"], tuple[OrthologPath, ...],
+                                             path=f"{path}.paths", resource_schema=resource_schema)
+        try:
+            return OrthologPathCollection.from_payload(body)
+        except (ValidationError, ValueError, TypeError, KeyError) as exc:
+            raise CanonicalRequestDecodingError(f"Invalid path collection at {path}: {exc}") from exc
     if hint is Any or hint is object:
         return value
     origin = get_origin(hint)
@@ -3629,6 +3652,10 @@ def _decode_typed_tree(
         raise CanonicalRequestDecodingError(
             f"Typed resource value at {path} does not match its union contract."
         )
+    if hint is OrthogroupGraphResult and resource_schema != 3:
+        raise CanonicalRequestDecodingError("Graph orthogroups require typed resource schema 3.")
+    if hint is OrthogroupResult and resource_schema == 3:
+        raise CanonicalRequestDecodingError("Legacy orthogroups require typed resource schema 1 or 2.")
     if isinstance(hint, type) and is_dataclass(hint):
         tagged = _object(value, path=path, required={"type", "fields"})
         if tagged["type"] != hint.__name__ or hint.__name__ not in _TYPED_TREE_CLASSES:
@@ -3666,7 +3693,11 @@ def _decode_typed_tree(
                 raise CanonicalRequestDecodingError(
                     f"Missing required field at {path}.fields.{key}."
                 )
-        return hint(**kwargs)
+        try:
+            result = hint(**kwargs)
+        except ValidationError as exc:
+            raise CanonicalRequestDecodingError(f"Invalid typed resource at {path}: {exc}") from exc
+        return compact_ortholog_paths(result) if isinstance(result, OrthogroupResult) else result
     if origin in {tuple, list, Sequence, SequenceABC}:
         raw = _array(value, path=path)
         item_hint = args[0] if args else Any

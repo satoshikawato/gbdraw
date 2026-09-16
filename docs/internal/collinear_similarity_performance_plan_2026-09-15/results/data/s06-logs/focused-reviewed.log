@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 99 items
+
+tests/test_sparse_support.py ........................................... [ 43%]
+................                                                         [ 59%]
+tests/test_api_session.py ........................                       [ 83%]
+tests/test_lossless_ortholog_paths.py ................                   [100%]
+
+=============================== warnings summary ===============================
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+  /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+    else pd.concat(frames, ignore_index=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 99 passed, 4 warnings in 67.35s (0:01:07) ===================

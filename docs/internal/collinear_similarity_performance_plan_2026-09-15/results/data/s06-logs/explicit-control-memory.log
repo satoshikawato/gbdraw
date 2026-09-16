@@ -1,0 +1,4 @@
+memory: path-16
+  path-16/selector
+  path-16/metadata
+  path-16/typed_serialization

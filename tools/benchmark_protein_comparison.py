@@ -46,9 +46,9 @@ GALLERIES = ("hepatoplasmataceae_collinear", "hepatoplasmataceae_orthogroup",
 CASES = ("hsp-edges", "hsp-1", "hsp-1000", "hsp-many", "dense-24", "support-edges",
          "sparse-2", "sparse-200", "sparse-400", "sparse-800",
          "giant-200", "giant-800", "unrelated-200", "unrelated-800",
-         "cache-49", "cache-64", "cache-81", "path-8", "path-12", "path-16",
+         "cache-49", "cache-64", "cache-81", "path-8", "path-12", "path-16", "path-24", "path-32", "path-56",
          "merge-300", "merge-600", "merge-1200", "merge-edges", "manifest",
-         "gallery-collinear", "gallery-orthogroup", "render-gallery")
+         "gallery-collinear", "gallery-collinear-off", "gallery-orthogroup", "render-gallery")
 
 
 def digest(data):
@@ -73,6 +73,8 @@ def canonical(value):
         return canonical(value.item())
     if value is pd.NA:
         return {"type": "pd.NA"}
+    if type(value).__name__ == "OrthologPathCollection":
+        return {"type": "OrthologPathCollection", "value": canonical(value.to_payload())}
     if is_dataclass(value):
         return {"type": type(value).__name__,
                 "fields": [[f.name, canonical(getattr(value, f.name))] for f in fields(value)]}
@@ -198,6 +200,8 @@ def synthetic(pc, name, seed):
             tables = {k: frame(v) for k, v in cases.items()}
         return pm, tables
     if name.startswith("path-"):
+        if size >= 24 and not hasattr(pc, "OrthologPathCollection"):
+            raise ValueError("R>=24 is compact-only; legacy enumeration is prohibited")
         pm = {f"p{i}": protein(pc, f"p{i}", i) for i in range(size)}
         return pm, {(i, j): frame([hit(f"p{i}", f"p{j}")])
                     for i in range(size) for j in range(size)}
@@ -419,7 +423,7 @@ def cache_case(root, pc, name):
             "boundary": "real Python helper LRU functions + native parse/filter; no raw search or JS derived hit"}, {"cache_cycle": run}
 
 
-def build_case(root, pc, cc, name, seed):
+def build_case(root, pc, cc, name, seed, path_representation="graph"):
     if name.startswith("unrelated-"):
         import pandas as pd
         # Membership-stage isolation: adding groups changes neither evidence nor
@@ -468,7 +472,7 @@ def build_case(root, pc, cc, name, seed):
     if name.startswith("merge-"):
         return merge_case(cc, name)
     if name.startswith("gallery-"):
-        gallery = GALLERIES[0 if name.endswith("collinear") else 1]
+        gallery = GALLERIES[0 if name.startswith("gallery-collinear") else 1]
         _, extraction, records, raw, inventory = gallery_input(root, gallery, pc)
         settings = {"bitscore": 50, "evalue": 0.01, "identity": 0, "alignment_length": 0}
         def parse():
@@ -478,17 +482,17 @@ def build_case(root, pc, cc, name, seed):
             return {k: pc.filter_protein_hits_by_thresholds(v, **settings) for k, v in parsed.items()}
         tables = filter_hits()
         inventory.update({"benchmarkThresholds": settings, "memberMaxHits": 5,
-                          "inference": True, "scope": "adjacent" if name.endswith("collinear") else "all",
-                          "blockParameters": canonical(cc.LosslessCollinearityParameters()) if name.endswith("collinear") else None,
+                          "inference": not name.endswith("-off"), "scope": "adjacent" if name.startswith("gallery-collinear") else "all",
+                          "blockParameters": canonical(cc.LosslessCollinearityParameters()) if name.startswith("gallery-collinear") else None,
                           "unitMode": "auto", "edgeMode": "rbh", "maxRelatedEdges": 2,
                           "filteredRows": sum(len(x) for x in tables.values()),
                           "inputDataFrameDeepBytes": sum(int(x.memory_usage(deep=True).sum()) for x in tables.values())})
         def aggregate():
             return {k: pc._aggregate_hsps_by_protein_pair(v, extraction.protein_map) for k, v in tables.items()}
-        if name.endswith("collinear"):
+        if name.startswith("gallery-collinear"):
             def analyze():
                 return cc.build_orthogroup_collinearity_blocks_from_hits(tables, extraction,
-                            records=records, orthogroup_member_max_hits=5, infer_orthogroups=True, search_scope="adjacent")
+                            records=records, orthogroup_member_max_hits=5, infer_orthogroups=not name.endswith("-off"), search_scope="adjacent")
         else:
             def analyze():
                 return pc.select_rbh_orthogroup_edges_from_directional_hits(tables, extraction.protein_map,
@@ -502,11 +506,11 @@ def build_case(root, pc, cc, name, seed):
             "post_search": analyze,
             "metadata": lambda: serialize_orthogroups_payload(result.orthogroups, records=records),
             "display_tables": (lambda: cc.convert_collinearity_blocks_to_pair_comparisons(result, records=records))
-                if name.endswith("collinear") else
+                if name.startswith("gallery-collinear") else
                 (lambda: [pc.convert_pair_protein_hits_to_genomic_links(
                     table, extraction.protein_map, extraction.protein_map, result.orthogroups)
                     for table in result.adjacent_display_edges_by_pair.values()]),
-            "typed_serialization": lambda: encode_canonical_typed_resource("result", result if name.endswith("collinear") else result.orthogroups)}
+            "typed_serialization": lambda: encode_canonical_typed_resource("result", result if name.startswith("gallery-collinear") else result.orthogroups)}
     pm, tables = synthetic(pc, name, seed)
     inventory = {"seed": seed, "generator": name, "proteinCount": len(pm),
                  "inputSha256": digest(json_bytes(canonical((pm, tables)))),
@@ -520,8 +524,63 @@ def build_case(root, pc, cc, name, seed):
         inventory.update({"expectedPaths": 2**(size-2), "expectedEdges": size*(size-1)//2})
     def select():
         return pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm,
-            record_count=max(p.record_index for p in pm.values())+1, orthogroup_member_max_hits=None)
+            record_count=max(p.record_index for p in pm.values())+1, orthogroup_member_max_hits=None,
+            **({"path_representation": path_representation} if path_representation != "graph" else {}))
+    if name.startswith("path-") and hasattr(pc, "OrthogroupGraphResult"):
+        from gbdraw.session_request_codec import encode_canonical_typed_resource
+        from gbdraw.web_support.orthogroup_metadata import serialize_orthogroups_payload
+        result = select().orthogroups
+        operations = {
+            "selector": select,
+            "metadata": lambda: serialize_orthogroups_payload(result),
+            "typed_serialization": lambda: encode_canonical_typed_resource("result", result),
+        }
+        if path_representation == "graph":
+            operations["path_graph"] = lambda: pc._build_ortholog_path_indexes(result.ortholog_edges_by_orthogroup_id, pm)
+        return inventory, operations
     return inventory, {"selector": select}
+
+
+def path_browser_inputs(root, pc, cc):
+    """Use the same saved evidence and native production helper as the browser."""
+    from dataclasses import asdict
+    inputs = []
+    for name in ("sparse-2", "path-24", "gallery-collinear", "gallery-collinear-off", "gallery-orthogroup"):
+        if name.startswith("gallery-"):
+            gallery = GALLERIES[0 if name.startswith("gallery-collinear") else 1]
+            _, extraction, records, raw, inventory = gallery_input(root, gallery, pc)
+            pm = extraction.protein_map
+            lengths = [len(r.seq) for r in records]
+            ids = [r.id for r in records]
+        else:
+            pm, tables = synthetic(pc, name, SEED)
+            raw = {pair: table.to_csv(sep="\t", header=False, index=False, lineterminator="\n")
+                   for pair, table in tables.items()}
+            count = max(p.record_index for p in pm.values()) + 1
+            lengths = [max((p.end for p in pm.values() if p.record_index == i), default=300) for i in range(count)]
+            ids = [f"record_{i}" for i in range(count)]
+            inventory = {"generator": name, "inputSha256": digest(json_bytes(canonical((pm, tables))))}
+        records_payload = [{"recordIndex": i, "recordId": ids[i],
+                            "proteinCacheKey": f"{name}-record-{i}",
+                            "proteinMap": {pid: asdict(p) for pid, p in pm.items() if p.record_index == i},
+                            "viewTransform": {"length": lengths[i], "reverse": False}}
+                           for i in range(len(ids))]
+        offset, texts, pairs = 0, [], []
+        for (q, t), text in raw.items():
+            size = len(text.encode())
+            pairs.append({"pairIndex": min(q, t), "queryIndex": q, "subjectIndex": t,
+                          "cacheKey": f"{name}-raw-{q}-{t}", "displayPair": t == q+1,
+                          "rawTsvOffset": offset, "rawTsvBytes": size})
+            texts.append(text)
+            offset += size
+        parameters = {"mode": "collinear" if name.startswith("gallery-collinear") else "orthogroup",
+                      "bitscore": 50, "evalue": "1e-2", "identity": 0, "alignmentLength": 0,
+                      "orthogroupMemberMaxHits": 5 if name.startswith("gallery-") else None,
+                      "collinearInferOrthogroups": not name.endswith("-off")}
+        inputs.append({"name": name, "inventory": inventory, "parameters": parameters,
+                       "pairsText": json.dumps({"records": records_payload, "pairs": pairs}, separators=(",", ":")),
+                       "rawText": "".join(texts)})
+    return inputs
 
 
 def operation_probe(pc, cc, fn):
@@ -630,7 +689,7 @@ def operation_probe(pc, cc, fn):
             (pc, "_raw_hsp_representative_rank", None),
             (pc, "_build_core_support_candidate", None),
             (pc, "_edge_metadata_for_protein_pair", edge_amount),
-            (pc, "_build_ortholog_paths", None),
+            (pc, "_build_ortholog_path_indexes" if hasattr(pc, "_build_ortholog_path_indexes") else "_build_ortholog_paths", None),
             (cc, "_lossless_conflicts_between_clusters", lambda a, k: len(a[2])),
         ):
             original = getattr(module, name)
@@ -658,6 +717,20 @@ def operation_probe(pc, cc, fn):
             stack.enter_context(patch.object(module, name, counted))
             if module is pc and getattr(cc, name, None) is original:
                 stack.enter_context(patch.object(cc, name, counted))
+        if hasattr(pc, "OrthologPathCollection"):
+            for name in ("iter_paths", "_path"):
+                original = getattr(pc.OrthologPathCollection, name)
+                counters["paths." + name + ".calls"] = 0
+                def paths_call(*args, _name=name, _original=original, **kwargs):
+                    counters["paths." + _name + ".calls"] += 1
+                    return _original(*args, **kwargs)
+                stack.enter_context(patch.object(pc.OrthologPathCollection, name, paths_call))
+            original_adapter = pc.materialize_ortholog_paths
+            counters["paths.materialize.calls"] = 0
+            def adapter(*args, **kwargs):
+                counters["paths.materialize.calls"] += 1
+                return original_adapter(*args, **kwargs)
+            stack.enter_context(patch.object(pc, "materialize_ortholog_paths", adapter))
         result = profile.runcall(fn)
     stats = pstats.Stats(profile)
     # Profile details are diagnostic; none of these instrumented times enters the timing gate.
@@ -673,11 +746,18 @@ def operation_probe(pc, cc, fn):
 def summarize_result(value):
     groups = getattr(value, "orthogroups", None)
     summary = {}
+    if isinstance(groups, dict):
+        groups = value
     if groups is not None:
         summary = {"groups": len(groups.orthogroups),
                    "members": sum(len(x) for x in groups.orthogroups.values()),
                    "edges": sum(len(x) for x in groups.ortholog_edges_by_orthogroup_id.values()),
-                   "paths": sum(len(x) for x in groups.ortholog_paths_by_orthogroup_id.values())}
+                   "paths": (sum(x.count for x in groups.path_indexes_by_orthogroup_id.values())
+                             if hasattr(groups, "path_indexes_by_orthogroup_id") else
+                             sum(len(x) for x in groups.ortholog_paths_by_orthogroup_id.values()))}
+        if hasattr(groups, "path_indexes_by_orthogroup_id"):
+            summary.update(nodes=sum(len(x.nodes) for x in groups.path_indexes_by_orthogroup_id.values()),
+                           transitions=sum(len(x.transitions) for x in groups.path_indexes_by_orthogroup_id.values()))
     if hasattr(value, "blocks"):
         summary.update({"blocks": len(value.blocks), "anchors": sum(len(b.anchors) for b in value.blocks)})
     if isinstance(value, dict) and ("warmHits" in value or "observedException" in value):
@@ -700,7 +780,7 @@ def measure_stage(pc, cc, fn, args, artifact):
             tracemalloc.start()
             try:
                 result = fn()
-                _, peak = tracemalloc.get_traced_memory()
+                retained, peak = tracemalloc.get_traced_memory()
             finally:
                 tracemalloc.stop()
             samples.append(peak)
@@ -714,6 +794,8 @@ def measure_stage(pc, cc, fn, args, artifact):
         data = json_bytes(canonical(result["semantic"] if diagnostics is not None else result))
         hashes.append(digest(data))
         summary = diagnostics if diagnostics is not None else summarize_result(result)
+        output_bytes = (len(result) if isinstance(result, bytes) else
+                        len(result.encode()) if isinstance(result, str) else None)
         del result
     if len(set(hashes)) != 1:
         raise ValueError("semantic results changed between identical samples")
@@ -723,10 +805,14 @@ def measure_stage(pc, cc, fn, args, artifact):
     report = {"semanticSha256": hashes[0], "semanticBytes": len(data), "summary": summary,
               "samples": samples, "unit": {"timing": "ms", "memory": "tracemalloc bytes", "probe": "counts/profile"}[args.measure],
               "sampleSemanticSha256": hashes}
+    if output_bytes is not None:
+        report["outputBytes"] = output_bytes
     if samples:
         median = statistics.median(samples)
         mad = statistics.median(abs(x-median) for x in samples)
         report.update({"median": median, "mad": mad, "noisePct": 100 * mad/median if median else 0})
+    if args.measure == "memory":
+        report["retainedBytes"] = retained
     if counts is not None:
         report.update({"operations": counts, "profile": profile})
     return report
@@ -791,6 +877,9 @@ def main(argv=None):
     run.add_argument("--seed", type=int, default=SEED)
     run.add_argument("--warmups", type=int, default=POLICY["warmups"])
     run.add_argument("--samples", type=int, default=POLICY["samples"])
+    run.add_argument("--path-representation", choices=("graph", "exhaustive"), default="graph",
+                     help="Same-source explicit-output control, restricted to R<=16 path cases")
+    run.add_argument("--stages", nargs="+", help="Measure only named stages; preparation remains outside stage timing")
     run.add_argument("--artifacts", type=Path)
     run.add_argument("--output", type=Path, required=True)
     comp = sub.add_parser("compare")
@@ -802,9 +891,22 @@ def main(argv=None):
     browser.add_argument("--source-root", type=Path, required=True)
     browser.add_argument("--samples", type=int, default=POLICY["samples"])
     browser.add_argument("--output", type=Path, required=True)
+    paths_browser = sub.add_parser("path-browser", help="S06 production conversion Worker timing/memory")
+    paths_browser.add_argument("--source-root", type=Path, required=True)
+    paths_browser.add_argument("--samples", type=int, default=7)
+    paths_browser.add_argument("--measure", choices=("timing", "memory"), default="timing")
+    paths_browser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "compare":
         report, code = compare_reports(read_report(args.baseline), read_report(args.current), semantic_only=args.semantics_only)
+    elif args.command == "path-browser":
+        from protein_comparison_browser import run_path_browser
+        root = args.source_root.resolve()
+        pc, cc = load_source(root)
+        report = {"benchmark": NAME, "schema": 1, "command": sys.argv,
+                  "source": source_info(root), "measurement": args.measure,
+                  "result": run_path_browser(root, path_browser_inputs(root, pc, cc), args.samples, args.measure)}
+        code = 0
     elif args.command == "browser":
         from protein_comparison_browser import run_browser
         if args.samples < 1:
@@ -821,6 +923,8 @@ def main(argv=None):
     else:
         if args.samples < 1 or args.warmups < 0:
             parser.error("samples must be positive and warmups nonnegative")
+        if args.path_representation == "exhaustive" and any(name not in {"path-8", "path-12", "path-16"} for name in args.cases):
+            parser.error("Explicit-output controls are restricted to R=8/12/16; never expand R>=24")
         root = args.source_root.resolve()
         pc, cc = load_source(root)
         report = {"benchmark": NAME, "schema": 1, "command": sys.argv,
@@ -833,7 +937,13 @@ def main(argv=None):
                   "cases": {}}
         for name in args.cases:
             print(f"{args.measure}: {name}", file=sys.stderr, flush=True)
-            fixture, operations = build_case(root, pc, cc, name, args.seed)
+            fixture, operations = build_case(root, pc, cc, name, args.seed, args.path_representation)
+            if args.path_representation != "graph":
+                fixture["pathRepresentation"] = args.path_representation
+            if args.stages:
+                operations = {stage: fn for stage, fn in operations.items() if stage in args.stages}
+                if not operations:
+                    parser.error(f"No selected stages in {name}")
             # A large transport fixture is written once, not embedded in every report.
             browser_payload = fixture.pop("browserPayload", None)
             if browser_payload and args.artifacts:

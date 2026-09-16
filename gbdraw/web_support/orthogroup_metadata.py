@@ -229,18 +229,6 @@ def _serialize_ortholog_edge(edge: Any) -> dict[str, object]:
     }
 
 
-def _serialize_ortholog_path(path: Any) -> dict[str, object]:
-    return {
-        "orthogroupId": _text(getattr(path, "orthogroup_id", "")),
-        "pathId": _text(getattr(path, "path_id", "")),
-        "proteinIds": [_text(item) for item in (getattr(path, "protein_ids", ()) or ())],
-        "edgeIds": [_text(item) for item in (getattr(path, "edge_ids", ()) or ())],
-        "sharedProteinIds": [
-            _text(item) for item in (getattr(path, "shared_protein_ids", ()) or ())
-        ],
-    }
-
-
 FeatureIdMapper = Callable[[int, str], str]
 
 
@@ -333,6 +321,7 @@ def serialize_orthogroups_payload(
     rbh_orthogroups = getattr(orthogroups, "rbh_orthogroups", {}) or {}
     ortholog_edges_by_id = getattr(orthogroups, "ortholog_edges_by_orthogroup_id", {}) or {}
     ortholog_paths_by_id = getattr(orthogroups, "ortholog_paths_by_orthogroup_id", {}) or {}
+    path_indexes = getattr(orthogroups, "path_indexes_by_orthogroup_id", {}) or {}
     related_edges_by_id = getattr(orthogroups, "related_edges_by_orthogroup_id", {}) or {}
     scope_by_id = getattr(orthogroups, "scope_by_orthogroup_id", {}) or {}
     source_record_index_by_id = getattr(orthogroups, "source_record_index_by_orthogroup_id", {}) or {}
@@ -360,6 +349,8 @@ def serialize_orthogroups_payload(
             if orthogroup_id in source_record_index_by_id
             else None
         )
+        path_count = (path_indexes[orthogroup_id].count if orthogroup_id in path_indexes
+                      else len(ortholog_paths_by_id.get(orthogroup_id, ()) or ()))
         payload.append(
             {
                 "id": orthogroup_id,
@@ -379,10 +370,7 @@ def serialize_orthogroups_payload(
                     _serialize_ortholog_edge(edge)
                     for edge in (ortholog_edges_by_id.get(orthogroup_id, []) or [])
                 ],
-                "orthologPaths": [
-                    _serialize_ortholog_path(path)
-                    for path in (ortholog_paths_by_id.get(orthogroup_id, []) or [])
-                ],
+                **({"orthologPathCount": str(path_count)} if path_count else {}),
                 "relatedEdges": [
                     _serialize_ortholog_edge(edge)
                     for edge in (related_edges_by_id.get(orthogroup_id, []) or [])

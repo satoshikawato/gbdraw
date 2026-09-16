@@ -1,0 +1,30 @@
+{
+  "sourceEqualsBrowserWheelPythonEqualsIsolatedInstall": {
+    "gbdraw/analysis/ortholog_paths.py": "b03c8b39df3f5e9fcbe96de9bf082493f2d5a4cee36a424644f976ab18661a66",
+    "gbdraw/analysis/protein_colinearity.py": "4c1f819aa88b9869fb707883ee5695df5e661f819089b6e22d52b98c31486c14",
+    "gbdraw/session_request_codec.py": "f3501ce57d8c05306e92682fcf151202b2c6ec461c202d19acbecd531bd5abd9",
+    "gbdraw/api/request_render.py": "03003d5ebaa83c5564da5d0f7e776b58e4962380dc285d8fd04178a9c2444f85",
+    "gbdraw/api/session_compat.py": "07347c488711a709dcaa7c6f3c9d24c12039d0c08025118b642d0f4443ad88c2",
+    "gbdraw/web_support/orthogroup_metadata.py": "11b5c89da3abf96e05cac5900c7310be832974b9b5a9e5da90e16466994beccf",
+    "gbdraw/analysis/collinearity.py": "7c750055bb0ae85d1a1283fbb46b811c8b81e534e690120a964ee8bf11110107",
+    "gbdraw/api/__init__.py": "07d9b9a72786266d462382a635b3d1ab0b17a46aae7f884c947b074ca12b0a6e",
+    "gbdraw/api/diagram.py": "a5a317b6a30c83166b9f830e7a4db8720dab7983af61898f8f0a5ba369577c30",
+    "gbdraw/api/options.py": "ef464e8b8a2df084609d06da6a37724690d64e03709174991752c7b745477828",
+    "gbdraw/diagrams/linear/assemble.py": "49962986eb7386a1be528e530e27b7a0f39e035f54b9f38cf9c64fb1497bc3c4",
+    "gbdraw/diagrams/linear/orthogroup_alignment.py": "e0fd6aa27d96a04c81339ebfd0fbd7e1545e9058fb02d2c2f794968a2e36f3fa",
+    "gbdraw/interface.py": "d2bed5b4817c5c7f5b9bbe44d30e68b1c74c79195f58b864daf00f5676aafabc"
+  },
+  "wheel": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/gbdraw/web/gbdraw-0.14.0-py3-none-any.whl",
+  "wheelSha256": "1b2e4f65736e38d53637d40a7c0cd1524c6da37b23466212c68bed59a2073704",
+  "installedImportOutsideCheckout": {
+    "package": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/lib/python3.13/site-packages/gbdraw/__init__.py",
+    "paths": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/lib/python3.13/site-packages/gbdraw/analysis/ortholog_paths.py"
+  },
+  "pythonpathRemoved": true,
+  "sourceSpaEqualsIsolatedInstallJavaScript": {
+    "gbdraw/web/js/services/session-request.js": "5558a98f0bfcd84c8c578887fc4463e55666810a124f22cd27edeee8640de110",
+    "gbdraw/web/js/app/run-analysis.js": "cdd420cf73b9512bc5a28450f69ee39c89bc18710d083d7d566aa0b99c33957e"
+  },
+  "installedImportProbeWorkingDirectory": "/tmp/gbdraw-s06-external-cli-up2_wsoj",
+  "externalCliReplayMatchesEarlierSvg": true
+}

@@ -27,6 +27,10 @@ from gbdraw.session_request_codec import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+legacy_spec = importlib.util.spec_from_file_location("s04_exhaustive", ROOT / "tests/prototypes/exhaustive_ortholog_paths.py")
+legacy = importlib.util.module_from_spec(legacy_spec)
+legacy_spec.loader.exec_module(legacy)
+_build_ortholog_paths = legacy._build_ortholog_paths
 prototype_spec = importlib.util.spec_from_file_location("s02_path_graph", ROOT / "tests/prototypes/ortholog_path_graph.py")
 prototype = importlib.util.module_from_spec(prototype_spec)
 prototype_spec.loader.exec_module(prototype)
@@ -48,7 +52,15 @@ def edge(pm, u, v, kind="rbh", prior=None):
 
 
 def compare(pm, edges):
-    old_edges, old_paths = pc._build_ortholog_paths({"og_1": edges}, pm)
+    old_edges, old_paths = _build_ortholog_paths({"og_1": edges}, pm)
+    production = pc.OrthologPathCollection.from_edges("og_1", edges, pm)
+    assert production.count == len(old_paths["og_1"])
+    assert tuple(production.iter_paths()) == old_paths["og_1"]
+    assert tuple(replace(e, path_id=production.first_path_id(e)) for e in edges) == old_edges["og_1"]
+    for rank, path in enumerate(old_paths["og_1"], 1):
+        assert production.path_at(rank) == path
+        assert production.rank_of(path.protein_ids) == rank
+        assert production.path_by_id(path.path_id) == path
     index = DagPathIndex("og_1", edges, pm)
     assert index.materialized_paths == 0
     assert index.count == len(old_paths["og_1"])
@@ -162,7 +174,7 @@ def infer(pm, rows):
     return pc.select_rbh_orthogroup_edges_from_directional_hits(
         {pair: baseline.frame(values) for pair, values in by_pair.items()}, pm,
         record_count=max(p.record_index for p in pm.values())+1,
-        comparison_pairs=(), max_related_edges_per_orthogroup=2,
+        comparison_pairs=(), max_related_edges_per_orthogroup=2, path_representation="exhaustive",
     ).orthogroups
 
 
@@ -206,7 +218,7 @@ def test_seeded_reachable_directional_evidence():
 @pytest.mark.parametrize("size", [8, 12, 16])
 def test_s01_full_selector_paths_and_archived_oracle(size):
     pm, tables = baseline.synthetic(pc, f"path-{size}", SEED)
-    result = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=size)
+    result = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=size, path_representation="exhaustive")
     check_inferred(pm, result.orthogroups)
     assert len(result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]) == 2**(size-2)
     archive = ROOT / f"docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/oracles/path-{size}.selector.json.gz"
@@ -239,15 +251,15 @@ def test_large_compact_count_rank_shared_without_legacy_enumeration(size, extra)
 def test_cycle_observations_do_not_become_a_dag_fallback():
     pm = proteins(6)
     cycle = [edge(pm, "p0", "p1"), edge(pm, "p1", "p0")]
-    _, paths = pc._build_ortholog_paths({"og_1": cycle}, pm)
+    _, paths = _build_ortholog_paths({"og_1": cycle}, pm)
     assert [p.protein_ids for p in paths["og_1"]] == [("p0", "p1"), ("p1", "p0")]
     # A cyclic component is not visited if another component has a source.
-    _, paths = pc._build_ortholog_paths({"og_1": cycle + [edge(pm, "p2", "p3")]}, pm)
+    _, paths = _build_ortholog_paths({"og_1": cycle + [edge(pm, "p2", "p3")]}, pm)
     assert [p.protein_ids for p in paths["og_1"]] == [("p2", "p3")]
     prefix_cycle = [edge(pm, "p4", "p0"), *cycle, edge(pm, "p1", "p5")]
-    _, paths = pc._build_ortholog_paths({"og_1": prefix_cycle}, pm)
+    _, paths = _build_ortholog_paths({"og_1": prefix_cycle}, pm)
     assert {p.protein_ids for p in paths["og_1"]} == {("p4", "p0", "p1"), ("p4", "p0", "p1", "p5")}
-    _, paths = pc._build_ortholog_paths({"og_1": [edge(pm, "p0", "p0")]}, pm)
+    _, paths = _build_ortholog_paths({"og_1": [edge(pm, "p0", "p0")]}, pm)
     assert paths["og_1"] == ()
     for edges in (cycle, prefix_cycle, [edge(pm, "p0", "p0")]):
         with pytest.raises(ValidationError, match="cycle"):
@@ -262,8 +274,9 @@ def test_legacy_typed_tuple_accepts_explicit_cyclic_noncanonical_corpus(tmp_path
         ortholog_edges_by_orthogroup_id={"og_1": edges}, ortholog_paths_by_orthogroup_id={"og_1": paths})
     path = tmp_path / "typed.json"
     path.write_bytes(encode_canonical_typed_resource("orthogroupResult", legacy))
-    decoded = _read_typed_json_resource("r", value_kind="orthogroupResult", expected=pc.OrthogroupResult,
+    decoded = _read_typed_json_resource("r", value_kind="orthogroupResult", expected=pc.OrthogroupResult | pc.OrthogroupGraphResult,
         path="comparison", resource_paths={"r": path})
+    decoded = pc.materialize_ortholog_paths(decoded)
     assert decoded == legacy
     assert type(decoded.ortholog_paths_by_orthogroup_id["og_1"]) is tuple
 
@@ -339,7 +352,7 @@ for (const kind of ['orthogroup', 'collinear']) {
 def write_evidence(output):
     records = {name: compare(pm, edges) for name, pm, edges in named_cases()}
     for name, pm, edges in named_cases():
-        old_edges, old_paths = pc._build_ortholog_paths({"og_1": edges}, pm)
+        old_edges, old_paths = _build_ortholog_paths({"og_1": edges}, pm)
         records[name]["input"] = {"proteins": {k: asdict(v) for k, v in pm.items()}, "edges": [asdict(e) for e in edges]}
         records[name]["expected"] = {"edges": [asdict(e) for e in old_edges["og_1"]], "paths": [asdict(p) for p in old_paths["og_1"]]}
     exhaustive = [compare(pm, edges) for pm, edges in all_small_dags()]
