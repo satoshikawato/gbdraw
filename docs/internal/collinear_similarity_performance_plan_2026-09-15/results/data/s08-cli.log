@@ -1,0 +1,11 @@
+/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/.venv/s08-cli/lib/python3.13/site-packages/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  else pd.concat(frames, ignore_index=True)
+/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/.venv/s08-cli/lib/python3.13/site-packages/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  else pd.concat(frames, ignore_index=True)
+/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/.venv/s08-cli/lib/python3.13/site-packages/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  else pd.concat(frames, ignore_index=True)
+/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/.venv/s08-cli/lib/python3.13/site-packages/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  else pd.concat(frames, ignore_index=True)
+gallery-collinear replayed
+gallery-orthogroup replayed
+released-v2 replayed

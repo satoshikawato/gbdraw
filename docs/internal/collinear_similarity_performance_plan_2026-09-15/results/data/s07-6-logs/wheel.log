@@ -1,0 +1,49 @@
+Processing /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'error'
+  error: subprocess-exited-with-error
+  
+  × pip subprocess to install build dependencies did not run successfully.
+  │ exit code: 1
+  ╰─> [8 lines of output]
+      WARNING: The directory '/home/kawato/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+      WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f80c04e3b60>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f80c03a0a50>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f80c03a0cd0>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f80c03a0f50>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7f80c03a11d0>: Failed to establish a new connection: [Errno -2] Name or service not known')': /simple/setuptools/
+      ERROR: Could not find a version that satisfies the requirement setuptools>=61.0 (from versions: none)
+      ERROR: No matching distribution found for setuptools>=61.0
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+error: subprocess-exited-with-error
+
+× pip subprocess to install build dependencies did not run successfully.
+│ exit code: 1
+╰─> See above for output.
+
+note: This error originates from a subprocess, and is likely not a problem with pip.
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tools/prepare_browser_wheel.py", line 120, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tools/prepare_browser_wheel.py", line 113, in main
+    return prepare_browser_wheel(
+        refresh_cache_bust=args.refresh_cache_bust,
+        build_isolation=not args.no_build_isolation,
+    )
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916/tools/prepare_browser_wheel.py", line 61, in prepare_browser_wheel
+    subprocess.run(
+    ~~~~~~~~~~~~~~^
+        wheel_command,
+        ^^^^^^^^^^^^^^
+    ...<2 lines>...
+        check=True,
+        ^^^^^^^^^^^
+    )
+    ^
+  File "/home/kawato/micromamba/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/kawato/micromamba/bin/python', '-m', 'pip', 'wheel', '--no-deps', '--no-cache-dir', '--wheel-dir', '/tmp/gbdraw-browser-wheel-94d1xz4_/dist', '/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916']' returned non-zero exit status 1.

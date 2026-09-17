@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 9 items / 1 deselected / 8 selected
+
+tests/test_protein_comparison_benchmark.py ........                      [100%]
+
+======================= 8 passed, 1 deselected in 0.74s ========================

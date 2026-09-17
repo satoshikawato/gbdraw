@@ -1,0 +1,159 @@
+--- inherited-final/tests/run_protein_local_browser_acceptance.py
++++ s09/tests/run_protein_local_browser_acceptance.py
+@@ -48,7 +48,7 @@
+     parser.add_argument('--baseline-root', type=Path)
+     parser.add_argument('--output', type=Path, required=True)
+     parser.add_argument('--resume', action='store_true', help='Reuse completed checks only with identical wheel/source hashes')
+-    parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline', 'manifest-merge'))
++    parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline', 'manifest-merge', 'session-writer'))
+     parser.add_argument('--manifest-fault', choices=('schema', 'blank-alias'), default='schema')
+     parser.add_argument('--cases', nargs='+', choices=tuple(INTEGRATION_CASES), default=list(INTEGRATION_CASES))
+     parser.add_argument('--samples', type=int, choices=(1, 2, 3), default=3)
+@@ -453,6 +453,8 @@
+             try:
+                 if args.integration == 'manifest-merge':
+                     run_manifest_merge(context_for, close_context, save)
++                elif args.integration == 'session-writer':
++                    run_session_writer(args, context_for, close_context, save)
+                 elif args.integration in {'lifecycle', 'replacement'}:
+                     run_integration_lifecycle(args, report, context_for, close_context, save)
+                 elif args.integration == 'offline':
+@@ -530,6 +532,94 @@
+         save()
+ 
+ 
++def run_session_writer(args, context_for, close_context, save):
++    """Reject corrupted save metadata, then save/load/reanalyse real saved raw."""
++    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
++    artifacts = ROOT / '.venv' / (args.output.name.split('.')[0] + '-artifacts')
++    artifacts.mkdir(parents=True, exist_ok=True)
++    for viewport in ((1280, 720), (390, 844)):
++        context, page, record = context_for(viewport)
++        integration_import(page, fixture)
++        record['fixtureSha256'] = digest(fixture.read_bytes())
++        record['workersAfterPreviewLoad'] = page.evaluate('() => window.__integration.workers.length')
++        assert record['workersAfterPreviewLoad'] == 0
++        record['preparation'] = integration_prepare(page, 'hep-on')
++        initial = record['savedRaw'] = integration_generate(page)
++        assert initial['telemetry']['cacheHits'] == 13 and not initial['searches']
++        record['writerChecks'] = page.evaluate('''async () => {
++          const {state} = await import('/gbdraw/web/js/state.js');
++          const {exportSession} = await import('/gbdraw/web/js/services/config.js');
++          const app = window.__GBDRAW_APP__, history = window.__GBDRAW_HISTORY__;
++          const original = {manifest: state.proteinIdentityManifest.value,
++            raw: state.losatCache.value, info: state.losatCacheInfo.value};
++          const snapshot = () => JSON.stringify({results: app.results,
++            selected: app.selectedResultIndex, undo: history.getUndoCount(), redo: history.getRedoCount(),
++            raw: [...state.losatCache.value], info: state.losatCacheInfo.value,
++            derived: [...state.losatDerivedCache.value], manifest: state.proteinIdentityManifest.value});
++          const rows = [], createUrl = URL.createObjectURL;
++          let downloads = 0;
++          URL.createObjectURL = (...args) => { downloads++; return createUrl(...args); };
++          try {
++            for (const cacheKind of ['empty', 'nucleotide']) {
++              state.losatCache.value = new Map(cacheKind === 'empty' ? [] : [['nucleotide',
++                {schema: 2, kind: 'raw-losat', program: 'blastn', text: ''}]]);
++              state.losatCacheInfo.value = [];
++              const badAlias = JSON.parse(JSON.stringify(original.manifest));
++              Object.values(Object.values(badAlias.recordInstances)[0].featureMetadata)[0].displayAlias = ' ';
++              for (const manifest of [null, badAlias]) {
++                state.proteinIdentityManifest.value = manifest;
++                const before = snapshot();
++                let error = null, status = null;
++                try { status = (await exportSession('s09-invalid-manifest')).status; }
++                catch (failure) { error = failure.message; }
++                rows.push({cacheKind, fault: manifest === null ? 'null' : 'blank-alias',
++                  error, status, preserved: snapshot() === before, downloads});
++              }
++            }
++          } finally {
++            URL.createObjectURL = createUrl;
++            state.proteinIdentityManifest.value = original.manifest;
++            state.losatCache.value = original.raw;
++            state.losatCacheInfo.value = original.info;
++          }
++          window.__s09SaveSnapshot = snapshot;
++          window.__s09BeforeSave = snapshot();
++          return rows;
++        }''')
++        for row in record['writerChecks']:
++            assert row['error'] == 'Save Session requires a valid protein identity manifest.', row
++            assert row['status'] is None and row['preserved'] and row['downloads'] == 0, row
++        saved = acceptance._save_session(page, acceptance.AcceptanceChecks())
++        assert page.evaluate('() => window.__s09SaveSnapshot() === window.__s09BeforeSave')
++        target = artifacts / f'{viewport[0]}.gbdraw-session.json.gz'
++        target.write_bytes(saved.read_bytes())
++        document = json.loads(gzip.decompress(target.read_bytes()))
++        record['savedSha256'] = digest(target.read_bytes())
++        record['savedRawCount'] = len(document['losatCache']['entries'])
++        assert record['savedRawCount'] == 13
++        close_context(context, page, record)
++        save()
++        context, page, restored = context_for(viewport)
++        integration_import(page, target)
++        restored['workersAfterPreviewLoad'] = page.evaluate('() => window.__integration.workers.length')
++        assert restored['workersAfterPreviewLoad'] == 0
++        page.evaluate('''async () => {
++          await window.__GBDRAW_APP__.setLinearComparisonGlobalAction('losat');
++          const {state} = await import('/gbdraw/web/js/state.js');
++          state.losatDerivedCache.value.clear();
++        }''')
++        regenerated = restored['regenerated'] = integration_generate(page)
++        assert regenerated['telemetry']['cacheHits'] == 13 and not regenerated['searches']
++        for field in ('svgSha256', 'geometrySha256', 'provenance'):
++            assert regenerated[field] == initial[field], field
++        repeated = restored['resolvedRepeat'] = integration_generate(page)
++        assert repeated['svgSha256'] == regenerated['svgSha256'] and not repeated['searches']
++        assert repeated['workerCount'] == regenerated['workerCount'] == 1
++        close_context(context, page, restored)
++        save()
++        print(viewport[0], 'writer rejection, recovery, fresh Load/raw reuse and disposal passed', flush=True)
++
++
+ def run_manifest_merge(context_for, close_context, save):
+     """Saved-raw merge and malformed extraction failure through the real Worker."""
+     fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+--- inherited-final/tests/web/session-export-validation.test.mjs
++++ s09/tests/web/session-export-validation.test.mjs
+@@ -235,11 +235,39 @@
+   assert.deepEqual([...state.losatCache.value], entries, 'Save must not mutate live cache/History state');
+   state.proteinIdentityManifest.value = null;
+   await assert.rejects(exportSession('invalid-protein-manifest'), /valid protein identity manifest/);
++  // A missing protein raw entry must not turn an invalid manifest into a
++  // successful save with silently discarded identity metadata.
++  for (const rawEntries of [[], [entries.at(-1)]]) {
++    state.losatCache.value = new Map(rawEntries);
++    state.losatCacheInfo.value = [];
++    for (const invalidManifest of [null, { schema: -1 }, {
++      ...structuredClone(replacementSession.proteinIdentityManifest),
++      recordAnalyses: {}
++    }]) {
++      state.proteinIdentityManifest.value = invalidManifest;
++      await assert.rejects(exportSession('invalid-manifest-without-protein-raw'),
++        /valid protein identity manifest/);
++      assert.equal(state.proteinIdentityManifest.value, invalidManifest);
++      assert.deepEqual([...state.losatCache.value], rawEntries);
++      assert.equal(downloadedBlobs, 2);
++      assert.equal(compressionAttempts, 2);
++    }
++  }
++  for (const rawEntries of [[], [entries.at(-1)]]) {
++    state.losatCache.value = new Map(rawEntries);
++    state.proteinIdentityManifest.value = structuredClone(session.proteinIdentityManifest);
++    const valid = await exportSession(`valid-empty-manifest-${rawEntries.length}`);
++    const document = JSON.parse(gunzipSync(Buffer.from(await valid.blob.arrayBuffer())).toString('utf8'));
++    assert.equal(valid.status, 'saved');
++    assert.deepEqual(document.proteinIdentityManifest, session.proteinIdentityManifest);
++    assert.equal(document.losatCache.entries.length, rawEntries.length);
++    assert.doesNotThrow(() => validateSessionLosatArtifacts(document, document.version));
++  }
+ } finally {
+   URL.createObjectURL = originalCreateObjectUrl;
+   globalThis.CompressionStream = OriginalCompressionStream;
+ }
+ assert.ok(inputReads > 0, 'saving must bind the active input file');
+-assert.equal(compressionAttempts, 2);
+-assert.equal(downloadedBlobs, 2);
++assert.equal(compressionAttempts, 4);
++assert.equal(downloadedBlobs, 4);
+ assert.ok(downloadedBlob instanceof Blob);

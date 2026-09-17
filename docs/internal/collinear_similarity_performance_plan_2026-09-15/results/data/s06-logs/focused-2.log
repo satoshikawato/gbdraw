@@ -1,0 +1,70 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 566 items
+
+tests/test_lossless_ortholog_paths.py ...........                        [  1%]
+tests/test_ortholog_path_contract.py .................                   [  4%]
+tests/test_protein_colinearity.py ...................................... [ 11%]
+........................................................................ [ 24%]
+............................................................s........... [ 37%]
+......................................                                   [ 43%]
+tests/test_collinearity.py ............................................. [ 51%]
+........................................................................ [ 64%]
+..........                                                               [ 66%]
+tests/test_session_request_codec.py .................................... [ 72%]
+........................................................................ [ 85%]
+........                                                                 [ 86%]
+tests/test_sparse_support.py ........................................... [ 94%]
+.....F.........F                                                         [ 97%]
+tests/test_output_comparison.py ................                         [100%]
+
+=================================== FAILURES ===================================
+_____________ test_endpoint_first_match_counts_and_unknown_errors ______________
+tests/test_sparse_support.py:137: in test_endpoint_first_match_counts_and_unknown_errors
+    reverse = replace(edge, query_protein_id=edge.subject_protein_id, subject_protein_id=edge.query_protein_id, path_id="second")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/kawato/micromamba/lib/python3.13/dataclasses.py:1596: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+/home/kawato/micromamba/lib/python3.13/dataclasses.py:1630: in _replace
+    return self.__class__(**changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:15: in __init__
+    ???
+gbdraw/analysis/protein_colinearity.py:415: in __post_init__
+    index.validate_edges(self.ortholog_edges_by_orthogroup_id.get(group_id, ()))
+gbdraw/analysis/ortholog_paths.py:197: in validate_edges
+    raise ValidationError("DAG transitions do not match selected evidence")
+E   gbdraw.exceptions.ValidationError: DAG transitions do not match selected evidence
+____________ test_endpoint_index_consumes_each_edge_once_as_needed _____________
+tests/test_sparse_support.py:233: in test_endpoint_index_consumes_each_edge_once_as_needed
+    return edge
+/home/kawato/micromamba/lib/python3.13/dataclasses.py:1596: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+/home/kawato/micromamba/lib/python3.13/dataclasses.py:1630: in _replace
+    return self.__class__(**changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:15: in __init__
+    ???
+gbdraw/analysis/protein_colinearity.py:415: in __post_init__
+    index.validate_edges(self.ortholog_edges_by_orthogroup_id.get(group_id, ()))
+gbdraw/analysis/ortholog_paths.py:197: in validate_edges
+    raise ValidationError("DAG transitions do not match selected evidence")
+E   gbdraw.exceptions.ValidationError: DAG transitions do not match selected evidence
+=============================== warnings summary ===============================
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_sparse_support.py::test_endpoint_first_match_counts_and_unknown_errors
+FAILED tests/test_sparse_support.py::test_endpoint_index_consumes_each_edge_once_as_needed
+======= 2 failed, 563 passed, 1 skipped, 1 warning in 166.67s (0:02:46) ========

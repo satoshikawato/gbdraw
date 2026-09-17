@@ -605,8 +605,13 @@ def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
         decoded = session_to_request(materialized)
 
     assert isinstance(decoded, LinearDiagramRequest)
-    assert decoded.options.orthogroups == orthogroups
-    assert decoded.options.collinearity_blocks == collinearity
+    from dataclasses import replace
+    from gbdraw.analysis.protein_colinearity import materialize_ortholog_paths
+    assert materialize_ortholog_paths(decoded.options.orthogroups) == orthogroups
+    decoded_collinearity = decoded.options.collinearity_blocks
+    if isinstance(decoded_collinearity, CollinearityResult):
+        decoded_collinearity = replace(decoded_collinearity, orthogroups=materialize_ortholog_paths(decoded_collinearity.orthogroups))
+    assert decoded_collinearity == collinearity
 
 
 @pytest.mark.browser

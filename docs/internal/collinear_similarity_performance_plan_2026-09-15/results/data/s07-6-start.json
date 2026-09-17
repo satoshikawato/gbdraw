@@ -1,0 +1,12 @@
+{
+  "originDev": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "head": "f52ed68e15e527b08e4d9247b990684040fe4270",
+  "branch": "perf/collinear-s07-6-unit-index-20260916",
+  "upstream": null,
+  "dependencyPatchCheck": "seven patch-unique commits; sequential cherry-pick --ff; no new commits",
+  "planningEntriesVerified": 9,
+  "scope": "S07.6 only",
+  "preflight": "IMPLEMENT_EXISTING_AUTHORITY",
+  "s05": "rejected",
+  "s07": "accepted; original numeric decisions unchanged"
+}

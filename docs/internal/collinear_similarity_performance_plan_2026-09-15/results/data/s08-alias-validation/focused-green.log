@@ -1,0 +1,3 @@
+RW-03: 3 input checks + 1 merged check; default/Generate failure precedence and deep copy passed
+RW-04: alias validity, NFC collisions, ordinals, immutability and failure precedence passed
+RW-04: 2 valid feature aliases, 2 NFC/trim operations

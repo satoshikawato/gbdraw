@@ -1,0 +1,52 @@
+--- inherited/gbdraw/web/js/app/losat-cache.js
++++ rw03/gbdraw/web/js/app/losat-cache.js
+@@ -272,10 +272,18 @@
+   return validated?.manifest === manifest ? validated : null;
+ };
+ 
+-export const mergeProteinIdentityManifests = (manifests) => {
++export const mergeProteinIdentityManifests = (manifests, { invalidInputMessage = null } = {}) => {
++  const inputs = Array.isArray(manifests) ? manifests : [];
++  // A caller-supplied input error takes precedence over any merge conflict.
++  // Keep the default helper's interleaved failure order for other callers.
++  const inputsValidated = invalidInputMessage !== null
++    && inputs.every((manifest) => validateProteinIdentityManifest(manifest));
++  if (invalidInputMessage !== null && !inputsValidated) {
++    throw new Error(invalidInputMessage);
++  }
+   const merged = emptyProteinIdentityManifest();
+-  (Array.isArray(manifests) ? manifests : []).forEach((manifest) => {
+-    if (!validateProteinIdentityManifest(manifest)) {
++  inputs.forEach((manifest) => {
++    if (!inputsValidated && !validateProteinIdentityManifest(manifest)) {
+       throw new Error('Cannot merge an invalid protein identity manifest.');
+     }
+     mergeManifestMap(merged.proteinSets, manifest.proteinSets, 'protein set');
+--- inherited/gbdraw/web/js/app/run-analysis.js
++++ rw03/gbdraw/web/js/app/run-analysis.js
+@@ -115,8 +115,7 @@
+   releaseValidatedProteinIdentityIndex,
+   sameLosatArgs,
+   transitionLegacyProteinCandidate,
+-  validateDerivedProteinReferences,
+-  validateProteinIdentityManifest
++  validateDerivedProteinReferences
+ } from './losat-cache.js';
+ import { comparisonFiltersForMode } from '../mode-profiles.js';
+ import { normalizeUserFacingError } from '../services/error-normalization.js';
+@@ -3537,12 +3536,10 @@
+             proteinEntries.push(await getSeqEntry(index));
+           }
+           const manifests = proteinEntries.map((entry) => entry.identityManifest);
+-          if (manifests.some((manifest) => !validateProteinIdentityManifest(manifest))) {
+-            throw new Error(
++          workingProteinIdentityManifest = mergeProteinIdentityManifests(manifests, {
++            invalidInputMessage:
+               'Protein comparison metadata could not be validated. Reload the page and try again.'
+-            );
+-          }
+-          workingProteinIdentityManifest = mergeProteinIdentityManifests(manifests);
++          });
+           const legacyReferenceIds = collectLegacyProteinReferences(
+             workingOrthogroups,
+             workingSelectedOrthogroupAlignmentFeature,

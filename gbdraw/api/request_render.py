@@ -1828,6 +1828,7 @@ def _build_current_derived_entries(
     identity = {
         "cacheSchema": 3,
         "semantics": "derived-option-conformance-v1",
+        "pathRepresentation": "lossless-graph-v1",
         "idEncoding": "runtime-handle-v1",
         "converter": "convert_losatp_blastp_pairs_to_genomic_payload",
         "mode": mode,
@@ -1910,6 +1911,14 @@ def _build_current_derived_entries(
             ),
             "parameterIdentity": parameter_identity,
         }
+    from gbdraw.session_request_codec import encode_canonical_typed_resource
+
+    compact_resource = {}
+    collinearity = metadata.collinearity_result if metadata is not None else request.options.collinearity_blocks
+    if mode == "collinear" and isinstance(collinearity, CollinearityResult):
+        compact_resource["collinearityResult"] = json.loads(encode_canonical_typed_resource("result", collinearity))
+    elif orthogroups is not None:
+        compact_resource["orthogroupResult"] = json.loads(encode_canonical_typed_resource("orthogroupResult", orthogroups))
     key = hashlib.sha256(
         json.dumps(
             identity,
@@ -1956,6 +1965,7 @@ def _build_current_derived_entries(
             },
             "pairs": pair_payloads,
             "orthogroups": orthogroup_payload,
+            **compact_resource,
         },
     }
     return (entry,)

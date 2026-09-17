@@ -1,0 +1,105 @@
+{
+  "cases": {
+    "gallery-collinear-vibrio": {
+      "report": "s07-7-current-gallery-collinear-vibrio-probe.json.gz",
+      "sha256": "667cf4aeabc946f27e2e24cf4e9a9ed8d1e31089ff9f4a5075ad42226fe32c70",
+      "semanticMatchesTiming": true,
+      "profiledCalls": 1,
+      "owners": {
+        "_normalize_directional_hit_tables": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 44.794560838801296
+        },
+        "_aggregate_hsps_by_protein_pair": {
+          "calls": 31,
+          "instrumentedCumulativeSharePct": 31.317856673536813
+        },
+        "_build_anchor_core_orthogroups": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 24.83409179682682
+        },
+        "_coerce_outfmt6_numeric_columns": {
+          "calls": 62,
+          "instrumentedCumulativeSharePct": 7.785656581770823
+        },
+        "_select_member_candidate_hits_per_query": {
+          "calls": 31,
+          "instrumentedCumulativeSharePct": 7.241727779237341
+        },
+        "build_collinearity_unit_index": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 6.7421967219846355
+        },
+        "_select_normalized_fit_rows": {
+          "calls": 31,
+          "instrumentedCumulativeSharePct": 5.140022393401022
+        },
+        "_anchor_core_hit_rank": {
+          "calls": 60089,
+          "instrumentedCumulativeSharePct": 2.562752941661161
+        }
+      }
+    },
+    "gallery-collinear-vibrio-off": {
+      "report": "s07-7-current-gallery-collinear-vibrio-off-probe.json.gz",
+      "sha256": "e9aeda7efe7c9bab89d1e03e1c9f6a0d85f86a859c12f995a978462442c22256",
+      "semanticMatchesTiming": true,
+      "profiledCalls": 1,
+      "owners": {
+        "build_collinearity_unit_index": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 43.51780447726729
+        },
+        "_coerce_outfmt6_numeric_columns": {
+          "calls": 40,
+          "instrumentedCumulativeSharePct": 23.919733598696414
+        },
+        "_select_member_candidate_hits_per_query": {
+          "calls": 20,
+          "instrumentedCumulativeSharePct": 21.497794435291524
+        },
+        "_select_orthogroup_edges": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 20.08427263067172
+        }
+      }
+    },
+    "gallery-orthogroup": {
+      "report": "s07-7-current-gallery-orthogroup-probe.json.gz",
+      "sha256": "9e54a8e5539990b80666f5e156881193305d894de7f3c4659f8f59585158583d",
+      "semanticMatchesTiming": true,
+      "profiledCalls": 1,
+      "owners": {
+        "_normalize_directional_hit_tables": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 50.813066386524305
+        },
+        "_aggregate_hsps_by_protein_pair": {
+          "calls": 25,
+          "instrumentedCumulativeSharePct": 25.0307219559648
+        },
+        "_build_anchor_core_orthogroups": {
+          "calls": 1,
+          "instrumentedCumulativeSharePct": 16.645490188203343
+        },
+        "_select_normalized_fit_rows": {
+          "calls": 25,
+          "instrumentedCumulativeSharePct": 13.752468130814325
+        },
+        "_select_member_candidate_hits_per_query": {
+          "calls": 25,
+          "instrumentedCumulativeSharePct": 12.867266045744785
+        },
+        "_coerce_outfmt6_numeric_columns": {
+          "calls": 54,
+          "instrumentedCumulativeSharePct": 12.045839437587222
+        },
+        "_anchor_core_hit_rank": {
+          "calls": 13846,
+          "instrumentedCumulativeSharePct": 1.8013714028988366
+        }
+      }
+    }
+  },
+  "limitations": "One instrumented call per case; nested cumulative shares, not uninstrumented wall-time shares or achievable savings"
+}

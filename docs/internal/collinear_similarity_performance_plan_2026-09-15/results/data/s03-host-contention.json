@@ -1,0 +1,7 @@
+{
+  "observedUtc": "2026-09-15T06:56:15.663778+00:00",
+  "knownCompetingProcess": "378445 Tue Sep 15 14:26:17 2026    01:29:58 python3",
+  "workDirectory": "/tmp/losat-four-program-20260915",
+  "action": "Read-only observation; no signal or modification to other work. Waiting for uncontended measurement interval.",
+  "scope": "S03 processes were sequential, but this host-level benchmark overlapped previous measurements."
+}

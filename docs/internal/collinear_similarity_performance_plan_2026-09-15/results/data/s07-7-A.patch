@@ -1,0 +1,13 @@
+diff --git a/gbdraw/analysis/protein_colinearity.py b/gbdraw/analysis/protein_colinearity.py
+index 65c6e05f..114dcedf 100644
+--- a/gbdraw/analysis/protein_colinearity.py
++++ b/gbdraw/analysis/protein_colinearity.py
+@@ -3509,7 +3509,7 @@ def _select_normalized_fit_rows(
+ ) -> list[tuple[float, float]]:
+     if normalized_hits.empty:
+         return []
+-    sorted_hits = normalized_hits.sort_values(
++    sorted_hits = normalized_hits[["length_product", "query", "subject", "bitscore"]].sort_values(
+         ["length_product", "query", "subject"],
+         ascending=[True, True, True],
+         kind="mergesort",

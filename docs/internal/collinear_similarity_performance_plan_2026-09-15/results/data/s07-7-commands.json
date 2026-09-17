@@ -1,0 +1,148 @@
+{
+  "cwd": "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916",
+  "tests": "No command timeout imposed; original pytest-owned timeouts unchanged",
+  "commands": [
+    {
+      "stage": "A",
+      "command": "PYTHONPATH=. pytest tests/test_protein_local_reductions.py tests/test_protein_colinearity.py tests/test_sparse_support.py -q",
+      "log": "s07-7-A-tests.log",
+      "exitCode": 0,
+      "result": "510 passed, 1 skipped"
+    },
+    {
+      "stage": "AB",
+      "command": "PYTHONPATH=. pytest tests/test_protein_local_reductions.py tests/test_protein_colinearity.py -q",
+      "log": "s07-7-B-tests.log",
+      "exitCode": 0,
+      "result": "532 passed, 1 skipped"
+    },
+    {
+      "stage": "ABC",
+      "command": "PYTHONPATH=. pytest tests/test_protein_local_reductions.py tests/test_sparse_support.py -q",
+      "log": "s07-7-C-tests.log",
+      "exitCode": 0,
+      "result": "718 passed"
+    },
+    {
+      "stage": "ABC",
+      "command": "PYTHONPATH=. pytest tests/test_protein_local_reductions.py -q -k degenerate",
+      "log": "s07-7-fit-tie-tests.log",
+      "exitCode": 0,
+      "result": "6 passed"
+    },
+    {
+      "stage": "ABC",
+      "command": "PYTHONPATH=. pytest tests/test_protein_colinearity.py tests/test_collinearity.py tests/test_collinearity_units.py tests/test_lossless_ortholog_paths.py tests/test_ortholog_path_contract.py tests/test_protein_comparison_benchmark.py -q -k 'not fresh_process_oracles_repeat_and_measure_existing_work'",
+      "log": "s07-7-native-tests.log",
+      "exitCode": 0,
+      "result": "882 passed, 1 skipped, 1 benchmark-runner test deselected"
+    },
+    {
+      "stage": "ABC",
+      "command": "PYTHONPATH=. pytest tests/test_web_feature_catalog.py tests/test_session_request_codec.py tests/test_session_compat.py tests/test_output_comparison.py::TestOutputComparison -q",
+      "log": "s07-7-typed-reference-tests.log",
+      "exitCode": 0,
+      "result": "195 passed"
+    },
+    {
+      "stage": "ABC",
+      "command": "python tools/prepare_browser_wheel.py --no-build-isolation",
+      "log": "s07-7-wheel.log",
+      "exitCode": 0,
+      "result": "208 packaged Python files match source"
+    },
+    {
+      "stage": "ABC",
+      "command": "node --test tests/web/session-request.test.mjs tests/web/run-analysis-derived-cache.test.mjs tests/web/orthogroups-stable-identity.test.mjs",
+      "log": "s07-7-node-corrected.log",
+      "exitCode": 0,
+      "result": "3 test files passed"
+    },
+    {
+      "stage": "ABC",
+      "command": "node tools/check-web-change-budget.mjs --base f52ed68e15e527b08e4d9247b990684040fe4270",
+      "log": "s07-7-architecture-final.log",
+      "exitCode": 0,
+      "result": "Gate PASS / Review CLEAR; escalated local Git subprocess"
+    },
+    {
+      "stage": "ABC",
+      "command": "env -u PYTHONPATH <worktree>/.venv/s07-7-cli/bin/python <worktree>/tests/run_protein_local_cli_acceptance.py",
+      "log": "s07-7-cli.log",
+      "exitCode": 0,
+      "result": "cwd /tmp; 2 fresh prepared-raw analyses and 3 installed CLI replays"
+    },
+    {
+      "stage": "ABC",
+      "command": "PYTHONPATH=. python tests/run_protein_local_browser_acceptance.py --baseline-root ../collinear-s07-6-20260916 --output docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser.json.gz --resume",
+      "log": "s07-7-browser-resolved-replay.log",
+      "exitCode": 0,
+      "result": "8 helper runs and 8 complete browser flows; matching completed evidence reused"
+    },
+    {
+      "stage": "ABC",
+      "command": "PYTHONPATH=. python tests/run_protein_local_browser_acceptance.py --baseline-root ../collinear-s07-6-20260916 --output docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-browser.json.gz --resume",
+      "log": "s07-7-browser-reuse-check.log",
+      "exitCode": 0,
+      "result": "Final runner revalidated all wheel/source/input/settings/session/browser identities; no completed case rerun"
+    },
+    {
+      "stage": "ABC",
+      "command": "ruff check gbdraw/ tests/test_protein_local_reductions.py tests/prototypes/protein_local_reductions.py tests/test_sparse_support.py tests/run_protein_local_browser_acceptance.py tests/run_protein_local_cli_acceptance.py",
+      "log": "s07-7-ruff.log",
+      "exitCode": 0,
+      "result": "All checks passed"
+    },
+    {
+      "stage": "authorized benchmark",
+      "command": "PYTHONPATH=. pytest tests/test_protein_comparison_benchmark.py -q",
+      "log": "s07-7-benchmark-runner-tests.log",
+      "exitCode": 0,
+      "result": "8 passed; closes previously deselected runner test"
+    },
+    {
+      "stage": "user sampling correction",
+      "command": "PYTHONPATH=. pytest tests/test_protein_comparison_benchmark.py -q -k 'not fresh_process_oracles_repeat_and_measure_existing_work'",
+      "log": "s07-7-sampling-policy-tests.log",
+      "exitCode": 0,
+      "result": "8 passed, 1 profiling test deselected; no measurement rerun"
+    },
+    {
+      "stage": "final benchmark audit",
+      "command": "python docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-benchmark-summary.py",
+      "exitCode": 0,
+      "result": "5 pass / 1 inconclusive; all ordered digests equal; quick3 descriptive only"
+    },
+    {
+      "stage": "final audit",
+      "command": "ruff check gbdraw/ and changed benchmark/test/evidence scripts; git diff --check",
+      "log": "s07-7-ruff-final.log",
+      "exitCode": 0,
+      "result": "passed"
+    }
+  ],
+  "diagnosticFailures": [
+    {
+      "log": "s07-7-browser-sandbox-denied.log",
+      "reason": "Local socket denied; repeated with escalation"
+    },
+    {
+      "log": "s07-7-browser-derived-hit.log",
+      "reason": "Saved resolved artifacts bypassed helper"
+    },
+    {
+      "log": "s07-7-browser-resume.log",
+      "reason": "Emptying derived cache alone does not invalidate resolved artifacts; existing Run LOSAT action used"
+    },
+    {
+      "log": "s07-7-architecture.log",
+      "reason": "Node Git subprocess denied; same checker repeated with escalation"
+    },
+    {
+      "log": "s07-7-node.log",
+      "reason": "Node 26 no longer accepts experimental-default-type flag; corrected invocation passed"
+    }
+  ],
+  "benchmarkCommands": "s07-7-benchmark-commands.jsonl",
+  "samplingPreference": "Future timing defaults three, no automatic noise repeat. Interrupted 21-sample retry retained with exit -15; historical judgments preserved."
+}

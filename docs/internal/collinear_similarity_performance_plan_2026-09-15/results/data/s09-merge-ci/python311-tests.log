@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917
+configfile: pyproject.toml
+plugins: xdist-3.8.0, timeout-2.4.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 34 items
+
+tests/test_ortholog_path_contract.py .................                   [ 50%]
+tests/test_lossless_ortholog_paths.py .................                  [100%]
+
+======================== 34 passed in 63.60s (0:01:03) =========================

@@ -1,0 +1,496 @@
+{
+  "baselinePolicy": "Archived S04 final current-side measurements reused unchanged; no baseline execution.",
+  "timingPolicy": {
+    "warmups": 1,
+    "samples": 21,
+    "maxNoisePct": 5,
+    "regressionPct": 10
+  },
+  "environmentCaveat": "External activity and across-run drift; numerical decisions are not independent performance acceptance. Initial current observations remain visible.",
+  "scienceEvidence": "test_gallery_science_matches_archived_s04_bytes; full small-DAG and R8/12/16 path oracles. Compact serialized bytes intentionally differ.",
+  "rows": [
+    {
+      "case": "sparse-2",
+      "stage": "selector",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 13.434787,
+      "currentMadMs": 0.24415300000000073,
+      "currentNoisePct": 1.8173194707143532,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-sparse-2.json.gz",
+      "baselineMedianMs": 16.507533,
+      "baselineMadMs": 0.6577760000000019,
+      "baselineNoisePct": 3.984702014528773,
+      "timeDeltaPct": -18.614204799711743,
+      "fixtureExact": true,
+      "numericalDecision": "pass",
+      "initialCurrent": {
+        "median": 16.911337,
+        "mad": 0.28316600000000136,
+        "noisePct": 1.674415216254051
+      },
+      "currentMemory": {
+        "median": 310632,
+        "retainedBytes": 202691
+      },
+      "baselineMemory": {
+        "median": 307938
+      }
+    },
+    {
+      "case": "path-16",
+      "stage": "selector",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 960.119296,
+      "currentMadMs": 32.40679899999998,
+      "currentNoisePct": 3.3752887932792865,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "initialCurrent": {
+        "median": 1178.234573,
+        "mad": 37.10165299999994,
+        "noisePct": 3.1489190565451133
+      },
+      "currentMemory": {
+        "median": 8459080,
+        "retainedBytes": 3691840
+      }
+    },
+    {
+      "case": "path-16",
+      "stage": "metadata",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 0.17698,
+      "currentMadMs": 0.011008999999999991,
+      "currentNoisePct": 6.2204768900440675,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "inconclusive",
+      "currentMemory": {
+        "median": 78182,
+        "retainedBytes": 75686
+      }
+    },
+    {
+      "case": "path-16",
+      "stage": "typed_serialization",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 3.246871,
+      "currentMadMs": 0.11519000000000013,
+      "currentNoisePct": 3.547723331170229,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "currentMemory": {
+        "median": 445859,
+        "retainedBytes": 159831
+      },
+      "outputBytes": 74298
+    },
+    {
+      "case": "path-16",
+      "stage": "path_graph",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 0.558821,
+      "currentMadMs": 0.030677999999999983,
+      "currentNoisePct": 5.489772216863715,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "inconclusive",
+      "currentMemory": {
+        "median": 111876,
+        "retainedBytes": 110180
+      }
+    },
+    {
+      "case": "path-24",
+      "stage": "selector",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 2146.390623,
+      "currentMadMs": 61.51779799999986,
+      "currentNoisePct": 2.866104489126808,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "initialCurrent": {
+        "median": 2496.125703,
+        "mad": 51.167709000000286,
+        "noisePct": 2.0498851054858225
+      },
+      "currentMemory": {
+        "median": 18333818,
+        "retainedBytes": 8022902
+      }
+    },
+    {
+      "case": "path-24",
+      "stage": "metadata",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 0.280905,
+      "currentMadMs": 0.02385599999999999,
+      "currentNoisePct": 8.492550862391194,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "inconclusive",
+      "currentMemory": {
+        "median": 164408,
+        "retainedBytes": 159688
+      }
+    },
+    {
+      "case": "path-24",
+      "stage": "typed_serialization",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 6.129243,
+      "currentMadMs": 0.17333299999999952,
+      "currentNoisePct": 2.827967499412236,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "currentMemory": {
+        "median": 849385,
+        "retainedBytes": 223691
+      },
+      "outputBytes": 159370
+    },
+    {
+      "case": "path-24",
+      "stage": "path_graph",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 1.032709,
+      "currentMadMs": 0.03525200000000006,
+      "currentNoisePct": 3.413546313627562,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "currentMemory": {
+        "median": 235898,
+        "retainedBytes": 234082
+      }
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "post_search",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 515.72044,
+      "currentMadMs": 11.765364000000034,
+      "currentNoisePct": 2.2813452963004592,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-collinear.json.gz",
+      "baselineMedianMs": 638.755233,
+      "baselineMadMs": 9.253829999999994,
+      "baselineNoisePct": 1.4487286400047377,
+      "timeDeltaPct": -19.26164932100054,
+      "fixtureExact": true,
+      "numericalDecision": "pass",
+      "initialCurrent": {
+        "median": 661.364503,
+        "mad": 13.70784100000003,
+        "noisePct": 2.072660528017487
+      },
+      "currentMemory": {
+        "median": 19005871,
+        "retainedBytes": 10240938
+      },
+      "baselineMemory": {
+        "median": 17413671
+      }
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "metadata",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 10.10602,
+      "currentMadMs": 0.5682029999999987,
+      "currentNoisePct": 5.6224210915869826,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-collinear.json.gz",
+      "baselineMedianMs": 15.762553,
+      "baselineMadMs": 0.30916699999999864,
+      "baselineNoisePct": 1.9614018109883509,
+      "timeDeltaPct": -35.8858936112697,
+      "fixtureExact": true,
+      "numericalDecision": "inconclusive",
+      "initialCurrent": {
+        "median": 15.552743,
+        "mad": 0.45871700000000004,
+        "noisePct": 2.9494282776999534
+      },
+      "currentMemory": {
+        "median": 4800247,
+        "retainedBytes": 4523687
+      },
+      "baselineMemory": {
+        "median": 5100043
+      }
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "display_tables",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 11.92704,
+      "currentMadMs": 0.3787409999999998,
+      "currentNoisePct": 3.1754819301352204,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-collinear.json.gz",
+      "baselineMedianMs": 16.848102,
+      "baselineMadMs": 0.17211900000000213,
+      "baselineNoisePct": 1.0215928179922114,
+      "timeDeltaPct": -29.208405789566093,
+      "fixtureExact": true,
+      "numericalDecision": "pass",
+      "initialCurrent": {
+        "median": 17.323762,
+        "mad": 0.3706560000000003,
+        "noisePct": 2.1395814604241292
+      },
+      "currentMemory": {
+        "median": 1811417,
+        "retainedBytes": 812467
+      },
+      "baselineMemory": {
+        "median": 1812658
+      }
+    },
+    {
+      "case": "gallery-collinear",
+      "stage": "typed_serialization",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 271.036386,
+      "currentMadMs": 5.514284000000032,
+      "currentNoisePct": 2.034517977966262,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-collinear.json.gz",
+      "baselineMedianMs": 384.234401,
+      "baselineMadMs": 7.228193000000033,
+      "baselineNoisePct": 1.881193610251476,
+      "timeDeltaPct": -29.460666381092725,
+      "fixtureExact": true,
+      "numericalDecision": "pass",
+      "initialCurrent": {
+        "median": 395.517046,
+        "mad": 5.0107830000000035,
+        "noisePct": 1.2668943224257403
+      },
+      "currentMemory": {
+        "median": 34065072,
+        "retainedBytes": 8284294
+      },
+      "baselineMemory": {
+        "median": 32798498
+      },
+      "outputBytes": 7656149
+    },
+    {
+      "case": "gallery-collinear-off",
+      "stage": "post_search",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 115.834984,
+      "currentMadMs": 3.9658480000000083,
+      "currentNoisePct": 3.4237048800386662,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "initialCurrent": {
+        "median": 148.135056,
+        "mad": 1.5252679999999827,
+        "noisePct": 1.0296468919551243
+      },
+      "currentMemory": {
+        "median": 6578448,
+        "retainedBytes": 4848754
+      }
+    },
+    {
+      "case": "gallery-collinear-off",
+      "stage": "metadata",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 0.004255,
+      "currentMadMs": 0.0003169999999999996,
+      "currentNoisePct": 7.45005875440657,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "inconclusive",
+      "initialCurrent": {
+        "median": 0.005678,
+        "mad": 0.0007930000000000003,
+        "noisePct": 13.966185276505819
+      },
+      "currentMemory": {
+        "median": 56,
+        "retainedBytes": 56
+      }
+    },
+    {
+      "case": "gallery-collinear-off",
+      "stage": "display_tables",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 12.846905,
+      "currentMadMs": 0.5992540000000002,
+      "currentNoisePct": 4.664578744841658,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "initialCurrent": {
+        "median": 15.799399,
+        "mad": 0.4069230000000008,
+        "noisePct": 2.575559994402324
+      },
+      "currentMemory": {
+        "median": 1619222,
+        "retainedBytes": 685194
+      }
+    },
+    {
+      "case": "gallery-collinear-off",
+      "stage": "typed_serialization",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 91.195088,
+      "currentMadMs": 1.8302580000000006,
+      "currentNoisePct": 2.00696993680186,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "numericalDecision": "observation-only",
+      "initialCurrent": {
+        "median": 129.26879,
+        "mad": 0.9000479999999982,
+        "noisePct": 0.6962608685360157
+      },
+      "currentMemory": {
+        "median": 10035439,
+        "retainedBytes": 2146574
+      },
+      "outputBytes": 2071749
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "post_search",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 879.741219,
+      "currentMadMs": 44.44808899999998,
+      "currentNoisePct": 5.052404961827755,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-orthogroup.json.gz",
+      "baselineMedianMs": 1149.833675,
+      "baselineMadMs": 13.825812000000042,
+      "baselineNoisePct": 1.2024184280391719,
+      "timeDeltaPct": -23.48969784695165,
+      "fixtureExact": true,
+      "numericalDecision": "inconclusive",
+      "initialCurrent": {
+        "median": 1164.317059,
+        "mad": 27.15621199999987,
+        "noisePct": 2.3323725947400957
+      },
+      "currentMemory": {
+        "median": 29024530,
+        "retainedBytes": 9244243
+      },
+      "baselineMemory": {
+        "median": 27735100
+      }
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "metadata",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 14.131938,
+      "currentMadMs": 0.44755699999999976,
+      "currentNoisePct": 3.1669895523175926,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-orthogroup.json.gz",
+      "baselineMedianMs": 26.443384,
+      "baselineMadMs": 1.2972220000000014,
+      "baselineNoisePct": 4.905658065548652,
+      "timeDeltaPct": -46.557755240403424,
+      "fixtureExact": true,
+      "numericalDecision": "pass",
+      "initialCurrent": {
+        "median": 20.147275,
+        "mad": 0.866258000000002,
+        "noisePct": 4.299628609824415
+      },
+      "currentMemory": {
+        "median": 6034871,
+        "retainedBytes": 5753399
+      },
+      "baselineMemory": {
+        "median": 7629560
+      }
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "display_tables",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 19.974248,
+      "currentMadMs": 1.3642730000000007,
+      "currentNoisePct": 6.830159513389443,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-orthogroup.json.gz",
+      "baselineMedianMs": 22.544506,
+      "baselineMadMs": 0.35666699999999807,
+      "baselineNoisePct": 1.5820572870392373,
+      "timeDeltaPct": -11.400817565042232,
+      "fixtureExact": true,
+      "numericalDecision": "inconclusive",
+      "initialCurrent": {
+        "median": 25.570193,
+        "mad": 0.7970420000000011,
+        "noisePct": 3.1170746345168423
+      },
+      "currentMemory": {
+        "median": 2327612,
+        "retainedBytes": 756434
+      },
+      "baselineMemory": {
+        "median": 2327962
+      }
+    },
+    {
+      "case": "gallery-orthogroup",
+      "stage": "typed_serialization",
+      "currentReport": "s06-current-timing-final.json.gz",
+      "currentMedianMs": 235.364724,
+      "currentMadMs": 3.743103999999988,
+      "currentNoisePct": 1.5903419749511776,
+      "sampleCount": 21,
+      "independentPerformanceAcceptance": false,
+      "baselineReport": "s04-current-timing-cursor-gallery-orthogroup.json.gz",
+      "baselineMedianMs": 375.188396,
+      "baselineMadMs": 5.289248999999984,
+      "baselineNoisePct": 1.409758152541579,
+      "timeDeltaPct": -37.26758969379213,
+      "fixtureExact": true,
+      "numericalDecision": "pass",
+      "initialCurrent": {
+        "median": 376.099986,
+        "mad": 5.121826999999996,
+        "noisePct": 1.361825894883175
+      },
+      "currentMemory": {
+        "median": 31745554,
+        "retainedBytes": 8196155
+      },
+      "baselineMemory": {
+        "median": 34600881
+      },
+      "outputBytes": 7623258
+    }
+  ],
+  "evidenceSha256": {
+    "s04-timing-selected-comparison.json": "7782354476c10679d07817673d4dbec86899fa69eeee8ed2898c40fd041db4e0",
+    "s06-current-timing-final.json.gz": "1a6c77d9066469b3a78eacf9c65eec367e63736b982f5f463e03712efb0154c8",
+    "s06-current-timing-initial.json.gz": "d36855a2aa6c4d2a37f9b057b011db70cd636d11e13ec926b451ce77197ad51f",
+    "s06-current-memory-final.json.gz": "b1f9bd5750324eb6f8ab999289036e91f21ad829881ee53245ce5d54d69223fc",
+    "s04-current-memory-final.json.gz": "3414fbc4f1805daeb1efcd4f426a7a373b2c427f2c5a401fa24cbbaadbcfaa26"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "session": "S02",
+  "base": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "headAtVerification": "fc944a299d77d25600229661b83fc6512ed24712",
+  "headNote": "S02 test/docs/evidence changes were uncommitted during verification; exact test source hashes below. Production tree equals base.",
+  "branch": "perf/collinear-s02-path-contract-20260915",
+  "upstream": null,
+  "s01Original": "eea6897c544bf272f4515e44ca8f19a3737c661a",
+  "s01CherryPick": "fc944a299d77d25600229661b83fc6512ed24712",
+  "productionDiff": "empty",
+  "newProductionFiles": [],
+  "environment": {
+    "python": "3.13.3 | packaged by conda-forge | (main, Apr 14 2025, 20:44:03) [GCC 13.3.0]",
+    "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "pandas": "2.3.0",
+    "biopython": "1.85",
+    "pytest": "9.0.2",
+    "node": "v26.8.2"
+  },
+  "sourceHashes": {
+    "tests/prototypes/ortholog_path_graph.py": "fc540e16a04aabb31c8aedc1002d04cf4cb4f071b03df7279b9604d68ac715f8",
+    "tests/prototypes/path_publication_history.py": "1fbfdf73c7d32ab04c355d8e728847e27e04398d44b7995614f9b45b4a14b924",
+    "tests/test_ortholog_path_contract.py": "8856a7c95264a5022d6e1b3eb5f454c0c99b6a958718c91904ec6c9a531cc292"
+  },
+  "runs": [
+    {
+      "command": "PYTHONPATH=. pytest tests/test_ortholog_path_contract.py tests/test_protein_colinearity.py tests/test_collinearity.py tests/test_collinearity_units.py tests/test_web_feature_catalog.py tests/test_session_request_codec.py tests/test_session_compat.py tests/test_losat_legacy_fixture.py tests/test_output_comparison.py::TestOutputComparison -q",
+      "exitCode": 0,
+      "passed": 464,
+      "skipped": 1,
+      "seconds": 118.3,
+      "log": "data/s02-logs/python-focused.log"
+    },
+    {
+      "command": "node --test tests/web/feature-catalog.test.mjs tests/web/pairwise-payload-performance.test.mjs tests/web/losat-cache.test.mjs tests/web/run-analysis-derived-cache.test.mjs tests/web/losat-session-schema-contract.test.mjs tests/web/architecture-contracts.test.mjs",
+      "initialExitCode": 1,
+      "initialLog": "data/s02-logs/node-sandbox-failure.log",
+      "initialFailure": "spawnSync python EPERM; architecture file-level failure",
+      "rerun": "same command with required sandbox escalation",
+      "exitCode": 0,
+      "passed": 168,
+      "seconds": 71.816835423,
+      "log": "data/s02-logs/node-focused.log"
+    },
+    {
+      "command": "ruff check gbdraw/ tests/test_ortholog_path_contract.py tests/prototypes/",
+      "exitCode": 0,
+      "log": "data/s02-logs/ruff.log"
+    },
+    {
+      "command": "PYTHONPATH=. python tests/test_ortholog_path_contract.py --output docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s02-path-oracles.json.gz",
+      "exitCode": 0
+    },
+    {
+      "command": "python tests/prototypes/path_publication_history.py --output docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s02-publication.json.gz",
+      "exitCode": 0
+    }
+  ],
+  "artifacts": {
+    "data/s02-path-oracles.json.gz": "1f57491548b83bf82a5b60246a0688820d8b7fda355aa3d5db1e7ae6fe843c64",
+    "data/s02-publication.json.gz": "0a1f6ae92274e4b359463daf62a58dbef9640322605efca32e6c71e266c48b7e"
+  },
+  "logs": {
+    "data/s02-logs/node-focused.log": "f40f3d86ffc5f5fe34268fbd1d8a7561890a1900fae872361c14a4c81a8aa328",
+    "data/s02-logs/node-sandbox-failure.log": "663a54df1fee330e8f01b4412d585644d63e6c5780efd521f0154bc5008fd22f",
+    "data/s02-logs/python-focused.log": "2740bb3690e16701944efea2c456accc66003171ec1bfc334b9b003f68d929e3",
+    "data/s02-logs/ruff.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "product": {
+    "concern": "protein-comparison.path-representation",
+    "revision": 1,
+    "receipt": null,
+    "acceptedAuthority": null,
+    "baseIntegrated": false
+  },
+  "limits": [
+    "No R>=24 legacy enumeration",
+    "No production speedup measurement",
+    "No new runtime/writer/reader implemented",
+    "No new-format browser validation; S06 gate",
+    "Full fast suite not rerun; focused tests selected for evidence-only scope"
+  ]
+}

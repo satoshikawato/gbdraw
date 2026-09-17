@@ -1,0 +1,29 @@
+{
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "head": "02ca8f950a7561ae9569c66f3f91d30702b53a17",
+  "branch": "perf/collinear-s07-8-local-reductions-20260916",
+  "upstream": "",
+  "inheritance": "Eight unique dependency patches fast-forwarded once from origin/dev; no dirty worktree copied.",
+  "sharedHead": "51d2ae362ac154a3e360727ad086ad1d27bbc989",
+  "sharedBranch": "dev",
+  "sharedUpstream": "origin/dev",
+  "sharedDirty": "Pre-existing changes preserved; see initial git status.",
+  "previousHead": "02ca8f950a7561ae9569c66f3f91d30702b53a17",
+  "previousBranch": "perf/collinear-s07-7-local-reductions-20260916",
+  "previousUpstream": "",
+  "previousDirty": false,
+  "sourceSha256": {
+    "gbdraw/analysis/protein_colinearity.py": "608abd7f9e0ff266e0746c7a961712c74d358ae85c27653355aa8ccce4fbc17d",
+    "gbdraw/analysis/collinearity_units.py": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da"
+  },
+  "inheritedCommits": [
+    "3a3b29c77dc37fbe403626ac7e2155f97ae38555",
+    "e3f93172c930d44ebefa7e67df95b2475c8555ca",
+    "603e07876397f863c83ba9609c335b91dac0b282",
+    "f35f2e63816b5eec82bee88f51f08a22fb618849",
+    "dc79915a7d30abe1e1cdea9b592b330bfef45696",
+    "ec16110cf08b894b6dce16aa973e1d6112554ac9",
+    "f52ed68e15e527b08e4d9247b990684040fe4270",
+    "02ca8f950a7561ae9569c66f3f91d30702b53a17"
+  ]
+}

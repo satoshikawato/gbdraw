@@ -1,0 +1,10 @@
+
+Running 3 tests using 1 worker
+
+(node:137312) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:972:1 › the real Cancel control restores the committed artifact and leaves no History entry (13.4s)
+  ✓  2 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:1133:1 › preflight and lazy-access failures preserve the committed preview (863ms)
+  ✓  3 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:1231:1 › a frozen v39 session round-trips through the legacy migration path (9.9s)
+
+  3 passed (27.4s)

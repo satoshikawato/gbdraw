@@ -1,0 +1,8 @@
+timing: gallery-orthogroup
+  gallery-orthogroup/parse
+  gallery-orthogroup/filter
+  gallery-orthogroup/hsp_aggregate
+  gallery-orthogroup/post_search
+  gallery-orthogroup/metadata
+  gallery-orthogroup/display_tables
+  gallery-orthogroup/typed_serialization

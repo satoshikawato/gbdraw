@@ -1,0 +1,8 @@
+WARNING: The directory '/home/kawato/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Processing ./gbdraw/web/gbdraw-0.14.0-py3-none-any.whl
+Installing collected packages: gbdraw
+  Attempting uninstall: gbdraw
+    Found existing installation: gbdraw 0.14.0b0
+    Not uninstalling gbdraw at /home/kawato/micromamba/lib/python3.13/site-packages, outside environment /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916/.venv/s07-8-cli
+    Can't uninstall 'gbdraw'. No files were found to uninstall.
+Successfully installed gbdraw-0.14.0

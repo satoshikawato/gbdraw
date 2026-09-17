@@ -1,0 +1,90 @@
+published-v33 1 11.805993164000029
+Traceback (most recent call last):
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/bin/gbdraw", line 8, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/cli.py", line 154, in main
+    linear_main(args)
+    ~~~~~~~~~~~^^^^^^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/linear.py", line 902, in linear_main
+    if render_canonical_session_if_present(
+       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        session,
+        ^^^^^^^^
+    ...<5 lines>...
+        session_output=session_request.session_output,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/cli_utils/session.py", line 544, in render_canonical_session_if_present
+    rendered = _render_request(
+        request,
+        session_document=document.to_dict(),
+        include_feature_catalog=sidecar_path is not None,
+    )
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/cli_utils/session.py", line 879, in _render_request
+    return render_session_compatible_request(
+        request,
+        session_document,
+        include_feature_catalog=include_feature_catalog,
+    )
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 815, in render_session_compatible_request
+    prepared, migration_report = _build_session_compatible_plan(
+                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        plan,
+        ^^^^^
+        session_artifacts,
+        ^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 788, in _build_session_compatible_plan
+    adapted = _adapt_session_plan(plan, session_artifacts)
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 693, in _adapt_session_plan
+    request = _rewrite_linear_request_protein_references(
+        plan.request,
+        id_map,
+    )
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 580, in _rewrite_linear_request_protein_references
+    orthogroups=rewrite_protein_artifact_references(
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        options.orthogroups,
+        ^^^^^^^^^^^^^^^^^^^^
+        id_map,
+        ^^^^^^^
+    ),
+    ^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 455, in rewrite_protein_artifact_references
+    field.name: rewrite_protein_artifact_references(
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        getattr(value, field.name),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        id_map,
+        ^^^^^^^
+    )
+    ^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 471, in rewrite_protein_artifact_references
+    rewritten_mapping[rewritten_key] = rewrite_protein_artifact_references(
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        item,
+        ^^^^^
+        id_map,
+        ^^^^^^^
+    )
+    ^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/lib/python3.13/site-packages/gbdraw/api/session_compat.py", line 452, in rewrite_protein_artifact_references
+    return replace(
+        value,
+    ...<6 lines>...
+        },
+    )
+  File "/home/kawato/micromamba/lib/python3.13/dataclasses.py", line 1596, in replace
+    return _replace(obj, **changes)
+  File "/home/kawato/micromamba/lib/python3.13/dataclasses.py", line 1614, in _replace
+    raise TypeError(f'field {f.name} is declared with '
+                    f'init=False, it cannot be specified with '
+                    f'replace()')
+TypeError: field _keys is declared with init=False, it cannot be specified with replace()
+
+Traceback (most recent call last):
+  File "<stdin>", line 19, in <module>
+AssertionError

@@ -1,0 +1,23 @@
+{
+  "python": "3.13.3",
+  "dependencies": {
+    "pandas": "2.3.0",
+    "numpy": "2.2.5",
+    "biopython": "1.85"
+  },
+  "sourcePythonSha256": "bcefeb82bb1d43ccb35e6773a3eefde03c7d8bfff4100a6452f250a86b1cbc79",
+  "runnerSha256": "ecd26c0a10b6b6a53c82229afe561fa8402afbd3817ec2b02974db94ca1af891",
+  "pandasInferString": false,
+  "cases": {
+    "gallery-collinear": {
+      "semanticSha256": "8cea7d842cd46b4023fc7544fa317f17914f659c8f97a9822283e8a73ccc55e8",
+      "canonicalBytes": 8279095,
+      "sessionSha256": "8d4069026221d85c3ca4cac5bfae42f13d3ab38e7f01ae8e458de1be38a33ea7"
+    },
+    "gallery-orthogroup": {
+      "semanticSha256": "bdad926d5d0aa1e5f81443785a117c613b207c7293b8114f86f7509db436a0cd",
+      "canonicalBytes": 10435580,
+      "sessionSha256": "fabd91df737270d2ffaf24030e3489658f016f305108bd399ce3bbd220c81399"
+    }
+  }
+}

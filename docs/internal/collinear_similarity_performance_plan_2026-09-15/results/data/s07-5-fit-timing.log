@@ -1,0 +1,157 @@
+/home/kawato/micromamba/lib/python3.13/site-packages/Bio/Seq.py:2879: BiopythonWarning: Partial codon, len(sequence) not a multiple of three. Explicitly trim the sequence or add trailing N before translation. This may become an error in future.
+  warnings.warn(
+{
+  "hep": {
+    "original": {
+      "samplesMs": [
+        102.445569,
+        101.179071,
+        98.250845,
+        96.530685,
+        96.778688,
+        95.924839,
+        96.561332
+      ],
+      "medianMs": 96.778688,
+      "madMs": 0.8538489999999967,
+      "noisePct": 0.8822696583776758,
+      "sampleSemanticSha256": [
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b"
+      ]
+    },
+    "narrow": {
+      "samplesMs": [
+        66.209225,
+        67.539727,
+        64.736692,
+        67.444165,
+        65.824042,
+        68.283439,
+        65.854444
+      ],
+      "medianMs": 66.209225,
+      "madMs": 1.2349399999999946,
+      "noisePct": 1.8652083603153407,
+      "sampleSemanticSha256": [
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b",
+        "5dcfe646e33ef7db511a62f77f1a41a7ad3f31b10ebcf88cc69976e93709885b"
+      ]
+    },
+    "changePct": -31.586978116504326,
+    "medianRegression": false,
+    "decision": "pass"
+  },
+  "similarity": {
+    "original": {
+      "samplesMs": [
+        184.227751,
+        183.799337,
+        185.371272,
+        185.717582,
+        184.400146,
+        186.173087,
+        185.830453
+      ],
+      "medianMs": 185.371272,
+      "madMs": 0.8018150000000048,
+      "noisePct": 0.43254544857414845,
+      "sampleSemanticSha256": [
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b"
+      ]
+    },
+    "narrow": {
+      "samplesMs": [
+        127.720824,
+        129.549988,
+        127.042724,
+        127.135492,
+        126.057461,
+        125.903133,
+        133.067915
+      ],
+      "medianMs": 127.135492,
+      "madMs": 1.0780309999999957,
+      "noisePct": 0.847938670029291,
+      "sampleSemanticSha256": [
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b",
+        "36ab1cfba6290a8b94619752ba1785db6ae79c6be804ac7497ff559cdeddf74b"
+      ]
+    },
+    "changePct": -31.415752490493787,
+    "medianRegression": false,
+    "decision": "pass"
+  },
+  "vibrio": {
+    "original": {
+      "samplesMs": [
+        264.028225,
+        264.358119,
+        262.810266,
+        266.283621,
+        280.308565,
+        279.629069,
+        268.86407
+      ],
+      "medianMs": 266.283621,
+      "madMs": 2.580449000000044,
+      "noisePct": 0.9690603538848693,
+      "sampleSemanticSha256": [
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73"
+      ]
+    },
+    "narrow": {
+      "samplesMs": [
+        194.016483,
+        192.897683,
+        192.603411,
+        194.803822,
+        194.387682,
+        192.353074,
+        195.84035
+      ],
+      "medianMs": 194.016483,
+      "madMs": 1.1187999999999931,
+      "noisePct": 0.5766520363117773,
+      "sampleSemanticSha256": [
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73",
+        "592e620877889a77c064630bc4fdd4b7e4da66597e27f7f445896d9827544d73"
+      ]
+    },
+    "changePct": -27.13916001615435,
+    "medianRegression": false,
+    "decision": "pass"
+  }
+}

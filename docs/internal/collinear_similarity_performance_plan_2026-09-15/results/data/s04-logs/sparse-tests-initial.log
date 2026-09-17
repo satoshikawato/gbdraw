@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /tmp/gbdraw-collinear-s04
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 51 items
+
+tests/test_sparse_support.py .....F..................................... [ 84%]
+...F....                                                                 [100%]
+
+=================================== FAILURES ===================================
+__________ test_direction_and_membership_diagnostic_priority[1-both] ___________
+tests/test_sparse_support.py:49: in test_direction_and_membership_diagnostic_priority
+    assert result.evidence_row is best[pairs[-1]] if direction == "both" else result.evidence_row is best[pairs[0]]
+E   assert False
+_________ test_fixed_core_then_expanded_competition_and_local_addition _________
+tests/test_sparse_support.py:97: in test_fixed_core_then_expanded_competition_and_local_addition
+    assert "v" not in result.member_by_protein_id and "w" not in result.member_by_protein_id
+E   AssertionError: assert ('v' not in {'a': OrthogroupMember(orthogroup_id='og_1', protein_id='a', record_index=0, feature_index=0, record_id='record_0', la...g cluster', supporting_edges=('v->w:record_local_paralog',), best_core_support=1.0, second_best_core_support=0.0), ...})
+E    +  where {'a': OrthogroupMember(orthogroup_id='og_1', protein_id='a', record_index=0, feature_index=0, record_id='record_0', la...g cluster', supporting_edges=('v->w:record_local_paralog',), best_core_support=1.0, second_best_core_support=0.0), ...} = OrthogroupResult(orthogroups={'og_1': [OrthogroupMember(orthogroup_id='og_1', protein_id='a', record_index=0, feature_..._record', 'og_2': 'record_local', 'og_3': 'record_local'}, source_record_index_by_orthogroup_id={'og_2': 0, 'og_3': 0}).member_by_protein_id
+=========================== short test summary info ============================
+FAILED tests/test_sparse_support.py::test_direction_and_membership_diagnostic_priority[1-both]
+FAILED tests/test_sparse_support.py::test_fixed_core_then_expanded_competition_and_local_addition
+========================= 2 failed, 49 passed in 1.54s =========================

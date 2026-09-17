@@ -1,0 +1,129 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "currentHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "semanticOnly": false,
+  "comparisons": {
+    "sparse-2/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 7.345584051054432,
+      "decision": "pass"
+    },
+    "support-edges/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.750434575843939,
+      "decision": "pass"
+    },
+    "sparse-200/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -74.52902850472523,
+      "decision": "pass"
+    },
+    "sparse-400/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -89.43888405514038,
+      "decision": "pass"
+    },
+    "sparse-800/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -95.5516592590936,
+      "decision": "pass"
+    },
+    "unrelated-200/support_scan": {
+      "semanticEqual": true,
+      "timeDeltaPct": -98.64550201785485,
+      "decision": "inconclusive"
+    },
+    "unrelated-800/support_scan": {
+      "semanticEqual": true,
+      "timeDeltaPct": -99.66109941593511,
+      "decision": "inconclusive"
+    },
+    "giant-200/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -2.7715821767828164,
+      "decision": "pass"
+    },
+    "giant-800/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -10.236570372065113,
+      "decision": "pass"
+    },
+    "dense-24/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.449535891631349,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.24103142863719507,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": 1.5955076420856695,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": 3.7869378386330643,
+      "decision": "inconclusive"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -73.85971491789863,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -91.80475828588538,
+      "decision": "pass"
+    },
+    "gallery-collinear/display_tables": {
+      "semanticEqual": true,
+      "timeDeltaPct": 9.119759189514953,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.9876303672919695,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.6840600585558798,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.5996748400474714,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": 6.076075998374986,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -59.14552083021925,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -87.85959492330703,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/display_tables": {
+      "semanticEqual": true,
+      "timeDeltaPct": 4.2127670462243305,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.7796932909435839,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 2
+}

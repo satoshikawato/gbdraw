@@ -1,0 +1,8 @@
+timing: gallery-collinear
+  gallery-collinear/parse
+  gallery-collinear/filter
+  gallery-collinear/hsp_aggregate
+  gallery-collinear/post_search
+  gallery-collinear/metadata
+  gallery-collinear/display_tables
+  gallery-collinear/typed_serialization

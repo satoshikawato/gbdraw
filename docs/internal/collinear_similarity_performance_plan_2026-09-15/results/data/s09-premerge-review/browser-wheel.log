@@ -1,0 +1,10 @@
+Processing /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: gbdraw
+  Building wheel for gbdraw (pyproject.toml): started
+  Building wheel for gbdraw (pyproject.toml): finished with status 'done'
+  Created wheel for gbdraw: filename=gbdraw-0.14.0-py3-none-any.whl size=3201676 sha256=db4314e30482d74186682eaddfb894a1ca108885bc470827ab806cf4ad254c90
+  Stored in directory: /tmp/pip-ephem-wheel-cache-77jlfy30/wheels/4e/8b/5a/3cd7ecc141467a711628a17675844013d8c6ab6a2a353ac037
+Successfully built gbdraw
+Prepared browser wheel: gbdraw/web/gbdraw-0.14.0-py3-none-any.whl

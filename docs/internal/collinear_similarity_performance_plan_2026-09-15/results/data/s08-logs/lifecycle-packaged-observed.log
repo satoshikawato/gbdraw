@@ -1,0 +1,25 @@
+1280 saved-raw passed
+1280 resolved-warm passed
+1280 derived-warm passed
+1280 color passed
+1280 block passed
+1280 member passed
+1280 filter passed
+1280 reverse passed
+1280 all-record-evidence passed
+1280 record-order passed
+1280 member-change-retry passed
+1280 clear-cache passed
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 654, in <module>
+    save()
+    ^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 58, in main
+    return run_integration(args)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 423, in run_integration
+    if args.integration == 'lifecycle':
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 601, in run_integration_lifecycle
+    assert retry['workerCount'] > reordered['workerCount']
+           ^^^^^^^^^^^^^^^^^^^
+AssertionError

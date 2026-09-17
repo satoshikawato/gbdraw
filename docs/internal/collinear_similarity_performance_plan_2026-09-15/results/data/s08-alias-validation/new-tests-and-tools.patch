@@ -1,0 +1,107 @@
+--- inherited/tests/run_protein_local_browser_acceptance.py
++++ rw04/tests/run_protein_local_browser_acceptance.py
+@@ -49,6 +49,7 @@
+     parser.add_argument('--output', type=Path, required=True)
+     parser.add_argument('--resume', action='store_true', help='Reuse completed checks only with identical wheel/source hashes')
+     parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline', 'manifest-merge'))
++    parser.add_argument('--manifest-fault', choices=('schema', 'blank-alias'), default='schema')
+     parser.add_argument('--cases', nargs='+', choices=tuple(INTEGRATION_CASES), default=list(INTEGRATION_CASES))
+     parser.add_argument('--samples', type=int, choices=(1, 2, 3), default=3)
+     parser.add_argument('--server-root', type=Path, default=ROOT,
+@@ -414,12 +415,19 @@
+                 if args.integration == 'manifest-merge':
+                     # Corrupt only a real extraction response, before the client sees
+                     # it. Success runs use the original transport and response bytes.
++                    record['manifestFault'] = args.manifest_fault
++                    fault = 'data.result.identity_manifest.schema = -1;'
++                    if args.manifest_fault == 'blank-alias':
++                        fault = """
++                          const instance = Object.values(data.result.identity_manifest.recordInstances)[0];
++                          Object.values(instance.featureMetadata)[0].displayAlias = ' \\t\\u3000';
++                        """
+                     observer = observer.replace('const key = data?.requestId', """
+                       if (window.__invalidManifest && data?.ok && data.result?.identity_manifest) {
+-                        data.result.identity_manifest.schema = -1;
++                        MANIFEST_FAULT
+                         window.__invalidManifestResponses++;
+                       }
+-                      const key = data?.requestId""")
++                      const key = data?.requestId""".replace('MANIFEST_FAULT', fault))
+                 context.add_init_script(observer)
+                 page = context.new_page()
+                 page.set_default_timeout(180_000)
+--- inherited/tests/web/losat-cache.test.mjs
++++ rw04/tests/web/losat-cache.test.mjs
+@@ -365,7 +365,11 @@
+   /new Set\(Object.values\((\w+)\.runtimeIds\)\)/g,
+   'new Set((counts.runtimeSets++, Object.values($1.runtimeIds)))'
+ );
+-await writeFile(probePath, 'export const manifestCalls = [];\nexport const counts = {manifest: 0, tsv: 0, runtimeSets: 0};\n' + probeSource);
++probeSource = probeSource.replaceAll(
++  "metadata.displayAlias.normalize('NFC').trim()",
++  "(aliasNormalizations++, metadata.displayAlias.normalize('NFC').trim())"
++);
++await writeFile(probePath, 'export let aliasNormalizations = 0;\nexport const manifestCalls = [];\nexport const counts = {manifest: 0, tsv: 0, runtimeSets: 0};\n' + probeSource);
+ const counted = await import(pathToFileURL(probePath));
+ assert.ok(counted.getCurrentRawLosatCacheEntry(rawMap, 'protein-key', proteinEntry, manifest));
+ assert.deepEqual(counted.counts, {manifest: 1, tsv: 1, runtimeSets: 2}, 'one validation per getter hit');
+@@ -871,3 +875,59 @@
+ await exercisePairLoop({failure: 'error'});
+ await exercisePairLoop({failure: 'cancel'});
+ await exercisePairLoop(); // Retry must acquire a new index.
++
++// Alias validity and ordinal grouping must use the same NFC-trimmed value.
++for (const [alias, valid] of [
++  ['protein-a', true], [' e\u0301 ', true], ['\u00e9', true], ['\u200b', true],
++  ['', false], [' \t\r\n\u00a0\u3000', false],
++  [null, false], [undefined, false], [42, false], [false, false], [[], false], [{}, false]
++]) {
++  const candidate = structuredClone(manifest);
++  candidate.recordInstances['record-1'].featureMetadata[featureA].displayAlias = alias;
++  const before = structuredClone(candidate);
++  assert.equal(cache.validateProteinIdentityManifest(candidate), valid);
++  assert.equal(Boolean(getProteinEntry(proteinEntry, candidate)), valid);
++  assert.deepEqual(candidate, before, 'validation must not rewrite the stored alias');
++}
++for (const metadata of [null, [], {}, { displayAlias: 'valid', exportOrdinal: 1 }]) {
++  const candidate = structuredClone(manifest);
++  candidate.recordInstances['record-1'].featureMetadata[featureA] = metadata;
++  assert.equal(cache.validateProteinIdentityManifest(candidate), false);
++}
++for (const [left, right, ordinals, valid] of [
++  [' e\u0301 ', '\u00e9', [1, 2], true],
++  [' e\u0301 ', '\u00e9', [2, 1], false],
++  [' e\u0301 ', '\u00e9', [null, null], false],
++  [' e\u0301 ', '\u00e9', ['1', '2'], false],
++  ['A', 'a', [null, null], true],
++  ['\uff21', 'A', [null, undefined], true]
++]) {
++  const candidate = structuredClone(firstRecord);
++  candidate.proteinSets['sha256:set-a'].proteins.push({ featureAnalysisId: featureB });
++  const instance = candidate.recordInstances['record-1'];
++  instance.runtimeIds = { [featureB]: runtimeB, [featureA]: runtimeA };
++  instance.featureMetadata = {
++    [featureB]: { displayAlias: right, exportOrdinal: ordinals[1] },
++    [featureA]: { displayAlias: left, exportOrdinal: ordinals[0] }
++  };
++  const before = structuredClone(candidate);
++  assert.equal(cache.validateProteinIdentityManifest(candidate), valid,
++    'NFC collisions use feature-ID order, preserving case and compatibility distinctions');
++  assert.deepEqual(candidate, before);
++}
++const blankAlias = structuredClone(firstRecord);
++blankAlias.recordInstances['record-1'].featureMetadata[featureA].displayAlias = ' \t\u3000';
++const aliasConflict = structuredClone(firstRecord);
++aliasConflict.recordInstances['record-1'].featureMetadata[featureA].displayAlias = 'different';
++assert.throws(() => mergeForGenerate([firstRecord, aliasConflict, blankAlias]),
++  { name: 'Error', message: reloadMessage });
++assert.throws(() => cache.mergeProteinIdentityManifests([firstRecord, aliasConflict, blankAlias]),
++  /conflicting record instance/);
++assert.throws(() => cache.mergeProteinIdentityManifests([blankAlias]),
++  { name: 'Error', message: invalidInputMessage });
++console.log('RW-04: alias validity, NFC collisions, ordinals, immutability and failure precedence passed');
++const aliasCountBefore = counted.aliasNormalizations;
++assert.equal(counted.validateProteinIdentityManifest(manifest), true);
++const aliasOperations = counted.aliasNormalizations - aliasCountBefore;
++console.log(`RW-04: 2 valid feature aliases, ${aliasOperations} NFC/trim operations`);
++assert.equal(aliasOperations, 2, 'one normalization per valid feature alias in each manifest validation');

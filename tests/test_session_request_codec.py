@@ -136,7 +136,7 @@ def test_typed_collinearity_anchor_schema2_and_schema1_compatibility(
     current = json.loads(
         encode_canonical_typed_resource("anchor", anchor).decode("utf-8")
     )
-    assert current["schema"] == 2
+    assert current["schema"] == 3
 
     def decode(payload: dict[str, Any], name: str) -> CollinearityAnchor:
         path = tmp_path / name
@@ -808,8 +808,11 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     assert [(c.query_record_index, c.subject_record_index)
             for c in decoded.options.linear_comparisons] == [(0, 1), (0, 1)]
     pd.testing.assert_frame_equal(decoded.options.linear_comparisons[1].matches, protein_table)
-    assert decoded.options.orthogroups == orthogroups
-    assert decoded.options.collinearity_blocks == collinearity
+    from gbdraw.analysis.protein_colinearity import materialize_ortholog_paths
+    assert materialize_ortholog_paths(decoded.options.orthogroups) == orthogroups
+    from dataclasses import replace
+    assert replace(decoded.options.collinearity_blocks,
+        orthogroups=materialize_ortholog_paths(decoded.options.collinearity_blocks.orthogroups)) == collinearity
     assert decoded.options.collinearity_params == request.options.collinearity_params
     assert decoded.options.output == request.options.output
     assert decoded.output.output_prefix == "canonical-linear"

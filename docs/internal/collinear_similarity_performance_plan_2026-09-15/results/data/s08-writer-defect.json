@@ -1,0 +1,37 @@
+{
+  "fixture": ".venv/s08-replacement-packaged-artifacts/1280-before-writer-fix.gbdraw-session.json.gz",
+  "sha256": "a91f39a4a910f220ffbf2d3628865d9235365ada2578f947d90944e8d20a0bce",
+  "version": 42,
+  "rawEntries": 16,
+  "invalid": [
+    {
+      "key": "db0d5dd3c842b54555ce4ce870fe53e54fd3097a35bbb4916f6759f7805fb72d",
+      "query": "record-1",
+      "subject": "record-2",
+      "queryProteinSetHash": "sha256:f01741b3cc3f61b5ae136f454964aef26bbd7067dc265848d2bba5efb54b7fd1",
+      "subjectProteinSetHash": "sha256:868e2b9312fd5b784dd666abccf32db794df65d64705c8766d41ea4c24dad317",
+      "queryRuntimeBindingHash": "sha256:56211aa4b80b75b37e96150f552819d52e21eced4d80558ade5c9afeeb2c5509",
+      "subjectRuntimeBindingHash": "sha256:2571465a5a2546a1ac5cc0e330ba896b426f109d7835c667600ef3208d59aaa8"
+    },
+    {
+      "key": "6b90a56f057270ee0fde0fd73f1a93fec9b08ebe545a3d757eea3d230034f1fb",
+      "query": "record-1",
+      "subject": "record-1",
+      "queryProteinSetHash": "sha256:f01741b3cc3f61b5ae136f454964aef26bbd7067dc265848d2bba5efb54b7fd1",
+      "subjectProteinSetHash": "sha256:f01741b3cc3f61b5ae136f454964aef26bbd7067dc265848d2bba5efb54b7fd1",
+      "queryRuntimeBindingHash": "sha256:56211aa4b80b75b37e96150f552819d52e21eced4d80558ade5c9afeeb2c5509",
+      "subjectRuntimeBindingHash": "sha256:56211aa4b80b75b37e96150f552819d52e21eced4d80558ade5c9afeeb2c5509"
+    },
+    {
+      "key": "f58c9e1d8e8e747e4aee2f770f432dff958ced4f6292832ce23ff3eddfa37d61",
+      "query": "record-2",
+      "subject": "record-1",
+      "queryProteinSetHash": "sha256:868e2b9312fd5b784dd666abccf32db794df65d64705c8766d41ea4c24dad317",
+      "subjectProteinSetHash": "sha256:f01741b3cc3f61b5ae136f454964aef26bbd7067dc265848d2bba5efb54b7fd1",
+      "queryRuntimeBindingHash": "sha256:2571465a5a2546a1ac5cc0e330ba896b426f109d7835c667600ef3208d59aaa8",
+      "subjectRuntimeBindingHash": "sha256:56211aa4b80b75b37e96150f552819d52e21eced4d80558ade5c9afeeb2c5509"
+    }
+  ],
+  "validEntries": 13,
+  "scope": "Actual Session saved after biological source replacement and successful undo/redo; current reader unchanged"
+}

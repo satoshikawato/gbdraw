@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/run_protein_local_browser_acceptance.py", line 215, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/run_protein_local_browser_acceptance.py", line 186, in main
+    assert run['generations'][0]['helpers'], 'Initial Generate did not exercise real Python helper'
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: Initial Generate did not exercise real Python helper

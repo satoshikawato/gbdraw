@@ -1,0 +1,258 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0 -- /home/kawato/micromamba/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /tmp/gbdraw-collinear-s03
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 30 items
+
+tests/test_linear_comparison_browser_contracts.py::test_linear_comparison_browser_contracts FAILED [  3%]
+tests/test_linear_definition_alignment.py::test_linear_definition_group_follows_record_offset_by_default PASSED [  6%]
+tests/test_linear_definition_alignment.py::test_linear_definition_group_can_stay_in_left_column PASSED [ 10%]
+tests/test_linear_definition_alignment.py::test_locked_linear_definition_column_uses_rendered_svg_text_width PASSED [ 13%]
+tests/test_linear_definition_alignment.py::test_locked_linear_definition_column_uses_configured_definition_gap PASSED [ 16%]
+tests/test_linear_definition_alignment.py::test_locked_linear_definition_column_follows_global_horizontal_shift PASSED [ 20%]
+tests/test_linear_definition_alignment.py::test_locked_linear_definition_column_gap_uses_records_column_left PASSED [ 23%]
+tests/test_linear_definition_alignment.py::test_precalculated_max_definition_width_is_ceiled PASSED [ 26%]
+tests/test_linear_definition_alignment.py::test_linear_definition_gap_defaults_to_twenty_for_legacy_config PASSED [ 30%]
+tests/test_linear_definition_alignment.py::test_linear_definition_gap_reads_explicit_config_value PASSED [ 33%]
+tests/test_linear_definition_alignment.py::test_linear_definition_band_matches_resolved_feature_center[above--1] PASSED [ 36%]
+tests/test_linear_definition_alignment.py::test_linear_definition_band_matches_resolved_feature_center[below-1] PASSED [ 40%]
+tests/test_linear_definition_alignment.py::test_liberation_sans_bundled_fonts_preferred_over_system_fontconfig PASSED [ 43%]
+tests/test_linear_definition_alignment.py::test_definition_plain_lines_use_definition_font_weight PASSED [ 46%]
+tests/test_linear_definition_alignment.py::test_definition_mixed_content_width_sums_style_aware_parts PASSED [ 50%]
+tests/test_linear_definition_alignment.py::test_browser_rendered_definition_gap_is_at_least_configured_gap[Plain definition-normal] PASSED [ 53%]
+tests/test_linear_definition_alignment.py::test_browser_rendered_definition_gap_is_at_least_configured_gap[Plain <i>italic definition</i> tail-normal] PASSED [ 56%]
+tests/test_linear_definition_alignment.py::test_browser_rendered_definition_gap_is_at_least_configured_gap[Bold definition-bold] PASSED [ 60%]
+tests/test_linear_definition_alignment.py::test_linear_definition_gap_svg_converts_with_cairosvg PASSED [ 63%]
+tests/test_record_display_interactive_browser.py::test_display_fragments_preview_and_standalone_source_actions[linear-False-False] PASSED [ 66%]
+tests/test_record_display_interactive_browser.py::test_display_fragments_preview_and_standalone_source_actions[circular-False-False] PASSED [ 70%]
+tests/test_record_display_interactive_browser.py::test_display_fragments_preview_and_standalone_source_actions[linear-True-False] PASSED [ 73%]
+tests/test_record_display_interactive_browser.py::test_display_fragments_preview_and_standalone_source_actions[circular-True-False] PASSED [ 76%]
+tests/test_record_display_interactive_browser.py::test_display_fragments_preview_and_standalone_source_actions[linear-True-True] PASSED [ 80%]
+tests/test_record_display_interactive_browser.py::test_display_fragments_preview_and_standalone_source_actions[circular-True-True] PASSED [ 83%]
+tests/test_record_display_interactive_browser.py::test_standalone_rejects_conflicting_fragment_or_source_identity[endpoint] PASSED [ 86%]
+tests/test_record_display_interactive_browser.py::test_standalone_rejects_conflicting_fragment_or_source_identity[fragment_index] PASSED [ 90%]
+tests/test_record_display_interactive_browser.py::test_standalone_rejects_conflicting_fragment_or_source_identity[feature_claim] PASSED [ 93%]
+tests/test_record_display_interactive_browser.py::test_circular_grid_match_actions_resolve_duplicate_record_instances PASSED [ 96%]
+tests/test_run_info_exact_replay.py::test_downloaded_exact_replay_after_original_history FAILED [100%]
+
+=================================== FAILURES ===================================
+___________________ test_linear_comparison_browser_contracts ___________________
+tests/test_linear_comparison_browser_contracts.py:17: in test_linear_comparison_browser_contracts
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError:
+E     > gbdraw-web-tests@0.0.0 test:web:comparison-contracts
+E     > playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0
+E
+E     error: unknown command 'test'
+E
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['npm', 'run', 'test:web:comparison-contracts'], returncode=1, stdout='\n> gbdraw-web-tests@0.0.0 test:web:comparison-contracts\n> playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0\n\n', stderr="error: unknown command 'test'\n").returncode
+_____________ test_downloaded_exact_replay_after_original_history ______________
+tests/test_run_info_exact_replay.py:172: in test_downloaded_exact_replay_after_original_history
+    assert result.returncode == 0, result.stderr
+E   AssertionError: ERROR: Session version 42 is newer than this gbdraw supports (40).
+E
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['gbdraw', 'circular', '--session', 'out.gbdraw-session.json'], returncode=1, stdout='', stderr='ERROR: Session version 42 is newer than this gbdraw supports (40).\n').returncode
+----------------------------- Captured stderr call -----------------------------
+127.0.0.1 - - [15/Sep/2026 15:58:15] "GET /gbdraw/web/index.html HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:15] "GET /gbdraw/web/vendor/phosphor-icons/regular/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:15] "GET /gbdraw/web/vendor/vue/vue.global.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:15] "GET /gbdraw/web/vendor/tailwindcss/tailwindcss-play.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:15] "GET /gbdraw/web/vendor/dompurify/purify.min.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/assets/gbdraw-logo-title.png HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/vendor/fonts/inter/inter-latin-700-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/vendor/fonts/inter/inter-latin-400-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/components.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/app-setup.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/color-utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-active-config-contract.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/record-display-options.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/config.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/state.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/history.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/history-files.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/history-snapshot.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/json-clone.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/file-content-cache.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/utils/clipboard.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/svg-serialization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/linear-sources.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/text-download.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/reset.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/diagram-generation.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/runtime-test-hooks.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/ui.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/pairwise-match-popup.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-search/preview-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/svg-styles.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/palettes.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-selection.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/run-analysis.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/error-normalization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/run-info.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend-layout/composition-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/results.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/watchers.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/history-inputs.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/history-shortcuts.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/preview-runtime.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/orthogroups.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/right-drawer.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/circular-track-slots.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/linear-track-slots.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations/record-catalog.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations/record-selector.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations/validation.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/utils/optional-positive-number.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/losat-settings.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/auto-value-display.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/linear-record-selector.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/linear-typography.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/record-options.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/linear-record-layout.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/linear-comparisons.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/comparison-ui.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/record-discovery.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/conservation-series.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/depth-tracks.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/mode-profiles.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/imported-comparison-intent.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/depth-track-state.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/definition-line-style-state.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/track-slot-validation.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/current-option-values.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/utils/feature-rendering.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/web-ux-profile.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/safe-object-keys.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/feature-placement.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-resource-backing.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-selector.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-visibility.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/plot-title-position.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/layout-preferences.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/match-sequences.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/svg-result-ingestion.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/canonical-comparisons.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/depth-file-codec.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/losat-normalization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/session-feature-metadata.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-request.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-resources.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/result-normalization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/feature-catalog.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/orthogroup-feature-metadata.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/gallery-session-migration.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-file.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations/state.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/specific-color-rules.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend/stroke-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/svg-result-normalization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/losat-cache.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-authority.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/resource-payload-owner.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/byte-utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/pyodide-assets.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/diagram-worker-protocol.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/runtime-capabilities.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/diagram-resource-staging.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/current-worker-result-source.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/color-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/rule-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/label-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/svg-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/visibility-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/placement-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-sequence-fasta.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-search/search-core.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/feature-identity.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-search/preview-svg.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-dom.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/feature-override-identity.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend/utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/track-slot-colors.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend/entry-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend/drag-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend/layout-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend/sort-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/losat.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-editor/label-override-table.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations/table-codec.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/utils/zip.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/file-imports.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend-layout/canvas-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/candidate-render.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend-layout/diagram-drag.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend-layout/reposition-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/legend-layout/transform-utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/record-groups.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/annotations/target-actions.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/track-slot-display.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/losat-thread-plan.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/mode-profiles.generated.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/svg-sanitization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/session-feature-metadata.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/app/feature-metadata-extraction.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/canonical-resource-references.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/config.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/js/services/losat-runtime.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/gallery/palettes/palettes.json HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/vendor/fonts/inter/inter-latin-600-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/vendor/phosphor-icons/regular/Phosphor.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:16] "GET /gbdraw/web/vendor/fonts/inter/inter-latin-500-normal.woff2 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/js/workers/diagram-generation-worker.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/js/services/diagram-worker-protocol.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/js/app/python-helpers.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/js/services/error-normalization.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.mjs HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide-lock.json HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.asm.wasm HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/python_stdlib.zip HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:17] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/pyodide.asm.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/biopython-1.85-cp313-cp313-pyodide_2025_0_wasm32.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/numpy-2.2.5-cp313-cp313-pyodide_2025_0_wasm32.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/pytz-2025.2-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/fonttools-4.56.0-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/bcbio_gff-0.7.1-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/svgwrite-1.4.3-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/vendor/pyodide-wheels/pandas-2.3.2-cp313-cp313-pyodide_2025_0_wasm32.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "HEAD /gbdraw/web/gbdraw-0.14.0-py3-none-any.whl?v=20260730-014339 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/pytz-2025.2-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/biopython-1.85-cp313-cp313-pyodide_2025_0_wasm32.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/numpy-2.2.5-cp313-cp313-pyodide_2025_0_wasm32.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/fonttools-4.56.0-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/bcbio_gff-0.7.1-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/svgwrite-1.4.3-py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:19] "GET /gbdraw/web/vendor/pyodide-wheels/pandas-2.3.2-cp313-cp313-pyodide_2025_0_wasm32.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:21] "GET /gbdraw/web/vendor/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl HTTP/1.1" 200 -
+127.0.0.1 - - [15/Sep/2026 15:58:21] "GET /gbdraw/web/gbdraw-0.14.0-py3-none-any.whl?v=20260730-014339 HTTP/1.1" 200 -
+=========================== short test summary info ============================
+FAILED tests/test_linear_comparison_browser_contracts.py::test_linear_comparison_browser_contracts - AssertionError:
+  > gbdraw-web-tests@0.0.0 test:web:comparison-contracts
+  > playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0
+
+  error: unknown command 'test'
+
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['npm', 'run', 'test:web:comparison-contracts'], returncode=1, stdout='\n> gbdraw-web-tests@0.0.0 test:web:comparison-contracts\n> playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0\n\n', stderr="error: unknown command 'test'\n").returncode
+FAILED tests/test_run_info_exact_replay.py::test_downloaded_exact_replay_after_original_history - AssertionError: ERROR: Session version 42 is newer than this gbdraw supports (40).
+
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['gbdraw', 'circular', '--session', 'out.gbdraw-session.json'], returncode=1, stdout='', stderr='ERROR: Session version 42 is newer than this gbdraw supports (40).\n').returncode
+======================== 2 failed, 28 passed in 28.78s =========================

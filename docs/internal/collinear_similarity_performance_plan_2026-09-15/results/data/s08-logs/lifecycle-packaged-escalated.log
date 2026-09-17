@@ -1,0 +1,15 @@
+1280 saved-raw passed
+1280 derived-warm passed
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 602, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 58, in main
+    return run_integration(args)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 423, in run_integration
+    run_integration_lifecycle(args, report, context_for, close_context, save)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 490, in run_integration_lifecycle
+    assert repeat['telemetry']['proteinDerivedPayloadCacheHits'] == 1
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable

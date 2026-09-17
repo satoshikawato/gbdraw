@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917/tests/run_protein_local_browser_acceptance.py", line 764, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917/tests/run_protein_local_browser_acceptance.py", line 58, in main
+    return run_integration(args)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917/tests/run_protein_local_browser_acceptance.py", line 447, in run_integration
+    run_manifest_merge(context_for, close_context, save)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917/tests/run_protein_local_browser_acceptance.py", line 572, in run_manifest_merge
+    assert failed['result'] == {'status': 'error'} and failed['preserved'], failed
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'result': {'status': 'ok'}, 'error': None, 'preserved': False, 'undoCount': 1, 'corruptResponses': 0, 'searches': [], 'messages': [{'type': 'helper', 'operation': 'buildProteinLosatCacheKeys', 'worker': 'http://127.0.0.1:41231/gbdraw/web/js/workers/diagram-generation-worker.js', 'start': 33434.5, 'end': 33785.10000000149, 'ok': True}, {'type': 'helper', 'operation': 'convertLosatpPairsToGenomicPayload', 'worker': 'http://127.0.0.1:41231/gbdraw/web/js/workers/diagram-generation-worker.js', 'start': 34046.20000000298, 'end': 36315.60000000149, 'ok': True}, {'type': 'run', 'operation': None, 'worker': 'http://127.0.0.1:41231/gbdraw/web/js/workers/diagram-generation-worker.js', 'start': 36781.39999999851, 'end': 44611.70000000298, 'ok': True}], 'workerCount': 1, 'liveWorkers': 1, 'processing': False}

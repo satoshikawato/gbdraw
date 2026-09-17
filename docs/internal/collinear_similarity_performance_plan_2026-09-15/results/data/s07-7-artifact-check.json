@@ -1,0 +1,110 @@
+{
+  "source": "608abd7f9e0ff266e0746c7a961712c74d358ae85c27653355aa8ccce4fbc17d",
+  "wheel": "cca690ac79d1921955f2121b8dc698eb1080b5705bdde4ed2a1e1e6833943821",
+  "flows": [
+    {
+      "case": "1280-collinear-True-5",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-collinearity-1",
+          "schema": 3,
+          "type": "CollinearityResult",
+          "sha256": "bc8a857bcb70f686b73126c10f6830d8c95e40032b8906e4bc6ea6ff296c9b51"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "1280-collinear-False-5",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-collinearity-1",
+          "schema": 3,
+          "type": "CollinearityResult",
+          "sha256": "653bf5acc068ec06467bc9c602c944445106991960f2e086a7af10d9e1784a12"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "1280-orthogroup-True-5",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-orthogroups-1",
+          "schema": 3,
+          "type": "OrthogroupGraphResult",
+          "sha256": "4fee31a4dcc53ea328b87a372342b745f42ff152f73a6e8353aed3946389fc1f"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "1280-orthogroup-True-None",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-orthogroups-1",
+          "schema": 3,
+          "type": "OrthogroupGraphResult",
+          "sha256": "756692f6698c18205a3133ccd1e87b854e7424627a5ed29ad2c47efe7e67bf20"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "390-collinear-True-5",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-collinearity-1",
+          "schema": 3,
+          "type": "CollinearityResult",
+          "sha256": "bc8a857bcb70f686b73126c10f6830d8c95e40032b8906e4bc6ea6ff296c9b51"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "390-collinear-False-5",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-collinearity-1",
+          "schema": 3,
+          "type": "CollinearityResult",
+          "sha256": "653bf5acc068ec06467bc9c602c944445106991960f2e086a7af10d9e1784a12"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "390-orthogroup-True-5",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-orthogroups-1",
+          "schema": 3,
+          "type": "OrthogroupGraphResult",
+          "sha256": "4fee31a4dcc53ea328b87a372342b745f42ff152f73a6e8353aed3946389fc1f"
+        }
+      ],
+      "rawExecutorCalls": 0
+    },
+    {
+      "case": "390-orthogroup-True-None",
+      "sessionVersion": 42,
+      "typedResources": [
+        {
+          "resourceId": "comparison-canonical-orthogroups-1",
+          "schema": 3,
+          "type": "OrthogroupGraphResult",
+          "sha256": "756692f6698c18205a3133ccd1e87b854e7424627a5ed29ad2c47efe7e67bf20"
+        }
+      ],
+      "rawExecutorCalls": 0
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /tmp/gbdraw-collinear-s04
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 223 items
+
+tests/test_sparse_support.py ........................................... [ 19%]
+................                                                         [ 26%]
+tests/test_web_feature_catalog.py .............................          [ 39%]
+tests/test_collinearity.py ............................................. [ 59%]
+........................................................................ [ 91%]
+..........                                                               [ 96%]
+tests/test_protein_comparison_benchmark.py ........                      [100%]
+
+============================= 223 passed in 11.01s =============================

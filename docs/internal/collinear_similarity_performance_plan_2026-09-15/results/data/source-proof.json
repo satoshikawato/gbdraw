@@ -1,0 +1,22 @@
+{
+  "allProductionFilesEqualAcrossRuns": {
+    "baseline-timing": true,
+    "repeat-timing": true,
+    "probe": true,
+    "memory": true,
+    "browser": true
+  },
+  "productionFileCount": 649,
+  "runnerHashes": {
+    "baseline-timing": "f0ce29209a8211f49ec95fead261cc8f9995d0d49ef1085edd427045e2c8afc7",
+    "repeat-timing": "c8623bfea554624b0a0ad534982dc29c104399d91c33a03dccd75843cc6d60b7",
+    "probe": "f0ce29209a8211f49ec95fead261cc8f9995d0d49ef1085edd427045e2c8afc7",
+    "memory": "39d250ee2023805eaa444c98a0f6088042d73959959ef8a1b4e8b4ed727723e5",
+    "browser": "f0ce29209a8211f49ec95fead261cc8f9995d0d49ef1085edd427045e2c8afc7"
+  },
+  "browserWheelSha256": "7b74e8d7f16853acca06aa6bb242ddc01876cf5a5f28ed0c414f490fdb302551",
+  "browserWheelPythonFilesMatchSource": 207,
+  "historicalReportSha256": "4c83b2a0eb09f0e52e41243cc237e03ec1932bcbe3af7f49e47109336eb6986c",
+  "cpu": "Intel(R) Core(TM) i9-14900HX",
+  "rawSearchExecuted": false
+}

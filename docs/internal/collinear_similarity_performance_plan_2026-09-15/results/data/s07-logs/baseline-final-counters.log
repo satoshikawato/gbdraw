@@ -1,0 +1,22 @@
+probe: merge-300
+  merge-300/cluster_merge
+probe: merge-600
+  merge-600/cluster_merge
+probe: merge-1200
+  merge-1200/cluster_merge
+probe: merge-edges
+  merge-edges/max_conflicts_0_merge
+  merge-edges/max_conflicts_1_merge
+  merge-edges/reverse_merge
+probe: gallery-collinear
+  gallery-collinear/post_search_merge
+probe: gallery-collinear-off
+  gallery-collinear-off/post_search_merge
+probe: gallery-collinear-vibrio
+/home/kawato/micromamba/lib/python3.13/site-packages/Bio/Seq.py:2879: BiopythonWarning: Partial codon, len(sequence) not a multiple of three. Explicitly trim the sequence or add trailing N before translation. This may become an error in future.
+  warnings.warn(
+  gallery-collinear-vibrio/post_search_merge
+probe: gallery-collinear-vibrio-off
+/home/kawato/micromamba/lib/python3.13/site-packages/Bio/Seq.py:2879: BiopythonWarning: Partial codon, len(sequence) not a multiple of three. Explicitly trim the sequence or add trailing N before translation. This may become an error in future.
+  warnings.warn(
+  gallery-collinear-vibrio-off/post_search_merge

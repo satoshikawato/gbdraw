@@ -1,0 +1,46 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 1139 items
+
+tests/test_protein_local_reductions.py ................................. [  2%]
+........................................................................ [  9%]
+........................................................................ [ 15%]
+........................................................................ [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 34%]
+........................................................................ [ 40%]
+........................................................................ [ 47%]
+........................................................................ [ 53%]
+........................................................................ [ 59%]
+........................................................................ [ 66%]
+........................................................................ [ 72%]
+........................................................................ [ 78%]
+........................................................................ [ 85%]
+................................                                         [ 87%]
+tests/test_sparse_support.py ........................................... [ 91%]
+................                                                         [ 93%]
+tests/test_protein_s078.py ............................................. [ 97%]
+..................................                                       [100%]
+
+=============================== warnings summary ===============================
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+  /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916/gbdraw/analysis/protein_colinearity.py:3404: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    sorted_hits.groupby("query", group_keys=False, sort=False)
+
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+  protein_colinearity_s076.py:3404: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+====================== 1139 passed, 8 warnings in 48.10s =======================

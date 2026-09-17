@@ -1,0 +1,132 @@
+
+> gbdraw-web-tests@0.0.0 test:web:comparison-contracts
+> playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0
+
+
+Running 13 tests using 1 worker
+
+(node:90739) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › tests/web/comparison-ui.playwright.spec.js:818:1 › comparison controls drive appearance and current Session round trips @comparison-contract (15.0s)
+  ✓   2 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2306:1 › @comparison-contract GFF annotation targets follow FASTA record order (785ms)
+  ✘   3 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2354:1 › protein raw cache survives cancellation and derived options preserve search identity @comparison-contract (19.3s)
+(node:92122) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2714:1 › @comparison-contract real LOSAT Wasm searches two multi-record sources in one job offline (8.1s)
+  ✓   5 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2748:1 › @comparison-contract OIC-015: multi-record Adjacent searches all six pairs and preserves independent rows through Save and Load (19.7s)
+  ✘   6 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2806:3 › @comparison-contract OIC-015: orthogroup all-record evidence includes same-row and non-adjacent records (7.4s)
+(node:95564) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   7 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2806:3 › @comparison-contract OIC-015: collinear all-record evidence includes same-row and non-adjacent records (7.9s)
+(node:96004) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   8 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2855:1 › @comparison-contract multi-record defaults render a shared Circular canvas and preserve saved opt-outs (7.8s)
+  ✓   9 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2904:1 › @comparison-contract one uploaded source stays one file card through record moves, replacement, and removal (1.5s)
+  ✓  10 [chromium] › tests/web/linear-multi-record.playwright.spec.js:2966:1 › @comparison-contract LOSAT Settings preserve execution controls and unbounded members through Save and Load (2.3s)
+  ✘  11 [chromium] › tests/web/linear-multi-record.playwright.spec.js:3017:1 › @comparison-contract LOSATP source jobs are reused after display start, reverse complement, and fresh Load (7.3s)
+(node:97082) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [chromium] › tests/web/linear-multi-record.playwright.spec.js:3082:1 › @comparison-contract Total threads reallocates Auto runs and threads in real threaded LOSATP (20.5s)
+  ✓  13 [chromium] › tests/web/linear-multi-record.playwright.spec.js:3172:1 › Collinear inference checkbox skips self searches and reuses matching evidence @comparison-contract (8.8s)
+
+
+  1) [chromium] › tests/web/linear-multi-record.playwright.spec.js:2354:1 › protein raw cache survives cancellation and derived options preserve search identity @comparison-contract 
+
+    Error: Resolved collinearityResult metadata is not a canonical typed resource.
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "status": "ok",
+    +   "status": "error",
+      }
+
+      2492 |   await cancelAfterRawSearch();
+      2493 |   const recovered = await runAndInspect();
+    > 2494 |   expect(recovered.result, recovered.errorSummary).toEqual({ status: 'ok' });
+           |                                                    ^
+      2495 |   expect(recovered.executorCalls).toBe(1);
+      2496 |   expect(recovered.rawKeys).toHaveLength(4);
+      2497 |   expect(recovered.matchCount).toBeGreaterThan(0);
+        at /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/web/linear-multi-record.playwright.spec.js:2494:52
+
+    Error Context: test-results/linear-multi-record.playwr-31f4f-ns-preserve-search-identity-chromium/error-context.md
+
+  2) [chromium] › tests/web/linear-multi-record.playwright.spec.js:2806:3 › @comparison-contract OIC-015: orthogroup all-record evidence includes same-row and non-adjacent records 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "status": "ok",
+    +   "status": "error",
+      }
+
+      2818 |         index < 2 ? 1 : index === 2 ? 2 : 3));
+      2819 |     }, mode);
+    > 2820 |     expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+           |                                                                            ^
+      2821 |     const snapshot = await completeComparisonSnapshot(page);
+      2822 |     expect(snapshot.selectors).toHaveLength(5);
+      2823 |     expect(snapshot.jobs).toHaveLength(1);
+        at /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/web/linear-multi-record.playwright.spec.js:2820:76
+
+    Error Context: test-results/linear-multi-record.playwr-f9852-ow-and-non-adjacent-records-chromium/error-context.md
+
+  3) [chromium] › tests/web/linear-multi-record.playwright.spec.js:2806:3 › @comparison-contract OIC-015: collinear all-record evidence includes same-row and non-adjacent records 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "status": "ok",
+    +   "status": "error",
+      }
+
+      2818 |         index < 2 ? 1 : index === 2 ? 2 : 3));
+      2819 |     }, mode);
+    > 2820 |     expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+           |                                                                            ^
+      2821 |     const snapshot = await completeComparisonSnapshot(page);
+      2822 |     expect(snapshot.selectors).toHaveLength(5);
+      2823 |     expect(snapshot.jobs).toHaveLength(1);
+        at /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/web/linear-multi-record.playwright.spec.js:2820:76
+
+    Error Context: test-results/linear-multi-record.playwr-565d7-ow-and-non-adjacent-records-chromium/error-context.md
+
+  4) [chromium] › tests/web/linear-multi-record.playwright.spec.js:3017:1 › @comparison-contract LOSATP source jobs are reused after display start, reverse complement, and fresh Load 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "status": "ok",
+    +   "status": "error",
+      }
+
+      3037 |   });
+      3038 |   const original = await run();
+    > 3039 |   expect(original.result).toEqual({ status: 'ok' });
+           |                           ^
+      3040 |   expect(original.jobCount).toBe(4);
+      3041 |   await page.evaluate(async () => {
+      3042 |     const app = window.__GBDRAW_APP__;
+        at /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/web/linear-multi-record.playwright.spec.js:3039:27
+
+    Error Context: test-results/linear-multi-record.playwr-4f969-e-complement-and-fresh-Load-chromium/error-context.md
+
+  4 failed
+    [chromium] › tests/web/linear-multi-record.playwright.spec.js:2354:1 › protein raw cache survives cancellation and derived options preserve search identity @comparison-contract 
+    [chromium] › tests/web/linear-multi-record.playwright.spec.js:2806:3 › @comparison-contract OIC-015: orthogroup all-record evidence includes same-row and non-adjacent records 
+    [chromium] › tests/web/linear-multi-record.playwright.spec.js:2806:3 › @comparison-contract OIC-015: collinear all-record evidence includes same-row and non-adjacent records 
+    [chromium] › tests/web/linear-multi-record.playwright.spec.js:3017:1 › @comparison-contract LOSATP source jobs are reused after display start, reverse complement, and fresh Load 
+  9 passed (2.2m)

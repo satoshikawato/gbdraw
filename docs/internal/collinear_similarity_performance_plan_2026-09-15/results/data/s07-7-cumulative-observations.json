@@ -1,0 +1,44 @@
+{
+  "purpose": "Answer the follow-up about cumulative workflow savings using existing evidence; no historical rerun",
+  "cases": {
+    "gallery-collinear": {
+      "baselineReport": "s03-baseline-acceptance-timing.json.gz",
+      "baselineReportSha256": "2a86b4b59bc7d3bce27a75854f217f427b3f4c7c7e58d1faa7d14d027a4b3ba3",
+      "currentReport": "s07-7-current-gallery-collinear-timing.json.gz",
+      "currentReportSha256": "b4e8a91ffc03f70f50f6bd26064c2de94aa7cc262cdf1873644479f77cf1dc7e",
+      "identicalFixtureInventory": true,
+      "identicalDependencies": true,
+      "historicalMedianSeconds": 5.725829038,
+      "currentMedianSeconds": 0.40359603099999997,
+      "observedReductionSeconds": 5.3222330069999995,
+      "observedReductionPct": 92.95130839007771,
+      "observedSpeedRatio": 14.187030094951554,
+      "historicalSamples": 7,
+      "currentSamples": 21
+    },
+    "gallery-orthogroup": {
+      "baselineReport": "s03-baseline-acceptance-timing.json.gz",
+      "baselineReportSha256": "2a86b4b59bc7d3bce27a75854f217f427b3f4c7c7e58d1faa7d14d027a4b3ba3",
+      "currentReport": "s07-7-current-gallery-orthogroup-timing.json.gz",
+      "currentReportSha256": "0944226e22c2719a55065a59753e2b82e4fc886c18daa7337fa3f86afd1baec8",
+      "identicalFixtureInventory": true,
+      "identicalDependencies": true,
+      "historicalMedianSeconds": 8.014943844000001,
+      "currentMedianSeconds": 0.753802539,
+      "observedReductionSeconds": 7.261141305,
+      "observedReductionPct": 90.59503655082626,
+      "observedSpeedRatio": 10.63268353358518,
+      "historicalSamples": 7,
+      "currentSamples": 21
+    }
+  },
+  "status": "Historical post-search observations, not an uncontended cumulative acceptance or whole-workflow measurement",
+  "limitations": [
+    "S01 same-code timings failed repeatability and are not used as improvement evidence",
+    "S03 baseline was measured during an external LOSAT benchmark; measurements are separated in time and host load",
+    "S06 intentionally changed path representation, so old/new complete typed hashes are not identical; S03/S04 exact and S06 graph/exhaustive oracles own equivalence",
+    "Post-search excludes raw search, extraction, parse/filter, downstream encode/render/save, Worker startup and transfer",
+    "S05 was rejected and contributes no implementation saving; S07.5 was a plan/prototype, not a production speedup",
+    "Nested stage timings must not be added; per-stage percentages must not be multiplied"
+  ]
+}

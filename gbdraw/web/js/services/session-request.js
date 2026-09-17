@@ -1712,7 +1712,7 @@ const buildComparisons = ({
       !typedResource
       || typeof typedResource !== 'object'
       || Array.isArray(typedResource)
-      || ![1, 2].includes(typedResource.schema)
+      || ![1, 2, 3].includes(typedResource.schema)
       || typedResource.kind !== expectedValueKind
       || !Object.prototype.hasOwnProperty.call(typedResource, 'value')
     ) {

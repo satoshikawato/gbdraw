@@ -1,0 +1,14 @@
+{
+  "previousAuditSha256": "8ead0f6963180930b75c6346a798f595fd1b52605f481134dba530b4613f1dda",
+  "matchingSourceFiles": 373,
+  "changedSourceFiles": [
+    "gbdraw/web/js/app/losat-cache.js",
+    "gbdraw/web/js/app/run-analysis.js"
+  ],
+  "reuse": [
+    "unchanged Python native/typed/reference gates",
+    "source replacement writer/save/fresh Load lifecycle",
+    "Cancel/retry/release and real legacy migration",
+    "Circular/mobile offline unchanged paths"
+  ]
+}

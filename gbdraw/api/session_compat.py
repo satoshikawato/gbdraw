@@ -457,6 +457,7 @@ def rewrite_protein_artifact_references(
                     id_map,
                 )
                 for field in fields(value)
+                if field.init
             },
         )
     if isinstance(value, Mapping):
@@ -507,6 +508,7 @@ def _contains_legacy_protein_reference(value: Any) -> bool:
         return any(
             _contains_legacy_protein_reference(getattr(value, field.name))
             for field in fields(value)
+            if field.init
         )
     if isinstance(value, Mapping):
         return any(
@@ -531,9 +533,10 @@ def _legacy_protein_reference_ids(value: Any) -> set[str]:
             references.update(_legacy_protein_reference_ids(item))
     elif is_dataclass(value) and not isinstance(value, type):
         for field in fields(value):
-            references.update(
-                _legacy_protein_reference_ids(getattr(value, field.name))
-            )
+            if field.init:
+                references.update(
+                    _legacy_protein_reference_ids(getattr(value, field.name))
+                )
     elif isinstance(value, Mapping):
         for key, item in value.items():
             references.update(_legacy_protein_reference_ids(key))

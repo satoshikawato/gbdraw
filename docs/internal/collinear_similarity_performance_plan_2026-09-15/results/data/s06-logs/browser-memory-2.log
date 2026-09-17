@@ -1,0 +1,41 @@
+path-browser memory: 1280 sparse-2
+Traceback (most recent call last):
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tools/benchmark_protein_comparison.py", line 945, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tools/benchmark_protein_comparison.py", line 888, in main
+    "result": run_path_browser(root, path_browser_inputs(root, pc, cc), args.samples, args.measure)}
+              ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tools/protein_comparison_browser.py", line 298, in run_path_browser
+    result = page.evaluate(r'''async ({input, samples, measurement}) => {
+      const api = await import('/gbdraw/web/js/services/diagram-generation.js');
+    ...<84 lines>...
+      return {rows, terminatedWorkers: window.__s06.terminated, rawSearchInvocations: 0};
+    }''', {"input": case, "samples": samples, "measurement": measurement})
+  File "/home/kawato/micromamba/lib/python3.13/site-packages/playwright/sync_api/_generated.py", line 9280, in evaluate
+    self._sync(
+    ~~~~~~~~~~^
+        self._impl_obj.evaluate(expression=expression, arg=mapping.to_impl(arg))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/kawato/micromamba/lib/python3.13/site-packages/playwright/_impl/_sync_base.py", line 115, in _sync
+    return task.result()
+           ~~~~~~~~~~~^^
+  File "/home/kawato/micromamba/lib/python3.13/site-packages/playwright/_impl/_page.py", line 472, in evaluate
+    return await self._main_frame.evaluate(expression, arg)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kawato/micromamba/lib/python3.13/site-packages/playwright/_impl/_frame.py", line 345, in evaluate
+    await self._channel.send(
+    ...<6 lines>...
+    )
+  File "/home/kawato/micromamba/lib/python3.13/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/kawato/micromamba/lib/python3.13/site-packages/playwright/_impl/_connection.py", line 563, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.evaluate: Error: [object Object]
+    at window.Worker.listener (eval at evaluate (:303:30), <anonymous>:15:58)

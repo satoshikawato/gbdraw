@@ -1,0 +1,17 @@
+WARNING: The directory '/home/kawato/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Processing /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: gbdraw
+  Building wheel for gbdraw (pyproject.toml): started
+  Building wheel for gbdraw (pyproject.toml): still running...
+  Building wheel for gbdraw (pyproject.toml): finished with status 'done'
+  Created wheel for gbdraw: filename=gbdraw-0.14.0-py3-none-any.whl size=36981820 sha256=961b3490d7af91f74a19175025be5698ba87cc4ac6c480aee264a3f74b73ca08
+  Stored in directory: /tmp/pip-ephem-wheel-cache-c970__gc/wheels/c4/a2/25/4a94ec92fbda347f9db023be4c98e8ce3ae69d366ae1e54d76
+Successfully built gbdraw
+Installing collected packages: gbdraw
+  Attempting uninstall: gbdraw
+    Found existing installation: gbdraw 0.14.0
+    Uninstalling gbdraw-0.14.0:
+      Successfully uninstalled gbdraw-0.14.0
+Successfully installed gbdraw-0.14.0

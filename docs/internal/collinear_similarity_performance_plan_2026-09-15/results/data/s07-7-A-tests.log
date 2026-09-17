@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 511 items
+
+tests/test_protein_local_reductions.py ................................. [  6%]
+........................................................................ [ 20%]
+........................................................................ [ 34%]
+.......................................................                  [ 45%]
+tests/test_protein_colinearity.py ...................................... [ 52%]
+........................................................................ [ 66%]
+............................................................s........... [ 81%]
+......................................                                   [ 88%]
+tests/test_sparse_support.py ........................................... [ 96%]
+................                                                         [100%]
+
+=============================== warnings summary ===============================
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 510 passed, 1 skipped, 1 warning in 9.74s ===================

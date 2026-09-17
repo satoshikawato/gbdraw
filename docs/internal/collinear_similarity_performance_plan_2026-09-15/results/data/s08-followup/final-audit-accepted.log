@@ -1,0 +1,110 @@
+{
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "inheritedHead": "8bf4b98ae02ef14f72caaebe3114f7a6fc3e0c75",
+  "sourceDigest": "15550c25f924488ec4feb113993872445a4b222e7b2010f7e5b4eb13a3d2e706",
+  "newProductionFiles": [
+    "gbdraw/web/js/app/losat-cache.js",
+    "gbdraw/web/js/app/run-analysis.js"
+  ],
+  "unchangedPythonFiles": 208,
+  "wheelSha256": "81fc40118d7de21974dc27391c58704c42d90f0b6354616020026a970a262e53",
+  "installedMatchingFiles": 466,
+  "s08GeometryAndProvenanceEquality": [
+    {
+      "label": "saved-raw",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "resolved-warm",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "derived-warm",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "color",
+      "geometrySha256": "a83795a96cd38c79f4c7be68a236d64d349b966bbc82f5e158ec6ccaef984c8e",
+      "svgSha256": "e6d18b8bb090a19ca85c72acbb324ae32dfab27489a5a35a5e4e0c88ff36fd19",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "block",
+      "geometrySha256": "f0d50c80b91ebb2ba9dd7e1658319b73e2febb1ad373c3c9bd74fadd61ea7192",
+      "svgSha256": "88c7c8d3d54b51b6140d1f0dc6bf8904444e0161332d165e66e29ac55eb4ff7c",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "member",
+      "geometrySha256": "ba77d562e837eec2eff9507896194b7f853e86377b55249508bb306d01ad30f8",
+      "svgSha256": "07b4f7c5a731435683db01ece2a803ce5c75decec5747bb68676a049f1449513",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "filter",
+      "geometrySha256": "b90903209b575850a545387165229253d3dab0a6bd36a253e92660c09e9a91bd",
+      "svgSha256": "df9465f72cdeb84cbacc14cfaa15143e48e34244b2c6f718def1e5ee51688734",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "reverse",
+      "geometrySha256": "7a2cd5018d9e2488ba1a7080a05d259172c87ca7ac9d67d36ecdf535d88786c4",
+      "svgSha256": "a573f497bdd7b02dc17d0c0fcde8f8bc49b8755aa2ca2aa750fed69af064f964",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "all-record-evidence",
+      "geometrySha256": "7a2cd5018d9e2488ba1a7080a05d259172c87ca7ac9d67d36ecdf535d88786c4",
+      "svgSha256": "3037534c661ec1732c068a2ba640c61e617dbb3613ed581abb5767e29d1d488d",
+      "provenanceEqual": true,
+      "searchBatchCount": 1
+    },
+    {
+      "label": "record-order",
+      "geometrySha256": "a600074488db56f173e8d458b24d0f7100fed8a2464b13626e66230258541db4",
+      "svgSha256": "c3ba804ce195135060be2e5572de0dc30bc7624237791fc04021bd0629e2b540",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    },
+    {
+      "label": "member-change-retry",
+      "geometrySha256": "67b62a8bffd0672c60d1019e07de0d3c4c3d47419b147d0b43368c2eadbe3e12",
+      "svgSha256": "45da545c6327b1f36eb9e4c32884a56bb458d41cc80d8dc04641cfb586340132",
+      "provenanceEqual": true,
+      "searchBatchCount": 0
+    }
+  ],
+  "sourceReplacementFreshLoadProvenanceEqual": true,
+  "clearCache": {
+    "rawSearchJobs": 13,
+    "matchesCurrentRetrySvgGeometryProvenance": true,
+    "retainedRawEntriesBefore": 38,
+    "retainedRawEntriesAfter": 13,
+    "activeRawKeysMatchProvenance": true,
+    "excludedHistoricalComparison": "S08 observed prefix clear-cache used committed typed resources; no raw search/provenance."
+  },
+  "packagedSourceGeometryAndProvenanceEqual": true,
+  "reviewedDiffSha256": "1ba421543010893a574bbe5d19bb32512bef7acc2dc108f28947a5b852615f87",
+  "changedTrackedFiles": [
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_REDUNDANT_WORK.md",
+    "gbdraw/web/js/app/losat-cache.js",
+    "gbdraw/web/js/app/run-analysis.js",
+    "tests/web/losat-cache.test.mjs"
+  ],
+  "timing": "No new accepted timing samples or warmups; command durations are operational logs."
+}

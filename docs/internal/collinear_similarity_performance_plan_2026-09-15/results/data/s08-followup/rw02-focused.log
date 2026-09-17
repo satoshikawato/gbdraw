@@ -1,0 +1,12 @@
+✔ tests/web/losat-cache.test.mjs (71.447988ms)
+✔ tests/web/run-analysis-derived-cache.test.mjs (686.98474ms)
+✔ tests/web/session-export-validation.test.mjs (852.85542ms)
+✔ tests/web/session-losat-cache-validation.test.mjs (1125.923943ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1154.040401

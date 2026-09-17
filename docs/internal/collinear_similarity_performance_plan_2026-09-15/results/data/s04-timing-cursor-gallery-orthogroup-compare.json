@@ -1,0 +1,44 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "currentHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "semanticOnly": false,
+  "comparisons": {
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": 4.930535221881871,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.835351676076736,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.2090204259340496,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -58.29360399794784,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -87.01513614019328,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/display_tables": {
+      "semanticEqual": true,
+      "timeDeltaPct": 9.05367009315694,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.002269474974436747,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 0
+}
