@@ -3214,3 +3214,97 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
   expect(restored.calls).toBe(on.calls);
   expect(restored.cache.proteinDerivedPayloadCacheHits).toBe(1);
 });
+
+test('File-level default organism and subtitle apply across records and allow per-record override', async ({ page }) => {
+  test.setTimeout(120000);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+
+  await page.evaluate(async ({ content, name }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    const source = new File([content], name, { type: 'text/plain', lastModified: 1 });
+    app.setLinearSeqPrimaryFile(0, 'gb', source);
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('none');
+  }, {
+    content: makeComparisonGenbank('DefTestA', 'atg') + makeComparisonGenbank('DefTestB', 'gct'),
+    name: 'file-default-test.gbk'
+  });
+
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+
+  const defInput = page.getByLabel('Default definition for file 1');
+  const subInput = page.getByLabel('Default subtitle for file 1');
+  await expect(defInput).toBeVisible();
+  await expect(subInput).toBeVisible();
+
+  await defInput.fill('<i>Escherichia coli</i> O157:H7');
+  await subInput.fill('Default Cluster');
+
+  const defaultValues = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const group = app.linearSourceGroups[0];
+    return {
+      definition: app.getLinearSourceDefaultDefinition(group),
+      subtitle: app.getLinearSourceDefaultSubtitle(group),
+      seq1_file_def: app.linearSeqs[0].file_definition,
+      seq2_file_def: app.linearSeqs[1].file_definition,
+      seq1_file_sub: app.linearSeqs[0].file_subtitle,
+      seq2_file_sub: app.linearSeqs[1].file_subtitle
+    };
+  });
+  expect(defaultValues.definition).toBe('<i>Escherichia coli</i> O157:H7');
+  expect(defaultValues.subtitle).toBe('Default Cluster');
+  expect(defaultValues.seq1_file_def).toBe('<i>Escherichia coli</i> O157:H7');
+  expect(defaultValues.seq2_file_def).toBe('<i>Escherichia coli</i> O157:H7');
+  expect(defaultValues.seq1_file_sub).toBe('Default Cluster');
+  expect(defaultValues.seq2_file_sub).toBe('Default Cluster');
+
+  await page.evaluate(() => {
+    const sourceRecords = document.querySelector('[data-linear-source-records]');
+    if (sourceRecords) sourceRecords.open = true;
+    const options = document.querySelector('[data-linear-record-options]');
+    if (options) options.open = true;
+  });
+
+  const record1Card = page.locator('[data-linear-record-card]').first();
+  const record1DefInput = page.getByLabel('Definition for sequence 1');
+  await expect(record1DefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7');
+  await expect(record1Card.getByText('Using file default').first()).toBeVisible();
+
+  await record1DefInput.fill('<i>Custom Strain Override</i>');
+  await expect(record1Card.getByRole('button', { name: 'Reset to default' }).first()).toBeVisible();
+
+  const resolved = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.linearSeqs.map((seq) => ({
+      label: app.resolveLinearRecordEffectiveDefinition(seq),
+      subtitle: app.resolveLinearRecordEffectiveSubtitle(seq)
+    }));
+  });
+  expect(resolved[0]).toEqual({ label: '<i>Custom Strain Override</i>', subtitle: 'Default Cluster' });
+  expect(resolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
+
+  await record1Card.getByRole('button', { name: 'Reset to default' }).first().click();
+  await expect(record1DefInput).toHaveValue('');
+  await expect(record1Card.getByText('Using file default').first()).toBeVisible();
+
+  const resetResolved = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.linearSeqs.map((seq) => ({
+      label: app.resolveLinearRecordEffectiveDefinition(seq),
+      subtitle: app.resolveLinearRecordEffectiveSubtitle(seq)
+    }));
+  });
+  expect(resetResolved[0]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
+  expect(resetResolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
+});
+

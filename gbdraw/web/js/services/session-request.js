@@ -712,8 +712,8 @@ const buildRecords = ({ state, filesData, resources }) => {
         region,
         presentation: {
           ...presentationPayload({
-            label: seq.definition,
-            subtitle: seq.record_subtitle,
+            label: String(seq.definition ?? '').trim() || String(seq.file_definition ?? '').trim() || '',
+            subtitle: String(seq.record_subtitle ?? '').trim() || String(seq.file_subtitle ?? '').trim() || '',
             gridRow: resolvedRows[index] ?? null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
@@ -2584,6 +2584,8 @@ const applyWebFileBindings = (
       losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
+      file_definition: String(sequence?.file_definition || ''),
+      file_subtitle: String(sequence?.file_subtitle || ''),
       region_record_id: String(sequence?.region_record_id || ''),
       region_start: sequence?.region_start ?? null,
       region_end: sequence?.region_end ?? null,

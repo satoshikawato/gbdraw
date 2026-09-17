@@ -33,7 +33,15 @@ import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
-import { groupLinearSourceRecords } from './linear-sources.js';
+import {
+  groupLinearSourceRecords,
+  getLinearSourceDefaultDefinition,
+  setLinearSourceDefaultDefinition,
+  getLinearSourceDefaultSubtitle,
+  setLinearSourceDefaultSubtitle,
+  resolveLinearRecordEffectiveDefinition,
+  resolveLinearRecordEffectiveSubtitle
+} from './linear-sources.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -3378,6 +3386,14 @@ export const createAppSetup = () => {
     reorderLinearSeqs(index, Number(index) + 1);
   };
 
+  const resetLinearRecordDefinition = (seq) => {
+    if (seq) seq.definition = '';
+  };
+
+  const resetLinearRecordSubtitle = (seq) => {
+    if (seq) seq.record_subtitle = '';
+  };
+
   return {
     recordDisplayControls,
     featurePlacementActions: featureActions.placementActions,
@@ -3531,6 +3547,14 @@ export const createAppSetup = () => {
     canMoveLinearSeqDown,
     moveLinearSeqUp,
     moveLinearSeqDown,
+    getLinearSourceDefaultDefinition,
+    setLinearSourceDefaultDefinition,
+    getLinearSourceDefaultSubtitle,
+    setLinearSourceDefaultSubtitle,
+    resolveLinearRecordEffectiveDefinition,
+    resolveLinearRecordEffectiveSubtitle,
+    resetLinearRecordDefinition,
+    resetLinearRecordSubtitle,
     linearRecordOptions: linearRecordSelector.optionsFor,
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     linearRecordSelectorDisabled: linearRecordSelector.isDisabled,

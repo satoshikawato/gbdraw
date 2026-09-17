@@ -392,7 +392,9 @@ export const createResultsManager = ({
 
       if (groups.length === 0) return;
 
-      const labels = linearSeqs.map((seq) => (seq.definition ?? '').toString());
+      const labels = linearSeqs.map((seq) => (
+        String(seq.definition ?? '').trim() || String(seq.file_definition ?? '').trim() || ''
+      ).toString());
       let updated = false;
       const parsedDefinitionFontSize =
         adv.def_font_size !== null && adv.def_font_size !== undefined && adv.def_font_size !== ''
