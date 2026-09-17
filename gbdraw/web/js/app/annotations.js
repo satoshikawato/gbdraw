@@ -1,4 +1,4 @@
-import { createAnnotationSet, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
+import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
 import { encodeAnnotationTable, parseAnnotationTable } from './annotations/table-codec.js';
 import {
@@ -7,6 +7,13 @@ import {
 } from './annotations/record-selector.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
+
+const nextAnnotationId = (annotations, prefix) => {
+  const ids = new Set(annotations.map((item) => item.id));
+  let index = annotations.length + 1;
+  while (ids.has(`${prefix}_${index}`)) index += 1;
+  return `${prefix}_${index}`;
+};
 
 export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
@@ -46,7 +53,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   };
   const addCoordinateAnnotation = (set, options = {}) => {
     if (!set) return null;
-    const id = `region_${set.annotations.length + 1}`;
+    const id = nextAnnotationId(set.annotations, 'region');
     const item = { id, target: coordinateTarget({ start: 1, end: 1, ...options }), label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
     set.annotations.push(item);
     return item;
@@ -54,14 +61,28 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
   const addSelectedFeatures = (set) => {
     if (!set) return [];
     const targets = featureTargetsFromSelection(state.selectedFeatures?.value ?? state.selectedFeatures ?? []);
-    const items = targets.map((target, index) => ({ id: `feature_${set.annotations.length + index + 1}`, target, label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} }));
-    set.annotations.push(...items);
+    const items = targets.map((target) => {
+      const item = { id: nextAnnotationId(set.annotations, 'feature'), target, label: '', mark: 'highlight', lane: null, style: null, legendLabel: null, metadata: {} };
+      set.annotations.push(item);
+      return item;
+    });
     reconcileRecords(items.length ? [{ annotations: items }] : []);
     return items;
   };
   const removeAnnotation = (set, item) => {
     const index = set?.annotations?.indexOf(item) ?? -1;
     if (index >= 0) set.annotations.splice(index, 1);
+  };
+  const renameAnnotation = (set, item, value) => {
+    const base = String(value || '').trim() || 'region';
+    const used = new Set(set.annotations.filter((entry) => entry !== item).map((entry) => entry.id));
+    let id = base;
+    for (let index = 2; used.has(id); index += 1) id = `${base}_${index}`;
+    item.id = id;
+  };
+  const setAnnotationStyle = (set, item, field, value) => {
+    item.style ??= createDefaultAnnotationStyle(set.defaultStyle);
+    item.style[field] = value;
   };
   const setAnnotationTargetKind = (item, kind) => {
     if (!item) return;
@@ -78,14 +99,25 @@ export const createAnnotationEditor = ({ state, getRecordCatalog }) => {
     downloadTextFile('annotations.tsv', encodeAnnotationTable(state.annotationSets));
   };
   const importAnnotationTableFile = async (event) => {
-    const file = event?.target?.files?.[0];
+    const input = event?.target;
+    const file = input?.files?.[0];
     if (!file) return;
-    importAnnotationTable(await readFileText(file));
-    event.target.value = '';
+    const setsBeforeRead = [...state.annotationSets];
+    try {
+      const text = await readFileText(file);
+      if (input.files?.[0] !== file
+        || setsBeforeRead.length !== state.annotationSets.length
+        || setsBeforeRead.some((set, index) => set !== state.annotationSets[index])) return;
+      importAnnotationTable(text);
+    } catch (error) {
+      if (input.files?.[0] === file) alert(`Could not import annotations: ${error.message}`);
+    } finally {
+      if (input.files?.[0] === file) input.value = '';
+    }
   };
   return {
     addAnnotationSet, renameAnnotationSet, duplicateAnnotationSet, removeAnnotationSet,
-    addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, setAnnotationTargetKind,
+    addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
     canDownloadAnnotationTable, downloadAnnotationTable,
     recordOptionsFor: recordSelector.optionsFor,

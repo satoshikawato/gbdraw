@@ -1,3 +1,4 @@
+import { createRulePreparation } from './rule-matching.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
@@ -33,7 +34,7 @@ import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { groupLinearSourceRecords } from './linear-sources.js';
-import { serializeCleanSvg } from '../services/svg-serialization.js';
+import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
@@ -1131,13 +1132,21 @@ export const createAppSetup = () => {
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
+  const ruleMatchingPending = ref(false);
+  const rulePreparation = createRulePreparation({
+    state,
+    pending: ruleMatchingPending,
+    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+  });
   const legendActions = createLegendManager({
     state,
+    rulePreparation,
     history,
     previewRuntime
   });
   const svgActions = createSvgStyles({
     state,
+    rulePreparation,
     watch,
     nextTick,
     legendActions
@@ -1145,6 +1154,7 @@ export const createAppSetup = () => {
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
+    rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
@@ -1162,6 +1172,11 @@ export const createAppSetup = () => {
     computed,
     reactive,
     previewRuntime,
+    resolveOrthogroups: () => orthogroups.value.map((group) => ({
+      ...group,
+      display_name: orthogroupActions.resolveOrthogroupName(group),
+      description: orthogroupActions.resolveOrthogroupDescription(group)
+    })),
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
@@ -2085,8 +2100,9 @@ export const createAppSetup = () => {
     rerenderLinearDefinitions: runLabelReflow
   });
 
-  setupWatchers({
+  const { waitForAuxiliaryFileImport } = setupWatchers({
     state,
+    rulePreparation,
     watch,
     nextTick,
     onMounted,
@@ -2105,6 +2121,7 @@ export const createAppSetup = () => {
   });
 
   const sessionImportPending = ref(false);
+  const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
   const importSession = async (event) => {
     const input = event?.target;
@@ -2164,6 +2181,7 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('history-baseline-start');
         await history.initializeIntentBaseline('Loaded session');
         recordSessionLifecycleEvent('history-baseline-end');
+        if (circularRecordPresentationPanel.value?.open) await refreshCircularRecordOrder();
       }
       return result;
     } finally {
@@ -2264,6 +2282,7 @@ export const createAppSetup = () => {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
     if (changedDomains.has('config') || changedDomains.has('features')) {
+      if (!await rulePreparation.prepare()) return;
       svgActions.applyPaletteToSvg();
       svgActions.applySpecificRulesToSvg();
     }
@@ -2467,6 +2486,7 @@ export const createAppSetup = () => {
       await focusLinearComparisonIssue();
     }
     if (result?.status === 'ok') {
+      await rulePreparation.prepare();
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
     return result;
@@ -2989,13 +3009,22 @@ export const createAppSetup = () => {
   };
 
   const runExportAction = async (methodName, label) => {
+    const previousError = errorLog.value;
     try {
+      const snapshot = captureSvgExport(state, { interactive: methodName === 'downloadInteractiveSVG' });
       const exportService = await loadExportService();
       const exportMethod = exportService?.[methodName];
       if (typeof exportMethod !== 'function') {
         throw new Error('The export service did not provide the requested action.');
       }
-      return await exportMethod();
+      const result = await exportMethod(snapshot, {
+        loadPdfFont: async (filename) => {
+          const result = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT, { filename });
+          return result.result.base64;
+        }
+      });
+      if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
+      return result;
     } catch (error) {
       const normalized = normalizeUserFacingError(error);
       errorLog.value = {
@@ -3404,7 +3433,9 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
-    importAnnotationTableFile: annotationEditor.importAnnotationTableFile,
+    importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
+    renameAnnotation: annotationEditor.renameAnnotation,
+    setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
     downloadAnnotationTable: annotationEditor.downloadAnnotationTable,
     annotationRecordOptions: annotationEditor.recordOptionsFor,
@@ -3683,6 +3714,8 @@ export const createAppSetup = () => {
     closeRightDrawer: rightDrawerActions.closeRightDrawer,
     openOrthogroupInDrawer,
     circularRecordList,
+    refreshCircularRecordOrder,
+    waitForAuxiliaryFileImport,
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
@@ -3728,6 +3761,7 @@ export const createAppSetup = () => {
     getFeatureShape,
     setFeatureShape,
     manualSpecificRules,
+    ruleMatchingPending,
     newSpecRule,
     specificRulePresets,
     specificRuleQualifierSuggestions,
@@ -3950,6 +3984,7 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,
     undoHistoryTitle,

@@ -642,6 +642,9 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     const { downloadInteractiveSVG } = await import(
       `${origin}/gbdraw/web/js/services/export.js`
     );
+    const { captureSvgExport } = await import(
+      `${origin}/gbdraw/web/js/services/svg-serialization.js`
+    );
     const catalog = {
       schema: 3,
       items: [{
@@ -702,7 +705,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
     try {
-      await downloadInteractiveSVG();
+      await downloadInteractiveSVG(captureSvgExport(state, { interactive: true }));
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
       const metadata = doc.querySelector('#gbdraw-interactive-feature-metadata');

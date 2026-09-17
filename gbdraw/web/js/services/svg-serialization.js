@@ -79,6 +79,32 @@ export const serializeCleanSvg = (svg, options = {}) => {
   return new XMLSerializer().serializeToString(clone);
 };
 
+// Capture the selected Result before any lazy export modules or libraries load.
+export const captureSvgExport = (state, { interactive = false } = {}) => {
+  const resultIndex = Number(state.selectedResultIndex.value);
+  const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
+  return {
+    svg: state.svgContainer.value?.querySelector('svg')?.cloneNode(true) || null,
+    svgContent: state.svgContent.value,
+    name,
+    dpi: state.downloadDpi.value,
+    ...(interactive ? { interactivity: {
+      popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich',
+      featureCatalog: state.featureCatalog?.value,
+      catalogResultIndex: resultIndex,
+      catalogResultName: name,
+      requireFeatureCatalog: true,
+      editableLabels: (state.editableLabels?.value || []).map(({ featureId, text, sourceText }) => ({
+        featureId, text, sourceText
+      })),
+      labelTextFeatureOverrides: { ...state.labelTextFeatureOverrides },
+      labelTextBulkOverrides: { ...state.labelTextBulkOverrides },
+      orthogroupNameOverrides: { ...state.orthogroupNameOverrides },
+      orthogroupDescriptionOverrides: { ...state.orthogroupDescriptionOverrides }
+    } } : {})
+  };
+};
+
 export const ensureSvgDefs = (svg) => {
   let defs = svg.querySelector('defs');
   if (!defs) {

@@ -354,6 +354,8 @@ def _resolve_label_override(
     base_label: str,
     rules: list[dict[str, Any]],
     record_id: Optional[str],
+    *,
+    selector: dict | None = None,
 ) -> Optional[str]:
     resolved_record_id = _get_feature_record_id(feature, record_id)
     feature_location = None
@@ -372,21 +374,21 @@ def _resolve_label_override(
 
         if qualifier_key == "record_location":
             if record_location is None:
-                record_location = _get_feature_record_location_str(feature, record_id)
+                record_location = selector.get("record_location") if selector is not None else _get_feature_record_location_str(feature, record_id)
             if record_location and pattern.search(record_location):
                 return replacement
             continue
 
         if qualifier_key == "hash":
             if feature_hash is None:
-                feature_hash = _get_feature_hash(feature, record_id)
+                feature_hash = selector.get("hash") if selector is not None else _get_feature_hash(feature, record_id)
             if feature_hash and pattern.search(feature_hash):
                 return replacement
             continue
 
         if qualifier_key == "location":
             if feature_location is None:
-                feature_location = _get_feature_location_str(feature)
+                feature_location = selector.get("location") if selector is not None else _get_feature_location_str(feature)
             if feature_location and pattern.search(feature_location):
                 return replacement
             continue

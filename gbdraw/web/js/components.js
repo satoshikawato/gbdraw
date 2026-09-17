@@ -119,7 +119,7 @@ export const ColorValueControl = {
 
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange'],
   emits: ['update:modelValue'],
   setup(props, { emit }) {
     const input = ref(null);
@@ -150,6 +150,7 @@ export const FileUploader = {
         void history.runUndoable('Change uploaded file', async () => {
           update();
           await nextTick();
+          await props.afterChange?.(nextFiles[0]);
         });
       } else {
         update();

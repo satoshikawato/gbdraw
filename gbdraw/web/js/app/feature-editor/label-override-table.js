@@ -319,22 +319,12 @@ export const parseLabelOverrideTsv = (text) => {
       throw new Error(`Invalid label TSV at line ${lineNo}: column 4 (value) is required.`);
     }
 
-    let qualifierValuePattern;
-    try {
-      qualifierValuePattern = new RegExp(valueRegex, 'i');
-    } catch (error) {
-      throw new Error(
-        `Invalid label TSV at line ${lineNo}: invalid regex '${valueRegex}' (${error.message}).`
-      );
-    }
-
     rows.push({
       lineNo,
       recordId,
       featureType,
       qualifier,
       valueRegex,
-      qualifierValuePattern,
       labelText,
       isGlobalLabelRule: recordId === '*' && featureType === '*' && qualifier.toLowerCase() === 'label'
     });

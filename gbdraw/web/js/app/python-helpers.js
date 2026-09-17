@@ -17,6 +17,7 @@ from gbdraw.web_support.request_render import (
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.api.prepared import PreparedBiologicalInputCache
+from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
@@ -24,6 +25,18 @@ _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
 _WEB_LOSATP_CACHE_ORDER = []
 _WEB_LOSATP_CACHE_LIMIT = 64
 _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
+
+def read_pdf_font(filename):
+    import base64
+    from importlib.resources import files
+    allowed = {
+        f"Liberation{family}-{style}.ttf"
+        for family in ("Sans", "Serif", "Mono")
+        for style in ("Regular", "Bold", "Italic", "BoldItalic")
+    }
+    if filename not in allowed:
+        raise ValueError("Unknown PDF font")
+    return json.dumps({"base64": base64.b64encode(files("gbdraw.data").joinpath(filename).read_bytes()).decode("ascii")})
 
 def _web_losatp_cache_by_name(name):
     if name == "filtered":
