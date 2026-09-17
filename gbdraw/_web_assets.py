@@ -80,16 +80,6 @@ REQUIRED_UI_FONT_FILES = tuple(
     for filename in filenames
 )
 
-# PDF uses the same Liberation faces as Python and the UI's Japanese fallback.
-REQUIRED_PDF_FONT_FILES = tuple(
-    Path("vendor/fonts") / f"Liberation{family}-{style}.ttf"
-    for family in ("Sans", "Serif", "Mono")
-    for style in ("Regular", "Bold", "Italic", "BoldItalic")
-) + tuple(
-    Path("vendor/fonts/noto-sans-jp") / f"noto-sans-jp-japanese-{weight}-normal.ttf"
-    for weight in (400, 700)
-)
-
 
 @dataclass(frozen=True)
 class WebAssetNotice:
@@ -103,15 +93,6 @@ class WebAssetNotice:
 
 
 WEB_ASSET_NOTICES = (
-    WebAssetNotice(
-        display_name="Liberation Fonts",
-        version="2.1.5",
-        license_expression="OFL-1.1",
-        source_url="https://github.com/liberationfonts/liberation-fonts",
-        bundled_path="vendor/fonts/Liberation*.ttf",
-        notice="Copyright (c) 2012 Red Hat, Inc. Copyright (c) 2010 Google Corporation.",
-        license_text_anchors=("license-ofl-1.1",),
-    ),
     WebAssetNotice(
         display_name="Vue.js",
         version="3.5.25",

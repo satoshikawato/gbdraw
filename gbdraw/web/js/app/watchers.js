@@ -37,6 +37,7 @@ export const runRecordDiscoveryWatcher = async ({
 
 export const setupWatchers = ({
   state,
+  rulePreparation,
   watch,
   nextTick,
   onMounted,
@@ -199,11 +200,11 @@ export const setupWatchers = ({
     () => [...manualSpecificRules],
     async (newRules, oldRules) => {
       if (semanticFileWatchersSuppressed.value) return;
-      applyPaletteToSvg();
-      applySpecificRulesToSvg();
       if (extractedFeatures.value.length > 0) {
         refreshFeatureOverrides(extractedFeatures.value);
       }
+      applyPaletteToSvg();
+      applySpecificRulesToSvg();
 
       const currentCaptions = new Set(newRules.filter((r) => r.cap).map((r) => r.cap));
       const oldCaptions = new Set((oldRules || []).filter((r) => r.cap).map((r) => r.cap));
@@ -456,12 +457,24 @@ export const setupWatchers = ({
 
   const pendingFileImports = new WeakMap();
   let fileImportApplications = Promise.resolve();
-  const watchFileImport = (key, apply) => watch(() => files[key], (file) => {
+  const restoredFileSelections = new Map();
+  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => {
+    const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
+    restoredFileSelections.delete(key);
+    if (restored) return;
     if (semanticFileWatchersSuppressed.value || !file) return;
-    const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value;
+    const ruleContext = key === 't_color' ? rulePreparation.snapshot() : null;
+    const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
+      && (!ruleContext || rulePreparation.isCurrent(ruleContext));
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
-      const application = fileImportApplications.then(() => isCurrent() ? apply(text, isCurrent) : undefined);
+      const application = fileImportApplications.then(async () => {
+        if (!isCurrent()) return;
+        if (await apply(text, isCurrent) === false && isCurrent()) {
+          restoredFileSelections.set(key, previousFile);
+          files[key] = previousFile;
+        }
+      });
       fileImportApplications = application.catch(() => {});
       return application;
     }).catch((error) => {
@@ -487,6 +500,7 @@ export const setupWatchers = ({
   watchFileImport('t_color', async (text, isCurrent) => {
     try {
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
+      if (!await rulePreparation.prepare(prepared.nextRules) || !isCurrent()) return;
       const previousCaptions = Array.from(fileLegendCaptions.value);
       const previousFileIntents = buildLegendIntents(
         manualSpecificRules.filter((rule) => rule.fromFile),
@@ -506,7 +520,8 @@ export const setupWatchers = ({
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
       console.error('Failed to load rules file:', e);
-      alert(`Failed to load rules file. ${e?.message || 'Please check the TSV format.'}`);
+      if (isCurrent()) alert(`Failed to load rules file. ${e?.message || 'Please check the TSV format.'}`);
+      return false;
     }
   });
 

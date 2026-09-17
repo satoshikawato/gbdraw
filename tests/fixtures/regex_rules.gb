@@ -1,0 +1,67 @@
+LOCUS       REGEX                   2100 bp    DNA     circular UNK 01-JAN-1980
+DEFINITION  Python rule parity regression corpus.
+ACCESSION   REGEX
+VERSION     REGEX.1
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     CDS             1..240
+                     /product="NADH"
+                     /locus_tag="R0"
+     CDS             271..510
+                     /product="NADH dehydrogenase"
+                     /locus_tag="R1"
+     CDS             541..780
+                     /product="β-lactamase"
+                     /locus_tag="R2"
+     CDS             811..1050
+                     /product="ı"
+                     /locus_tag="R3"
+     CDS             1081..1320
+                     /product="i"
+                     /locus_tag="R4"
+     CDS             1351..1590
+                     /product="İ"
+                     /locus_tag="R5"
+     CDS             1621..1860
+                     /product="unrelated"
+                     /locus_tag="R6"
+ORIGIN
+        1 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+       61 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      121 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      181 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      241 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      301 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      361 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      421 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      481 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      541 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      601 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      661 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      721 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      781 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      841 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      901 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+      961 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1021 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1081 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1141 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1201 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1261 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1321 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1381 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1441 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1501 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1561 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1621 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1681 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1741 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1801 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1861 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1921 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     1981 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+     2041 atgatgatga tgatgatgat gatgatgatg atgatgatga tgatgatgat gatgatgatg
+//

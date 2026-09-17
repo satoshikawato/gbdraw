@@ -1,5 +1,6 @@
+import { ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, getFeatureHashCandidates, ruleMatchesFeature } from '../feature-utils.js';
+import { getFeatureCaption, getFeatureHashCandidates } from '../feature-utils.js';
 import { exactRegexValue } from '../feature-selector.js';
 import {
   featureOverrideKey,
@@ -8,6 +9,7 @@ import {
 
 export const createFeatureColorActions = ({
   state,
+  rulePreparation,
   nextTick,
   legendActions,
   svgActions,
@@ -118,7 +120,32 @@ export const createFeatureColorActions = ({
     }
   };
 
-  const colorAction = (action) => (...args) => runColorAction(() => action(...args));
+  const colorAction = (action) => (...args) => {
+    const prepareTargets = () => {
+      const targets = new Set();
+      const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
+      args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
+      add(clickedFeature.value?.feat);
+      add(featureStyleScopeDialog.feat);
+      for (const feature of [...targets]) {
+        findFeaturesWithSameLegendItem(feature).forEach(add);
+        findFeaturesWithSameDisplayedLabel(feature).forEach(add);
+        findFeaturesWithSameIndividualLabel(feature).forEach(add);
+      }
+      const candidates = [...manualSpecificRules];
+      targets.forEach((feature) => {
+        const hash = getFeatureQualifier(feature);
+        if (hash) candidates.push({ feat: feature.type, ...hash });
+        for (const label of [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]) {
+          const rule = getLabelSpecificRule(feature, label);
+          if (rule) candidates.push(rule);
+        }
+      });
+      return rulePreparation.run(candidates, () => runColorAction(() => action(...args)));
+    };
+    const result = rulePreparation.run(manualSpecificRules, prepareTargets);
+    return result?.catch ? result.catch((error) => { alert(`Cannot apply feature style: ${error.message}`); }) : result;
+  };
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {
     if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
@@ -1953,7 +1980,7 @@ export const createFeatureColorActions = ({
     let legendCaption = '';
     if (choice === 'rule' && matchingRule) {
       targetFeatures = extractedFeatures.value.filter((candidate) => (
-        candidate?.type === matchingRule.feat && ruleMatchesFeature(candidate, matchingRule)
+        ruleMatchesFeature(candidate, matchingRule)
       ));
       legendCaption = normalizeCaption(matchingRule.cap);
     } else if (choice === 'caption') {

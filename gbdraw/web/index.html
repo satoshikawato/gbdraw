@@ -3652,7 +3652,8 @@
                                 </div>
                             </div>
 
-                            <div>
+                            <div data-history-managed>
+                                <p v-if="ruleMatchingPending" role="status" class="text-xs text-slate-500">Checking color rules…</p>
                                 <div class="flex items-center justify-between mb-2">
                                     <h4 class="text-[11px] font-bold text-slate-500">SPECIFIC RULES (-t) <help-tip text="Color features matching specific qualifier values (Regex supported). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
@@ -3668,11 +3669,11 @@
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="i" class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
                                         <div class="grid grid-cols-12 gap-1 items-center">
-                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value)" class="form-input form-input-compact col-span-4">
+                                            <select :value="rule.feat" @change="setSpecificRuleField(i, 'feat', $event.target.value, $event.target)" class="form-input form-input-compact col-span-4">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
-                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4">
-                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value)" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1">
+                                            <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4">
+                                            <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value, $event.target)" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1">
                                             <div class="col-span-3 flex items-center justify-end gap-0.5">
                                                 <button @click="moveSpecificRuleUp(i)" :disabled="i === 0" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
                                                 <button @click="moveSpecificRuleDown(i)" :disabled="i === manualSpecificRules.length - 1" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
@@ -3680,8 +3681,8 @@
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
-                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value)" placeholder="Regex" class="form-input form-input-compact col-span-7 font-mono">
-                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
+                                            <input :value="rule.val" @change="setSpecificRuleField(i, 'val', $event.target.value, $event.target)" placeholder="Regex" class="form-input form-input-compact col-span-7 font-mono">
+                                            <input :value="rule.cap" @change="setSpecificRuleField(i, 'cap', $event.target.value, $event.target)" placeholder="Legend Caption" class="form-input form-input-compact col-span-5">
                                         </div>
                                     </div>
                                     <div v-if="manualSpecificRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No rules added</div>

@@ -10,8 +10,9 @@ for (const [name, colors, rules, expected] of [
   ['specific rule', { default: '#123456', unlisted_type: '#654321' }, [{ feat: 'unlisted_type', qual: 'gene', val: 'sample', color: '#aabbcc' }], '#aabbcc'],
   ['hash rule precedence', { default: '#123456' }, [{ feat: 'unlisted_type', qual: 'gene', val: 'sample', color: '#aabbcc' }, { feat: 'unlisted_type', qual: 'hash', val: 'f1', color: '#778899' }], '#778899']
 ]) {
-  test(`specific-rule replay uses ${name}`, () => {
-    const { actions, attrs } = fixture(colors, rules);
+  test(`specific-rule replay uses ${name}`, async () => {
+    const { actions, attrs, ready } = fixture(colors, rules);
+    await ready;
     actions.applySpecificRulesToSvg();
     assert.equal(attrs.fill, expected);
   });

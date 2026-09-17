@@ -1,3 +1,4 @@
+import { createRulePreparation } from './rule-matching.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
@@ -1131,13 +1132,21 @@ export const createAppSetup = () => {
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
+  const ruleMatchingPending = ref(false);
+  const rulePreparation = createRulePreparation({
+    state,
+    pending: ruleMatchingPending,
+    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+  });
   const legendActions = createLegendManager({
     state,
+    rulePreparation,
     history,
     previewRuntime
   });
   const svgActions = createSvgStyles({
     state,
+    rulePreparation,
     watch,
     nextTick,
     legendActions
@@ -1145,6 +1154,7 @@ export const createAppSetup = () => {
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
+    rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
@@ -2092,6 +2102,7 @@ export const createAppSetup = () => {
 
   const { waitForAuxiliaryFileImport } = setupWatchers({
     state,
+    rulePreparation,
     watch,
     nextTick,
     onMounted,
@@ -2271,6 +2282,7 @@ export const createAppSetup = () => {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
     if (changedDomains.has('config') || changedDomains.has('features')) {
+      if (!await rulePreparation.prepare()) return;
       svgActions.applyPaletteToSvg();
       svgActions.applySpecificRulesToSvg();
     }
@@ -2474,6 +2486,7 @@ export const createAppSetup = () => {
       await focusLinearComparisonIssue();
     }
     if (result?.status === 'ok') {
+      await rulePreparation.prepare();
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
     return result;
@@ -3004,7 +3017,12 @@ export const createAppSetup = () => {
       if (typeof exportMethod !== 'function') {
         throw new Error('The export service did not provide the requested action.');
       }
-      const result = await exportMethod(snapshot);
+      const result = await exportMethod(snapshot, {
+        loadPdfFont: async (filename) => {
+          const result = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT, { filename });
+          return result.result.base64;
+        }
+      });
       if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
       return result;
     } catch (error) {
@@ -3743,6 +3761,7 @@ export const createAppSetup = () => {
     getFeatureShape,
     setFeatureShape,
     manualSpecificRules,
+    ruleMatchingPending,
     newSpecRule,
     specificRulePresets,
     specificRuleQualifierSuggestions,

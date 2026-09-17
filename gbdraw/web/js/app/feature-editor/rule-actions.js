@@ -1,6 +1,7 @@
+import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
-import { getFeatureGenerationHash, ruleMatchesFeature } from '../feature-utils.js';
+import { getFeatureGenerationHash } from '../feature-utils.js';
 import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
@@ -13,7 +14,7 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 
-export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => {
+export const createFeatureRuleActions = ({ state, nextTick, legendActions, rulePreparation, history, svgActions }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -44,24 +45,45 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   const captionMatches = (value, target) => normalizeCaptionKey(value) === normalizeCaptionKey(target);
   const specificRuleFields = new Set(['feat', 'qual', 'val', 'color', 'cap']);
 
-  const setSpecificRuleField = (index, field, value) => {
+  let preparationRevision = 0;
+  const commitPrepared = (rules, label, commit) => {
+    const revision = ++preparationRevision;
+    const before = rulePreparation.snapshot();
+    const apply = () => {
+      if (revision !== preparationRevision || !rulePreparation.isCurrent(before)) return;
+      return history.runUndoable(label, () => {
+        if (revision !== preparationRevision || !rulePreparation.isCurrent(before)) return;
+        return commit();
+      });
+    };
+    try {
+      const prepared = rulePreparation.prepare(rules);
+      return Promise.resolve(prepared === true ? apply() : prepared.then((current) => current && apply()))
+        .catch((error) => { if (revision === preparationRevision) alert(`Invalid rule: ${error.message}`); });
+    } catch (error) {
+      alert(`Invalid rule: ${error.message}`);
+    }
+  };
+  const applyRulePreview = () => {
+    refreshFeatureOverrides(extractedFeatures.value);
+    svgActions.applyPaletteToSvg();
+    svgActions.applySpecificRulesToSvg();
+  };
+
+  const setSpecificRuleField = (index, field, value, input = null) => {
     if (!specificRuleFields.has(field)) return;
     const current = manualSpecificRules[index];
     if (!current) return;
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
 
-    if (field === 'val') {
-      try {
-        new RegExp(nextValue);
-      } catch (e) {
-        alert('Invalid Regular Expression: ' + e.message);
-        return;
-      }
-    }
-
     const nextRule = { ...current, [field]: nextValue };
     delete nextRule.fromFile;
-    manualSpecificRules.splice(index, 1, nextRule);
+    return commitPrepared([nextRule, ...manualSpecificRules], 'Edit specific color rule', () => {
+      manualSpecificRules.splice(index, 1, nextRule);
+      applyRulePreview();
+    })?.finally(() => {
+      if (input?.isConnected) input.value = manualSpecificRules[index]?.[field] ?? '';
+    });
   };
 
   const moveSpecificRule = (index, offset) => {
@@ -125,30 +147,12 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  const getFirstMatchingRule = (feat, ruleFilter) => {
-    for (const rule of manualSpecificRules) {
-      if (rule.feat !== feat.type) continue;
-      if (!ruleFilter(rule)) continue;
-      if (ruleMatchesFeature(feat, rule)) return rule;
-    }
-    return null;
-  };
-
   // Resolve the effective legend item label used by current SVG coloring priority.
   const getEffectiveLegendCaption = (feat) => {
     if (!feat) return '';
 
-    const hashRule = getFirstMatchingRule(feat, (rule) => String(rule.qual || '').toLowerCase() === 'hash');
-    if (hashRule) {
-      const hashCaption = normalizeCaption(hashRule.cap);
-      if (hashCaption) return hashCaption;
-    }
-
-    const regexRule = getFirstMatchingRule(feat, (rule) => String(rule.qual || '').toLowerCase() !== 'hash');
-    if (regexRule) {
-      const regexCaption = normalizeCaption(regexRule.cap);
-      if (regexCaption) return regexCaption;
-    }
+    const rule = firstMatchingRule(feat, manualSpecificRules);
+    if (rule && normalizeCaption(rule.cap)) return normalizeCaption(rule.cap);
 
     const overrideCaption = normalizeCaption(
       getFeatureOverride(featureColorOverrides, feat)?.caption
@@ -195,13 +199,6 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       }
     }
 
-    try {
-      new RegExp(newSpecRule.val);
-    } catch (e) {
-      alert('Invalid Regular Expression: ' + e.message);
-      return;
-    }
-
     const rule = {
       feat: String(newSpecRule.feat || ''),
       qual: String(newSpecRule.qual || ''),
@@ -209,18 +206,16 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    manualSpecificRules.push(rule);
-
-    if (rule.cap) {
-      await nextTick();
-      const actualCaption = await addLegendEntry(rule.cap, rule.color);
-      if (actualCaption && typeof actualCaption === 'string') {
-        addedLegendCaptions.value.add(actualCaption);
+    return commitPrepared([...manualSpecificRules, rule], 'Add specific color rule', async () => {
+      manualSpecificRules.push(rule);
+      applyRulePreview();
+      if (newSpecRule.val === rule.val) newSpecRule.val = '';
+      if (rule.cap) {
+        const actualCaption = await addLegendEntry(rule.cap, rule.color);
+        if (actualCaption && typeof actualCaption === 'string') addedLegendCaptions.value.add(actualCaption);
+        extractLegendEntries();
       }
-      extractLegendEntries();
-    }
-
-    newSpecRule.val = '';
+    });
   };
 
   const clearAllSpecificRules = async () => {
@@ -231,6 +226,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     }
 
     manualSpecificRules.splice(0);
+    applyRulePreview();
     extractLegendEntries();
   };
 
@@ -244,6 +240,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       return;
     }
 
+    const presetContext = rulePreparation.snapshot();
     specificRulePresetLoading.value = true;
     try {
       const response = await fetch(preset.path, { cache: 'no-store' });
@@ -252,6 +249,9 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       }
       const text = await response.text();
       const { rules, rulesWithCaptions } = parseSpecificRules(text);
+      if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)) return;
+      return await commitPrepared(rules, 'Apply specific color preset', async () => {
+      if (selectedSpecificPreset.value !== presetId) return;
 
       const captionsToRemove = manualSpecificRules.filter((rule) => rule.cap).map((rule) => rule.cap);
       for (const cap of captionsToRemove) {
@@ -263,6 +263,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       manualSpecificRules.splice(0);
       rules.forEach((rule) => manualSpecificRules.push(rule));
 
+      applyRulePreview();
       if (presetId === 'bakta') {
         currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
         adv.legend_box_size = 12;
@@ -282,6 +283,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
       } else {
         extractLegendEntries();
       }
+      });
     } catch (e) {
       console.error('Failed to load specific rule preset:', e);
       alert('Failed to load preset. Please check the preset file and format.');
@@ -372,31 +374,21 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
   };
 
   const refreshFeatureOverrides = (features) => {
-    if (!features || features.length === 0) return;
+    if (!features || features.length === 0 || !ruleMatchesReady(features, manualSpecificRules)) return;
     migrateLegacyFeatureOverrides(featureColorOverrides, features);
 
     for (const feat of features) {
-      for (const rule of manualSpecificRules) {
-        if (!ruleMatchesFeature(feat, rule)) continue;
-        const key = featureOverrideKey(feat);
-        if (key) {
-          featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
-        }
-        break;
+      const rule = firstMatchingRule(feat, manualSpecificRules);
+      const key = featureOverrideKey(feat);
+      if (key) {
+        if (rule) featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
+        else delete featureColorOverrides[key];
       }
     }
   };
 
   const findMatchingRegexRule = (feat) => {
-    for (const rule of manualSpecificRules) {
-      if (rule.feat !== feat.type) continue;
-      if (String(rule.qual || '').toLowerCase() === 'hash') continue;
-
-      if (ruleMatchesFeature(feat, rule)) {
-        return rule;
-      }
-    }
-    return null;
+    return firstMatchingRule(feat, manualSpecificRules.filter((rule) => rule.qual !== 'hash'));
   };
 
   const countFeaturesMatchingRule = (rule) => {
@@ -404,7 +396,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
 
     let count = 0;
     for (const feat of extractedFeatures.value) {
-      if (feat.type !== rule.feat) continue;
+      if (rule.feat !== '*' && feat.type !== rule.feat) continue;
 
       if (ruleMatchesFeature(feat, rule)) count++;
     }
@@ -469,7 +461,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     addSpecificRule,
     applySpecificRulePreset,
     canEditFeatureColor,
-    clearAllSpecificRules,
+    clearAllSpecificRules: () => commitPrepared(manualSpecificRules, 'Clear specific color rules', clearAllSpecificRules),
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,
     findExistingColorForCaption,
@@ -485,10 +477,10 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions }) => 
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLabelSpecificRule,
-    moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
-    moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
+    moveSpecificRuleDown: (index) => commitPrepared(manualSpecificRules, 'Move specific color rule', () => { moveSpecificRule(index, 1); applyRulePreview(); }),
+    moveSpecificRuleUp: (index) => commitPrepared(manualSpecificRules, 'Move specific color rule', () => { moveSpecificRule(index, -1); applyRulePreview(); }),
     refreshFeatureOverrides,
-    removeSpecificRule,
+    removeSpecificRule: (index) => commitPrepared(manualSpecificRules, 'Remove specific color rule', () => { removeSpecificRule(index); applyRulePreview(); }),
     setSpecificRuleField
   };
 };

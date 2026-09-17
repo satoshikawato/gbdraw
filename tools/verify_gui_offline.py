@@ -33,7 +33,6 @@ from gbdraw._web_assets import (
     PYODIDE_RUNTIME_DIR,
     PYODIDE_RUNTIME_PACKAGE_WHEELS,
     REQUIRED_UI_FONT_FILES,
-    REQUIRED_PDF_FONT_FILES,
     UI_FONT_ASSETS,
     VENDOR_ROOT,
     WEB_ROOT,
@@ -107,21 +106,6 @@ def _extract_tgz_prefix(archive: Path, prefix: str, destination_dir: Path) -> No
 def _extract_tgz_files(archive: Path, members: tuple[str, ...], destination_dir: Path) -> None:
     for member_name in members:
         _extract_tgz_member(archive, f"package/files/{member_name}", destination_dir / member_name)
-
-
-def prepare_pdf_fonts() -> None:
-    """Prepare PDF-readable TTFs from the fonts already bundled with gbdraw."""
-    from fontTools.ttLib import TTFont
-
-    for relative in REQUIRED_PDF_FONT_FILES:
-        target = WEB_ROOT / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.name.startswith("Liberation"):
-            shutil.copyfile(REPO_ROOT / "gbdraw/data" / target.name, target)
-        else:
-            with TTFont(target.with_suffix(".woff2"), recalcTimestamp=False) as font:
-                font.flavor = None
-                font.save(target)
 
 
 def vendor_assets() -> None:
@@ -220,7 +204,6 @@ def vendor_assets() -> None:
             UI_FONT_ASSETS["noto-sans-jp"],
             VENDOR_ROOT / "fonts" / "noto-sans-jp",
         )
-    prepare_pdf_fonts()
 
 
 def _parse_wheel_name() -> str:
@@ -254,7 +237,6 @@ def _assert_packaged_assets() -> None:
         WEB_ROOT / "vendor" / "vue" / "vue.global.js",
         WEB_ROOT / "vendor" / "tailwindcss" / "tailwindcss-play.js",
         *(WEB_ROOT / path for path in REQUIRED_UI_FONT_FILES),
-        *(WEB_ROOT / path for path in REQUIRED_PDF_FONT_FILES),
         *(PYODIDE_RUNTIME_DIR / filename for filename in PYODIDE_CORE_FILES),
         *(PYODIDE_RUNTIME_DIR / filename for filename in PYODIDE_RUNTIME_PACKAGE_WHEELS.values()),
         WEB_ROOT / "vendor" / "browser_wasi_shim" / "dist" / "index.js",
@@ -1247,7 +1229,6 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/vendor/phosphor-icons/regular/style.css",
     }
     required.update(f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_UI_FONT_FILES)
-    required.update(f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_PDF_FONT_FILES)
     required.update(
         f"gbdraw/web/{path.as_posix()}" for path in REQUIRED_TUTORIAL_DATA_FILES
     )

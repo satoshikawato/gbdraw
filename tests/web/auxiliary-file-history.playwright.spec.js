@@ -28,6 +28,7 @@ for (const sample of cases) {
     const before = await inspect();
     const expected = sample.key === 'blacklist' ? `${before.value}, mygene` : sample.expected;
     await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: 'import.tsv', mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
+    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);
     await expect.poll(inspect).toEqual({ file: 'import.tsv', value: expected });
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -54,6 +55,7 @@ test('a slow earlier specific table cannot overwrite a later uploaded table', as
   await upload.setInputFiles({ name: 'older.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#ff0000\tOlder\n') });
   await page.waitForFunction(() => window.__RELEASE_READ__);
   await upload.setInputFiles({ name: 'newer.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#0000ff\tNewer\n') });
+  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0]?.cap)).toBe('Newer');
   await page.evaluate(async () => {
     window.__RELEASE_READ__();

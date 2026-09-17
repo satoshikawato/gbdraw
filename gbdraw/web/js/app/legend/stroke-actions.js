@@ -1,4 +1,5 @@
-import { getFeatureCaption, ruleMatchesFeature } from '../feature-utils.js';
+import { ruleMatchesFeature } from '../rule-matching.js';
+import { getFeatureCaption } from '../feature-utils.js';
 import {
   FEATURE_SELECTOR,
   getFeatureElementIndex,

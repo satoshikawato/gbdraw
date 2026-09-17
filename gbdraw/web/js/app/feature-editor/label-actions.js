@@ -1,3 +1,4 @@
+import { ruleFeaturePayload } from '../rule-matching.js';
 import {
   buildFeatureMetadataMap,
   buildFeatureUniquenessIndex,
@@ -54,22 +55,6 @@ const toNumber = (value, fallback = 0) => {
 
 const normalizeKeyToken = (value) => String(value ?? '').trim().toLowerCase();
 const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const normalizePositionToken = (value) => {
-  const token = String(value ?? '').trim();
-  if (!token || token === '*') return '*';
-  const match = token.match(/^(\d+)\.\.(\d+):(.+)$/);
-  if (!match) return token;
-  const strandRaw = String(match[3] ?? '').trim().toLowerCase();
-  const strand =
-    strandRaw === '+' || strandRaw === 'positive' || strandRaw === 'forward' || strandRaw === '1'
-      ? '+'
-      : strandRaw === '-' || strandRaw === 'negative' || strandRaw === 'reverse' || strandRaw === '-1'
-        ? '-'
-        : 'undefined';
-  return `${match[1]}..${match[2]}:${strand}`;
-};
-const wildcardOrExactMatch = (ruleValue, actualValue) =>
-  String(ruleValue || '') === '*' || String(ruleValue || '') === String(actualValue || '');
 const makeSafeFilename = (name, fallback = 'gbdraw') => {
   const cleaned = String(name || '')
     .replace(/[^\w.-]+/g, '_')
@@ -374,7 +359,7 @@ const hasFeatureScopedOverrideInSvg = (svg, ...overrideMaps) => {
   ));
 };
 
-export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
+export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePreparation }) => {
   const {
     mode,
     generatedMode,
@@ -536,10 +521,12 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   const resetLabelsToSourceText = (svg) => {
     let changed = false;
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
-      const sourceText = textEl.getAttribute('data-label-source-text');
+      const sourceText = labelTextFeatureOverrideSources[textEl.getAttribute('data-label-feature-id')]
+        ?? textEl.getAttribute('data-label-source-text');
       if (sourceText === null) return;
       if (getLabelText(textEl) === sourceText) return;
       setLabelText(textEl, sourceText);
+      textEl.setAttribute('data-label-source-text', sourceText);
       changed = true;
     });
     return changed;
@@ -954,6 +941,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
   };
 
   const resetAllLabelTextOverrides = () => {
+    const svg = svgContainer.value?.querySelector('svg');
+    if (svg) resetLabelsToSourceText(svg);
     clearOverrides();
     if (!svgContainer.value) {
       labelOverrideContextKey.value = '';
@@ -962,9 +951,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       closeGlobalLabelModeDialog();
       return;
     }
-    const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
-    resetLabelsToSourceText(svg);
     applyStoredVisibilityOverridesToSvg(svg);
 
     closeLabelTextScopeDialog();
@@ -974,97 +961,61 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     queueLabelReflow('reset');
   };
 
-  const getEntryMeta = (entry, metadataByFeatureId) => {
-    const featureIdKey = normalizeKeyToken(entry?.featureId);
-    const metadata = metadataByFeatureId.get(featureIdKey) || null;
-    const record = String(metadata?.record || '').trim();
-    const location = String(metadata?.location || '').trim();
-    const position = normalizePositionToken(metadata?.position || '');
-    const featureType = String(metadata?.featureType || '').trim();
-    const qualifiers =
-      metadata && metadata.qualifiers && typeof metadata.qualifiers === 'object'
-        ? metadata.qualifiers
-        : {};
-    const recordLocation = record && position && position !== '*' ? `${record}:${position}` : '';
-    return {
-      record,
-      location,
-      position,
-      featureType,
-      qualifiers,
-      recordLocation
-    };
-  };
-
-  const getQualifierValuesForEntry = (entry, entryMeta, qualifierKeyRaw) => {
-    const qualifierKey = String(qualifierKeyRaw || '').trim().toLowerCase();
-    if (qualifierKey === 'label') return [String(entry?.sourceText || '')];
-    if (qualifierKey === 'hash') return [String(entry?.featureId || '')];
-    if (qualifierKey === 'location') return entryMeta.location ? [entryMeta.location] : [];
-    if (qualifierKey === 'record_location') return entryMeta.recordLocation ? [entryMeta.recordLocation] : [];
-    const values = entryMeta.qualifiers[qualifierKey];
-    if (!Array.isArray(values)) return [];
-    return values.map((value) => String(value));
-  };
-
-  const rowMatchesEntry = (row, entry, entryMeta) => {
-    if (!wildcardOrExactMatch(row.recordId, entryMeta.record)) return false;
-    if (!wildcardOrExactMatch(row.featureType, entryMeta.featureType)) return false;
-    const values = getQualifierValuesForEntry(entry, entryMeta, row.qualifier);
-    if (!values.length) return false;
-    return values.some((value) => row.qualifierValuePattern.test(String(value || '')));
-  };
-
+  let labelImportRevision = 0;
+  const labelIntentSignature = () => JSON.stringify([
+    labelTextFeatureOverrides, labelTextBulkOverrides, labelVisibilityOverrides
+  ]);
   const loadLabelOverrideTable = async (event) => {
     const input = event?.target;
     const file = input?.files?.[0];
     if (!file) return;
     const sourceSvg = svgContainer.value?.querySelector('svg') || null;
+    const before = rulePreparation.snapshot();
+    const labelIntent = labelIntentSignature();
+    const revision = ++labelImportRevision;
 
     try {
       const text = await readFileText(file);
       if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       const rows = parseLabelOverrideTsv(text);
 
-      if (!svgContainer.value) {
-        clearOverrides();
-        labelOverrideContextKey.value = '';
-        editableLabels.value = [];
-        closeLabelTextScopeDialog();
-        closeGlobalLabelModeDialog();
-        window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
-        return;
-      }
-
-      const svg = svgContainer.value.querySelector('svg');
+      const svg = sourceSvg;
+      const elements = svg ? collectEditableLabelElements(svg, mode.value) : [];
+      const assignments = svg ? assignFeatureIdsToLabels(svg, elements, collectFeatureGeometry(svg), mode.value) : new Map();
+      const labels = elements.map((element, index) => ({
+        key: `label-${index + 1}`,
+        featureId: assignments.get(element) || '',
+        sourceText: labelTextFeatureOverrideSources[assignments.get(element)]
+          ?? element.getAttribute('data-label-source-text') ?? getLabelText(element)
+      }));
+      const byId = new Map(extractedFeatures.value.map((feature) => [normalizeKeyToken(feature.svg_id), feature]));
+      const evaluation = await rulePreparation.evaluate({
+        kind: 'label', rules: rows,
+        features: labels.map((entry) => ruleFeaturePayload(
+          byId.get(normalizeKeyToken(entry.featureId)) || { type: '', svg_id: entry.featureId }, entry.sourceText
+        ))
+      });
+      if (revision !== labelImportRevision || labelIntent !== labelIntentSignature()
+        || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
+        || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (!svg) {
-        clearOverrides();
-        labelOverrideContextKey.value = '';
-        editableLabels.value = [];
-        closeLabelTextScopeDialog();
-        closeGlobalLabelModeDialog();
         window.alert(`Loaded ${rows.length} row(s). No diagram is currently displayed.`);
         return;
       }
-
       syncLabelEditor();
-      const metadataByFeatureId = buildFeatureMetadataMap(extractedFeatures.value);
       const operations = [];
-      editableLabels.value.forEach((entry) => {
-        const entryMeta = getEntryMeta(entry, metadataByFeatureId);
-        const matchedRow = rows.find((row) => rowMatchesEntry(row, entry, entryMeta));
+      labels.forEach((entry, index) => {
+        const matchedRow = rows[evaluation.winners[index]];
         if (!matchedRow) return;
         operations.push({
-          key: String(entry.key || ''),
-          featureId: String(entry.featureId || ''),
-          sourceText: String(entry.sourceText || ''),
-          nextText: String(matchedRow.labelText ?? ''),
+          key: String(entry.key || ''), featureId: String(entry.featureId || ''),
+          sourceText: String(entry.sourceText || ''), nextText: String(matchedRow.labelText ?? ''),
           isGlobalLabelRule: Boolean(matchedRow.isGlobalLabelRule)
         });
       });
 
-      clearOverrides();
       const resetChanged = resetLabelsToSourceText(svg);
+      clearOverrides();
 
       let appliedCount = 0;
       let skippedNonTrackableCount = 0;

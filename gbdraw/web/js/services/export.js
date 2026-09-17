@@ -357,7 +357,7 @@ export const downloadPNG = async (snapshot) => {
   }
 };
 
-export const downloadPDF = async (snapshot) => {
+export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
   const filename = getDownloadName(snapshot, 'pdf');
   const svgString = getCurrentSvgString(snapshot);
 
@@ -385,7 +385,7 @@ export const downloadPDF = async (snapshot) => {
       format: [dims.width, dims.height]
     });
 
-    await preparePdfFonts(doc, pdfSvg);
+    await preparePdfFonts(doc, pdfSvg, loadPdfFont);
 
     // 4. Convert SVG to PDF
     await doc.svg(pdfSvg, {

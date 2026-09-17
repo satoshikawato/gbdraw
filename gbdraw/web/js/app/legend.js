@@ -11,6 +11,7 @@ import {
 
 export const createLegendManager = ({
   state,
+  rulePreparation,
   history = null,
   previewRuntime = null
 }) => {
@@ -33,6 +34,7 @@ export const createLegendManager = ({
     ...layoutActions,
     ...sortActions,
     ...strokeActions,
+    captureOriginalStrokeValues: (...args) => rulePreparation.run(state.manualSpecificRules, () => strokeActions.captureOriginalStrokeValues(...args)),
     ...dragActions,
     getAllFeatureLegendGroups,
     getVisibleFeatureLegendGroup,

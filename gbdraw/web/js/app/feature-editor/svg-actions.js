@@ -40,6 +40,7 @@ export const createFeatureSvgActions = ({
   getFeatureColor,
   getEffectiveLegendCaption,
   onFeaturePopupOpened = null,
+  rulePreparation,
   featureSelection = null,
   previewRuntime = null,
   previewTransformInteraction = null
@@ -394,7 +395,7 @@ export const createFeatureSvgActions = ({
     };
   };
 
-  const openFeatureEditorForFeature = (feat, eventLike = null) => {
+  const openPreparedFeatureEditor = (feat, eventLike = null) => {
     if (!feat) return null;
     if (!svgContainer.value) return null;
     const svg = svgContainer.value.querySelector('svg');
@@ -421,6 +422,12 @@ export const createFeatureSvgActions = ({
       onFeaturePopupOpened();
     }
     return clickedFeature.value;
+  };
+
+  const openFeatureEditorForFeature = (feat, eventLike = null) => {
+    const opened = () => openPreparedFeatureEditor(feat, eventLike);
+    const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened) : opened();
+    return result?.catch ? result.catch((error) => { alert(`Cannot open feature editor: ${error.message}`); }) : result;
   };
 
   const hoverSummaryIsAllowed = () => {
