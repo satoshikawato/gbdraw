@@ -231,7 +231,15 @@ const diagramWorkerResourceBytes = (activity) => (
   ), 0)
 );
 
-const captureIdleWorkerStage = async (page, label, evidence) => {
+const expectRulePreparationWorker = (activity, runs = 0) => {
+  expect(activity).toMatchObject({ constructions: 1, initializations: 1, runs });
+  expect(activity.helpers).toBeGreaterThan(0);
+  for (const helper of activity.instances.flatMap(instance => instance.helpers || [])) {
+    expect(helper).toMatchObject({ operation: 'evaluateRules', transferredBytes: 0 });
+  }
+};
+
+const capturePreviewWorkerStage = async (page, label, evidence, preparedRules = false) => {
   const activity = await getDiagramWorkerActivity(page);
   const stage = {
     label,
@@ -241,14 +249,15 @@ const captureIdleWorkerStage = async (page, label, evidence) => {
     runs: activity.runs,
     transferredResourceBytes: diagramWorkerResourceBytes(activity)
   };
-  expect(stage, `${label}: diagram Worker must remain idle`).toEqual({
-    label,
-    constructions: 0,
-    initializations: 0,
-    helpers: 0,
-    runs: 0,
-    transferredResourceBytes: 0
-  });
+  if (preparedRules) {
+    expectRulePreparationWorker(activity);
+    expect(stage.transferredResourceBytes).toBe(0);
+  } else {
+    expect(stage, `${label}: preview alone must leave the Worker idle`).toEqual({
+      label, constructions: 0, initializations: 0, helpers: 0, runs: 0,
+      transferredResourceBytes: 0
+    });
+  }
   evidence.push(stage);
   return activity;
 };
@@ -1260,7 +1269,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   context
 }, testInfo) => {
   test.setTimeout(600_000);
-  const idleWorkerStages = [];
+  const previewWorkerStages = [];
   const featureBlocks = (snapshot, owner = 'dom') => snapshot[owner].feature.filter(
     (element) => element.part !== 'connector' && !element.id.includes('__line')
   );
@@ -1351,7 +1360,7 @@ test('loaded current preview supports direct edits before the first Generate', a
 
   await openIntentApp(page);
   await loadCurrentSession(page, sourceSessionPath, sourceSession);
-  await captureIdleWorkerStage(page, 'after Load', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after Load', previewWorkerStages);
   const target = await prepareLoadedPreviewDirectEditTarget(page);
   expect(target.featureRecordKey).toBeTruthy();
   expect(target.biologicalFeatureId).toBeTruthy();
@@ -1360,7 +1369,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   );
   expect(target.visibilityFeatureOverrideKey).toBeTruthy();
   expect(target.visibilityFeatureId).not.toBe(target.featureId);
-  await captureIdleWorkerStage(page, 'before direct edits', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'before direct edits', previewWorkerStages);
 
   const featureSelector = [
     `[data-gbdraw-feature-id="${target.featureId}"]`,
@@ -1472,6 +1481,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   });
   expectBiologicalOwnersUnchanged(initiallyLoaded);
   await featureDialog.getByLabel('Feature fill color').first().fill(DIRECT_FILL);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
   const colorScopeHeading = page.getByRole('heading', { name: 'Color Change Scope' });
   await expect(colorScopeHeading).toBeVisible();
   const colorScopeDialog = colorScopeHeading.locator('..');
@@ -1491,7 +1501,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expectFeatureFill(afterFill, DIRECT_FILL);
   expect(afterFill.overrides.fill).toMatchObject({ color: DIRECT_FILL });
   expect(afterFill.history.undoCount).toBeGreaterThan(initiallyLoaded.history.undoCount);
-  await captureIdleWorkerStage(page, 'after feature fill', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after feature fill', previewWorkerStages, true);
 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(page);
@@ -1499,7 +1509,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expectDirectEditFlushed(afterFill, afterFillUndo);
   expectFeatureFill(afterFillUndo, featureBlocks(initiallyLoaded)[0].fill);
   expect(afterFillUndo.overrides.fill).toBeNull();
-  await captureIdleWorkerStage(page, 'after direct-edit Undo', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after direct-edit Undo', previewWorkerStages, true);
 
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(page);
@@ -1507,7 +1517,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expectDirectEditFlushed(afterFillUndo, afterFillRedo);
   expectFeatureFill(afterFillRedo, DIRECT_FILL);
   expect(afterFillRedo.overrides.fill).toMatchObject({ color: DIRECT_FILL });
-  await captureIdleWorkerStage(page, 'after direct-edit Redo', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after direct-edit Redo', previewWorkerStages, true);
 
   const strokeApplied = await page.evaluate(async ({ color, width }) => {
     const app = window.__GBDRAW_APP__;
@@ -1524,7 +1534,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     strokeColor: DIRECT_STROKE,
     strokeWidth: DIRECT_STROKE_WIDTH
   });
-  await captureIdleWorkerStage(page, 'after feature stroke', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after feature stroke', previewWorkerStages, true);
 
   const visibilityApplied = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1540,7 +1550,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expectDirectEditFlushed(afterStroke, afterVisibility);
   expectFeatureHidden(afterVisibility);
   expect(afterVisibility.overrides.visibility).toBe('off');
-  await captureIdleWorkerStage(page, 'after feature visibility', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after feature visibility', previewWorkerStages, true);
 
   const labelApplied = await page.evaluate(async ({ text }) => {
     const app = window.__GBDRAW_APP__;
@@ -1585,7 +1595,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     labelText: DIRECT_LABEL_TEXT,
     labelVisibility: 'off'
   });
-  await captureIdleWorkerStage(page, 'after label text and visibility', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after label text and visibility', previewWorkerStages, true);
 
   const legendApplied = await page.evaluate(async ({ color, stroke, strokeWidth }) => {
     const app = window.__GBDRAW_APP__;
@@ -1614,7 +1624,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     strokeColor: DIRECT_LEGEND_STROKE,
     strokeWidth: DIRECT_LEGEND_STROKE_WIDTH
   });
-  await captureIdleWorkerStage(page, 'after legend color', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true);
 
   const titleSummary = page.locator('summary[aria-label="Title & Legend"]');
   const titleDetails = titleSummary.locator('..');
@@ -1625,14 +1635,14 @@ test('loaded current preview supports direct edits before the first Generate', a
   const afterDraftConfig = await captureLoadedPreviewDirectEditState(page);
   expect(afterDraftConfig.result.sha256).toBe(afterLegend.result.sha256);
   expectBiologicalOwnersUnchanged(afterDraftConfig);
-  await captureIdleWorkerStage(page, 'after divergent active config', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after divergent active config', previewWorkerStages, true);
 
   const saved = await saveCurrentSession(page, 'loaded-preview-direct-edit');
   const afterSave = await captureLoadedPreviewDirectEditState(page);
   expect(afterSave.result.sha256).toBe(afterLegend.result.sha256);
   expectAllDirectEdits(afterSave);
   expectBiologicalOwnersUnchanged(afterSave);
-  await captureIdleWorkerStage(page, 'after Save without Generate', idleWorkerStages);
+  await capturePreviewWorkerStage(page, 'after Save without Generate', previewWorkerStages, true);
   expect(
     saved.session.results[saved.session.ui.selectedResultIndex].content
   ).toBe(await page.evaluate(() => (
@@ -1687,10 +1697,11 @@ test('loaded current preview supports direct edits before the first Generate', a
     directEditOrthogroupReplacementCount: 0
   });
 
+  const directEditWorker = await getDiagramWorkerActivity(page);
   const freshPage = await context.newPage();
   await openIntentApp(freshPage);
   await loadCurrentSession(freshPage, saved.path, saved.session);
-  await captureIdleWorkerStage(freshPage, 'after fresh Load', idleWorkerStages);
+  await capturePreviewWorkerStage(freshPage, 'after fresh Load', previewWorkerStages);
   const freshTarget = await prepareLoadedPreviewDirectEditTarget(freshPage, target);
   Object.assign(
     freshTarget,
@@ -1711,10 +1722,10 @@ test('loaded current preview supports direct edits before the first Generate', a
   });
   expect(freshlyLoaded.autoLabelReflowEnabled).toBe(false);
   expectBiologicalOwnersUnchanged(freshlyLoaded);
-  await captureIdleWorkerStage(
+  await capturePreviewWorkerStage(
     freshPage,
     'before first Generate on fresh Load',
-    idleWorkerStages
+    previewWorkerStages
   );
   const freshLoadMetrics = await freshPage.evaluate(() => (
     window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_PROBE__.stop()
@@ -1745,12 +1756,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     freshlyLoaded.history.artifactCheckpointBuilds
   );
   const generatedWorker = await getDiagramWorkerActivity(freshPage);
-  expect({
-    constructions: generatedWorker.constructions,
-    initializations: generatedWorker.initializations,
-    helpers: generatedWorker.helpers,
-    runs: generatedWorker.runs
-  }).toEqual({ constructions: 1, initializations: 1, helpers: 0, runs: 1 });
+  expectRulePreparationWorker(generatedWorker, 1);
 
   expect(await freshPage.evaluate(() => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(freshPage);
@@ -1763,12 +1769,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     artifactReplacementHistoryEntryCount: 1
   });
   const workerAfterGenerateUndo = await getDiagramWorkerActivity(freshPage);
-  expect({
-    constructions: workerAfterGenerateUndo.constructions,
-    initializations: workerAfterGenerateUndo.initializations,
-    helpers: workerAfterGenerateUndo.helpers,
-    runs: workerAfterGenerateUndo.runs
-  }).toEqual({ constructions: 1, initializations: 1, helpers: 0, runs: 1 });
+  expectRulePreparationWorker(workerAfterGenerateUndo, 1);
 
   expect(await freshPage.evaluate(() => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(freshPage);
@@ -1781,24 +1782,19 @@ test('loaded current preview supports direct edits before the first Generate', a
     artifactReplacementHistoryEntryCount: 1
   });
   const workerAfterGenerateRedo = await getDiagramWorkerActivity(freshPage);
-  expect({
-    constructions: workerAfterGenerateRedo.constructions,
-    initializations: workerAfterGenerateRedo.initializations,
-    helpers: workerAfterGenerateRedo.helpers,
-    runs: workerAfterGenerateRedo.runs
-  }).toEqual({ constructions: 1, initializations: 1, helpers: 0, runs: 1 });
+  expectRulePreparationWorker(workerAfterGenerateRedo, 1);
 
   await testInfo.attach('loaded-preview-direct-edit.json', {
     body: Buffer.from(JSON.stringify({
       target,
       actualUiOperation: 'SVG Feature click -> Feature details -> Feature fill color',
-      idleWorkerStages,
+      previewWorkerStages,
       directMetrics: {
         ...directMetrics,
-        directEditWorkerConstructionDelta: 0,
-        directEditWorkerInitializationDelta: 0,
-        directEditWorkerRunDelta: 0,
-        directEditResourceTransferBytes: 0
+        directEditWorkerConstructionDelta: directEditWorker.constructions,
+        directEditWorkerInitializationDelta: directEditWorker.initializations,
+        directEditWorkerRunDelta: directEditWorker.runs,
+        directEditResourceTransferBytes: diagramWorkerResourceBytes(directEditWorker)
       },
       domEvidence: {
         before: initiallyLoaded.dom,
