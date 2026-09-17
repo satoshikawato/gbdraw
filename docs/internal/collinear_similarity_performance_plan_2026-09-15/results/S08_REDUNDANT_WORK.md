@@ -1,5 +1,30 @@
 # S08 follow-up — 重複計算の修正候補
 
+## 2026-09-17 RW-03完了
+
+[merge検証の修正・証拠・handoff](S08_FOLLOWUP_MANIFEST_MERGE.md)。Generateの入力検証を
+merge owner内へ集約し、正常時2R→R、必要な統合後検証1回を維持した。
+不正入力・conflictの優先順、reload案内、公開helperの既定動作を回帰確認した。
+source/installed packageの実Worker・desktop/mobileで保存raw検索0回、結果/provenance一致、
+不正manifest時のResult/History/cache保持と再試行を確認。RW-01/RW-02は維持する。
+秒数改善は未測定。近傍に同じ入力・寿命・結果と証明できる新しい重複は見つからなかった。
+
+## 2026-09-17後続更新
+
+RW-01→RW-02を実装し、getterと処理区間の回帰検証を行った。
+[修正・検証・handoff](S08_FOLLOWUP_RAW_VALIDATION.md)を参照。
+RW-01は後段の重複検証のみ削除、RW-02はGenerateでdeep copyした非共有manifestを
+prepared-pair loop内だけ索引化し、成功・例外・Cancelでreleaseする。
+Session reader/writerの検証、entry固有TSV検証と公開helperを維持した。
+H件の正常hit・R recordsの区間はmanifest検証2H→1、runtime ID Set 4H→R、
+TSV走査2H→H。秒数の改善を示すものではない。
+
+引き継ぎsourceはcommit `8bf4b98ae02ef14f72caaebe3114f7a6fc3e0c75`。
+以下の「02ca8f95＋未コミット差分」はcommit前の観測記録として残す。
+S08は完了済み、S07承認・S06/S08 writerの将来merge前Review・S05却下を維持する。
+
+## 初版の調査記録
+
 2026-09-17。ユーザーの「明らかに無駄な計算とかあったらそれをドキュメントして。それを次なおそうや片っ端から」という追加依頼に対する記録。
 今回は読み取りと文書化のみ。次回は下記の順で扱い、実装前に最終sourceとの差を確認する。
 S07.5〜S07.8の追加削減は終了のまま、S07の承認・S06のmerge前Review・S05却下を維持する。
@@ -21,7 +46,7 @@ S07.5〜S07.8の追加削減は終了のまま、S07の承認・S06のmerge前Re
 時間は[保存済みbrowser観測](data/s08-browser-summary.json)を参照する。
 各区間には別の処理も含まれるため、重複処理の所要秒数・削減可能秒数とはしない。
 
-## RW-01 — 同じraw entryを1回取得する間に検証が2回走る【確認済み・最初に修正】
+## RW-01 — 同じraw entryを1回取得する間に検証が2回走る【後続で修正済み】
 
 到達経路は `run-analysis.js:3732` のprepared-job loop →
 `getReusableLosatCacheEntry`（1279）→ `getRawLosatCacheEntry`（260）→
@@ -56,7 +81,7 @@ strict numeric fixtureをgetter経由でも確認する。raw/derived identity�
 保存rawからの実Generateで検索0回・結果/provenance一致を確認する。
 壁時計の閾値をテストにせず、重複呼び出し削除と既存oracleで正確性を示す。
 
-## RW-02 — 同じmanifestを各pairで検証し直す【重複確認・再利用の寿命確認が必要】
+## RW-02 — 同じmanifestを各pairで検証し直す【後続で寿命確認・修正済み】
 
 RW-01を直しても、prepared-job loopは各entryに同じ
 `workingProteinIdentityManifest` を渡し、validatorがmanifest全体を1回ずつ検証する。
@@ -98,3 +123,20 @@ raw新規検索、異なる設定の再解析、必要なself/reverse evidence�
 別境界の検証、明示的全path取得を「無駄」として削らない。
 追加の明確な重複が見つかった場合は、同じ入力・同じ寿命・同じ結果という根拠を付けて
 この一覧へ追加する。新しい測定は必要な境界のみ各3回まで、warmup最大1回、noise追加なし。
+
+
+## RW-03 — merge直前のper-record manifest検証【後続で修正済み】
+
+以下は候補登録時の調査記録。実装・保持契約・検証結果は冒頭のRW-03結果文書を参照。
+
+`run-analysis.js`で`proteinEntries.map(entry => entry.identityManifest)`の直後に
+`manifests.some(manifest => !validateProteinIdentityManifest(manifest))`を実行し、
+そのまま`mergeProteinIdentityManifests(manifests)`を呼ぶ。merge ownerは各入力manifestに
+同じvalidatorを再実行する。正常入力では同じ配列・同じ内容であり、この二呼び出し間に
+await・mutationはない。R入力なら同じper-record manifest検証がR回余分にある。
+merge後の**統合manifest**検証は別の必要な検証であり、この数には含めない。
+
+ただし不正入力時の前段はユーザー向けreload案内を含む固有error、merge側は一般的な
+invalid-manifest errorを返す。単に前段を削除するとerror wordingが変わるため、既存の
+失敗契約・他のmerge callerを調べてから既存owner内で整理する。今回は実装・時間測定せず、
+RW-01/RW-02の削減回数に加算しない。全体改善率や削減可能秒数は未測定。

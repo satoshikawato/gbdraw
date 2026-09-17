@@ -4,6 +4,28 @@
 - 状態: S08の統合・回帰検証とhandoff完了（2026-09-17 JST）。source変更後のSession保存不具合を修正し、最終sourceのgate・実browser・offline・上限内のWeb時間確認を完了した。S07.5〜S07.8の追加高速化は終了。S07の既承認、S06の将来merge前Review、S05却下を維持する。新たな性能承認や統合mergeは行っていない。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
+## S08後続: manifest merge（2026-09-17 JST）
+
+RW-03を既存merge owner内で修正した。Generateの入力manifest検証を2R→Rへ集約し、
+統合後検証1回、invalid/conflictの失敗優先順、reload案内とdefault helper契約を維持した。
+RW-01/RW-02の未コミット37ファイルをhash一致で継承し、getter/index寿命は変更していない。
+focused Node gateとsource/installed packageの実Workerをdesktop/mobile・外部通信遮断で検証した。
+保存rawは13 hits・検索0回。不正manifest時のResult/History保持と再試行も確認した。
+[結果・source・証拠・handoff](results/S08_FOLLOWUP_MANIFEST_MERGE.md)を参照。
+新規時間測定なし。S08完了、S07承認、S06/S08 writerのmerge前Review、S05却下、
+S07.5〜S07.8終了は変えない。
+
+## S08後続: raw validation（2026-09-17 JST）
+
+S08の全成果は `8bf4b98ae02ef14f72caaebe3114f7a6fc3e0c75` にcommit済み。
+以下のS08開始時・完了時に記した旧HEAD/未コミット表現は、その時点の検証履歴である。
+最新origin/dev `5e0cb0fa` 由来の専用worktreeで依存を重複なく継承し、RW-01→RW-02を修正した。
+既存getterの二重検証を除去し、非共有manifestの内容が不変なpair処理区間だけ既存indexを貸与する。
+詳細・source hash・gate・lifecycle・offline・operation count・限界は
+[results/S08_FOLLOWUP_RAW_VALIDATION.md](results/S08_FOLLOWUP_RAW_VALIDATION.md)を参照。
+時間改善は未測定。次の局所候補RW-03は[重複計算一覧](results/S08_REDUNDANT_WORK.md)に記録し、raw-validation時点では実装しなかった。今回のRW-03結果は上記を参照。
+S08完了、S07の既承認、S06とS08 writerの将来merge前Review、S05却下とS07.5〜S07.8終了は変えない。
+
 ## S06開始時の更新（2026-09-16）
 
 S05は却下済み。未コミット候補・cache owner・共通解析class・Worker変更を復活させない。

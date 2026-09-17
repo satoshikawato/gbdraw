@@ -1,0 +1,123 @@
+{
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "inheritedHead": "8bf4b98ae02ef14f72caaebe3114f7a6fc3e0c75",
+  "branch": "perf/s08-manifest-merge-20260917",
+  "upstream": null,
+  "newProductionHashes": {
+    "gbdraw/web/js/app/losat-cache.js": "524ec4108c83461efc1cc7e3aa4d718687ea7998126892b125a2fd64041d0ceb",
+    "gbdraw/web/js/app/run-analysis.js": "62bbe9e886820059c7be9a26e0a6bb265ed1fb4f5bbc3dc4254d2865b72e25e9"
+  },
+  "unchangedSourceFiles": 373,
+  "unchangedPythonFiles": 208,
+  "wheelSha256": "031d2f85027b34cc2e4f11baa840f1143025169effcc5b78fb783d42da8b46a1",
+  "installedMatchingFiles": 466,
+  "historicalFilesPreserved": 32,
+  "preservedWorktrees": [
+    "/mnt/c/Users/genom/GitHub/gbdraw",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916"
+  ],
+  "browserParity": [
+    {
+      "artifact": "browser-source.json.gz",
+      "viewport": [
+        1280,
+        720
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW01RW02": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "failurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    },
+    {
+      "artifact": "browser-source.json.gz",
+      "viewport": [
+        390,
+        844
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW01RW02": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "failurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    },
+    {
+      "artifact": "browser-package.json.gz",
+      "viewport": [
+        1280,
+        720
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW01RW02": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "failurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    },
+    {
+      "artifact": "browser-package.json.gz",
+      "viewport": [
+        390,
+        844
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW01RW02": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "failurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    }
+  ],
+  "newDiffClassification": {
+    "production": [
+      "gbdraw/web/js/app/losat-cache.js",
+      "gbdraw/web/js/app/run-analysis.js"
+    ],
+    "tests": [
+      "tests/run_protein_local_browser_acceptance.py",
+      "tests/web/losat-cache.test.mjs"
+    ],
+    "documentation": [
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_REDUNDANT_WORK.md",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_FOLLOWUP_MANIFEST_MERGE.md"
+    ]
+  },
+  "testsSha256": {
+    "tests/run_protein_local_browser_acceptance.py": "fff8100a6fb782b37f65d41160e92b9e6539f97a7a4adfee5fa475ef513a5bb3",
+    "tests/web/losat-cache.test.mjs": "468e5d2aaf166e0e72df002c4cf739bc8b56cfe8f320ec6e28d4dc352136c8a9"
+  },
+  "operationCounts": {
+    "R": 3,
+    "beforeInput": 6,
+    "afterInput": 3,
+    "beforeMerged": 1,
+    "afterMerged": 1,
+    "method": "instrument real validator; execute actual run-analysis merge block"
+  },
+  "timing": "No timing samples or warmups. Verification/build duration is not performance evidence."
+}

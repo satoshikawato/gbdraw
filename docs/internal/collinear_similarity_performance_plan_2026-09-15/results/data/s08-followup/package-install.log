@@ -1,0 +1,17 @@
+WARNING: The directory '/home/kawato/.cache/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Processing /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: gbdraw
+  Building wheel for gbdraw (pyproject.toml): started
+  Building wheel for gbdraw (pyproject.toml): still running...
+  Building wheel for gbdraw (pyproject.toml): finished with status 'done'
+  Created wheel for gbdraw: filename=gbdraw-0.14.0-py3-none-any.whl size=36982844 sha256=97457eba8176d23be60d8b428f6a32aecb6d38c4ccf02540a495dde691a006e7
+  Stored in directory: /tmp/pip-ephem-wheel-cache-ewqhn1v5/wheels/5b/38/35/a335eca9897dd5f907ef917014536d439234c95fe20d9f0c01
+Successfully built gbdraw
+Installing collected packages: gbdraw
+  Attempting uninstall: gbdraw
+    Found existing installation: gbdraw 0.14.0b0
+    Not uninstalling gbdraw at /home/kawato/micromamba/lib/python3.13/site-packages, outside environment /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917/.venv/raw-validation
+    Can't uninstall 'gbdraw'. No files were found to uninstall.
+Successfully installed gbdraw-0.14.0

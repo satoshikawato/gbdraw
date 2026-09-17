@@ -1,0 +1,83 @@
+{
+  "sourceSha256": {
+    "gbdraw/web/js/app/losat-cache.js": "4794a5e5473b8270248ee4a9460694aeada1418b698ad6e17bbad9701d04da24",
+    "gbdraw/web/js/app/run-analysis.js": "af9f9a346aba3c0e8d814d4b27486e3f744f4fb291ce8c40f55f0384147f271a",
+    "tests/web/losat-cache.test.mjs": "2a84e97bb776faab84ba67591cfe23d4d997b8cdbc25d7e831b157b413dcc24a"
+  },
+  "observed": {
+    "inheritedGetter": {
+      "manifest": 2,
+      "tsv": 2
+    },
+    "rw01Getter": {
+      "manifest": 1,
+      "runtimeIdSets": 2,
+      "tsv": 1
+    },
+    "finalLoop": {
+      "hits": 3,
+      "records": 2,
+      "manifest": 1,
+      "runtimeIdSets": 2,
+      "tsv": 3
+    },
+    "interruptedLoop": {
+      "successfulHits": 1,
+      "manifest": 1,
+      "runtimeIdSets": 2,
+      "tsv": 1,
+      "released": true
+    }
+  },
+  "scope": "Successful getter/pair-loop raw validation only; excludes merge/extraction/reader/writer/derived boundaries. Runtime Sets exclude manifest-internal Sets. Counters execute real validator and extracted production loop; async I/O is controlled.",
+  "sourceDerivedWorkloadCounts": [
+    {
+      "case": "Hep ON",
+      "hits": 13,
+      "records": 5,
+      "before": [
+        26,
+        52,
+        26
+      ],
+      "rw01": [
+        13,
+        26,
+        13
+      ],
+      "final": [
+        1,
+        5,
+        13
+      ]
+    },
+    {
+      "case": "S08 Vibrio ON inventory (not rerun)",
+      "hits": 47,
+      "records": 11,
+      "before": [
+        94,
+        188,
+        94
+      ],
+      "rw01": [
+        47,
+        94,
+        47
+      ],
+      "final": [
+        1,
+        11,
+        47
+      ]
+    }
+  ],
+  "countOrder": [
+    "manifest",
+    "runtimeIdSets",
+    "tsv"
+  ],
+  "timingSamples": [],
+  "warmups": 0,
+  "timingClaim": null
+}

@@ -1,0 +1,589 @@
+diff --git a/docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md b/docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md
+index 7446f9f3..8fa0628e 100644
+--- a/docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md
++++ b/docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md
+@@ -4,6 +4,17 @@
+ - 状態: S08の統合・回帰検証とhandoff完了（2026-09-17 JST）。source変更後のSession保存不具合を修正し、最終sourceのgate・実browser・offline・上限内のWeb時間確認を完了した。S07.5〜S07.8の追加高速化は終了。S07の既承認、S06の将来merge前Review、S05却下を維持する。新たな性能承認や統合mergeは行っていない。
+ - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
+ 
++## S08後続: raw validation（2026-09-17 JST）
++
++S08の全成果は `8bf4b98ae02ef14f72caaebe3114f7a6fc3e0c75` にcommit済み。
++以下のS08開始時・完了時に記した旧HEAD/未コミット表現は、その時点の検証履歴である。
++最新origin/dev `5e0cb0fa` 由来の専用worktreeで依存を重複なく継承し、RW-01→RW-02を修正した。
++既存getterの二重検証を除去し、非共有manifestの内容が不変なpair処理区間だけ既存indexを貸与する。
++詳細・source hash・gate・lifecycle・offline・operation count・限界は
++[results/S08_FOLLOWUP_RAW_VALIDATION.md](results/S08_FOLLOWUP_RAW_VALIDATION.md)を参照。
++時間改善は未測定。次の局所候補RW-03は[重複計算一覧](results/S08_REDUNDANT_WORK.md)に記録し、今回実装しない。
++S08完了、S07の既承認、S06とS08 writerの将来merge前Review、S05却下とS07.5〜S07.8終了は変えない。
++
+ ## S06開始時の更新（2026-09-16）
+ 
+ S05は却下済み。未コミット候補・cache owner・共通解析class・Worker変更を復活させない。
+diff --git a/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_REDUNDANT_WORK.md b/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_REDUNDANT_WORK.md
+index b35477f6..fb17a663 100644
+--- a/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_REDUNDANT_WORK.md
++++ b/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S08_REDUNDANT_WORK.md
+@@ -1,5 +1,21 @@
+ # S08 follow-up — 重複計算の修正候補
+ 
++## 2026-09-17後続更新
++
++RW-01→RW-02を実装し、getterと処理区間の回帰検証を行った。
++[修正・検証・handoff](S08_FOLLOWUP_RAW_VALIDATION.md)を参照。
++RW-01は後段の重複検証のみ削除、RW-02はGenerateでdeep copyした非共有manifestを
++prepared-pair loop内だけ索引化し、成功・例外・Cancelでreleaseする。
++Session reader/writerの検証、entry固有TSV検証と公開helperを維持した。
++H件の正常hit・R recordsの区間はmanifest検証2H→1、runtime ID Set 4H→R、
++TSV走査2H→H。秒数の改善を示すものではない。
++
++引き継ぎsourceはcommit `8bf4b98ae02ef14f72caaebe3114f7a6fc3e0c75`。
++以下の「02ca8f95＋未コミット差分」はcommit前の観測記録として残す。
++S08は完了済み、S07承認・S06/S08 writerの将来merge前Review・S05却下を維持する。
++
++## 初版の調査記録
++
+ 2026-09-17。ユーザーの「明らかに無駄な計算とかあったらそれをドキュメントして。それを次なおそうや片っ端から」という追加依頼に対する記録。
+ 今回は読み取りと文書化のみ。次回は下記の順で扱い、実装前に最終sourceとの差を確認する。
+ S07.5〜S07.8の追加削減は終了のまま、S07の承認・S06のmerge前Review・S05却下を維持する。
+@@ -21,7 +37,7 @@ S07.5〜S07.8の追加削減は終了のまま、S07の承認・S06のmerge前Re
+ 時間は[保存済みbrowser観測](data/s08-browser-summary.json)を参照する。
+ 各区間には別の処理も含まれるため、重複処理の所要秒数・削減可能秒数とはしない。
+ 
+-## RW-01 — 同じraw entryを1回取得する間に検証が2回走る【確認済み・最初に修正】
++## RW-01 — 同じraw entryを1回取得する間に検証が2回走る【後続で修正済み】
+ 
+ 到達経路は `run-analysis.js:3732` のprepared-job loop →
+ `getReusableLosatCacheEntry`（1279）→ `getRawLosatCacheEntry`（260）→
+@@ -56,7 +72,7 @@ strict numeric fixtureをgetter経由でも確認する。raw/derived identity
+ 保存rawからの実Generateで検索0回・結果/provenance一致を確認する。
+ 壁時計の閾値をテストにせず、重複呼び出し削除と既存oracleで正確性を示す。
+ 
+-## RW-02 — 同じmanifestを各pairで検証し直す【重複確認・再利用の寿命確認が必要】
++## RW-02 — 同じmanifestを各pairで検証し直す【後続で寿命確認・修正済み】
+ 
+ RW-01を直しても、prepared-job loopは各entryに同じ
+ `workingProteinIdentityManifest` を渡し、validatorがmanifest全体を1回ずつ検証する。
+@@ -98,3 +114,18 @@ raw新規検索、異なる設定の再解析、必要なself/reverse evidence
+ 別境界の検証、明示的全path取得を「無駄」として削らない。
+ 追加の明確な重複が見つかった場合は、同じ入力・同じ寿命・同じ結果という根拠を付けて
+ この一覧へ追加する。新しい測定は必要な境界のみ各3回まで、warmup最大1回、noise追加なし。
++
++
++## RW-03 — merge直前のper-record manifest検証【後続候補・未実装】
++
++`run-analysis.js`で`proteinEntries.map(entry => entry.identityManifest)`の直後に
++`manifests.some(manifest => !validateProteinIdentityManifest(manifest))`を実行し、
++そのまま`mergeProteinIdentityManifests(manifests)`を呼ぶ。merge ownerは各入力manifestに
++同じvalidatorを再実行する。正常入力では同じ配列・同じ内容であり、この二呼び出し間に
++await・mutationはない。R入力なら同じper-record manifest検証がR回余分にある。
++merge後の**統合manifest**検証は別の必要な検証であり、この数には含めない。
++
++ただし不正入力時の前段はユーザー向けreload案内を含む固有error、merge側は一般的な
++invalid-manifest errorを返す。単に前段を削除するとerror wordingが変わるため、既存の
++失敗契約・他のmerge callerを調べてから既存owner内で整理する。今回は実装・時間測定せず、
++RW-01/RW-02の削減回数に加算しない。全体改善率や削減可能秒数は未測定。
+diff --git a/gbdraw/web/js/app/losat-cache.js b/gbdraw/web/js/app/losat-cache.js
+index 248694b3..504ca4ed 100644
+--- a/gbdraw/web/js/app/losat-cache.js
++++ b/gbdraw/web/js/app/losat-cache.js
+@@ -579,7 +579,9 @@ export const validateDerivedProteinReferences = (
+   );
+ };
+ 
+-export const getCurrentRawLosatCacheEntry = (cacheMap, cacheKey, metadata = {}, manifest = null) => {
++export const getCurrentRawLosatCacheEntry = (
++  cacheMap, cacheKey, metadata = {}, manifest = null, { identityIndex = null } = {}
++) => {
+   if (!(cacheMap instanceof Map) || !cacheKey) return null;
+   const entry = cacheMap.get(cacheKey);
+   if ((entry?.searchContext ?? null) !== (metadata.searchContext ?? null)) return null;
+@@ -596,13 +598,7 @@ export const getCurrentRawLosatCacheEntry = (cacheMap, cacheKey, metadata = {},
+       metadata.subjectRuntimeBindingHash &&
+       entry.subjectRuntimeBindingHash !== metadata.subjectRuntimeBindingHash
+     ) return null;
+-    if (!validateProteinRawEntryReferences(entry, manifest)) return null;
+-    const ids = proteinRuntimeIdSets(
+-      manifest,
+-      entry.queryRecordInstanceKey,
+-      entry.subjectRecordInstanceKey
+-    );
+-    if (!ids || !rawProteinTextMatchesBindings(entry.text, ids.query, ids.subject)) return null;
++    if (!validateProteinRawEntryReferences(entry, manifest, { identityIndex })) return null;
+     return { key: cacheKey, entry };
+   }
+   if (classification !== 'nucleotide-current') return null;
+diff --git a/gbdraw/web/js/app/run-analysis.js b/gbdraw/web/js/app/run-analysis.js
+index 2a36b4c9..5efb87ff 100644
+--- a/gbdraw/web/js/app/run-analysis.js
++++ b/gbdraw/web/js/app/run-analysis.js
+@@ -104,6 +104,7 @@ import {
+   LOSAT_DERIVED_CACHE_SCHEMA,
+   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
+   PROTEIN_LOSAT_CACHE_SCHEMA,
++  buildValidatedProteinIdentityIndex,
+   classifyRawLosatCacheEntry,
+   emptyProteinIdentityManifest,
+   getCurrentRawLosatCacheEntry,
+@@ -111,6 +112,7 @@ import {
+   isLosatDerivedCacheEntry,
+   mergeProteinIdentityManifests,
+   normalizeLosatArgs,
++  releaseValidatedProteinIdentityIndex,
+   sameLosatArgs,
+   transitionLegacyProteinCandidate,
+   validateDerivedProteinReferences,
+@@ -257,9 +259,9 @@ const buildLosatCachePayload = ({
+   return payload;
+ };
+ 
+-const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
++const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
+   if (!cacheMap) return null;
+-  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest);
++  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
+   if (direct) return direct;
+   if (metadata?.identityKind === 'protein') return null;
+ 
+@@ -1276,10 +1278,10 @@ export const createRunAnalysis = ({
+   // search's entries for retry, without changing the saved Result. Cache owner
+   // replacement (Clear Cache, Session load, or History) invalidates the retry.
+   let completedLosatSearch = null;
+-  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
++  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
+     if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
+-    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest)
+-      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest);
++    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, identityIndex)
++      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest, identityIndex);
+   };
+   const retainCompletedLosatSearch = (cacheMap, pairs) => {
+     completedLosatSearch = {
+@@ -3342,7 +3344,8 @@ export const createRunAnalysis = ({
+           cacheKey,
+           metadata,
+           queryEntry,
+-          subjectEntry
++          subjectEntry,
++          identityIndex
+         }) => {
+           if (
+             metadata?.identityKind !== 'protein' ||
+@@ -3410,7 +3413,8 @@ export const createRunAnalysis = ({
+             cacheMap,
+             cacheKey,
+             metadata,
+-            workingProteinIdentityManifest
++            workingProteinIdentityManifest,
++            { identityIndex }
+           );
+           if (!verified) {
+             cacheMap.delete(cacheKey);
+@@ -3710,86 +3714,67 @@ export const createRunAnalysis = ({
+             proteinCacheKeys = result.keys;
+           }
+ 
+-          for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
+-            throwIfGenerationCanceled();
+-            const queryEntry = await getSeqEntry(spec.queryIndex);
+-            throwIfGenerationCanceled();
+-            const subjectEntry = await getSeqEntry(spec.subjectIndex);
+-            throwIfGenerationCanceled();
+-            const cacheKey = useProteinBlastp
+-              ? proteinCacheKeys[jobIndex]
+-              : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
+-            throwIfGenerationCanceled();
+-            const queryCanonicalHash = await getSeqHash(spec.queryIndex);
+-            throwIfGenerationCanceled();
+-            const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
+-            throwIfGenerationCanceled();
+-            if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
+-              throw new Error('LOSAT sequence cache key was not prepared.');
+-            }
+-            sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
+-            sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
+-            let cached = getReusableLosatCacheEntry(
+-              cacheMap,
+-              cacheKey,
+-              cacheMetadata,
+-              workingProteinIdentityManifest
+-            );
+-            if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
+-              cached = await tryPromoteLegacyProteinEntry({
+-                cacheKey,
+-                metadata: cacheMetadata,
+-                queryEntry,
+-                subjectEntry
+-              });
++          // mergeProteinIdentityManifests made a private deep copy for this run.
++          // Nothing mutates or publishes it during this loop; helper calls receive
++          // clones, including legacy promotion. Release before search/render and
++          // publication so no index can outlive input, Session or History changes.
++          const identityIndex = useProteinBlastp && preparedJobs.length > 0
++            ? buildValidatedProteinIdentityIndex(workingProteinIdentityManifest)
++            : null;
++          if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
++            throw new Error('Protein comparison identity manifest is invalid.');
++          }
++          try {
++            for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
+               throwIfGenerationCanceled();
+-            }
+-            const hasCachedText = Boolean(cached);
+-            if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
+-            losatTiming.totalPairs += 1;
+-            if (hasCachedText) losatTiming.cacheHits += 1;
+-            else losatTiming.cacheMisses += 1;
+-            const resolvedEdge = comparisonResolution.edges.find(
+-              (edge) => edge.edgeKey === spec.edgeKey
+-            );
+-            const isResolvedDisplayPair = Boolean(
+-              resolvedEdge &&
+-              spec.queryIndex === resolvedEdge.queryIndex &&
+-              spec.subjectIndex === resolvedEdge.subjectIndex
+-            );
+-            const pair = {
+-              pairIndex: spec.ordinal,
+-              ordinal: spec.ordinal,
+-              edgeKey: spec.edgeKey,
+-              queryUid: spec.queryUid,
+-              subjectUid: spec.subjectUid,
+-              queryIndex: spec.queryIndex,
+-              subjectIndex: spec.subjectIndex,
+-              cacheKey,
+-              filename: buildCacheFilename(spec, queryEntry, subjectEntry),
+-              displayPair: isResolvedDisplayPair
+-            };
+-            losatPairs.push(pair);
+-            if (
+-              isResolvedDisplayPair &&
+-              !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
+-            ) {
+-              cacheInfo.push({
+-                key: cacheKey,
+-                filename: pair.filename,
+-                display: true,
+-                edgeKey: spec.edgeKey,
+-                ordinal: spec.ordinal,
+-                queryUid: resolvedEdge.queryUid,
+-                subjectUid: resolvedEdge.subjectUid,
+-                queryIndex: resolvedEdge.queryIndex,
+-                subjectIndex: resolvedEdge.subjectIndex
+-              });
+-            }
+-
+-            if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
+-              pendingJobKeys.add(cacheKey);
+-              losatJobs.push({
++              const queryEntry = await getSeqEntry(spec.queryIndex);
++              throwIfGenerationCanceled();
++              const subjectEntry = await getSeqEntry(spec.subjectIndex);
++              throwIfGenerationCanceled();
++              const cacheKey = useProteinBlastp
++                ? proteinCacheKeys[jobIndex]
++                : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
++              throwIfGenerationCanceled();
++              const queryCanonicalHash = await getSeqHash(spec.queryIndex);
++              throwIfGenerationCanceled();
++              const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
++              throwIfGenerationCanceled();
++              if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
++                throw new Error('LOSAT sequence cache key was not prepared.');
++              }
++              sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
++              sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
++              let cached = getReusableLosatCacheEntry(
++                cacheMap,
++                cacheKey,
++                cacheMetadata,
++                workingProteinIdentityManifest,
++                identityIndex
++              );
++              if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
++                cached = await tryPromoteLegacyProteinEntry({
++                  cacheKey,
++                  metadata: cacheMetadata,
++                  queryEntry,
++                  subjectEntry,
++                  identityIndex
++                });
++                throwIfGenerationCanceled();
++              }
++              const hasCachedText = Boolean(cached);
++              if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
++              losatTiming.totalPairs += 1;
++              if (hasCachedText) losatTiming.cacheHits += 1;
++              else losatTiming.cacheMisses += 1;
++              const resolvedEdge = comparisonResolution.edges.find(
++                (edge) => edge.edgeKey === spec.edgeKey
++              );
++              const isResolvedDisplayPair = Boolean(
++                resolvedEdge &&
++                spec.queryIndex === resolvedEdge.queryIndex &&
++                spec.subjectIndex === resolvedEdge.subjectIndex
++              );
++              const pair = {
+                 pairIndex: spec.ordinal,
+                 ordinal: spec.ordinal,
+                 edgeKey: spec.edgeKey,
+@@ -3798,17 +3783,52 @@ export const createRunAnalysis = ({
+                 queryIndex: spec.queryIndex,
+                 subjectIndex: spec.subjectIndex,
+                 cacheKey,
+-                program: losatProgram.value,
+-                querySequenceKey: queryEntry.sequenceKey,
+-                subjectSequenceKey: subjectEntry.sequenceKey,
+-                queryCanonicalHash,
+-                subjectCanonicalHash,
+-                outfmt: losat.outfmt || '6',
+-                extraArgs: losatArgs,
+-                cacheMetadata,
+-                batch
+-              });
++                filename: buildCacheFilename(spec, queryEntry, subjectEntry),
++                displayPair: isResolvedDisplayPair
++              };
++              losatPairs.push(pair);
++              if (
++                isResolvedDisplayPair &&
++                !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
++              ) {
++                cacheInfo.push({
++                  key: cacheKey,
++                  filename: pair.filename,
++                  display: true,
++                  edgeKey: spec.edgeKey,
++                  ordinal: spec.ordinal,
++                  queryUid: resolvedEdge.queryUid,
++                  subjectUid: resolvedEdge.subjectUid,
++                  queryIndex: resolvedEdge.queryIndex,
++                  subjectIndex: resolvedEdge.subjectIndex
++                });
++              }
++
++              if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
++                pendingJobKeys.add(cacheKey);
++                losatJobs.push({
++                  pairIndex: spec.ordinal,
++                  ordinal: spec.ordinal,
++                  edgeKey: spec.edgeKey,
++                  queryUid: spec.queryUid,
++                  subjectUid: spec.subjectUid,
++                  queryIndex: spec.queryIndex,
++                  subjectIndex: spec.subjectIndex,
++                  cacheKey,
++                  program: losatProgram.value,
++                  querySequenceKey: queryEntry.sequenceKey,
++                  subjectSequenceKey: subjectEntry.sequenceKey,
++                  queryCanonicalHash,
++                  subjectCanonicalHash,
++                  outfmt: losat.outfmt || '6',
++                  extraArgs: losatArgs,
++                  cacheMetadata,
++                  batch
++                });
++              }
+             }
++          } finally {
++            releaseValidatedProteinIdentityIndex(identityIndex);
+           }
+           const sourceJobs = [];
+           for (const batch of sourcePlan.batches) {
+diff --git a/tests/web/losat-cache.test.mjs b/tests/web/losat-cache.test.mjs
+index 4d36ce85..6319119e 100644
+--- a/tests/web/losat-cache.test.mjs
++++ b/tests/web/losat-cache.test.mjs
+@@ -311,8 +311,103 @@ for (const numericCase of numericContract) {
+     numericCase.valid,
+     `${numericCase.name}: schema-4 validation`
+   );
++  assert.equal(
++    Boolean(cache.getCurrentRawLosatCacheEntry(
++      new Map([['protein-key', currentCase]]), 'protein-key', proteinEntry, manifest
++    )),
++    numericCase.valid,
++    `${numericCase.name}: raw getter`
++  );
+ }
+ 
++const getProteinEntry = (entry = proteinEntry, identity = manifest, metadata = proteinEntry) => (
++  cache.getCurrentRawLosatCacheEntry(new Map([['protein-key', entry]]), 'protein-key', metadata, identity)
++);
++assert.ok(getProteinEntry({ ...proteinEntry, text: '' }), 'empty raw is a successful hit');
++assert.equal(getProteinEntry(proteinEntry, mismatchedBindingManifest), null);
++for (const patch of [
++  { schema: 3 }, { program: 'blastn' }, { outfmt: '7' }, { args: ['--max-target-seqs', '1'] },
++  { searchContext: 'a'.repeat(64) }, { queryProteinSetHash: 'wrong' },
++  { subjectProteinSetHash: 'wrong' }, { queryRecordInstanceKey: 'missing' },
++  { subjectRecordInstanceKey: 'missing' }, { queryRuntimeBindingHash: 'wrong' },
++  { subjectRuntimeBindingHash: 'wrong' },
++  { text: `${proteinEntry.text.trimEnd()}\textra\n` },
++  { text: `${runtimeA}\t${runtimeB}\n` },
++  { text: proteinEntry.text.replace(runtimeB, 'unknown') }
++]) assert.equal(getProteinEntry({ ...proteinEntry, ...patch }), null, JSON.stringify(patch));
++assert.ok(getProteinEntry(
++  { ...proteinEntry, searchContext: 'a'.repeat(64) }, manifest,
++  { ...proteinEntry, searchContext: 'a'.repeat(64) }
++));
++const reverseEntry = {
++  ...proteinEntry,
++  text: proteinEntry.text.replace(`${runtimeA}\t${runtimeB}`, `${runtimeB}\t${runtimeA}`),
++  queryProteinSetHash: proteinEntry.subjectProteinSetHash,
++  subjectProteinSetHash: proteinEntry.queryProteinSetHash,
++  queryRuntimeBindingHash: proteinEntry.subjectRuntimeBindingHash,
++  subjectRuntimeBindingHash: proteinEntry.queryRuntimeBindingHash,
++  queryRecordInstanceKey: proteinEntry.subjectRecordInstanceKey,
++  subjectRecordInstanceKey: proteinEntry.queryRecordInstanceKey
++};
++assert.ok(getProteinEntry(reverseEntry, manifest, reverseEntry), 'matching reverse direction hits');
++
++// Count actual validation entry points, without a production telemetry API.
++const probePath = join(tempRoot, 'counted-cache.js');
++let probeSource = await readFile(join(tempRoot, 'losat-cache.js'), 'utf8');
++for (const [signature, counter] of [
++  ['export const validateProteinIdentityManifest = (manifest) => {', 'manifest'],
++  ['export const rawProteinTextMatchesBindings = (text, queryIds, subjectIds) => {', 'tsv']
++]) {
++  assert.ok(probeSource.includes(signature));
++  probeSource = probeSource.replace(signature, `${signature}\n  counts.${counter}++;`);
++}
++probeSource = probeSource.replace(
++  /new Set\(Object.values\((\w+)\.runtimeIds\)\)/g,
++  'new Set((counts.runtimeSets++, Object.values($1.runtimeIds)))'
++);
++await writeFile(probePath, 'export const counts = {manifest: 0, tsv: 0, runtimeSets: 0};\n' + probeSource);
++const counted = await import(pathToFileURL(probePath));
++assert.ok(counted.getCurrentRawLosatCacheEntry(rawMap, 'protein-key', proteinEntry, manifest));
++assert.deepEqual(counted.counts, {manifest: 1, tsv: 1, runtimeSets: 2}, 'one validation per getter hit');
++const resetCounts = () => Object.assign(counted.counts, {manifest: 0, tsv: 0, runtimeSets: 0});
++resetCounts();
++const privateManifest = counted.mergeProteinIdentityManifests([manifest]);
++// The merge owns deep copies, including nested runtime IDs and metadata.
++assert.notStrictEqual(privateManifest.recordInstances['record-1'].runtimeIds,
++  manifest.recordInstances['record-1'].runtimeIds);
++resetCounts();
++const batchIndex = counted.buildValidatedProteinIdentityIndex(privateManifest);
++assert.deepEqual(counted.counts, {manifest: 1, tsv: 0, runtimeSets: 2});
++resetCounts();
++for (const entry of [proteinEntry, reverseEntry, {...proteinEntry, text: ''}]) {
++  assert.ok(counted.getCurrentRawLosatCacheEntry(
++    new Map([['protein-key', entry]]), 'protein-key', entry, privateManifest, {identityIndex: batchIndex}
++  ));
++}
++assert.deepEqual(counted.counts, {manifest: 0, tsv: 3, runtimeSets: 0}, 'batch reuses only manifest work');
++const changedManifest = structuredClone(privateManifest);
++changedManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
++assert.equal(counted.getCurrentRawLosatCacheEntry(
++  rawMap, 'protein-key', proteinEntry, changedManifest, {identityIndex: batchIndex}
++), null, 'an index for another manifest cannot approve stale IDs');
++for (const numericCase of numericContract) {
++  assert.equal(Boolean(counted.getCurrentRawLosatCacheEntry(
++    new Map([['protein-key', entryWithNumericCase(proteinEntry, numericCase)]]),
++    'protein-key', proteinEntry, privateManifest, {identityIndex: batchIndex}
++  )), numericCase.valid, `${numericCase.name}: indexed getter`);
++}
++assert.equal(counted.releaseValidatedProteinIdentityIndex(batchIndex), true);
++assert.equal(counted.releaseValidatedProteinIdentityIndex(batchIndex), false);
++privateManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
++assert.equal(counted.getCurrentRawLosatCacheEntry(
++  rawMap, 'protein-key', proteinEntry, privateManifest, {identityIndex: batchIndex}
++), null, 'a released index cannot approve changed contents of the same object');
++privateManifest.schema = 1;
++assert.equal(counted.getCurrentRawLosatCacheEntry(
++  rawMap, 'protein-key', proteinEntry, privateManifest, {identityIndex: batchIndex}
++), null, 'released index falls back to full manifest validation');
++
++
+ const pending = cache.createLegacyProteinCandidateEnvelope([legacyProteinEntry, nucleotideEntry]);
+ assert.equal(pending.entries.length, 1);
+ assert.equal(pending.entries[0].state, 'pending');
+@@ -606,3 +701,89 @@ assert.throws(
+   ]),
+   /conflicting record instance/
+ );
++
++// Execute the production pair-loop body with real validators. The surrounding
++// asynchronous I/O is controlled so an exception/cancel occurs while the loan
++// is active, rather than after the loop has already released its index.
++const runSource = await readFile(join(repoRoot, 'gbdraw/web/js/app/run-analysis.js'), 'utf8');
++const loopStart = runSource.indexOf('          const identityIndex = useProteinBlastp && preparedJobs.length > 0');
++const loopEnd = runSource.indexOf('          const sourceJobs = [];', loopStart);
++assert.ok(loopStart > 0 && loopEnd > loopStart);
++const loopSource = runSource.slice(loopStart, loopEnd);
++const exercisePairLoop = async ({failure = null, promote = false, mutateSource = false} = {}) => {
++  const externalManifest = structuredClone(manifest);
++  const workingManifest = counted.mergeProteinIdentityManifests([externalManifest]);
++  const entries = [proteinEntry, reverseEntry, {...proteinEntry, text: ''}];
++  const cacheMap = new Map(promote ? [] : entries.map((entry, index) => [String(index), entry]));
++  let loan = null, released = false, reads = 0;
++  const cancellation = new Error('canceled inside pair preparation');
++  const context = {
++    useProteinBlastp: true,
++    preparedJobs: entries.map((entry, index) => ({
++      spec: {ordinal: index, queryIndex: 0, subjectIndex: 1, edgeKey: String(index)},
++      losatArgs: [], cacheMetadata: entry, batch: {}
++    })),
++    workingProteinIdentityManifest: workingManifest,
++    buildValidatedProteinIdentityIndex(value) {
++      loan = counted.buildValidatedProteinIdentityIndex(value);
++      return loan;
++    },
++    releaseValidatedProteinIdentityIndex(value) {
++      assert.strictEqual(value, loan);
++      released = counted.releaseValidatedProteinIdentityIndex(value);
++    },
++    throwIfGenerationCanceled() { if (failure === 'cancel' && reads >= 3) throw cancellation; },
++    async getSeqEntry() {
++      reads++;
++      await Promise.resolve();
++      if (failure === 'error' && reads >= 3) throw new Error('sequence preparation failed');
++      if (mutateSource) {
++        externalManifest.recordInstances['record-1'].runtimeIds[featureA] = `h_${'c'.repeat(26)}`;
++        externalManifest.schema = 1;
++      }
++      return {sequenceKey: 'sequence', fasta: 'data'};
++    },
++    proteinCacheKeys: ['0', '1', '2'],
++    async getSeqHash() { return 'hash'; },
++    sequenceEntriesByKey: new Map(), cacheMap,
++    getReusableLosatCacheEntry(map, key, metadata, identity, index) {
++      assert.strictEqual(index, loan);
++      return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity, {identityIndex: index});
++    },
++    async tryPromoteLegacyProteinEntry({cacheKey, metadata, identityIndex: index}) {
++      await Promise.resolve();
++      assert.strictEqual(index, loan);
++      cacheMap.set(cacheKey, entries[Number(cacheKey)]);
++      return counted.getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, workingManifest, {identityIndex: index});
++    },
++    promoteRawLosatCacheEntry() {},
++    losatTiming: {totalPairs: 0, cacheHits: 0, cacheMisses: 0},
++    comparisonResolution: {edges: []}, losatPairs: [], cacheInfo: [],
++    buildCacheFilename() { return 'pair.tsv'; },
++    pendingJobKeys: new Set(), losatJobs: [], losatProgram: {value: 'blastp'}, losat: {outfmt: '6'}
++  };
++  const execute = new Function('context', `return (async () => {
++    const {${Object.keys(context).join(',')}} = context;
++    ${loopSource}
++  })()`);
++  resetCounts();
++  if (failure) await assert.rejects(execute(context), failure === 'cancel' ? /canceled inside/ : /sequence preparation failed/);
++  else await execute(context);
++  assert.equal(released, true, 'every exit releases the loop index');
++  assert.equal(counted.releaseValidatedProteinIdentityIndex(loan), false);
++  assert.equal(counted.counts.manifest, 1, 'one manifest validation in the pair loop');
++  assert.equal(counted.counts.runtimeSets, 2, 'one runtime ID Set per record');
++  assert.equal(counted.counts.tsv, failure ? 1 : 3, 'one TSV validation for every hit, including promotion');
++  if (!failure) assert.equal(context.losatTiming.cacheHits, 3);
++  // The very same manifest object may change once the loan has ended. Its old
++  // index must no longer bypass ID or manifest validation on a later lookup.
++  workingManifest.schema = 1;
++  assert.equal(counted.getCurrentRawLosatCacheEntry(
++    new Map([['protein-key', proteinEntry]]), 'protein-key', proteinEntry, workingManifest, {identityIndex: loan}
++  ), null);
++};
++await exercisePairLoop({mutateSource: true});
++await exercisePairLoop({promote: true, mutateSource: true});
++await exercisePairLoop({failure: 'error'});
++await exercisePairLoop({failure: 'cancel'});
++await exercisePairLoop(); // Retry must acquire a new index.

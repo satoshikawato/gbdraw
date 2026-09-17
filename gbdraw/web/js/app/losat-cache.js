@@ -272,10 +272,18 @@ const indexedProteinIdentity = (manifest, index) => {
   return validated?.manifest === manifest ? validated : null;
 };
 
-export const mergeProteinIdentityManifests = (manifests) => {
+export const mergeProteinIdentityManifests = (manifests, { invalidInputMessage = null } = {}) => {
+  const inputs = Array.isArray(manifests) ? manifests : [];
+  // A caller-supplied input error takes precedence over any merge conflict.
+  // Keep the default helper's interleaved failure order for other callers.
+  const inputsValidated = invalidInputMessage !== null
+    && inputs.every((manifest) => validateProteinIdentityManifest(manifest));
+  if (invalidInputMessage !== null && !inputsValidated) {
+    throw new Error(invalidInputMessage);
+  }
   const merged = emptyProteinIdentityManifest();
-  (Array.isArray(manifests) ? manifests : []).forEach((manifest) => {
-    if (!validateProteinIdentityManifest(manifest)) {
+  inputs.forEach((manifest) => {
+    if (!inputsValidated && !validateProteinIdentityManifest(manifest)) {
       throw new Error('Cannot merge an invalid protein identity manifest.');
     }
     mergeManifestMap(merged.proteinSets, manifest.proteinSets, 'protein set');
@@ -579,7 +587,9 @@ export const validateDerivedProteinReferences = (
   );
 };
 
-export const getCurrentRawLosatCacheEntry = (cacheMap, cacheKey, metadata = {}, manifest = null) => {
+export const getCurrentRawLosatCacheEntry = (
+  cacheMap, cacheKey, metadata = {}, manifest = null, { identityIndex = null } = {}
+) => {
   if (!(cacheMap instanceof Map) || !cacheKey) return null;
   const entry = cacheMap.get(cacheKey);
   if ((entry?.searchContext ?? null) !== (metadata.searchContext ?? null)) return null;
@@ -596,13 +606,7 @@ export const getCurrentRawLosatCacheEntry = (cacheMap, cacheKey, metadata = {}, 
       metadata.subjectRuntimeBindingHash &&
       entry.subjectRuntimeBindingHash !== metadata.subjectRuntimeBindingHash
     ) return null;
-    if (!validateProteinRawEntryReferences(entry, manifest)) return null;
-    const ids = proteinRuntimeIdSets(
-      manifest,
-      entry.queryRecordInstanceKey,
-      entry.subjectRecordInstanceKey
-    );
-    if (!ids || !rawProteinTextMatchesBindings(entry.text, ids.query, ids.subject)) return null;
+    if (!validateProteinRawEntryReferences(entry, manifest, { identityIndex })) return null;
     return { key: cacheKey, entry };
   }
   if (classification !== 'nucleotide-current') return null;

@@ -1,0 +1,19 @@
+tests/web/losat-cache.test.mjs:234:  cache.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:249:  cache.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:271:  cache.getCurrentRawLosatCacheEntry(invalidTextMap, 'protein-key', {
+tests/web/losat-cache.test.mjs:315:    Boolean(cache.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:324:  cache.getCurrentRawLosatCacheEntry(new Map([['protein-key', entry]]), 'protein-key', metadata, identity)
+tests/web/losat-cache.test.mjs:370:assert.ok(counted.getCurrentRawLosatCacheEntry(rawMap, 'protein-key', proteinEntry, manifest));
+tests/web/losat-cache.test.mjs:383:  assert.ok(counted.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:390:assert.equal(counted.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:394:  assert.equal(Boolean(counted.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:402:assert.equal(counted.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:406:assert.equal(counted.getCurrentRawLosatCacheEntry(
+tests/web/losat-cache.test.mjs:751:      return counted.getCurrentRawLosatCacheEntry(map, key, metadata, identity, {identityIndex: index});
+tests/web/losat-cache.test.mjs:757:      return counted.getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, workingManifest, {identityIndex: index});
+tests/web/losat-cache.test.mjs:781:  assert.equal(counted.getCurrentRawLosatCacheEntry(
+gbdraw/web/js/app/run-analysis.js:110:  getCurrentRawLosatCacheEntry,
+gbdraw/web/js/app/run-analysis.js:264:  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
+gbdraw/web/js/app/run-analysis.js:3412:          const verified = getCurrentRawLosatCacheEntry(
+gbdraw/web/js/app/losat-cache.js:321:export const proteinRuntimeIdSets = (manifest, queryInstanceKey, subjectInstanceKey) => {
+gbdraw/web/js/app/losat-cache.js:582:export const getCurrentRawLosatCacheEntry = (

@@ -1,0 +1,452 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Generate validates R inputs once each, then the distinct merged manifest once
++ actual - expected
+... Skipped lines
+
+  [
+    {
+      proteinSets: {
+        'sha256:set-a': {
+          proteins: [
+...
+        },
++     },
++     schema: 2
++   },
++   {
++     proteinSets: {
++       'sha256:set-a': {
++         proteins: [
++           {
++             aaSha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
++             featureAnalysisId: 'f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
++           }
++         ],
++         schema: 1
++       },
++       'sha256:set-b': {
++         proteins: [
++           {
++             aaSha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
++             featureAnalysisId: 'f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
++           }
++         ],
++         schema: 1
++       }
++     },
++     recordAnalyses: {
++       'sha256:analysis-a': {
++         proteinSetHash: 'sha256:set-a',
++         recordSourceId: 'A',
++         schema: 1
++       },
++       'sha256:analysis-b': {
++         proteinSetHash: 'sha256:set-b',
++         recordSourceId: 'B',
++         schema: 1
++       }
++     },
++     recordInstances: {
+        'record-2': {
+          displayBindingHash: 'sha256:display-binding-b',
+          featureMetadata: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: {
+              displayAlias: 'protein-b',
+...
+    },
++   {
++     proteinSets: {},
++     recordAnalyses: {},
++     recordInstances: {},
++     schema: 2
++   },
++   {
++     proteinSets: {
++       'sha256:set-a': {
++         proteins: [
++           {
++             aaSha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
++             featureAnalysisId: 'f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
++           }
++         ],
++         schema: 1
++       },
++       'sha256:set-b': {
++         proteins: [
++           {
++             aaSha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
++             featureAnalysisId: 'f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
++           }
++         ],
++         schema: 1
++       }
++     },
++     recordAnalyses: {
++       'sha256:analysis-a': {
++         proteinSetHash: 'sha256:set-a',
++         recordSourceId: 'A',
++         schema: 1
++       },
++       'sha256:analysis-b': {
++         proteinSetHash: 'sha256:set-b',
++         recordSourceId: 'B',
++         schema: 1
++       }
++     },
++     recordInstances: {
++       'record-1': {
++         displayBindingHash: 'sha256:display-binding-a',
++         featureMetadata: {
++           f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: {
++             displayAlias: 'protein-a',
++             exportOrdinal: null
++           }
++         },
++         recordAnalysisId: 'sha256:analysis-a',
++         runtimeBindingHash: 'sha256:runtime-binding-a',
++         runtimeIds: {
++           f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
++         },
++         schema: 2
++       },
++       'record-2': {
++         displayBindingHash: 'sha256:display-binding-b',
++         featureMetadata: {
++           f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: {
++             displayAlias: 'protein-b',
++             exportOrdinal: null
++           }
++         },
++         recordAnalysisId: 'sha256:analysis-b',
++         runtimeBindingHash: 'sha256:runtime-binding-b',
++         runtimeIds: {
++           f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
++         },
++         schema: 2
++       }
++     },
++     schema: 2
++   }
+  ]
+
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917/tests/web/losat-cache.test.mjs:734:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-1': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-a',
+          runtimeBindingHash: 'sha256:runtime-binding-a',
+          displayBindingHash: 'sha256:display-binding-a',
+          runtimeIds: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+          },
+          featureMetadata: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: [Object]
+          }
+        }
+      }
+    },
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-2': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-b',
+          runtimeBindingHash: 'sha256:runtime-binding-b',
+          displayBindingHash: 'sha256:display-binding-b',
+          runtimeIds: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+          },
+          featureMetadata: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: [Object]
+          }
+        }
+      }
+    },
+    {
+      schema: 2,
+      proteinSets: {},
+      recordAnalyses: {},
+      recordInstances: {}
+    },
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-1': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-a',
+          runtimeBindingHash: 'sha256:runtime-binding-a',
+          displayBindingHash: 'sha256:display-binding-a',
+          runtimeIds: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+          },
+          featureMetadata: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: [Object]
+          }
+        }
+      }
+    },
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-2': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-b',
+          runtimeBindingHash: 'sha256:runtime-binding-b',
+          displayBindingHash: 'sha256:display-binding-b',
+          runtimeIds: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+          },
+          featureMetadata: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: [Object]
+          }
+        }
+      }
+    },
+    {
+      schema: 2,
+      proteinSets: {},
+      recordAnalyses: {},
+      recordInstances: {}
+    },
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-1': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-a',
+          runtimeBindingHash: 'sha256:runtime-binding-a',
+          displayBindingHash: 'sha256:display-binding-a',
+          runtimeIds: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+          },
+          featureMetadata: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: [Object]
+          }
+        },
+        'record-2': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-b',
+          runtimeBindingHash: 'sha256:runtime-binding-b',
+          displayBindingHash: 'sha256:display-binding-b',
+          runtimeIds: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+          },
+          featureMetadata: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: [Object]
+          }
+        }
+      }
+    }
+  ],
+  expected: [
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-1': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-a',
+          runtimeBindingHash: 'sha256:runtime-binding-a',
+          displayBindingHash: 'sha256:display-binding-a',
+          runtimeIds: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+          },
+          featureMetadata: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: [Object]
+          }
+        }
+      }
+    },
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-2': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-b',
+          runtimeBindingHash: 'sha256:runtime-binding-b',
+          displayBindingHash: 'sha256:display-binding-b',
+          runtimeIds: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+          },
+          featureMetadata: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: [Object]
+          }
+        }
+      }
+    },
+    {
+      schema: 2,
+      proteinSets: {},
+      recordAnalyses: {},
+      recordInstances: {}
+    },
+    {
+      schema: 2,
+      proteinSets: {
+        'sha256:set-a': { schema: 1, proteins: [ [Object] ] },
+        'sha256:set-b': { schema: 1, proteins: [ [Object] ] }
+      },
+      recordAnalyses: {
+        'sha256:analysis-a': {
+          schema: 1,
+          recordSourceId: 'A',
+          proteinSetHash: 'sha256:set-a'
+        },
+        'sha256:analysis-b': {
+          schema: 1,
+          recordSourceId: 'B',
+          proteinSetHash: 'sha256:set-b'
+        }
+      },
+      recordInstances: {
+        'record-1': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-a',
+          runtimeBindingHash: 'sha256:runtime-binding-a',
+          displayBindingHash: 'sha256:display-binding-a',
+          runtimeIds: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
+          },
+          featureMetadata: {
+            f_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: [Object]
+          }
+        },
+        'record-2': {
+          schema: 2,
+          recordAnalysisId: 'sha256:analysis-b',
+          runtimeBindingHash: 'sha256:runtime-binding-b',
+          displayBindingHash: 'sha256:display-binding-b',
+          runtimeIds: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 'h_bbbbbbbbbbbbbbbbbbbbbbbbbb'
+          },
+          featureMetadata: {
+            f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: [Object]
+          }
+        }
+      }
+    }
+  ],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.8.2

@@ -1,0 +1,205 @@
+# Web change policy
+
+- Context: ORDINARY
+- Base: `origin/dev`
+- Head: `working tree`
+- Gate: **PASS**
+- Review: **REQUIRED**
+- Privileged allowlist revision: `origin/dev`
+- Architecture rule base: `origin/dev`
+- Architecture rule candidate: `working tree`
+- Policy guide: `docs/internal/WEB_CHANGE_POLICY.md`
+- Selected profile: ordinary
+- Size-review threshold for production files: 8
+- Size-review threshold for gross churn: 800
+- Size-review threshold for net additions: 100
+- `architecture-change` label: absent
+
+## Blocking violations
+
+- None
+
+## Review reasons
+
+- Material behavior/output risk: registered session or compatibility paths changed (gbdraw/web/js/services/config.js, gbdraw/web/js/services/session-request.js)
+
+## Key architecture differential summary
+
+| Inventory | Before | Added | Removed | After | Delta | Classification |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Registered Authority Location Count | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Registered canonical-contract results | 2 | 0 | 0 | 2 | 0 | registered rule |
+| Privileged operator permission entries | 48 | 0 | 0 | 48 | 0 | hard authority |
+| Privileged importer permission entries | 54 | 0 | 0 | 54 | 0 | hard authority |
+| Production files | 196 | 0 | 0 | 196 | 0 | size-review |
+| Production modules | 149 | 0 | 0 | 149 | 0 | report-only |
+| Exports | 866 | 0 | 0 | 866 | 0 | report-only |
+| create* declarations | 94 | 0 | 0 | 94 | 0 | report-only |
+| Reactive declarations | 332 | 0 | 0 | 332 | 0 | report-only |
+| Watcher calls | 55 | 0 | 0 | 55 | 0 | report-only |
+| Compatibility-like names | 143 | 0 | 0 | 143 | 0 | report-only |
+| Resource-like names | 399 | 0 | 0 | 399 | 0 | report-only |
+| Session object keys | 920 | 0 | 0 | 920 | 0 | report-only |
+| Privileged import-target fan-out | 54 | 0 | 0 | 54 | 0 | report-only |
+| First-party static import cycles | 0 | 0 | 0 | 0 | 0 | hard |
+
+Production line change:
+
+- Additions: 139
+- Deletions: 108
+- Gross churn: 247
+- Net additions: 31
+
+## Differential inventory changes
+
+- None
+
+## First-party static import graph
+
+- Before: 149 modules, 463 edges, 0 cycles
+- After: 149 modules, 463 edges, 0 cycles
+- Delta: 0 cycles
+- Cycle definition: SCC size > 1, or a one-node SCC with a self-edge.
+- Head cycles (sorted nodes and internal edges):
+- None
+- Base graph resolution errors:
+- None
+- Head graph resolution errors:
+- None
+
+## Report-only privileged import-target fan-out
+
+| Production module | Before | After | Delta |
+| --- | ---: | ---: | ---: |
+| app/app-setup.js | 9 | 9 | 0 |
+| app/candidate-render.js | 1 | 1 | 0 |
+| app/feature-editor/label-actions.js | 1 | 1 | 0 |
+| app/feature-editor/svg-actions.js | 1 | 1 | 0 |
+| app/feature-metadata-extraction.js | 1 | 1 | 0 |
+| app/feature-search/preview-svg.js | 1 | 1 | 0 |
+| app/feature-selection.js | 1 | 1 | 0 |
+| app/legend-layout/canvas-actions.js | 1 | 1 | 0 |
+| app/legend-layout/diagram-drag.js | 1 | 1 | 0 |
+| app/legend-layout/reposition-actions.js | 1 | 1 | 0 |
+| app/legend/drag-actions.js | 1 | 1 | 0 |
+| app/legend/entry-actions.js | 2 | 2 | 0 |
+| app/legend/sort-actions.js | 1 | 1 | 0 |
+| app/legend/stroke-actions.js | 1 | 1 | 0 |
+| app/preview-runtime.js | 1 | 1 | 0 |
+| app/record-discovery.js | 1 | 1 | 0 |
+| app/results.js | 2 | 2 | 0 |
+| app/run-analysis.js | 2 | 2 | 0 |
+| app/session-feature-metadata.js | 1 | 1 | 0 |
+| app/svg-styles.js | 1 | 1 | 0 |
+| app/watchers.js | 1 | 1 | 0 |
+| services/config.js | 8 | 8 | 0 |
+| services/diagram-generation.js | 2 | 2 | 0 |
+| services/diagram-resource-staging.js | 1 | 1 | 0 |
+| services/export.js | 1 | 1 | 0 |
+| services/gallery-session-migration.js | 1 | 1 | 0 |
+| services/history-snapshot.js | 1 | 1 | 0 |
+| services/session-request.js | 1 | 1 | 0 |
+| services/session-resources.js | 1 | 1 | 0 |
+| services/standalone-interactivity.js | 1 | 1 | 0 |
+| services/svg-result-ingestion.js | 2 | 2 | 0 |
+| state.js | 1 | 1 | 0 |
+| workers/diagram-generation-worker.js | 2 | 2 | 0 |
+
+## Production files touched
+
+- M gbdraw/web/js/app/losat-cache.js
+- M gbdraw/web/js/app/run-analysis.js
+- M gbdraw/web/js/services/config.js
+- M gbdraw/web/js/services/session-request.js
+
+## Production additions/deletions
+
+- Additions: 139
+- Deletions: 108
+- Gross churn: 247
+- Net additions: 31
+- Binary production files: 0
+
+## Report-only new production modules
+
+- None
+
+## Report-only new exports and create* owners
+
+- None
+
+## Report-only new reactive state/watchers
+
+- None
+
+## Unapproved privileged capability owners/importers
+
+- None
+
+## Removed privileged allowlist entries
+
+- None
+
+## Added privileged allowlist entries
+
+- None
+
+## Active privileged owners/importers excluded by proposed policy
+
+- None
+
+## Missing base privileged allowlist keys
+
+- None
+
+## Added privileged allowlist keys
+
+- None
+
+## Candidate architecture authority delta
+
+- Classification: UNCHANGED
+- None
+
+## Candidate architecture admission observations
+
+- None
+
+## Candidate architecture rule errors
+
+- None
+
+## Active architecture rule results
+
+- canonical-path.current-result-admission | subject=app/candidate-render.js -> services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- canonical-path.render-request | subject=app/run-analysis.js -> services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | observedCanonicalEntryEdges=1/1
+- semantic-owner.current-result-admission | subject=services/svg-result-ingestion.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+- semantic-owner.render-request | subject=services/session-request.js | observation=CONFORMING | mode=HARD | baselineRelation=NOT_APPLICABLE | authorityResolution=NOT_APPLICABLE | decision=PASS | registeredDefinitionLocations=1; observedDefinitions=1/1
+
+## Active architecture rule errors
+
+- None
+
+## Report-only cache/token/handle/journal/protocol/manager names
+
+- None
+
+## Report-only session object keys and compatibility names
+
+- None
+
+## Added binary runtime files
+
+- None
+
+## Changed vendored runtime files
+
+- None
+
+## Dependency changes
+
+- None
+
+## Guard files touched
+
+- None

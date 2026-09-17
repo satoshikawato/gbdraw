@@ -1,0 +1,11 @@
+✔ Web and Python current Session, request and protein-cache schemas agree (13.767706ms)
+✔ Node LOSAT acceptance expects the current writer for every output schema (5.020973ms)
+✔ Python LOSAT acceptance expects the current writer for every output schema (0.095915ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1879.924059

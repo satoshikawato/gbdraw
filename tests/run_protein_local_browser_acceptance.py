@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--baseline-root', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--resume', action='store_true', help='Reuse completed checks only with identical wheel/source hashes')
-    parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline'))
+    parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline', 'manifest-merge'))
     parser.add_argument('--cases', nargs='+', choices=tuple(INTEGRATION_CASES), default=list(INTEGRATION_CASES))
     parser.add_argument('--samples', type=int, choices=(1, 2, 3), default=3)
     parser.add_argument('--server-root', type=Path, default=ROOT,
@@ -410,7 +410,17 @@ def run_integration(args):
                         record['paths'].add(url.path)
                         r.continue_()
                 context.route('**/*', route)
-                context.add_init_script(INTEGRATION_OBSERVER)
+                observer = INTEGRATION_OBSERVER
+                if args.integration == 'manifest-merge':
+                    # Corrupt only a real extraction response, before the client sees
+                    # it. Success runs use the original transport and response bytes.
+                    observer = observer.replace('const key = data?.requestId', """
+                      if (window.__invalidManifest && data?.ok && data.result?.identity_manifest) {
+                        data.result.identity_manifest.schema = -1;
+                        window.__invalidManifestResponses++;
+                      }
+                      const key = data?.requestId""")
+                context.add_init_script(observer)
                 page = context.new_page()
                 page.set_default_timeout(180_000)
                 page.on('pageerror', lambda error: record['pageErrors'].append(str(error)))
@@ -433,7 +443,9 @@ def run_integration(args):
                 context.close()
 
             try:
-                if args.integration in {'lifecycle', 'replacement'}:
+                if args.integration == 'manifest-merge':
+                    run_manifest_merge(context_for, close_context, save)
+                elif args.integration in {'lifecycle', 'replacement'}:
                     run_integration_lifecycle(args, report, context_for, close_context, save)
                 elif args.integration == 'offline':
                     for viewport in ((1280, 720), (390, 844)):
@@ -508,6 +520,81 @@ def run_integration(args):
         server.server_close()
         thread.join()
         save()
+
+
+def run_manifest_merge(context_for, close_context, save):
+    """Saved-raw merge and malformed extraction failure through the real Worker."""
+    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+    for viewport in ((1280, 720), (390, 844)):
+        context, page, record = context_for(viewport)
+        integration_import(page, fixture)
+        record['fixtureSha256'] = digest(fixture.read_bytes())
+        record['workersAfterPreviewLoad'] = page.evaluate('() => window.__integration.workers.length')
+        assert record['workersAfterPreviewLoad'] == 0
+        record['preparation'] = integration_prepare(page, 'hep-on')
+        initial = record['savedRaw'] = integration_generate(page)
+        assert not initial['searches']
+        assert initial['telemetry']['proteinDerivedPayloadCacheMisses'] == 1
+        assert initial['telemetry']['cacheHits'] == 13
+        repeat = record['resolvedRepeat'] = integration_generate(page)
+        assert repeat['svgSha256'] == initial['svgSha256']
+        assert repeat['workerCount'] == initial['workerCount'] == 1
+        assert not repeat['searches']
+        # Give identical source bytes a fresh File owner to force extraction,
+        # then corrupt its manifest. This does not replace the Worker or manufacture a Result.
+        page.evaluate('''async () => {
+          const app = window.__GBDRAW_APP__;
+          await app.setLinearComparisonGlobalAction('losat');
+          const file = app.linearSeqs[0].gb;
+          window.__mergeOriginalFile = file;
+          const {readFileText} = await import('/gbdraw/web/js/services/file-content-cache.js');
+          app.setLinearSeqPrimaryFile(0, 'gb', new File([await readFileText(file)], file.name,
+            {type: file.type, lastModified: file.lastModified}));
+          await Vue.nextTick();
+          window.__invalidManifestResponses = 0;
+          window.__invalidManifest = true;
+        }''')
+        failed = record['invalidManifest'] = page.evaluate('''async () => {
+          const app = window.__GBDRAW_APP__, history = window.__GBDRAW_HISTORY__;
+          const {state} = await import('/gbdraw/web/js/state.js');
+          const snapshot = () => JSON.stringify({results: app.results,
+            selected: app.selectedResultIndex, undo: history.getUndoCount(), redo: history.getRedoCount(),
+            raw: [...state.losatCache.value], derived: [...state.losatDerivedCache.value],
+            manifest: state.proteinIdentityManifest.value});
+          const before = snapshot();
+          const trace = window.__integration;
+          const messageStart = trace.messages.length, searchStart = trace.searches.length;
+          const result = await app.runAnalysis();
+          await Vue.nextTick();
+          return {result, error: JSON.parse(JSON.stringify(app.errorLog)),
+            preserved: before === snapshot(), undoCount: history.getUndoCount(),
+            corruptResponses: window.__invalidManifestResponses,
+            searches: trace.searches.slice(searchStart), messages: trace.messages.slice(messageStart),
+            workerCount: trace.workers.length, liveWorkers: trace.workers.filter(w => !w.terminated).length,
+            processing: app.processing};
+        }''')
+        assert failed['result'] == {'status': 'error'} and failed['preserved'], failed
+        assert failed['error']['summary'] == (
+            'Protein comparison metadata could not be validated. Reload the page and try again.'), failed
+        assert failed['corruptResponses'] == 1 and failed['undoCount'] > 0, failed
+        assert not failed['searches'] and not failed['processing'], failed
+        assert all(message['type'] == 'helper' for message in failed['messages']), failed
+        assert failed['workerCount'] == failed['liveWorkers'] == 1, failed
+        page.evaluate('''async () => {
+          window.__invalidManifest = false;
+          const app = window.__GBDRAW_APP__;
+          app.setLinearSeqPrimaryFile(0, 'gb', window.__mergeOriginalFile);
+          await app.setLinearComparisonGlobalAction('losat');
+          const {state} = await import('/gbdraw/web/js/state.js');
+          state.losatDerivedCache.value.clear();
+        }''')
+        retry = record['savedRawRetry'] = integration_generate(page)
+        for key in ('svgSha256', 'geometrySha256', 'provenance'):
+            assert retry[key] == initial[key], key
+        assert not retry['searches'] and retry['workerCount'] == 1
+        close_context(context, page, record)
+        save()
+        print(viewport[0], 'saved raw, repeat, invalid manifest isolation and retry passed', flush=True)
 
 
 def run_integration_lifecycle(args, report, context_for, close_context, save):
