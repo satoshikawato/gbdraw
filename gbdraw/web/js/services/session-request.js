@@ -50,6 +50,10 @@ import {
   orderedOptionalConservationFiles
 } from '../app/conservation-series.js';
 import {
+  resolveLinearRecordEffectiveDefinition,
+  resolveLinearRecordEffectiveSubtitle
+} from '../app/linear-sources.js';
+import {
   assertValidCustomTrackPlan,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
@@ -712,8 +716,8 @@ const buildRecords = ({ state, filesData, resources }) => {
         region,
         presentation: {
           ...presentationPayload({
-            label: String(seq.definition ?? '').trim() || String(seq.file_definition ?? '').trim() || '',
-            subtitle: String(seq.record_subtitle ?? '').trim() || String(seq.file_subtitle ?? '').trim() || '',
+            label: resolveLinearRecordEffectiveDefinition(seq),
+            subtitle: resolveLinearRecordEffectiveSubtitle(seq),
             gridRow: resolvedRows[index] ?? null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
@@ -2364,12 +2368,17 @@ export const buildCanonicalRenderRequest = ({
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
   if (state.mode.value === 'linear') {
-    webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => ({
-      recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
-      losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1,
-      fileDefinition: String(filesData.linearSeqs[sourceIndex]?.file_definition || ''),
-      fileSubtitle: String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '')
-    }));
+    webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
+      const entry = {
+        recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
+        losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
+      };
+      const fileDefinition = String(filesData.linearSeqs[sourceIndex]?.file_definition || '').trim();
+      const fileSubtitle = String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '').trim();
+      if (fileDefinition) entry.fileDefinition = fileDefinition;
+      if (fileSubtitle) entry.fileSubtitle = fileSubtitle;
+      return entry;
+    });
   }
 
   return {
@@ -3490,6 +3499,10 @@ export const projectCanonicalSessionRequest = ({
       const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index];
       const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
         savedLinearRecordMetadata[sourceIndex] || legacyLinearSequences[sourceIndex] || {};
+      const fileDefinition = String(savedMetadata.fileDefinition ?? savedMetadata.file_definition ?? '');
+      const fileSubtitle = String(savedMetadata.fileSubtitle ?? savedMetadata.file_subtitle ?? '');
+      const recordLabel = String(record.presentation?.label || '');
+      const recordSubtitle = String(record.presentation?.subtitle || '');
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank'
@@ -3515,10 +3528,10 @@ export const projectCanonicalSessionRequest = ({
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),
-        definition: record.presentation?.label || '',
-        record_subtitle: record.presentation?.subtitle || '',
-        file_definition: String(savedMetadata.fileDefinition ?? savedMetadata.file_definition ?? ''),
-        file_subtitle: String(savedMetadata.fileSubtitle ?? savedMetadata.file_subtitle ?? ''),
+        definition: (fileDefinition && recordLabel === fileDefinition) ? '' : recordLabel,
+        record_subtitle: (fileSubtitle && recordSubtitle === fileSubtitle) ? '' : recordSubtitle,
+        file_definition: fileDefinition,
+        file_subtitle: fileSubtitle,
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
         region_start: region?.start ?? null,
         region_end: region?.end ?? null,

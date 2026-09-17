@@ -2,6 +2,7 @@ import { parseTransform } from './legend-layout/transform-utils.js';
 import { COMPOSITION_ROLE_ATTRIBUTE } from './legend-layout/composition-actions.js';
 import { COMPARISON_LEGEND_SELECTOR } from './legend/utils.js';
 import { isMultiRecordCanvasSvg } from './record-groups.js';
+import { resolveLinearRecordEffectiveDefinition } from './linear-sources.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
@@ -393,7 +394,7 @@ export const createResultsManager = ({
       if (groups.length === 0) return;
 
       const labels = linearSeqs.map((seq) => (
-        String(seq.definition ?? '').trim() || String(seq.file_definition ?? '').trim() || ''
+        resolveLinearRecordEffectiveDefinition(seq)
       ).toString());
       let updated = false;
       const parsedDefinitionFontSize =

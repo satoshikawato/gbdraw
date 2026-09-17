@@ -3420,11 +3420,17 @@ export const createAppSetup = () => {
   };
 
   const resetLinearRecordDefinition = (seq) => {
-    if (seq) seq.definition = '';
+    if (!seq) return;
+    history.runUndoable('Reset record definition', () => {
+      seq.definition = '';
+    });
   };
 
   const resetLinearRecordSubtitle = (seq) => {
-    if (seq) seq.record_subtitle = '';
+    if (!seq) return;
+    history.runUndoable('Reset record subtitle', () => {
+      seq.record_subtitle = '';
+    });
   };
 
   return {

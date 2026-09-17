@@ -114,3 +114,54 @@ test('resolveLinearRecordEffectiveSubtitle falls back to file default when recor
   assert.equal(resolveLinearRecordEffectiveSubtitle(seq1), 'Default subtitle');
   assert.equal(resolveLinearRecordEffectiveSubtitle(seq2), 'Overridden subtitle');
 });
+
+test('projectCanonicalSessionRequest preserves inheritance when label matches fileDefinition', async () => {
+  const { projectCanonicalSessionRequest, CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
+  const canonicalRequest = {
+    renderRequest: {
+      schema: CANONICAL_REQUEST_SCHEMA,
+      mode: 'linear',
+      grouping: 'single',
+      records: [
+        {
+          recordKey: 'rec-1',
+          source: { kind: 'genbank', resourceId: 'res-1' },
+          presentation: { label: '<i>Escherichia coli</i>', subtitle: 'Chromosome 1' },
+          display: { isCircular: null, startCoordinate: null }
+        },
+        {
+          recordKey: 'rec-2',
+          source: { kind: 'genbank', resourceId: 'res-1' },
+          presentation: { label: '<i>Custom Override</i>', subtitle: 'Overridden Subtitle' },
+          display: { isCircular: null, startCoordinate: null }
+        }
+      ],
+      diagramOptions: { featurePlacements: [] },
+      output: { prefix: 'test' }
+    },
+    webFiles: {
+      linearRecordMetadata: [
+        { recordKey: 'rec-1', fileDefinition: '<i>Escherichia coli</i>', fileSubtitle: 'Chromosome 1' },
+        { recordKey: 'rec-2', fileDefinition: '<i>Escherichia coli</i>', fileSubtitle: 'Chromosome 1' }
+      ]
+    },
+    resources: {
+      'res-1': { kind: 'file', name: 'records.gb' }
+    }
+  };
+
+  const projected = projectCanonicalSessionRequest(canonicalRequest);
+  assert.equal(projected.files.linearSeqs.length, 2);
+
+  // rec-1 inherited file default: definition and record_subtitle must be empty string
+  assert.equal(projected.files.linearSeqs[0].file_definition, '<i>Escherichia coli</i>');
+  assert.equal(projected.files.linearSeqs[0].file_subtitle, 'Chromosome 1');
+  assert.equal(projected.files.linearSeqs[0].definition, '');
+  assert.equal(projected.files.linearSeqs[0].record_subtitle, '');
+
+  // rec-2 had an explicit override: definition and record_subtitle must be preserved
+  assert.equal(projected.files.linearSeqs[1].file_definition, '<i>Escherichia coli</i>');
+  assert.equal(projected.files.linearSeqs[1].file_subtitle, 'Chromosome 1');
+  assert.equal(projected.files.linearSeqs[1].definition, '<i>Custom Override</i>');
+  assert.equal(projected.files.linearSeqs[1].record_subtitle, 'Overridden Subtitle');
+});
