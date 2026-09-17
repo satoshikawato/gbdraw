@@ -3942,6 +3942,9 @@ export const exportSession = async (
   const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
     state.legacyProteinDerivedEvidence.value
   );
+  if (!validateProteinIdentityManifest(state.proteinIdentityManifest.value)) {
+    throw new Error('Save Session requires a valid protein identity manifest.');
+  }
   const sessionData = {
     format: 'gbdraw-session',
     version: SESSION_VERSION,
@@ -4004,13 +4007,9 @@ export const exportSession = async (
     losatDerivedCache: {
       entries: []
     },
-    proteinIdentityManifest: validateProteinIdentityManifest(state.proteinIdentityManifest.value)
-      ? (
-          state.proteinIdentityManifest.value === adoptedProteinIdentityManifest
-            ? state.proteinIdentityManifest.value
-            : cloneJsonData(state.proteinIdentityManifest.value)
-        )
-      : emptyProteinIdentityManifest(),
+    proteinIdentityManifest: state.proteinIdentityManifest.value === adoptedProteinIdentityManifest
+      ? state.proteinIdentityManifest.value
+      : cloneJsonData(state.proteinIdentityManifest.value),
     cliInvocation: exportableCliInvocation
   };
 

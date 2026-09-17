@@ -1,0 +1,9 @@
+{
+  "python": "3.13.3",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "node": "v26.8.2",
+  "pythonPlaywright": "1.61.0",
+  "nodePlaywright": "1.61.1",
+  "packageLocation": ".venv/s09-package",
+  "browserSource": "See browser reports for exact Chromium version. Desktop-host narrow viewports, not physical mobile hardware."
+}

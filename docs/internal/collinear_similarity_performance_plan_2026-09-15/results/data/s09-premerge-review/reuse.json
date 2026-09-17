@@ -1,0 +1,85 @@
+{
+  "sourceBasis": "All 375 inherited Python/JS source hashes and both RW-04 test hashes matched before new edits; inherited 30-file evidence inventory also matched. See inheritance.json.",
+  "newBoundary": "Only exportSession final manifest rejection changes; raw filtering, readers, Generate, validators, algorithms and Worker transport remain as inherited.",
+  "records": [
+    {
+      "evidence": [
+        "s08-alias-validation/audit.json",
+        "s08-alias-validation/evidence-inventory.json",
+        "s08-alias-validation/browser-source.json.gz",
+        "s08-alias-validation/browser-package.json.gz"
+      ],
+      "use": "RW-04 validator, source/package saved raw, invalid alias failure/retry, exact fixture/output baseline; 374/375 current source files match. The config.js change is separately tested in S09.",
+      "sha256": {
+        "s08-alias-validation/audit.json": "13a93c4b7281a41c7a55e930f5f488500dbffe0c279c399438360cefef18e946",
+        "s08-alias-validation/evidence-inventory.json": "1ce1e56592b1825a015a4ac5a6914873ee63c3b801685edc8cd977ad433b552d",
+        "s08-alias-validation/browser-source.json.gz": "27b13d4d66c01d669024c6ca881a4f84e0b607897682e81fb56b508be4c862eb",
+        "s08-alias-validation/browser-package.json.gz": "8d3093ac396f9f3b1ca2f4bc18a00e66b0986abc06e3049ee0aa82ed073924f7"
+      }
+    },
+    {
+      "evidence": [
+        "s08-followup/audit.json",
+        "s08-followup/lifecycle.json.gz",
+        "s08-followup/offline-package.json.gz",
+        "s08-manifest-merge/reuse.json",
+        "s08-alias-validation/reuse.json"
+      ],
+      "use": "Unchanged biological source replacement, raw filtering, History undo/redo, explicit Run LOSAT derived reuse, downstream Cancel/completed raw retry, clearing, Circular and old migration. Later RW-03/04 validator changes are covered by their own evidence and new Node gates; this is not whole-tree identity with RW-01/02.",
+      "sha256": {
+        "s08-followup/audit.json": "8ead0f6963180930b75c6346a798f595fd1b52605f481134dba530b4613f1dda",
+        "s08-followup/lifecycle.json.gz": "4d2c0598a32f8db3a7261b598d4d7e398b0090da6150205319ffaf48409460bd",
+        "s08-followup/offline-package.json.gz": "23f93dcf4828998d899089b4239bedb64b7df27118e085d9f39251d399ab391b",
+        "s08-manifest-merge/reuse.json": "69046095b1136201985a295f7a08d533d8659a5e3b1e8a3790a4b2fc3ec5a433",
+        "s08-alias-validation/reuse.json": "ddac000f89662cb7c3723206d7cb3851b3d4a0ae880832fc3b1189a6591d87e0"
+      }
+    },
+    {
+      "evidence": [
+        "s08-logs/python-fast-final.log",
+        "s08-logs/typed-session.log",
+        "s08-cli.json",
+        "s08-native-reuse.json",
+        "s08-contract-reuse.json"
+      ],
+      "use": "All 208 current Python sources are byte-identical to the verified S08/RW-01/02 snapshot. Reuse native science, API/CLI, typed/readers, reference outputs and full-suite results with original skips. No native workloads or measurements rerun.",
+      "sha256": {
+        "s08-logs/python-fast-final.log": "67423f516197c6c3ffc863f5a58098fff212c8938438e16724e3cec6362a2526",
+        "s08-logs/typed-session.log": "70b90c843eaa83e4570cbf2676c7635b70804f300055e43218150f56f2130c1d",
+        "s08-cli.json": "b7c86295942a2a8fe1191d8e5d2fb87d89d80aa9b7d9be3378d8404d7e076ff2",
+        "s08-native-reuse.json": "ace75ea54914839eb9f9403dacfc223ffece21ddb101a968d7525201f4556239",
+        "s08-contract-reuse.json": "91218a8cfd0faf893e8f16ba438c11b63daf59659a93f1a348433ecf21f2dd23"
+      }
+    },
+    {
+      "evidence": [
+        "s06-logs/python-final-affected.log",
+        "s06-browser-acceptance-final.json",
+        "s06-measurement-source-check.json",
+        "s02-publication.json.gz"
+      ],
+      "use": "S06 path owner/codec/promotion and public adapters remain byte/AST identical; later science-owner edits use S08 final coverage. Read-only Git witnesses recheck publication; earlier scope/hash and performance limitations remain.",
+      "sha256": {
+        "s06-logs/python-final-affected.log": "d600201b2d9f9d69f896f28a4d5074750159399ea88d824e90036536a3977552",
+        "s06-browser-acceptance-final.json": "8164f83268d8b345f1d02b7c72b776fd8b6bbdc72c9312708587398c116dd024",
+        "s06-measurement-source-check.json": "5614269971ee43f5465655ba5a97523ead4e2d6aabce003d7e44b8d455975dab",
+        "s02-publication.json.gz": "0a1f6ae92274e4b359463daf62a58dbef9640322605efca32e6c71e266c48b7e"
+      }
+    }
+  ],
+  "routeNotes": {
+    "normalGenerate": "Resolved committed typed resources can satisfy Generate without raw lookup or derived hit.",
+    "explicitRunLosat": "The existing action clears resolved artifacts; a matching derived payload is a separately tested continuation.",
+    "save": "Existing raw filter -> scoped validator/index -> final manifest validation -> resource/Session serialization; S09 replaces only invalid fallback.",
+    "freshLoad": "Reader preflight -> manifest index -> per-entry strict raw/derived references -> existing import transaction; no validation removed."
+  },
+  "notRun": [
+    "Unchanged native science/full pytest/reference regeneration",
+    "S08 full timings or long new LOSAT searches",
+    "Full cancel/clear/source-replacement lifecycle",
+    "Hosted analytics/deploy bundle"
+  ],
+  "timingSamples": 0,
+  "warmups": 0,
+  "secondsImprovement": "Unmeasured for RW-01 through RW-04; no S09 timing claim."
+}

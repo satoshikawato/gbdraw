@@ -1,0 +1,51 @@
+{
+  "pythonExecutable": "/home/kawato/micromamba/bin/python",
+  "commands": [
+    {
+      "argv": [
+        "python",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "Python 3.13.3",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "v26.8.2",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "playwright",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "Version 1.61.0",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "ruff",
+        "--version"
+      ],
+      "exit": 0,
+      "stdout": "ruff 0.15.12",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "-e",
+        "console.log(require.resolve('@playwright/test'))"
+      ],
+      "exit": 0,
+      "stdout": "/mnt/c/Users/genom/GitHub/gbdraw/node_modules/@playwright/test/index.js",
+      "stderr": ""
+    }
+  ]
+}

@@ -48,7 +48,8 @@ def main():
     parser.add_argument('--baseline-root', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--resume', action='store_true', help='Reuse completed checks only with identical wheel/source hashes')
-    parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline', 'manifest-merge'))
+    parser.add_argument('--integration', choices=('timing', 'lifecycle', 'replacement', 'offline', 'manifest-merge', 'session-writer'))
+    parser.add_argument('--manifest-fault', choices=('schema', 'blank-alias'), default='schema')
     parser.add_argument('--cases', nargs='+', choices=tuple(INTEGRATION_CASES), default=list(INTEGRATION_CASES))
     parser.add_argument('--samples', type=int, choices=(1, 2, 3), default=3)
     parser.add_argument('--server-root', type=Path, default=ROOT,
@@ -414,12 +415,19 @@ def run_integration(args):
                 if args.integration == 'manifest-merge':
                     # Corrupt only a real extraction response, before the client sees
                     # it. Success runs use the original transport and response bytes.
+                    record['manifestFault'] = args.manifest_fault
+                    fault = 'data.result.identity_manifest.schema = -1;'
+                    if args.manifest_fault == 'blank-alias':
+                        fault = """
+                          const instance = Object.values(data.result.identity_manifest.recordInstances)[0];
+                          Object.values(instance.featureMetadata)[0].displayAlias = ' \\t\\u3000';
+                        """
                     observer = observer.replace('const key = data?.requestId', """
                       if (window.__invalidManifest && data?.ok && data.result?.identity_manifest) {
-                        data.result.identity_manifest.schema = -1;
+                        MANIFEST_FAULT
                         window.__invalidManifestResponses++;
                       }
-                      const key = data?.requestId""")
+                      const key = data?.requestId""".replace('MANIFEST_FAULT', fault))
                 context.add_init_script(observer)
                 page = context.new_page()
                 page.set_default_timeout(180_000)
@@ -445,6 +453,8 @@ def run_integration(args):
             try:
                 if args.integration == 'manifest-merge':
                     run_manifest_merge(context_for, close_context, save)
+                elif args.integration == 'session-writer':
+                    run_session_writer(args, context_for, close_context, save)
                 elif args.integration in {'lifecycle', 'replacement'}:
                     run_integration_lifecycle(args, report, context_for, close_context, save)
                 elif args.integration == 'offline':
@@ -520,6 +530,94 @@ def run_integration(args):
         server.server_close()
         thread.join()
         save()
+
+
+def run_session_writer(args, context_for, close_context, save):
+    """Reject corrupted save metadata, then save/load/reanalyse real saved raw."""
+    fixture = ROOT / 'gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz'
+    artifacts = ROOT / '.venv' / (args.output.name.split('.')[0] + '-artifacts')
+    artifacts.mkdir(parents=True, exist_ok=True)
+    for viewport in ((1280, 720), (390, 844)):
+        context, page, record = context_for(viewport)
+        integration_import(page, fixture)
+        record['fixtureSha256'] = digest(fixture.read_bytes())
+        record['workersAfterPreviewLoad'] = page.evaluate('() => window.__integration.workers.length')
+        assert record['workersAfterPreviewLoad'] == 0
+        record['preparation'] = integration_prepare(page, 'hep-on')
+        initial = record['savedRaw'] = integration_generate(page)
+        assert initial['telemetry']['cacheHits'] == 13 and not initial['searches']
+        record['writerChecks'] = page.evaluate('''async () => {
+          const {state} = await import('/gbdraw/web/js/state.js');
+          const {exportSession} = await import('/gbdraw/web/js/services/config.js');
+          const app = window.__GBDRAW_APP__, history = window.__GBDRAW_HISTORY__;
+          const original = {manifest: state.proteinIdentityManifest.value,
+            raw: state.losatCache.value, info: state.losatCacheInfo.value};
+          const snapshot = () => JSON.stringify({results: app.results,
+            selected: app.selectedResultIndex, undo: history.getUndoCount(), redo: history.getRedoCount(),
+            raw: [...state.losatCache.value], info: state.losatCacheInfo.value,
+            derived: [...state.losatDerivedCache.value], manifest: state.proteinIdentityManifest.value});
+          const rows = [], createUrl = URL.createObjectURL;
+          let downloads = 0;
+          URL.createObjectURL = (...args) => { downloads++; return createUrl(...args); };
+          try {
+            for (const cacheKind of ['empty', 'nucleotide']) {
+              state.losatCache.value = new Map(cacheKind === 'empty' ? [] : [['nucleotide',
+                {schema: 2, kind: 'raw-losat', program: 'blastn', text: ''}]]);
+              state.losatCacheInfo.value = [];
+              const badAlias = JSON.parse(JSON.stringify(original.manifest));
+              Object.values(Object.values(badAlias.recordInstances)[0].featureMetadata)[0].displayAlias = ' ';
+              for (const manifest of [null, badAlias]) {
+                state.proteinIdentityManifest.value = manifest;
+                const before = snapshot();
+                let error = null, status = null;
+                try { status = (await exportSession('s09-invalid-manifest')).status; }
+                catch (failure) { error = failure.message; }
+                rows.push({cacheKind, fault: manifest === null ? 'null' : 'blank-alias',
+                  error, status, preserved: snapshot() === before, downloads});
+              }
+            }
+          } finally {
+            URL.createObjectURL = createUrl;
+            state.proteinIdentityManifest.value = original.manifest;
+            state.losatCache.value = original.raw;
+            state.losatCacheInfo.value = original.info;
+          }
+          window.__s09SaveSnapshot = snapshot;
+          window.__s09BeforeSave = snapshot();
+          return rows;
+        }''')
+        for row in record['writerChecks']:
+            assert row['error'] == 'Save Session requires a valid protein identity manifest.', row
+            assert row['status'] is None and row['preserved'] and row['downloads'] == 0, row
+        saved = acceptance._save_session(page, acceptance.AcceptanceChecks())
+        assert page.evaluate('() => window.__s09SaveSnapshot() === window.__s09BeforeSave')
+        target = artifacts / f'{viewport[0]}.gbdraw-session.json.gz'
+        target.write_bytes(saved.read_bytes())
+        document = json.loads(gzip.decompress(target.read_bytes()))
+        record['savedSha256'] = digest(target.read_bytes())
+        record['savedRawCount'] = len(document['losatCache']['entries'])
+        assert record['savedRawCount'] == 13
+        close_context(context, page, record)
+        save()
+        context, page, restored = context_for(viewport)
+        integration_import(page, target)
+        restored['workersAfterPreviewLoad'] = page.evaluate('() => window.__integration.workers.length')
+        assert restored['workersAfterPreviewLoad'] == 0
+        page.evaluate('''async () => {
+          await window.__GBDRAW_APP__.setLinearComparisonGlobalAction('losat');
+          const {state} = await import('/gbdraw/web/js/state.js');
+          state.losatDerivedCache.value.clear();
+        }''')
+        regenerated = restored['regenerated'] = integration_generate(page)
+        assert regenerated['telemetry']['cacheHits'] == 13 and not regenerated['searches']
+        for field in ('svgSha256', 'geometrySha256', 'provenance'):
+            assert regenerated[field] == initial[field], field
+        repeated = restored['resolvedRepeat'] = integration_generate(page)
+        assert repeated['svgSha256'] == regenerated['svgSha256'] and not repeated['searches']
+        assert repeated['workerCount'] == regenerated['workerCount'] == 1
+        close_context(context, page, restored)
+        save()
+        print(viewport[0], 'writer rejection, recovery, fresh Load/raw reuse and disposal passed', flush=True)
 
 
 def run_manifest_merge(context_for, close_context, save):

@@ -218,10 +218,10 @@ export const validateProteinIdentityManifest = (manifest) => {
       const metadata = instance.featureMetadata[featureId];
       if (
         !isPlainObject(metadata) ||
-        typeof metadata.displayAlias !== 'string' ||
-        !metadata.displayAlias.normalize('NFC').trim()
+        typeof metadata.displayAlias !== 'string'
       ) return false;
       const alias = metadata.displayAlias.normalize('NFC').trim();
+      if (!alias) return false;
       if (!featuresByAlias.has(alias)) featuresByAlias.set(alias, []);
       featuresByAlias.get(alias).push(featureId);
       allRuntimeHandles.add(runtimeHandle);

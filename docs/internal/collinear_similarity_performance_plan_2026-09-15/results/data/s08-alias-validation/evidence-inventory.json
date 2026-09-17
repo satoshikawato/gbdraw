@@ -1,0 +1,125 @@
+{
+  "scope": "All evidence directory files after final-audit completion, excluding this self-referential inventory. Includes final audit outputs and separated patches.",
+  "files": {
+    "architecture-cumulative.log": {
+      "bytes": 6358,
+      "sha256": "7433e01fc1c8c0aebbd95eafc3b09cf43aebe054c43a471a0f6d309107171068"
+    },
+    "architecture-escalated.log": {
+      "bytes": 6156,
+      "sha256": "2a23c1a0480937eee4dd0b3c4e33a27f033828e8a3c589b56cdc0b98df48d8f8"
+    },
+    "architecture.log": {
+      "bytes": 1329,
+      "sha256": "b76ab56bd8a85511e5c85579150f314ee521532cdac9bbeb5f5bf016fbe81177"
+    },
+    "audit.json": {
+      "bytes": 176051,
+      "sha256": "13a93c4b7281a41c7a55e930f5f488500dbffe0c279c399438360cefef18e946"
+    },
+    "audit.py": {
+      "bytes": 8761,
+      "sha256": "dafcd1b31667e18cfddd14a3247a71472bb026f7c766557d45dc1c436827f2df"
+    },
+    "browser-package.json.gz": {
+      "bytes": 14834,
+      "sha256": "8d3093ac396f9f3b1ca2f4bc18a00e66b0986abc06e3049ee0aa82ed073924f7"
+    },
+    "browser-package.log": {
+      "bytes": 135,
+      "sha256": "f82f71d3053cafcaddd2ea0290438ef26e364482aa457ae5d43371e9f8a5166a"
+    },
+    "browser-source-escalated.log": {
+      "bytes": 135,
+      "sha256": "f82f71d3053cafcaddd2ea0290438ef26e364482aa457ae5d43371e9f8a5166a"
+    },
+    "browser-source.json.gz": {
+      "bytes": 14877,
+      "sha256": "27b13d4d66c01d669024c6ca881a4f84e0b607897682e81fb56b508be4c862eb"
+    },
+    "browser-source.log": {
+      "bytes": 1204,
+      "sha256": "467cb0c5ede7b1a95a1da973951109de04dac9e4a8ef9bb33e4c78c4595acefc"
+    },
+    "browser-wheel.log": {
+      "bytes": 746,
+      "sha256": "04b97662b958995ea0131be4299386ff714c10e1c599fb97660874d30abda8f0"
+    },
+    "commands.jsonl": {
+      "bytes": 6183,
+      "sha256": "ccbe6f9e066a3435335239667b19f4c0523ab751a8ceb0705c8b8d03adf5d1dd"
+    },
+    "environment.json": {
+      "bytes": 911,
+      "sha256": "e4317a5cbc77fb428d256cd68e1202f695380edc98a7175f47a795e01ac464c0"
+    },
+    "evidence-lint.log": {
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "final-audit.log": {
+      "bytes": 4046,
+      "sha256": "c8380e7a8321031306a26332e1b6f1450ee75fa97c33dd407fd3137150fe6763"
+    },
+    "focused-green.log": {
+      "bytes": 243,
+      "sha256": "bc5c9859c96cccd4596d06f97e49f2d0cb62448dabb9f35276e7ccd7be8f8bc6"
+    },
+    "focused-red.log": {
+      "bytes": 698,
+      "sha256": "40a3fb9ee4ef9cd13b8c9bf071dd337c996711af548dc814d93ae8f6fd8293ea"
+    },
+    "inheritance.json": {
+      "bytes": 123086,
+      "sha256": "6a4040d74ea854297d61a70dc0de087c9802e12264268c5957ad854fc0931601"
+    },
+    "lint.log": {
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "new-documentation.patch": {
+      "bytes": 19732,
+      "sha256": "c967f3afc23fc9e07553b37f38a88d876eb611422c7424e90174ef5339f0f5b5"
+    },
+    "new-production.patch": {
+      "bytes": 674,
+      "sha256": "25e05e57d6f2edc4699456100245aab07f34e3bbe181b14c3d22bd4852a11dc2"
+    },
+    "new-tests-and-tools.patch": {
+      "bytes": 6616,
+      "sha256": "a1e89b3f08f88d64bd9461921a8e4d94e2efcbedf7e3cfafba895a0d69d8a35e"
+    },
+    "node-gates.log": {
+      "bytes": 547,
+      "sha256": "e86cb31f21d0a29d25ead18ec1cea4cb57f772ec0f7625c30a44e36651d48db8"
+    },
+    "offline-assets.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "package-install.log": {
+      "bytes": 1084,
+      "sha256": "8b90dc0ba6571bd07ad458cc7c225e4909fdb63cd6556b5196dfe34c28febd8e"
+    },
+    "preserved-start.json": {
+      "bytes": 10801,
+      "sha256": "36f831f95032a4c66f5b3e706055c2345d69dbe899748a3dfdaba6b6244588a2"
+    },
+    "reuse.json": {
+      "bytes": 1579,
+      "sha256": "ddac000f89662cb7c3723206d7cb3851b3d4a0ae880832fc3b1189a6591d87e0"
+    },
+    "run.py": {
+      "bytes": 748,
+      "sha256": "5d26ab724ef752d0e94592e0538af124d4ac8769e586e54aefa13ad786b1fcde"
+    },
+    "schema-escalated.log": {
+      "bytes": 388,
+      "sha256": "9adb91b1162de35778eb7e14047468cd87e8c2a6d969ba995aa822849630bb9a"
+    },
+    "schema.log": {
+      "bytes": 2473,
+      "sha256": "16a3386d52624c2d48d2433a175390dd2d606bd06cc4fd974f1946fa69b82836"
+    }
+  }
+}

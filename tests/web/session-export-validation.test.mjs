@@ -235,11 +235,39 @@ try {
   assert.deepEqual([...state.losatCache.value], entries, 'Save must not mutate live cache/History state');
   state.proteinIdentityManifest.value = null;
   await assert.rejects(exportSession('invalid-protein-manifest'), /valid protein identity manifest/);
+  // A missing protein raw entry must not turn an invalid manifest into a
+  // successful save with silently discarded identity metadata.
+  for (const rawEntries of [[], [entries.at(-1)]]) {
+    state.losatCache.value = new Map(rawEntries);
+    state.losatCacheInfo.value = [];
+    for (const invalidManifest of [null, { schema: -1 }, {
+      ...structuredClone(replacementSession.proteinIdentityManifest),
+      recordAnalyses: {}
+    }]) {
+      state.proteinIdentityManifest.value = invalidManifest;
+      await assert.rejects(exportSession('invalid-manifest-without-protein-raw'),
+        /valid protein identity manifest/);
+      assert.equal(state.proteinIdentityManifest.value, invalidManifest);
+      assert.deepEqual([...state.losatCache.value], rawEntries);
+      assert.equal(downloadedBlobs, 2);
+      assert.equal(compressionAttempts, 2);
+    }
+  }
+  for (const rawEntries of [[], [entries.at(-1)]]) {
+    state.losatCache.value = new Map(rawEntries);
+    state.proteinIdentityManifest.value = structuredClone(session.proteinIdentityManifest);
+    const valid = await exportSession(`valid-empty-manifest-${rawEntries.length}`);
+    const document = JSON.parse(gunzipSync(Buffer.from(await valid.blob.arrayBuffer())).toString('utf8'));
+    assert.equal(valid.status, 'saved');
+    assert.deepEqual(document.proteinIdentityManifest, session.proteinIdentityManifest);
+    assert.equal(document.losatCache.entries.length, rawEntries.length);
+    assert.doesNotThrow(() => validateSessionLosatArtifacts(document, document.version));
+  }
 } finally {
   URL.createObjectURL = originalCreateObjectUrl;
   globalThis.CompressionStream = OriginalCompressionStream;
 }
 assert.ok(inputReads > 0, 'saving must bind the active input file');
-assert.equal(compressionAttempts, 2);
-assert.equal(downloadedBlobs, 2);
+assert.equal(compressionAttempts, 4);
+assert.equal(downloadedBlobs, 4);
 assert.ok(downloadedBlob instanceof Blob);

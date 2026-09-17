@@ -365,7 +365,11 @@ probeSource = probeSource.replace(
   /new Set\(Object.values\((\w+)\.runtimeIds\)\)/g,
   'new Set((counts.runtimeSets++, Object.values($1.runtimeIds)))'
 );
-await writeFile(probePath, 'export const manifestCalls = [];\nexport const counts = {manifest: 0, tsv: 0, runtimeSets: 0};\n' + probeSource);
+probeSource = probeSource.replaceAll(
+  "metadata.displayAlias.normalize('NFC').trim()",
+  "(aliasNormalizations++, metadata.displayAlias.normalize('NFC').trim())"
+);
+await writeFile(probePath, 'export let aliasNormalizations = 0;\nexport const manifestCalls = [];\nexport const counts = {manifest: 0, tsv: 0, runtimeSets: 0};\n' + probeSource);
 const counted = await import(pathToFileURL(probePath));
 assert.ok(counted.getCurrentRawLosatCacheEntry(rawMap, 'protein-key', proteinEntry, manifest));
 assert.deepEqual(counted.counts, {manifest: 1, tsv: 1, runtimeSets: 2}, 'one validation per getter hit');
@@ -871,3 +875,59 @@ await exercisePairLoop({promote: true, mutateSource: true});
 await exercisePairLoop({failure: 'error'});
 await exercisePairLoop({failure: 'cancel'});
 await exercisePairLoop(); // Retry must acquire a new index.
+
+// Alias validity and ordinal grouping must use the same NFC-trimmed value.
+for (const [alias, valid] of [
+  ['protein-a', true], [' e\u0301 ', true], ['\u00e9', true], ['\u200b', true],
+  ['', false], [' \t\r\n\u00a0\u3000', false],
+  [null, false], [undefined, false], [42, false], [false, false], [[], false], [{}, false]
+]) {
+  const candidate = structuredClone(manifest);
+  candidate.recordInstances['record-1'].featureMetadata[featureA].displayAlias = alias;
+  const before = structuredClone(candidate);
+  assert.equal(cache.validateProteinIdentityManifest(candidate), valid);
+  assert.equal(Boolean(getProteinEntry(proteinEntry, candidate)), valid);
+  assert.deepEqual(candidate, before, 'validation must not rewrite the stored alias');
+}
+for (const metadata of [null, [], {}, { displayAlias: 'valid', exportOrdinal: 1 }]) {
+  const candidate = structuredClone(manifest);
+  candidate.recordInstances['record-1'].featureMetadata[featureA] = metadata;
+  assert.equal(cache.validateProteinIdentityManifest(candidate), false);
+}
+for (const [left, right, ordinals, valid] of [
+  [' e\u0301 ', '\u00e9', [1, 2], true],
+  [' e\u0301 ', '\u00e9', [2, 1], false],
+  [' e\u0301 ', '\u00e9', [null, null], false],
+  [' e\u0301 ', '\u00e9', ['1', '2'], false],
+  ['A', 'a', [null, null], true],
+  ['\uff21', 'A', [null, undefined], true]
+]) {
+  const candidate = structuredClone(firstRecord);
+  candidate.proteinSets['sha256:set-a'].proteins.push({ featureAnalysisId: featureB });
+  const instance = candidate.recordInstances['record-1'];
+  instance.runtimeIds = { [featureB]: runtimeB, [featureA]: runtimeA };
+  instance.featureMetadata = {
+    [featureB]: { displayAlias: right, exportOrdinal: ordinals[1] },
+    [featureA]: { displayAlias: left, exportOrdinal: ordinals[0] }
+  };
+  const before = structuredClone(candidate);
+  assert.equal(cache.validateProteinIdentityManifest(candidate), valid,
+    'NFC collisions use feature-ID order, preserving case and compatibility distinctions');
+  assert.deepEqual(candidate, before);
+}
+const blankAlias = structuredClone(firstRecord);
+blankAlias.recordInstances['record-1'].featureMetadata[featureA].displayAlias = ' \t\u3000';
+const aliasConflict = structuredClone(firstRecord);
+aliasConflict.recordInstances['record-1'].featureMetadata[featureA].displayAlias = 'different';
+assert.throws(() => mergeForGenerate([firstRecord, aliasConflict, blankAlias]),
+  { name: 'Error', message: reloadMessage });
+assert.throws(() => cache.mergeProteinIdentityManifests([firstRecord, aliasConflict, blankAlias]),
+  /conflicting record instance/);
+assert.throws(() => cache.mergeProteinIdentityManifests([blankAlias]),
+  { name: 'Error', message: invalidInputMessage });
+console.log('RW-04: alias validity, NFC collisions, ordinals, immutability and failure precedence passed');
+const aliasCountBefore = counted.aliasNormalizations;
+assert.equal(counted.validateProteinIdentityManifest(manifest), true);
+const aliasOperations = counted.aliasNormalizations - aliasCountBefore;
+console.log(`RW-04: 2 valid feature aliases, ${aliasOperations} NFC/trim operations`);
+assert.equal(aliasOperations, 2, 'one normalization per valid feature alias in each manifest validation');

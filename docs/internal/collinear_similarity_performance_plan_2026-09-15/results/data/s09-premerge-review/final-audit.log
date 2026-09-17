@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s09-premerge-review/audit.py", line 210, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s09-premerge-review/audit.py", line 112, in main
+    assert b'OrthogroupResult' in api_source and b'OrthologPath' in api_source
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

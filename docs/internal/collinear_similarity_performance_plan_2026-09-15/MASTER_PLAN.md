@@ -4,6 +4,36 @@
 - 状態: S08の統合・回帰検証とhandoff完了（2026-09-17 JST）。source変更後のSession保存不具合を修正し、最終sourceのgate・実browser・offline・上限内のWeb時間確認を完了した。S07.5〜S07.8の追加高速化は終了。S07の既承認、S06の将来merge前Review、S05却下を維持する。新たな性能承認や統合mergeは行っていない。
 - 対象: Similarity groups（内部トークン `orthogroup`）と Collinear の解析、Web 中間キャッシュ、結果・保存メタデータ。
 
+## S09: S06互換性・S08 Session writerの統合前レビュー（2026-09-17 JST）
+
+今回新しく区切るレビュー工程。S08や局所重複調査の再開ではない。
+最新origin/dev `5e0cb0fa` 由来の専用worktree/branchで10依存commitを重複なく継承し、
+RW-04の未コミット37ファイルと375 source hashを照合した。
+PATH-B、typed resource 1/2読込・3 writer、明示的旧tuple、S06例外宣言、S08 writerと
+RW-01〜04の接続をReviewした。不正manifestが空/nucleotide-only raw cacheのとき
+空manifestへ置換され正常保存される不具合を再現し、既存writerの最終検証で明示的に拒否した。
+正常な空manifest保存、inactive raw保持、live cache/History、readerとindex寿命は維持する。
+focused gateとsource/新規installed packageのdesktop/mobile実browserは通過。
+保存失敗時の状態保持と正常Save→fresh Load→保存raw 13 hits・検索0回を確認した。最終source・wheel/package・継承証拠・既存11 worktreeの保持監査も完了した。
+[S09 findings・根拠・検証・handoff](results/S09_PREMERGE_REVIEW.md)と
+`results/data/s09-premerge-review/`に今回の証拠を分離した。
+未変更の科学計算・全測定・長い新規検索は再実行せず、秒数改善は未測定。
+S08完了・S07承認・S05却下・S07.5〜S07.8終了を維持する。
+S06互換性例外とS08 writerの人によるmerge前Review、最終candidateのcommit固定は残る。
+未コミットsourceをexact-head承認済みとしない。push/PR/merge/tag/deployは行わない。
+
+## S08後続: alias validation（2026-09-17 JST）
+
+RW-01〜03を含むcommit `6d361253` を最新origin/dev由来の専用worktreeへ継承した。
+局所調査で、manifest validator内の同じaliasに対するNFC/trim二重評価を確認し、
+RW-04として既存ownerの1箇所で2回→1回にした。検証回数・入力許容範囲・失敗順は維持する。
+Unicode/ordinalのfocused gate、既存RW-01〜03・Session・run-analysis回帰、
+source/installed packageのdesktop/mobile実Workerで保存raw 13 hits・検索0回、
+結果/provenance一致、空alias時の失敗隔離・retryを確認した。
+[調査範囲・修正・検証・handoff](results/S08_FOLLOWUP_ALIAS_VALIDATION.md)を参照。
+新規時間測定なし。S08完了、S07承認、S06/S08 writerの将来merge前Review、S05却下、
+S07.5〜S07.8終了を維持する。次のRWは登録していない。
+
 ## S08後続: manifest merge（2026-09-17 JST）
 
 RW-03を既存merge owner内で修正した。Generateの入力manifest検証を2R→Rへ集約し、

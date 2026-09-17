@@ -1,0 +1,158 @@
+{
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "head": "6d3612534c1cd236d7fa3f130d4940c4536ae00c",
+  "branch": "review/s09-premerge-20260917",
+  "upstream": null,
+  "sourceIsHeadPlusUncommittedRW04AndS09": true,
+  "sourceAggregateSha256": "2786f88d13149749167f4f3fc5fa12c8d6bdba5e611ab06aa3c99c5d232daa6d",
+  "s09ChangedSourceFiles": [
+    "gbdraw/web/js/services/config.js"
+  ],
+  "unchangedPythonFiles": 208,
+  "testsSha256": {
+    "tests/run_protein_local_browser_acceptance.py": "08d53eee59b79783fa2ea916f94bd9a17ba092e3657772fdd97cc53f38adbcfb",
+    "tests/web/losat-cache.test.mjs": "c9e5e2149b1c106ea11743ffba53082434e9a27c21d8a80b10d38fde2b1114d0",
+    "tests/web/session-export-validation.test.mjs": "ffa1b897be88c491c6d95db1c247cd7d91727c52859a7b0dded0a519523497f5"
+  },
+  "authoritiesUnchangedFromBase": {
+    "AGENTS.md": "481ad5565023baf4ed1ec0517f97333f6be5fb5510a1a3a64f9a7f29b81946b5",
+    "CLAUDE.md": "bcb549f35299ab6a78d81f1ff25fba5c0ef4c3ca84c9e587998e668bb4c0c21e",
+    "gbdraw/web/CLAUDE.md": "44a5b70fb63053c3ef02daeba527b02e1458480095493be74494340fbf16d3d5",
+    "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md": "779f5c20630e17522a011bb242bf3e1144fa4d9502c6ea00ceb14990df83db60",
+    "docs/internal/PRODUCT_IMPACT_RATCHET.md": "f35e4bd11257e10eda1b518e5d6366edb8632de9ea0802d81b9531e1100cd235",
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "2c7d20e424ce0cc092264084e5909993158be8233899e829fa225893d06eab90",
+    "tools/web-product-impact-map.json": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+    "tools/web-product-decisions.json": "23b1843c9cc1d5d1e974f75c647b2dc299c53d5c117cfdf45830003eda5ef3b6",
+    "tools/web-architecture-rules.json": "5ed342ad89f394a8621d0faa7910c3c6d15deaf19ef4ebefd96ec65172326282",
+    "tools/check-web-change-budget.mjs": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c"
+  },
+  "baseSessionContractSha256": "e061a746652f0d861d9331b70e0332162ec5d5868d3f2e54ce21b4c5cbbfd231",
+  "historicalTrackedFilesPreserved": 1022,
+  "preservedWorktrees": [
+    "/mnt/c/Users/genom/GitHub/gbdraw",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s06-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-5-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-6-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-local-duplication-20260917",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917"
+  ],
+  "publicWitnesses": [
+    {
+      "gitObject": "0.13.0:gbdraw/web/gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json",
+      "sha256": "e62f4a1dd51404f726be022fd3259cbabbd0fd4dddb529ffd385fddb10e422d1",
+      "typedResources": {}
+    },
+    {
+      "gitObject": "17e2c9dee32724219aa7c96a02d183280ffbe438:gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+      "sha256": "1a99019cc2d4bddc7957c24c2913bc8430ccebe619d7cd4da5d648339e07c3c4",
+      "typedResources": {
+        "comparison-orthogroups": {
+          "kind": "orthogroupResult",
+          "schema": 1,
+          "sha256": "40868b747828f2f1f9b68f2599f51214727897a2a0e0d39c00602dbd9e858b37",
+          "type": "OrthogroupResult"
+        }
+      }
+    },
+    {
+      "gitObject": "3bca0e8d98d7743e5df4f30dfb33a0fa34ddbf2f:gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+      "sha256": "5e566c305535bb4caccf50723158462471ecf82ce5f71ecc2fda57f91e80f937",
+      "typedResources": {
+        "comparison-orthogroups": {
+          "kind": "orthogroupResult",
+          "schema": 2,
+          "sha256": "295ee47f12dbeaf5d763436b9e279480b51143989ca892863a36ff3451d3b1dc",
+          "type": "OrthogroupResult"
+        }
+      }
+    },
+    {
+      "gitObject": "6b89c7814f95e7dfb1aebe89e79163ae529219f8:gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+      "sha256": "3f10b998e7f257fa0458fb4310f9c5ae246d3e431b8f54755b16fe506f53dbdd",
+      "typedResources": {
+        "comparison-orthogroups": {
+          "kind": "orthogroupResult",
+          "schema": 1,
+          "sha256": "40868b747828f2f1f9b68f2599f51214727897a2a0e0d39c00602dbd9e858b37",
+          "type": "OrthogroupResult"
+        }
+      }
+    }
+  ],
+  "releaseApiWitnesses": {
+    "0.13.0:gbdraw/api/__init__.py": "938d6536cfabe1fe4f74a7e80122c0fbee0be01f66bd2049a0cf28fe4c066f7e",
+    "0.13.0:gbdraw/api/options.py": "4c5094237b01179c6147c61a0ffb37cc3a395db51dad2e8497467e1da13cec38",
+    "0.13.0:gbdraw/analysis/protein_colinearity.py": "f5aef91b938414bbd77855e344ccf8b474d6027da55030554ffe251be3e59174"
+  },
+  "s06UnchangedPathDefinitions": [
+    "OrthogroupGraphResult",
+    "OrthogroupResult",
+    "_build_ortholog_path_indexes",
+    "compact_ortholog_paths",
+    "materialize_ortholog_paths"
+  ],
+  "s06UnchangedBoundaryFiles": [
+    "gbdraw/analysis/ortholog_paths.py",
+    "gbdraw/session_request_codec.py",
+    "gbdraw/api/session_compat.py",
+    "gbdraw/api/request_render.py",
+    "gbdraw/web_support/orthogroup_metadata.py",
+    "gbdraw/web/js/services/session-request.js"
+  ],
+  "wheelSha256": "db4314e30482d74186682eaddfb894a1ca108885bc470827ab806cf4ad254c90",
+  "installedMatchingFiles": 466,
+  "browserParity": [
+    {
+      "artifact": "browser-source.json.gz",
+      "viewport": [
+        1280,
+        720
+      ],
+      "savedRawHits": 13,
+      "searches": 0,
+      "invalidSaveCases": 4,
+      "svgGeometryProvenanceEqualToRW04": true
+    },
+    {
+      "artifact": "browser-source.json.gz",
+      "viewport": [
+        390,
+        844
+      ],
+      "savedRawHits": 13,
+      "searches": 0,
+      "invalidSaveCases": 4,
+      "svgGeometryProvenanceEqualToRW04": true
+    },
+    {
+      "artifact": "browser-package.json.gz",
+      "viewport": [
+        1280,
+        720
+      ],
+      "savedRawHits": 13,
+      "searches": 0,
+      "invalidSaveCases": 4,
+      "svgGeometryProvenanceEqualToRW04": true
+    },
+    {
+      "artifact": "browser-package.json.gz",
+      "viewport": [
+        390,
+        844
+      ],
+      "savedRawHits": 13,
+      "searches": 0,
+      "invalidSaveCases": 4,
+      "svgGeometryProvenanceEqualToRW04": true
+    }
+  ],
+  "timingSamples": 0,
+  "warmups": 0,
+  "humanS06ExceptionAndS08WriterReview": "PENDING; no approved exact-head commit exists"
+}

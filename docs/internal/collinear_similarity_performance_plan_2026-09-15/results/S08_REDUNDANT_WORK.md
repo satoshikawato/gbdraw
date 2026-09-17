@@ -1,5 +1,16 @@
 # S08 follow-up — 重複計算の修正候補
 
+## 2026-09-17 RW-04完了 — aliasの二重正規化
+
+commit `6d361253` の後続を局所調査し、`validateProteinIdentityManifest` 内で
+同じprimitive stringの`displayAlias.normalize('NFC').trim()`を、空値判定と
+直後のalias集約用変数のために2回実行していると確認した。間にawait・内容変更はない。
+既存の変数で一度計算し、その値の空値判定を残した。正常なP featureを訪れる
+manifest検証1回につき2P→P、fixtureでは4→2。manifest検証回数は変えない。
+Unicode・ordinal・不正入力・失敗順、RW-01〜03とSessionの既存回帰、実Workerでの
+保存raw・失敗隔離・retryを確認した。[調査・証拠・handoff](S08_FOLLOWUP_ALIAS_VALIDATION.md)。
+秒数改善は未測定。別境界の検証は維持し、次候補は未登録。この1件で今回の調査を終了する。
+
 ## 2026-09-17 RW-03完了
 
 [merge検証の修正・証拠・handoff](S08_FOLLOWUP_MANIFEST_MERGE.md)。Generateの入力検証を
