@@ -1474,12 +1474,12 @@ def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -
 
     command = captured["command"]
     assert command[0:2] == ["custom-losat", "blastp"]
-    assert "--max-hsps-per-subject" in command
-    assert command[command.index("--max-hsps-per-subject") + 1] == "1"
-    assert "--max-target-seqs" in command
-    assert command[command.index("--max-target-seqs") + 1] == "3"
-    assert "--num-threads" in command
-    assert command[command.index("--num-threads") + 1] == "4"
+    assert "-max_hsps" in command
+    assert command[command.index("-max_hsps") + 1] == "1"
+    assert "-max_target_seqs" in command
+    assert command[command.index("-max_target_seqs") + 1] == "3"
+    assert "-num_threads" in command
+    assert command[command.index("-num_threads") + 1] == "4"
 
 
 @pytest.mark.linear
@@ -1709,7 +1709,7 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
         max_hsps_per_subject=None,
     )
 
-    assert "--max-hsps-per-subject" not in captured["command"]
+    assert "-max_hsps" not in captured["command"]
 
 
 @pytest.mark.linear
@@ -1724,9 +1724,9 @@ def test_build_losat_blastp_command_uses_losat_flags() -> None:
     )
 
     assert command[:2] == ["losat", "blastp"]
-    assert "--max-hsps-per-subject" in command
-    assert "--max-target-seqs" in command
-    assert "--num-threads" in command
+    assert "-max_hsps" in command
+    assert "-max_target_seqs" in command
+    assert "-num_threads" in command
 
 
 @pytest.mark.linear
@@ -1766,7 +1766,7 @@ def test_build_blastp_commands_omit_hsp_cap_when_requested() -> None:
         threads=None,
     )
 
-    assert "--max-hsps-per-subject" not in losat_command
+    assert "-max_hsps" not in losat_command
     assert "-max_hsps" not in ncbi_command
 
 

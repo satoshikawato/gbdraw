@@ -460,7 +460,7 @@ class ProteinBlastpRuntime:
 
     kind: Literal["losat", "ncbi-blastp"]
     executable: str
-    source: Literal["explicit", "bundled", "path"]
+    source: Literal["explicit", "managed", "bundled", "path"]
 
 
 @dataclass(frozen=True)
@@ -3272,7 +3272,7 @@ def _protein_blastp_runtime_error(
     return ValidationError(
         "Protein BLASTP comparison needs LOSAT or NCBI BLAST+. "
         f"{bundled_status}, {losat_status}, and {blastp_status}. "
-        "gbdraw currently bundles LOSAT only for Linux x86_64."
+        "Run gbdraw setup-losat to install the pinned release when available."
         f"{platform_note} "
         "Install NCBI BLAST+ and make `blastp` available on PATH, or pass a "
         "native LOSAT executable with --losatp_bin, or pass an NCBI BLAST+ "
@@ -3299,6 +3299,12 @@ def _resolve_protein_blastp_runtime(
         runtime = ProteinBlastpRuntime("ncbi-blastp", requested_ncbi_bin, "explicit")
         logger.debug("Using explicit NCBI BLAST+ blastp runtime: %s", runtime.executable)
         return runtime
+
+    from gbdraw.losat_setup import managed_losat
+
+    managed_path = managed_losat()
+    if managed_path is not None:
+        return ProteinBlastpRuntime("losat", str(managed_path), "managed")
 
     bundled_resource = _bundled_losatp_resource()
     if bundled_resource is not None:
@@ -5889,11 +5895,11 @@ def _build_losat_blastp_command(
         "6",
     ]
     if max_hsps_per_subject is not None:
-        command.extend(["--max-hsps-per-subject", str(int(max_hsps_per_subject))])
+        command.extend(["-max_hsps", str(int(max_hsps_per_subject))])
     if max_hits is not None:
-        command.extend(["--max-target-seqs", str(int(max_hits))])
+        command.extend(["-max_target_seqs", str(int(max_hits))])
     if threads is not None:
-        command.extend(["--num-threads", str(int(threads))])
+        command.extend(["-num_threads", str(int(threads))])
     return command
 
 
