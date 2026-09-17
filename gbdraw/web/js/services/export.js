@@ -1,8 +1,8 @@
-import { state } from '../state.js';
 import { setDpiInPng } from '../utils/png.js';
 import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 import { ensureSvgDefs, stripTransientPreviewState } from './svg-serialization.js';
 import { downloadBlob } from './text-download.js';
+import { preparePdfFonts } from './pdf-fonts.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const JSPDF_SCRIPT_URL = new URL('../../vendor/jspdf/jspdf.umd.min.js', import.meta.url);
@@ -31,6 +31,7 @@ const loadSameOriginScript = (url, label) => new Promise((resolve, reject) => {
   script.dataset.gbdrawExportLibrary = label;
   script.addEventListener('load', resolve, { once: true });
   script.addEventListener('error', () => {
+    script.remove();
     reject(new Error(`Failed to load the vendored ${label} library.`));
   }, { once: true });
   document.head.appendChild(script);
@@ -47,14 +48,15 @@ const loadPdfLibraries = () => {
     if (typeof window.jspdf.jsPDF.API?.svg !== 'function') {
       throw new Error('The vendored svg2pdf library did not initialize.');
     }
-  })();
+  })().catch((error) => {
+    pdfLibrariesPromise = null;
+    throw error;
+  });
   return pdfLibrariesPromise;
 };
 
-const getDownloadName = (extension) => {
-  const baseName =
-    state.results.value?.[state.selectedResultIndex.value]?.name ||
-    (extension ? `gbdraw.${extension}` : 'gbdraw.svg');
+const getDownloadName = (snapshot, extension) => {
+  const baseName = snapshot.name;
   if (!extension) return baseName;
   const normalized = baseName.replace(/\.svg$/i, `.${extension}`);
   if (normalized === baseName && !baseName.toLowerCase().endsWith(`.${extension}`)) {
@@ -63,23 +65,16 @@ const getDownloadName = (extension) => {
   return normalized;
 };
 
-const cloneCurrentSvg = () => {
-  const liveSvg = state.svgContainer.value?.querySelector('svg');
-  if (liveSvg) {
-    const clone = liveSvg.cloneNode(true);
+const getCurrentSvgClone = (snapshot, { interactive = false } = {}) => {
+  const clone = snapshot.svg || getSvgFromString(snapshot.svgContent);
+  if (clone) {
     if (!clone.getAttribute('xmlns')) {
       clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     }
     if (!clone.getAttribute('xmlns:xlink')) {
       clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
     }
-    return clone;
   }
-  return getSvgFromString(state.svgContent.value);
-};
-
-const getCurrentSvgClone = ({ interactive = false } = {}) => {
-  const clone = cloneCurrentSvg();
   if (!clone) {
     throw new Error('No SVG result is available for export.');
   }
@@ -88,27 +83,14 @@ const getCurrentSvgClone = ({ interactive = false } = {}) => {
   return clone;
 };
 
-const getCurrentSvgString = () => (
-  new XMLSerializer().serializeToString(getCurrentSvgClone())
+const getCurrentSvgString = (snapshot) => (
+  new XMLSerializer().serializeToString(getCurrentSvgClone(snapshot))
 );
 
-const getInteractiveSvgString = async () => {
+const getInteractiveSvgString = async (snapshot) => {
   const { enrichSvgWithStandaloneInteractivity } = await loadStandaloneInteractivity();
-  const clone = getCurrentSvgClone({ interactive: true });
-  const resultIndex = Number(state.selectedResultIndex.value);
-  const result = state.results.value?.[resultIndex] || null;
-  const enriched = enrichSvgWithStandaloneInteractivity(clone, {
-    popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich',
-    featureCatalog: state.featureCatalog?.value,
-    catalogResultIndex: resultIndex,
-    catalogResultName: result?.name,
-    requireFeatureCatalog: true,
-    editableLabels: state.editableLabels?.value,
-    labelTextFeatureOverrides: state.labelTextFeatureOverrides,
-    labelTextBulkOverrides: state.labelTextBulkOverrides,
-    orthogroupNameOverrides: state.orthogroupNameOverrides,
-    orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides
-  });
+  const clone = getCurrentSvgClone(snapshot, { interactive: true });
+  const enriched = enrichSvgWithStandaloneInteractivity(clone, snapshot.interactivity);
   if (!enriched) {
     throw new Error('Interactive SVG export requires the committed feature catalog.');
   }
@@ -314,18 +296,19 @@ const downloadSvgString = (svgString, filename) => {
   downloadBlob(new Blob([svgString], { type: 'image/svg+xml' }), filename);
 };
 
-export const downloadSVG = () => {
-  const svgString = getCurrentSvgString();
-  downloadSvgString(svgString, getDownloadName('svg'));
+export const downloadSVG = (snapshot) => {
+  const svgString = getCurrentSvgString(snapshot);
+  downloadSvgString(svgString, getDownloadName(snapshot, 'svg'));
 };
 
-export const downloadInteractiveSVG = async () => {
-  const svgString = await getInteractiveSvgString();
-  downloadSvgString(svgString, getDownloadName('interactive.svg'));
+export const downloadInteractiveSVG = async (snapshot) => {
+  const svgString = await getInteractiveSvgString(snapshot);
+  downloadSvgString(svgString, getDownloadName(snapshot, 'interactive.svg'));
 };
 
-export const downloadPNG = async () => {
-  const svgString = getCurrentSvgString();
+export const downloadPNG = async (snapshot) => {
+  const filename = getDownloadName(snapshot, 'png');
+  const svgString = getCurrentSvgString(snapshot);
   const svg = getSvgFromString(svgString);
   if (!svg) {
     throw new Error('The current SVG could not be parsed for PNG export.');
@@ -335,7 +318,7 @@ export const downloadPNG = async () => {
     throw new Error('The current SVG has no usable dimensions for PNG export.');
   }
   const canvas = document.createElement('canvas');
-  const dpi = parseInt(state.downloadDpi.value, 10);
+  const dpi = parseInt(snapshot.dpi, 10);
   if (!Number.isFinite(dpi) || dpi <= 0) {
     throw new Error('The selected PNG DPI is invalid.');
   }
@@ -368,14 +351,15 @@ export const downloadPNG = async () => {
       }, 'image/png');
     });
     const fixedBlob = await setDpiInPng(pngBlob, dpi);
-    downloadBlob(fixedBlob, getDownloadName('png'));
+    downloadBlob(fixedBlob, filename);
   } finally {
     URL.revokeObjectURL(url);
   }
 };
 
-export const downloadPDF = async () => {
-  const svgString = getCurrentSvgString();
+export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
+  const filename = getDownloadName(snapshot, 'pdf');
+  const svgString = getCurrentSvgString(snapshot);
 
   // 1. Create temporary SVG element to read dimensions
   const svg = getSvgFromString(svgString);
@@ -401,6 +385,8 @@ export const downloadPDF = async () => {
       format: [dims.width, dims.height]
     });
 
+    await preparePdfFonts(doc, pdfSvg, loadPdfFont);
+
     // 4. Convert SVG to PDF
     await doc.svg(pdfSvg, {
       x: 0,
@@ -409,7 +395,7 @@ export const downloadPDF = async () => {
       height: dims.height
     });
     // 5. Save File
-    doc.save(getDownloadName('pdf'));
+    doc.save(filename);
   } finally {
     cleanup();
   }

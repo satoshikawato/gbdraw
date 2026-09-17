@@ -1,0 +1,272 @@
+{
+  "sourceHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "checks": [
+    {
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_protein_comparison_benchmark.py",
+        "tests/test_protein_colinearity.py",
+        "tests/test_collinearity.py",
+        "tests/test_collinearity_units.py",
+        "tests/test_web_feature_catalog.py",
+        "tests/test_session_request_codec.py",
+        "tests/test_session_compat.py",
+        "tests/test_api_request_render.py",
+        "tests/test_output_comparison.py::TestOutputComparison",
+        "-q"
+      ],
+      "exitCode": 0,
+      "result": "517 passed, 1 skipped; includes 16 reference SVG comparisons",
+      "log": "python-focused.log",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_protein_comparison_benchmark.py",
+        "-q"
+      ],
+      "exitCode": 0,
+      "result": "8 passed after compressed-report I/O was added; overlaps 7 tests in the preceding gate",
+      "log": "runner-tests.log",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "node",
+        "--test",
+        "tests/web/losat-cache.test.mjs",
+        "tests/web/run-analysis-derived-cache.test.mjs",
+        "tests/web/run-analysis-simple-path.test.mjs",
+        "tests/web/session-losat-cache-validation.test.mjs",
+        "tests/web/losat-settings.test.mjs",
+        "tests/web/losat-session-schema-contract.test.mjs",
+        "tests/web/linear-sources.test.mjs",
+        "tests/web/architecture-contracts.test.mjs",
+        "tests/web/gallery-session-migration.test.mjs",
+        "tests/web/diagram-generation-worker.test.mjs"
+      ],
+      "exitCode": 0,
+      "result": "189 passed",
+      "log": "node-focused.log",
+      "sandbox": "required escalation for Node child-process creation",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "ruff",
+        "check",
+        "gbdraw/",
+        "tools/benchmark_protein_comparison.py",
+        "tools/protein_comparison_browser.py",
+        "tests/test_protein_comparison_benchmark.py"
+      ],
+      "exitCode": 0,
+      "log": "ruff.log",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "python",
+        "tools/prepare_browser_wheel.py",
+        "--no-build-isolation"
+      ],
+      "exitCode": 0,
+      "log": "browser-wheel.log",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "python",
+        "tests/run_losat_cache_browser_acceptance.py",
+        "--python"
+      ],
+      "environment": {
+        "PYTHONPATH": "."
+      },
+      "exitCode": 0,
+      "result": "22567 assertions passed",
+      "log": "browser-acceptance.log",
+      "sandbox": "required escalation for localhost socket and Chromium",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "/tmp/gbdraw-collinear-s01/tools/benchmark_protein_comparison.py",
+        "run",
+        "--source-root",
+        "/tmp/gbdraw-collinear-s01-base",
+        "--measure",
+        "timing",
+        "--output",
+        "/tmp/s01-base-timing.json"
+      ],
+      "exitCode": 0,
+      "report": "baseline-timing.json.gz",
+      "measurement": "timing",
+      "sourceHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+      "cwd": "/tmp"
+    },
+    {
+      "command": [
+        "tools/benchmark_protein_comparison.py",
+        "run",
+        "--source-root",
+        "/tmp/gbdraw-collinear-s01",
+        "--measure",
+        "timing",
+        "--output",
+        "/tmp/s01-timing.json"
+      ],
+      "exitCode": 0,
+      "report": "repeat-timing.json.gz",
+      "measurement": "timing",
+      "sourceHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "tools/benchmark_protein_comparison.py",
+        "run",
+        "--source-root",
+        "/tmp/gbdraw-collinear-s01",
+        "--measure",
+        "probe",
+        "--artifacts",
+        "/tmp/s01-final-oracles",
+        "--output",
+        "/tmp/s01-final-probe.json"
+      ],
+      "exitCode": 0,
+      "report": "probe.json.gz",
+      "measurement": "probe",
+      "sourceHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "tools/benchmark_protein_comparison.py",
+        "run",
+        "--source-root",
+        "/tmp/gbdraw-collinear-s01",
+        "--measure",
+        "memory",
+        "--output",
+        "/tmp/s01-final-memory.json"
+      ],
+      "exitCode": 0,
+      "report": "memory.json.gz",
+      "measurement": "memory",
+      "sourceHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "command": [
+        "tools/benchmark_protein_comparison.py",
+        "browser",
+        "--source-root",
+        "/tmp/gbdraw-collinear-s01",
+        "--output",
+        "/tmp/s01-browser-final.json"
+      ],
+      "exitCode": 0,
+      "report": "browser.json.gz",
+      "measurement": "browser",
+      "sourceHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+      "cwd": "/tmp/gbdraw-collinear-s01"
+    },
+    {
+      "report": "source-comparison.json",
+      "exitCode": 0,
+      "comparisonCount": 42,
+      "allScientificResultsEqual": true,
+      "cwd": "/tmp/gbdraw-collinear-s01",
+      "command": [
+        "python",
+        "tools/benchmark_protein_comparison.py",
+        "compare",
+        "--baseline",
+        "/tmp/s01-base-timing.json",
+        "--current",
+        "/tmp/s01-timing.json",
+        "--semantics-only",
+        "--output",
+        "/tmp/s01-source-comparison.json"
+      ]
+    },
+    {
+      "report": "probe-comparison.json",
+      "exitCode": 0,
+      "comparisonCount": 42,
+      "allScientificResultsEqual": true,
+      "cwd": "/tmp/gbdraw-collinear-s01",
+      "command": [
+        "python",
+        "tools/benchmark_protein_comparison.py",
+        "compare",
+        "--baseline",
+        "/tmp/s01-base-timing.json",
+        "--current",
+        "/tmp/s01-final-probe.json",
+        "--semantics-only",
+        "--output",
+        "/tmp/s01-probe-comparison.json"
+      ]
+    },
+    {
+      "report": "memory-comparison.json",
+      "exitCode": 0,
+      "comparisonCount": 42,
+      "allScientificResultsEqual": true,
+      "cwd": "/tmp/gbdraw-collinear-s01",
+      "command": [
+        "python",
+        "tools/benchmark_protein_comparison.py",
+        "compare",
+        "--baseline",
+        "/tmp/s01-base-timing.json",
+        "--current",
+        "/tmp/s01-final-memory.json",
+        "--semantics-only",
+        "--output",
+        "/tmp/s01-memory-comparison.json"
+      ]
+    },
+    {
+      "report": "time-comparison.json",
+      "exitCode": 1,
+      "comparisonCount": 42,
+      "allScientificResultsEqual": true,
+      "cwd": "/tmp/gbdraw-collinear-s01",
+      "command": [
+        "python",
+        "tools/benchmark_protein_comparison.py",
+        "compare",
+        "--baseline",
+        "/tmp/s01-base-timing.json",
+        "--current",
+        "/tmp/s01-timing.json",
+        "--output",
+        "/tmp/s01-time-comparison.json"
+      ]
+    }
+  ],
+  "notRun": [
+    "external NCBI BLASTP smoke (existing opt-in flag not enabled)",
+    "whole fast suite (no production changes)",
+    "raw LOSAT search timing",
+    "browser/Wasm peak memory",
+    "mobile or release-site bundle acceptance"
+  ],
+  "timingCaveats": [
+    "same production code; time gate has 3 threshold crossings and 15 inconclusive stages",
+    "first repeat-timing run initially overlapped the control checkout",
+    "between-run drift is not explained solely by within-run MAD; no speedup conclusion",
+    "probe/memory samples are instrumented and separate from timing",
+    "only collector metadata, progress logging, or report I/O changed between recorded runner hashes; stage generators and timing loop were unchanged"
+  ]
+}

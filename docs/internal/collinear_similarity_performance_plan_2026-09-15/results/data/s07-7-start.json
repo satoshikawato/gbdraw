@@ -1,0 +1,656 @@
+{
+  "originDev": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "head": "f52ed68e15e527b08e4d9247b990684040fe4270",
+  "branch": "perf/collinear-s07-7-local-reductions-20260916",
+  "upstream": null,
+  "inherited": [
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "sha256": "0ee0efe9c10f232f02cbd58d086130566453e3428f68569eb98c6f6a117776b9"
+    },
+    {
+      "path": "gbdraw/analysis/collinearity_units.py",
+      "sha256": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da"
+    },
+    {
+      "path": "tests/test_collinearity_units.py",
+      "sha256": "8e0a52a8f450952afa4765ba5b180f455180f0a04d480e90cd156a622ca60f80"
+    },
+    {
+      "path": "tools/benchmark_protein_comparison.py",
+      "sha256": "1664ab79e01fb60117813af70475c84bf66515b926564781c03ee647be034a70"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_5_PLAN.md",
+      "sha256": "3a96ae370c0ecd065aa37df5e9371506cc4b8107749cf73235167d5602a89716"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_6.md",
+      "sha256": "0a3ee1936c7c070a620b69c61fa6256ef0fad15ff781761531d7f9678d5c5a0b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-diagnose.py",
+      "sha256": "9b8e0599693d79afcacf83c07f8b255bee6d1db9cdce2c4ffef4bae7454e7fd8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-evidence-reuse.json",
+      "sha256": "11938a9d51e87fb37257692f1263a087ba33acec56c9cb45d48f8411e65c40e6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-memory.json.gz",
+      "sha256": "fae819f3a6b4f118bf50ba9c16bf9d1785b9594bd8bc84f9e19035122708f1ca"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing-command.json",
+      "sha256": "ab6b8caf0a4b4eb0ae94b2f117cecbd2b2370b1dfe8ca2c9b23e981af2d91ded"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing.json.gz",
+      "sha256": "c92964b297d828eb1bb7d9c031b950f10af3be3df4fa0a8ee53b92a5fea06d29"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing.log",
+      "sha256": "cbcc062aff665c3924f693a9a0263b5f28eb65bd9dc3edc2ee831eea38908d90"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-inventory.json.gz",
+      "sha256": "cc17928dc421db93a486f9378c57cd13717eef0f22466c03c97393ac2b39f97d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-review.json",
+      "sha256": "8599ef363726186fc607ac82ee215874f163878bb21c4668af8fa981655012cc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-baseline-probe.json.gz",
+      "sha256": "92128b7f0d9bed24bc025e8abe88cec1f0d7d8afac8262610c17516fb68b7df2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-baseline-unit-memory.json.gz",
+      "sha256": "dec981e346fb90058e617c1449a0fd7a61412aaf5d0087f08119353f9a42721a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-browser-final.json.gz",
+      "sha256": "e11f3144bc970b77d9a717d7eb40a6f351c6469a4b95535309e47833e8a2270b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-browser-native-differences.json",
+      "sha256": "a8ce9fc09a9daee1f459ec0a45d7367edfe98b968b6f21598104e3e2c1983a87"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-browser.json.gz",
+      "sha256": "122939a0ea8eb99dae12af9d2196dfe6be95f0d070916da79729e4a3813c50d5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-command.py",
+      "sha256": "b29b39377317a363530bc89e5d433f884bfdaedd4ae61bf2a0fcc5585cacb2dc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-commands.jsonl",
+      "sha256": "ff2a9d76b147103c9a5be7b1a323d11c0f407a77c8692c073502bdeb6a87bb2d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-comparison.json",
+      "sha256": "4e152651d15a26ab065edab90a2a698a3c1a7be31e738bf7e2c178ce8ccd9ad3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-current-memory.json.gz",
+      "sha256": "6afeaac8998dc53646dfbfbbf9aed8a29637cdb2df61a92e899fc1bc92eff170"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-current-probe.json.gz",
+      "sha256": "e86fe5b166c672e330a29055683846c84eae015f2d9b96c033874df1898aae1a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-current-unit-memory.json.gz",
+      "sha256": "b1a0a5511047322f038967d41a999d5399cd6a5d828f28aa5b2304e23bbdd4c1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-evidence-reuse.json",
+      "sha256": "7d1b5369c55178f7d4bf2e62db478e000bed44cc5df9a88ea4d7e3f8889eee54"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-followup.json",
+      "sha256": "a7ea3c55f64010be0679a027b0d0044711d00f44400370c2d34de1020ae15300"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-host-contention.jsonl",
+      "sha256": "d896feaeed88cf0734bb1edd42fb408ff774f8aa563904ccdc055fbfcae204ee"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-host-after.txt",
+      "sha256": "e88fe85e74b8ade93c79bf6df985e5745df8d66787501facefe20c47f652e506"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-host-before.txt",
+      "sha256": "be6509c47cf7ac2212d9d13b3c9943eacd9a3a5bc178841a591cd2065650b1ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-local-host-after.txt",
+      "sha256": "9fb24809637c991c47b1f71c2ea71b93b50b0f40afd9f03c55101552d1485b90"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-local-host-before.txt",
+      "sha256": "4fb6efaf33e7470c02011dc3190af470db121d20118b40af418dd231fe59e8d9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-local.log",
+      "sha256": "2af10cde3714a4409460eb6ada314bf72fdff8cb242784b94982c31b7eee501d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture.log",
+      "sha256": "c2e43434f92deea6dbfd8e485061a71597df2a2b44d4f3e3fb8e83a623cd4312"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-diagnose-host-after.txt",
+      "sha256": "281681a6e15a449e9d4c538e8d56dec74eaf8ae1f3d1cbbef628853644e7a7e5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-diagnose-host-before.txt",
+      "sha256": "aa5525c2f67810404162258f126e324be0e20f71f899c77ef4f60142b5fa6cb9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-diagnose.log",
+      "sha256": "f3b968dc9a4108574192e1960c64a7e78deb003c597033f868854a5ecff09df2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-final-host-after.txt",
+      "sha256": "8b86a8bdf9dcfb27ae9da18b7d802f9daa0fff65ffaca8e570349e378ae2c2e6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-final-host-before.txt",
+      "sha256": "457a44a30df6bb6e9c2b515a7a05fc7af0850e2d291fe3d7d6f73cdc9bcc1ee6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-final.log",
+      "sha256": "4fc06fe34cb68486d22064ec0cd22e33e7ad9767deb9d60e97ddcd47201bb5af"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-host-after.txt",
+      "sha256": "b529116724471ab95b09bf528b8f3b498e02d0e788c48dbf2b33dd73eadf72ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-host-before.txt",
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-local-host-after.txt",
+      "sha256": "9a8c9c16cc8881f2adbc5df308c7fdf7bfe8f2140c70d9300b0b3118deaf5976"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-local-host-before.txt",
+      "sha256": "6ddb72ebf3f1c3eb75fa578f9daefc180598adb6327883e3704e409eb4217cec"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-local.log",
+      "sha256": "8f9eafe0c3cd7c3ef62c7a93a80ac7529499590e7feae05906fa901fdf355183"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-same-runtime-host-after.txt",
+      "sha256": "6846590fef998652f211a15e0d526b072c4a1c5b3812b9b225d1e90f446e63bc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-same-runtime-host-before.txt",
+      "sha256": "39275b72f7f99a95c8e138d034394f795d18549cdf5db9717c28fe558bd6fbff"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-same-runtime.log",
+      "sha256": "4fc06fe34cb68486d22064ec0cd22e33e7ad9767deb9d60e97ddcd47201bb5af"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser.log",
+      "sha256": "4f8a0d4789c46b10100d9a0bb9a5235050d16b169b9ed8b541475c319ef80b2a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-final-state-host-after.txt",
+      "sha256": "e2584a088d73799b05779b53f74d572f47bcf0e286132ccb95f1120d468b8aa7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-final-state-host-before.txt",
+      "sha256": "d185151afd36d8901b6bb0fab4c573a843200fed73cf40da6af2c9c488825650"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-final-state.log",
+      "sha256": "7c4e791ac294c1a5aa63d09a5f068a5e90421869437931158990df701f663283"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-host-after.txt",
+      "sha256": "010d30ee0b3cd4f6ef43a315d30599e4970e4ab16078f93f6d3114cff299cfe7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-host-before.txt",
+      "sha256": "b90222354f19603a23a6e073b07b111c7b8db9901da178c786532991d0dd5a36"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison.log",
+      "sha256": "7c4e791ac294c1a5aa63d09a5f068a5e90421869437931158990df701f663283"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-baseline-host-after.txt",
+      "sha256": "4dc1e6ecb6cc7b04bad2019fb77739f1f4a201d81912f621dc2b5da3479b3598"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-baseline-host-before.txt",
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-baseline.log",
+      "sha256": "9ece0eba5b5fb41c12d37d2c4fe760e4f456c3f481849e735b22618f8deb7ad3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-current-host-after.txt",
+      "sha256": "ab23333aeab9ebf223d6d6a62036f3f43f87060e93e57c22ca856ad285b9d536"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-current-host-before.txt",
+      "sha256": "d185151afd36d8901b6bb0fab4c573a843200fed73cf40da6af2c9c488825650"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-current.log",
+      "sha256": "230912dbd30193bdc14311a7ec5ba70f9ac46a6f52daf5c68aede3d6e125b1cc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-reductions-host-after.txt",
+      "sha256": "c1053a0c30278704a076cf2f3d5904dacc2a5f4bbdfb5a6a020bb45b10e56744"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-reductions-host-before.txt",
+      "sha256": "7f18950a623ddadcf437dbc85d6c0e58224c51bb3928d24ad2a53b7514f4493b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-reductions.log",
+      "sha256": "076e5754b302aed4e6c1726aa2b1eb3f35dfd63f8176de8f0b713f1175784922"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-unit-focused-host-after.txt",
+      "sha256": "e1c5814921164a1304177fe1ab562bdd6be24d682355c2d4fa4f1f21860f7c41"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-unit-focused-host-before.txt",
+      "sha256": "6ba7c047d6e79eaabff830e00d96f0e49ae97fa8ec15a926ddf84ef21935888f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-unit-focused.log",
+      "sha256": "44c0255b8508e887544d90d45bb1027c3e9b90963a2b03956f0bd04a537f3db5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/focused-host-after.txt",
+      "sha256": "efcdf7fd8617c0add0ac5714f3078238657fd7cdedc14ca4968085e5ca391659"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/focused-host-before.txt",
+      "sha256": "3b5de82f362b107c2466e4cf0fe044f2221f8fd7f1af6afd5d86a0ea77eb6599"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/focused.log",
+      "sha256": "0002809a1bdd8a5ea5d874b3de7c5cd7578641afad2a12f9e4a7099b0c4bdfe9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/lint-handoff-host-after.txt",
+      "sha256": "c667f3c7982352c1de4c62c4c32db5be40d57a6c059c3a3f8ef970049359ad3d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/lint-handoff-host-before.txt",
+      "sha256": "cb3c17b521ab4d0ffb967bb1adbc68dd164d9742ddcf47cef6ac16d075b2fdbd"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/lint-handoff.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-post-search-host-after.txt",
+      "sha256": "e7ba086e1cd459068b91e3b398575b191786c5ae59ff680018c4a2c9bd996c93"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-post-search-host-before.txt",
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-post-search.log",
+      "sha256": "4d3b5c1cc2fd26a955f99b1ffe1717d8d2e6466756c8ffe276141aa2f6fde1fb"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-baseline-host-after.txt",
+      "sha256": "4dc1e6ecb6cc7b04bad2019fb77739f1f4a201d81912f621dc2b5da3479b3598"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-baseline-host-before.txt",
+      "sha256": "be6509c47cf7ac2212d9d13b3c9943eacd9a3a5bc178841a591cd2065650b1ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-baseline.log",
+      "sha256": "3f62ac6e1d8010d20471716206b158a2a557ec49450ebc5c1aa4ba7b481f6169"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-current-host-after.txt",
+      "sha256": "757edfe4539abffbd1b9fffdd7ef2514d0507d0ac398b7fa7d85fc3e688a4d36"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-current-host-before.txt",
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-current.log",
+      "sha256": "3f62ac6e1d8010d20471716206b158a2a557ec49450ebc5c1aa4ba7b481f6169"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/native-related-host-after.txt",
+      "sha256": "834c474ea606b18a60d9823c3815c21c0bc12a7ebcd5c3b7772c78d96e8f2221"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/native-related-host-before.txt",
+      "sha256": "c57d3c5c8d883f8c3cd09b902c99c0f0cfbfd311ffa9670587ad323b4fcc7b17"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/native-related.log",
+      "sha256": "2fed10d0a394687d4727e4032c922e50027a255a9837d8786b2a29cd78a34c70"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-final-host-after.txt",
+      "sha256": "c6484404b6de86767c08923368db24bff2b1d150f5fcfba8cd88435e582666c8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-final-host-before.txt",
+      "sha256": "4beeecbed0d8e80a4f1df5d4c90d2b95b53b67ee55e463768301f79d233cf09e"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-final.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-host-after.txt",
+      "sha256": "0a1dca948018ec64adc61013dbfa8bb2927c28e93f0ef97ad60c93eb9989edfe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-host-before.txt",
+      "sha256": "dfbacfc0f12f983464b4252dc4cccd091427e9c6760034c137e408a377f6524a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff.log",
+      "sha256": "864382fba0d734ef6c0095b0d4410221409f9a96b4fd8a8360267cbac394c556"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/typed-reference-host-after.txt",
+      "sha256": "9396d2a463f055f54e2c606435074b0f28bc544b0dc13815920cd00a4e0af3f9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/typed-reference-host-before.txt",
+      "sha256": "eacb9c9d757cc1068ac5e19737f5436372a9355f0ac53e36cdef0f3870bbec06"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/typed-reference.log",
+      "sha256": "d1d2905c9241d4258ed01ed81a46bdfdec665b840c201cf04205e8d1912def64"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-final-host-after.txt",
+      "sha256": "4220097dc5464be10a567f6c6d1049332dc3d9cd33f9da41618415f8c9c29881"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-final-host-before.txt",
+      "sha256": "fcc66a06fe17be1967700bfc8dfc714de2fd0ff16892406edf48091df27fe0e3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-final.log",
+      "sha256": "28fb09d004145ad90f2d6e31fbe4f3d9adce1fa99cebd6453bef0bdab72ebd4a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-host-after.txt",
+      "sha256": "f7f8f5802794bf088c9e75b99394d07a890057a5cc5778e6b8846298821c2af5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-host-before.txt",
+      "sha256": "079d5357c5e8bdfefdd3500b8ae9502031d76a4dfbf4960f6b1537fe81e38f05"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-local-host-after.txt",
+      "sha256": "435a3bc7aa19eb047259489163417680298517461eb35f15034886a443ae2ff5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-local-host-before.txt",
+      "sha256": "390a68b8b99852bad57627735bd76889259032205802bb6b6ca2265466d951f1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-local.log",
+      "sha256": "d1a56d6e03e669948c3e855b0fc5b230b996742c7fc55ce8ad819cfa03350bd3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel.log",
+      "sha256": "40e3b31c4ebc82613a00648a8b72e1d6961baf82db2c0ed31d8d1482b42f8f1f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-review.json",
+      "sha256": "da883273beab47f2bf213af62b6a9f0911d8749848e86ffbc0c77de4cb75f927"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-start.json",
+      "sha256": "dfa7e97f205ee3cae0781cc00cfbc4b0ca29364ec14f85b32489ad180fa4c581"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-summarize.py",
+      "sha256": "bf195a02e517495d2993875bd8eb383237903e78c734b2316390d912a20df2d0"
+    },
+    {
+      "path": "tests/prototypes/collinearity_units_frozen.py",
+      "sha256": "d733f099116313e38f77ea99ea1817a5b64fbdeb5ef438071f4bb87146bffe2d"
+    },
+    {
+      "path": "tests/prototypes/collinearity_units_oracle.py",
+      "sha256": "48f09e0e4652a30773c3e163e7ab5cf32a3de9569b3a6a2c0ea89d0a52c84ee8"
+    },
+    {
+      "path": "tests/run_unit_index_browser_acceptance.py",
+      "sha256": "4b9908bad726310585e1444ea76ed826143788a0f7dd2173d14e885b24609240"
+    }
+  ],
+  "productionSha256": {
+    "gbdraw/circular.py": "75be9f8e58e899a89537b9a782cbff98ee5d2dd8dec4ceab3d06880e983a5a80",
+    "gbdraw/cli.py": "885f273b72d7352fc51f8ad708c48f1daeb888e12132da6b9c72253ffa7b9a7f",
+    "gbdraw/crop_genbank.py": "6cfdfa870792c25bd4b4b8f542814046d520f630474d7ea1d4948b16ca97c523",
+    "gbdraw/definition_line_styles.py": "0b802b07adfc47ae31ff3332f20205539817ba51f4c6c71f51598c7aeb42dc45",
+    "gbdraw/exceptions.py": "fa6c2af6bebde0ddb56399a9a879fa4a90444b4767e2972e4e53f60329d091ce",
+    "gbdraw/interface.py": "d2bed5b4817c5c7f5b9bbe44d30e68b1c74c79195f58b864daf00f5676aafabc",
+    "gbdraw/linear.py": "36399a81bae5a3039a1115e5f23f4ca68eb0a4856b65083d4ca0c8d1903b95fb",
+    "gbdraw/linear_comparison.py": "8e8bb0f58a2accdff6b36a8dc4d75196c29e7bed2f400e13c140934a5a5f7bfe",
+    "gbdraw/mode_profiles.py": "8675dc5be9c608b2b11b934917f0ee6f366c0d0641e4ceffa4a80b93101259d1",
+    "gbdraw/session.py": "52ddcb01ae31587fa9f55411a649fba1ff9c628e86ced3fdeb41e12e3b946a54",
+    "gbdraw/session_io.py": "d50fd0196a9ba646d91410f5b41a5c2c423359ab1fa2a8badce8dd741578cfc5",
+    "gbdraw/session_request_codec.py": "f3501ce57d8c05306e92682fcf151202b2c6ec461c202d19acbecd531bd5abd9",
+    "gbdraw/version.py": "85b8e962e5b32e0211f37b6f05a6a68742f62b815908a55e0a049795a7028823",
+    "gbdraw/_build_support.py": "c19a0659c91ef6766aea9fdaf4660203da29b466593d04c98d48b008f0d72c49",
+    "gbdraw/_web_assets.py": "71dc277bec670b3bf9849dd15e81ee327a4dd18cf1382c8e36a64c5ff77dc018",
+    "gbdraw/__init__.py": "41085b5a06a7f9433f1dcfc8e677522059a74a0048710debc5406aaaa3ec65ff",
+    "gbdraw/analysis/collinearity.py": "700063652c3016ac00361a19938eab18972b0bb6e705bb865781366179803741",
+    "gbdraw/analysis/collinearity_units.py": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da",
+    "gbdraw/analysis/conservation.py": "eda80ce6a0795f3c527937f868dee9564764e324fe95a38bc5609794d30669a2",
+    "gbdraw/analysis/depth.py": "78531d2b2f79b3e68337bc92487958fba55d2c650be18209a522a03e9e4eaac9",
+    "gbdraw/analysis/depth_tracks.py": "3af5ddd5dc0783d3cba7ecc53b8768d048bb5decc430c0b14ec716c66c8b79f8",
+    "gbdraw/analysis/gc.py": "4094699326084961375db4f8c1d1d7eb15cc0327f743caf1ca858fb4c83ea752",
+    "gbdraw/analysis/ortholog_paths.py": "b03c8b39df3f5e9fcbe96de9bf082493f2d5a4cee36a424644f976ab18661a66",
+    "gbdraw/analysis/protein_artifacts.py": "8942010d6e9c3bf8b1b672ec2741c3f85cd77a9ac8f1684ebfe2e8e57cc2359e",
+    "gbdraw/analysis/protein_colinearity.py": "4c1f819aa88b9869fb707883ee5695df5e661f819089b6e22d52b98c31486c14",
+    "gbdraw/analysis/skew.py": "526f8cbc0aa160f3ce8db7f8e1e738bbadb670d28b33050ec68cebcbe22d8004",
+    "gbdraw/analysis/__init__.py": "972336242488b40a4397d35ac700dc24cf0a9a2c34f293f3bd5da4024b643231",
+    "gbdraw/annotations/feature_underlays.py": "a3ee050c9ee6e0d8e0b509f957f013e1e5e67af585288f7e8fec0e4212f6da0f",
+    "gbdraw/annotations/io.py": "76ec7c47ce3901fee7f114681080f97d94a497eb1b3a606133f73de1fb11fdb7",
+    "gbdraw/annotations/layout.py": "2155801d9eaa1464185365c55aff161e0873e184083d9fb85d037ee3ecb2f293",
+    "gbdraw/annotations/legend.py": "9a43968bba4618c961859481a2f103341a846b1742bf828a3ab57e37f3d9e270",
+    "gbdraw/annotations/models.py": "b8caf1c632add9a6a74eb099ad8418d85b67713470bca3a8d45822b1db40d49a",
+    "gbdraw/annotations/planning.py": "e9462f68f4d0c1819e371e5e4b4b0ce47e3dd75d02290c4dd75544f2bc76482b",
+    "gbdraw/annotations/resolve.py": "87b0e909d30f4747f90b26d235fb1c749db3c2e6d525e8ee7f9e2f5362d889d3",
+    "gbdraw/annotations/__init__.py": "757b401f0409ee6412d697cbff9f727dce46e82ef54b3233bed46943eaf020cf",
+    "gbdraw/api/config.py": "5cf3426ff7ff14ac96e1c684e6a1e61ee2d60beea842bf463851d9277c31b558",
+    "gbdraw/api/diagram.py": "a5a317b6a30c83166b9f830e7a4db8720dab7983af61898f8f0a5ba369577c30",
+    "gbdraw/api/io.py": "98e17eda1cbb8500a7a5b0f921129369e2a2621c692ff73919b3753b8f96ebf9",
+    "gbdraw/api/options.py": "ef464e8b8a2df084609d06da6a37724690d64e03709174991752c7b745477828",
+    "gbdraw/api/prepared.py": "312b07b4bf501c4d39c8d1a57f436f75b572c37b2260c86a1411b95f481690c1",
+    "gbdraw/api/record_planning.py": "4ef53e9876f2ad5cde5b594a8d8af4a1e2620a027a9fae4daecb7cecc0180d78",
+    "gbdraw/api/render.py": "b11ceccc1fc8965f503faadca7039900c4539419017e7c77a702d3d4612b3331",
+    "gbdraw/api/requests.py": "8e4f7f82c0fd27fe761d9dabe9ec66cd5d3dd9fa05eca3f4c34441bea8f91cfd",
+    "gbdraw/api/request_render.py": "03003d5ebaa83c5564da5d0f7e776b58e4962380dc285d8fd04178a9c2444f85",
+    "gbdraw/api/session_compat.py": "07347c488711a709dcaa7c6f3c9d24c12039d0c08025118b642d0f4443ad88c2",
+    "gbdraw/api/tracks.py": "1efe041e7e8912dc096aaecd10a67faeb4085ee1956dd74c334af9acde6139e3",
+    "gbdraw/api/__init__.py": "07d9b9a72786266d462382a635b3d1ab0b17a46aae7f884c947b074ca12b0a6e",
+    "gbdraw/canvas/circular.py": "710aa975e1a814e8fcce1f1c4d028b6f2748a7915230952153be94a81a138264",
+    "gbdraw/canvas/linear.py": "3994d3af77295474caf2fba13b70494ac9ef108f02737685f73e6c3eb4a04e7e",
+    "gbdraw/canvas/__init__.py": "65fc90a4c704530ba19b27ff2be8c0537552296e92c6b5ba7e0783c6f7f15833",
+    "gbdraw/cli_utils/common.py": "40083e87682ff0f6a58700c2d060cc96d4fec0116f4fbc5a2dab541919b91965",
+    "gbdraw/cli_utils/session.py": "9866b79797559ee997b432bfe895e3b6fd34e01cf285bfc938c2f5daf056f10e",
+    "gbdraw/cli_utils/__init__.py": "b3e28efd932ce92a0aa4dce0808291812f7cd2755d759c69c32a87a44f6599b6",
+    "gbdraw/config/modify.py": "b403f772b671a5eaf9bea6cdb7b2129b9ab01019659036941e59fe24b1757e9e",
+    "gbdraw/config/toml.py": "3cde247a241c2e02345014108b15ac57f2cf140c1f0808a7355f2e03dfd1c751",
+    "gbdraw/config/__init__.py": "89b99828075b36b72200cefaccc17c897951a1f5a2225d68687d46723589bc3b",
+    "gbdraw/configurators/blast.py": "ede1830458cbc61d49674010f505ad4ed239628012f9f50d6033adefb9f0cf28",
+    "gbdraw/configurators/depth.py": "8e24027397b82555bc7ac42b20060081f2e58d1cc667ada2f1488c88440380a6",
+    "gbdraw/configurators/features.py": "337bcbff2fa6c1b2b5370ef826d6412824fb2b40584822de34831d83e53c71ce",
+    "gbdraw/configurators/gc.py": "e9f8b0a301f08cbbfda56c73145a04343270539ad25a99e335246ad59abd94a7",
+    "gbdraw/configurators/legend.py": "2ed377855fc13a998878cece10997bf534b9fcdc3c4bed058387b0fd28aba438",
+    "gbdraw/configurators/__init__.py": "5570a9984f469f5a3ca680e303bbda5567da81d5bb8007acdfb971e5fc5678d9",
+    "gbdraw/core/color.py": "aa33f0a73086b4b43bdde506909cd484228510658f5614769c6f3dfe7fdc847b",
+    "gbdraw/core/record_metadata.py": "b38afacebbf4fabaddc9b71cefe711762e5e0b71d6528e305c3f51a7eedcfe79",
+    "gbdraw/core/sequence.py": "cbe9f9e3e44908e0bb154ea407589141648f0afa0157cc91c634c002e3e6f589",
+    "gbdraw/core/text.py": "a476bc3679febaa2a7a9355a74091e3b3e578c94cd5f16e88dd0ba8681759cc9",
+    "gbdraw/core/__init__.py": "84483c622d9d47632f12f0ac3acb8009b7efa4d1ffb760dbb3f5087ef4110c5e",
+    "gbdraw/data/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gbdraw/diagrams/__init__.py": "f5bcebde615c23b73f828b64da692423988973df7c7792b0b57aef82ae237e2c",
+    "gbdraw/features/colors.py": "675cfb44cdc4accbc84a6ab6a644e0fce841892a3147a6166ee650ef845667a1",
+    "gbdraw/features/coordinates.py": "45a601b856e731f38146eb1f3d7d86398239bc82ff6a4673174f92c5b4bbfd39",
+    "gbdraw/features/factory.py": "b3f0ae97206d980b72c67ca90effe0b8dabc2b6ebe9dd478ac16b71998b2f291",
+    "gbdraw/features/ids.py": "55d97b620934fee50ad5bb240034f5b57eb540ef3530a526652d4f5824d42bff",
+    "gbdraw/features/objects.py": "db57586755319a9cdcc7415059d95097b40ad8f074c964ec8b4837430aebcc29",
+    "gbdraw/features/placement.py": "3740ab5f834f00c7ded03ca6089d7b05df15bb1fb26b38c0523aef38a5f336f7",
+    "gbdraw/features/selector_values.py": "91ca6db89b018cf354c08d52c45d0466cc4c5ba689282352592ad109a837291d",
+    "gbdraw/features/shapes.py": "72e1359d92de0f81d79877d1b4033e9a17e323cc1af43e6df9e44caf51919c1d",
+    "gbdraw/features/source.py": "0b0d0ac12ef78bf465d73df2b9cc2ae616235c6cd92e1573af163421c01c12a0",
+    "gbdraw/features/tracks.py": "8050ee6d6e2b9fb07bf2035521c64025b5ec0cfc92209547f87e95f822c7d859",
+    "gbdraw/features/visibility.py": "545079996585518391669e4a1a5cb1e6e9f0e51894b4c45e7e0d21e307eddb91",
+    "gbdraw/features/__init__.py": "e1c2e63222283b9e7e7a16b38ac6cf4a760db96099a446adf42f7beebc41631e",
+    "gbdraw/io/cli_tables.py": "fa54055904c2ae1053f9e18cabd03d0993587125a6a970f5694d21c987ab6fe9",
+    "gbdraw/io/colors.py": "6e334612b63447403fa6fc01e4c2952ed41a2052e043312d8280135b5f309cfc",
+    "gbdraw/io/comparisons.py": "14c47a8c8516ec1870a43488ecfcb7ecd792698521bba2afbbf7f2b3712a0e29",
+    "gbdraw/io/genome.py": "0bbc46976db065c9470c92e326811676619005cfd2d977f4a73b2ade4e8fc572",
+    "gbdraw/io/record_select.py": "e12fd6e392935e7666312ce7b3e256de7402ac1ff0bdc83ac081a1f68ad6afeb",
+    "gbdraw/io/regions.py": "721467fd0f21838060984a91c86d88f8a577ca6ad07ef5b4080d93660d2261a4",
+    "gbdraw/io/__init__.py": "634950b4d18c5cdd2658e8e3d1e324b4e603959348e95bd84b8232f5a1212a9e",
+    "gbdraw/labels/circular.py": "08fe7da5a4b8eebecd1eff8f70c08399c2c0c8f2899c1d7591f290ec748d5054",
+    "gbdraw/labels/circular_candidates.py": "3817d0d22c29f9e0aec680db66f417e7c81c74482e8137ab54cb23ff67a5f6b5",
+    "gbdraw/labels/circular_radial.py": "10958694482d54940b70d1058b3aefef77938c08daaacf62890d6a18367e1462",
+    "gbdraw/labels/circular_types.py": "ebb42ba393e6c3b24de542619c84c906acf43152db7cfde608bc22826f4902d2",
+    "gbdraw/labels/coordinates.py": "19fce6417eac75400b5a0f9eb9b74ba564c6935228699feaee441d38f21b4f5c",
+    "gbdraw/labels/filtering.py": "014bfaed0b520072bfc2509e0227311443bf704262aae337cb787e99211e93af",
+    "gbdraw/labels/linear.py": "d226401c93958379ef83fd593ea13c5d6015debc590a2c2dc5ba01988ee459a1",
+    "gbdraw/labels/policy.py": "d80c48b2f152919167ba9c50b18bda5fa1d22329784040e58a702225269d144c",
+    "gbdraw/labels/__init__.py": "7f05a151f7b0e11a2584c1d68d981ef5ce8ddcb77a66b9a8172a0e83580e061b",
+    "gbdraw/layout/circular.py": "22494265ae9ad9149d57db9b36b8a8048d8b63e17270fa4f1df7cced2afa665d",
+    "gbdraw/layout/circular_depth_axis.py": "9487bad8232fcdf5e9ec65017f94a50e70dec4f1873f87c41850e1a6873c8a39",
+    "gbdraw/layout/common.py": "e468ac686425303b08bb9afaed68dfefdfac37b9f980139e955680ca4e01441e",
+    "gbdraw/layout/composition.py": "bcc6c1e82e3d02a1009343962fdf9e8528a8a986108d06aab1d5d7cb7b9f6b50",
+    "gbdraw/layout/linear.py": "4dc349e4d29cef64ab38b8a3d14dbd841459773db0035431ae3e70bf94a957f6",
+    "gbdraw/layout/linear_coords.py": "9112c0ac4421de6205a73c729eb6bcf91051d24f6b0e4708ad65a8073024c27f",
+    "gbdraw/layout/linear_multi_record.py": "a7b5e8d790472f48682f57f3123b1d49aa7fa5c479377b0c4ff34302b32acca0",
+    "gbdraw/layout/record_coordinates.py": "88ca0579ad002b4057949274034319d00bb82535adfa59de6b75c638b8df31be",
+    "gbdraw/layout/record_labels.py": "9e88e2fe80358e92410250bf82ab641513c7c750e709d236404b0479b008482e",
+    "gbdraw/layout/record_placement.py": "835c1409fba537af76c127b19a2e8666419d60a3a3db6ee691b7265d61d6f1ed",
+    "gbdraw/layout/scalar_axis.py": "e591fb2888ceba9ee84fec6d9f8ccfb3e8f3d9c527ad813e945876818ed8b8a4",
+    "gbdraw/layout/spatial.py": "3b1a44f1df99751708d556b7c127aa9bddad32e2625d5c7de19230bd789f38f3",
+    "gbdraw/layout/text_geometry.py": "3c9966311418ab76e9ba647b593b353414ae2cd28d4126fdb4bf802108073343",
+    "gbdraw/layout/_immutable.py": "3789978f0dc5492aa3a889fb1e3790c4de1b1650c476f79b59536e141dcd3c69",
+    "gbdraw/layout/__init__.py": "0944b4a9a5b8dce85033f8f3c6488980110bb63e5f6d1d8401db73a8211b759c",
+    "gbdraw/legend/circular_layout.py": "492aba1bb11a84010f7d1c430fdb02f4a9c093863e80cea15981bcac798fc846",
+    "gbdraw/legend/linear_layout.py": "5ceedbe7ceb74a2d8bf19d9716aa44c1b1dab272f3ccc8418250bf84fb70f9fd",
+    "gbdraw/legend/metrics.py": "dcba8f1b4b6f42481a23e570851d27901b7b2b8fb98b2f55972eb12750758d6d",
+    "gbdraw/legend/table.py": "a1b3df9aff7e3f98d928933228d5951e8f0ebe33dc44871c149d3087418d03a6",
+    "gbdraw/legend/__init__.py": "8bb14485cddae675c1f2b7410eded7dea8e2570c5298a1143110e60049dbb399",
+    "gbdraw/render/composition.py": "14f1415582c3cbaaf51c82d698687c050646d8486d1278eeb18673d950e3b493",
+    "gbdraw/render/export.py": "f73570210df139e9e4c9306511eaa88f50e0b1567561176cb966b75a30ac2d75",
+    "gbdraw/render/formats.py": "3dc308028162d901baf3e239c849a3e61875e60bbcbab8e5a4355f58f504e601",
+    "gbdraw/render/interactive_context.py": "cb1c6df2e995ff999047b2661586a194a4a3ae0970bac6e2e2afa87fe591b5a0",
+    "gbdraw/render/interactive_svg.py": "1fb4d63f9d4fc308dcd792f7aefe48adb6ea76ee60823fe1f1d271646c1e4cad",
+    "gbdraw/render/output_paths.py": "73578daaba6fb9dbb338c1a74e2554dd800a9c903fb28b0f62b621f081600f6a",
+    "gbdraw/render/patterns.py": "d74f709ba95a4e55c094452ecfe2ea8bf7e90b7b65f8a25a8d817b71e467962b",
+    "gbdraw/render/track_slot_metadata.py": "6a2408e78b783e831a6153186da4a7420338bd5b990e7792b21d3b0869d37d03",
+    "gbdraw/render/__init__.py": "3987a9c3dc1a131bae5566f6c8aafc971c9119a208fbc5ae4ecef47bc2e019c7",
+    "gbdraw/svg/arrows.py": "3cf171c28b3bdb31e9e9e7c7458c23cce9b542fa5a241feae5a26ab22f710a87",
+    "gbdraw/svg/circular_conservation.py": "855ec145c7772cf4d8344b515f5f17b4eb56b05ae15bf79bfdee1f31894dc926",
+    "gbdraw/svg/circular_features.py": "19fdfd0cca1a0aacb2f6981712236d32154be53c11150a4245fcead5f1bd80ae",
+    "gbdraw/svg/circular_ticks.py": "7d2ced15b800829e85cb90d11e4956c4c56547fc81a6f6ebed6730dddadd3950",
+    "gbdraw/svg/circular_tracks.py": "e7d7ad2779fb164a062599ccc1441c9ba5cdd3534632b9e1c700f893cc84cbff",
+    "gbdraw/svg/ids.py": "8039ef650ba8d6bff929cfd788eb8e701d965e7a181c740b5f28fff47e0bab41",
+    "gbdraw/svg/linear_features.py": "fddcb482199df83d07fac3e3a60ed695693e931d1f10b83223e8457da2605c0b",
+    "gbdraw/svg/linear_tracks.py": "b5f603ed0c3958ced299ca6191a1afb13494ec5f054b058a407d8d7d0ab4d9cc",
+    "gbdraw/svg/text_path.py": "e4a57c1c04cd2527b357410f54002a3d0d19243d9ba8a0b941715d873364e9de",
+    "gbdraw/svg/__init__.py": "4a4e7f35f62dcf76efbdeba258995227b1efe330f2c9b06453e1ab671d63ccba",
+    "gbdraw/tracks/circular.py": "95b2123847c13f82a508b696e3abbb7ff472dfcf5cb08722d649c938b4e5786c",
+    "gbdraw/tracks/linear.py": "ed6fba442f925c136f55a7c3d3a6e94ac7ea0ce6ad60e7781836b7f71696a025",
+    "gbdraw/tracks/parsing.py": "ecbae8c77f18e826d4cedc7e3097047b87ccea17378368b3651c5ae72b6905bf",
+    "gbdraw/tracks/scalars.py": "0b286cd8df26e7b48917a63fce8206468bb60d2fe70ba7ae7e6690ce658deb1c",
+    "gbdraw/tracks/__init__.py": "ba0df98b0fdb49d1e69e521da3fd0f5fbc0e515e188e12d3f06d2e769b521005",
+    "gbdraw/web/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gbdraw/web_support/capabilities.py": "51c07c4ac13fc2e7c8f491d5f38e7bab3ab3fcd11f7d5ad53add6015f1fe887a",
+    "gbdraw/web_support/config_overrides.py": "e6af63264fdfd8b53f6c8764c5496d8cb75fff449e8346e5e5a16bdaa02d45f2",
+    "gbdraw/web_support/feature_catalog.py": "4a3d6b4af12d7584c270615f8e1972e112afd0f6094b80564fe0eea99c675f71",
+    "gbdraw/web_support/feature_metadata.py": "fee9d1cbb6a243b1b8c2395d3f5b2c2a2166c83cb67c5c660c6edff677c33492",
+    "gbdraw/web_support/orthogroup_metadata.py": "11b5c89da3abf96e05cac5900c7310be832974b9b5a9e5da90e16466994beccf",
+    "gbdraw/web_support/request_render.py": "bc878e80735c2419c5e263ba0bd15041853fbb0ec96bbaa1e2b30843851f9186",
+    "gbdraw/web_support/__init__.py": "dd9cfad492d9460d8764d02893440c3b9a6c9d188cd15bef51cf95592a2c83ea",
+    "gbdraw/render/drawers/__init__.py": "a54c2fb80fbfeff2c9ff11e1e09f42308df66ca7648ba97565a41aa852f91649",
+    "gbdraw/render/groups/__init__.py": "dd61de781f2883ae856394e1b9ebfb980d7f06e766eaeff414fc6cca673ed0b3",
+    "gbdraw/render/groups/circular/axis.py": "f52e82af05432960883da862a9a98447ddfd6f48cefd8ba3710f12ff708a4ded",
+    "gbdraw/render/groups/circular/conservation.py": "a55c4d70f2ca160d4f9d4ef8f9b014a027670ee82d79f141298fa98917edf530",
+    "gbdraw/render/groups/circular/definition.py": "7c63d65dbd60bd24806d74801cf32718a1476420a8efcb135ccaaf3d05b6d5fe",
+    "gbdraw/render/groups/circular/depth.py": "1a9bbb0bf2411c1ac57662eb814deddb442c5bb823727336d877cc6813b1880a",
+    "gbdraw/render/groups/circular/gc_content.py": "1b8b0479975bd0af819448e5b3e2629e3d83209270b3c22c6a4683fe72fda924",
+    "gbdraw/render/groups/circular/gc_skew.py": "9a5002be280968090bc355f5922e193182854a2305e432b45a1177933c958b7f",
+    "gbdraw/render/groups/circular/labels.py": "7816ffda30d82012072c680bb014bec76af14e3d268ba884cba7f5e079b99b8e",
+    "gbdraw/render/groups/circular/legend.py": "ad7b4b4a0da979efbaa9fcffb627087f6b7ff699fc0f7ca3d079e73d4e823ea0",
+    "gbdraw/render/groups/circular/seq_record.py": "38785de8a2fd7f5261c96ccac693bffc64551d16a9fbdbd9f2a0a8967c94c0bc",
+    "gbdraw/render/groups/circular/ticks.py": "f0cae650f59c28fb6fdee86fc0d78c49798c6805422108bbe2ca6045dcd19b35",
+    "gbdraw/render/groups/circular/__init__.py": "814f18cbb04388672727f79c5087ad1f9e9048e5879db582477f880061b8c88e",
+    "gbdraw/render/groups/linear/definition.py": "ffd6fde7c2f5ad7b69947d8b5c4ea2f2387615fe175ab70d50b04a3bef0cee12",
+    "gbdraw/render/groups/linear/depth.py": "97da583a1091cfc2f27ddfda102effea7349a8cb9707e7aeceb7b390405240b8",
+    "gbdraw/render/groups/linear/gc_content.py": "da35cb4203ca23a2bc5c697af3a8f9568a554762dfb0bafa3fffcf19385ba750",
+    "gbdraw/render/groups/linear/gc_skew.py": "4888a0c72c6b83b0211f237c22c3a4ac9e0530ec01e03d260a883ae4f62f48c3",
+    "gbdraw/render/groups/linear/legend.py": "fcdb402858f34faeb54e7a68978e8abe436b43f01b179b88ce0f795b9cf71ba8",
+    "gbdraw/render/groups/linear/length_bar.py": "3a1f2ca3f1bf673fa29f952a03f8a50f3a9844722aa207aee8d351a8a73e88fb",
+    "gbdraw/render/groups/linear/pairwise_match.py": "49ebb08cefdeabc0d86257880daed25801a7b4135a5a7d0713b1d580e6a76b26",
+    "gbdraw/render/groups/linear/plot_title.py": "5708ccab00a317e9e5bf8f05ccccb3efe39a7f9e98bf14af61608e2399cae6d2",
+    "gbdraw/render/groups/linear/seq_record.py": "1a3f73bf62b4e86d72f1d8b08705511f16c9f8a878379f01fedbee7a5e52b554",
+    "gbdraw/render/groups/linear/__init__.py": "02ed96c60e3014b70c59ed3ef76fecdde1b078c9d9b458f726f8a3e0cda54b09",
+    "gbdraw/render/drawers/circular/annotations.py": "458699852535277d1e242cb25de96edfeaa0320cb101a5a4a80a32988c871539",
+    "gbdraw/render/drawers/circular/conservation.py": "10e869b5923b2ea44a3b1e5cd070c0d1f8af1f5e1d3b0f58c1ee750bb76cb790",
+    "gbdraw/render/drawers/circular/definition.py": "c2ca881d1f3efe5259d82e5135699df859ff1fe2a62c4b8ec2bc8fcaf8ad1af0",
+    "gbdraw/render/drawers/circular/depth.py": "29c688cc3923d9ee1954395d67bb0f0eee879bf4d11061c1250960d0374aed36",
+    "gbdraw/render/drawers/circular/features.py": "38fe7dd0aae7f4d142d2ccd4c41c4cb2f7059b9dd87263f2067e5bc9440813ac",
+    "gbdraw/render/drawers/circular/gc_content.py": "231217be4a0b486e02652413bd3f9dc732bad2cd0bda09b168f03810434aa5ef",
+    "gbdraw/render/drawers/circular/gc_skew.py": "a263218ef9357981186e93012d8d4f6919d7862868e888c70021960aeb4f2555",
+    "gbdraw/render/drawers/circular/labels.py": "943e3c2abedf42dc49d1e8ce9c4ef4a4975a00ca43883f6267de5ea246bdffb4",
+    "gbdraw/render/drawers/circular/__init__.py": "d558f916c5c8be607d2f949ce771209b7e88e01b3b9c963ca5dc7dfa1a722974",
+    "gbdraw/render/drawers/linear/annotations.py": "2b2ba1927b8e16964a9bc3d5cb94154ad17a2c6c9137efcc6befd53c5315daff",
+    "gbdraw/render/drawers/linear/depth.py": "baeb7eecc0ba43eec6048a7c8a6f5e1e786659cb8628351d7d53a227166f3018",
+    "gbdraw/render/drawers/linear/features.py": "bd80611376d0b9ba3a22a422c2a1e4d45ff9265115d82ebb08dfb9853b74e9f6",
+    "gbdraw/render/drawers/linear/gc_content.py": "0bfdd7f07899ddfdb3e200bd7173608ca704b3fd85c89a5b60a0fd4ba558e504",
+    "gbdraw/render/drawers/linear/gc_skew.py": "a0198c4bd787dcd11fcbc0cca052ec2bca950ae208598463b357e0cdff6cb75b",
+    "gbdraw/render/drawers/linear/labels.py": "6d63e633addef1657265de622a84ea1f235b1c3c864bf48a2f497d9ae979f342",
+    "gbdraw/render/drawers/linear/__init__.py": "d4f043b19ea960c58da980cb7acc6d6b42af45f80495372572913c2a2c44d0d2",
+    "gbdraw/diagrams/circular/assemble.py": "14166a88f53a7d640c5a77b23ea1daecd460a2968713d8f6e5499d7246025859",
+    "gbdraw/diagrams/circular/builders.py": "33fa6199ea90bc5d4b72088e6f390f63387ad38ffab59296b61eea0c6c2e2df0",
+    "gbdraw/diagrams/circular/positioning.py": "6a61b9bf8384bcf152e4e8919d8da2aa1ce8d8f2994aa4a72da304735dbfc9c8",
+    "gbdraw/diagrams/circular/presets.py": "44d86d7c530070646d8b1c30a466dee3dbacb1ac615a0dad384b749a84036621",
+    "gbdraw/diagrams/circular/radial_layout.py": "c1183d326d2e74059858222a659a29766c0fa891cbef9a0f48dad4413084fa18",
+    "gbdraw/diagrams/circular/__init__.py": "eb15c2d6cf5db31b647feb92c346301e994395312d4e9f7a94118540a3e94cec",
+    "gbdraw/diagrams/linear/assemble.py": "49962986eb7386a1be528e530e27b7a0f39e035f54b9f38cf9c64fb1497bc3c4",
+    "gbdraw/diagrams/linear/builders.py": "c1598e543e51fcb2b6f7a0163896a81d386ffa32d1159ddac9a81627e3b24356",
+    "gbdraw/diagrams/linear/orthogroup_alignment.py": "e0fd6aa27d96a04c81339ebfd0fbd7e1545e9058fb02d2c2f794968a2e36f3fa",
+    "gbdraw/diagrams/linear/positioning.py": "11a7c1d514688a2c2e5e54d3f493eed9b9ca80192857194b1a22e33b022f340b",
+    "gbdraw/diagrams/linear/precalc.py": "bcc63447cb51f8ab9dd3f5fcf2e830bf63c35d6d3aea2ff6341a05f3bf3b32db",
+    "gbdraw/diagrams/linear/track_slots.py": "85dabf4179a049292e758f8a1d6bfc6eb54435f97ed2b53558202f29e418953a",
+    "gbdraw/diagrams/linear/__init__.py": "6be346471397ace365d35ecd4957e647acb70b02dd1cc0e6c3ab1a0c32149e29",
+    "gbdraw/config/models/canvas.py": "26c5e68fb2cf3a7d4d4c525f49e818708a4f49f77a4e381deb0f52e554bf630b",
+    "gbdraw/config/models/common.py": "e9962e9f406bf8af0309d217c83cfccd1157d7dee99eda2e79ce4181e0ff61ad",
+    "gbdraw/config/models/labels.py": "827a783d4a2c423fe5059894ae704d5e30bcfce51b14d4c707475b219c3c2f5f",
+    "gbdraw/config/models/objects.py": "8fdf4e0c5e6596060d1f691bb9e3da2df11da118af9af81812ae5302897e61a9",
+    "gbdraw/config/models/render_profiles.py": "d07d43a13989eeadc90779675c23fb583cbe0ef79f23a534ce1ef10ef6a7be0e",
+    "gbdraw/config/models/root.py": "d13664e09db50dbe5aa27551acff65cf70d9bdda0e06206c6439f1bbd34554bb",
+    "gbdraw/config/models/__init__.py": "9290eed84f19c2c9ec3f3f86eea88ff27c73b30e8ee11f25afaf0048a4ab4712"
+  },
+  "s076LedgerVerifiedEntries": 108,
+  "benchmark": "deferred by user; no new measurements"
+}

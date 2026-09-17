@@ -1150,7 +1150,7 @@ def test_anchor_core_unions_connected_near_reciprocal_groups() -> None:
     }
     path_sets = {
         tuple(path.protein_ids)
-        for path in result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]
+        for path in tuple(result.orthogroups.path_indexes_by_orthogroup_id["og_1"].iter_paths())
     }
     assert ("a0", "b0") in path_sets
     assert ("a1", "b1") in path_sets
@@ -1734,7 +1734,7 @@ def test_shared_node_paths_are_serialized_without_collapsing_to_one_to_one() -> 
     )
 
     assert result.orthogroups is not None
-    paths = result.orthogroups.ortholog_paths_by_orthogroup_id["og_1"]
+    paths = tuple(result.orthogroups.path_indexes_by_orthogroup_id["og_1"].iter_paths())
     path_sets = {tuple(path.protein_ids): tuple(path.shared_protein_ids) for path in paths}
     assert path_sets[("a0", "b0", "c0")] == ("c0",)
     assert path_sets[("a1", "b1", "c0")] == ("c0",)
@@ -2399,7 +2399,7 @@ def test_web_losatp_blastp_payload_helper_returns_collinear_rows(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["collinearityResult"]["schema"] == 2
+    assert result["collinearityResult"]["schema"] == 3
     assert result["collinearityResult"]["kind"] == "result"
     assert result["collinearityResult"]["value"]["type"] == "CollinearityResult"
     typed_fields = result["collinearityResult"]["value"]["fields"]
@@ -3750,3 +3750,112 @@ def test_collinear_without_inference_applies_member_limit_after_raw_filters():
         edge_mode="all", orthogroup_member_max_hits=limit,
     ) for limit in [1, None]]
     assert [sum(len(block.anchors) for block in result.blocks) for result in results] == [1, 2]
+
+
+@pytest.mark.parametrize("orientation", ["plus", "minus"])
+def test_merge_conflict_index_preserves_exact_count_boundaries_and_exclusions(orientation):
+    from tests.prototypes.cluster_merge import _lossless_conflicts_between_clusters as oracle
+
+    def anchor(q, s):
+        return _anchor(q, 20 - s if orientation == "minus" else s,
+                       subject_strand=-1 if orientation == "minus" else 1)
+
+    # The deliberately overlapping left cluster exercises membership exclusion
+    # even for a private exact-count call outside the normal merge order.
+    left = collinearity_module._lossless_block_from_anchors(
+        block_id="left", pair=(0, 1), orientation=orientation,
+        anchors=[anchor(0, 0), anchor(3, 3), anchor(6, 6)])
+    right = collinearity_module._lossless_block_from_anchors(
+        block_id="right", pair=(0, 1), orientation=orientation,
+        anchors=[anchor(2, 2), anchor(4, 4), anchor(8, 8)])
+    anchors = [*left.anchors, *right.anchors,
+               anchor(2, 3), anchor(6, 3), anchor(3, 2), anchor(3, 6),
+               anchor(3, 4), anchor(3, 4), anchor(5, 5)]
+    anchors.sort(key=lambda a: a.query_order)
+    expected = oracle(left, right, anchors)
+    assert expected == 3  # duplicate retained rows each count, cluster members do not
+    count = collinearity_module._lossless_conflicts_between_clusters
+    assert count(left.anchors, right.anchors, anchors) == expected
+    for maximum in (0, 1, 2, 3, 4):
+        assert count(left.anchors, right.anchors, anchors, max_conflicts=maximum) == min(expected, maximum + 1)
+    assert count((), right.anchors, anchors) == 0
+    assert count(left.anchors, (), anchors) == 0
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_lossless_merge_matches_frozen_oracle_for_all_result_fields(seed, monkeypatch):
+    import random
+    from tests.prototypes.cluster_merge import _merge_lossless_clusters as oracle
+    from gbdraw.session_request_codec import encode_canonical_typed_resource
+
+    rng = random.Random(seed)
+    anchors = []
+    for pair in ((0, 1), (1, 2), (0, 2)):
+        for i in range(30):
+            q = rng.randrange(20)
+            s = rng.choice((q, 20 - q, rng.randrange(20)))
+            anchor = replace(
+                _anchor(q, s, subject_strand=rng.choice((-1, 1, None))),
+                query_record_index=pair[0], subject_record_index=pair[1],
+                query_protein_id=f"q{pair[0]}_{i}", subject_protein_id=f"s{pair[1]}_{i}",
+                orthogroup_id=f"og{i % 4}", rbh_orthogroup_id=f"rbh{i % 3}",
+                ortholog_path_id=f"og{i % 4}.path_{i}", edge_kind="core",
+                render_role="representative", query_orthogroup_representative=bool(i % 2),
+                subject_orthogroup_representative=bool(i % 3),
+                query_orthogroup_member_count=i, subject_orthogroup_member_count=i + 1,
+                query_view_feature_svg_id=f"qv{i}", subject_view_feature_svg_id=f"sv{i}",
+                query_feature_index=i, subject_feature_index=i + 1,
+                bitscore=rng.choice((0.1, 1e16, 1.0, 200.0)))
+            anchors.extend([anchor] * (2 if i % 7 == 0 else 1))
+    rng.shuffle(anchors)
+    params = LosslessCollinearityParameters(
+        min_anchors=1 + seed % 4, max_unit_gap=seed % 7,
+        max_diagonal_drift=seed % 5, max_conflicts=seed % 3,
+        merge_orientation=("strand", "order", "either")[seed % 3])
+    actual = cluster_lossless_collinearity_anchors(anchors, params=params)
+    with monkeypatch.context() as m:
+        m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
+        expected = cluster_lossless_collinearity_anchors(anchors, params=params)
+    assert actual == expected
+    assert encode_canonical_typed_resource("result", actual) == encode_canonical_typed_resource("result", expected)
+    for scope in ("adjacent", "all"):
+        a = convert_collinearity_blocks_to_pair_comparisons(actual, record_ids=["a", "b", "c"], search_scope=scope)
+        b = convert_collinearity_blocks_to_pair_comparisons(expected, record_ids=["a", "b", "c"], search_scope=scope)
+        assert a.keys() == b.keys()
+        for pair in a:
+            pd.testing.assert_frame_equal(a[pair], b[pair])
+
+
+def test_chain_merge_materializes_once_and_visits_only_query_gap(monkeypatch):
+    from tools.benchmark_protein_comparison import merge_case, operation_probe
+    from tests.prototypes.cluster_merge import _merge_lossless_clusters as oracle
+
+    _, operations = merge_case(collinearity_module, "merge-300")
+    actual, counters, _ = operation_probe(protein_colinearity_module, collinearity_module, operations["cluster"])
+    with monkeypatch.context() as m:
+        m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
+        expected = operations["cluster"]()
+    assert actual == expected
+    assert counters["merge.conflictCandidateVisits"] == 99
+    assert counters["merge.materializationCalls"] == 1
+    assert counters["merge.materializationAnchorReferences"] == 200
+    assert counters.get("merge.conflictEndpointSortCalls", 0) == 0
+    assert len(actual.blocks) == 101  # the 100 intervening singletons survive
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("min_anchors", [1, 2, 80])
+def test_chain_merge_preserves_float_score_and_final_order(reverse, min_anchors, monkeypatch):
+    from tests.prototypes.cluster_merge import _merge_lossless_clusters as oracle
+
+    anchors = [_anchor(i, (180 - s if reverse else s),
+                       subject_strand=-1 if reverse else 1,
+                       bitscore=(0.1, 1e16, 1.0)[i % 3])
+               for i in range(60) for s in [i if i % 3 != 2 else 120 + i]]
+    params = LosslessCollinearityParameters(
+        max_unit_gap=2, max_conflicts=0, min_anchors=min_anchors)
+    actual = cluster_lossless_collinearity_anchors(anchors, params=params)
+    with monkeypatch.context() as m:
+        m.setattr(collinearity_module, "_merge_lossless_clusters", oracle)
+        expected = cluster_lossless_collinearity_anchors(anchors, params=params)
+    assert actual == expected

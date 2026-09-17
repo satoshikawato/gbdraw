@@ -1,0 +1,79 @@
+{
+  "installedPackage": "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/.venv/s07-7-cli/lib/python3.13/site-packages/gbdraw",
+  "packagedPythonFilesMatched": 208,
+  "cwdOutsideCheckout": true,
+  "pythonpathUnset": true,
+  "preparedRawGeneration": [
+    {
+      "case": "gallery-collinear",
+      "exactFrozenParity": true,
+      "typedSessionVersion": 42,
+      "resultSha256": "937f8c52db6263d2fb360ca082c7c1bb3207049e3b3258c94c81b86fd209100e",
+      "svgSha256": [
+        "472b1ee111210734126f084c6a81363d2e8abfb03d0ec8eb0ccfa1b267c721b4"
+      ]
+    },
+    {
+      "case": "gallery-orthogroup",
+      "exactFrozenParity": true,
+      "typedSessionVersion": 42,
+      "resultSha256": "635a0f542a21007c91b8175b392c29ec4f0d945c50e218cad26a0a7ee5ce02aa",
+      "svgSha256": [
+        "f9436b0eeece3704c18e0bb3ad59cc226ed9a27240b5f2bf2b7a3d04125771e5"
+      ]
+    }
+  ],
+  "replays": [
+    {
+      "case": "gallery-collinear",
+      "sessionVersion": 42,
+      "inputSha256": "c308e897f758216227d9c42e261e13d1faf006d68a77868739bc606bbfbe7230",
+      "argv": [
+        "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/.venv/s07-7-cli/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/.venv/s07-7-cli-artifacts/gallery-collinear.gbdraw-session.json",
+        "-o",
+        "replayed",
+        "-f",
+        "svg"
+      ],
+      "exitCode": 0,
+      "svgSha256": "472b1ee111210734126f084c6a81363d2e8abfb03d0ec8eb0ccfa1b267c721b4"
+    },
+    {
+      "case": "gallery-orthogroup",
+      "sessionVersion": 42,
+      "inputSha256": "6d607d7f75477f08f11fa29383a13b608c878264eb11515d4c4de5204b4b0ceb",
+      "argv": [
+        "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/.venv/s07-7-cli/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/.venv/s07-7-cli-artifacts/gallery-orthogroup.gbdraw-session.json",
+        "-o",
+        "replayed",
+        "-f",
+        "svg"
+      ],
+      "exitCode": 0,
+      "svgSha256": "f9436b0eeece3704c18e0bb3ad59cc226ed9a27240b5f2bf2b7a3d04125771e5"
+    },
+    {
+      "case": "released-v2",
+      "sessionVersion": 33,
+      "inputSha256": "c10b794a02b74ff4ab35720bb81e422298343c1d1c58d7922ae6fc71d314a0ea",
+      "argv": [
+        "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/.venv/s07-7-cli/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz",
+        "-o",
+        "replayed",
+        "-f",
+        "svg"
+      ],
+      "exitCode": 0,
+      "svgSha256": "8e0c8732efa338e5c5488d0ac151df73a305078db48d724704aaa9236b3c863b"
+    }
+  ]
+}

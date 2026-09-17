@@ -1,0 +1,102 @@
+{
+  "cwd": "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916",
+  "timeout": "No process deadline imposed; test-owned timeouts unchanged.",
+  "commands": [
+    {
+      "stage": "A",
+      "command": "PYTHONPATH=. pytest tests/test_protein_s078.py tests/test_protein_colinearity.py -q",
+      "log": "s07-8-A-tests.log",
+      "exitCode": 0,
+      "result": "298 passed, 1 skipped"
+    },
+    {
+      "stage": "B",
+      "command": "PYTHONPATH=. pytest tests/test_protein_local_reductions.py tests/test_sparse_support.py tests/test_protein_s078.py -q",
+      "log": "s07-8-B-tests.log",
+      "exitCode": 0,
+      "result": "1139 passed"
+    },
+    {
+      "stage": "C",
+      "command": "PYTHONPATH=. pytest tests/test_protein_s078.py tests/test_collinearity_units.py tests/test_protein_local_reductions.py tests/test_sparse_support.py -q",
+      "log": "s07-8-C-tests.log",
+      "exitCode": 1,
+      "result": "1667 passed; 3 test assumptions about public limit zero corrected"
+    },
+    {
+      "stage": "limits adapter",
+      "command": "PYTHONPATH=. pytest tests/test_protein_s078.py -q -k related_limits",
+      "log": "s07-8-limits-tests.log",
+      "exitCode": 1,
+      "result": "6 passed; ValidationError does not subclass ValueError; adapter corrected"
+    },
+    {
+      "stage": "limits corrected",
+      "command": "PYTHONPATH=. pytest tests/test_protein_s078.py -q -k related_limits",
+      "log": "s07-8-limits-corrected-tests.log",
+      "exitCode": 0,
+      "result": "9 passed"
+    },
+    {
+      "stage": "boundary final",
+      "command": "PYTHONPATH=. pytest tests/test_protein_s078.py -q",
+      "log": "s07-8-boundary-final-tests.log",
+      "exitCode": 0,
+      "result": "167 passed"
+    },
+    {
+      "stage": "native",
+      "command": "PYTHONPATH=. pytest tests/test_protein_colinearity.py tests/test_collinearity.py tests/test_lossless_ortholog_paths.py tests/test_ortholog_path_contract.py -q",
+      "log": "s07-8-native-tests.log",
+      "exitCode": 0,
+      "result": "429 passed, 1 skipped"
+    },
+    {
+      "stage": "typed and SVG",
+      "command": "PYTHONPATH=. pytest tests/test_web_feature_catalog.py tests/test_session_request_codec.py tests/test_session_compat.py tests/test_output_comparison.py::TestOutputComparison -q",
+      "log": "s07-8-typed-reference-tests.log",
+      "exitCode": 0,
+      "result": "195 passed"
+    },
+    {
+      "stage": "wheel",
+      "command": "python tools/prepare_browser_wheel.py --no-build-isolation",
+      "log": "s07-8-wheel.log",
+      "exitCode": 0,
+      "result": "208 Python files match source"
+    },
+    {
+      "stage": "architecture",
+      "command": "node tools/check-web-change-budget.mjs --base 02ca8f950a7561ae9569c66f3f91d30702b53a17",
+      "log": "s07-8-architecture-accepted.log",
+      "exitCode": 0,
+      "result": "Gate PASS / Review CLEAR; local Git subprocess needed escalation"
+    },
+    {
+      "stage": "CLI",
+      "command": "env -u PYTHONPATH <worktree>/.venv/s07-8-cli/bin/python <worktree>/tests/run_protein_local_cli_acceptance.py --output <data>/s07-8-cli.json",
+      "log": "s07-8-cli.log",
+      "exitCode": 0,
+      "result": "cwd=/tmp; 2 prepared raw analyses, 3 replays"
+    },
+    {
+      "stage": "lint",
+      "command": "ruff check gbdraw/ tests/prototypes/protein_s078.py tests/test_protein_s078.py tests/test_protein_local_reductions.py tests/run_protein_local_browser_acceptance.py tests/run_protein_local_cli_acceptance.py",
+      "log": "s07-8-ruff-final.log",
+      "exitCode": 0,
+      "result": "All checks passed"
+    },
+    {
+      "stage": "browser",
+      "command": "PYTHONPATH=. python tests/run_protein_local_browser_acceptance.py --baseline-root ../collinear-s07-7-20260916 --output docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-browser.json.gz",
+      "log": "s07-8-browser-accepted.log",
+      "exitCode": 0,
+      "result": "8 helper runs, 8 final-wheel desktop/mobile Session flows; exact Pyodide parity"
+    }
+  ],
+  "sandboxFailures": {
+    "s07-8-browser.log": "Local HTTP socket EPERM; same command escalated",
+    "s07-8-architecture.log": "Node Git spawn EPERM; same command escalated"
+  },
+  "measurementLedger": "s07-8-measurement-commands.jsonl"
+}

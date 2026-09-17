@@ -1,0 +1,42 @@
+
+Running 8 tests using 1 worker
+
+(node:130708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:306:1 › synthetic current session restores and exports without materializing resources (934ms)
+  ✓  2 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:385:1 › neutral cached conservation session regenerates three ordered rings offline (7.3s)
+Vibrio lazy-session evidence: {"structural":{"base64DecodeCount":0,"decodedByteCount":0,"fileConstructionCount":0,"blobConstructionCount":0,"resourceTextReadCount":0,"resourceByteReadCount":0,"sourceRecoveryCount":0,"workerConstructionCount":0,"workerInitializationCount":0},"historyBaseline":{"artifactCheckpointBuilds":0,"artifactCheckpointSignatureComputations":0,"artifactSvgBytes":0,"intentBuilds":1,"intentSignatureComputations":1,"undoCount":0,"redoCount":0,"currentCheckpointAbsent":true},"preflightStructural":{"proteinManifestFullValidationCount":1,"proteinRawTextValidationCount":59},"timing":{"currentSessionPreflightMs":4743.300000000745,"historyBaselineMs":3,"preflightSubphases":{"sessionAuthorityValidationMs":125.5,"featureCatalogValidationMs":3885.5,"editorStateNormalizationMs":0.19999999925494194,"resourceTableAdoptionMs":0.09999999962747097,"losatArtifactValidationMs":727.8000000007451,"canonicalRequestProjectionMs":2.699999999254942,"currentDraftValidationMs":0.599999999627471,"artifactProjectionMs":0.10000000149011612},"firstPreviewMs":8875.900000000373,"interactiveReadyMs":61545.60000000149,"ready":{"name":"interactiveReady","timestamp":62165.5,"status":"success","degradedRecovery":false}}}
+  ✓  3 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:552:1 › real Vibrio preview is lazy and leaves the Worker idle (1.1m)
+  ✓  4 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:614:1 › Generate materializes only required resources and reuses one Worker (8.0s)
+  ✓  5 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:840:1 › render-only Generate reuses preparation and remains undoable (7.7s)
+  ✘  6 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:972:1 › the real Cancel control restores the committed artifact and leaves no History entry (1.0s)
+  -  7 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:1133:1 › preflight and lazy-access failures preserve the committed preview
+  -  8 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:1231:1 › a frozen v39 session round-trips through the legacy migration path
+
+
+  1) [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:972:1 › the real Cancel control restores the committed artifact and leaves no History entry 
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:4173/gbdraw/web/index.html
+    Call log:
+      - navigating to "http://127.0.0.1:4173/gbdraw/web/index.html", waiting until "domcontentloaded"
+
+
+       at helpers/app-lifecycle.cjs:264
+
+      262 |   installPageErrorCollection(page);
+      263 |   await installDiagramWorkerTracking(page);
+    > 264 |   await page.goto(path, { waitUntil: 'domcontentloaded' });
+          |              ^
+      265 |   await waitForAppShell(page, { waitForPalette, timeout });
+      266 |   return assertAppShellReady(page, { waitForPalette, checkErrors });
+      267 | };
+        at openApp (/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/helpers/app-lifecycle.cjs:264:14)
+        at openInstrumentedApp (/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:274:3)
+        at /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:976:3
+
+    Error Context: test-results/contracts-current-session--8609e-and-leaves-no-History-entry-chromium/error-context.md
+
+  1 failed
+    [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:972:1 › the real Cancel control restores the committed artifact and leaves no History entry 
+  2 did not run
+  5 passed (1.5m)

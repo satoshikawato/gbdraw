@@ -1,0 +1,17 @@
+{
+  "artifact": "source SPA with generated local browser wheel",
+  "network": "fresh contexts; external requests blocked before navigation",
+  "acceptance": "tests/run_losat_cache_browser_acceptance.py",
+  "runs": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "paths": [],
+      "blockedExternal": [],
+      "pageErrors": [],
+      "exitCode": 1
+    }
+  ]
+}

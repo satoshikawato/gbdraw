@@ -1,0 +1,35 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 419 items
+
+tests/test_collinearity.py ............................................. [ 10%]
+........................................................................ [ 27%]
+.....................................................                    [ 40%]
+tests/test_collinearity_units.py ....                                    [ 41%]
+tests/test_protein_colinearity.py ...................................... [ 50%]
+........................................................................ [ 67%]
+............................................................s........... [ 84%]
+......................................                                   [ 94%]
+tests/test_lossless_ortholog_paths.py .................                  [ 98%]
+tests/test_protein_comparison_benchmark.py ........                      [100%]
+
+=============================== warnings summary ===============================
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+  /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+    else pd.concat(frames, ignore_index=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============ 418 passed, 1 skipped, 5 warnings in 184.98s (0:03:04) ============

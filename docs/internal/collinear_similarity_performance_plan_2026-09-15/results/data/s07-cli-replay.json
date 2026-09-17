@@ -1,0 +1,22 @@
+{
+  "command": [
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916/.venv/s07-cli/bin/gbdraw",
+    "linear",
+    "--session",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916/gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+    "-o",
+    "/tmp/gbdraw-s07-cli-replay/replayed",
+    "--session_output",
+    "/tmp/gbdraw-s07-cli-replay/replayed-session.json.gz",
+    "--overwrite"
+  ],
+  "cwd": "/tmp/gbdraw-s07-cli-replay",
+  "pythonpathAndPythonhomeRemoved": true,
+  "exitCode": 0,
+  "elapsedSeconds": 38.403857707977295,
+  "inputSha256": "8d4069026221d85c3ca4cac5bfae42f13d3ab38e7f01ae8e458de1be38a33ea7",
+  "outputHashes": {
+    "replayed.svg": "ccf4a5d4ebe91dae024e717b8a78295f61f9ad6a4da2f80f0ce939ad1386c1fb",
+    "replayed-session.json.gz": "41afbc6d99cb0fa7a7ca1cc82218c101992377d24de47d08cf46f777da63157a"
+  }
+}

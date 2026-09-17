@@ -77,6 +77,8 @@ const changeColor = async (picker, color) => {
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   }, color);
+  // A cold Session prepares Python matches before the synchronous edit phase.
+  await picker.page().waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -255,6 +257,7 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
   const strokeMode = popup.getByLabel('Feature stroke color mode', { exact: true });
   if (await strokeMode.inputValue() === 'auto') {
     await strokeMode.selectOption('color');
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
   }
   let strokePicker = popup.getByLabel('Feature stroke color', { exact: true });
   await expect(strokePicker).toBeEnabled();

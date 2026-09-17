@@ -1,0 +1,6040 @@
+{
+  "baselineRevision": "dc79915a7d30abe1e1cdea9b592b330bfef45696",
+  "candidateProductionRevision": "0374ae1b29e3d438977926eb3e4270b4767c1d85",
+  "exactBaselineCandidateEquality": [
+    "Python 3.10.21",
+    "Python 3.11.16",
+    "Python 3.13.3"
+  ],
+  "python310And311ExactEquality": true,
+  "crossVersionDifferenceKinds": [
+    "float"
+  ],
+  "crossVersionDifferences": {
+    "gallery-collinear": [
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "items",
+          73,
+          "fields",
+          4,
+          1
+        ],
+        "pythonBefore312": 847.4000000000001,
+        "python312Plus": 847.4,
+        "ulpDifference": 1.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          27,
+          1,
+          "items",
+          5,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.345783995705038,
+        "python312Plus": 0.3457839957050375,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          27,
+          1,
+          "items",
+          5,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.08658958830321851,
+        "python312Plus": 0.0865895883032186,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          57,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.40098839755425925,
+        "python312Plus": 0.4009883975542587,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          67,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3449593158247756,
+        "python312Plus": 0.34495931582477607,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          93,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7021939521875151,
+        "python312Plus": 0.7021939521875145,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          101,
+          1,
+          "items",
+          2,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.1434163426940795,
+        "python312Plus": 0.14341634269407977,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          109,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.03808791099432913,
+        "python312Plus": 0.03808791099432921,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          117,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.11165070419562538,
+        "python312Plus": 0.1116507041956256,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          119,
+          1,
+          "items",
+          3,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.055483313802915,
+        "python312Plus": 0.05548331380291488,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          119,
+          1,
+          "items",
+          5,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.45329925351888917,
+        "python312Plus": 0.45329925351888983,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          119,
+          1,
+          "items",
+          5,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.06849319730855623,
+        "python312Plus": 0.06849319730855633,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          120,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3312915826353074,
+        "python312Plus": 0.33129158263530795,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          120,
+          1,
+          "items",
+          6,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5300782720577653,
+        "python312Plus": 0.5300782720577648,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          121,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.24029038958386784,
+        "python312Plus": 0.24029038958386803,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          127,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.1544922036619027,
+        "python312Plus": 0.15449220366190303,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          130,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.22174888900509448,
+        "python312Plus": 0.2217488890050946,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          148,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 1.2038007226537148,
+        "python312Plus": 1.2038007226537133,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          184,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.37160198059753535,
+        "python312Plus": 0.37160198059753563,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          191,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.43250067550712357,
+        "python312Plus": 0.43250067550712384,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          191,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.22010588635399714,
+        "python312Plus": 0.22010588635399725,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          191,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.32725439254705085,
+        "python312Plus": 0.327254392547051,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          208,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5530536422336911,
+        "python312Plus": 0.5530536422336914,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          262,
+          1,
+          "items",
+          4,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.29510759551915844,
+        "python312Plus": 0.2951075955191582,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          294,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2848458306688722,
+        "python312Plus": 0.28484583066887237,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          294,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.036966051645122164,
+        "python312Plus": 0.03696605164512225,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          299,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6359718845046854,
+        "python312Plus": 0.6359718845046862,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          325,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4244560720247729,
+        "python312Plus": 0.42445607202477315,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          325,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.17309131594382202,
+        "python312Plus": 0.1730913159438221,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          325,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.36581061728287045,
+        "python312Plus": 0.3658106172828706,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          325,
+          1,
+          "items",
+          4,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.20218136569158274,
+        "python312Plus": 0.2021813656915829,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          346,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10582744130240397,
+        "python312Plus": 0.10582744130240382,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          347,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5906001535489791,
+        "python312Plus": 0.5906001535489782,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          347,
+          1,
+          "items",
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.2181605670692863,
+        "python312Plus": 0.2181605670692866,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          355,
+          1,
+          "items",
+          4,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.9222246249184485,
+        "python312Plus": 0.9222246249184489,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          366,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6569305798430172,
+        "python312Plus": 0.6569305798430181,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          375,
+          1,
+          "items",
+          5,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.8305740582766423,
+        "python312Plus": 0.830574058276642,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          375,
+          1,
+          "items",
+          5,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.6709629567891493,
+        "python312Plus": 0.6709629567891491,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          377,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7012684618854781,
+        "python312Plus": 0.701268461885479,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          420,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.05653957900399759,
+        "python312Plus": 0.056539579003997475,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          439,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.29047957165621885,
+        "python312Plus": 0.2904795716562192,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          439,
+          1,
+          "items",
+          3,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.3336346617898108,
+        "python312Plus": 0.33363466178981016,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          455,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6711310641655405,
+        "python312Plus": 0.6711310641655408,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          455,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.6006453135374017,
+        "python312Plus": 0.6006453135374008,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          484,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.28677567253109676,
+        "python312Plus": 0.28677567253109737,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          485,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3706781119877126,
+        "python312Plus": 0.37067811198771183,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          490,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.07037852911196933,
+        "python312Plus": 0.07037852911196919,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          496,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5298033842528808,
+        "python312Plus": 0.5298033842528818,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          502,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7424051022132869,
+        "python312Plus": 0.7424051022132871,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          502,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5066528479641037,
+        "python312Plus": 0.5066528479641028,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          523,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.42105492117948795,
+        "python312Plus": 0.4210549211794884,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          524,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.1578692327016794,
+        "python312Plus": 0.15786923270167957,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          554,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          554,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          555,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.42036677904768305,
+        "python312Plus": 0.4203667790476839,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          555,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.42036677904768305,
+        "python312Plus": 0.4203667790476839,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          556,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          556,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          556,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          557,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          557,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          558,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          558,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          559,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17174645901719918,
+        "python312Plus": 0.1717464590171995,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          559,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17174645901719918,
+        "python312Plus": 0.1717464590171995,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          560,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          560,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          561,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          561,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          561,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          561,
+          1,
+          "items",
+          3,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          562,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          562,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          563,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3895638677385647,
+        "python312Plus": 0.38956386773856555,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          563,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3895638677385647,
+        "python312Plus": 0.38956386773856555,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          564,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2001945973375277,
+        "python312Plus": 0.20019459733752812,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          564,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2001945973375277,
+        "python312Plus": 0.20019459733752812,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          565,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          565,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          566,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          566,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          137,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.345783995705038,
+        "python312Plus": 0.3457839957050375,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          137,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.08658958830321851,
+        "python312Plus": 0.0865895883032186,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          282,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.40098839755425925,
+        "python312Plus": 0.4009883975542587,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          329,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3449593158247756,
+        "python312Plus": 0.34495931582477607,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          461,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7021939521875151,
+        "python312Plus": 0.7021939521875145,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          507,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.1434163426940795,
+        "python312Plus": 0.14341634269407977,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          546,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.03808791099432913,
+        "python312Plus": 0.03808791099432921,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          589,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.11165070419562538,
+        "python312Plus": 0.1116507041956256,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          603,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.055483313802915,
+        "python312Plus": 0.05548331380291488,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          605,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.45329925351888917,
+        "python312Plus": 0.45329925351888983,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          605,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.06849319730855623,
+        "python312Plus": 0.06849319730855633,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          608,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3312915826353074,
+        "python312Plus": 0.33129158263530795,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          613,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5300782720577653,
+        "python312Plus": 0.5300782720577648,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          615,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.24029038958386784,
+        "python312Plus": 0.24029038958386803,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          644,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.1544922036619027,
+        "python312Plus": 0.15449220366190303,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          665,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.22174888900509448,
+        "python312Plus": 0.2217488890050946,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          750,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 1.2038007226537148,
+        "python312Plus": 1.2038007226537133,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          929,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.37160198059753535,
+        "python312Plus": 0.37160198059753563,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          963,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.43250067550712357,
+        "python312Plus": 0.43250067550712384,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          963,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.22010588635399714,
+        "python312Plus": 0.22010588635399725,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          964,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.32725439254705085,
+        "python312Plus": 0.327254392547051,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1052,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5530536422336911,
+        "python312Plus": 0.5530536422336914,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1319,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.29510759551915844,
+        "python312Plus": 0.2951075955191582,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1484,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2848458306688722,
+        "python312Plus": 0.28484583066887237,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1484,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.036966051645122164,
+        "python312Plus": 0.03696605164512225,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1511,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6359718845046854,
+        "python312Plus": 0.6359718845046862,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1641,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4244560720247729,
+        "python312Plus": 0.42445607202477315,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1641,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.17309131594382202,
+        "python312Plus": 0.1730913159438221,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1642,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.36581061728287045,
+        "python312Plus": 0.3658106172828706,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1645,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.20218136569158274,
+        "python312Plus": 0.2021813656915829,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1741,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10582744130240397,
+        "python312Plus": 0.10582744130240382,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1746,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5906001535489791,
+        "python312Plus": 0.5906001535489782,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1746,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.2181605670692863,
+        "python312Plus": 0.2181605670692866,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1780,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.9222246249184485,
+        "python312Plus": 0.9222246249184489,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1824,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6569305798430172,
+        "python312Plus": 0.6569305798430181,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1881,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.8305740582766423,
+        "python312Plus": 0.830574058276642,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1881,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.6709629567891493,
+        "python312Plus": 0.6709629567891491,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1889,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7012684618854781,
+        "python312Plus": 0.701268461885479,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2036,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.05653957900399759,
+        "python312Plus": 0.056539579003997475,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2098,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.29047957165621885,
+        "python312Plus": 0.2904795716562192,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2101,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.3336346617898108,
+        "python312Plus": 0.33363466178981016,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2157,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6711310641655405,
+        "python312Plus": 0.6711310641655408,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2157,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.6006453135374017,
+        "python312Plus": 0.6006453135374008,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2245,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.28677567253109676,
+        "python312Plus": 0.28677567253109737,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2249,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3706781119877126,
+        "python312Plus": 0.37067811198771183,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2265,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.07037852911196933,
+        "python312Plus": 0.07037852911196919,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2284,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5298033842528808,
+        "python312Plus": 0.5298033842528818,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2303,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7424051022132869,
+        "python312Plus": 0.7424051022132871,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2305,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5066528479641037,
+        "python312Plus": 0.5066528479641028,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2365,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.42105492117948795,
+        "python312Plus": 0.4210549211794884,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2369,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.1578692327016794,
+        "python312Plus": 0.15786923270167957,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2432,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2433,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2434,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.42036677904768305,
+        "python312Plus": 0.4203667790476839,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2435,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.42036677904768305,
+        "python312Plus": 0.4203667790476839,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2436,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2437,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2438,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2439,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2440,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2441,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2442,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2443,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17174645901719918,
+        "python312Plus": 0.1717464590171995,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2444,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17174645901719918,
+        "python312Plus": 0.1717464590171995,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2445,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2446,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2447,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2448,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2449,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2450,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2451,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2452,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2453,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3895638677385647,
+        "python312Plus": 0.38956386773856555,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2454,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3895638677385647,
+        "python312Plus": 0.38956386773856555,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2455,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2001945973375277,
+        "python312Plus": 0.20019459733752812,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2456,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2001945973375277,
+        "python312Plus": 0.20019459733752812,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2457,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2458,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2459,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          2,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2460,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      }
+    ],
+    "gallery-orthogroup": [
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          11,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.23285877594550078,
+        "python312Plus": 0.23285877594550125,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          30,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.06668653197471641,
+        "python312Plus": 0.06668653197471648,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          30,
+          1,
+          "items",
+          3,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10132810286394314,
+        "python312Plus": 0.10132810286394305,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          30,
+          1,
+          "items",
+          8,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.055483313802915,
+        "python312Plus": 0.05548331380291488,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          30,
+          1,
+          "items",
+          10,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5201669371198626,
+        "python312Plus": 0.5201669371198623,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          31,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.12024993641541216,
+        "python312Plus": 0.12024993641541229,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          31,
+          1,
+          "items",
+          6,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.345783995705038,
+        "python312Plus": 0.3457839957050375,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          31,
+          1,
+          "items",
+          6,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.08658958830321851,
+        "python312Plus": 0.0865895883032186,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          77,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3449593158247756,
+        "python312Plus": 0.34495931582477607,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          105,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7021939521875151,
+        "python312Plus": 0.7021939521875145,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          121,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.04393335406020308,
+        "python312Plus": 0.04393335406020317,
+        "ulpDifference": 13.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          121,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.11165070419562538,
+        "python312Plus": 0.1116507041956256,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          121,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.05914298321935761,
+        "python312Plus": 0.059142983219357737,
+        "ulpDifference": 18.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          121,
+          1,
+          "items",
+          2,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.03808791099432913,
+        "python312Plus": 0.03808791099432921,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          131,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.46658195871417735,
+        "python312Plus": 0.4665819587141775,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          133,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3312915826353074,
+        "python312Plus": 0.33129158263530795,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          163,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 1.2119065087845007,
+        "python312Plus": 1.2119065087845016,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          180,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.320101407273887,
+        "python312Plus": 0.32010140727388736,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          180,
+          1,
+          "items",
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.278991721085603,
+        "python312Plus": 0.2789917210856032,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          201,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.37160198059753535,
+        "python312Plus": 0.37160198059753563,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          208,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4724012121368544,
+        "python312Plus": 0.4724012121368546,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          208,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.2892536641157783,
+        "python312Plus": 0.289253664115778,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          225,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5530536422336911,
+        "python312Plus": 0.5530536422336914,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          286,
+          1,
+          "items",
+          4,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.9451410699354972,
+        "python312Plus": 0.9451410699354978,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          286,
+          1,
+          "items",
+          4,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.3585463317723817,
+        "python312Plus": 0.35854633177238115,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          319,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.37379202311393855,
+        "python312Plus": 0.3737920231139382,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          324,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.19731815696653865,
+        "python312Plus": 0.19731815696653907,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          332,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6359718845046854,
+        "python312Plus": 0.6359718845046862,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          361,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4244560720247729,
+        "python312Plus": 0.42445607202477315,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          361,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.22746131616969723,
+        "python312Plus": 0.2274613161696973,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          361,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3676092144049369,
+        "python312Plus": 0.36760921440493743,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          386,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10582744130240397,
+        "python312Plus": 0.10582744130240382,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          394,
+          1,
+          "items",
+          4,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.9233416005861173,
+        "python312Plus": 0.9233416005861192,
+        "ulpDifference": 18.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          406,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.4433880021693072,
+        "python312Plus": 0.4433880021693077,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          410,
+          1,
+          "items",
+          3,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.058763855794986095,
+        "python312Plus": 0.05876385579498612,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          415,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7153980322684229,
+        "python312Plus": 0.7153980322684234,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          432,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.27945223847925055,
+        "python312Plus": 0.279452238479252,
+        "ulpDifference": 26.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          437,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.0772664341591871,
+        "python312Plus": 0.07726643415918702,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          450,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.05653957900399759,
+        "python312Plus": 0.056539579003997475,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          462,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.29047957165621885,
+        "python312Plus": 0.2904795716562192,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          462,
+          1,
+          "items",
+          3,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7882057624764641,
+        "python312Plus": 0.7882057624764636,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          462,
+          1,
+          "items",
+          3,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.3357530935754198,
+        "python312Plus": 0.3357530935754206,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          477,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.673265494181856,
+        "python312Plus": 0.6732654941818574,
+        "ulpDifference": 13.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          477,
+          1,
+          "items",
+          0,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.6084109394384992,
+        "python312Plus": 0.6084109394385006,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          493,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.28677567253109676,
+        "python312Plus": 0.28677567253109737,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          495,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.07037852911196933,
+        "python312Plus": 0.07037852911196919,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          503,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7506634481364298,
+        "python312Plus": 0.750663448136429,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          503,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5127716725370655,
+        "python312Plus": 0.5127716725370663,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          522,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.1578692327016794,
+        "python312Plus": 0.15786923270167957,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          549,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          549,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          550,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          550,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          550,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          551,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          551,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          552,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          552,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          553,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          553,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          554,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          554,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          554,
+          1,
+          "items",
+          2,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          554,
+          1,
+          "items",
+          3,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          555,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          555,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          556,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          556,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          557,
+          1,
+          "items",
+          0,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          0,
+          1,
+          "items",
+          557,
+          1,
+          "items",
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          55,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.23285877594550078,
+        "python312Plus": 0.23285877594550125,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          150,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.06668653197471641,
+        "python312Plus": 0.06668653197471648,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          152,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10132810286394314,
+        "python312Plus": 0.10132810286394305,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          157,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.055483313802915,
+        "python312Plus": 0.05548331380291488,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          159,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5201669371198626,
+        "python312Plus": 0.5201669371198623,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          164,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.12024993641541216,
+        "python312Plus": 0.12024993641541229,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          169,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.345783995705038,
+        "python312Plus": 0.3457839957050375,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          169,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.08658958830321851,
+        "python312Plus": 0.0865895883032186,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          385,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3449593158247756,
+        "python312Plus": 0.34495931582477607,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          531,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7021939521875151,
+        "python312Plus": 0.7021939521875145,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          615,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.04393335406020308,
+        "python312Plus": 0.04393335406020317,
+        "ulpDifference": 13.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          616,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.11165070419562538,
+        "python312Plus": 0.1116507041956256,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          617,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.05914298321935761,
+        "python312Plus": 0.059142983219357737,
+        "ulpDifference": 18.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          617,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.03808791099432913,
+        "python312Plus": 0.03808791099432921,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          682,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.46658195871417735,
+        "python312Plus": 0.4665819587141775,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          692,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3312915826353074,
+        "python312Plus": 0.33129158263530795,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          838,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 1.2119065087845007,
+        "python312Plus": 1.2119065087845016,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          920,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.320101407273887,
+        "python312Plus": 0.32010140727388736,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          920,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.278991721085603,
+        "python312Plus": 0.2789917210856032,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1031,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.37160198059753535,
+        "python312Plus": 0.37160198059753563,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1065,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4724012121368544,
+        "python312Plus": 0.4724012121368546,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1065,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.2892536641157783,
+        "python312Plus": 0.289253664115778,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1153,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5530536422336911,
+        "python312Plus": 0.5530536422336914,
+        "ulpDifference": 2.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1453,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.9451410699354972,
+        "python312Plus": 0.9451410699354978,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1453,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.3585463317723817,
+        "python312Plus": 0.35854633177238115,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1625,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.37379202311393855,
+        "python312Plus": 0.3737920231139382,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1648,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.19731815696653865,
+        "python312Plus": 0.19731815696653907,
+        "ulpDifference": 15.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1684,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.6359718845046854,
+        "python312Plus": 0.6359718845046862,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1828,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4244560720247729,
+        "python312Plus": 0.42445607202477315,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1828,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.22746131616969723,
+        "python312Plus": 0.2274613161696973,
+        "ulpDifference": 3.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1829,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3676092144049369,
+        "python312Plus": 0.36760921440493743,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1943,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10582744130240397,
+        "python312Plus": 0.10582744130240382,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          1978,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.9233416005861173,
+        "python312Plus": 0.9233416005861192,
+        "ulpDifference": 18.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2025,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.4433880021693072,
+        "python312Plus": 0.4433880021693077,
+        "ulpDifference": 9.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2045,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.058763855794986095,
+        "python312Plus": 0.05876385579498612,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2091,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7153980322684229,
+        "python312Plus": 0.7153980322684234,
+        "ulpDifference": 4.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2154,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.27945223847925055,
+        "python312Plus": 0.279452238479252,
+        "ulpDifference": 26.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2172,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.0772664341591871,
+        "python312Plus": 0.07726643415918702,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2213,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.05653957900399759,
+        "python312Plus": 0.056539579003997475,
+        "ulpDifference": 17.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2250,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.29047957165621885,
+        "python312Plus": 0.2904795716562192,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2253,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7882057624764641,
+        "python312Plus": 0.7882057624764636,
+        "ulpDifference": 5.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2253,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.3357530935754198,
+        "python312Plus": 0.3357530935754206,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2300,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.673265494181856,
+        "python312Plus": 0.6732654941818574,
+        "ulpDifference": 13.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2300,
+          1,
+          "fields",
+          20,
+          1
+        ],
+        "pythonBefore312": 0.6084109394384992,
+        "python312Plus": 0.6084109394385006,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2353,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.28677567253109676,
+        "python312Plus": 0.28677567253109737,
+        "ulpDifference": 11.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2360,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.07037852911196933,
+        "python312Plus": 0.07037852911196919,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2384,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7506634481364298,
+        "python312Plus": 0.750663448136429,
+        "ulpDifference": 7.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2386,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5127716725370655,
+        "python312Plus": 0.5127716725370663,
+        "ulpDifference": 8.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2441,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.1578692327016794,
+        "python312Plus": 0.15786923270167957,
+        "ulpDifference": 6.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2498,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2499,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.10775344016498603,
+        "python312Plus": 0.10775344016498625,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2500,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2501,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2502,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.17438935659922042,
+        "python312Plus": 0.1743893565992208,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2503,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2504,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.2993572357039818,
+        "python312Plus": 0.29935723570398237,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2505,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2506,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.3510932156137399,
+        "python312Plus": 0.3510932156137406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2507,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2508,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.16302375900140567,
+        "python312Plus": 0.163023759001406,
+        "ulpDifference": 12.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2509,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2510,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2511,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2512,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.4209401896168534,
+        "python312Plus": 0.4209401896168543,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2513,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2514,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.5002863002920575,
+        "python312Plus": 0.5002863002920586,
+        "ulpDifference": 10.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2515,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2516,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.21712298414049352,
+        "python312Plus": 0.21712298414049397,
+        "ulpDifference": 16.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2517,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      },
+      {
+        "path": [
+          "fields",
+          0,
+          1,
+          "fields",
+          1,
+          1,
+          "items",
+          2518,
+          1,
+          "fields",
+          19,
+          1
+        ],
+        "pythonBefore312": 0.7434282454439597,
+        "python312Plus": 0.7434282454439612,
+        "ulpDifference": 14.0
+      }
+    ]
+  },
+  "testsUseTolerance": false,
+  "baselineSourceVerifiedAgainstGit": {
+    "revision": "dc79915a7d30abe1e1cdea9b592b330bfef45696",
+    "pythonFileCount": 207,
+    "pythonSourceSha256": "baa9150d17e74e1efa49a585d6609c95d12284d52f465278367ebccc8fd47ab6"
+  }
+}

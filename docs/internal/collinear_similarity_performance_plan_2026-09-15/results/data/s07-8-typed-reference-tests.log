@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 195 items
+
+tests/test_web_feature_catalog.py .............................          [ 14%]
+tests/test_session_request_codec.py .................................... [ 33%]
+........................................................................ [ 70%]
+........                                                                 [ 74%]
+tests/test_session_compat.py ..................................          [ 91%]
+tests/test_output_comparison.py ................                         [100%]
+
+=============================== warnings summary ===============================
+tests/test_session_compat.py::test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders
+tests/test_session_compat.py::test_version_39_typed_replay_retains_dormant_comparison_resource
+  /home/kawato/micromamba/lib/python3.13/site-packages/Bio/SeqIO/InsdcIO.py:404: BiopythonWarning: Feature qualifier key 'candidate_cluster_numbers' is longer than maximum length specified by standard (20 characters).
+    warnings.warn(
+
+tests/test_session_compat.py::test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders
+tests/test_session_compat.py::test_version_39_typed_replay_retains_dormant_comparison_resource
+  /home/kawato/micromamba/lib/python3.13/site-packages/Bio/SeqIO/InsdcIO.py:404: BiopythonWarning: Feature qualifier key 'candidate_cluster_number' is longer than maximum length specified by standard (20 characters).
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 195 passed, 4 warnings in 87.96s (0:01:27) ==================

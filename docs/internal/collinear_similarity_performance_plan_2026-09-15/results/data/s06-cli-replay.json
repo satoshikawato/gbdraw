@@ -1,0 +1,159 @@
+{
+  "scope": "isolated installed CLI with PYTHONPATH/PYTHONHOME removed; initial replays use an ignored worktree subdirectory; final current-graph replay uses a genuinely external /tmp cwd; lifecycle observations, not a performance gate",
+  "runs": [
+    {
+      "case": "published-v33",
+      "command": [
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/fixtures/sessions/BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz",
+        "-o",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/published-v33/replayed",
+        "--session_output",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/published-v33/replayed-session.json.gz",
+        "--overwrite"
+      ],
+      "cwd": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/published-v33",
+      "pythonpathRemoved": true,
+      "returncode": 0,
+      "elapsedSeconds": 11.468332577000183,
+      "inputSha256": "c10b794a02b74ff4ab35720bb81e422298343c1d1c58d7922ae6fc71d314a0ea",
+      "outputs": {
+        "cli.log": {
+          "bytes": 2114,
+          "sha256": "c0fc10443bf5e5da694aef41df7a5ecc33bbbabe122c1892eae1aba19969a5bd"
+        },
+        "replayed-session.json.gz": {
+          "bytes": 617556,
+          "sha256": "a7f5ed9cb43aeea115a171f9e7c6b8bccb478494b8c0592b8740f23444245219"
+        },
+        "replayed.interactive.svg": {
+          "bytes": 1090899,
+          "sha256": "897fb6e512dec95cdd46c67ee0c986e17d995d96e586cf53e6b35df6e2c3e893"
+        },
+        "replayed.svg": {
+          "bytes": 231772,
+          "sha256": "8e0c8732efa338e5c5488d0ac151df73a305078db48d724704aaa9236b3c863b"
+        }
+      },
+      "sessionVersion": 42,
+      "requestSchema": 7,
+      "cwdOutsideCheckout": false
+    },
+    {
+      "case": "current-graph",
+      "command": [
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-browser-sessions/1280/session-1.json.gz",
+        "-o",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/current-graph/replayed",
+        "--session_output",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/current-graph/replayed-session.json.gz",
+        "--overwrite"
+      ],
+      "cwd": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/current-graph",
+      "pythonpathRemoved": true,
+      "returncode": 0,
+      "elapsedSeconds": 10.047307150999586,
+      "inputSha256": "75c9ff5e307e15954aaba67e8d910e2a6b25b3bf451add333426b2e028a5a1b2",
+      "outputs": {
+        "cli.log": {
+          "bytes": 2103,
+          "sha256": "ad8fc632b7412ea6687355a50c059a59f1748d2c0d8e559d94713db0ff833962"
+        },
+        "replayed-session.json.gz": {
+          "bytes": 658495,
+          "sha256": "ad6d72b202ba68db22904a6f12d466b8029c8ba4cd514e523bd85c470111743f"
+        },
+        "replayed.svg": {
+          "bytes": 238172,
+          "sha256": "8036c83e026fd681a3e9b0e505472c0c49eff5941d069d95284968fbf3621055"
+        }
+      },
+      "sessionVersion": 42,
+      "requestSchema": 7,
+      "cwdOutsideCheckout": false
+    },
+    {
+      "case": "gallery-collinear",
+      "command": [
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/gbdraw/web/gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz",
+        "-o",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/gallery-collinear/replayed",
+        "--session_output",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/gallery-collinear/replayed-session.json.gz",
+        "--overwrite"
+      ],
+      "cwd": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/gallery-collinear",
+      "pythonpathRemoved": true,
+      "returncode": 0,
+      "elapsedSeconds": 28.877360992000376,
+      "inputSha256": "8d4069026221d85c3ca4cac5bfae42f13d3ab38e7f01ae8e458de1be38a33ea7",
+      "outputs": {
+        "cli.log": {
+          "bytes": 1575,
+          "sha256": "75d2aefaf2bd5f75e343be922ee34e4e0fd1781295ede84219102d8c4800ac2c"
+        },
+        "replayed-session.json.gz": {
+          "bytes": 11414891,
+          "sha256": "7f1a77fc9af91287a05ae173ff3da2b307d07437063d454aef172be1e88eb932"
+        },
+        "replayed.svg": {
+          "bytes": 6251210,
+          "sha256": "ccf4a5d4ebe91dae024e717b8a78295f61f9ad6a4da2f80f0ce939ad1386c1fb"
+        }
+      },
+      "sessionVersion": 42,
+      "requestSchema": 7,
+      "cwdOutsideCheckout": false
+    },
+    {
+      "case": "current-graph-external-cwd",
+      "command": [
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/bin/gbdraw",
+        "linear",
+        "--session",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-browser-sessions/1280/session-1.json.gz",
+        "-o",
+        "/tmp/gbdraw-s06-external-cli-up2_wsoj/replayed",
+        "--session_output",
+        "/tmp/gbdraw-s06-external-cli-up2_wsoj/replayed-session.json.gz",
+        "--overwrite"
+      ],
+      "cwd": "/tmp/gbdraw-s06-external-cli-up2_wsoj",
+      "sourceCheckout": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916",
+      "cwdOutsideCheckout": true,
+      "pythonpathRemoved": true,
+      "importProbe": [
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/lib/python3.13/site-packages/gbdraw/__init__.py",
+        "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-final/lib/python3.13/site-packages/gbdraw/analysis/ortholog_paths.py"
+      ],
+      "returncode": 0,
+      "elapsedSeconds": 10.450144430999899,
+      "inputSha256": "75c9ff5e307e15954aaba67e8d910e2a6b25b3bf451add333426b2e028a5a1b2",
+      "outputs": {
+        "replayed.svg": {
+          "bytes": 238172,
+          "sha256": "8036c83e026fd681a3e9b0e505472c0c49eff5941d069d95284968fbf3621055",
+          "retainedCopy": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/external-current/replayed.svg"
+        },
+        "cli.log": {
+          "bytes": 2039,
+          "sha256": "b5cab11bbacc34187eb3f19bf23eccf76aeb33588d9aab48caf524ca7ce7da30",
+          "retainedCopy": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/external-current/cli.log"
+        },
+        "replayed-session.json.gz": {
+          "bytes": 658496,
+          "sha256": "03f13ea4aebc6466562129eb38e0e7a516231e070f4279e34882bfaa7b153172",
+          "retainedCopy": "/mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/.venv/s06-cli-replay/external-current/replayed-session.json.gz"
+        }
+      }
+    }
+  ]
+}

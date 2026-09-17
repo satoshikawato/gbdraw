@@ -1,0 +1,42 @@
+{
+  "purpose": "Historical context for the user question, not a matched before/after performance comparison",
+  "originalReport": "/mnt/c/Users/genom/GitHub/gbdraw/docs/internal/gbdraw_v014_release_results/S01.md",
+  "reportSha256": "2d2509719e5aa2fe8399ecf3d49667cb9d99884a0ebea6bb0b07362cbd7567b7",
+  "originalPlan": "gbdraw_v014_release S01 (distinct from collinear performance S01)",
+  "source": "47f5cebd480006b6d5315d956c74e6c23c24442c",
+  "reportedMergeUtc": "2026-09-07T10:58:31Z",
+  "fixture": "gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz",
+  "fixtureSha256": "f42953f63067a373a7ea11bdf07b05cd2b7514480c3f94e91a0eb5c4d379dfb4",
+  "observations": [
+    {
+      "state": "first Generate with saved raw",
+      "memberLimit": 5,
+      "seconds": 428.98,
+      "cachePreparationSeconds": 265.737,
+      "rawHits": 47,
+      "rawMisses": 0,
+      "rawWorkerCalls": 0,
+      "reportedTransferBytes": 161277175
+    },
+    {
+      "state": "same Worker, changed derived member option",
+      "memberLimit": 6,
+      "seconds": 341.936,
+      "cachePreparationSeconds": 253.954,
+      "rawHits": 47,
+      "rawMisses": 0,
+      "rawWorkerCalls": 0,
+      "reportedTransferBytes": 0
+    }
+  ],
+  "completion": "Both actual Generate promises, Result commits, accepted Preview ready receipts and History finalization completed, according to the original report",
+  "comparisonLimitations": [
+    "Different revision and instrumentation; no matched S08 browser baseline",
+    "Second old run changed member limit to 6; it is not the S08 derived-warm member=5 run",
+    "Source, browser/runtime/environment and complete settings not controlled against S08",
+    "Only established conclusion: earlier saved-raw Vibrio generation also took multiple minutes",
+    "No speedup ratio or code/host attribution; no historical rerun"
+  ],
+  "readOnlyReuse": true,
+  "fixtureMatchesS08": true
+}

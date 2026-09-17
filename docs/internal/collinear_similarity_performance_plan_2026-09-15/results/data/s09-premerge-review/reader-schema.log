@@ -1,0 +1,60 @@
+node:internal/child_process:1144
+    result.error = new ErrnoException(result.error, 'spawnSync ' + options.file);
+                   ^
+
+<ref *1> Error: spawnSync python EPERM
+    at Object.spawnSync (node:internal/child_process:1144:20)
+    at spawnSync (node:child_process:928:24)
+    at execFileSync (node:child_process:971:15)
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/tests/web/losat-session-schema-contract.test.mjs:18:27
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -1,
+  code: 'EPERM',
+  syscall: 'spawnSync python',
+  path: 'python',
+  spawnargs: [
+    '-c',
+    '\n' +
+      'import json, runpy\n' +
+      'from gbdraw.session_io import CURRENT_SESSION_VERSION, PROTEIN_LOSAT_CACHE_SCHEMA, LOSAT_DERIVED_CACHE_SCHEMA\n' +
+      'from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA\n' +
+      "adapter = runpy.run_path('tests/run_losat_cache_browser_acceptance.py')\n" +
+      'print(json.dumps({\n' +
+      "    'writer': {'session': CURRENT_SESSION_VERSION, 'request': CANONICAL_REQUEST_SCHEMA,\n" +
+      "               'proteinRaw': PROTEIN_LOSAT_CACHE_SCHEMA, 'proteinDerived': LOSAT_DERIVED_CACHE_SCHEMA},\n" +
+      "    'adapter': {'session': adapter['CURRENT_SESSION_VERSION'], 'request': adapter['CURRENT_RENDER_REQUEST_SCHEMA'],\n" +
+      "                'proteinRaw': adapter['CURRENT_PROTEIN_RAW_SCHEMA'], 'proteinDerived': adapter['CURRENT_PROTEIN_DERIVED_SCHEMA']}\n" +
+      '}))\n'
+  ],
+  error: [Circular *1],
+  status: 0,
+  signal: null,
+  output: [
+    null,
+    '{"writer": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}, "adapter": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}}\n',
+    ''
+  ],
+  pid: 28,
+  stdout: '{"writer": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}, "adapter": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}}\n',
+  stderr: ''
+}
+
+Node.js v26.8.2
+✖ tests/web/losat-session-schema-contract.test.mjs (9579.074701ms)
+✔ tests/web/session-losat-cache-validation.test.mjs (1917.748038ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9600.277372
+
+✖ failing tests:
+
+test at tests/web/losat-session-schema-contract.test.mjs:1:1
+✖ tests/web/losat-session-schema-contract.test.mjs (9579.074701ms)
+  'test failed'

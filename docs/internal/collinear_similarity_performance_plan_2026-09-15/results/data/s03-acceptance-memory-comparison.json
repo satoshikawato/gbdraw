@@ -1,0 +1,105 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "ca0ef3aa38a7e366aae7c76b97b1c9bcd25de576",
+  "currentHead": "e6410a8166db7839bc7ca5c2398c32c97185c82b",
+  "semanticOnly": true,
+  "comparisons": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/unknown_missing": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/bad_coordinates": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/pair_row_order": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/nan_score": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_score": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_length": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/empty": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-1/multi_hsp": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-1000/multi_hsp": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-many/multi_hsp": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 0
+}

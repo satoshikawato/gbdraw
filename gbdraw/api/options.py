@@ -32,6 +32,7 @@ from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupResult,
+    OrthogroupGraphResult,
     normalize_orthogroup_membership_mode,
     normalize_protein_blastp_mode,
 )
@@ -893,7 +894,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     blast_files: Sequence[str] | None = None
     linear_comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
-    orthogroups: OrthogroupResult | None = None
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     protein_blastp_mode: Literal[
         "none",
         "pairwise",

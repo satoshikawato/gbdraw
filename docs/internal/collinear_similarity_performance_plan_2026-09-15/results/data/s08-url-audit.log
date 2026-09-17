@@ -1,0 +1,34 @@
+tools/prepare_cloudflare_pages.py:36:  Content-Security-Policy: frame-ancestors 'none'
+tools/prepare_cloudflare_pages.py:39:  ! Content-Security-Policy
+tools/prepare_cloudflare_pages.py:40:  Content-Security-Policy: default-src 'self' data: blob:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'self'
+tools/prepare_cloudflare_pages.py:78:def _render_google_analytics_script(measurement_id: str) -> str:
+tools/prepare_cloudflare_pages.py:80:    <script async src="https://www.googletagmanager.com/gtag/js?id={measurement_id}"></script>
+tools/prepare_cloudflare_pages.py:89:def _render_google_analytics_notice() -> str:
+tools/prepare_cloudflare_pages.py:112:        f"https://raw.githubusercontent.com/{DEFAULT_GALLERY_REMOTE_REPOSITORY}/"
+tools/prepare_cloudflare_pages.py:139:    google_analytics_measurement_id: str = DEFAULT_GOOGLE_ANALYTICS_MEASUREMENT_ID,
+tools/prepare_cloudflare_pages.py:157:        _render_google_analytics_script(google_analytics_measurement_id),
+tools/prepare_cloudflare_pages.py:159:    index_html = _replace_once(index_html, NOTICE_MARKER, _render_google_analytics_notice())
+tools/prepare_cloudflare_pages.py:163:        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googletagmanager.com;",
+tools/prepare_cloudflare_pages.py:168:        "img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com;",
+tools/prepare_cloudflare_pages.py:172:        "connect-src 'self';",
+tools/prepare_cloudflare_pages.py:173:        "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;",
+tools/prepare_cloudflare_pages.py:198:    google_analytics_measurement_id: str | None = None,
+tools/prepare_cloudflare_pages.py:206:        google_analytics_measurement_id
+tools/prepare_cloudflare_pages.py:212:        google_analytics_measurement_id=measurement_id,
+tools/prepare_cloudflare_pages.py:226:        help="Refresh GBDRAW_WHEEL_CACHE_BUST while preparing the browser wheel.",
+tools/prepare_cloudflare_pages.py:229:        "--google-analytics-id",
+tools/prepare_cloudflare_pages.py:238:        google_analytics_measurement_id=args.google_analytics_id,
+gbdraw/web/index.html:5:    <meta http-equiv="Content-Security-Policy" content="
+gbdraw/web/index.html:11:    connect-src 'self';
+gbdraw/web/index.html:12:    worker-src 'self' blob:;
+gbdraw/web/index.html:1181:        details > summary::before { content: ''; @apply w-4 h-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
+gbdraw/web/index.html:4458:                                    Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
+gbdraw/web/index.html:4462:                                    <a href="https://doi.org/10.64898/2026.04.07.716863" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">
+gbdraw/web/index.html:4463:                                        https://doi.org/10.64898/2026.04.07.716863
+gbdraw/web/index.html:4467:                                    Source code: <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-800 underline">https://github.com/satoshikawato/gbdraw</a>
+gbdraw/web/index.html:4481:                                    <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+gbdraw/web/index.html:4488:                                <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+gbdraw/web/index.html:4491:                                <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
+gbdraw/web/index.html:6574:            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Interactive Gallery</a> |
+gbdraw/web/index.html:6575:            <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">MIT on GitHub</a> |
+gbdraw/web/index.html:6576:            Author: <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="hover:underline hover:text-slate-700">Satoshi Kawato</a>

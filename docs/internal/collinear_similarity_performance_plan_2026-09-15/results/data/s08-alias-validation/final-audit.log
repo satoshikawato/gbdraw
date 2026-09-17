@@ -1,0 +1,107 @@
+{
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "inheritedCommit": "6d3612534c1cd236d7fa3f130d4940c4536ae00c",
+  "branch": "perf/s08-local-duplication-20260917",
+  "upstream": null,
+  "sourceAggregateSha256": "ae6e34df07cd3acd5fc38cda9522a8dbeae1d4e9dcd89b24954580bdd6264fcc",
+  "changedSourceFiles": [
+    "gbdraw/web/js/app/losat-cache.js"
+  ],
+  "unchangedSourceFiles": 374,
+  "unchangedPythonFiles": 208,
+  "wheelSha256": "5a7db97abc6fed7df5738aca89f1af356b859793ec4bd8f0adab8452e51f1e6d",
+  "installedMatchingFiles": 466,
+  "historicalFilesPreserved": 1020,
+  "preservedWorktrees": [
+    "/mnt/c/Users/genom/GitHub/gbdraw",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-manifest-merge-20260917",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916",
+    "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-8-20260916"
+  ],
+  "browserParity": [
+    {
+      "artifact": "browser-source.json.gz",
+      "viewport": [
+        1280,
+        720
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW03": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "blankAliasFailurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    },
+    {
+      "artifact": "browser-source.json.gz",
+      "viewport": [
+        390,
+        844
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW03": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "blankAliasFailurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    },
+    {
+      "artifact": "browser-package.json.gz",
+      "viewport": [
+        1280,
+        720
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW03": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "blankAliasFailurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    },
+    {
+      "artifact": "browser-package.json.gz",
+      "viewport": [
+        390,
+        844
+      ],
+      "svgSha256": "d1d39d90005edb500e5942c501a8ec6ac48ae5cc5d6b48b7e1eeea8931d80407",
+      "geometrySha256": "a364160ea5c4fec21233b71519dcc5a04892984edfc62bcdb08c8ba46ee3c62c",
+      "provenanceEqualToRW03": true,
+      "savedRawHits": 13,
+      "searches": 0,
+      "blankAliasFailurePreservedResultHistoryCachesManifest": true,
+      "error": {
+        "summary": "Protein comparison metadata could not be validated. Reload the page and try again.",
+        "details": []
+      },
+      "liveWorkersAfterDispose": 0
+    }
+  ],
+  "testsSha256": {
+    "tests/run_protein_local_browser_acceptance.py": "7a3921258988d72f29bfe6256930d4fe173e8985de7445847ed79f3eda245249",
+    "tests/web/losat-cache.test.mjs": "c9e5e2149b1c106ea11743ffba53082434e9a27c21d8a80b10d38fde2b1114d0"
+  },
+  "operationCounts": {
+    "scope": "one manifest validation; two valid feature aliases",
+    "beforeNfcTrim": 4,
+    "afterNfcTrim": 2,
+    "manifestValidationCountChanged": false
+  },
+  "timing": "Zero timing samples and warmups. Verification/build duration is not performance evidence."
+}

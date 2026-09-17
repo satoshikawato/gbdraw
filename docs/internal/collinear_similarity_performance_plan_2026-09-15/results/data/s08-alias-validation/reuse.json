@@ -1,0 +1,29 @@
+{
+  "previousAuditSha256": "42d23b849c967f67fb9b82d3b248447633fbcfeb2b16022d2bfb028d108eb1fd",
+  "matchingSourceFiles": 374,
+  "changedSourceFiles": [
+    "gbdraw/web/js/app/losat-cache.js"
+  ],
+  "routes": [
+    {
+      "evidence": "../s08-manifest-merge/browser-source.json.gz and browser-package.json.gz",
+      "use": "Matched Gallery fixture and success/retry SVG, geometry and provenance baseline; new candidate runs cover the changed validator and blank-alias failure."
+    },
+    {
+      "evidence": "../s08-followup/lifecycle.json.gz via s08-manifest-merge/reuse.json",
+      "use": "Unchanged source-replacement, Save/fresh Load, explicit Run LOSAT derived reuse, Cancel/retry, clearing and History owner transitions. The validator internals are covered by new Node and browser evidence, not declared byte-identical."
+    },
+    {
+      "evidence": "../s08-followup/audit.json and its preserved S08 chain",
+      "use": "All 208 Python sources unchanged; reuse native scientific/typed/reference evidence with original skips and Review limits."
+    }
+  ],
+  "unchangedBoundaryOwners": [
+    "gbdraw/web/js/app/run-analysis.js",
+    "gbdraw/web/js/services/config.js",
+    "gbdraw/web/js/services/diagram-generation.js",
+    "gbdraw/web/js/services/session-request.js",
+    "gbdraw/web/js/workers/diagram-generation-worker.js"
+  ],
+  "boundaryNote": "No validator invocation, index lifetime or Worker/persistence boundary is removed. Only the second NFC/trim within each alias validation is removed. Prior scripts and artifacts were read, never executed or refreshed."
+}

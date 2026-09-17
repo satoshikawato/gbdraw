@@ -1,0 +1,40 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 533 items
+
+tests/test_protein_local_reductions.py ................................. [  6%]
+........................................................................ [ 19%]
+........................................................................ [ 33%]
+........................................................................ [ 46%]
+................................................................         [ 58%]
+tests/test_protein_colinearity.py ...................................... [ 65%]
+........................................................................ [ 79%]
+............................................................s........... [ 92%]
+......................................                                   [100%]
+
+=============================== warnings summary ===============================
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+  /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py:3404: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    sorted_hits.groupby("query", group_keys=False, sort=False)
+
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[1-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+tests/test_protein_local_reductions.py::test_member_top_best_and_reciprocity_independent_oracle[5-categorical]
+  protein_colinearity_s076.py:3404: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 532 passed, 1 skipped, 9 warnings in 10.15s ==================

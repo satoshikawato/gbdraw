@@ -91,10 +91,8 @@ assert.throws(
   () => parseSpecificRules('feature_type\n'),
   /line 1: expected 4 or 5 columns/
 );
-assert.throws(
-  () => parseSpecificRules('CDS\tgene\t[\t#112233\tAlpha\n'),
-  /Invalid specific-color regex at line 1/
-);
+// The TSV codec preserves Python patterns; validation belongs to the Worker.
+assert.equal(parseSpecificRules('CDS\tgene\t(?i)alpha\t#112233\tAlpha\n').rules[0].val, '(?i)alpha');
 assert.throws(
   () => parseSpecificRules('CDS\tgene\talpha\tnot-a-color\tAlpha\n'),
   /Invalid specific-color value at line 1/

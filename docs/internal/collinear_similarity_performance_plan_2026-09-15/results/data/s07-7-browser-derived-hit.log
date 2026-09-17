@@ -1,0 +1,18 @@
+helper baseline gallery-collinear
+helper baseline gallery-collinear-off
+helper baseline gallery-orthogroup
+helper baseline gallery-orthogroup-unbounded
+helper current gallery-collinear
+helper current gallery-collinear-off
+helper current gallery-orthogroup
+helper current gallery-orthogroup-unbounded
+flow 1280-collinear-True-5 passed
+flow 1280-collinear-False-5 passed
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/run_protein_local_browser_acceptance.py", line 196, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-7-20260916/tests/run_protein_local_browser_acceptance.py", line 168, in main
+    assert run['generations'][0]['helpers'], 'Initial Generate did not exercise real Python helper'
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+AssertionError: Initial Generate did not exercise real Python helper

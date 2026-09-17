@@ -123,6 +123,7 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
   for (let i = 0; i < 7; i += 1) await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await settle(page);
+  expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 0 });
 
   for (const selector of ['[data-gbdraw-feature-id]', '[data-gbdraw-pairwise-match-id]']) {
     const point = await page.evaluate((selector) => {
@@ -138,6 +139,7 @@ test('preview pan leaves feature and match gestures available', async ({ page })
     await move(page, point, 10, 10);
     expectTranslation(before, await geometry(page), 0, 0);
     await page.mouse.click(point.x, point.y);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
     const selectionKey = selector.includes('pairwise') ? 'clickedPairwiseMatch' : 'clickedFeature';
     await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), selectionKey)).toBe(true);
     await page.keyboard.press('Escape');
@@ -155,5 +157,6 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
   await settle(page);
   expect(await geometry(page)).toMatchObject({ zoom: 1, pan: { x: 0, y: 0 }, panning: false });
-  expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 0 });
+  // Feature editing prepares Python rule matches; later navigation reuses that worker.
+  expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 1 });
 });

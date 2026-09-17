@@ -138,7 +138,7 @@ assert.equal(
 assert.equal(
   hasRequiredCanonicalAnalysisResource('collinear', {
     collinearityResult: {
-      schema: 2,
+      schema: 3,
       kind: 'result',
       value: { type: 'CollinearityResult', fields: {} }
     }
@@ -148,9 +148,9 @@ assert.equal(
 assert.equal(
   hasRequiredCanonicalAnalysisResource('orthogroup', {
     orthogroupResult: {
-      schema: 1,
+      schema: 3,
       kind: 'orthogroupResult',
-      value: { type: 'OrthogroupResult', fields: {} }
+      value: { type: 'OrthogroupGraphResult', fields: {} }
     }
   }),
   true
@@ -230,3 +230,14 @@ assert.notEqual(
   cacheKey(pairwiseIdentity),
   'Pairwise max hits must participate in Pairwise derived identity'
 );
+
+// Old persisted resources remain readable, but do not masquerade as new cache hits.
+for (const schema of [1, 2]) {
+  assert.equal(hasRequiredCanonicalAnalysisResource('orthogroup', {
+    orthogroupResult: {schema, kind: 'orthogroupResult', value: {type: 'OrthogroupResult', fields: {}}}
+  }), false);
+}
+assert.equal(baselineIdentity.pathRepresentation, 'lossless-graph-v1');
+const oldIdentity = {...baselineIdentity};
+delete oldIdentity.pathRepresentation;
+assert.notEqual(cacheKey(oldIdentity), cacheKey(baselineIdentity));

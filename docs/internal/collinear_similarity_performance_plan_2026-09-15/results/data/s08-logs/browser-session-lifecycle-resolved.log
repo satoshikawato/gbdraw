@@ -1,0 +1,16 @@
+
+Running 8 tests using 1 worker
+
+(node:102681) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:306:1 › synthetic current session restores and exports without materializing resources (1.1s)
+  ✓  2 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:385:1 › neutral cached conservation session regenerates three ordered rings offline (8.1s)
+Vibrio lazy-session evidence: {"structural":{"base64DecodeCount":0,"decodedByteCount":0,"fileConstructionCount":0,"blobConstructionCount":0,"resourceTextReadCount":0,"resourceByteReadCount":0,"sourceRecoveryCount":0,"workerConstructionCount":0,"workerInitializationCount":0},"historyBaseline":{"artifactCheckpointBuilds":0,"artifactCheckpointSignatureComputations":0,"artifactSvgBytes":0,"intentBuilds":1,"intentSignatureComputations":1,"undoCount":0,"redoCount":0,"currentCheckpointAbsent":true},"preflightStructural":{"proteinManifestFullValidationCount":1,"proteinRawTextValidationCount":59},"timing":{"currentSessionPreflightMs":6109.0999999996275,"historyBaselineMs":3.300000000745058,"preflightSubphases":{"sessionAuthorityValidationMs":125.5,"featureCatalogValidationMs":4943.799999998882,"editorStateNormalizationMs":0.2000000011175871,"resourceTableAdoptionMs":0.2999999988824129,"losatArtifactValidationMs":1033.5,"canonicalRequestProjectionMs":3.799999998882413,"currentDraftValidationMs":0.7999999988824129,"artifactProjectionMs":0.09999999962747097},"firstPreviewMs":11286.10000000149,"interactiveReadyMs":82074.60000000149,"ready":{"name":"interactiveReady","timestamp":82796.80000000075,"status":"success","degradedRecovery":false}}}
+  ✓  3 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:552:1 › real Vibrio preview is lazy and leaves the Worker idle (1.4m)
+  ✓  4 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:614:1 › Generate materializes only required resources and reuses one Worker (13.0s)
+  ✓  5 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:840:1 › render-only Generate reuses preparation and remains undoable (12.8s)
+  ✓  6 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:972:1 › the real Cancel control restores the committed artifact and leaves no History entry (22.3s)
+  ✓  7 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:1133:1 › preflight and lazy-access failures preserve the committed preview (1.4s)
+  ✓  8 [chromium] › tests/web/contracts/current-session-lazy-materialization.playwright.spec.js:1231:1 › a frozen v39 session round-trips through the legacy migration path (14.8s)
+
+  8 passed (2.7m)

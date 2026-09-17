@@ -1,0 +1,62 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /tmp/gbdraw-collinear-s03
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 218 items / 109 deselected / 109 selected
+
+tests/test_protein_colinearity.py ...................................... [ 34%]
+....................................F.....................F............  [100%]
+
+=================================== FAILURES ===================================
+__________ test_hsp_missing_ids_never_become_valid_strings[category] ___________
+tests/test_protein_colinearity.py:1282: in test_hsp_missing_ids_never_become_valid_strings
+    _assert_hsp_baseline(hits, pm)
+tests/test_protein_colinearity.py:1237: in _assert_hsp_baseline
+    pd.testing.assert_frame_equal(actual, expected, check_exact=True)
+/home/kawato/micromamba/lib/python3.13/site-packages/pandas/_testing/asserters.py:690: in _raise
+    raise_assert_detail(obj, msg, left, right, index_values=index_values)
+E   AssertionError: DataFrame.iloc[:, 0] (column name="query") are different
+E
+E   DataFrame.iloc[:, 0] (column name="query") values are different (50.0 %)
+E   [index]: [0, 1]
+E   [left]:  [unknown, q]
+E   [right]: [nan, q]
+_______ test_hsp_aggregation_iterates_table_once_without_pair_dataframes _______
+tests/test_protein_colinearity.py:1362: in test_hsp_aggregation_iterates_table_once_without_pair_dataframes
+    result = pc._aggregate_hsps_by_protein_pair(hits, pm)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+gbdraw/analysis/protein_colinearity.py:3638: in _aggregate_hsps_by_protein_pair
+    pair_codes = grouped.ngroup().fillna(-1)
+                 ^^^^^^^^^^^^^^^^
+/home/kawato/micromamba/lib/python3.13/site-packages/pandas/core/groupby/groupby.py:4629: in ngroup
+    obj = self._obj_with_exclusions
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+pandas/_libs/properties.pyx:36: in pandas._libs.properties.CachedProperty.__get__
+    ???
+/home/kawato/micromamba/lib/python3.13/site-packages/pandas/core/base.py:229: in _obj_with_exclusions
+    return self.obj._drop_axis(self.exclusions, axis=1, only_slice=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/kawato/micromamba/lib/python3.13/site-packages/pandas/core/generic.py:4896: in _drop_axis
+    result = self._constructor_from_mgr(new_mgr, axes=new_mgr.axes)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_protein_colinearity.py:1359: in grouped
+    pytest.fail("HSP aggregation must not construct per-pair DataFrames")
+E   Failed: HSP aggregation must not construct per-pair DataFrames
+=============================== warnings summary ===============================
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /tmp/gbdraw-collinear-s03/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /tmp/gbdraw-collinear-s03/gbdraw/analysis/protein_colinearity.py:3636: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    grouped = hits.groupby(["query", "subject"], sort=False)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+FAILED tests/test_protein_colinearity.py::test_hsp_aggregation_iterates_table_once_without_pair_dataframes
+========== 2 failed, 107 passed, 109 deselected, 2 warnings in 1.40s ===========

@@ -1,0 +1,46 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 491 items
+
+tests/test_lossless_ortholog_paths.py ...........                        [  2%]
+tests/test_ortholog_path_contract.py .................                   [  5%]
+tests/test_protein_colinearity.py ...................................... [ 13%]
+........................................................................ [ 28%]
+............................................................s........... [ 42%]
+......................................                                   [ 50%]
+tests/test_collinearity.py ............................................. [ 59%]
+........................................................................ [ 74%]
+..........                                                               [ 76%]
+tests/test_session_request_codec.py ................................F... [ 83%]
+........................................................................ [ 98%]
+........                                                                 [100%]
+
+=================================== FAILURES ===================================
+_____________ test_linear_comparison_kinds_and_payload_round_trip ______________
+tests/test_session_request_codec.py:813: in test_linear_comparison_kinds_and_payload_round_trip
+    assert decoded.options.collinearity_blocks == collinearity
+E   AssertionError: assert CollinearityR...ogroup_id={})) == CollinearityR...ogroup_id={}))
+E     
+E     Omitting 2 identical items, use -vv to show
+E     Differing attributes:
+E     ['orthogroups']
+E     
+E     Drill down into differing attribute orthogroups:
+E       orthogroups: OrthogroupGraphResult(orthogroups={'OG1': [OrthogroupMember(orthogroup_id='OG1', protein_id='protein-a', record_index=0, feature_index=1, record_id='record-a', label='Protein A', start=10, end=40, strand=1, feature_svg_id='feature-a', source_protein_id='source-a', gene=None, product=None, note=None, representative=False, role='anchor', confidence='high', assignment_reason='', supporting_edges=(), best_core_support=0.0, second_best...
+E     
+E     ...Full output truncated (1 line hidden), use '-vv' to show
+=============================== warnings summary ===============================
+tests/test_protein_colinearity.py::test_hsp_missing_ids_never_become_valid_strings[category]
+  /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/prototypes/hsp_aggregation.py:30: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_session_request_codec.py::test_linear_comparison_kinds_and_payload_round_trip
+============= 1 failed, 489 passed, 1 skipped, 1 warning in 44.45s =============

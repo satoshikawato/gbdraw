@@ -1,0 +1,41 @@
+{
+  "cacheBoundary": {
+    "source": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+    "helperEmbeddingByteEqual": true,
+    "parseFilterOwnersAstEqual": [
+      "parse_losatp_outfmt6",
+      "filter_protein_hits_by_thresholds",
+      "_coerce_outfmt6_numeric_columns",
+      "_validate_comparison_columns"
+    ],
+    "tableCounts": [
+      49,
+      64,
+      81
+    ],
+    "warmHitMiss": [
+      [
+        49,
+        0
+      ],
+      [
+        0,
+        64
+      ],
+      [
+        0,
+        81
+      ]
+    ],
+    "evidence": "S01.md and data/oracles/cache-*.cache_cycle.json.gz",
+    "meaning": "Shared filtered/converted 64-entry LRU; warm misses repeat parse/filter, not raw search"
+  },
+  "archivedBrowser": {
+    "report": "s07-8-browser.json.gz",
+    "sha256": "6afda2186ceadb3505a8cd5a60cf4f29e8d1fe41f2b6a02594f8126a4b6ca6b4",
+    "productionPythonFilesMatched": 208,
+    "helpers": 8,
+    "flows": 8,
+    "use": "Exact same scientific source; within-Pyodide frozen/current parity and 4 settings x2 viewports; no timing reuse"
+  }
+}

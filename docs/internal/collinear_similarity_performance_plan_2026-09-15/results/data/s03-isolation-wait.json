@@ -1,0 +1,552 @@
+{
+  "readOnly": true,
+  "observations": [
+    {
+      "utc": "2026-09-15T07:02:38.934497+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 466655,
+          "executable": "time",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi.js"
+        },
+        {
+          "pid": 466657,
+          "executable": "node",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi.js"
+        }
+      ]
+    },
+    {
+      "utc": "2026-09-15T07:03:23.936295+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 467979,
+          "executable": "time",
+          "script": null
+        },
+        {
+          "pid": 467981,
+          "executable": "LOSAT",
+          "script": null
+        }
+      ]
+    },
+    {
+      "utc": "2026-09-15T07:04:08.938564+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 468427,
+          "executable": "time",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi_threads.js"
+        },
+        {
+          "pid": 468429,
+          "executable": "node",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi_threads.js"
+        }
+      ]
+    },
+    {
+      "utc": "2026-09-15T07:04:53.940221+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 468908,
+          "executable": "time",
+          "script": null
+        },
+        {
+          "pid": 468910,
+          "executable": "LOSAT",
+          "script": null
+        }
+      ]
+    },
+    {
+      "utc": "2026-09-15T07:05:38.942042+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 469239,
+          "executable": "time",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi_threads.js"
+        },
+        {
+          "pid": 469241,
+          "executable": "node",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi_threads.js"
+        }
+      ]
+    },
+    {
+      "utc": "2026-09-15T07:06:23.943967+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 469460,
+          "executable": "time",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi.js"
+        },
+        {
+          "pid": 469462,
+          "executable": "node",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi.js"
+        }
+      ]
+    },
+    {
+      "utc": "2026-09-15T07:07:08.945951+00:00",
+      "processes": [
+        {
+          "pid": 376604,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376624,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 376625,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 376626,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 376627,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/run_final_measurement_sequence.py"
+        },
+        {
+          "pid": 378444,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_measurements.py"
+        },
+        {
+          "pid": 378445,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/benchmark_driver.py"
+        },
+        {
+          "pid": 383478,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383483,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 383484,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 383485,
+          "executable": "bash",
+          "script": null
+        },
+        {
+          "pid": 383486,
+          "executable": "python3",
+          "script": "/tmp/losat-four-program-20260915/final_turbofan_sequence.py"
+        },
+        {
+          "pid": 470057,
+          "executable": "time",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi_threads.js"
+        },
+        {
+          "pid": 470059,
+          "executable": "node",
+          "script": "/mnt/c/Users/genom/GitHub/LOSAT/LOSAT/tests/run_losat_wasi_threads.js"
+        },
+        {
+          "pid": 470111,
+          "executable": "codex-linux-sandbox",
+          "script": null
+        },
+        {
+          "pid": 470120,
+          "executable": "bwrap",
+          "script": null
+        },
+        {
+          "pid": 470121,
+          "executable": "bwrap",
+          "script": null
+        }
+      ]
+    }
+  ],
+  "completion": {
+    "utc": "2026-09-15T07:08:45.449720+00:00",
+    "status": "canceled_by_user",
+    "instruction": "\u72ec\u7acb\u518d\u6e2c\u5b9a\u306f\u884c\u308f\u305a\u3001\u307e\u3068\u3081\u308b",
+    "otherBenchmarkModified": false,
+    "isolatedMeasurementStarted": false
+  }
+}

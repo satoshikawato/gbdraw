@@ -2394,8 +2394,9 @@ state.linearComparisonPlan = {
   mode: 'adjacent'
 };
 state.losat.blastp.mode = 'collinear';
+for (const schema of [1, 2, 3]) {
 const typedCollinearityResource = {
-  schema: 2,
+  schema,
   kind: 'result',
   value: { type: 'CollinearityResult', fields: {} }
 };
@@ -2434,6 +2435,7 @@ assert.equal(
   false,
   'Collinear rendering must use the full typed result instead of parallel pair tables'
 );
+}
 state.losat.blastp.mode = 'pairwise';
 state.linearComparisonPlan = selectedComparisonPlan;
 const orthogroupResourceText = '{"schema":1,"valueKind":"orthogroupResult","value":{}}\n';

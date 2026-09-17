@@ -187,4 +187,3 @@ WEB_ASSET_NOTICES = (
         license_text_anchors=("license-ofl-1.1",),
     ),
 )
-

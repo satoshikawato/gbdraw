@@ -1,0 +1,12 @@
+timing: hsp-edges
+  hsp-edges/overlap_duplicate_tie
+  hsp-edges/disjoint_reverse_clamp
+  hsp-edges/unknown_missing
+  hsp-edges/bad_coordinates
+  hsp-edges/pair_row_order
+  hsp-edges/nan_score
+  hsp-edges/infinite_score
+  hsp-edges/infinite_length
+  hsp-edges/empty
+timing: hsp-1
+  hsp-1/multi_hsp

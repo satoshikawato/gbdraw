@@ -1,0 +1,14 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "currentHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "semanticOnly": false,
+  "comparisons": {
+    "giant-200/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -6.921634566757451,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 0
+}

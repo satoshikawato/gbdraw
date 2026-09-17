@@ -1,0 +1,319 @@
+browser app lifecycle source guard passed
+✔ tests/web/app-lifecycle-contract.test.mjs (3006.12614ms)
+✔ the main application import graph excludes Worker-only modules (1.410503ms)
+✔ Worker construction and the diagram-generation client have explicit owners (5.025237ms)
+✔ Pyodide initialization and helper execution are Worker-only (9.058226ms)
+✔ export payloads stay outside the eager application graph (0.676329ms)
+✔ production rendering crosses the canonical request and Worker boundary (1.404443ms)
+✔ the embedded Python render bridge has no alternate production caller (3.455382ms)
+✔ History intent and SVG admission have one production ownership path (3.526365ms)
+✔ right drawer availability and transitions have one production owner (3.120493ms)
+✔ privileged capability owners and importers stay within their allowlists (144.540097ms)
+✔ shared privileged detectors preserve the characterized current-source facts (129.727934ms)
+✔ versioned architecture detectors expose stable normalized subjects (0.554136ms)
+✔ current Result admission detectors characterize the merged runtime source facts (179.788181ms)
+✔ declared architecture rules actively govern the current source tree (596.29502ms)
+✔ four-rule authority activation validates and passes on the current source tree (588.41894ms)
+✔ pure architecture evaluation owns no I/O, source detection, or authority data (0.390887ms)
+✔ pure Product Impact mechanics own no I/O, Git, environment, reporting, or CLI (0.522348ms)
+✔ Product Impact authority bootstrap accepts zero or two inert JSON files (40.326351ms)
+✔ registered architecture authority and executable matching have separate owners (0.330523ms)
+✔ the Web checker remains the sole evaluator orchestrator and CLI entry point (0.512568ms)
+✔ report-only source facts preserve the characterized masking behavior (0.803411ms)
+✔ workflow triggers separate dev admission, dev staging, promotion, and deployment (0.337895ms)
+✔ PR-to-dev jobs and aggregate use the trusted selective plan (0.77009ms)
+✔ PR smoke selection is explicit while the full functional inventory stays wide (0.079393ms)
+✔ exact dev staging routes every job through the protected-branch plan (0.272554ms)
+✔ Gallery readiness routes jobs from direct-parent evidence and aggregates the current SHA (0.258775ms)
+✔ trusted promotion uses base code for topology, exact-SHA evidence, and tree proof (0.348074ms)
+✔ steady-state topology removes legacy main producers without changing final owners (4.17274ms)
+✔ the PR template retains architecture evidence anchors (0.063965ms)
+✔ the PR template contains one optional bounded Product Impact decision block (0.04889ms)
+✔ the PR template requires exact changed-scope architecture debt arithmetic (0.051323ms)
+✔ normal CI uses only dev as the staging push branch (0.023522ms)
+✔ dev staging Web checks scope only the newly integrated change (0.133162ms)
+✔ supported-version and slow matrices are mandatory in explicit release acceptance (0.127905ms)
+✔ synthetic architecture fixtures grow through evidence dependencies, not alternate authority (0.512676ms)
+✔ otherwise unmodified synthetic repositories pass current inherited authority (255.125002ms)
+✔ active base rules accept one canonical entry edge (104.067184ms)
+✔ an extra registered authority location fails and remains visible in the delta (104.198746ms)
+✔ an unpreauthorized registered authority move fails (104.230983ms)
+✔ a first-party static self-import fails as a one-node cycle (102.459141ms)
+✔ an unresolved first-party static import fails closed (104.560473ms)
+✔ two-node and three-node first-party static cycles fail (206.450702ms)
+✔ an acyclic graph resolves extensionless modules and directory indexes (105.051752ms)
+✔ multiple cycles report stable sorted nodes and internal edges (113.990416ms)
+✔ compatibility-like names report and a private helper adds no authority (109.86393ms)
+✔ active hard rule fails when the canonical entry edge is absent (109.157692ms)
+✔ active hard rule rejects an unapproved canonical entry edge (110.271112ms)
+✔ two simultaneously active preauthorized edges fail in stable subject order (107.636526ms)
+✔ an inactive preauthorized edge does not fail (106.074393ms)
+✔ a preauthorized one-for-one canonical path move passes and requires review (118.147856ms)
+✔ trusted Product Impact stays absent for unchanged source and non-authoritative pull requests (334.072139ms)
+✔ trusted Product Impact reports a mapped provider substitution as one conforming concern (106.97508ms)
+✔ two changed architecture rules still produce one trusted Product Impact concern packet (108.580999ms)
+✔ report-only Product Impact regression requires review without changing a passing Gate (104.61756ms)
+✔ Decision Pack routing is outcome-oriented and accepts only an eligible exact-head decision (216.340079ms)
+✔ stale and non-maintainer Product Impact decisions remain unresolved and routed (224.44711ms)
+✔ invalid current Product Impact authority fails closed without exposing body content (105.277367ms)
+✔ conflicting static and current Product Impact authority is report-only but explicit (104.033267ms)
+✔ candidate Product Impact authority is validation-only and cannot authorize candidate runtime (104.82785ms)
+✔ malformed candidate Product Impact authority fails closed (107.044008ms)
+✔ mapped contract changes are surfaced while unrelated tests add no Product Impact burden (217.098246ms)
+✔ Product Impact stdout and GitHub summary use the same deterministic report (109.846758ms)
+✔ hard Product Impact fixtures block every blocking observation (441.467896ms)
+✔ report-only rules report absence without consulting an accepted store or failing (110.829557ms)
+✔ hard rules do not consult an accepted-violation store (112.053816ms)
+✔ trusted checker rejects malformed proposed rule JSON as inert data (105.07843ms)
+✔ a proposed detector that throws is never loaded or executed (105.394021ms)
+✔ trusted fixture execution imports detector and evaluator modules from its base revision (107.995818ms)
+✔ proposed detector ID and implementation cannot alter trusted source observation (110.884857ms)
+✔ cross-validated inert architecture and Product Impact preauthorization passes and requires review (103.567525ms)
+✔ mutually conforming proposed rules and source cannot replace base authority (110.082833ms)
+✔ fixed profiles classify exact and excess production-file review thresholds (642.277105ms)
+✔ fixed profiles classify exact and excess gross-churn review thresholds (652.068094ms)
+✔ fixed profiles classify exact and excess net-addition review thresholds (665.411378ms)
+✔ the architecture label selects a larger advisory profile without waiving blockers (307.046005ms)
+✔ net-zero rewrites above gross thresholds require review in both profiles (328.136142ms)
+✔ new module, export, create, reactive, and watcher signals are report-only (313.237759ms)
+✔ registered performance, reference-output, and session paths require review (493.621572ms)
+✔ review reasons are deduplicated and deterministically sorted (170.826626ms)
+✔ report-only inventory contractions display removals without failing (107.606207ms)
+✔ the GitHub step summary leads with independent Gate and Review results (321.122659ms)
+✔ review reasons and blocking violations produce the four independent decision states (1367.518006ms)
+✔ GitHub Actions emits one bounded warning only when Review is required (697.314085ms)
+✔ dependency, vendor, binary, and runtime/guard rules are non-waivable (2059.385ms)
+✔ malformed authority and unsupported accepted-violation authority fail canonically (308.843758ms)
+✔ a trusted workflow cannot check out candidate head code (158.290629ms)
+✔ reserved future guard paths need not exist before their rollout (160.275018ms)
+✔ every Product Impact policy, checker, authority, parser, and fixture path is guarded (2565.901234ms)
+✔ Product Impact checker implementation is separate from Product Impact authority (3021.218853ms)
+✔ the Product Contract authority path is exact and isolated (534.063028ms)
+✔ the narrow inert authority bundle contains only architecture rules, map, and decisions (509.762045ms)
+✔ runtime cannot co-change with any protected architecture guard path (1362.870279ms)
+✔ checker implementation and authority files cannot change together (35294.391863ms)
+✔ all checker implementations are separated from reserved future authority (9724.073052ms)
+✔ promotion helper stays checker-only while evidence workflows stay authority-only (663.215307ms)
+✔ evaluator fixtures stay implementation-only while active rule authority stays isolated (444.74743ms)
+✔ the reserved PR template is guard-only (430.318883ms)
+✔ an unregistered path acquires no guard or authority classification (393.703951ms)
+✔ the Web change-budget checker allows an owner-internal edit (194.504672ms)
+✔ privileged ownership and import contractions do not require a policy edit (182.156149ms)
+✔ runtime removal may contract its now-inactive owner authorization in one revision (182.772018ms)
+✔ runtime removal may contract exactly its inactive owner and importer authorizations (188.505449ms)
+✔ safe contraction passes but requires review at exact size thresholds (395.719053ms)
+✔ runtime and policy cannot self-authorize a new privileged owner (338.663188ms)
+✔ runtime and policy cannot self-authorize a new privileged importer (338.956641ms)
+✔ runtime contraction cannot mix removal with a new authorization (378.7761ms)
+✔ runtime contraction cannot remove an authorization still active at head (375.695826ms)
+✔ runtime contraction cannot delete a capability key (372.947284ms)
+✔ runtime contraction cannot delete a privileged import-target key (360.388961ms)
+✔ runtime contraction cannot add privileged policy keys (716.830421ms)
+✔ runtime plus a semantically unchanged policy remains separated (361.360945ms)
+✔ runtime plus policy contraction rejects every additional guard change (4178.436112ms)
+✔ safe contraction requires review above the selected production-file threshold (416.802124ms)
+✔ safe contraction does not waive dependency, vendor, or binary integrity (1460.096622ms)
+✔ unapproved privileged expansion fails against the base allowlist (362.788746ms)
+✔ an unused privileged owner allowlist entry can contract (199.495713ms)
+✔ an active privileged owner allowlist entry cannot contract (371.539971ms)
+✔ an active privileged importer allowlist entry cannot contract (377.650034ms)
+✔ a policy change cannot self-authorize privileged runtime expansion (385.306001ms)
+✔ base privileged allowlist keys cannot disappear (389.351078ms)
+✔ privileged expansion requires policy preauthorization on the base revision (374.26135ms)
+✔ comments, strings, and local session object keys are not hard failures (189.531689ms)
+✔ index.html growth counts toward the net-addition review threshold (184.640581ms)
+✔ base-policy execution ignores a PR-modified checker and detects its runtime co-change (188.356664ms)
+✔ trusted-base execution rejects self-authorization despite a successful head checker (210.453246ms)
+✔ trusted-base execution rejects runtime plus a candidate Product Contract and checker (205.510099ms)
+✔ promotion omits runtime and guard inventories without weakening ordinary PRs (279.66679ms)
+✔ promotion omits checker and authority aggregation without authorizing ordinary PRs (285.007419ms)
+✔ promotion omits ordinary size profiling while ordinary review remains required (288.096739ms)
+✔ promotion relies on exact staging instead of rerunning ordinary import-cycle checks (283.460247ms)
+✔ promotion relies on exact staging instead of rerunning ordinary privileged checks (290.516905ms)
+✔ promotion relies on exact staging instead of parsing ordinary architecture authority (273.895168ms)
+✔ arbitrary-head and fork pull requests to main fail the bounded promotion gate (175.73928ms)
+✔ malformed pull-request metadata fails before ordinary inventory evaluation (103.623119ms)
+✔ promotion accepts a content-neutral main merge commit without a sync PR (151.094464ms)
+✔ promotion rejects a main merge commit with main-only tree content (139.011605ms)
+✔ promotion fails when dev does not contain current main content (121.745971ms)
+✔ pull request SHA mismatches are blocking metadata errors (100.69888ms)
+✔ tests/web/diagram-generation-worker.test.mjs (120.275357ms)
+✔ tests/web/losat-cache.test.mjs (69.865931ms)
+✔ Web and Python current Session, request and protein-cache schemas agree (20.14612ms)
+✔ Node LOSAT acceptance expects the current writer for every output schema (5.536459ms)
+✔ Python LOSAT acceptance expects the current writer for every output schema (0.101274ms)
+losat-settings tests passed
+losat total-budget allocation tests passed
+✔ tests/web/losat-settings.test.mjs (166.221229ms)
+✔ tests/web/run-analysis-derived-cache.test.mjs (1126.565386ms)
+gbdraw circular typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+gbdraw circular typed request render: 0.00s.
+gbdraw circular typed request render: 0.00s.
+gbdraw circular typed request render: 0.00s.
+gbdraw circular typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+gbdraw circular typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+gbdraw circular typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+Failed to refresh circular record order: Error: injected record discovery helper failure
+    at deserializeWorkerError (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/diagram-generation.js:175:17)
+    at handleMessage (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/diagram-generation.js:520:23)
+    at AuditSimplePathWorker.emit (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/run-analysis-simple-path.test.mjs:123:7)
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/run-analysis-simple-path.test.mjs:151:56
+Failed to refresh circular record order: Error: injected depth record discovery failure
+    at deserializeWorkerError (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/diagram-generation.js:175:17)
+    at handleMessage (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/diagram-generation.js:520:23)
+    at AuditSimplePathWorker.emit (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/run-analysis-simple-path.test.mjs:123:7)
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/run-analysis-simple-path.test.mjs:151:56
+Failed to refresh circular record order: DiagramGenerationCanceledError: Diagram generation was canceled.
+    at cancelDiagramGeneration (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/diagram-generation.js:572:17)
+    at Object.cancelRunAnalysis (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/app/run-analysis.js:4974:12)
+    at TestContext.<anonymous> (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/run-analysis-simple-path.test.mjs:1002:16)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+  canceled: true
+}
+✔ afterPaint crosses one completed frame before resolving (0.448737ms)
+✔ afterFrame crosses one post-bind frame before resolving (0.120346ms)
+✔ audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional (30.7018ms)
+gbdraw circular typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+LOSAT runtime warmup failed; execution will report the error if LOSAT is used. Error: Missing packaged asset: browser_wasi_shim module at https://audit.invalid/vendor/browser_wasi_shim/dist/index.js. Only URLs with a scheme in: file and data are supported by the default ESM loader. Received protocol 'https:'
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/losat.js:54:13
+    at async Promise.all (index 0)
+    at async prepareLosatRuntime (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/losat.js:782:20)
+LOSAT timing: pairs=1, cache hits=0, misses=1, unique jobs=1, input FS write=0.00s, FASTA extraction=0.00s, FASTA cache hits=0, protein extraction cache hits=0, JS FASTA=2, Worker FASTA=0, derived payload cache hits=0, derived payload cache misses=0, protein conversion cache hits=0, filtered hit cache hits=0, filtered hit cache misses=0, cache hashing=0.00s, cache hash hits=0, job build=0.00s, job build wall=0.00s, runtime wait=0.00s, execution=0.00s, BLAST FS write=0.00s, FASTA chars=33
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+LOSAT runtime warmup failed; execution will report the error if LOSAT is used. Error: Missing packaged asset: browser_wasi_shim module at https://audit.invalid/vendor/browser_wasi_shim/dist/index.js. Only URLs with a scheme in: file and data are supported by the default ESM loader. Received protocol 'https:'
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/losat.js:54:13
+    at async Promise.all (index 0)
+    at async prepareLosatRuntime (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/losat.js:782:20)
+LOSAT timing: pairs=1, cache hits=0, misses=1, unique jobs=1, input FS write=0.00s, FASTA extraction=0.00s, FASTA cache hits=2, protein extraction cache hits=0, JS FASTA=0, Worker FASTA=0, derived payload cache hits=0, derived payload cache misses=0, protein conversion cache hits=0, filtered hit cache hits=0, filtered hit cache misses=0, cache hashing=0.00s, cache hash hits=2, job build=0.00s, job build wall=0.00s, runtime wait=0.00s, execution=0.00s, BLAST FS write=0.00s, FASTA chars=33
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+LOSAT runtime warmup failed; execution will report the error if LOSAT is used. Error: Missing packaged asset: browser_wasi_shim module at https://audit.invalid/vendor/browser_wasi_shim/dist/index.js. Only URLs with a scheme in: file and data are supported by the default ESM loader. Received protocol 'https:'
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/losat.js:54:13
+    at async Promise.all (index 0)
+    at async prepareLosatRuntime (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/losat.js:782:20)
+LOSAT timing: pairs=1, cache hits=1, misses=0, unique jobs=0, input FS write=0.00s, FASTA extraction=0.00s, FASTA cache hits=2, protein extraction cache hits=0, JS FASTA=0, Worker FASTA=0, derived payload cache hits=0, derived payload cache misses=0, protein conversion cache hits=0, filtered hit cache hits=0, filtered hit cache misses=0, cache hashing=0.00s, cache hash hits=2, job build=0.00s, job build wall=0.00s, runtime wait=0.00s, execution=0.00s, BLAST FS write=0.00s, FASTA chars=33
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+✔ neutral conservation replay delegates lazy resources to the shared reader (46.211824ms)
+gbdraw linear typed request render: 0.00s.
+post-gbdraw timing
+  run-analysis sanitize and reapply editor overrides: 0.00s
+  run-analysis assign results: 0.00s
+✔ Linear mode none ignores dormant comparison state while active depth and annotations render (5.999445ms)
+✔ decision-required protein comparisons stay committed without projecting a partial draft (17.150081ms)
+✔ current session recovers files only when a sequence consumer is missing (8.438338ms)
+✔ current Circular sessions recover only supplied comparison FASTA sources (6.5033ms)
+✔ fresh Circular LOSAT resources become session-owned live files (0.762798ms)
+✔ legacy standalone config import migrates retired values without a writer envelope (0.738383ms)
+✔ visible protein cache entries from the frozen v39 session recover stable edge identities (116.98877ms)
+✔ a conflicting restored edge key is not exposed under the wrong endpoints (95.921893ms)
+✔ version-39 import rejects duplicate raw LOSAT cache keys (0.385577ms)
+✔ version-39 import rejects duplicate derived LOSATP cache keys (0.252222ms)
+✔ version-39 import rejects a nucleotide raw cache key of undefined (0.195657ms)
+✔ version-39 import rejects a nucleotide raw cache key of  (0.131188ms)
+✔ version-39 import rejects a nucleotide raw cache key of null (0.08058ms)
+✔ version-39 import rejects a nucleotide raw cache key of 1 (0.040077ms)
+✔ version-39 import rejects an empty protein raw cache key (0.133569ms)
+✔ version-39 import rejects a non-object losatCache (0.063996ms)
+✔ version-39 import rejects a non-array losatCache.entries (0.048824ms)
+✔ version-39 import rejects a non-object losatDerivedCache (0.056672ms)
+✔ version-39 import rejects a non-array losatDerivedCache.entries (0.036752ms)
+✔ version-39 import rejects branch-internal raw schema 3 (0.108127ms)
+✔ version-39 import rejects branch-internal derived schema 2 (0.097167ms)
+✔ version-40 import rejects duplicate raw LOSAT cache keys (0.038767ms)
+✔ version-40 import rejects duplicate derived LOSATP cache keys (0.040929ms)
+✔ version-40 import rejects a nucleotide raw cache key of undefined (0.050582ms)
+✔ version-40 import rejects a nucleotide raw cache key of  (0.095958ms)
+✔ version-40 import rejects a nucleotide raw cache key of null (0.042387ms)
+✔ version-40 import rejects a nucleotide raw cache key of 1 (0.055742ms)
+✔ version-40 import rejects an empty protein raw cache key (0.046663ms)
+✔ version-40 import rejects a non-object losatCache (0.02904ms)
+✔ version-40 import rejects a non-array losatCache.entries (0.023048ms)
+✔ version-40 import rejects a non-object losatDerivedCache (0.029693ms)
+✔ version-40 import rejects a non-array losatDerivedCache.entries (0.024211ms)
+✔ version-40 import rejects branch-internal raw schema 3 (0.044656ms)
+✔ version-40 import rejects branch-internal derived schema 2 (0.058204ms)
+Error: Unsupported session version: 34.
+    at validateSessionVersion (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1103:11)
+    at preflightSessionImport (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1483:3)
+    at importSession (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:4054:23)
+    at async TestContext.<anonymous> (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/session-losat-cache-validation.test.mjs:1157:20)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+✔ session import rejects branch-internal version 34 (3.578421ms)
+Error: Unsupported session version: 35.
+    at validateSessionVersion (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1103:11)
+    at preflightSessionImport (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1483:3)
+    at importSession (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:4054:23)
+    at async TestContext.<anonymous> (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/session-losat-cache-validation.test.mjs:1157:20)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+✔ session import rejects branch-internal version 35 (0.501753ms)
+Error: Unsupported session version: 36.
+    at validateSessionVersion (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1103:11)
+    at preflightSessionImport (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1483:3)
+    at importSession (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:4054:23)
+    at async TestContext.<anonymous> (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/session-losat-cache-validation.test.mjs:1157:20)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+✔ session import rejects branch-internal version 36 (0.389909ms)
+Error: Unsupported session version: 37.
+    at validateSessionVersion (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1103:11)
+    at preflightSessionImport (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1483:3)
+    at importSession (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:4054:23)
+    at async TestContext.<anonymous> (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/session-losat-cache-validation.test.mjs:1157:20)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+✔ session import rejects branch-internal version 37 (0.497983ms)
+Error: Unsupported session version: 38.
+    at validateSessionVersion (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1103:11)
+    at preflightSessionImport (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:1483:3)
+    at importSession (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/gbdraw/web/js/services/config.js:4054:23)
+    at async TestContext.<anonymous> (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/web/session-losat-cache-validation.test.mjs:1157:20)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+✔ session import rejects branch-internal version 38 (2.879248ms)
+✔ tests/web/session-request.test.mjs (1704.1495ms)
+ℹ tests 189
+ℹ suites 0
+ℹ pass 189
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 91698.364097

@@ -104,6 +104,7 @@ import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA,
+  buildValidatedProteinIdentityIndex,
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
   getCurrentRawLosatCacheEntry,
@@ -111,10 +112,10 @@ import {
   isLosatDerivedCacheEntry,
   mergeProteinIdentityManifests,
   normalizeLosatArgs,
+  releaseValidatedProteinIdentityIndex,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
-  validateDerivedProteinReferences,
-  validateProteinIdentityManifest
+  validateDerivedProteinReferences
 } from './losat-cache.js';
 import { comparisonFiltersForMode } from '../mode-profiles.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
@@ -257,9 +258,9 @@ const buildLosatCachePayload = ({
   return payload;
 };
 
-const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
+const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
   if (!cacheMap) return null;
-  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest);
+  const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
   if (direct) return direct;
   if (metadata?.identityKind === 'protein') return null;
 
@@ -375,6 +376,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
     payload.pairwise = { maxHits: Number(maxHits) || 5 };
   }
   if (['orthogroup', 'collinear'].includes(normalizedMode)) {
+    payload.pathRepresentation = 'lossless-graph-v1';
     payload.orthogroup = {
       membershipMode: String(orthogroupMembershipMode || 'anchor_core_v1'),
       memberMaxHits: requireCurrentOrthogroupMemberMaxHits(orthogroupMemberMaxHits)
@@ -419,12 +421,12 @@ export const hasRequiredCanonicalAnalysisResource = (mode, payload) => {
     ? payload?.collinearityResult
     : payload?.orthogroupResult;
   const expectedKind = normalizedMode === 'collinear' ? 'result' : 'orthogroupResult';
-  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupResult';
+  const expectedType = normalizedMode === 'collinear' ? 'CollinearityResult' : 'OrthogroupGraphResult';
   return Boolean(
     resource
     && typeof resource === 'object'
     && !Array.isArray(resource)
-    && [1, 2].includes(resource.schema)
+    && resource.schema === 3
     && resource.kind === expectedKind
     && resource.value?.type === expectedType
     && resource.value.fields
@@ -1275,10 +1277,10 @@ export const createRunAnalysis = ({
   // search's entries for retry, without changing the saved Result. Cache owner
   // replacement (Clear Cache, Session load, or History) invalidates the retry.
   let completedLosatSearch = null;
-  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null) => {
+  const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
     if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
-    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest)
-      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest);
+    return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, identityIndex)
+      || getRawLosatCacheEntry(completedLosatSearch?.entries, cacheKey, metadata, manifest, identityIndex);
   };
   const retainCompletedLosatSearch = (cacheMap, pairs) => {
     completedLosatSearch = {
@@ -3341,7 +3343,8 @@ export const createRunAnalysis = ({
           cacheKey,
           metadata,
           queryEntry,
-          subjectEntry
+          subjectEntry,
+          identityIndex
         }) => {
           if (
             metadata?.identityKind !== 'protein' ||
@@ -3409,7 +3412,8 @@ export const createRunAnalysis = ({
             cacheMap,
             cacheKey,
             metadata,
-            workingProteinIdentityManifest
+            workingProteinIdentityManifest,
+            { identityIndex }
           );
           if (!verified) {
             cacheMap.delete(cacheKey);
@@ -3532,12 +3536,10 @@ export const createRunAnalysis = ({
             proteinEntries.push(await getSeqEntry(index));
           }
           const manifests = proteinEntries.map((entry) => entry.identityManifest);
-          if (manifests.some((manifest) => !validateProteinIdentityManifest(manifest))) {
-            throw new Error(
+          workingProteinIdentityManifest = mergeProteinIdentityManifests(manifests, {
+            invalidInputMessage:
               'Protein comparison metadata could not be validated. Reload the page and try again.'
-            );
-          }
-          workingProteinIdentityManifest = mergeProteinIdentityManifests(manifests);
+          });
           const legacyReferenceIds = collectLegacyProteinReferences(
             workingOrthogroups,
             workingSelectedOrthogroupAlignmentFeature,
@@ -3709,86 +3711,67 @@ export const createRunAnalysis = ({
             proteinCacheKeys = result.keys;
           }
 
-          for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
-            throwIfGenerationCanceled();
-            const queryEntry = await getSeqEntry(spec.queryIndex);
-            throwIfGenerationCanceled();
-            const subjectEntry = await getSeqEntry(spec.subjectIndex);
-            throwIfGenerationCanceled();
-            const cacheKey = useProteinBlastp
-              ? proteinCacheKeys[jobIndex]
-              : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
-            throwIfGenerationCanceled();
-            const queryCanonicalHash = await getSeqHash(spec.queryIndex);
-            throwIfGenerationCanceled();
-            const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
-            throwIfGenerationCanceled();
-            if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
-              throw new Error('LOSAT sequence cache key was not prepared.');
-            }
-            sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
-            sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
-            let cached = getReusableLosatCacheEntry(
-              cacheMap,
-              cacheKey,
-              cacheMetadata,
-              workingProteinIdentityManifest
-            );
-            if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
-              cached = await tryPromoteLegacyProteinEntry({
-                cacheKey,
-                metadata: cacheMetadata,
-                queryEntry,
-                subjectEntry
-              });
+          // mergeProteinIdentityManifests made a private deep copy for this run.
+          // Nothing mutates or publishes it during this loop; helper calls receive
+          // clones, including legacy promotion. Release before search/render and
+          // publication so no index can outlive input, Session or History changes.
+          const identityIndex = useProteinBlastp && preparedJobs.length > 0
+            ? buildValidatedProteinIdentityIndex(workingProteinIdentityManifest)
+            : null;
+          if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
+            throw new Error('Protein comparison identity manifest is invalid.');
+          }
+          try {
+            for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
-            }
-            const hasCachedText = Boolean(cached);
-            if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
-            losatTiming.totalPairs += 1;
-            if (hasCachedText) losatTiming.cacheHits += 1;
-            else losatTiming.cacheMisses += 1;
-            const resolvedEdge = comparisonResolution.edges.find(
-              (edge) => edge.edgeKey === spec.edgeKey
-            );
-            const isResolvedDisplayPair = Boolean(
-              resolvedEdge &&
-              spec.queryIndex === resolvedEdge.queryIndex &&
-              spec.subjectIndex === resolvedEdge.subjectIndex
-            );
-            const pair = {
-              pairIndex: spec.ordinal,
-              ordinal: spec.ordinal,
-              edgeKey: spec.edgeKey,
-              queryUid: spec.queryUid,
-              subjectUid: spec.subjectUid,
-              queryIndex: spec.queryIndex,
-              subjectIndex: spec.subjectIndex,
-              cacheKey,
-              filename: buildCacheFilename(spec, queryEntry, subjectEntry),
-              displayPair: isResolvedDisplayPair
-            };
-            losatPairs.push(pair);
-            if (
-              isResolvedDisplayPair &&
-              !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
-            ) {
-              cacheInfo.push({
-                key: cacheKey,
-                filename: pair.filename,
-                display: true,
-                edgeKey: spec.edgeKey,
-                ordinal: spec.ordinal,
-                queryUid: resolvedEdge.queryUid,
-                subjectUid: resolvedEdge.subjectUid,
-                queryIndex: resolvedEdge.queryIndex,
-                subjectIndex: resolvedEdge.subjectIndex
-              });
-            }
-
-            if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
-              pendingJobKeys.add(cacheKey);
-              losatJobs.push({
+              const queryEntry = await getSeqEntry(spec.queryIndex);
+              throwIfGenerationCanceled();
+              const subjectEntry = await getSeqEntry(spec.subjectIndex);
+              throwIfGenerationCanceled();
+              const cacheKey = useProteinBlastp
+                ? proteinCacheKeys[jobIndex]
+                : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
+              throwIfGenerationCanceled();
+              const queryCanonicalHash = await getSeqHash(spec.queryIndex);
+              throwIfGenerationCanceled();
+              const subjectCanonicalHash = await getSeqHash(spec.subjectIndex);
+              throwIfGenerationCanceled();
+              if (!queryEntry.sequenceKey || !subjectEntry.sequenceKey) {
+                throw new Error('LOSAT sequence cache key was not prepared.');
+              }
+              sequenceEntriesByKey.set(queryEntry.sequenceKey, queryEntry.fasta);
+              sequenceEntriesByKey.set(subjectEntry.sequenceKey, subjectEntry.fasta);
+              let cached = getReusableLosatCacheEntry(
+                cacheMap,
+                cacheKey,
+                cacheMetadata,
+                workingProteinIdentityManifest,
+                identityIndex
+              );
+              if (!cached && useProteinBlastp && !cacheMetadata.searchContext) {
+                cached = await tryPromoteLegacyProteinEntry({
+                  cacheKey,
+                  metadata: cacheMetadata,
+                  queryEntry,
+                  subjectEntry,
+                  identityIndex
+                });
+                throwIfGenerationCanceled();
+              }
+              const hasCachedText = Boolean(cached);
+              if (cached) promoteRawLosatCacheEntry(cacheMap, cacheKey, cached, cacheMetadata);
+              losatTiming.totalPairs += 1;
+              if (hasCachedText) losatTiming.cacheHits += 1;
+              else losatTiming.cacheMisses += 1;
+              const resolvedEdge = comparisonResolution.edges.find(
+                (edge) => edge.edgeKey === spec.edgeKey
+              );
+              const isResolvedDisplayPair = Boolean(
+                resolvedEdge &&
+                spec.queryIndex === resolvedEdge.queryIndex &&
+                spec.subjectIndex === resolvedEdge.subjectIndex
+              );
+              const pair = {
                 pairIndex: spec.ordinal,
                 ordinal: spec.ordinal,
                 edgeKey: spec.edgeKey,
@@ -3797,17 +3780,52 @@ export const createRunAnalysis = ({
                 queryIndex: spec.queryIndex,
                 subjectIndex: spec.subjectIndex,
                 cacheKey,
-                program: losatProgram.value,
-                querySequenceKey: queryEntry.sequenceKey,
-                subjectSequenceKey: subjectEntry.sequenceKey,
-                queryCanonicalHash,
-                subjectCanonicalHash,
-                outfmt: losat.outfmt || '6',
-                extraArgs: losatArgs,
-                cacheMetadata,
-                batch
-              });
+                filename: buildCacheFilename(spec, queryEntry, subjectEntry),
+                displayPair: isResolvedDisplayPair
+              };
+              losatPairs.push(pair);
+              if (
+                isResolvedDisplayPair &&
+                !cacheInfo.some((entry) => entry.edgeKey === spec.edgeKey)
+              ) {
+                cacheInfo.push({
+                  key: cacheKey,
+                  filename: pair.filename,
+                  display: true,
+                  edgeKey: spec.edgeKey,
+                  ordinal: spec.ordinal,
+                  queryUid: resolvedEdge.queryUid,
+                  subjectUid: resolvedEdge.subjectUid,
+                  queryIndex: resolvedEdge.queryIndex,
+                  subjectIndex: resolvedEdge.subjectIndex
+                });
+              }
+
+              if (!hasCachedText && !pendingJobKeys.has(cacheKey)) {
+                pendingJobKeys.add(cacheKey);
+                losatJobs.push({
+                  pairIndex: spec.ordinal,
+                  ordinal: spec.ordinal,
+                  edgeKey: spec.edgeKey,
+                  queryUid: spec.queryUid,
+                  subjectUid: spec.subjectUid,
+                  queryIndex: spec.queryIndex,
+                  subjectIndex: spec.subjectIndex,
+                  cacheKey,
+                  program: losatProgram.value,
+                  querySequenceKey: queryEntry.sequenceKey,
+                  subjectSequenceKey: subjectEntry.sequenceKey,
+                  queryCanonicalHash,
+                  subjectCanonicalHash,
+                  outfmt: losat.outfmt || '6',
+                  extraArgs: losatArgs,
+                  cacheMetadata,
+                  batch
+                });
+              }
             }
+          } finally {
+            releaseValidatedProteinIdentityIndex(identityIndex);
           }
           const sourceJobs = [];
           for (const batch of sourcePlan.batches) {

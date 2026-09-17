@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 import math
 import sys
@@ -26,6 +27,10 @@ from gbdraw.analysis.protein_colinearity import (
     LosatpRunner,
     OrthogroupMembershipMode,
     OrthogroupResult,
+    OrthogroupGraphResult,
+    _OrthogroupEdgeIndex,
+    _edge_metadata_for_protein_pair,
+    _orthogroup_member_counts,
     ProteinExtractionResult,
     _execute_losatp_search,
     _select_member_candidate_hits_per_query,
@@ -148,7 +153,7 @@ class CollinearityBlock:
 class CollinearityResult:
     blocks: tuple[CollinearityBlock, ...]
     unblocked_anchors: tuple[CollinearityAnchor, ...] = ()
-    orthogroups: OrthogroupResult | None = None
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
 
 
 @dataclass(frozen=True)
@@ -408,41 +413,26 @@ def _protein_order_by_id(protein_map: Mapping[str, CdsProtein]) -> dict[str, int
 
 
 def _orthogroup_member_counts_by_record(
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
 ) -> dict[tuple[str, int], int]:
     counts: dict[tuple[str, int], int] = {}
     if orthogroups is None:
         return counts
     for orthogroup_id, members in orthogroups.orthogroups.items():
-        for member in members:
-            key = (str(orthogroup_id), int(member.record_index))
-            counts[key] = counts.get(key, 0) + 1
+        for record_index, count in _orthogroup_member_counts(members).items():
+            key = (str(orthogroup_id), record_index)
+            counts[key] = counts.get(key, 0) + count
     return counts
-
-
-def _orthogroup_id_for_edge(
-    query_id: str,
-    subject_id: str,
-    orthogroups: OrthogroupResult | None,
-) -> str:
-    if orthogroups is None:
-        return ""
-    query_member = orthogroups.member_by_protein_id.get(query_id)
-    subject_member = orthogroups.member_by_protein_id.get(subject_id)
-    if query_member is None or subject_member is None:
-        return ""
-    if query_member.orthogroup_id != subject_member.orthogroup_id:
-        return ""
-    return str(query_member.orthogroup_id)
 
 
 def _orthogroup_edge_metadata_for_anchor(
     query_id: str,
     subject_id: str,
-    orthogroup_id: str,
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> dict[str, object]:
     metadata = {
+        "orthogroup_id": "",
         "rbh_orthogroup_id": "",
         "ortholog_path_id": "",
         "edge_kind": "",
@@ -458,35 +448,14 @@ def _orthogroup_edge_metadata_for_anchor(
         metadata["query_orthogroup_representative"] = bool(query_member.representative)
     if subject_member is not None:
         metadata["subject_orthogroup_representative"] = bool(subject_member.representative)
-    if not orthogroup_id:
-        return metadata
-    candidate_edges = [
-        *orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ()),
-        *orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ()),
-    ]
-    for edge in candidate_edges:
-        if (
-            edge.query_protein_id == query_id
-            and edge.subject_protein_id == subject_id
-        ) or (
-            edge.query_protein_id == subject_id
-            and edge.subject_protein_id == query_id
-        ):
-            source_group = str(edge.source_rbh_orthogroup_id or "")
-            target_group = str(edge.target_rbh_orthogroup_id or "")
-            if source_group and target_group and source_group != target_group:
-                rbh_group = f"{source_group};{target_group}"
-            else:
-                rbh_group = source_group or target_group
-            metadata.update(
-                {
-                    "rbh_orthogroup_id": rbh_group,
-                    "ortholog_path_id": str(edge.path_id or ""),
-                    "edge_kind": edge.edge_kind,
-                    "render_role": edge.render_role,
-                }
-            )
-            return metadata
+    orthogroup_id = ""
+    if query_member is not None and subject_member is not None:
+        if query_member.orthogroup_id == subject_member.orthogroup_id:
+            orthogroup_id = str(query_member.orthogroup_id)
+    metadata["orthogroup_id"] = orthogroup_id
+    metadata.update(_edge_metadata_for_protein_pair(
+        orthogroups, orthogroup_id, query_id, subject_id, edge_indexes,
+    ))
     return metadata
 
 
@@ -506,8 +475,9 @@ def _lossless_anchor_from_edge_row(
     protein_map: Mapping[str, CdsProtein],
     order_by_id: Mapping[str, int],
     unit_index: CollinearityUnitIndex | None,
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
     member_counts_by_record: Mapping[tuple[str, int], int],
+    edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> CollinearityAnchor | None:
     query_id = str(getattr(row, "query"))
     subject_id = str(getattr(row, "subject"))
@@ -535,13 +505,13 @@ def _lossless_anchor_from_edge_row(
         if subject_unit is not None
         else subject_protein
     )
-    orthogroup_id = _orthogroup_id_for_edge(query_id, subject_id, orthogroups)
     edge_metadata = _orthogroup_edge_metadata_for_anchor(
         query_id,
         subject_id,
-        orthogroup_id,
         orthogroups,
+        edge_indexes,
     )
+    orthogroup_id = str(edge_metadata["orthogroup_id"])
     qstart, qend = (
         _unit_genomic_link_coordinates(query_unit)
         if query_unit is not None
@@ -631,7 +601,7 @@ def _lossless_anchor_from_edge_row(
 def orthogroup_edges_to_lossless_collinearity_anchors(
     adjacent_edges_by_pair: Mapping[tuple[int, int], DataFrame],
     protein_map: Mapping[str, CdsProtein],
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
     *,
     unit_index: CollinearityUnitIndex | None = None,
 ) -> tuple[CollinearityAnchor, ...]:
@@ -639,6 +609,7 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
 
     order_by_id = _protein_order_by_id(protein_map)
     member_counts_by_record = _orthogroup_member_counts_by_record(orthogroups)
+    edge_indexes: dict[str, _OrthogroupEdgeIndex] = {}
     anchors: list[CollinearityAnchor] = []
     missing_ids: set[str] = set()
     for query_record_index, subject_record_index in sorted(adjacent_edges_by_pair):
@@ -661,6 +632,7 @@ def orthogroup_edges_to_lossless_collinearity_anchors(
                 unit_index=unit_index,
                 orthogroups=orthogroups,
                 member_counts_by_record=member_counts_by_record,
+                edge_indexes=edge_indexes,
             )
             if anchor is not None:
                 anchors.append(anchor)
@@ -851,55 +823,62 @@ def _lossless_initial_clusters_for_pair(
 
 
 def _lossless_conflicts_between_clusters(
-    left: CollinearityBlock,
-    right: CollinearityBlock,
+    left: Sequence[CollinearityAnchor],
+    right: Sequence[CollinearityAnchor],
     anchors: Sequence[CollinearityAnchor],
+    *,
+    max_conflicts: int | None = None,
 ) -> int:
-    left_path = _path_sorted_anchors(left.anchors, left.orientation)
-    right_path = _path_sorted_anchors(right.anchors, right.orientation)
-    if not left_path or not right_path:
+    """Count the strict gap in query-sorted anchors between path-sorted clusters.
+
+    Without a limit this returns the exact count. Only the boolean merge
+    consumer supplies a limit; exceeding it suffices to reject that merge.
+    """
+    if not left or not right:
         return 0
-    left_end = left_path[-1]
-    right_start = right_path[0]
+    left_end, right_start = left[-1], right[0]
     query_min = min(int(left_end.query_order), int(right_start.query_order))
     query_max = max(int(left_end.query_order), int(right_start.query_order))
     subject_min = min(int(left_end.subject_order), int(right_start.subject_order))
     subject_max = max(int(left_end.subject_order), int(right_start.subject_order))
-    cluster_anchors = {*left.anchors, *right.anchors}
-    return sum(
-        1
-        for anchor in anchors
-        if anchor not in cluster_anchors
-        and query_min < int(anchor.query_order) < query_max
-        and subject_min < int(anchor.subject_order) < subject_max
-    )
+    start = bisect_right(anchors, query_min, key=lambda anchor: int(anchor.query_order))
+    end = bisect_left(anchors, query_max, key=lambda anchor: int(anchor.query_order))
+    cluster_anchors = None
+    conflicts = 0
+    for index in range(start, end):
+        anchor = anchors[index]
+        if not subject_min < int(anchor.subject_order) < subject_max:
+            continue
+        if cluster_anchors is None:
+            cluster_anchors = {*left, *right}
+        if anchor not in cluster_anchors:
+            conflicts += 1
+            if max_conflicts is not None and conflicts > max_conflicts:
+                break
+    return conflicts
 
 
 def _lossless_clusters_can_merge(
-    left: CollinearityBlock,
+    left: Sequence[CollinearityAnchor],
     right: CollinearityBlock,
     *,
+    orientation: CollinearityOrientation,
     anchors: Sequence[CollinearityAnchor],
     params: LosslessCollinearityParameters,
 ) -> bool:
-    if left.kind != "cluster" or right.kind != "cluster":
-        return False
-    if left.orientation != right.orientation:
-        return False
-    left_path = _path_sorted_anchors(left.anchors, left.orientation)
-    right_path = _path_sorted_anchors(right.anchors, right.orientation)
-    if not left_path or not right_path:
+    # Initial clusters and the accumulated path are already path-sorted.
+    if orientation != right.orientation or not left or not right.anchors:
         return False
     if not _lossless_anchors_are_compatible(
-        left_path[-1],
-        right_path[0],
-        orientation=left.orientation,
+        left[-1],
+        right.anchors[0],
+        orientation=orientation,
         params=params,
     ):
         return False
-    return _lossless_conflicts_between_clusters(left, right, anchors) <= int(
-        params.max_conflicts
-    )
+    return _lossless_conflicts_between_clusters(
+        left, right.anchors, anchors, max_conflicts=int(params.max_conflicts)
+    ) <= int(params.max_conflicts)
 
 
 def _merge_lossless_clusters(
@@ -911,22 +890,42 @@ def _merge_lossless_clusters(
     merged: list[CollinearityBlock] = []
     singleton_blocks = [block for block in blocks if block.kind == "singleton"]
     cluster_blocks = [block for block in blocks if block.kind == "cluster"]
+    ordered_anchors = (
+        sorted(anchors, key=lambda anchor: int(anchor.query_order))
+        if len(cluster_blocks) > 1 else ()
+    )
+    previous: CollinearityBlock | None = None
+    current: tuple[CollinearityAnchor, ...] | list[CollinearityAnchor] = ()
+
+    def flush() -> None:
+        if previous is None:
+            return
+        merged.append(
+            _lossless_block_from_anchors(
+                block_id=previous.block_id,
+                pair=(previous.query_record_index, previous.subject_record_index),
+                orientation=previous.orientation,
+                anchors=current,
+            ) if isinstance(current, list) else previous
+        )
+
     for block in sorted(cluster_blocks, key=_final_block_sort_key):
-        if not merged or not _lossless_clusters_can_merge(
-            merged[-1],
+        if previous is None or not _lossless_clusters_can_merge(
+            current,
             block,
-            anchors=anchors,
+            orientation=previous.orientation,
+            anchors=ordered_anchors,
             params=params,
         ):
-            merged.append(block)
+            flush()
+            previous, current = block, block.anchors
             continue
-        previous = merged[-1]
-        merged[-1] = _lossless_block_from_anchors(
-            block_id=previous.block_id,
-            pair=(previous.query_record_index, previous.subject_record_index),
-            orientation=previous.orientation,
-            anchors=(*previous.anchors, *block.anchors),
-        )
+        if isinstance(current, tuple):
+            current = list(current)
+        # Compatible endpoints strictly increase query order. Appending a
+        # sorted right path therefore preserves the entire path's tie order.
+        current.extend(block.anchors)
+    flush()
     return tuple(sorted((*merged, *singleton_blocks), key=_final_block_sort_key))
 
 
@@ -1300,6 +1299,7 @@ def build_orthogroup_collinearity_blocks_from_hits(
             orthogroup_membership_mode=normalized_membership_mode,
             orthogroup_member_max_hits=orthogroup_member_max_hits,
             max_related_edges_per_orthogroup=resolved_max_paralog_links,
+            comparison_pairs=(),
         )
         orthogroups = edge_selection.orthogroups
         if normalized_edge_mode == "rbh":

@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s08-followup/audit.py", line 99, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917/docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s08-followup/audit.py", line 65, in main
+    assert current['provenance'] == previous['provenance'], current['label']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: clear-cache

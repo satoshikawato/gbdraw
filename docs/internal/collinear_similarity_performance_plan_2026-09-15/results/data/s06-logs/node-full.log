@@ -1,0 +1,215 @@
+✔ tests/web/annotations.test.mjs (2907.097352ms)
+✔ tests/web/app-lifecycle-contract.test.mjs (5514.076679ms)
+✖ tests/web/architecture-contracts.test.mjs (21465.719634ms)
+✔ tests/web/architecture-ratchet-fixtures.test.mjs (147.621573ms)
+✔ tests/web/candidate-render.test.mjs (488.368334ms)
+✔ tests/web/circular-label-slot-exclusions.test.mjs (709.171676ms)
+✔ tests/web/circular-track-slots.test.mjs (1797.292772ms)
+✔ tests/web/cloudflare-worker.test.mjs (126.329849ms)
+✔ tests/web/color-utils.test.mjs (108.015362ms)
+✔ tests/web/comparison-ui.test.mjs (121.637741ms)
+✔ tests/web/composition-layout.test.mjs (132.681105ms)
+✔ tests/web/composition-runtime-parity.test.mjs (5595.5691ms)
+✔ tests/web/current-option-values.test.mjs (106.314333ms)
+✔ tests/web/definition-layout-completion.test.mjs (246.977534ms)
+✔ tests/web/definition-line-style-state.test.mjs (2783.54434ms)
+✔ tests/web/depth-track-state.test.mjs (105.007177ms)
+✔ tests/web/diagram-generation-worker.test.mjs (219.654991ms)
+✔ tests/web/diagram-resource-recovery.test.mjs (680.10082ms)
+✔ tests/web/diagram-resource-staging.test.mjs (307.67903ms)
+✔ tests/web/error-normalization.test.mjs (341.650076ms)
+✔ tests/web/feature-catalog.test.mjs (282.248901ms)
+✔ tests/web/feature-color-actions.test.mjs (219.618731ms)
+✔ tests/web/feature-display-boundaries.test.mjs (128.077615ms)
+✔ tests/web/feature-fill-targets.test.mjs (139.983487ms)
+✔ tests/web/feature-override-identity.test.mjs (244.608761ms)
+✔ tests/web/feature-selection.test.mjs (116.445949ms)
+✔ tests/web/feature-selector.test.mjs (106.837349ms)
+✔ tests/web/feature-shapes.test.mjs (102.933359ms)
+✔ tests/web/feature-visibility-actions.test.mjs (167.835319ms)
+✔ tests/web/feature-visibility-reconciliation.test.mjs (158.671182ms)
+✔ tests/web/feature-visibility.test.mjs (123.545665ms)
+✔ tests/web/file-content-cache.test.mjs (214.952696ms)
+✔ tests/web/file-imports.test.mjs (125.141434ms)
+✔ tests/web/gallery-session-migration.test.mjs (6472.169878ms)
+✔ tests/web/gallery-session-publication.test.mjs (6894.729541ms)
+✔ tests/web/generation-feedback.test.mjs (497.02087ms)
+✔ tests/web/history-canonical-owner.test.mjs (2571.89193ms)
+✔ tests/web/history-config-restore.test.mjs (2518.664585ms)
+✔ tests/web/history-inputs.test.mjs (173.605065ms)
+✔ tests/web/history.test.mjs (268.934602ms)
+✔ tests/web/imported-comparison-intent.test.mjs (124.131714ms)
+✔ tests/web/joint-display-placement.test.mjs (1220.127395ms)
+✔ tests/web/layout-preferences.test.mjs (110.665061ms)
+✔ tests/web/legend-layout-actions.test.mjs (359.331717ms)
+✔ tests/web/legend-sync.test.mjs (3249.70609ms)
+✔ tests/web/linear-comparisons.test.mjs (121.588518ms)
+✔ tests/web/linear-record-layout.test.mjs (108.82792ms)
+✔ tests/web/linear-sources.test.mjs (234.409445ms)
+✔ tests/web/linear-typography.test.mjs (184.128863ms)
+✔ tests/web/losat-cache.test.mjs (127.203426ms)
+node:internal/child_process:1144
+    result.error = new ErrnoException(result.error, 'spawnSync ' + options.file);
+                   ^
+
+<ref *1> Error: spawnSync python EPERM
+    at Object.spawnSync (node:internal/child_process:1144:20)
+    at spawnSync (node:child_process:928:24)
+    at execFileSync (node:child_process:971:15)
+    at file:///mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/tests/web/losat-session-schema-contract.test.mjs:18:27
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -1,
+  code: 'EPERM',
+  syscall: 'spawnSync python',
+  path: 'python',
+  spawnargs: [
+    '-c',
+    '\n' +
+      'import json, runpy\n' +
+      'from gbdraw.session_io import CURRENT_SESSION_VERSION, PROTEIN_LOSAT_CACHE_SCHEMA, LOSAT_DERIVED_CACHE_SCHEMA\n' +
+      'from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA\n' +
+      "adapter = runpy.run_path('tests/run_losat_cache_browser_acceptance.py')\n" +
+      'print(json.dumps({\n' +
+      "    'writer': {'session': CURRENT_SESSION_VERSION, 'request': CANONICAL_REQUEST_SCHEMA,\n" +
+      "               'proteinRaw': PROTEIN_LOSAT_CACHE_SCHEMA, 'proteinDerived': LOSAT_DERIVED_CACHE_SCHEMA},\n" +
+      "    'adapter': {'session': adapter['CURRENT_SESSION_VERSION'], 'request': adapter['CURRENT_RENDER_REQUEST_SCHEMA'],\n" +
+      "                'proteinRaw': adapter['CURRENT_PROTEIN_RAW_SCHEMA'], 'proteinDerived': adapter['CURRENT_PROTEIN_DERIVED_SCHEMA']}\n" +
+      '}))\n'
+  ],
+  error: [Circular *1],
+  status: 0,
+  signal: null,
+  output: [
+    null,
+    '{"writer": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}, "adapter": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}}\n',
+    ''
+  ],
+  pid: 533,
+  stdout: '{"writer": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}, "adapter": {"session": 42, "request": 7, "proteinRaw": 4, "proteinDerived": 3}}\n',
+  stderr: ''
+}
+
+Node.js v26.8.2
+✖ tests/web/losat-session-schema-contract.test.mjs (5295.953547ms)
+✔ tests/web/losat-settings.test.mjs (284.97366ms)
+✔ tests/web/match-sequences.test.mjs (224.938034ms)
+✔ tests/web/mode-profiles.test.mjs (3583.877184ms)
+✔ tests/web/optional-positive-number.test.mjs (118.370535ms)
+✔ tests/web/orthogroups-stable-identity.test.mjs (374.071923ms)
+✔ tests/web/pairwise-payload-performance.test.mjs (1728.018882ms)
+✔ tests/web/palette-history-preservation.test.mjs (859.542356ms)
+
+Interrupted while running:
+
+⚠ tests/web/pr-language.test.mjs (tests/web/pr-language.test.mjs:1:1)
+⚠ tests/web/preview-feature-search.test.mjs (tests/web/preview-feature-search.test.mjs:1:1)
+⚠ tests/web/preview-runtime.test.mjs (tests/web/preview-runtime.test.mjs:1:1)
+⚠ tests/web/preview-transform-interaction.test.mjs (tests/web/preview-transform-interaction.test.mjs:1:1)
+⚠ tests/web/product-impact-ratchet-fixtures.test.mjs (tests/web/product-impact-ratchet-fixtures.test.mjs:1:1)
+⚠ tests/web/promotion-readiness.test.mjs (tests/web/promotion-readiness.test.mjs:1:1)
+⚠ tests/web/pyodide-startup.test.mjs (tests/web/pyodide-startup.test.mjs:1:1)
+⚠ tests/web/record-display-options.test.mjs (tests/web/record-display-options.test.mjs:1:1)
+⚠ tests/web/record-groups.test.mjs (tests/web/record-groups.test.mjs:1:1)
+⚠ tests/web/record-selector.test.mjs (tests/web/record-selector.test.mjs:1:1)
+⚠ tests/web/responsiveness-guardrail.test.mjs (tests/web/responsiveness-guardrail.test.mjs:1:1)
+⚠ tests/web/result-normalization.test.mjs (tests/web/result-normalization.test.mjs:1:1)
+⚠ tests/web/right-drawer.test.mjs (tests/web/right-drawer.test.mjs:1:1)
+⚠ tests/web/run-analysis-derived-cache.test.mjs (tests/web/run-analysis-derived-cache.test.mjs:1:1)
+⚠ tests/web/run-analysis-simple-path.test.mjs (tests/web/run-analysis-simple-path.test.mjs:1:1)
+⚠ tests/web/run-info.test.mjs (tests/web/run-info.test.mjs:1:1)
+⚠ tests/web/runtime-capabilities.test.mjs (tests/web/runtime-capabilities.test.mjs:1:1)
+⚠ tests/web/session-active-config-contract.test.mjs (tests/web/session-active-config-contract.test.mjs:1:1)
+⚠ tests/web/session-active-files.test.mjs (tests/web/session-active-files.test.mjs:1:1)
+⚠ tests/web/session-authority.test.mjs (tests/web/session-authority.test.mjs:1:1)
+⚠ tests/web/session-cli-compatibility.test.mjs (tests/web/session-cli-compatibility.test.mjs:1:1)
+⚠ tests/web/session-definition-rehydration.test.mjs (tests/web/session-definition-rehydration.test.mjs:1:1)
+⚠ tests/web/session-draft-authority.test.mjs (tests/web/session-draft-authority.test.mjs:1:1)
+⚠ tests/web/session-export-validation.test.mjs (tests/web/session-export-validation.test.mjs:1:1)
+⚠ tests/web/session-feature-metadata.test.mjs (tests/web/session-feature-metadata.test.mjs:1:1)
+⚠ tests/web/session-file.test.mjs (tests/web/session-file.test.mjs:1:1)
+⚠ tests/web/session-losat-cache-validation.test.mjs (tests/web/session-losat-cache-validation.test.mjs:1:1)
+⚠ tests/web/session-regeneration-contract.test.mjs (tests/web/session-regeneration-contract.test.mjs:1:1)
+⚠ tests/web/session-request.test.mjs (tests/web/session-request.test.mjs:1:1)
+⚠ tests/web/session-resource-backing.test.mjs (tests/web/session-resource-backing.test.mjs:1:1)
+⚠ tests/web/session-resources.test.mjs (tests/web/session-resources.test.mjs:1:1)
+⚠ tests/web/settings-only-session.test.mjs (tests/web/settings-only-session.test.mjs:1:1)
+⚠ tests/web/svg-result-ingestion.test.mjs (tests/web/svg-result-ingestion.test.mjs:1:1)
+⚠ tests/web/svg-sanitization.test.mjs (tests/web/svg-sanitization.test.mjs:1:1)
+⚠ tests/web/svg-style-completion.test.mjs (tests/web/svg-style-completion.test.mjs:1:1)
+⚠ tests/web/svg-styles-track-groups.test.mjs (tests/web/svg-styles-track-groups.test.mjs:1:1)
+⚠ tests/web/svg-visual-semantics.test.mjs (tests/web/svg-visual-semantics.test.mjs:1:1)
+⚠ tests/web/track-slot-colors.test.mjs (tests/web/track-slot-colors.test.mjs:1:1)
+⚠ tests/web/track-slot-display.test.mjs (tests/web/track-slot-display.test.mjs:1:1)
+⚠ tests/web/track-slot-validation.test.mjs (tests/web/track-slot-validation.test.mjs:1:1)
+⚠ tests/web/web-promotion-context.test.mjs (tests/web/web-promotion-context.test.mjs:1:1)
+⚠ tests/web/zip.test.mjs (tests/web/zip.test.mjs:1:1)
+✖ tests/web/pr-language.test.mjs (619112.345462ms)
+✔ tests/web/preview-feature-search.test.mjs (836.527573ms)
+✔ tests/web/preview-runtime.test.mjs (205.298511ms)
+✔ tests/web/preview-transform-interaction.test.mjs (241.785197ms)
+✔ tests/web/product-impact-ratchet-fixtures.test.mjs (204.915466ms)
+✔ tests/web/promotion-readiness.test.mjs (182.978263ms)
+✔ tests/web/pyodide-startup.test.mjs (570.715924ms)
+✔ tests/web/record-display-options.test.mjs (1028.550158ms)
+✔ tests/web/record-groups.test.mjs (131.20748ms)
+✔ tests/web/record-selector.test.mjs (640.399444ms)
+✔ tests/web/responsiveness-guardrail.test.mjs (207.088217ms)
+✔ tests/web/result-normalization.test.mjs (160.610191ms)
+✔ tests/web/right-drawer.test.mjs (207.635862ms)
+✔ tests/web/run-analysis-derived-cache.test.mjs (2277.94347ms)
+✔ tests/web/run-analysis-simple-path.test.mjs (3168.527526ms)
+✔ tests/web/run-info.test.mjs (50891.205989ms)
+✔ tests/web/runtime-capabilities.test.mjs (534.511457ms)
+✔ tests/web/session-active-config-contract.test.mjs (739.072585ms)
+✔ tests/web/session-active-files.test.mjs (2377.141085ms)
+✔ tests/web/session-authority.test.mjs (744.241871ms)
+✖ tests/web/session-cli-compatibility.test.mjs (19725.923429ms)
+✔ tests/web/session-definition-rehydration.test.mjs (2095.014702ms)
+✔ tests/web/session-draft-authority.test.mjs (4670.159095ms)
+✔ tests/web/session-export-validation.test.mjs (2656.540029ms)
+✔ tests/web/session-feature-metadata.test.mjs (461.980108ms)
+✔ tests/web/session-file.test.mjs (200.856614ms)
+✔ tests/web/session-losat-cache-validation.test.mjs (3051.97417ms)
+✔ tests/web/session-regeneration-contract.test.mjs (147.311838ms)
+✔ tests/web/session-request.test.mjs (3087.21295ms)
+✔ tests/web/session-resource-backing.test.mjs (760.101277ms)
+✔ tests/web/session-resources.test.mjs (3060.990536ms)
+✔ tests/web/settings-only-session.test.mjs (1266.725051ms)
+✔ tests/web/svg-result-ingestion.test.mjs (1184.031806ms)
+✔ tests/web/svg-sanitization.test.mjs (163.613283ms)
+✔ tests/web/svg-style-completion.test.mjs (674.952892ms)
+✔ tests/web/svg-styles-track-groups.test.mjs (661.585321ms)
+✔ tests/web/svg-visual-semantics.test.mjs (211.002074ms)
+✔ tests/web/track-slot-colors.test.mjs (141.485247ms)
+✔ tests/web/track-slot-display.test.mjs (1765.919589ms)
+✔ tests/web/track-slot-validation.test.mjs (1719.273287ms)
+✔ tests/web/web-promotion-context.test.mjs (158.916626ms)
+✔ tests/web/zip.test.mjs (104.819927ms)
+ℹ tests 100
+ℹ suites 0
+ℹ pass 96
+ℹ fail 3
+ℹ cancelled 1
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 620102.411894
+
+✖ failing tests:
+
+test at tests/web/architecture-contracts.test.mjs:1:1
+✖ tests/web/architecture-contracts.test.mjs (21465.719634ms)
+  'test failed'
+
+test at tests/web/losat-session-schema-contract.test.mjs:1:1
+✖ tests/web/losat-session-schema-contract.test.mjs (5295.953547ms)
+  'test failed'
+
+test at tests/web/pr-language.test.mjs:1:1
+✖ tests/web/pr-language.test.mjs (619112.345462ms)
+  'Promise resolution is still pending but the event loop has already resolved'
+
+test at tests/web/session-cli-compatibility.test.mjs:1:1
+✖ tests/web/session-cli-compatibility.test.mjs (19725.923429ms)
+  'test failed'

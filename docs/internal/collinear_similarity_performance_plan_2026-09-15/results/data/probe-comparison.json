@@ -1,0 +1,177 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "currentHead": "9a4f7e29ab1b99676bb783321f8a9f40f969d04c",
+  "semanticOnly": true,
+  "comparisons": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/unknown_missing": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/bad_coordinates": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/pair_row_order": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/nan_score": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_score": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_length": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-edges/empty": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "hsp-1000/multi_hsp": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "dense-24/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "support-edges/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "sparse-200/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "sparse-400/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "sparse-800/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "cache-49/cache_cycle": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "cache-64/cache_cycle": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "cache-81/cache_cycle": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "path-8/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "path-12/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "path-16/selector": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "merge-300/cluster": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "merge-600/cluster": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "merge-1200/cluster": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "merge-edges/max_conflicts_0": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "merge-edges/max_conflicts_1": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "merge-edges/reverse": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "manifest/batch_identity": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "render-gallery/hepatoplasmataceae_collinear": {
+      "semanticEqual": true,
+      "decision": "pass"
+    },
+    "render-gallery/hepatoplasmataceae_orthogroup": {
+      "semanticEqual": true,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 0
+}

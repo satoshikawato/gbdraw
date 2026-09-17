@@ -1,0 +1,15 @@
+✔ tests/web/losat-cache.test.mjs (100.328688ms)
+✔ tests/web/losat-settings.test.mjs (134.182774ms)
+✔ tests/web/orthogroups-stable-identity.test.mjs (170.532819ms)
+✔ tests/web/run-analysis-derived-cache.test.mjs (807.598164ms)
+✔ tests/web/run-analysis-simple-path.test.mjs (1500.861631ms)
+✔ tests/web/session-export-validation.test.mjs (747.859314ms)
+✔ tests/web/session-losat-cache-validation.test.mjs (975.987537ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1562.082563

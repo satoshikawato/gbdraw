@@ -1,0 +1,21 @@
+RW-03: 3 input checks + 1 merged check; default/Generate failure precedence and deep copy passed
+RW-04: alias validity, NFC collisions, ordinals, immutability and failure precedence passed
+RW-04: 2 valid feature aliases, 4 NFC/trim operations
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: one normalization per valid feature alias in each manifest validation
+
+4 !== 2
+
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-local-duplication-20260917/tests/web/losat-cache.test.mjs:933:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 4,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.8.2

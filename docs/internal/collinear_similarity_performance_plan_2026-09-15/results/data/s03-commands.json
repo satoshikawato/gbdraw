@@ -1,0 +1,1046 @@
+[
+  {
+    "label": "baseline-timing",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "timing",
+      "--seed",
+      "20260915",
+      "--warmups",
+      "1",
+      "--samples",
+      "7",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "gallery-collinear",
+      "gallery-orthogroup",
+      "render-gallery",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-timing.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T05:55:35.828754+00:00",
+    "elapsedSeconds": 551.1310608599997,
+    "exitCode": 0
+  },
+  {
+    "label": "current-timing",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "timing",
+      "--seed",
+      "20260915",
+      "--warmups",
+      "1",
+      "--samples",
+      "7",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "gallery-collinear",
+      "gallery-orthogroup",
+      "render-gallery",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-timing.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:04:46.983264+00:00",
+    "elapsedSeconds": 383.9068772449973,
+    "exitCode": 0
+  },
+  {
+    "label": "timing-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-timing.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-timing.json.gz",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-timing-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:11:25.624537+00:00",
+    "elapsedSeconds": 0.08727140100018005,
+    "exitCode": 1
+  },
+  {
+    "label": "baseline-hsp-probe",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "probe",
+      "--cases",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-probe.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:11:49.296636+00:00",
+    "elapsedSeconds": 5.167282579001039,
+    "exitCode": 0
+  },
+  {
+    "label": "current-hsp-probe",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "probe",
+      "--cases",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-probe.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:11:54.485101+00:00",
+    "elapsedSeconds": 3.9631096279990743,
+    "exitCode": 0
+  },
+  {
+    "label": "baseline-hsp-memory",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "memory",
+      "--cases",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-memory.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:11:58.469017+00:00",
+    "elapsedSeconds": 4.799713480999344,
+    "exitCode": 0
+  },
+  {
+    "label": "current-hsp-memory",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "memory",
+      "--cases",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-memory.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:12:03.292498+00:00",
+    "elapsedSeconds": 4.023185260000901,
+    "exitCode": 0
+  },
+  {
+    "label": "focused-after-profile",
+    "command": [
+      "pytest",
+      "tests/test_protein_colinearity.py",
+      "-k",
+      "hsp",
+      "-q"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:15:02.017072+00:00",
+    "elapsedSeconds": 2.411221653001121,
+    "exitCode": 1
+  },
+  {
+    "label": "baseline-hsp-repeat",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "timing",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-repeat.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:15:19.945104+00:00",
+    "elapsedSeconds": 8.350611532001494,
+    "exitCode": 0
+  },
+  {
+    "label": "current-hsp-repeat",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "timing",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-repeat.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:15:28.317664+00:00",
+    "elapsedSeconds": 6.749997709997842,
+    "exitCode": 0
+  },
+  {
+    "label": "hsp-repeat-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-repeat.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-repeat.json.gz",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-hsp-repeat-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:15:35.090938+00:00",
+    "elapsedSeconds": 0.08582471699992311,
+    "exitCode": 1
+  },
+  {
+    "label": "focused-key-groups",
+    "command": [
+      "pytest",
+      "tests/test_protein_colinearity.py",
+      "-k",
+      "hsp",
+      "-q"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:18:17.870123+00:00",
+    "elapsedSeconds": 2.2086284189972503,
+    "exitCode": 0
+  },
+  {
+    "label": "baseline-hsp-final",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "timing",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-final.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:18:37.604509+00:00",
+    "elapsedSeconds": 10.119575164997514,
+    "exitCode": 0
+  },
+  {
+    "label": "current-hsp-final",
+    "command": [
+      "taskset",
+      "-c",
+      "2",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "timing",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-final.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:18:47.755262+00:00",
+    "elapsedSeconds": 5.837419548002799,
+    "exitCode": 0
+  },
+  {
+    "label": "hsp-final-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-hsp-final.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-hsp-final.json.gz",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-hsp-final-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:18:53.614464+00:00",
+    "elapsedSeconds": 0.08341674199982663,
+    "exitCode": 2
+  },
+  {
+    "label": "focused-final",
+    "command": [
+      "pytest",
+      "tests/test_protein_colinearity.py",
+      "tests/test_collinearity.py",
+      "tests/test_collinearity_units.py",
+      "tests/test_protein_comparison_benchmark.py",
+      "tests/test_ortholog_path_contract.py",
+      "-q"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:20:14.076517+00:00",
+    "elapsedSeconds": 28.760085013000207,
+    "exitCode": 0
+  },
+  {
+    "label": "ruff",
+    "command": [
+      "ruff",
+      "check",
+      "gbdraw/",
+      "tests/test_protein_colinearity.py",
+      "tests/prototypes/hsp_aggregation.py",
+      "tests/run_hsp_browser_acceptance.py",
+      "tools/benchmark_protein_comparison.py"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:20:42.859896+00:00",
+    "elapsedSeconds": 0.0960983099976147,
+    "exitCode": 0
+  },
+  {
+    "label": "baseline-acceptance-timing",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "timing",
+      "--seed",
+      "20260915",
+      "--warmups",
+      "1",
+      "--samples",
+      "7",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "gallery-collinear",
+      "gallery-orthogroup",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-timing.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:21:04.501809+00:00",
+    "elapsedSeconds": 278.9364757220028,
+    "exitCode": 0
+  },
+  {
+    "label": "current-acceptance-timing",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "timing",
+      "--seed",
+      "20260915",
+      "--warmups",
+      "1",
+      "--samples",
+      "7",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "gallery-collinear",
+      "gallery-orthogroup",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-timing.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:25:43.459285+00:00",
+    "elapsedSeconds": 138.84535229600078,
+    "exitCode": 0
+  },
+  {
+    "label": "acceptance-timing-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-timing.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-timing.json.gz",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-acceptance-timing-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:28:02.332028+00:00",
+    "elapsedSeconds": 0.09802178500103764,
+    "exitCode": 2
+  },
+  {
+    "label": "baseline-acceptance-probe",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "probe",
+      "--artifacts",
+      "/tmp/gbdraw-s03-oracles/baseline",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-probe.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:28:37.783640+00:00",
+    "elapsedSeconds": 240.2517250810015,
+    "exitCode": 0
+  },
+  {
+    "label": "current-acceptance-probe",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "probe",
+      "--artifacts",
+      "/tmp/gbdraw-s03-oracles/current",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-probe.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:32:38.058455+00:00",
+    "elapsedSeconds": 179.06670406000194,
+    "exitCode": 0
+  },
+  {
+    "label": "acceptance-probe-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-probe.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-probe.json.gz",
+      "--semantics-only",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-acceptance-probe-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:35:37.146728+00:00",
+    "elapsedSeconds": 0.15786409700012882,
+    "exitCode": 0
+  },
+  {
+    "label": "baseline-acceptance-memory",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "memory",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "gallery-collinear",
+      "gallery-orthogroup",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-memory.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:37:22.458058+00:00",
+    "elapsedSeconds": 140.26017571299963,
+    "exitCode": 0
+  },
+  {
+    "label": "current-acceptance-memory",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "memory",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "hsp-1000",
+      "hsp-many",
+      "gallery-collinear",
+      "gallery-orthogroup",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-memory.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:39:42.743363+00:00",
+    "elapsedSeconds": 62.66623548899952,
+    "exitCode": 0
+  },
+  {
+    "label": "acceptance-memory-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-acceptance-memory.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-acceptance-memory.json.gz",
+      "--semantics-only",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-acceptance-memory-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:40:45.431421+00:00",
+    "elapsedSeconds": 0.07478993699987768,
+    "exitCode": 0
+  },
+  {
+    "label": "baseline-small-repeat",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s02",
+      "--measure",
+      "timing",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-small-repeat.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:40:45.527388+00:00",
+    "elapsedSeconds": 4.6965809450011875,
+    "exitCode": 0
+  },
+  {
+    "label": "current-small-repeat",
+    "command": [
+      "taskset",
+      "-c",
+      "3",
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "run",
+      "--source-root",
+      "/tmp/gbdraw-collinear-s03",
+      "--measure",
+      "timing",
+      "--cases",
+      "hsp-edges",
+      "hsp-1",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-small-repeat.json.gz"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:40:50.244552+00:00",
+    "elapsedSeconds": 3.8458367660023214,
+    "exitCode": 0
+  },
+  {
+    "label": "small-repeat-compare",
+    "command": [
+      "python",
+      "tools/benchmark_protein_comparison.py",
+      "compare",
+      "--baseline",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-baseline-small-repeat.json.gz",
+      "--current",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-current-small-repeat.json.gz",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-small-repeat-comparison.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:40:54.111330+00:00",
+    "elapsedSeconds": 0.07467956499749562,
+    "exitCode": 0
+  },
+  {
+    "label": "browser-wheel",
+    "command": [
+      "python",
+      "tools/prepare_browser_wheel.py",
+      "--no-build-isolation"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:41:53.958611+00:00",
+    "elapsedSeconds": 1.2297834559976764,
+    "exitCode": 0
+  },
+  {
+    "label": "metadata-svg",
+    "command": [
+      "pytest",
+      "tests/test_web_feature_catalog.py",
+      "tests/test_session_request_codec.py",
+      "tests/test_session_compat.py",
+      "tests/test_output_comparison.py::TestOutputComparison",
+      "-v"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:41:55.208987+00:00",
+    "elapsedSeconds": 28.57985158199881,
+    "exitCode": 0
+  },
+  {
+    "label": "node-focused",
+    "command": [
+      "node",
+      "--test",
+      "tests/web/losat-cache.test.mjs",
+      "tests/web/run-analysis-derived-cache.test.mjs",
+      "tests/web/run-analysis-simple-path.test.mjs",
+      "tests/web/linear-sources.test.mjs",
+      "tests/web/losat-settings.test.mjs",
+      "tests/web/losat-session-schema-contract.test.mjs",
+      "tests/web/session-losat-cache-validation.test.mjs",
+      "tests/web/architecture-contracts.test.mjs",
+      "tests/web/feature-catalog.test.mjs",
+      "tests/web/pairwise-payload-performance.test.mjs"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:42:22.550237+00:00",
+    "elapsedSeconds": 9.786254241000279,
+    "exitCode": 1
+  },
+  {
+    "label": "architecture-gate",
+    "command": [
+      "node",
+      "tools/check-web-change-budget.mjs",
+      "--base",
+      "origin/dev"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:42:32.360641+00:00",
+    "elapsedSeconds": 0.20011208500000066,
+    "exitCode": 1
+  },
+  {
+    "label": "browser-acceptance",
+    "command": [
+      "python",
+      "tests/run_hsp_browser_acceptance.py",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-browser.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:47:43.002443+00:00",
+    "elapsedSeconds": 0.8300233340014529,
+    "exitCode": 1
+  },
+  {
+    "label": "node-focused-escalated",
+    "command": [
+      "node",
+      "--test",
+      "tests/web/losat-cache.test.mjs",
+      "tests/web/run-analysis-derived-cache.test.mjs",
+      "tests/web/run-analysis-simple-path.test.mjs",
+      "tests/web/linear-sources.test.mjs",
+      "tests/web/losat-settings.test.mjs",
+      "tests/web/losat-session-schema-contract.test.mjs",
+      "tests/web/session-losat-cache-validation.test.mjs",
+      "tests/web/architecture-contracts.test.mjs",
+      "tests/web/feature-catalog.test.mjs",
+      "tests/web/pairwise-payload-performance.test.mjs"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:47:30.565717+00:00",
+    "elapsedSeconds": 80.05446062999908,
+    "exitCode": 0
+  },
+  {
+    "label": "architecture-gate-escalated",
+    "command": [
+      "node",
+      "tools/check-web-change-budget.mjs",
+      "--base",
+      "origin/dev"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:48:50.650551+00:00",
+    "elapsedSeconds": 15.338512042999355,
+    "exitCode": 0
+  },
+  {
+    "label": "browser-acceptance-escalated",
+    "command": [
+      "python",
+      "tests/run_hsp_browser_acceptance.py",
+      "--output",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s03-browser.json"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:48:10.189855+00:00",
+    "elapsedSeconds": 106.48730411900033,
+    "exitCode": 0
+  },
+  {
+    "label": "python-fast",
+    "command": [
+      "pytest",
+      "tests/",
+      "-v",
+      "-m",
+      "not slow",
+      "-ra"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:42:23.814251+00:00",
+    "elapsedSeconds": 875.7534235780004,
+    "exitCode": 1
+  },
+  {
+    "label": "python-browser-retry",
+    "command": [
+      "pytest",
+      "tests/test_linear_comparison_browser_contracts.py",
+      "tests/test_linear_definition_alignment.py",
+      "tests/test_record_display_interactive_browser.py",
+      "tests/test_run_info_exact_replay.py",
+      "-v",
+      "-ra"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:58:01.737887+00:00",
+    "elapsedSeconds": 29.8550015610017,
+    "exitCode": 1
+  },
+  {
+    "label": "install-cli",
+    "command": [
+      "/tmp/gbdraw-s03-cli-venv/bin/python",
+      "-m",
+      "pip",
+      "install",
+      "--no-deps",
+      "--no-build-isolation",
+      "."
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T06:59:35.126472+00:00",
+    "elapsedSeconds": 3.984383588001947,
+    "exitCode": 0
+  },
+  {
+    "label": "python-cli-replay-retry",
+    "command": [
+      "env",
+      "PATH=/tmp/gbdraw-s03-cli-venv/bin:/home/kawato/.local/bin:/home/kawato/.codex/tmp/arg0/codex-arg0pMZnAF:/home/kawato/.vscode-server/bin/645f29cc3176500b4b5762ba887cf2a7f0ffdf2c/bin/remote-cli:/home/kawato/.local/bin:/home/kawato/.cargo/bin:/home/kawato/apps/google-cloud-sdk/bin:/home/kawato/micromamba/bin:/home/kawato/micromamba/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program",
+      "Files/Common",
+      "Files/libhmsbeagle/:/mnt/c/Program",
+      "Files",
+      "(x86)/Common",
+      "Files/Oracle/Java/java8path:/mnt/c/Program",
+      "Files",
+      "(x86)/Common",
+      "Files/Oracle/Java/javapath:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program",
+      "Files",
+      "(x86)/NVIDIA",
+      "Corporation/PhysX/Common:/mnt/c/Program",
+      "Files/NVIDIA",
+      "Corporation/NVIDIA",
+      "NvDLISR:/mnt/c/Program",
+      "Files/MEGA12:/mnt/c/Program",
+      "Files/MEGACC:/mnt/c/Program",
+      "Files/cursor/resources/app/bin:/mnt/c/Program",
+      "Files/Git/cmd:/mnt/c/Users/genom/.cargo/bin:/mnt/c/Users/genom/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/genom/AppData/Local/Programs/Microsoft",
+      "VS",
+      "Code/bin:/mnt/c/Users/genom/AppData/Local/GitHubDesktop/bin:/mnt/c/texlive/2025/bin/windows:/snap/bin:/home/kawato/.vscode-server/extensions/openai.chatgpt-26.908.40401-linux-x64/bin/linux-x86_64",
+      "python",
+      "-m",
+      "pytest",
+      "tests/test_run_info_exact_replay.py",
+      "-v",
+      "-ra"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T07:00:20.369864+00:00",
+    "elapsedSeconds": 0.0011786059985752217,
+    "exitCode": 127
+  },
+  {
+    "label": "python-cli-replay-retry-quoted",
+    "command": [
+      "env",
+      "PATH=/tmp/gbdraw-s03-cli-venv/bin:/home/kawato/.local/bin:/home/kawato/.codex/tmp/arg0/codex-arg0pMZnAF:/home/kawato/.vscode-server/bin/645f29cc3176500b4b5762ba887cf2a7f0ffdf2c/bin/remote-cli:/home/kawato/.local/bin:/home/kawato/.cargo/bin:/home/kawato/apps/google-cloud-sdk/bin:/home/kawato/micromamba/bin:/home/kawato/micromamba/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files/Common Files/libhmsbeagle/:/mnt/c/Program Files (x86)/Common Files/Oracle/Java/java8path:/mnt/c/Program Files (x86)/Common Files/Oracle/Java/javapath:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA NvDLISR:/mnt/c/Program Files/MEGA12:/mnt/c/Program Files/MEGACC:/mnt/c/Program Files/cursor/resources/app/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Users/genom/.cargo/bin:/mnt/c/Users/genom/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/genom/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/genom/AppData/Local/GitHubDesktop/bin:/mnt/c/texlive/2025/bin/windows:/snap/bin:/home/kawato/.vscode-server/extensions/openai.chatgpt-26.908.40401-linux-x64/bin/linux-x86_64",
+      "python",
+      "-m",
+      "pytest",
+      "tests/test_run_info_exact_replay.py",
+      "-v",
+      "-ra"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T07:00:32.726242+00:00",
+    "elapsedSeconds": 12.92796092700155,
+    "exitCode": 0
+  },
+  {
+    "label": "python-comparison-contract-retry",
+    "command": [
+      "pytest",
+      "tests/test_linear_comparison_browser_contracts.py",
+      "-v",
+      "-ra"
+    ],
+    "cwd": "/tmp/gbdraw-collinear-s03",
+    "environment": {
+      "PYTHONPATH": "/tmp/gbdraw-collinear-s03"
+    },
+    "startedUtc": "2026-09-15T07:00:11.021935+00:00",
+    "elapsedSeconds": 162.18148188399937,
+    "exitCode": 0
+  }
+]

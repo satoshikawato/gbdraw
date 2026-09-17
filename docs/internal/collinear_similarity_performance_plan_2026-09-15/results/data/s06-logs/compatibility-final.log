@@ -1,0 +1,51 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.3, pytest-9.0.2, pluggy-1.5.0
+rootdir: /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916
+configfile: pyproject.toml
+plugins: anyio-4.9.0, xdist-3.8.0, timeout-2.4.0, cov-7.0.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collected 70 items / 6 deselected / 64 selected
+
+tests/test_session_compat.py ..................................          [ 53%]
+tests/test_lossless_ortholog_paths.py ................F                  [ 79%]
+tests/test_cli_tables_tracks_sessions_exports_recipe_contracts.py ...... [ 89%]
+.......                                                                  [100%]
+
+=================================== FAILURES ===================================
+____ test_legacy_reference_promotion_rebuilds_only_declared_collection_data ____
+tests/test_lossless_ortholog_paths.py:255: in test_legacy_reference_promotion_rebuilds_only_declared_collection_data
+    assert index.path_at(1) == pc.OrthologPath('og_1', 'custom', ('h_first', 'h_second'),
+E   AssertionError: assert OrthologPath(...=('h_first',)) == OrthologPath(...=('h_first',))
+E     
+E     Omitting 4 identical items, use -vv to show
+E     Differing attributes:
+E     ['edge_ids']
+E     
+E     Drill down into differing attribute edge_ids:
+E       edge_ids: ('p_r_old1->p_r_old2',) != ('h_first->h_second',)
+E       At index 0 diff: 'p_r_old1->p_r_old2' != 'h_first->h_second'
+E       Use -v to get more diff
+=============================== warnings summary ===============================
+tests/test_session_compat.py::test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders
+tests/test_session_compat.py::test_version_39_typed_replay_retains_dormant_comparison_resource
+  /home/kawato/micromamba/lib/python3.13/site-packages/Bio/SeqIO/InsdcIO.py:404: BiopythonWarning: Feature qualifier key 'candidate_cluster_numbers' is longer than maximum length specified by standard (20 characters).
+    warnings.warn(
+
+tests/test_session_compat.py::test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders
+tests/test_session_compat.py::test_version_39_typed_replay_retains_dormant_comparison_resource
+  /home/kawato/micromamba/lib/python3.13/site-packages/Bio/SeqIO/InsdcIO.py:404: BiopythonWarning: Feature qualifier key 'candidate_cluster_number' is longer than maximum length specified by standard (20 characters).
+    warnings.warn(
+
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+tests/test_lossless_ortholog_paths.py::test_current_gallery_render_save_replay_do_not_enumerate[gallery-orthogroup]
+  /mnt/c/users/genom/github/gbdraw/.worktrees/collinear-s06-20260916/gbdraw/linear_comparison.py:110: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+    else pd.concat(frames, ignore_index=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lossless_ortholog_paths.py::test_legacy_reference_promotion_rebuilds_only_declared_collection_data
+====== 1 failed, 63 passed, 6 deselected, 8 warnings in 63.79s (0:01:03) =======

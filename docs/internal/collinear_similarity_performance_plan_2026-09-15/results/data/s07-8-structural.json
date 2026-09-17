@@ -1,0 +1,89 @@
+{
+  "1": {
+    "sides": {
+      "baseline": {
+        "addAliasCalls": 10,
+        "nonemptyAttempts": 7,
+        "listMembershipPositions": 18,
+        "maxAliasContainerShallowBytes": 120,
+        "keyMinInputs": [
+          "list",
+          "list",
+          "list",
+          "list"
+        ],
+        "unitSortKey": [
+          0,
+          40,
+          0,
+          "p0"
+        ],
+        "uniqueAliases": 5
+      },
+      "current": {
+        "addAliasCalls": 10,
+        "nonemptyAttempts": 7,
+        "listMembershipPositions": 0,
+        "maxAliasContainerShallowBytes": 184,
+        "keyMinInputs": [
+          "generator",
+          "generator",
+          "generator",
+          "generator"
+        ],
+        "unitSortKey": [
+          0,
+          40,
+          0,
+          "p0"
+        ],
+        "uniqueAliases": 5
+      }
+    },
+    "exactAliasParity": true
+  },
+  "100": {
+    "sides": {
+      "baseline": {
+        "addAliasCalls": 703,
+        "nonemptyAttempts": 403,
+        "listMembershipPositions": 21402,
+        "maxAliasContainerShallowBytes": 1912,
+        "keyMinInputs": [
+          "list",
+          "list",
+          "list",
+          "list"
+        ],
+        "unitSortKey": [
+          0,
+          40,
+          0,
+          "p0"
+        ],
+        "uniqueAliases": 203
+      },
+      "current": {
+        "addAliasCalls": 703,
+        "nonemptyAttempts": 403,
+        "listMembershipPositions": 0,
+        "maxAliasContainerShallowBytes": 6576,
+        "keyMinInputs": [
+          "generator",
+          "generator",
+          "generator",
+          "generator"
+        ],
+        "unitSortKey": [
+          0,
+          40,
+          0,
+          "p0"
+        ],
+        "uniqueAliases": 203
+      }
+    },
+    "exactAliasParity": true
+  },
+  "limits": "Structural counter only, no clocks or tracemalloc. Shallow container bytes exclude strings, generator frames and output; whole-stage peak and retained bytes measured separately. List traversal positions are derived from membership order; dict probes are not measured."
+}

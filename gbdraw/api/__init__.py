@@ -46,6 +46,10 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthogroupMembershipMode,
     OrthologEdge,
     OrthologPath,
+    OrthogroupResult,
+    OrthogroupGraphResult,
+    OrthologPathCollection,
+    materialize_ortholog_paths,
     normalize_orthogroup_membership_mode,
 )
 from .diagram import LinearDiagramMetadata
@@ -219,6 +223,10 @@ __all__ = [
     "OrthogroupMembershipMode",
     "OrthologEdge",
     "OrthologPath",
+    "OrthogroupResult",
+    "OrthogroupGraphResult",
+    "OrthologPathCollection",
+    "materialize_ortholog_paths",
     "normalize_orthogroup_membership_mode",
     # options
     "AnnotationOptions",

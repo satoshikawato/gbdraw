@@ -1,0 +1,217 @@
+{
+  "baseline": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "commitUnit": "S04 commit containing this evidence; source bytes below are verified before committing",
+  "productionSha256": {
+    "gbdraw/analysis/protein_colinearity.py": "8362cfc23e58a38e4a968c247efd4f0b1efc881fa73726f4bbf3c0434b14e26d",
+    "gbdraw/analysis/collinearity.py": "a85cd83cecc23b98853fe32f105608085692d75555651554a268001dd09f672d",
+    "gbdraw/web_support/orthogroup_metadata.py": "a85885f58649fc12469d4ef350ba88aba139390871bb13088f4a2e28d8349e0a"
+  },
+  "runnerSha256": "681581ee7e2739eb2e1f651306b2d0aeca324b23ff35ad0509936b7a5189a14b",
+  "currentSourceReports": [
+    "s04-current-timing-cursor-dense-24.json.gz",
+    "s04-current-timing-cursor-gallery-collinear.json.gz",
+    "s04-current-timing-cursor-gallery-orthogroup.json.gz",
+    "s04-current-timing-cursor-giant-200.json.gz",
+    "s04-current-timing-cursor-giant-800.json.gz",
+    "s04-current-timing-cursor-sparse-2.json.gz",
+    "s04-current-timing-cursor-sparse-200.json.gz",
+    "s04-current-timing-cursor-sparse-400.json.gz",
+    "s04-current-timing-cursor-sparse-800.json.gz",
+    "s04-current-timing-cursor-support-edges.json.gz",
+    "s04-current-timing-cursor-unrelated-200.json.gz",
+    "s04-current-timing-cursor-unrelated-800.json.gz",
+    "s04-current-probe-final.json.gz",
+    "s04-current-memory-final.json.gz"
+  ],
+  "frozenOracleAstEqual": [
+    "_best_evidence_between_protein_and_members",
+    "_build_core_support_candidate",
+    "_edge_metadata_for_protein_pair",
+    "_record_local_component_has_competing_core_support"
+  ],
+  "sourceWheelInstalledFiles": 207,
+  "gates": {
+    "cursor-index-focused": {
+      "exitCode": 0,
+      "command": [
+        "env",
+        "PYTHONPATH=.",
+        "pytest",
+        "tests/test_sparse_support.py",
+        "tests/test_web_feature_catalog.py",
+        "tests/test_collinearity.py",
+        "tests/test_protein_comparison_benchmark.py",
+        "-q"
+      ],
+      "log": "s04-logs/cursor-index-focused.log"
+    },
+    "python-fast-cursor": {
+      "exitCode": 0,
+      "command": [
+        "env",
+        "PYTHONPATH=.",
+        "python",
+        "-m",
+        "pytest",
+        "tests/",
+        "-v",
+        "-m",
+        "not slow",
+        "-ra"
+      ],
+      "log": "s04-logs/python-fast-cursor.log"
+    },
+    "node-final": {
+      "exitCode": 0,
+      "command": [
+        "node",
+        "--test",
+        "tests/web/losat-cache.test.mjs",
+        "tests/web/run-analysis-derived-cache.test.mjs",
+        "tests/web/run-analysis-simple-path.test.mjs",
+        "tests/web/losat-session-schema-contract.test.mjs",
+        "tests/web/architecture-contracts.test.mjs",
+        "tests/web/linear-sources.test.mjs",
+        "tests/web/losat-settings.test.mjs",
+        "tests/web/diagram-generation-worker.test.mjs",
+        "tests/web/feature-catalog.test.mjs",
+        "tests/web/pairwise-payload-performance.test.mjs",
+        "tests/web/session-losat-cache-validation.test.mjs"
+      ],
+      "log": "s04-logs/node-final.log"
+    },
+    "browser-acceptance-cursor-fixed": {
+      "exitCode": 0,
+      "command": [
+        "env",
+        "PYTHONPATH=.",
+        "python",
+        "tests/run_hsp_browser_acceptance.py",
+        "--output",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-browser-cursor.json"
+      ],
+      "log": "s04-logs/browser-acceptance-cursor-fixed.log"
+    },
+    "architecture-gate-cursor": {
+      "exitCode": 0,
+      "command": [
+        "node",
+        "tools/check-web-change-budget.mjs",
+        "--base",
+        "origin/dev"
+      ],
+      "log": "s04-logs/architecture-gate-cursor.log"
+    },
+    "ruff-final": {
+      "exitCode": 0,
+      "command": [
+        "ruff",
+        "check",
+        "gbdraw/",
+        "tests/test_sparse_support.py",
+        "tests/prototypes/sparse_support.py",
+        "tools/benchmark_protein_comparison.py"
+      ],
+      "log": "s04-logs/ruff-final.log"
+    },
+    "source-proof-cursor": {
+      "exitCode": 0,
+      "command": [
+        "python",
+        "/tmp/s04-refresh-source-proof.py"
+      ],
+      "log": "s04-logs/source-proof-cursor.log"
+    },
+    "probe-final-compare": {
+      "exitCode": 0,
+      "command": [
+        "python",
+        "tools/benchmark_protein_comparison.py",
+        "compare",
+        "--baseline",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-baseline-probe-current-runner.json.gz",
+        "--current",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-current-probe-final.json.gz",
+        "--semantics-only",
+        "--output",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-probe-final-comparison.json"
+      ],
+      "log": "s04-logs/probe-final-compare.log"
+    },
+    "memory-final-compare": {
+      "exitCode": 0,
+      "command": [
+        "python",
+        "tools/benchmark_protein_comparison.py",
+        "compare",
+        "--baseline",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-baseline-memory-final.json.gz",
+        "--current",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-current-memory-final.json.gz",
+        "--semantics-only",
+        "--output",
+        "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s04-memory-final-comparison.json"
+      ],
+      "log": "s04-logs/memory-final-compare.log"
+    }
+  },
+  "pythonFast": {
+    "passed": 4295,
+    "skipped": 17,
+    "deselected": 11,
+    "warnings": 5
+  },
+  "node": {
+    "passed": 214,
+    "failed": 0
+  },
+  "browser": {
+    "viewports": [
+      {
+        "width": 1280,
+        "height": 720
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "assertionsEach": 22567,
+    "externalRequests": 0,
+    "pageErrors": 0
+  },
+  "equivalence": {
+    "cases": 28,
+    "stages": 51,
+    "crossReportStageChecks": 560
+  },
+  "timing": {
+    "pass": 22,
+    "inconclusive": 2,
+    "regression": 0,
+    "fullyPassed": false
+  },
+  "measurementCommands": 71,
+  "overlapWithOwnHeavyChecks": [],
+  "hostObservationScope": "WSL /proc, periodically sampled unsandboxed; Windows processes not visible; no exclusive CPU reservation",
+  "protectedArtifactDiff": "",
+  "diffReview": {
+    "production": [
+      "gbdraw/analysis/protein_colinearity.py",
+      "gbdraw/analysis/collinearity.py",
+      "gbdraw/web_support/orthogroup_metadata.py"
+    ],
+    "tests": [
+      "tests/test_sparse_support.py",
+      "tests/prototypes/sparse_support.py"
+    ],
+    "tooling": [
+      "tools/benchmark_protein_comparison.py"
+    ],
+    "documentation": [
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S04.md"
+    ],
+    "generatedEvidence": "results/data/s04-* only; generated browser wheel is ignored"
+  }
+}

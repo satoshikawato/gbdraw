@@ -1,0 +1,643 @@
+{
+  "baseCommit": "02ca8f950a7561ae9569c66f3f91d30702b53a17",
+  "head": "02ca8f950a7561ae9569c66f3f91d30702b53a17",
+  "branch": "perf/collinear-s07-8-local-reductions-20260916",
+  "upstream": "",
+  "performance": "NOT_ESTABLISHED",
+  "adoption": "Carried into S08 as an integration verification candidate, without performance acceptance.",
+  "newCommit": false,
+  "published": false,
+  "testedSourceFilesStillMatched": 208,
+  "previousWorktree": {
+    "head": "02ca8f950a7561ae9569c66f3f91d30702b53a17",
+    "status": ""
+  },
+  "sharedRepository": {
+    "head": "51d2ae362ac154a3e360727ad086ad1d27bbc989",
+    "branch": "dev",
+    "statusObservedAtHandoff": "M gbdraw/analysis/protein_colinearity.py\n M gbdraw/api/__init__.py\n M gbdraw/api/diagram.py\n M gbdraw/api/record_planning.py\n M gbdraw/api/request_render.py\n M gbdraw/api/requests.py\n M gbdraw/diagrams/circular/assemble.py\n M gbdraw/diagrams/linear/assemble.py\n M gbdraw/diagrams/linear/precalc.py\n M gbdraw/features/coordinates.py\n M gbdraw/features/factory.py\n M gbdraw/features/objects.py\n M gbdraw/io/regions.py\n M gbdraw/render/drawers/circular/features.py\n M gbdraw/render/drawers/linear/features.py\n M gbdraw/svg/arrows.py\n M gbdraw/svg/circular_features.py\n M gbdraw/svg/linear_features.py\n M gbdraw/web/js/app/losat-normalization.js\n M gbdraw/web/js/app/losat-settings.js\n M gbdraw/web/js/app/run-analysis.js\n M gbdraw/web/js/services/losat-runtime.js\n M gbdraw/web/js/services/losat.js\n M gbdraw/web/js/workers/losat-threaded-worker.js\n M gbdraw/web/js/workers/losat-wasi-thread-worker.js\n M gbdraw/web/js/workers/losat-worker.js\n M gbdraw/web/wasm/losat/README.md\n M gbdraw/web/wasm/losat/losat-threaded.wasm\n M gbdraw/web/wasm/losat/losat.wasm\n M tests/test_protein_colinearity.py\n M tests/test_record_planning.py\n M tests/web/contracts/vibrio-full-generation.serial.spec.js\n M tests/web/run-analysis-derived-cache.test.mjs\n M tests/web/run-analysis-simple-path.test.mjs\n?? .worktrees/\n?? docs/internal/BUG04_COMPOSITE_DRAFT_RESOURCE_PERSISTENCE_DESIGN_2026-09-09.md\n?? docs/internal/BUG04_COMPOSITE_DRAFT_RESOURCE_PRODUCT_DECISION_2026-09-09.md\n?? docs/internal/collinear_similarity_performance_plan_2026-09-15/\n?? docs/internal/gbdraw_emergency_linear_ribbon_hotfix/\n?? docs/internal/gbdraw_harness_integration_full48_S11_next_20260913.md\n?? docs/internal/gbdraw_v014_adversarial_state_transition_pack_2026-09-09/\n?? docs/internal/gbdraw_v014_final_release_pack_2026-09-09/\n?? docs/internal/gbdraw_v014_publication_preparation_after_S11_20260913.md\n?? docs/internal/gbdraw_v014_release_pack/\n?? docs/internal/gbdraw_v014_release_results/\n?? docs/internal/gbdraw_v014_session02_split_2026-09-09/\n?? docs/internal/gbdraw_v014_session05a10_m_evidence_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a11_p_evidence_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a13_a_evidence_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a13_b_evidence_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a14_followup_integration_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a14_integration_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a14_review_handoff_2026-09-12/\n?? docs/internal/gbdraw_v014_session05a2_evidence_2026-09-10/\n?? docs/internal/gbdraw_v014_session05a3_evidence_2026-09-10/\n?? docs/internal/gbdraw_v014_session05a3_f1_evidence_2026-09-10/\n?? docs/internal/gbdraw_v014_session05a4_evidence_2026-09-10/\n?? docs/internal/gbdraw_v014_session05a5_h_evidence_2026-09-11/\n?? docs/internal/gbdraw_v014_session05a7_e_evidence_2026-09-11/\n?? docs/internal/gbdraw_v014_session05a8_r_evidence_2026-09-11/\n?? docs/internal/gbdraw_v014_session05a9_w_evidence_2026-09-12/\n?? docs/internal/report.md\n?? gbdraw/layout/record_coordinates.py\n?? tests/test_record_display_geometry.py\n?? tests/test_record_display_transform.py\n?? tests/web/losat-cli-v2.test.mjs\n?? tests/web/losat-worker-lifecycle.test.mjs",
+    "editsByThisSession": false
+  },
+  "profileReassessment": {
+    "gallery-collinear-vibrio": {
+      "sourceReport": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-probe.json.gz",
+      "sha256": "667cf4aeabc946f27e2e24cf4e9a9ed8d1e31089ff9f4a5075ad42226fe32c70",
+      "instrumentedTotalSeconds": 7.063185259000001,
+      "rows": [
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3672,
+          "name": "_aggregate_hsps_by_protein_pair",
+          "calls": 31,
+          "primitiveCalls": 31,
+          "ownSeconds": 0.43707341600000005,
+          "cumulativeSeconds": 2.212038236
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 5194,
+          "name": "_build_anchor_core_orthogroups",
+          "calls": 1,
+          "primitiveCalls": 1,
+          "ownSeconds": 0.16064841000000002,
+          "cumulativeSeconds": 1.7540779110000002
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3633,
+          "name": "_covered_length",
+          "calls": 155844,
+          "primitiveCalls": 155844,
+          "ownSeconds": 0.054049853,
+          "cumulativeSeconds": 0.515916829
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3613,
+          "name": "_merge_coverage_intervals",
+          "calls": 155844,
+          "primitiveCalls": 155844,
+          "ownSeconds": 0.068979943,
+          "cumulativeSeconds": 0.368431157
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3048,
+          "name": "<genexpr>",
+          "calls": 1617822,
+          "primitiveCalls": 1617822,
+          "ownSeconds": 0.227501374,
+          "cumulativeSeconds": 0.29468298400000004
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 4173,
+          "name": "_make_orthogroup_member",
+          "calls": 10385,
+          "primitiveCalls": 10385,
+          "ownSeconds": 0.235711994,
+          "cumulativeSeconds": 0.254874149
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 4134,
+          "name": "_build_orthogroup_name_metadata",
+          "calls": 1,
+          "primitiveCalls": 1,
+          "ownSeconds": 0.004380671,
+          "cumulativeSeconds": 0.248183058
+        }
+      ],
+      "operations": {
+        "units.instances": 24027,
+        "units.memberSortCalls": 0,
+        "units.memberSortReferences": 0,
+        "units.explicitSetCalls": 11,
+        "units.aliasVisits": 151181,
+        "paths.iter_paths.calls": 0,
+        "paths._path.calls": 0,
+        "paths.materialize.calls": 0,
+        "units.sortCalls": 22,
+        "_aggregate_hsps_by_protein_pair.calls": 31,
+        "_aggregate_hsps_by_protein_pair.inputItems": 80888,
+        "hsp.pandas.groupby.calls": 31,
+        "hsp.pandas.itertuples.calls": 31,
+        "hsp.itertuples.rows": 80888,
+        "_raw_hsp_representative_rank.calls": 80888,
+        "_index_core_support_evidence.calls": 2,
+        "_index_core_support_evidence.inputItems": 107814,
+        "_index_core_support_evidence.buildNanoseconds": 60606915,
+        "_index_core_support_evidence.retainedEvidenceReferences": 26490,
+        "_index_core_support_evidence.maxOwnedContainerBytes": 2442096,
+        "_build_core_support_candidate.calls": 6010,
+        "support.evidenceVisits": 20752,
+        "support.reductionCalls": 6010,
+        "_build_ortholog_path_indexes.calls": 1,
+        "_orthogroup_member_counts.calls": 2437,
+        "_orthogroup_member_counts.inputItems": 10385,
+        "_orthogroup_member_counts.buildNanoseconds": 3480198,
+        "_orthogroup_member_counts.retainedEntries": 5913,
+        "_orthogroup_member_counts.maxOwnedContainerBytes": 352,
+        "metadata.anchorLookups": 4908,
+        "_edge_metadata_for_protein_pair.calls": 4908,
+        "_edge_metadata_for_protein_pair.inputItems": 0,
+        "_index_orthogroup_edges.calls": 4017,
+        "_index_orthogroup_edges.inputItems": 8589,
+        "_index_orthogroup_edges.buildNanoseconds": 10060538,
+        "_index_orthogroup_edges.edgeVisits": 6440,
+        "_index_orthogroup_edges.retainedEntries": 6440,
+        "_index_orthogroup_edges.maxOwnedContainerBytes": 11464,
+        "merge.calls": 10,
+        "merge.pathSortCalls": 4648,
+        "merge.pathSortAnchorReferences": 5674,
+        "merge.boundaryTests": 244,
+        "merge.endpointReads": 282
+      }
+    },
+    "gallery-collinear-vibrio-off": {
+      "sourceReport": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-collinear-vibrio-off-probe.json.gz",
+      "sha256": "e9aeda7efe7c9bab89d1e03e1c9f6a0d85f86a859c12f995a978462442c22256",
+      "instrumentedTotalSeconds": 1.1756531060000002,
+      "rows": [
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3042,
+          "name": "_coerce_outfmt6_numeric_columns",
+          "calls": 40,
+          "primitiveCalls": 40,
+          "ownSeconds": 0.001254347,
+          "cumulativeSeconds": 0.281213091
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/collinearity_units.py",
+          "line": 116,
+          "name": "_unit_aliases",
+          "calls": 24027,
+          "primitiveCalls": 24027,
+          "ownSeconds": 0.042314564000000006,
+          "cumulativeSeconds": 0.144000507
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3048,
+          "name": "<genexpr>",
+          "calls": 685860,
+          "primitiveCalls": 685860,
+          "ownSeconds": 0.103212971,
+          "cumulativeSeconds": 0.132791179
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/collinearity_units.py",
+          "line": 110,
+          "name": "_add_alias",
+          "calls": 240270,
+          "primitiveCalls": 240270,
+          "ownSeconds": 0.06307341600000001,
+          "cumulativeSeconds": 0.09301200400000001
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/collinearity_units.py",
+          "line": 95,
+          "name": "_unit_sort_key",
+          "calls": 24027,
+          "primitiveCalls": 24027,
+          "ownSeconds": 0.021659256,
+          "cumulativeSeconds": 0.027967926
+        }
+      ],
+      "operations": {
+        "units.instances": 24027,
+        "units.memberSortCalls": 0,
+        "units.memberSortReferences": 0,
+        "units.explicitSetCalls": 11,
+        "units.aliasVisits": 151181,
+        "paths.iter_paths.calls": 0,
+        "paths._path.calls": 0,
+        "paths.materialize.calls": 0,
+        "units.sortCalls": 22,
+        "metadata.anchorLookups": 3600,
+        "merge.calls": 10,
+        "merge.pathSortCalls": 3328,
+        "merge.pathSortAnchorReferences": 4344,
+        "merge.boundaryTests": 226,
+        "merge.endpointReads": 250
+      }
+    },
+    "gallery-orthogroup": {
+      "sourceReport": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-7-current-gallery-orthogroup-probe.json.gz",
+      "sha256": "9e54a8e5539990b80666f5e156881193305d894de7f3c4659f8f59585158583d",
+      "instrumentedTotalSeconds": 1.994175601,
+      "rows": [
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3672,
+          "name": "_aggregate_hsps_by_protein_pair",
+          "calls": 25,
+          "primitiveCalls": 25,
+          "ownSeconds": 0.097391482,
+          "cumulativeSeconds": 0.49915655000000003
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 5194,
+          "name": "_build_anchor_core_orthogroups",
+          "calls": 1,
+          "primitiveCalls": 1,
+          "ownSeconds": 0.037752796000000005,
+          "cumulativeSeconds": 0.331940304
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3048,
+          "name": "<genexpr>",
+          "calls": 436024,
+          "primitiveCalls": 436024,
+          "ownSeconds": 0.063226392,
+          "cumulativeSeconds": 0.08171120700000001
+        },
+        {
+          "file": ".worktrees/collinear-s07-7-20260916/gbdraw/analysis/protein_colinearity.py",
+          "line": 3633,
+          "name": "_covered_length",
+          "calls": 33176,
+          "primitiveCalls": 33176,
+          "ownSeconds": 0.012243488,
+          "cumulativeSeconds": 0.073136119
+        }
+      ],
+      "operations": {
+        "units.instances": 0,
+        "units.memberSortCalls": 0,
+        "units.memberSortReferences": 0,
+        "units.explicitSetCalls": 0,
+        "units.aliasVisits": 0,
+        "paths.iter_paths.calls": 0,
+        "paths._path.calls": 0,
+        "paths.materialize.calls": 0,
+        "_aggregate_hsps_by_protein_pair.calls": 25,
+        "_aggregate_hsps_by_protein_pair.inputItems": 18699,
+        "hsp.pandas.groupby.calls": 25,
+        "hsp.pandas.itertuples.calls": 25,
+        "hsp.itertuples.rows": 18699,
+        "_raw_hsp_representative_rank.calls": 18699,
+        "_index_core_support_evidence.calls": 2,
+        "_index_core_support_evidence.inputItems": 27520,
+        "_index_core_support_evidence.buildNanoseconds": 10541659,
+        "_index_core_support_evidence.retainedEvidenceReferences": 820,
+        "_index_core_support_evidence.maxOwnedContainerBytes": 72712,
+        "_build_core_support_candidate.calls": 122,
+        "support.evidenceVisits": 693,
+        "support.reductionCalls": 122,
+        "_build_ortholog_path_indexes.calls": 1
+      }
+    }
+  },
+  "profileInterpretation": "Archived S07.7 instrumented observations, overlapping parent/child times; no removable-seconds or current-source speedup estimate.",
+  "categoryReview": {
+    "production": "Two owner files only; 22 inserted/26 removed lines; no public signatures, runtime/cache owner or persisted format changes. Exact parity demonstrated for tested boundaries; performance adoption open.",
+    "tests": "Two hash-asserted frozen source files with isolated private definitions; AST-identical public classes for typed registry; existing full-result matrices and browser/CLI runners reused. New limit-zero test mistakes corrected without changing production.",
+    "benchmark-tooling": "No changes. Existing runner, three current timing samples/one warmup per case, one separate memory run; no additional timing/profile after reassessment. Historical compare guard rejects settings mismatch.",
+    "documentation": "S07_8 history, MASTER_PLAN closure, and revised SESSION_08_INTEGRATION prompt preserve the measured observations and close additional optimization by explicit user instruction. S08 execution has not begun.",
+    "generated-evidence": "Only new s07-8 evidence, no historical result rewrites. Test failure logs retained with subsequent resolution; ignored wheel matches tested source; no reference/public figure changes."
+  },
+  "files": [
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "category": "documentation",
+      "bytes": 44747,
+      "sha256": "887b7caade6e066ab0e0daa78f985a908314a370e69d0e9d64a4b37803115678"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/SESSION_08_INTEGRATION.md",
+      "category": "documentation",
+      "bytes": 14376,
+      "sha256": "ba65acddc9ff6a3cdae672ff1e4ea4fc81c8a0e519ddc224cac2bdcc1ac05399"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_8.md",
+      "category": "documentation",
+      "bytes": 20197,
+      "sha256": "f0556007e886d4466cc21dd452903d19d1664ea952e509ababa3772aaf17dbf1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-A-tests.log",
+      "category": "generated-evidence",
+      "bytes": 1636,
+      "sha256": "6d1ad8d3dbf5cbe065b69449f70058cd466549052d7f3fdd3b25e3677cb1f616"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-A.patch",
+      "category": "generated-evidence",
+      "bytes": 620,
+      "sha256": "171de8abc78cb521cb0969a88782e2eb7d919f5efcb538dc7ebe4ef123485dfc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-B-tests.log",
+      "category": "generated-evidence",
+      "bytes": 3724,
+      "sha256": "0d7586138852598f77409daa3f8e1101ef28ee3d1f5fe8c7b9734ebacd9d5397"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-B.patch",
+      "category": "generated-evidence",
+      "bytes": 2609,
+      "sha256": "0140a9acc9c7a7381955db7697ebe4309119639185f0899ea2f5bce878e7a459"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-C-tests.log",
+      "category": "generated-evidence",
+      "bytes": 7176,
+      "sha256": "8c3954e96a4efc58ce30ae407721b96ddd09d86353d10c8e0039eff0e7d6f3ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-C.patch",
+      "category": "generated-evidence",
+      "bytes": 1808,
+      "sha256": "b993b0565e5207fdefef3d5f9e186329bb7753b6d97fddcfab69fce09dd47aad"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-architecture-accepted.log",
+      "category": "generated-evidence",
+      "bytes": 6126,
+      "sha256": "e2f02905b80c0344be5546c7d44f6513f87d00317631442b25605032dc7358a2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-architecture.log",
+      "category": "generated-evidence",
+      "bytes": 1299,
+      "sha256": "84a015d8e575a8f9702edd7fd0b5b3a4ffc091d26e242d4cfc6400182de2add7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-artifacts.json",
+      "category": "generated-evidence",
+      "bytes": 292,
+      "sha256": "1656ba3215643678f17840176dcef1ff7c5e6e8697ec2b84b5309620f5fdda52"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-baseline-reuse.json",
+      "category": "generated-evidence",
+      "bytes": 6669,
+      "sha256": "d18b9b5495ccd002e3be3146282c71f0a402a7e6b8ec503a9a11773056a52c06"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-benchmark-summary.json",
+      "category": "generated-evidence",
+      "bytes": 39957,
+      "sha256": "b47c800bb12ab7dd79f8764bf73ff03384338e603ab1461c7f7d60ae9ca83447"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-boundary-final-tests.log",
+      "category": "generated-evidence",
+      "bytes": 713,
+      "sha256": "adc771e097dede3bbdcc762bfef2a7a67d4bb37785db78c92c09e682832f0fb7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-browser-accepted.log",
+      "category": "generated-evidence",
+      "bytes": 631,
+      "sha256": "42dabcb8e9fca200d0d05cbf6b4fb5da79e28a4e45cebccbbce5beb28b32d9b6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-browser.json.gz",
+      "category": "generated-evidence",
+      "bytes": 15455,
+      "sha256": "6afda2186ceadb3505a8cd5a60cf4f29e8d1fe41f2b6a02594f8126a4b6ca6b4"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-browser.log",
+      "category": "generated-evidence",
+      "bytes": 1327,
+      "sha256": "ee75806f2faafff7f0618ee2d0592741dd457da29a1d7198216016b933787e07"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-cli-gallery-collinear.log",
+      "category": "generated-evidence",
+      "bytes": 1421,
+      "sha256": "2662eabc05c6f618103987a22d420b4b4d5c6a72c821181eb66e05480b2437c8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-cli-gallery-orthogroup.log",
+      "category": "generated-evidence",
+      "bytes": 3361,
+      "sha256": "753745f4ca6a7ea850dcf1e6cdbf587c4154cd7a018f6a98f9645e26f2954c3d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-cli-install.log",
+      "category": "generated-evidence",
+      "bytes": 729,
+      "sha256": "e7c04b86ef845ee7c77f017fc7e7854fd725bb4908d94b9d98c34f38851ceace"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-cli-released-v2.log",
+      "category": "generated-evidence",
+      "bytes": 1426,
+      "sha256": "93cf3ea5e3777366d3db7678c7fdafccd01edcd2f53b992604d76ff16cdd7233"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-cli.json",
+      "category": "generated-evidence",
+      "bytes": 2870,
+      "sha256": "3a6b79f44ac37fb974fd12ea8c633de9683ba50a7cff783b01c936adbc5f0195"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-cli.log",
+      "category": "generated-evidence",
+      "bytes": 2016,
+      "sha256": "bc68775153890767ea065d81d55e86fc92ab1569a213ece3ba61edde97ba7410"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-commands.json",
+      "category": "generated-evidence",
+      "bytes": 4262,
+      "sha256": "7762c88ea8e195316378cceaeb8d7fd935a3657b381ee9eb812168040dbf0d23"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61851,
+      "sha256": "8541aa035d3bdee7699b649f04bc99ee1b37a78b217f45a7438216c1033c9b58"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-off-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61826,
+      "sha256": "520650780a7e370534d20e3dfcf4b9e6c6df209f1f01710369efb23c3ecbca97"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-off-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61896,
+      "sha256": "96388db637fb032c6980a7a3ec508af376273414468b05c3436bb5623a3632ec"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 61934,
+      "sha256": "b54af61560221c2d22f966f6b10887b95b78b9db7dc9994050e02658bbfe3495"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-vibrio-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65777,
+      "sha256": "a477700ad48a5d148bbdb4715d8fa051c77acd79ad32523ec9f299ea97d33a5f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-vibrio-off-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65729,
+      "sha256": "6eae4d169dc34f0534bd5fd8ad84c754b66edd3b39752d63c48dec9bbdeef059"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-vibrio-off-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65799,
+      "sha256": "95be68552ef78575dce3b51021215177dc43926f63d285919f1c215d4e1791ff"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-collinear-vibrio-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 65851,
+      "sha256": "95d1d02800afe19e49e85ca52dded9fad346a43b41790f2a25f62412ed130e20"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-orthogroup-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62532,
+      "sha256": "5fa12c9077f0c2d65c6944cedd156dc997052131faed0b7bcbd60e4431951d1d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-orthogroup-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62601,
+      "sha256": "ccc5b14125a388a8cec528e18f57d3c8ed885b3c1c6a10a83e6758bfcc5a6139"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-orthogroup-unbounded-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62560,
+      "sha256": "a8c6bd161dff4ca64e29ce70b56356bf932c69138a4d18fbc2b474b496045ae2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-current-gallery-orthogroup-unbounded-timing.json.gz",
+      "category": "generated-evidence",
+      "bytes": 62621,
+      "sha256": "d7f57628b12fb03c3c5a8a521f6d13f5505a9451fbcaec6e528fdce8f8f56b63"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-limits-corrected-tests.log",
+      "category": "generated-evidence",
+      "bytes": 583,
+      "sha256": "e2fdea75313990017c1927cda929cf713b73f3d0a68e6694765f1b0c8d72c349"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-limits-tests.log",
+      "category": "generated-evidence",
+      "bytes": 3890,
+      "sha256": "176a8d0f928e61d11f6312bf8a0602f0e09dde78979d3f14b209caa16f90728c"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-measurement-commands.jsonl",
+      "category": "generated-evidence",
+      "bytes": 79698,
+      "sha256": "9ef9dde1cdebace4bcefdc74911a1964eaf39c4a648a6aade21459f5fece6ce7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-memory.log",
+      "category": "generated-evidence",
+      "bytes": 940,
+      "sha256": "6e9cfb6349963cb7057aa8a84717244bc411a4b410c9d1df365a6e78bbe2f18f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-native-tests.log",
+      "category": "generated-evidence",
+      "bytes": 2785,
+      "sha256": "62ece4f143c26fe598db4da0204d399835af56a79d5d0de2d23d7196f41b7b0f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-ruff-final.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-stages.json",
+      "category": "generated-evidence",
+      "bytes": 22468,
+      "sha256": "f4164d3612c8847fb3bb3490354c77eaa9157897aa738d99f66a8e06df0ad795"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-start.json",
+      "category": "generated-evidence",
+      "bytes": 1348,
+      "sha256": "9e14b84b0847bc00e37a27976b81d933f44a4fe45ceec004a0fd5e5e8701b76e"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-structural.json",
+      "category": "generated-evidence",
+      "bytes": 2067,
+      "sha256": "7a35d597e6c60cb9d2859d9047d781b0fe669b5366f1a1da580db44a4cb1cfa6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-timing.log",
+      "category": "generated-evidence",
+      "bytes": 940,
+      "sha256": "18eb015bdf1e233a2bd9157d9cc665708e67a34496af8bfe838b20de8bcb910f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-typed-reference-tests.log",
+      "category": "generated-evidence",
+      "bytes": 1969,
+      "sha256": "202be42012faabf882bc9b75afa2160058d542d6670f06381853b1f215f47a20"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-8-wheel.log",
+      "category": "generated-evidence",
+      "bytes": 740,
+      "sha256": "1f77820cab594055cf8c4ec6d364081a29836af4c92f1a4418a1f4421530b3dd"
+    },
+    {
+      "path": "gbdraw/analysis/collinearity_units.py",
+      "category": "production",
+      "bytes": 11500,
+      "sha256": "730c1354e98fcc539d7d395cc0c06f1fb3bbd4f71f57f9be211e2d9c8dc7ad8f"
+    },
+    {
+      "path": "gbdraw/analysis/protein_colinearity.py",
+      "category": "production",
+      "bytes": 268758,
+      "sha256": "816111a76a99755034a3e4e5479230ba6f643cf810c576503f5d0dba267f453a"
+    },
+    {
+      "path": "tests/prototypes/collinearity_units_s077.py.gz",
+      "category": "tests",
+      "bytes": 2839,
+      "sha256": "0146874fa3c3e61478fd44bb36e47a187bc0648d30b2dd2aac7942b6313fea2f"
+    },
+    {
+      "path": "tests/prototypes/protein_colinearity_s077.py.gz",
+      "category": "tests",
+      "bytes": 49697,
+      "sha256": "6c3444a546a3c97188b7af3d903221d20887e456207ed8802a8e82db0a073bd8"
+    },
+    {
+      "path": "tests/prototypes/protein_s078.py",
+      "category": "tests",
+      "bytes": 1783,
+      "sha256": "1f9a66ae84becdc04c8849513fb2dff694240009bfcfadc4387c2dded5e762b7"
+    },
+    {
+      "path": "tests/run_protein_local_browser_acceptance.py",
+      "category": "tests",
+      "bytes": 14282,
+      "sha256": "2530f4b17dbcea1f9eefee1a518b94044357f9348d75de8d86b38432a3aa5239"
+    },
+    {
+      "path": "tests/run_protein_local_cli_acceptance.py",
+      "category": "tests",
+      "bytes": 5212,
+      "sha256": "b9924daca4d3504eb613b1a0ec9afed181bf81598a0439a41375c393ae0d98b3"
+    },
+    {
+      "path": "tests/test_protein_local_reductions.py",
+      "category": "tests",
+      "bytes": 21322,
+      "sha256": "16e2661cec3e21d26b02f8b5cdd11381bc606da79720aa4925a149a2a4f08ee8"
+    },
+    {
+      "path": "tests/test_protein_s078.py",
+      "category": "tests",
+      "bytes": 7297,
+      "sha256": "a7e43fc0693551d63490a2f80bedea91166183313a8485e9227cc73c0ae89edb"
+    }
+  ],
+  "categoryCounts": {
+    "documentation": 3,
+    "generated-evidence": 46,
+    "production": 2,
+    "tests": 7
+  },
+  "proposedCommitTitle": "Reduce temporary HSP, group and unit construction work",
+  "englishSummary": "Remove redundant row copies, member-rank lookups and temporary group/unit containers. Preserve tested S07.7 results and Session replay. Record that practical performance improvement and adoption remain unestablished.",
+  "additionalOptimization": "CLOSED_BY_USER: further speedup, attribution investigation and performance adoption experiments are not outstanding S08 tasks.",
+  "handoff": "User requested the next S08 session prompt, then clarified that the extra request to make it faster no longer needs to be pursued. No S08 tests or benchmarks run in this handoff turn."
+}

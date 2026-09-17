@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `5`
+- Contract revision: `6`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -24,7 +24,7 @@ Status: active Product authority
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
-  `PD-OI-021`, `PD-OI-022`
+  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -45,6 +45,12 @@ Status: active Product authority
   reset on every switch. The maintainer explicitly requested these decisions
   and contracts be recorded to prevent regression. Earlier approvals above
   retain their original scope; this amendment records the new instructions.
+- Revision 6 addition: `PD-OI-023`, selected by `satoshikawato` on
+  `2026-09-15` through the complete `PRODUCT_DECISION` response for
+  `protein-comparison.path-representation`, scenario revision `1`.
+  Only PATH-B and the supplied preservation, retirement and risk terms are
+  recorded. The earlier decisions retain their scope. Dependent runtime still
+  requires this authority on its base; this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -723,6 +729,38 @@ corrected. Passing evidence does not make incorrect behavior normative.
 - Decision source: Explicit maintainer request to fix the reported cancellation
   cache behavior and add Product Decisions/Contracts against regression.
 - Owner and decision date: `satoshikawato`, `2026-09-14`.
+
+### PD-OI-023: Lossless protein paths during normal generation and saving
+
+- Concern key: `protein-comparison.path-representation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `PATH-B / lossless-graph`
+- Normative outcome: 通常の生成・保存では、全経路を再現できるgraphを保持する。
+  図と解析情報、全経路の内容・順序・ID・shared情報を維持し、対応済み旧ファイルを
+  読み込めることと、明示的な旧tuple形式での全経路取得を維持する。
+  通常のAPI戻り値と保存形式が常に全経路配列を含む仕様は廃止してよい。
+- Decision source: The complete maintainer response to S02 Decision Pack
+  revision `1`, prepared at `c46e55d14b6b8fae9e6778a7f04183a4d321185f`.
+  The receipt below preserves every supplied field without translating or
+  extending its rationale, retirement, risk, owner or date. It is a reviewable
+  serialization within this existing authority document, not a new decision
+  store or evaluator. Implementation names and schema allocations in the S02
+  design remain engineering proposals; this receipt does not freeze them.
+
+```json
+{
+  "concern": "protein-comparison.path-representation",
+  "scenarioRevision": 1,
+  "choice": "PATH-B / lossless-graph",
+  "rationale": "解析情報を維持しながら、通常の生成・保存での経路展開コストを減らしたい。",
+  "mustPreserve": "図と解析情報、全経路の内容・順序・ID・shared情報、対応済み旧ファイルの読み込み、明示的な旧tuple形式での全経路取得。",
+  "mayRetire": "通常のAPI戻り値と保存形式が、常に全経路配列を含む仕様。",
+  "acceptedResidualRisk": "旧API依存コードの修正、新形式を旧バージョンで読めないこと、明示的な全量取得には大きな時間・メモリが必要になり得ること。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-15"
+}
+```
 
 ## Acceptance contract catalog
 

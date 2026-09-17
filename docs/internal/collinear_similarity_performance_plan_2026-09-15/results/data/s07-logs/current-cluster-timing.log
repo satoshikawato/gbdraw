@@ -1,0 +1,10 @@
+timing: merge-300
+  merge-300/cluster
+timing: merge-600
+  merge-600/cluster
+timing: merge-1200
+  merge-1200/cluster
+timing: merge-edges
+  merge-edges/max_conflicts_0
+  merge-edges/max_conflicts_1
+  merge-edges/reverse

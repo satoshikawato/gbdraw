@@ -1,0 +1,99 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "currentHead": "d7695a620e59f18a03409afc03b75f44770d78f1",
+  "semanticOnly": false,
+  "comparisons": {
+    "unrelated-200/support_scan": {
+      "semanticEqual": true,
+      "timeDeltaPct": -98.83100394020202,
+      "decision": "pass"
+    },
+    "unrelated-800/support_scan": {
+      "semanticEqual": true,
+      "timeDeltaPct": -99.69382625164451,
+      "decision": "pass"
+    },
+    "giant-200/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -10.8565341213274,
+      "decision": "pass"
+    },
+    "giant-800/selector": {
+      "semanticEqual": true,
+      "timeDeltaPct": -14.434821726923719,
+      "decision": "pass"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.1059201790300843,
+      "decision": "pass"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -2.323788142562977,
+      "decision": "pass"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": 2.0611314894505517,
+      "decision": "pass"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -74.84048736560092,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -91.65985928571362,
+      "decision": "pass"
+    },
+    "gallery-collinear/display_tables": {
+      "semanticEqual": true,
+      "timeDeltaPct": 1.5678313521489962,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": 1.3114187630654417,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.4468085304894842,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.7046366746491737,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.8590099828379882,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -59.52112752444685,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -87.53238305546883,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/display_tables": {
+      "semanticEqual": true,
+      "timeDeltaPct": 20.444913654757645,
+      "decision": "regression"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": -0.4448298158280295,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 1
+}

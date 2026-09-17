@@ -1,0 +1,12 @@
+{
+  "userInstruction": "Benchmarkは後でいいからまだ削れるところはないの？",
+  "benchmarkDisposition": "deferred by explicit user instruction",
+  "additionalSameOwnerChanges": [
+    "Use setdefault for first unique-alias registration",
+    "Reuse known absent locus ID in auto CDS fallback",
+    "Skip three representative aliases already added before the member loop"
+  ],
+  "finalProductionSha256": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da",
+  "earlierMeasuredProductionSha256": "2c8d68a3b7b8cd079c55e72173177cbebd5c66b9a6607e5481f8b7bd61457c8c",
+  "earlierMeasurementsAreFinalCandidateMeasurements": false
+}

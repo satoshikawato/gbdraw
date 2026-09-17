@@ -1,0 +1,24 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: one validation per getter hit
++ actual - expected
+
+  {
++   manifest: 2,
++   tsv: 2
+-   manifest: 1,
+-   tsv: 1
+  }
+
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s08-raw-validation-20260917/tests/web/losat-cache.test.mjs:367:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: { manifest: 2, tsv: 2 },
+  expected: { manifest: 1, tsv: 1 },
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.8.2

@@ -32,6 +32,7 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
@@ -42,6 +43,9 @@ from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+# Historical internal import; edge identity is owned by ortholog_paths.
+_edge_id = ortholog_edge_id
 
 logger = logging.getLogger(__name__)
 
@@ -358,17 +362,6 @@ class OrthologEdge:
 
 
 @dataclass(frozen=True)
-class OrthologPath:
-    """Traceable ortholog/co-ortholog path inside one broad orthogroup."""
-
-    orthogroup_id: str
-    path_id: str
-    protein_ids: tuple[str, ...]
-    edge_ids: tuple[str, ...]
-    shared_protein_ids: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class OrthogroupNameCandidate:
     """Annotation-derived display-name candidate for an orthogroup."""
 
@@ -399,11 +392,66 @@ class OrthogroupResult:
 
 
 @dataclass(frozen=True)
+class OrthogroupGraphResult:
+    """Orthogroups with compact lossless path indexes (the default result)."""
+
+    orthogroups: dict[str, list[OrthogroupMember]]
+    member_by_protein_id: dict[str, OrthogroupMember]
+    names_by_orthogroup_id: dict[str, str] = field(default_factory=dict)
+    descriptions_by_orthogroup_id: dict[str, str] = field(default_factory=dict)
+    name_candidates_by_orthogroup_id: dict[str, list[OrthogroupNameCandidate]] = field(default_factory=dict)
+    confidence_by_orthogroup_id: dict[str, str] = field(default_factory=dict)
+    rbh_orthogroups: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    ortholog_edges_by_orthogroup_id: dict[str, tuple[OrthologEdge, ...]] = field(default_factory=dict)
+    path_indexes_by_orthogroup_id: dict[str, OrthologPathCollection] = field(default_factory=dict)
+    related_edges_by_orthogroup_id: dict[str, tuple[OrthologEdge, ...]] = field(default_factory=dict)
+    scope_by_orthogroup_id: dict[str, OrthogroupScope] = field(default_factory=dict)
+    source_record_index_by_orthogroup_id: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        for group_id, index in self.path_indexes_by_orthogroup_id.items():
+            if not isinstance(index, OrthologPathCollection) or group_id != index.orthogroup_id:
+                raise ValidationError("Orthogroup path index has an inconsistent group ID")
+            index.validate_edges(self.ortholog_edges_by_orthogroup_id.get(group_id, ()))
+
+
+def _orthogroup_metadata_fields(result):
+    return {name: getattr(result, name) for name in OrthogroupResult.__dataclass_fields__
+            if name != "ortholog_paths_by_orthogroup_id"}
+
+
+def compact_ortholog_paths(result: OrthogroupResult | OrthogroupGraphResult) -> OrthogroupGraphResult:
+    """Adapt a legacy corpus once, without reconstructing its edge closure."""
+    if isinstance(result, OrthogroupGraphResult):
+        return result
+    return OrthogroupGraphResult(
+        **_orthogroup_metadata_fields(result),
+        path_indexes_by_orthogroup_id={
+            group_id: OrthologPathCollection(group_id, "explicit", paths=paths)
+            for group_id, paths in result.ortholog_paths_by_orthogroup_id.items()
+        },
+    )
+
+
+def materialize_ortholog_paths(result: OrthogroupResult | OrthogroupGraphResult) -> OrthogroupResult:
+    """Explicit exhaustive legacy output; time and memory grow with all paths."""
+    if isinstance(result, OrthogroupResult):
+        return result
+    return OrthogroupResult(
+        **_orthogroup_metadata_fields(result),
+        ortholog_paths_by_orthogroup_id={
+            group_id: tuple(index.iter_paths())
+            for group_id, index in result.path_indexes_by_orthogroup_id.items()
+        },
+    )
+
+
+@dataclass(frozen=True)
 class ProteinBlastpResult:
     """LOSATP blastp display comparisons plus optional orthogroup metadata."""
 
     comparisons: list[DataFrame]
-    orthogroups: OrthogroupResult | None = None
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
 
 
 @dataclass(frozen=True)
@@ -419,7 +467,7 @@ class ProteinBlastpRuntime:
 class OrthogroupEdgeSelectionResult:
     """Orthogroup selection plus separate adjacent anchor and display edges."""
 
-    orthogroups: OrthogroupResult
+    orthogroups: OrthogroupResult | OrthogroupGraphResult
     all_edges_by_pair: dict[tuple[int, int], DataFrame]
     adjacent_anchor_edges_by_pair: dict[tuple[int, int], DataFrame]
     adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame]
@@ -3368,12 +3416,12 @@ def _select_member_candidate_hits_per_query(
 
     if max_hits is None:
         _validate_comparison_columns(hits)
-        return hits.copy().reset_index(drop=True)
+        return hits.reset_index(drop=True)
     selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
     if selected_pairs.empty:
         return hits.iloc[0:0].copy()
-    pair_index = pd.MultiIndex.from_frame(selected_pairs[["query", "subject"]])
-    hit_index = pd.MultiIndex.from_frame(hits[["query", "subject"]])
+    pair_index = pd.MultiIndex.from_arrays([selected_pairs["query"], selected_pairs["subject"]])
+    hit_index = pd.MultiIndex.from_arrays([hits["query"], hits["subject"]])
     return hits.loc[hit_index.isin(pair_index)].reset_index(drop=True)
 
 
@@ -3387,22 +3435,20 @@ def select_reciprocal_best_hits(hits: DataFrame) -> DataFrame:
     coerced_hits = _coerce_outfmt6_numeric_columns(hits)
     query_best = (
         _sort_hits_for_query_best(coerced_hits)
-        .drop_duplicates(["query", "subject"], keep="first")
         .drop_duplicates("query", keep="first")
     )
     subject_best = (
         _sort_hits_for_subject_best(coerced_hits)
-        .drop_duplicates(["query", "subject"], keep="first")
         .drop_duplicates("subject", keep="first")
     )
     reciprocal_pairs = {
-        (str(row.query), str(row.subject))
-        for row in subject_best.itertuples(index=False)
+        (str(query), str(subject))
+        for query, subject in zip(subject_best["query"], subject_best["subject"])
     }
     return query_best.loc[
         [
-            (str(row.query), str(row.subject)) in reciprocal_pairs
-            for row in query_best.itertuples(index=False)
+            (str(query), str(subject)) in reciprocal_pairs
+            for query, subject in zip(query_best["query"], query_best["subject"])
         ]
     ].reset_index(drop=True)
 
@@ -3418,7 +3464,6 @@ def select_best_hits_per_query(
 
     return (
         _sort_hits_for_query_best(_coerce_outfmt6_numeric_columns(hits))
-        .drop_duplicates(["query", "subject"], keep="first")
         .drop_duplicates("query", keep="first")
         .reset_index(drop=True)
     )
@@ -3439,12 +3484,12 @@ def select_reciprocal_best_hit_edges(
     forward_best = select_best_hits_per_query(forward_hits)
     reverse_best = select_best_hits_per_query(reverse_hits)
     reverse_best_by_query = {
-        str(row.query): str(row.subject)
-        for row in reverse_best.itertuples(index=False)
+        str(query): str(subject)
+        for query, subject in zip(reverse_best["query"], reverse_best["subject"])
     }
     keep_mask = [
-        reverse_best_by_query.get(str(row.subject)) == str(row.query)
-        for row in forward_best.itertuples(index=False)
+        reverse_best_by_query.get(str(subject)) == str(query)
+        for query, subject in zip(forward_best["query"], forward_best["subject"])
     ]
     return forward_best.loc[keep_mask].reset_index(drop=True)
 
@@ -3461,7 +3506,7 @@ def _select_normalized_fit_rows(
 ) -> list[tuple[float, float]]:
     if normalized_hits.empty:
         return []
-    sorted_hits = normalized_hits.sort_values(
+    sorted_hits = normalized_hits[["length_product", "query", "subject", "bitscore"]].sort_values(
         ["length_product", "query", "subject"],
         ascending=[True, True, True],
         kind="mergesort",
@@ -3611,6 +3656,19 @@ def _raw_hsp_representative_rank(row: object, row_index: int) -> tuple[float, fl
     )
 
 
+@dataclass(slots=True)
+class _HspPairAccumulator:
+    query_length: int
+    subject_length: int
+    representative_row: object = None
+    representative_rank: tuple[float | int, ...] = ()
+    rank_error: ValueError | OverflowError | None = None
+    query_intervals: list[tuple[int, int]] = field(default_factory=list)
+    subject_intervals: list[tuple[int, int]] = field(default_factory=list)
+    hsp_count: int = 0
+    total_alignment_length: int = 0
+
+
 def _aggregate_hsps_by_protein_pair(
     hits: DataFrame,
     protein_map: Mapping[str, CdsProtein],
@@ -3619,8 +3677,12 @@ def _aggregate_hsps_by_protein_pair(
         columns = tuple(hits.columns) if hits is not None else tuple(COMPARISON_COLUMNS)
         return _empty_normalized_hit_table(columns)
 
-    rows: list[dict[str, object]] = []
-    for (query_id, subject_id), group in hits.groupby(["query", "subject"], sort=False):
+    # Table-level grouping retains pandas' ID coercion, missing-ID handling
+    # and pair order. It does not construct a DataFrame for each pair.
+    pairs: dict[tuple[object, object], _HspPairAccumulator] = {}
+    for (query_id, subject_id), hsp_count in hits.groupby(
+        ["query", "subject"], sort=False, observed=True,
+    ).size().items():
         query_protein = protein_map.get(str(query_id))
         subject_protein = protein_map.get(str(subject_id))
         if query_protein is None or subject_protein is None:
@@ -3629,65 +3691,83 @@ def _aggregate_hsps_by_protein_pair(
         subject_length = int(subject_protein.protein_length)
         if query_length <= 0 or subject_length <= 0:
             continue
-        hsp_rows = list(group.itertuples(index=False))
-        if not hsp_rows:
-            continue
-        representative_index, representative_row = min(
-            enumerate(hsp_rows),
-            key=lambda item: _raw_hsp_representative_rank(item[1], item[0]),
+        pairs[(query_id, subject_id)] = _HspPairAccumulator(
+            query_length, subject_length, hsp_count=int(hsp_count),
         )
+
+    for row_index, hsp_row in enumerate(hits.itertuples(index=False)):
+        accumulator = pairs.get((hsp_row.query, hsp_row.subject))
+        if accumulator is None or accumulator.rank_error is not None:
+            continue
+        try:
+            rank = _raw_hsp_representative_rank(hsp_row, row_index)
+        except (ValueError, OverflowError) as error:
+            # Direct private callers can bypass numeric validation. Preserve
+            # the old first-pair error order even when HSPs are interleaved.
+            accumulator.rank_error = error
+            continue
+        if accumulator.representative_row is None or rank < accumulator.representative_rank:
+            accumulator.representative_row = hsp_row
+            accumulator.representative_rank = rank
+
+        alignment_length = _row_float(hsp_row, "alignment_length", 0.0)
+        if math.isfinite(alignment_length) and alignment_length > 0:
+            accumulator.total_alignment_length += int(alignment_length)
+        query_interval = _coverage_interval_from_hsp(
+            getattr(hsp_row, "qstart", None),
+            getattr(hsp_row, "qend", None),
+            accumulator.query_length,
+        )
+        if query_interval is not None:
+            accumulator.query_intervals.append(query_interval)
+        subject_interval = _coverage_interval_from_hsp(
+            getattr(hsp_row, "sstart", None),
+            getattr(hsp_row, "send", None),
+            accumulator.subject_length,
+        )
+        if subject_interval is not None:
+            accumulator.subject_intervals.append(subject_interval)
+
+    rows: list[dict[str, object]] = []
+    # Dict insertion order retains pair appearance; global row ranks retain
+    # pair-local order on complete ties. Interval sorting remains in the helper.
+    for accumulator in pairs.values():
+        if accumulator.rank_error is not None:
+            raise accumulator.rank_error
+        query_length = accumulator.query_length
+        subject_length = accumulator.subject_length
+        representative_row = accumulator.representative_row
         bitscore = _row_float(representative_row, "bitscore", 0.0)
         representative_alignment_length = int(_row_float(representative_row, "alignment_length", 0.0))
         if bitscore <= 0.0 or representative_alignment_length <= 0:
             continue
 
-        query_intervals: list[tuple[int, int]] = []
-        subject_intervals: list[tuple[int, int]] = []
-        total_hsp_alignment_length = 0
-        for hsp_row in hsp_rows:
-            alignment_length = _row_float(hsp_row, "alignment_length", 0.0)
-            if math.isfinite(alignment_length) and alignment_length > 0:
-                total_hsp_alignment_length += int(alignment_length)
-            query_interval = _coverage_interval_from_hsp(
-                getattr(hsp_row, "qstart", None),
-                getattr(hsp_row, "qend", None),
-                query_length,
-            )
-            if query_interval is not None:
-                query_intervals.append(query_interval)
-            subject_interval = _coverage_interval_from_hsp(
-                getattr(hsp_row, "sstart", None),
-                getattr(hsp_row, "send", None),
-                subject_length,
-            )
-            if subject_interval is not None:
-                subject_intervals.append(subject_interval)
-
-        query_covered_length = _covered_length(query_intervals)
-        subject_covered_length = _covered_length(subject_intervals)
+        query_covered_length = _covered_length(accumulator.query_intervals)
+        subject_covered_length = _covered_length(accumulator.subject_intervals)
         query_coverage = min(1.0, float(query_covered_length) / float(query_length))
         subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
         min_hit_coverage = min(query_coverage, subject_coverage)
 
-        record = dict(representative_row._asdict())
+        record = representative_row._asdict()
         record.update(
             {
                 "query_length": query_length,
                 "subject_length": subject_length,
                 "length_product": float(query_length * subject_length),
-                "hsp_count": int(len(hsp_rows)),
+                "hsp_count": int(accumulator.hsp_count),
                 "query_covered_length": int(query_covered_length),
                 "subject_covered_length": int(subject_covered_length),
                 "query_coverage": query_coverage,
                 "subject_coverage": subject_coverage,
                 "min_coverage": min_hit_coverage,
                 "representative_alignment_length": int(representative_alignment_length),
-                "total_hsp_alignment_length": int(total_hsp_alignment_length),
+                "total_hsp_alignment_length": int(accumulator.total_alignment_length),
                 "coverage_source": "hsp_union",
             }
         )
         rows.append(record)
 
+    pairs.clear()
     if not rows:
         return _empty_normalized_hit_table(tuple(hits.columns))
     return pd.DataFrame.from_records(rows)
@@ -4089,14 +4169,6 @@ def _build_orthogroup_name_metadata(
     )
 
 
-def _edge_id(edge: OrthologEdge) -> str:
-    return (
-        f"{edge.orthogroup_id}:"
-        f"{edge.query_record_index}:{edge.query_protein_id}->"
-        f"{edge.subject_record_index}:{edge.subject_protein_id}:"
-        f"{edge.edge_kind}"
-    )
-
 
 def _make_orthogroup_member(
     orthogroup_id: str,
@@ -4143,7 +4215,7 @@ def _orthogroup_result_from_member_ids(
     group_order: Sequence[str],
     rbh_orthogroups: Mapping[str, Sequence[str]],
     ortholog_edges_by_orthogroup_id: Mapping[str, Sequence[OrthologEdge]],
-    ortholog_paths_by_orthogroup_id: Mapping[str, Sequence[OrthologPath]],
+    path_indexes_by_orthogroup_id: Mapping[str, OrthologPathCollection],
     related_edges_by_orthogroup_id: Mapping[str, Sequence[OrthologEdge]],
     member_roles_by_protein_id: Mapping[str, OrthogroupMemberRole] | None = None,
     member_confidence_by_protein_id: Mapping[str, OrthogroupMemberConfidence] | None = None,
@@ -4153,7 +4225,7 @@ def _orthogroup_result_from_member_ids(
     second_best_core_support_by_protein_id: Mapping[str, float] | None = None,
     scope_by_orthogroup_id: Mapping[str, OrthogroupScope] | None = None,
     source_record_index_by_orthogroup_id: Mapping[str, int] | None = None,
-) -> OrthogroupResult:
+) -> OrthogroupGraphResult:
     orthogroups: dict[str, list[OrthogroupMember]] = {}
     member_by_protein_id: dict[str, OrthogroupMember] = {}
     ordered_group_ids = [
@@ -4200,7 +4272,7 @@ def _orthogroup_result_from_member_ids(
         confidence_by_orthogroup_id,
     ) = _build_orthogroup_name_metadata(orthogroups)
 
-    return OrthogroupResult(
+    return OrthogroupGraphResult(
         orthogroups=orthogroups,
         member_by_protein_id=member_by_protein_id,
         names_by_orthogroup_id=names_by_orthogroup_id,
@@ -4215,10 +4287,7 @@ def _orthogroup_result_from_member_ids(
             str(key): tuple(value)
             for key, value in ortholog_edges_by_orthogroup_id.items()
         },
-        ortholog_paths_by_orthogroup_id={
-            str(key): tuple(value)
-            for key, value in ortholog_paths_by_orthogroup_id.items()
-        },
+        path_indexes_by_orthogroup_id=dict(path_indexes_by_orthogroup_id),
         related_edges_by_orthogroup_id={
             str(key): tuple(value)
             for key, value in related_edges_by_orthogroup_id.items()
@@ -4283,120 +4352,13 @@ def _make_ortholog_edge(
     )
 
 
-def _path_sort_key(
-    protein_ids: Sequence[str],
-    protein_map: Mapping[str, CdsProtein],
-) -> tuple[tuple[int, int, int, str], ...]:
-    return tuple(_protein_sort_key(protein_map[protein_id]) for protein_id in protein_ids)
-
-
-def _build_ortholog_paths(
-    edges_by_group: Mapping[str, Sequence[OrthologEdge]],
-    protein_map: Mapping[str, CdsProtein],
-) -> tuple[dict[str, tuple[OrthologEdge, ...]], dict[str, tuple[OrthologPath, ...]]]:
-    updated_edges_by_group: dict[str, tuple[OrthologEdge, ...]] = {}
-    paths_by_group: dict[str, tuple[OrthologPath, ...]] = {}
+def _build_ortholog_path_indexes(edges_by_group, protein_map):
+    updated, indexes = {}, {}
     for group_id, edges in edges_by_group.items():
-        path_edges = [
-            edge
-            for edge in edges
-            if edge.edge_kind in {"rbh", "coortholog"}
-            and edge.query_protein_id in protein_map
-            and edge.subject_protein_id in protein_map
-        ]
-        if not path_edges:
-            updated_edges_by_group[group_id] = tuple(edges)
-            paths_by_group[group_id] = ()
-            continue
-        outgoing: dict[str, list[OrthologEdge]] = {}
-        incoming: dict[str, list[OrthologEdge]] = {}
-        for edge in path_edges:
-            outgoing.setdefault(edge.query_protein_id, []).append(edge)
-            incoming.setdefault(edge.subject_protein_id, []).append(edge)
-        for edge_list in outgoing.values():
-            edge_list.sort(
-                key=lambda edge: (
-                    edge.subject_record_index,
-                    _protein_sort_key(protein_map[edge.subject_protein_id]),
-                    _edge_id(edge),
-                )
-            )
-        nodes = set(outgoing).union(incoming)
-        start_nodes = [
-            node
-            for node in nodes
-            if node not in incoming
-        ] or list(nodes)
-        start_nodes.sort(key=lambda protein_id: _protein_sort_key(protein_map[protein_id]))
-
-        raw_paths: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
-
-        def walk(node: str, protein_path: tuple[str, ...], edge_path: tuple[str, ...]) -> None:
-            next_edges = outgoing.get(node, [])
-            if not next_edges:
-                if edge_path:
-                    raw_paths.append((protein_path, edge_path))
-                return
-            for edge in next_edges:
-                if edge.subject_protein_id in protein_path:
-                    if edge_path:
-                        raw_paths.append((protein_path, edge_path))
-                    continue
-                walk(
-                    edge.subject_protein_id,
-                    (*protein_path, edge.subject_protein_id),
-                    (*edge_path, _edge_id(edge)),
-                )
-
-        for start_node in start_nodes:
-            walk(start_node, (start_node,), ())
-
-        deduped: dict[tuple[str, ...], tuple[str, ...]] = {}
-        for protein_path, edge_path in raw_paths:
-            current = deduped.get(protein_path)
-            if current is None or edge_path < current:
-                deduped[protein_path] = edge_path
-        sorted_paths = sorted(
-            deduped.items(),
-            key=lambda item: (_path_sort_key(item[0], protein_map), item[1]),
-        )
-        protein_path_counts: dict[str, int] = {}
-        for protein_path, _edge_path in sorted_paths:
-            for protein_id in set(protein_path):
-                protein_path_counts[protein_id] = protein_path_counts.get(protein_id, 0) + 1
-
-        edge_path_id: dict[str, str] = {}
-        paths: list[OrthologPath] = []
-        for path_index, (protein_path, edge_path) in enumerate(sorted_paths, start=1):
-            path_id = f"{group_id}.path_{path_index}"
-            for edge_id in edge_path:
-                edge_path_id.setdefault(edge_id, path_id)
-            shared_protein_ids = tuple(
-                sorted(
-                    (
-                        protein_id
-                        for protein_id in protein_path
-                        if protein_path_counts.get(protein_id, 0) > 1
-                    ),
-                    key=lambda protein_id: _protein_sort_key(protein_map[protein_id]),
-                )
-            )
-            paths.append(
-                OrthologPath(
-                    orthogroup_id=group_id,
-                    path_id=path_id,
-                    protein_ids=tuple(protein_path),
-                    edge_ids=tuple(edge_path),
-                    shared_protein_ids=shared_protein_ids,
-                )
-            )
-
-        updated_edges_by_group[group_id] = tuple(
-            replace(edge, path_id=edge_path_id.get(_edge_id(edge), edge.path_id))
-            for edge in edges
-        )
-        paths_by_group[group_id] = tuple(paths)
-    return updated_edges_by_group, paths_by_group
+        index = OrthologPathCollection.from_edges(group_id, edges, protein_map)
+        updated[group_id] = tuple(replace(edge, path_id=index.first_path_id(edge)) for edge in edges)
+        indexes[group_id] = index
+    return updated, indexes
 
 
 def _anchor_core_hit_rank(
@@ -4456,22 +4418,20 @@ def _dedupe_anchor_core_directional_rows(
     return best_by_direction
 
 
-def _best_rows_by_query_target_record(
-    best_by_direction: Mapping[tuple[str, str], object],
+def _best_row_by_query_target_record(
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
     protein_map: Mapping[str, CdsProtein],
-) -> dict[tuple[str, int], list[object]]:
-    rows_by_query_record: dict[tuple[str, int], list[object]] = {}
-    for (query_id, subject_id), row in best_by_direction.items():
+) -> dict[tuple[str, int], object]:
+    best_by_query_record: dict[tuple[str, int], object] = {}
+    for (query_id, subject_id), row in ranked_direction_rows:
         query_protein = protein_map.get(query_id)
         subject_protein = protein_map.get(subject_id)
         if query_protein is None or subject_protein is None:
             continue
         if int(query_protein.record_index) == int(subject_protein.record_index):
             continue
-        rows_by_query_record.setdefault((query_id, int(subject_protein.record_index)), []).append(row)
-    for rows in rows_by_query_record.values():
-        rows.sort(key=lambda row: _anchor_core_hit_rank(row, protein_map))
-    return rows_by_query_record
+        best_by_query_record.setdefault((query_id, int(subject_protein.record_index)), row)
+    return best_by_query_record
 
 
 def _comparison_record_for_ids(row: object, query_id: str, subject_id: str) -> dict[str, object]:
@@ -4504,23 +4464,19 @@ def _anchor_core_edge_sort_key(
 def _select_anchor_core_edges(
     best_by_direction: Mapping[tuple[str, str], object],
     protein_map: Mapping[str, CdsProtein],
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
-    rows_by_query_record = _best_rows_by_query_target_record(best_by_direction, protein_map)
+    best_by_query_record = _best_row_by_query_target_record(ranked_direction_rows, protein_map)
     best_subject_by_query_record = {
-        key: str(rows[0].subject)
-        for key, rows in rows_by_query_record.items()
-        if rows
+        key: str(row.subject)
+        for key, row in best_by_query_record.items()
     }
     best_score_by_query_record = {
-        key: _normalized_score_from_row(rows[0])
-        for key, rows in rows_by_query_record.items()
-        if rows
+        key: _normalized_score_from_row(row)
+        for key, row in best_by_query_record.items()
     }
     selected_by_pair: dict[tuple[str, str], _AnchorCoreEvidenceEdge] = {}
-    for (query_id, subject_id), row in sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    ):
+    for (query_id, subject_id), row in ranked_direction_rows:
         query_protein = protein_map.get(query_id)
         subject_protein = protein_map.get(subject_id)
         if query_protein is None or subject_protein is None:
@@ -4628,6 +4584,7 @@ def _select_record_local_paralog_edges(
     thresholds: Mapping[str, _LocalThreshold],
     group_member_ids: Mapping[str, set[str]],
     group_by_protein: Mapping[str, str],
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
     _ = group_member_ids
     best_same_record_score_by_query = _best_same_record_unassigned_score_by_query(
@@ -4636,10 +4593,7 @@ def _select_record_local_paralog_edges(
         group_by_protein,
     )
     selected_by_pair: dict[tuple[str, str], _AnchorCoreEvidenceEdge] = {}
-    for (query_id, subject_id), row in sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    ):
+    for (query_id, subject_id), row in ranked_direction_rows:
         if query_id == subject_id:
             continue
         query_protein = protein_map.get(query_id)
@@ -4766,13 +4720,13 @@ def _record_local_support_by_member(
 
 def _record_local_component_has_competing_core_support(
     member_ids: Sequence[str],
-    group_member_ids: Mapping[str, set[str]],
-    best_by_direction: Mapping[tuple[str, str], object],
+    has_core_groups: bool,
+    evidence_by_protein: Mapping[str, Mapping[str, Sequence[tuple[str, str, object]]]],
     thresholds: Mapping[str, _LocalThreshold],
     protein_map: Mapping[str, CdsProtein],
     local_support_by_member: Mapping[str, float],
 ) -> bool:
-    if not group_member_ids:
+    if not has_core_groups:
         return False
     credible_core_ids: set[str] = set()
     for member_id in member_ids:
@@ -4781,13 +4735,12 @@ def _record_local_component_has_competing_core_support(
             return True
         candidates = [
             candidate
-            for group_id, existing_member_ids in group_member_ids.items()
+            for group_id, evidence in evidence_by_protein.get(member_id, {}).items()
             if (
                 candidate := _build_core_support_candidate(
                     member_id,
                     group_id,
-                    sorted(existing_member_ids, key=lambda item: _protein_sort_key(protein_map[item])),
-                    best_by_direction,
+                    evidence,
                     thresholds,
                     protein_map,
                 )
@@ -4986,63 +4939,81 @@ def _derive_anchor_core_thresholds(
     return thresholds
 
 
+def _index_core_support_evidence(
+    best_by_direction: Mapping[tuple[str, str], object],
+    group_by_protein: Mapping[str, str],
+) -> dict[str, dict[str, list[tuple[str, str, object]]]]:
+    """Snapshot incoming/outgoing evidence from unassigned proteins to members.
+
+    Rows are immutable normalized tuples. Buckets own only references and never
+    alias the mutable membership map; rebuild after membership expansion.
+    """
+    evidence_by_protein: dict[str, dict[str, list[tuple[str, str, object]]]] = {}
+    for (query_id, subject_id), row in best_by_direction.items():
+        query_group = group_by_protein.get(query_id)
+        subject_group = group_by_protein.get(subject_id)
+        if query_group is None and subject_group is not None:
+            evidence_by_protein.setdefault(query_id, {}).setdefault(subject_group, []).append(
+                (query_id, subject_id, row)
+            )
+        elif subject_group is None and query_group is not None:
+            evidence_by_protein.setdefault(subject_id, {}).setdefault(query_group, []).append(
+                (query_id, subject_id, row)
+            )
+    return evidence_by_protein
+
+
 def _best_evidence_between_protein_and_members(
     protein_id: str,
-    member_ids: Sequence[str],
-    best_by_direction: Mapping[tuple[str, str], object],
+    evidence: Sequence[tuple[str, str, object]],
     protein_map: Mapping[str, CdsProtein],
-    *,
-    same_record: bool,
-) -> _BestCoreEvidence:
+) -> tuple[_BestCoreEvidence, _BestCoreEvidence]:
+    """Reduce connected evidence once, returning same-record then cross-record."""
     protein = protein_map[protein_id]
-    best_support: tuple[float, object | None, str, str] = (0.0, None, "", "")
-    best_diagnostic: tuple[float, object | None, str, str] = (0.0, None, "", "")
-    member_set = set(member_ids)
-    for member_id in member_set:
-        if member_id == protein_id or member_id not in protein_map:
+    supports: list[tuple[float, object | None, str, str]] = [(0.0, None, "", "")] * 2
+    diagnostics: list[tuple[float, object | None, str, str]] = [(0.0, None, "", "")] * 2
+    for query_id, subject_id, row in evidence:
+        member_id = subject_id if query_id == protein_id else query_id
+        if member_id == protein_id or member_id not in protein_map or row is None:
             continue
-        member = protein_map[member_id]
-        is_same_record = int(protein.record_index) == int(member.record_index)
-        if is_same_record != bool(same_record):
+        record_kind = int(int(protein.record_index) != int(protein_map[member_id].record_index))
+        score = _normalized_score_from_row(row)
+        if score <= 0.0:
             continue
-        for query_id, subject_id in ((protein_id, member_id), (member_id, protein_id)):
-            row = best_by_direction.get((query_id, subject_id))
-            if row is None:
-                continue
-            score = _normalized_score_from_row(row)
-            if score <= 0.0:
-                continue
-            current_diagnostic_row = best_diagnostic[1]
-            if (
-                current_diagnostic_row is None
-                or score > best_diagnostic[0]
-                or (
-                    score == best_diagnostic[0]
-                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_diagnostic_row, protein_map)
-                )
-            ):
-                best_diagnostic = (float(score), row, query_id, subject_id)
-            if not _row_supports_membership(row):
-                continue
-            current_support_row = best_support[1]
-            if (
-                current_support_row is None
-                or score > best_support[0]
-                or (
-                    score == best_support[0]
-                    and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_support_row, protein_map)
-                )
-            ):
-                best_support = (float(score), row, query_id, subject_id)
-    return _BestCoreEvidence(
-        support_score=float(best_support[0]),
-        support_row=best_support[1],
-        support_query_id=best_support[2],
-        support_subject_id=best_support[3],
-        diagnostic_score=float(best_diagnostic[0]),
-        diagnostic_row=best_diagnostic[1],
-        diagnostic_query_id=best_diagnostic[2],
-        diagnostic_subject_id=best_diagnostic[3],
+        current_diagnostic_row = diagnostics[record_kind][1]
+        if (
+            current_diagnostic_row is None
+            or score > diagnostics[record_kind][0]
+            or (
+                score == diagnostics[record_kind][0]
+                and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_diagnostic_row, protein_map)
+            )
+        ):
+            diagnostics[record_kind] = (float(score), row, query_id, subject_id)
+        if not _row_supports_membership(row):
+            continue
+        current_support_row = supports[record_kind][1]
+        if (
+            current_support_row is None
+            or score > supports[record_kind][0]
+            or (
+                score == supports[record_kind][0]
+                and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_support_row, protein_map)
+            )
+        ):
+            supports[record_kind] = (float(score), row, query_id, subject_id)
+    return tuple(
+        _BestCoreEvidence(
+            support_score=float(support[0]),
+            support_row=support[1],
+            support_query_id=support[2],
+            support_subject_id=support[3],
+            diagnostic_score=float(diagnostic[0]),
+            diagnostic_row=diagnostic[1],
+            diagnostic_query_id=diagnostic[2],
+            diagnostic_subject_id=diagnostic[3],
+        )
+        for support, diagnostic in zip(supports, diagnostics)
     )
 
 
@@ -5057,24 +5028,12 @@ def _support_gap_ratio(best_support: float, second_support: float) -> float:
 def _build_core_support_candidate(
     protein_id: str,
     group_id: str,
-    member_ids: Sequence[str],
-    best_by_direction: Mapping[tuple[str, str], object],
+    evidence: Sequence[tuple[str, str, object]],
     thresholds: Mapping[str, _LocalThreshold],
     protein_map: Mapping[str, CdsProtein],
 ) -> _CoreSupportCandidate | None:
-    same_evidence = _best_evidence_between_protein_and_members(
-        protein_id,
-        member_ids,
-        best_by_direction,
-        protein_map,
-        same_record=True,
-    )
-    cross_evidence = _best_evidence_between_protein_and_members(
-        protein_id,
-        member_ids,
-        best_by_direction,
-        protein_map,
-        same_record=False,
+    same_evidence, cross_evidence = _best_evidence_between_protein_and_members(
+        protein_id, evidence, protein_map,
     )
     if same_evidence.diagnostic_row is None and cross_evidence.diagnostic_row is None:
         return None
@@ -5237,9 +5196,10 @@ def _build_anchor_core_orthogroups(
     anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
     protein_map: Mapping[str, CdsProtein],
     *,
+    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
     include_singletons: bool,
     max_related_edges_per_orthogroup: int,
-) -> OrthogroupResult:
+) -> OrthogroupGraphResult:
     thresholds = _derive_anchor_core_thresholds(best_by_direction, anchor_edges, protein_map)
     union_find = _UnionFind()
     member_ranks: dict[str, tuple[float, float, float, float]] = {}
@@ -5296,6 +5256,11 @@ def _build_anchor_core_orthogroups(
         for protein_id in member_ids
     }
     scope_by_group.update({group_id: "cross_record" for group_id in group_member_ids})
+
+    def representative_member_key(member_id: str) -> tuple[float, float, float, float, str]:
+        rank = member_ranks[member_id]
+        return (-rank[0], rank[1], -rank[2], -rank[3], str(member_id))
+
     representative_ids_by_group: dict[str, set[str]] = {}
     for group_id, member_ids in group_member_ids.items():
         members_by_record: dict[int, list[str]] = {}
@@ -5305,13 +5270,7 @@ def _build_anchor_core_orthogroups(
         for record_member_ids in members_by_record.values():
             representative_id = min(
                 record_member_ids,
-                key=lambda member_id: (
-                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[0],
-                    member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[1],
-                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[2],
-                    -member_ranks.get(member_id, (0.0, float("inf"), 0.0, 0.0))[3],
-                    str(member_id),
-                ),
+                key=representative_member_key,
             )
             representative_ids_by_group.setdefault(group_id, set()).add(representative_id)
 
@@ -5333,23 +5292,21 @@ def _build_anchor_core_orthogroups(
             )
         )
 
-    core_member_snapshot = {
-        group_id: set(member_ids)
-        for group_id, member_ids in group_member_ids.items()
-    }
+    # Freeze core membership before any additions; evidence cannot chain through
+    # proteins assigned later in this loop.
+    core_member_snapshot = _index_core_support_evidence(best_by_direction, group_by_protein)
     related_edges_by_group: dict[str, list[OrthologEdge]] = {}
     for protein_id in sorted(protein_map, key=lambda item: _protein_sort_key(protein_map[item])):
         if protein_id in group_by_protein:
             continue
         candidates = [
             candidate
-            for group_id, member_ids in core_member_snapshot.items()
+            for group_id, evidence in core_member_snapshot.get(protein_id, {}).items()
             if (
                 candidate := _build_core_support_candidate(
                     protein_id,
                     group_id,
-                    sorted(member_ids, key=lambda item: _protein_sort_key(protein_map[item])),
-                    best_by_direction,
+                    evidence,
                     thresholds,
                     protein_map,
                 )
@@ -5423,27 +5380,36 @@ def _build_anchor_core_orthogroups(
             )
         )
 
+    del core_member_snapshot
     record_local_edges = _select_record_local_paralog_edges(
         best_by_direction,
         protein_map,
         thresholds,
         group_member_ids,
         group_by_protein,
+        ranked_direction_rows,
     )
     record_local_components = _record_local_components_from_edges(record_local_edges, protein_map)
     local_support_by_member = _record_local_support_by_member(record_local_edges)
+    # Expanded cross-record membership is stable throughout component screening.
+    # All components are screened before any record-local groups are appended.
+    expanded_core_evidence = (
+        _index_core_support_evidence(best_by_direction, group_by_protein)
+        if record_local_components and group_member_ids else {}
+    )
     accepted_record_local_components = tuple(
         component
         for component in record_local_components
         if not _record_local_component_has_competing_core_support(
             component,
-            group_member_ids,
-            best_by_direction,
+            bool(group_member_ids),
+            expanded_core_evidence,
             thresholds,
             protein_map,
             local_support_by_member,
         )
     )
+    del expanded_core_evidence
     _append_record_local_orthogroups(
         group_member_ids=group_member_ids,
         group_by_protein=group_by_protein,
@@ -5470,10 +5436,7 @@ def _build_anchor_core_orthogroups(
         for edge in edges
     }
     seen_related_pairs: set[tuple[str, str, OrthologEdgeKind]] = set()
-    for (query_id, subject_id), row in sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    ):
+    for (query_id, subject_id), row in ranked_direction_rows:
         if query_id not in protein_map or subject_id not in protein_map or query_id == subject_id:
             continue
         canonical_query_id, canonical_subject_id = _canonical_edge_endpoint_ids(query_id, subject_id, protein_map)
@@ -5518,7 +5481,7 @@ def _build_anchor_core_orthogroups(
                 ),
             )
 
-    updated_edges_by_group, paths_by_group = _build_ortholog_paths(
+    updated_edges_by_group, paths_by_group = _build_ortholog_path_indexes(
         {
             group_id: sorted(
                 edges,
@@ -5534,23 +5497,19 @@ def _build_anchor_core_orthogroups(
         },
         protein_map,
     )
-    anchor_members_by_group = {
-        group_id: [
+    rbh_orthogroups: dict[str, tuple[str, ...]] = {}
+    for group_id, member_ids in group_member_ids.items():
+        anchor_member_ids = [
             member_id
             for member_id in member_ids
             if member_roles.get(member_id) == "anchor"
         ]
-        for group_id, member_ids in group_member_ids.items()
-    }
-    rbh_orthogroups = {
-        group_id: tuple(
+        rbh_orthogroups[group_id] = tuple(
             sorted(
-                anchor_members_by_group.get(group_id) or list(member_ids),
+                anchor_member_ids or member_ids,
                 key=lambda member_id: _protein_sort_key(protein_map[member_id]),
             )
         )
-        for group_id, member_ids in group_member_ids.items()
-    }
     return _orthogroup_result_from_member_ids(
         group_member_ids,
         representative_ids_by_group,
@@ -5558,7 +5517,7 @@ def _build_anchor_core_orthogroups(
         group_order=group_order,
         rbh_orthogroups=rbh_orthogroups,
         ortholog_edges_by_orthogroup_id=updated_edges_by_group,
-        ortholog_paths_by_orthogroup_id=paths_by_group,
+        path_indexes_by_orthogroup_id=paths_by_group,
         related_edges_by_orthogroup_id={
             group_id: tuple(
                 sorted(
@@ -5602,7 +5561,13 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         min_coverage=0.0,
     )
     best_by_direction = _dedupe_anchor_core_directional_rows(normalized_tables, protein_map)
-    anchor_edges = _select_anchor_core_edges(best_by_direction, protein_map)
+    # Rank fields are immutable across the three membership phases. Keep the
+    # original mapping order for support accumulation; share only this traversal.
+    ranked_direction_rows = sorted(
+        best_by_direction.items(),
+        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
+    )
+    anchor_edges = _select_anchor_core_edges(best_by_direction, protein_map, ranked_direction_rows)
     anchor_edge_tables = _anchor_core_edge_tables(anchor_edges, protein_map)
     if record_count is None:
         record_count = 0
@@ -5643,6 +5608,7 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         best_by_direction,
         anchor_edges,
         protein_map,
+        ranked_direction_rows=ranked_direction_rows,
         include_singletons=include_singletons,
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
     )
@@ -5669,7 +5635,7 @@ def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
 def convert_protein_hits_to_genomic_links(
     hits: DataFrame,
     protein_map: Mapping[str, CdsProtein],
-    orthogroups: OrthogroupResult | None = None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
 ) -> DataFrame:
     """Convert protein hit rows to genomic-coordinate comparison rows."""
 
@@ -5693,25 +5659,48 @@ def _protein_metadata_value(value: object | None) -> object:
     return "" if value is None else value
 
 
-def _orthogroup_member_count(
-    orthogroups: OrthogroupResult | None,
+def _orthogroup_member_counts(members: Sequence[OrthogroupMember]) -> dict[int, int]:
+    counts: dict[int, int] = {}
+    for member in members:
+        record_index = int(member.record_index)
+        counts[record_index] = counts.get(record_index, 0) + 1
+    return counts
+
+
+_OrthogroupEdgeIndex = tuple[
+    dict[tuple[str, str], OrthologEdge],
+    int,
+]
+
+
+def _index_orthogroup_edges(
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
     orthogroup_id: str,
-    record_index: int,
-) -> int:
-    if orthogroups is None or not orthogroup_id:
-        return 0
-    return sum(
-        1
-        for member in orthogroups.orthogroups.get(orthogroup_id, [])
-        if int(member.record_index) == int(record_index)
-    )
+    requested: tuple[str, str],
+    index: _OrthogroupEdgeIndex,
+) -> _OrthogroupEdgeIndex:
+    """Extend an endpoint index to the requested edge without rereading a prefix."""
+    indexed, offset = index
+    membership = orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ())
+    related = orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ())
+    boundary = len(membership)
+    total = boundary + len(related)
+    for position in range(offset, total):
+        edge = membership[position] if position < boundary else related[position - boundary]
+        query_id, subject_id = edge.query_protein_id, edge.subject_protein_id
+        key = (query_id, subject_id) if query_id <= subject_id else (subject_id, query_id)
+        indexed.setdefault(key, edge)
+        if key == requested:
+            return indexed, position + 1
+    return indexed, total
 
 
 def _edge_metadata_for_protein_pair(
-    orthogroups: OrthogroupResult | None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
     orthogroup_id: str,
     query_id: str,
     subject_id: str,
+    edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> dict[str, object]:
     metadata = {
         "rbh_orthogroup_id": "",
@@ -5721,33 +5710,29 @@ def _edge_metadata_for_protein_pair(
     }
     if orthogroups is None or not orthogroup_id:
         return metadata
-    candidate_edges = [
-        *orthogroups.ortholog_edges_by_orthogroup_id.get(orthogroup_id, ()),
-        *orthogroups.related_edges_by_orthogroup_id.get(orthogroup_id, ()),
-    ]
-    for edge in candidate_edges:
-        if (
-            edge.query_protein_id == query_id
-            and edge.subject_protein_id == subject_id
-        ) or (
-            edge.query_protein_id == subject_id
-            and edge.subject_protein_id == query_id
-        ):
-            source_group = str(edge.source_rbh_orthogroup_id or "")
-            target_group = str(edge.target_rbh_orthogroup_id or "")
-            if source_group and target_group and source_group != target_group:
-                rbh_group = f"{source_group};{target_group}"
-            else:
-                rbh_group = source_group or target_group
-            metadata.update(
-                {
-                    "rbh_orthogroup_id": rbh_group,
-                    "ortholog_path_id": str(edge.path_id or ""),
-                    "edge_kind": edge.edge_kind,
-                    "render_role": edge.render_role,
-                }
-            )
-            return metadata
+    index = edge_indexes.get(orthogroup_id)
+    if index is None:
+        index = ({}, 0)
+    key = (query_id, subject_id) if query_id <= subject_id else (subject_id, query_id)
+    if key not in index[0]:
+        index = _index_orthogroup_edges(orthogroups, orthogroup_id, key, index)
+    edge_indexes[orthogroup_id] = index
+    edge = index[0].get(key)
+    if edge is not None:
+        source_group = str(edge.source_rbh_orthogroup_id or "")
+        target_group = str(edge.target_rbh_orthogroup_id or "")
+        if source_group and target_group and source_group != target_group:
+            rbh_group = f"{source_group};{target_group}"
+        else:
+            rbh_group = source_group or target_group
+        metadata.update(
+            {
+                "rbh_orthogroup_id": rbh_group,
+                "ortholog_path_id": str(edge.path_id or ""),
+                "edge_kind": edge.edge_kind,
+                "render_role": edge.render_role,
+            }
+        )
     return metadata
 
 
@@ -5755,13 +5740,16 @@ def convert_pair_protein_hits_to_genomic_links(
     hits: DataFrame,
     query_protein_map: Mapping[str, CdsProtein],
     subject_protein_map: Mapping[str, CdsProtein],
-    orthogroups: OrthogroupResult | None = None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
 ) -> DataFrame:
     """Convert pairwise protein hit rows using separate query and subject maps."""
 
     if hits.empty:
         return pd.DataFrame(columns=LOSATP_COMPARISON_COLUMNS)
 
+    # Build each touched group once, preserving lazy handling of unused groups.
+    edge_indexes: dict[str, _OrthogroupEdgeIndex] = {}
+    member_counts: dict[str, dict[int, int]] = {}
     rows: list[dict[str, object]] = []
     missing_ids: set[str] = set()
     for row in hits.itertuples(index=False):
@@ -5797,7 +5785,13 @@ def convert_pair_protein_hits_to_genomic_links(
             orthogroup_id,
             query_id,
             subject_id,
+            edge_indexes,
         )
+        if orthogroup_id and orthogroup_id not in member_counts:
+            member_counts[orthogroup_id] = _orthogroup_member_counts(
+                orthogroups.orthogroups.get(orthogroup_id, [])
+            )
+        counts = member_counts.get(orthogroup_id, {})
         rows.append(
             {
                 "query": query_protein.record_id,
@@ -5843,16 +5837,8 @@ def convert_pair_protein_hits_to_genomic_links(
                 "subject_orthogroup_representative": (
                     bool(subject_member.representative) if subject_member is not None else False
                 ),
-                "query_orthogroup_member_count": _orthogroup_member_count(
-                    orthogroups,
-                    orthogroup_id,
-                    query_protein.record_index,
-                ),
-                "subject_orthogroup_member_count": _orthogroup_member_count(
-                    orthogroups,
-                    orthogroup_id,
-                    subject_protein.record_index,
-                ),
+                "query_orthogroup_member_count": counts.get(int(query_protein.record_index), 0) if counts else 0,
+                "subject_orthogroup_member_count": counts.get(int(subject_protein.record_index), 0) if counts else 0,
                 "query_orthogroup_role": (
                     str(query_member.role) if query_member is not None else ""
                 ),
@@ -6119,7 +6105,7 @@ def _empty_comparison_hits() -> DataFrame:
 
 
 def _orthogroup_scope(
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
     orthogroup_id: str,
 ) -> OrthogroupScope:
     return orthogroups.scope_by_orthogroup_id.get(str(orthogroup_id), "cross_record")
@@ -6127,7 +6113,7 @@ def _orthogroup_scope(
 
 def _ortholog_edge_display_rank(
     edge: OrthologEdge,
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
 ) -> tuple[object, ...]:
     query_member = orthogroups.member_by_protein_id.get(edge.query_protein_id)
     subject_member = orthogroups.member_by_protein_id.get(edge.subject_protein_id)
@@ -6155,7 +6141,7 @@ def _ortholog_edge_display_rank(
 def _display_pair_orthogroup_id(
     query_id: str,
     subject_id: str,
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
 ) -> str | None:
     query_member = orthogroups.member_by_protein_id.get(str(query_id))
     subject_member = orthogroups.member_by_protein_id.get(str(subject_id))
@@ -6209,7 +6195,7 @@ def _comparison_row_key(row: Mapping[str, object]) -> tuple[str, str]:
 
 def _comparison_row_display_rank(
     row: Mapping[str, object],
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
     *,
     edge_kind_rank: int,
 ) -> tuple[object, ...]:
@@ -6301,7 +6287,7 @@ def _add_display_row(
 
 def _orthogroup_display_table(
     table: DataFrame,
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
 ) -> DataFrame:
     if table is None or table.empty:
         return _empty_comparison_hits()
@@ -6327,7 +6313,7 @@ def _orthogroup_display_table(
 
 def _build_adjacent_display_edges_by_pair(
     adjacent_anchor_edges_by_pair: Mapping[tuple[int, int], DataFrame],
-    orthogroups: OrthogroupResult,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult,
     *,
     max_display_edges_per_orthogroup: int,
     adjacent_candidate_edges_by_pair: Mapping[tuple[int, int], DataFrame] | None = None,
@@ -6514,6 +6500,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     orthogroup_membership_mode: OrthogroupMembershipMode | str = ORTHOGROUP_INFERENCE_VERSION,
     orthogroup_member_max_hits: int | None = None,
     max_related_edges_per_orthogroup: int = 2,
+    path_representation: Literal["graph", "exhaustive"] = "graph",
     comparison_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> OrthogroupEdgeSelectionResult:
     """Infer groups from all evidence and project links onto requested display pairs.
@@ -6522,6 +6509,8 @@ def select_rbh_orthogroup_edges_from_directional_hits(
     sequence produces membership without display links.
     """
 
+    if path_representation not in {"graph", "exhaustive"}:
+        raise ValidationError("path_representation must be graph or exhaustive")
     normalize_orthogroup_membership_mode(str(orthogroup_membership_mode))
     if orthogroup_member_max_hits is not None:
         _validate_max_hits(
@@ -6535,7 +6524,7 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         )
         for pair, hits in directional_hits_by_pair.items()
     }
-    return _select_anchor_core_orthogroup_edges_from_directional_hits(
+    result = _select_anchor_core_orthogroup_edges_from_directional_hits(
         member_hits,
         protein_map,
         record_count=record_count,
@@ -6543,6 +6532,10 @@ def select_rbh_orthogroup_edges_from_directional_hits(
         max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
         comparison_pairs=comparison_pairs,
     )
+
+    if path_representation == "exhaustive":
+        return replace(result, orthogroups=materialize_ortholog_paths(result.orthogroups))
+    return result
 
 
 def build_pairwise_protein_blastp_comparisons(
@@ -6625,6 +6618,7 @@ def build_pairwise_protein_blastp_comparisons(
 def build_rbh_orthogroup_protein_blastp_comparisons(
     records: Sequence[SeqRecord],
     *,
+    path_representation: Literal["graph", "exhaustive"] = "graph",
     losatp_bin: str = "losat",
     ncbi_blastp_bin: str | None = None,
     losatp_threads: int | None = None,
@@ -6644,6 +6638,8 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
 ) -> ProteinBlastpResult:
     """Infer all-vs-all RBH-seeded orthogroups and return adjacent display links."""
 
+    if path_representation not in {"graph", "exhaustive"}:
+        raise ValidationError("path_representation must be graph or exhaustive")
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='orthogroup' requires at least two records")
     _validate_losatp_threads(losatp_threads)
@@ -6724,6 +6720,7 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
     edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
         directional_hits_by_pair,
         extraction.protein_map,
+        path_representation=path_representation,
         record_count=len(records),
         orthogroup_membership_mode=normalized_membership_mode,
         orthogroup_member_max_hits=orthogroup_member_max_hits,
@@ -6764,6 +6761,9 @@ __all__ = [
     "OrthogroupMembershipMode",
     "OrthogroupNameCandidate",
     "OrthogroupResult",
+    "OrthogroupGraphResult",
+    "OrthologPathCollection",
+    "materialize_ortholog_paths",
     "OrthogroupScope",
     "OrthologEdge",
     "OrthologEdgeKind",

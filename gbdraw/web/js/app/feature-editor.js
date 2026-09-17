@@ -7,6 +7,7 @@ import { createFeaturePlacementActions } from './feature-editor/placement-action
 
 export const createFeatureEditor = ({
   state,
+  rulePreparation,
   history,
   getCommittedRequest,
   isCurrentFeature,
@@ -17,12 +18,13 @@ export const createFeatureEditor = ({
   previewRuntime = null,
   previewTransformInteraction = null
 }) => {
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions });
-  const labelActions = createFeatureLabelActions({ state, previewRuntime });
+  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions });
+  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
+    rulePreparation,
     onFeaturePopupOpened: labelActions.syncLabelEditor,
     featureSelection,
     previewRuntime,
@@ -30,6 +32,7 @@ export const createFeatureEditor = ({
   });
   const colorActions = createFeatureColorActions({
     state,
+    rulePreparation,
     nextTick,
     legendActions,
     svgActions,

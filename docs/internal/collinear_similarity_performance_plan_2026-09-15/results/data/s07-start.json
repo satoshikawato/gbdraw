@@ -1,0 +1,22 @@
+{
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "baseline": "ec16110cf08b894b6dce16aa973e1d6112554ac9",
+  "s06Commit": "9e6c6e740e5886b7cc627386c303973325a785a9",
+  "branch": "perf/collinear-s07-cluster-merge-20260916",
+  "upstream": null,
+  "worktree": "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s07-20260916",
+  "dependencyCommits": [
+    "3a3b29c77dc37fbe403626ac7e2155f97ae38555 Add reproducible protein comparison performance baselines",
+    "e3f93172c930d44ebefa7e67df95b2475c8555ca Define protein path contracts with exhaustive equivalence evidence",
+    "603e07876397f863c83ba9609c335b91dac0b282 Update S02 handoff after the PATH-B decision",
+    "f35f2e63816b5eec82bee88f51f08a22fb618849 Aggregate protein HSP rows once per table",
+    "dc79915a7d30abe1e1cdea9b592b330bfef45696 Index protein support evidence and orthogroup metadata",
+    "ec16110cf08b894b6dce16aa973e1d6112554ac9 Represent ortholog paths with a lossless graph"
+  ],
+  "s06ReviewHashMatches": 114,
+  "s06ReviewUnlistedFiles": [
+    "results/data/s06-review.json"
+  ],
+  "s06RawLogWhitespacePreserved": true,
+  "s06TreeEqualBaseline": true
+}

@@ -27,6 +27,7 @@ from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupMembershipMode,
     OrthogroupResult,
+    OrthogroupGraphResult,
 )
 from gbdraw.annotations import AnnotationOptions
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
@@ -331,7 +332,7 @@ class LinearComparisonOptions:
     blast_files: Sequence[str] | None = None
     comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
-    orthogroups: OrthogroupResult | None = None
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     protein_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = (
         _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_mode
     )

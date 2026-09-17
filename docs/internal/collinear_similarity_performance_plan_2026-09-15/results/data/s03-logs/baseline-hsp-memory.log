@@ -1,0 +1,6 @@
+memory: hsp-1
+  hsp-1/multi_hsp
+memory: hsp-1000
+  hsp-1000/multi_hsp
+memory: hsp-many
+  hsp-many/multi_hsp

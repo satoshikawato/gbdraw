@@ -1,0 +1,19 @@
+/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py:557: SyntaxWarning: invalid escape sequence '\/'
+  const next = text.replace(/(\/translation="[A-Z])([A-Z])/, (full, start, amino) => start + (amino === 'A' ? 'G' : 'A'));
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 602, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 58, in main
+    return run_integration(args)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/collinear-s08-20260916/tests/run_protein_local_browser_acceptance.py", line 379, in run_integration
+    server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(args.server_root)))
+  File "/home/kawato/micromamba/lib/python3.13/socketserver.py", line 453, in __init__
+    self.socket = socket.socket(self.address_family,
+                  ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+                                self.socket_type)
+                                ^^^^^^^^^^^^^^^^^
+  File "/home/kawato/micromamba/lib/python3.13/socket.py", line 233, in __init__
+    _socket.socket.__init__(self, family, type, proto, fileno)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted

@@ -1222,6 +1222,158 @@ def _protein_map_for_lengths(lengths: dict[str, int]) -> dict[str, protein_colin
     }
 
 
+def _assert_hsp_baseline(hits, protein_map):
+    from tests.prototypes.hsp_aggregation import aggregate_hsps_baseline
+
+    before = None if hits is None else hits.copy(deep=True)
+    try:
+        expected = aggregate_hsps_baseline(hits, protein_map)
+    except (ValueError, TypeError, OverflowError, KeyError) as exc:
+        with pytest.raises(type(exc)) as caught:
+            protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, protein_map)
+        assert str(caught.value) == str(exc)
+    else:
+        actual = protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, protein_map)
+        pd.testing.assert_frame_equal(actual, expected, check_exact=True)
+    if hits is not None:
+        pd.testing.assert_frame_equal(hits, before, check_exact=True)
+
+
+@pytest.mark.parametrize("seed", range(24))
+def test_hsp_accumulation_matches_grouped_oracle(seed):
+    import random
+
+    rng = random.Random(seed)
+    pm = _protein_map_for_lengths({"q": 100, "s": 80, "t": 200, "zero": 0})
+    rows = []
+    for i in range(120):
+        q, s = rng.choice(list(pm)), rng.choice(list(pm))
+        rows.append(_hit_row(q, s, bitscore=rng.choice([0, -1, 50, 100]),
+            identity=rng.choice([80, 90]), evalue=rng.choice([0, 1e-10]),
+            alignment_length=rng.choice([-1, 0, 20, 40]),
+            qstart=rng.randint(-30, 230), qend=rng.randint(-30, 230),
+            sstart=rng.randint(-30, 230), send=rng.randint(-30, 230)) | {"source_row": i})
+    hits = pd.DataFrame(rows)
+    hits.index = [7] * len(hits)  # tie order is positional, not the index label
+    _assert_hsp_baseline(hits, pm)
+
+
+@pytest.mark.parametrize("column", ["bitscore", "evalue", "identity", "alignment_length",
+                                    "qstart", "qend", "sstart", "send"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), "bad", None, pd.NA])
+def test_hsp_private_boundary_and_public_numeric_rejection(column, value):
+    from gbdraw.exceptions import ParseError
+
+    pm = _protein_map_for_lengths({"q": 100, "s": 100})
+    hits = pd.DataFrame([_hit_row("q", "s"), _hit_row("q", "s") | {column: value}])
+    _assert_hsp_baseline(hits, pm)
+    for limit in (None, 1):
+        with pytest.raises(ParseError, match="non-numeric outfmt 6"):
+            select_rbh_orthogroup_edges_from_directional_hits(
+                {(0, 1): hits}, pm, orthogroup_member_max_hits=limit)
+
+
+@pytest.mark.parametrize("dtype", ["object", "string", "category"])
+def test_hsp_missing_ids_never_become_valid_strings(dtype):
+    pm = _protein_map_for_lengths({"q": 100, "s": 100, "nan": 100, "None": 100, "<NA>": 100})
+    rows = [_hit_row(q, s) for q, s in [(None, "s"), ("q", None), (float("nan"), "s"),
+            (pd.NA, "s"), ("unknown", "s"), ("nan", "s"), ("q", "s"), ("nan", "s")]]
+    hits = pd.DataFrame(rows).astype({"query": dtype, "subject": dtype})
+    _assert_hsp_baseline(hits, pm)
+    result = protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, pm)
+    assert list(zip(result["query"], result["subject"], result["hsp_count"])) == [
+        ("nan", "s", 2), ("q", "s", 1)]
+
+
+@pytest.mark.parametrize("hits", [None, pd.DataFrame(columns=COMPARISON_COLUMNS),
+    pd.DataFrame(columns=[*COMPARISON_COLUMNS, "extra"]),
+    pd.DataFrame([_hit_row("unknown", "s")]),
+    pd.DataFrame([_hit_row("q", "zero")]), pd.DataFrame([_hit_row("q", "negative")])])
+def test_hsp_empty_output_columns_and_types(hits):
+    _assert_hsp_baseline(hits, _protein_map_for_lengths({"q": 1, "s": 100, "zero": 0, "negative": -1}))
+
+
+@pytest.mark.parametrize("column,winner", [("bitscore", 101), ("evalue", 0), ("identity", 100),
+    ("alignment_length", 101), ("qstart", 0), ("qend", 99), ("sstart", 0), ("send", 99), (None, None)])
+def test_hsp_representative_rank_and_complete_tie_order(column, winner):
+    pm = _protein_map_for_lengths({"q": 200, "s": 200})
+    first = _hit_row("q", "s", bitscore=100, evalue=1e-20, identity=90,
+                     alignment_length=100, qstart=1, qend=100, sstart=1, send=100)
+    second = first | ({column: winner} if column else {})
+    hits = pd.DataFrame([first | {"tag": "first"}, _hit_row("s", "q"), second | {"tag": "second"}])
+    _assert_hsp_baseline(hits, pm)
+    result = protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, pm)
+    assert result["query"].tolist() == ["q", "s"]
+    assert result.iloc[0]["tag"] == ("second" if column else "first")
+
+
+def test_hsp_adjacent_reverse_clamped_union_and_all_selected_hsps(monkeypatch):
+    from tests.prototypes.hsp_aggregation import aggregate_hsps_baseline
+    from tools.benchmark_protein_comparison import canonical
+
+    pc = protein_colinearity_module
+    pm = _protein_map_for_lengths({"q": 100, "s": 100, "t": 100})
+    hits = pd.DataFrame([
+        _hit_row("q", "s", bitscore=200, alignment_length=30, qstart=-10, qend=20, sstart=20, send=-10),
+        _hit_row("q", "t", bitscore=100),
+        _hit_row("q", "s", bitscore=190, alignment_length=30, qstart=21, qend=50, sstart=50, send=21),
+        _hit_row("q", "s", bitscore=180, alignment_length=40, qstart=150, qend=61, sstart=61, send=150)])
+    for limit in (1, None):
+        selected = pc._select_member_candidate_hits_per_query(hits, max_hits=limit)
+        result = pc._normalize_directional_hit_table(selected, pm, min_coverage=0.0)
+        pair = result.loc[result["subject"] == "s"].iloc[0]
+        assert pair["hsp_count"] == 3
+        assert pair["query_covered_length"] == pair["subject_covered_length"] == 90
+        assert pair["total_hsp_alignment_length"] == 100
+        assert len(result) == (1 if limit == 1 else 2)
+        # String numerics are coerced at the existing normalization boundary.
+        string_hits = hits.astype({c: str for c in pc._NUMERIC_COMPARISON_COLUMNS})
+        args = ({(0, 1): string_hits}, pm)
+        actual = select_rbh_orthogroup_edges_from_directional_hits(*args, orthogroup_member_max_hits=limit)
+        with monkeypatch.context() as patch:
+            patch.setattr(pc, "_aggregate_hsps_by_protein_pair", aggregate_hsps_baseline)
+            expected = select_rbh_orthogroup_edges_from_directional_hits(*args, orthogroup_member_max_hits=limit)
+        assert canonical(actual) == canonical(expected)
+
+
+@pytest.mark.parametrize("first_error,later_error", [(float("nan"), float("inf")), (float("inf"), float("nan"))])
+def test_hsp_errors_follow_pair_appearance_not_interleaved_error_row(first_error, later_error):
+    pm = _protein_map_for_lengths({"q": 100, "s": 100, "t": 100})
+    hits = pd.DataFrame([_hit_row("q", "s"),
+        _hit_row("q", "t", alignment_length=later_error),
+        _hit_row("q", "s", alignment_length=first_error)])
+    _assert_hsp_baseline(hits, pm)
+
+
+@pytest.mark.parametrize("identifiers", [[1, 2.0], [1, 1.0], [True, 1], ["", "nan"], [None, pd.NaT]])
+def test_hsp_group_key_coercion_matches_pandas(identifiers):
+    pm = _protein_map_for_lengths({"1": 100, "s": 100, "": 100, "nan": 100})
+    hits = pd.DataFrame([_hit_row(q, "s") for q in identifiers])
+    hits["query"] = pd.Series(identifiers, dtype=object)
+    _assert_hsp_baseline(hits, pm)
+
+
+def test_hsp_aggregation_iterates_table_once_without_pair_dataframes(monkeypatch):
+    from tools.benchmark_protein_comparison import synthetic, SEED
+
+    pc = protein_colinearity_module
+    pm, tables = synthetic(pc, "hsp-1000", SEED)
+    hits = tables["multi_hsp"]
+    original = pd.DataFrame.itertuples
+    seen = []
+    def iterate(df, *args, **kwargs):
+        seen.append(len(df))
+        return original(df, *args, **kwargs)
+    from pandas.core.groupby.ops import FrameSplitter
+    def grouped(*args, **kwargs):
+        pytest.fail("HSP aggregation must not construct per-pair DataFrames")
+    monkeypatch.setattr(pd.DataFrame, "itertuples", iterate)
+    monkeypatch.setattr(FrameSplitter, "_chop", grouped)
+    result = pc._aggregate_hsps_by_protein_pair(hits, pm)
+    assert seen == [3000]
+    assert result["hsp_count"].tolist() == [3] * 1000
+
+
 @pytest.mark.linear
 def test_hsp_union_coverage_uses_merged_intervals() -> None:
     protein_map = _protein_map_for_lengths({"BDT62853.1": 4741, "BDT62565.1": 4468})
@@ -3359,9 +3511,9 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     result = json.loads(str(raw_result))
 
     assert "error" not in result
-    assert result["orthogroupResult"]["schema"] == 2
+    assert result["orthogroupResult"]["schema"] == 3
     assert result["orthogroupResult"]["kind"] == "orthogroupResult"
-    assert result["orthogroupResult"]["value"]["type"] == "OrthogroupResult"
+    assert result["orthogroupResult"]["value"]["type"] == "OrthogroupGraphResult"
     typed_fields = result["orthogroupResult"]["value"]["fields"]
     group_id = next(iter(typed_fields["orthogroups"]))
     group_members = typed_fields["orthogroups"][group_id]

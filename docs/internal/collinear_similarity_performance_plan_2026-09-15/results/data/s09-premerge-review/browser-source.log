@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/tests/run_protein_local_browser_acceptance.py", line 866, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/tests/run_protein_local_browser_acceptance.py", line 59, in main
+    return run_integration(args)
+  File "/mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/tests/run_protein_local_browser_acceptance.py", line 394, in run_integration
+    server = ThreadingHTTPServer(('127.0.0.1', 0), partial(Handler, directory=str(args.server_root)))
+  File "/home/kawato/micromamba/lib/python3.13/socketserver.py", line 453, in __init__
+    self.socket = socket.socket(self.address_family,
+                  ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+                                self.socket_type)
+                                ^^^^^^^^^^^^^^^^^
+  File "/home/kawato/micromamba/lib/python3.13/socket.py", line 233, in __init__
+    _socket.socket.__init__(self, family, type, proto, fileno)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted

@@ -1,0 +1,69 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "ca0ef3aa38a7e366aae7c76b97b1c9bcd25de576",
+  "currentHead": "e6410a8166db7839bc7ca5c2398c32c97185c82b",
+  "semanticOnly": false,
+  "comparisons": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "semanticEqual": true,
+      "timeDeltaPct": 0.6161288324380232,
+      "decision": "pass"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -6.2891274593907305,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/unknown_missing": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.0152792215358808,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/bad_coordinates": {
+      "semanticEqual": true,
+      "timeDeltaPct": 1.2986186262652133,
+      "decision": "pass"
+    },
+    "hsp-edges/pair_row_order": {
+      "semanticEqual": true,
+      "timeDeltaPct": -8.022195026823276,
+      "decision": "pass"
+    },
+    "hsp-edges/nan_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": 11.446413016132006,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/infinite_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": 1.5699611753635656,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_length": {
+      "semanticEqual": true,
+      "timeDeltaPct": -10.10239668189541,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/empty": {
+      "semanticEqual": true,
+      "timeDeltaPct": -19.9345866262156,
+      "decision": "inconclusive"
+    },
+    "hsp-1/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -14.740100984625837,
+      "decision": "pass"
+    },
+    "hsp-1000/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -95.28204118989592,
+      "decision": "pass"
+    },
+    "hsp-many/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -29.155573359668907,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 2
+}

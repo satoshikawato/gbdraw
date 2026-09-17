@@ -1,0 +1,10 @@
+{
+  "sourceAggregateSha256": "2786f88d13149749167f4f3fc5fa12c8d6bdba5e611ab06aa3c99c5d232daa6d",
+  "auditSha256": "576337a716221910b661e805ec8c11e614a9ad2973f133cce554ffb92a5e92b5",
+  "finalDocumentationSha256": {
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md": "3d4c6ff1c35ebc7b988d03e3d616a88302308bd4c169d683d84140e5929e0d79",
+    "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S09_PREMERGE_REVIEW.md": "3756c8a594ecc368da0ac50ec7856cd1f966954d2b62e50fd29995afe3932534"
+  },
+  "sourceAndTestHashesStillMatchAudit": true,
+  "humanReviewAndCommitFixing": "Still required; no approval or publication performed."
+}

@@ -1,0 +1,693 @@
+{
+  "createdUtc": "2026-09-16T08:45:17.155027+00:00",
+  "base": "5e0cb0fa1d9920592da431b764fa2c9133b5bfdf",
+  "head": "f52ed68e15e527b08e4d9247b990684040fe4270",
+  "branch": "perf/collinear-s07-6-unit-index-20260916",
+  "upstream": null,
+  "newCommitCreated": false,
+  "implementationComplete": true,
+  "performanceAcceptance": "NOT_ESTABLISHED; final benchmarks explicitly deferred by user",
+  "preflight": "IMPLEMENT_EXISTING_AUTHORITY",
+  "finalProductionSha256": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da",
+  "earlierMeasuredProductionSha256": "2c8d68a3b7b8cd079c55e72173177cbebd5c66b9a6607e5481f8b7bd61457c8c",
+  "earlierMeasurementsAreFinalMeasurements": false,
+  "s07Acceptance": "unchanged; accepted by user",
+  "s06CompatibilityReview": "still required before future merge",
+  "s05": "rejected",
+  "s07_7AndS08": "not started",
+  "checks": {
+    "initialFocused": "298 passed",
+    "initialRelatedNative": "883 passed / 1 existing optional skip",
+    "typedSessionAndReference": "195 passed / all 16 read-only references",
+    "finalFocused": "622 passed",
+    "browser": "four baseline/current viewport runs; ON/OFF cold/repeat; exact ordered complete output hashes; no external requests/page errors",
+    "browserHashPairs": 4,
+    "packagedPythonFilesMatchingSource": 208,
+    "ruff": "PASS",
+    "architecture": "Gate PASS / Review CLEAR on initial unit diff; follow-up retains same native owner/path and no Web subject changes",
+    "diffCheck": "PASS",
+    "frozenOracle": "all original functions/classes AST-identical to f52ed68e",
+    "changedProductionDefinitions": [
+      "_unit_aliases",
+      "build_collinearity_unit_index"
+    ]
+  },
+  "audit": {
+    "production": "One existing owner; planned three replacements and requested follow-up removal of redundant lookup/locus/representative-alias work. No new production API/cache/fallback or algorithm mode.",
+    "tests": "Independent and frozen oracles; complete fields/order/errors/logs; 324 whole-result cases; structural counts; final packaged real-helper equality.",
+    "documentation": "S07.6 report and MASTER distinguish final source from earlier measurements; S07.5 inheritance preserved.",
+    "generatedEvidence": "Counter/memory records remain bound to their measured source; final wheel/helper bound to final source. No timing samples fabricated. Failure logs retained.",
+    "ignoredArtifacts": "Generated wheels/build products and browser diagnosis scratch outputs are not part of change.",
+    "sharedTree": "No task writes targeted shared dirty files or existing worktrees; no stash/reset/clean."
+  },
+  "entries": [
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/MASTER_PLAN.md",
+      "category": "documentation",
+      "bytes": 39093,
+      "sha256": "0ee0efe9c10f232f02cbd58d086130566453e3428f68569eb98c6f6a117776b9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_5_PLAN.md",
+      "category": "inherited-S07.5",
+      "bytes": 47650,
+      "sha256": "3a96ae370c0ecd065aa37df5e9371506cc4b8107749cf73235167d5602a89716"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/S07_6.md",
+      "category": "documentation",
+      "bytes": 17925,
+      "sha256": "0a3ee1936c7c070a620b69c61fa6256ef0fad15ff781761531d7f9678d5c5a0b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-diagnose.py",
+      "category": "inherited-S07.5",
+      "bytes": 11473,
+      "sha256": "9b8e0599693d79afcacf83c07f8b255bee6d1db9cdce2c4ffef4bae7454e7fd8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-evidence-reuse.json",
+      "category": "inherited-S07.5",
+      "bytes": 281171,
+      "sha256": "11938a9d51e87fb37257692f1263a087ba33acec56c9cb45d48f8411e65c40e6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-memory.json.gz",
+      "category": "inherited-S07.5",
+      "bytes": 10929,
+      "sha256": "fae819f3a6b4f118bf50ba9c16bf9d1785b9594bd8bc84f9e19035122708f1ca"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing-command.json",
+      "category": "inherited-S07.5",
+      "bytes": 6017,
+      "sha256": "ab6b8caf0a4b4eb0ae94b2f117cecbd2b2370b1dfe8ca2c9b23e981af2d91ded"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing.json.gz",
+      "category": "inherited-S07.5",
+      "bytes": 11564,
+      "sha256": "c92964b297d828eb1bb7d9c031b950f10af3be3df4fa0a8ee53b92a5fea06d29"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-fit-timing.log",
+      "category": "inherited-S07.5",
+      "bytes": 5783,
+      "sha256": "cbcc062aff665c3924f693a9a0263b5f28eb65bd9dc3edc2ee831eea38908d90"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-inventory.json.gz",
+      "category": "inherited-S07.5",
+      "bytes": 11517,
+      "sha256": "cc17928dc421db93a486f9378c57cd13717eef0f22466c03c97393ac2b39f97d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-5-review.json",
+      "category": "inherited-S07.5",
+      "bytes": 4561,
+      "sha256": "8599ef363726186fc607ac82ee215874f163878bb21c4668af8fa981655012cc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-baseline-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 69655,
+      "sha256": "92128b7f0d9bed24bc025e8abe88cec1f0d7d8afac8262610c17516fb68b7df2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-baseline-unit-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 67214,
+      "sha256": "dec981e346fb90058e617c1449a0fd7a61412aaf5d0087f08119353f9a42721a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-browser-final.json.gz",
+      "category": "generated-evidence",
+      "bytes": 21755,
+      "sha256": "e11f3144bc970b77d9a717d7eb40a6f351c6469a4b95535309e47833e8a2270b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-browser-native-differences.json",
+      "category": "generated-evidence",
+      "bytes": 1811,
+      "sha256": "a8ce9fc09a9daee1f459ec0a45d7367edfe98b968b6f21598104e3e2c1983a87"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-browser.json.gz",
+      "category": "generated-evidence",
+      "bytes": 21757,
+      "sha256": "122939a0ea8eb99dae12af9d2196dfe6be95f0d070916da79729e4a3813c50d5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-command.py",
+      "category": "measurement-tooling",
+      "bytes": 1320,
+      "sha256": "b29b39377317a363530bc89e5d433f884bfdaedd4ae61bf2a0fcc5585cacb2dc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-commands.jsonl",
+      "category": "generated-evidence",
+      "bytes": 16956,
+      "sha256": "ff2a9d76b147103c9a5be7b1a323d11c0f407a77c8692c073502bdeb6a87bb2d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-comparison.json",
+      "category": "generated-evidence",
+      "bytes": 7194,
+      "sha256": "4e152651d15a26ab065edab90a2a698a3c1a7be31e738bf7e2c178ce8ccd9ad3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-current-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 73912,
+      "sha256": "6afeaac8998dc53646dfbfbbf9aed8a29637cdb2df61a92e899fc1bc92eff170"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-current-probe.json.gz",
+      "category": "generated-evidence",
+      "bytes": 87461,
+      "sha256": "e86fe5b166c672e330a29055683846c84eae015f2d9b96c033874df1898aae1a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-current-unit-memory.json.gz",
+      "category": "generated-evidence",
+      "bytes": 67997,
+      "sha256": "b1a0a5511047322f038967d41a999d5399cd6a5d828f28aa5b2304e23bbdd4c1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-evidence-reuse.json",
+      "category": "generated-evidence",
+      "bytes": 2995,
+      "sha256": "7d1b5369c55178f7d4bf2e62db478e000bed44cc5df9a88ea4d7e3f8889eee54"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-followup.json",
+      "category": "generated-evidence",
+      "bytes": 655,
+      "sha256": "a7ea3c55f64010be0679a027b0d0044711d00f44400370c2d34de1020ae15300"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-host-contention.jsonl",
+      "category": "generated-evidence",
+      "bytes": 1097,
+      "sha256": "d896feaeed88cf0734bb1edd42fb408ff774f8aa563904ccdc055fbfcae204ee"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "e88fe85e74b8ade93c79bf6df985e5745df8d66787501facefe20c47f652e506"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "be6509c47cf7ac2212d9d13b3c9943eacd9a3a5bc178841a591cd2065650b1ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-local-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 2944,
+      "sha256": "9fb24809637c991c47b1f71c2ea71b93b50b0f40afd9f03c55101552d1485b90"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-local-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 3203,
+      "sha256": "4fb6efaf33e7470c02011dc3190af470db121d20118b40af418dd231fe59e8d9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture-local.log",
+      "category": "generated-evidence",
+      "bytes": 6126,
+      "sha256": "2af10cde3714a4409460eb6ada314bf72fdff8cb242784b94982c31b7eee501d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/architecture.log",
+      "category": "generated-evidence",
+      "bytes": 1299,
+      "sha256": "c2e43434f92deea6dbfd8e485061a71597df2a2b44d4f3e3fb8e83a623cd4312"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-diagnose-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 3058,
+      "sha256": "281681a6e15a449e9d4c538e8d56dec74eaf8ae1f3d1cbbef628853644e7a7e5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-diagnose-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 3131,
+      "sha256": "aa5525c2f67810404162258f126e324be0e20f71f899c77ef4f60142b5fa6cb9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-diagnose.log",
+      "category": "generated-evidence",
+      "bytes": 576,
+      "sha256": "f3b968dc9a4108574192e1960c64a7e78deb003c597033f868854a5ecff09df2"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-final-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 2360,
+      "sha256": "8b86a8bdf9dcfb27ae9da18b7d802f9daa0fff65ffaca8e570349e378ae2c2e6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-final-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 2551,
+      "sha256": "457a44a30df6bb6e9c2b515a7a05fc7af0850e2d291fe3d7d6f73cdc9bcc1ee6"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-final.log",
+      "category": "generated-evidence",
+      "bytes": 38,
+      "sha256": "4fc06fe34cb68486d22064ec0cd22e33e7ad9767deb9d60e97ddcd47201bb5af"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "b529116724471ab95b09bf528b8f3b498e02d0e788c48dbf2b33dd73eadf72ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-local-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 3131,
+      "sha256": "9a8c9c16cc8881f2adbc5df308c7fdf7bfe8f2140c70d9300b0b3118deaf5976"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-local-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 2944,
+      "sha256": "6ddb72ebf3f1c3eb75fa578f9daefc180598adb6327883e3704e409eb4217cec"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-local.log",
+      "category": "generated-evidence",
+      "bytes": 493,
+      "sha256": "8f9eafe0c3cd7c3ef62c7a93a80ac7529499590e7feae05906fa901fdf355183"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-same-runtime-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 2757,
+      "sha256": "6846590fef998652f211a15e0d526b072c4a1c5b3812b9b225d1e90f446e63bc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-same-runtime-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 2757,
+      "sha256": "39275b72f7f99a95c8e138d034394f795d18549cdf5db9717c28fe558bd6fbff"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser-same-runtime.log",
+      "category": "generated-evidence",
+      "bytes": 38,
+      "sha256": "4fc06fe34cb68486d22064ec0cd22e33e7ad9767deb9d60e97ddcd47201bb5af"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/browser.log",
+      "category": "generated-evidence",
+      "bytes": 1321,
+      "sha256": "4f8a0d4789c46b10100d9a0bb9a5235050d16b169b9ed8b541475c319ef80b2a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-final-state-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "e2584a088d73799b05779b53f74d572f47bcf0e286132ccb95f1120d468b8aa7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-final-state-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "d185151afd36d8901b6bb0fab4c573a843200fed73cf40da6af2c9c488825650"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-final-state.log",
+      "category": "generated-evidence",
+      "bytes": 223,
+      "sha256": "7c4e791ac294c1a5aa63d09a5f068a5e90421869437931158990df701f663283"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "010d30ee0b3cd4f6ef43a315d30599e4970e4ab16078f93f6d3114cff299cfe7"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "b90222354f19603a23a6e073b07b111c7b8db9901da178c786532991d0dd5a36"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/comparison.log",
+      "category": "generated-evidence",
+      "bytes": 223,
+      "sha256": "7c4e791ac294c1a5aa63d09a5f068a5e90421869437931158990df701f663283"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-baseline-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "4dc1e6ecb6cc7b04bad2019fb77739f1f4a201d81912f621dc2b5da3479b3598"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-baseline-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-baseline.log",
+      "category": "generated-evidence",
+      "bytes": 438,
+      "sha256": "9ece0eba5b5fb41c12d37d2c4fe760e4f456c3f481849e735b22618f8deb7ad3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-current-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "ab23333aeab9ebf223d6d6a62036f3f43f87060e93e57c22ca856ad285b9d536"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-current-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "d185151afd36d8901b6bb0fab4c573a843200fed73cf40da6af2c9c488825650"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/counter-current.log",
+      "category": "generated-evidence",
+      "bytes": 992,
+      "sha256": "230912dbd30193bdc14311a7ec5ba70f9ac46a6f52daf5c68aede3d6e125b1cc"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-reductions-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "c1053a0c30278704a076cf2f3d5904dacc2a5f4bbdfb5a6a020bb45b10e56744"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-reductions-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "7f18950a623ddadcf437dbc85d6c0e58224c51bb3928d24ad2a53b7514f4493b"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-reductions.log",
+      "category": "generated-evidence",
+      "bytes": 77959,
+      "sha256": "076e5754b302aed4e6c1726aa2b1eb3f35dfd63f8176de8f0b713f1175784922"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-unit-focused-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "e1c5814921164a1304177fe1ab562bdd6be24d682355c2d4fa4f1f21860f7c41"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-unit-focused-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "6ba7c047d6e79eaabff830e00d96f0e49ae97fa8ec15a926ddf84ef21935888f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/final-unit-focused.log",
+      "category": "generated-evidence",
+      "bytes": 77959,
+      "sha256": "44c0255b8508e887544d90d45bb1027c3e9b90963a2b03956f0bd04a537f3db5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/focused-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 3033,
+      "sha256": "efcdf7fd8617c0add0ac5714f3078238657fd7cdedc14ca4968085e5ca391659"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/focused-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 3033,
+      "sha256": "3b5de82f362b107c2466e4cf0fe044f2221f8fd7f1af6afd5d86a0ea77eb6599"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/focused.log",
+      "category": "generated-evidence",
+      "bytes": 32167,
+      "sha256": "0002809a1bdd8a5ea5d874b3de7c5cd7578641afad2a12f9e4a7099b0c4bdfe9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/lint-handoff-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 174,
+      "sha256": "c667f3c7982352c1de4c62c4c32db5be40d57a6c059c3a3f8ef970049359ad3d"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/lint-handoff-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 174,
+      "sha256": "cb3c17b521ab4d0ffb967bb1adbc68dd164d9742ddcf47cef6ac16d075b2fdbd"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/lint-handoff.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-post-search-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "e7ba086e1cd459068b91e3b398575b191786c5ae59ff680018c4a2c9bd996c93"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-post-search-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-post-search.log",
+      "category": "generated-evidence",
+      "bytes": 800,
+      "sha256": "4d3b5c1cc2fd26a955f99b1ffe1717d8d2e6466756c8ffe276141aa2f6fde1fb"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-baseline-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "4dc1e6ecb6cc7b04bad2019fb77739f1f4a201d81912f621dc2b5da3479b3598"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-baseline-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "be6509c47cf7ac2212d9d13b3c9943eacd9a3a5bc178841a591cd2065650b1ed"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-baseline.log",
+      "category": "generated-evidence",
+      "bytes": 441,
+      "sha256": "3f62ac6e1d8010d20471716206b158a2a557ec49450ebc5c1aa4ba7b481f6169"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-current-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "757edfe4539abffbd1b9fffdd7ef2514d0507d0ac398b7fa7d85fc3e688a4d36"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-current-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "d522d4fdbcec80be2344481e66eeda1109551cabd132764e7a8c0c27f32aa8fe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/memory-unit-current.log",
+      "category": "generated-evidence",
+      "bytes": 441,
+      "sha256": "3f62ac6e1d8010d20471716206b158a2a557ec49450ebc5c1aa4ba7b481f6169"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/native-related-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 4262,
+      "sha256": "834c474ea606b18a60d9823c3815c21c0bc12a7ebcd5c3b7772c78d96e8f2221"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/native-related-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 4262,
+      "sha256": "c57d3c5c8d883f8c3cd09b902c99c0f0cfbfd311ffa9670587ad323b4fcc7b17"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/native-related.log",
+      "category": "generated-evidence",
+      "bytes": 109767,
+      "sha256": "2fed10d0a394687d4727e4032c922e50027a255a9837d8786b2a29cd78a34c70"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-final-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "c6484404b6de86767c08923368db24bff2b1d150f5fcfba8cd88435e582666c8"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-final-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "4beeecbed0d8e80a4f1df5d4c90d2b95b53b67ee55e463768301f79d233cf09e"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-final.log",
+      "category": "generated-evidence",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 9099,
+      "sha256": "0a1dca948018ec64adc61013dbfa8bb2927c28e93f0ef97ad60c93eb9989edfe"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 9099,
+      "sha256": "dfbacfc0f12f983464b4252dc4cccd091427e9c6760034c137e408a377f6524a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/ruff.log",
+      "category": "generated-evidence",
+      "bytes": 1468,
+      "sha256": "864382fba0d734ef6c0095b0d4410221409f9a96b4fd8a8360267cbac394c556"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/typed-reference-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 1918,
+      "sha256": "9396d2a463f055f54e2c606435074b0f28bc544b0dc13815920cd00a4e0af3f9"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/typed-reference-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 1918,
+      "sha256": "eacb9c9d757cc1068ac5e19737f5436372a9355f0ac53e36cdef0f3870bbec06"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/typed-reference.log",
+      "category": "generated-evidence",
+      "bytes": 26425,
+      "sha256": "d1d2905c9241d4258ed01ed81a46bdfdec665b840c201cf04205e8d1912def64"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-final-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "4220097dc5464be10a567f6c6d1049332dc3d9cd33f9da41618415f8c9c29881"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-final-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 140,
+      "sha256": "fcc66a06fe17be1967700bfc8dfc714de2fd0ff16892406edf48091df27fe0e3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-final.log",
+      "category": "generated-evidence",
+      "bytes": 740,
+      "sha256": "28fb09d004145ad90f2d6e31fbe4f3d9adce1fa99cebd6453bef0bdab72ebd4a"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 1497,
+      "sha256": "f7f8f5802794bf088c9e75b99394d07a890057a5cc5778e6b8846298821c2af5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 1497,
+      "sha256": "079d5357c5e8bdfefdd3500b8ae9502031d76a4dfbf4960f6b1537fe81e38f05"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-local-host-after.txt",
+      "category": "generated-evidence",
+      "bytes": 2074,
+      "sha256": "435a3bc7aa19eb047259489163417680298517461eb35f15034886a443ae2ff5"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-local-host-before.txt",
+      "category": "generated-evidence",
+      "bytes": 2074,
+      "sha256": "390a68b8b99852bad57627735bd76889259032205802bb6b6ca2265466d951f1"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel-local.log",
+      "category": "generated-evidence",
+      "bytes": 740,
+      "sha256": "d1a56d6e03e669948c3e855b0fc5b230b996742c7fc55ce8ad819cfa03350bd3"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-logs/wheel.log",
+      "category": "generated-evidence",
+      "bytes": 4015,
+      "sha256": "40e3b31c4ebc82613a00648a8b72e1d6961baf82db2c0ed31d8d1482b42f8f1f"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-start.json",
+      "category": "generated-evidence",
+      "bytes": 477,
+      "sha256": "dfa7e97f205ee3cae0781cc00cfbc4b0ca29364ec14f85b32489ad180fa4c581"
+    },
+    {
+      "path": "docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data/s07-6-summarize.py",
+      "category": "measurement-tooling",
+      "bytes": 6369,
+      "sha256": "bf195a02e517495d2993875bd8eb383237903e78c734b2316390d912a20df2d0"
+    },
+    {
+      "path": "gbdraw/analysis/collinearity_units.py",
+      "category": "production",
+      "bytes": 11585,
+      "sha256": "975873bfd0c4cf685df5790c0bcbcea85c71a1498f27a511e2ce07b069c564da"
+    },
+    {
+      "path": "tests/prototypes/collinearity_units_frozen.py",
+      "category": "tests",
+      "bytes": 12073,
+      "sha256": "d733f099116313e38f77ea99ea1817a5b64fbdeb5ef438071f4bb87146bffe2d"
+    },
+    {
+      "path": "tests/prototypes/collinearity_units_oracle.py",
+      "category": "tests",
+      "bytes": 5470,
+      "sha256": "48f09e0e4652a30773c3e163e7ab5cf32a3de9569b3a6a2c0ea89d0a52c84ee8"
+    },
+    {
+      "path": "tests/run_unit_index_browser_acceptance.py",
+      "category": "tests",
+      "bytes": 8554,
+      "sha256": "4b9908bad726310585e1444ea76ed826143788a0f7dd2173d14e885b24609240"
+    },
+    {
+      "path": "tests/test_collinearity_units.py",
+      "category": "tests",
+      "bytes": 15077,
+      "sha256": "8e0a52a8f450952afa4765ba5b180f455180f0a04d480e90cd156a622ca60f80"
+    },
+    {
+      "path": "tools/benchmark_protein_comparison.py",
+      "category": "measurement-tooling",
+      "bytes": 65092,
+      "sha256": "1664ab79e01fb60117813af70475c84bf66515b926564781c03ee647be034a70"
+    }
+  ]
+}

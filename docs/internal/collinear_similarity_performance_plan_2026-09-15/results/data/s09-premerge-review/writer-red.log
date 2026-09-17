@@ -1,0 +1,22 @@
+Session feature catalog validation failed. Error: The diagram engine returned incompatible feature metadata. Reload the page and Generate again.
+    at catalogError (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/gbdraw/web/js/services/feature-catalog.js:31:28)
+    at admitFeatureCatalog (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/gbdraw/web/js/services/feature-catalog.js:516:53)
+    at validateFeatureCatalog (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/gbdraw/web/js/services/feature-catalog.js:601:3)
+    at exportSession (file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/gbdraw/web/js/services/config.js:3851:36)
+    at file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/tests/web/session-export-validation.test.mjs:68:22
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Missing expected rejection.
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///mnt/c/Users/genom/GitHub/gbdraw/.worktrees/s09-premerge-review-20260917/tests/web/session-export-validation.test.mjs:248:7 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: /valid protein identity manifest/,
+  operator: 'rejects',
+  diff: 'simple'
+}
+
+Node.js v26.8.2

@@ -1,0 +1,139 @@
+{
+  "benchmark": "gbdraw-protein-comparison",
+  "baselineHead": "ca0ef3aa38a7e366aae7c76b97b1c9bcd25de576",
+  "currentHead": "e6410a8166db7839bc7ca5c2398c32c97185c82b",
+  "semanticOnly": false,
+  "comparisons": {
+    "hsp-edges/overlap_duplicate_tie": {
+      "semanticEqual": true,
+      "timeDeltaPct": -13.917063632036209,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/disjoint_reverse_clamp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -18.969535821475958,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/unknown_missing": {
+      "semanticEqual": true,
+      "timeDeltaPct": -27.49076290213991,
+      "decision": "pass"
+    },
+    "hsp-edges/bad_coordinates": {
+      "semanticEqual": true,
+      "timeDeltaPct": -30.388351445064508,
+      "decision": "pass"
+    },
+    "hsp-edges/pair_row_order": {
+      "semanticEqual": true,
+      "timeDeltaPct": -30.922367566690955,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/nan_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": -17.908064664661882,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/infinite_score": {
+      "semanticEqual": true,
+      "timeDeltaPct": -26.187935662140504,
+      "decision": "pass"
+    },
+    "hsp-edges/infinite_length": {
+      "semanticEqual": true,
+      "timeDeltaPct": -46.389536973530156,
+      "decision": "inconclusive"
+    },
+    "hsp-edges/empty": {
+      "semanticEqual": true,
+      "timeDeltaPct": -9.194839830441081,
+      "decision": "pass"
+    },
+    "hsp-1/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -12.11165489561159,
+      "decision": "inconclusive"
+    },
+    "hsp-1000/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": -91.38213548829268,
+      "decision": "inconclusive"
+    },
+    "hsp-many/multi_hsp": {
+      "semanticEqual": true,
+      "timeDeltaPct": 23.69608074757872,
+      "decision": "regression"
+    },
+    "gallery-collinear/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": 13.288707537758992,
+      "decision": "regression"
+    },
+    "gallery-collinear/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": 16.329163342848197,
+      "decision": "regression"
+    },
+    "gallery-collinear/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": -94.9799631883238,
+      "decision": "inconclusive"
+    },
+    "gallery-collinear/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -51.20412847621056,
+      "decision": "pass"
+    },
+    "gallery-collinear/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -2.404024391662185,
+      "decision": "pass"
+    },
+    "gallery-collinear/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": -1.9494991604935286,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/parse": {
+      "semanticEqual": true,
+      "timeDeltaPct": -2.754935013383386,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/filter": {
+      "semanticEqual": true,
+      "timeDeltaPct": -4.690426682962945,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/hsp_aggregate": {
+      "semanticEqual": true,
+      "timeDeltaPct": -95.41582958582202,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/post_search": {
+      "semanticEqual": true,
+      "timeDeltaPct": -63.14409690305464,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/metadata": {
+      "semanticEqual": true,
+      "timeDeltaPct": -9.411081592382253,
+      "decision": "pass"
+    },
+    "gallery-orthogroup/typed_serialization": {
+      "semanticEqual": true,
+      "timeDeltaPct": -4.9029288088685,
+      "decision": "pass"
+    },
+    "render-gallery/hepatoplasmataceae_collinear": {
+      "semanticEqual": true,
+      "timeDeltaPct": -13.64271139578015,
+      "decision": "pass"
+    },
+    "render-gallery/hepatoplasmataceae_orthogroup": {
+      "semanticEqual": true,
+      "timeDeltaPct": -13.571736237428256,
+      "decision": "pass"
+    }
+  },
+  "exitCode": 1
+}

@@ -36,7 +36,7 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     representative_depth_tracks,
     sync_depth_track_legend_entries,
 )
-from ...analysis.protein_colinearity import OrthogroupResult  # type: ignore[reportMissingImports]
+from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...config.models import (  # type: ignore[reportMissingImports]
     GbdrawConfig,
@@ -1638,7 +1638,7 @@ def assemble_linear_diagram(
     comparison_dataframes: list[DataFrame] | None = None,
     linear_comparisons: list[LinearComparison] | None = None,
     linear_layout: LinearMultiRecordOptions | None = None,
-    orthogroups: OrthogroupResult | None = None,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
     align_orthogroup_feature: str | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> Drawing:

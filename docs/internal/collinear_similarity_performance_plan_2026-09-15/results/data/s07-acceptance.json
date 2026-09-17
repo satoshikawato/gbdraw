@@ -1,0 +1,11 @@
+{
+  "scope": "S07 performance evaluation",
+  "status": "accepted",
+  "authority": "Explicit user instruction in this session",
+  "verbatimUserAnnotation": "合格とします",
+  "verbatimUserMessage": "合格でいいです",
+  "numericalDecisionsUnchanged": true,
+  "measurementConditionsUnchanged": true,
+  "independentRemeasurementPerformed": false,
+  "scopeExcludes": "S08 implementation, S06 compatibility review, publication or merge"
+}

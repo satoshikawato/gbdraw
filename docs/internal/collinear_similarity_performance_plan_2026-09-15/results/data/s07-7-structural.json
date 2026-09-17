@@ -1,0 +1,53 @@
+{
+  "scope": "Call counters only; no clocks, profiler or memory measurement",
+  "cases": {
+    "sparse-2": {
+      "S07.6": {
+        "globalSorts": 3,
+        "E": 4,
+        "X": 4,
+        "rankCalls": 16,
+        "resultSha256": "cc0a87b00e98be1b796190013ee16c79bf36fd5c75ee0995e4a08398fa847240"
+      },
+      "final": {
+        "globalSorts": 1,
+        "E": 4,
+        "X": 4,
+        "rankCalls": 4,
+        "resultSha256": "cc0a87b00e98be1b796190013ee16c79bf36fd5c75ee0995e4a08398fa847240"
+      }
+    },
+    "dense-4": {
+      "S07.6": {
+        "globalSorts": 3,
+        "E": 64,
+        "X": 64,
+        "rankCalls": 260,
+        "resultSha256": "6aa2abe7cf2b59a732c8e35e056980a5d429ba2c885cc474fce29cc1bacb82f0"
+      },
+      "final": {
+        "globalSorts": 1,
+        "E": 64,
+        "X": 64,
+        "rankCalls": 68,
+        "resultSha256": "6aa2abe7cf2b59a732c8e35e056980a5d429ba2c885cc474fce29cc1bacb82f0"
+      }
+    },
+    "support-edges": {
+      "S07.6": {
+        "globalSorts": 3,
+        "E": 12,
+        "X": 10,
+        "rankCalls": 56,
+        "resultSha256": "0704d7b3da7bce20d1e8c59d20f54e64cc5d0a168791d569373424d1ccf6b3de"
+      },
+      "final": {
+        "globalSorts": 1,
+        "E": 12,
+        "X": 10,
+        "rankCalls": 22,
+        "resultSha256": "0704d7b3da7bce20d1e8c59d20f54e64cc5d0a168791d569373424d1ccf6b3de"
+      }
+    }
+  }
+}

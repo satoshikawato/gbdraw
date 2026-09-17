@@ -1,0 +1,66 @@
+{
+  "initialFullSuite": {
+    "passed": 4221,
+    "failed": 9,
+    "errors": 6,
+    "skipped": 17,
+    "deselected": 11,
+    "seconds": 873.13,
+    "log": "s03-logs/python-fast.log"
+  },
+  "retriedFiles": {
+    "passed": 28,
+    "failed": 2,
+    "seconds": 28.78,
+    "log": "s03-logs/python-browser-retry.log"
+  },
+  "finalNodeBrowserContract": {
+    "passed": 1,
+    "seconds": 161.27,
+    "log": "s03-logs/python-comparison-contract-retry.log"
+  },
+  "finalInstalledCliReplay": {
+    "passed": 1,
+    "seconds": 12.06,
+    "log": "s03-logs/python-cli-replay-retry-quoted.log"
+  },
+  "combinedCoverage": {
+    "passed": 4236,
+    "skipped": 17,
+    "deselected": 11,
+    "unresolvedFailures": 0
+  },
+  "skipReasons": {
+    "referenceUpdateOptIn": 16,
+    "externalBlastpOptIn": 1
+  },
+  "focused": {
+    "passed": 375,
+    "skipped": 1
+  },
+  "metadataAndSvg": {
+    "passed": 195,
+    "referenceSvgCount": 16
+  },
+  "nodeUnit": {
+    "passed": 213,
+    "skipped": 0
+  },
+  "architectureGate": "passed",
+  "ruff": "passed",
+  "offlineBrowser": {
+    "viewports": [
+      [
+        1280,
+        720
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "assertionsEach": 22567,
+    "externalRequests": 0,
+    "pageErrors": 0
+  }
+}
