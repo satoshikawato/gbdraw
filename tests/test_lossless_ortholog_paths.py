@@ -4,6 +4,7 @@ from dataclasses import replace
 import importlib.util
 import json
 from pathlib import Path
+import sys
 from unittest.mock import patch
 
 import pandas as pd
@@ -217,6 +218,12 @@ def test_gallery_science_matches_archived_s04_bytes(name):
     saved = json.loads(gzip.decompress((ROOT / 'docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data'
         / f's04-current-timing-cursor-{name}.json.gz').read_bytes()))
     expected = saved['cases'][name]['stages']['post_search']['semanticSha256']
+    if sys.version_info < (3, 12):
+        # Python 3.12 changed float sum(). These exact digests come from the
+        # unchanged S04 commit run independently on Python 3.10 and 3.11.
+        saved = json.loads((ROOT / 'docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data'
+            / 's09-merge-ci/baseline-python311.json').read_text())
+        expected = saved['cases'][name]['semanticSha256']
     assert runner.digest(runner.json_bytes(runner.canonical(legacy))) == expected
 
 
