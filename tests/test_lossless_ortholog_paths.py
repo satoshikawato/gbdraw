@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 
 from gbdraw.analysis import protein_colinearity as pc
@@ -208,8 +209,10 @@ def test_alias_keys_and_equal_protein_order_keys_preserve_legacy_order(tmp_path)
 def test_gallery_science_matches_archived_s04_bytes(name):
     import gzip
     from gbdraw.analysis import collinearity as cc
-    _, stages = runner.build_case(ROOT, pc, cc, name, runner.SEED)
-    result = stages["post_search"]()
+    # Reproduce the archived pandas 2 inference setting, including its dtypes.
+    with pd.option_context("future.infer_string", False):
+        _, stages = runner.build_case(ROOT, pc, cc, name, runner.SEED)
+        result = stages["post_search"]()
     legacy = replace(result, orthogroups=pc.materialize_ortholog_paths(result.orthogroups))
     saved = json.loads(gzip.decompress((ROOT / 'docs/internal/collinear_similarity_performance_plan_2026-09-15/results/data'
         / f's04-current-timing-cursor-{name}.json.gz').read_bytes()))
