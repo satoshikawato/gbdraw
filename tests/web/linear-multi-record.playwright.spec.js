@@ -3308,3 +3308,59 @@ test('File-level default organism and subtitle apply across records and allow pe
   expect(resetResolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
 });
 
+test('GenBank file upload automatically populates file defaults with inferred organism and subtitle', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.mode = 'linear';
+  });
+
+  const sampleGenbank = `LOCUS       NC_002695            1000 bp    DNA     circular BCT 12-FEB-2021
+DEFINITION  Escherichia coli O157:H7 str. Sakai DNA, complete genome.
+ACCESSION   NC_002695
+VERSION     NC_002695.2
+FEATURES             Location/Qualifiers
+     source          1..1000
+                     /organism="Escherichia coli O157:H7 str. Sakai"
+                     /mol_type="genomic DNA"
+                     /strain="Sakai"
+                     /sub_strain="RIMD 0509952"
+                     /serovar="O157:H7"
+     gene            1..100
+                     /gene="testA"
+     CDS             1..100
+                     /gene="testA"
+                     /product="test protein"
+//
+`;
+
+  await page.evaluate((content) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'Sakai_sample.gbk', { type: 'text/plain' }));
+  }, sampleGenbank);
+
+  await expect.poll(() => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const group = app.linearSourceGroups[0];
+    return {
+      definition: app.getLinearSourceDefaultDefinition(group),
+      subtitle: app.getLinearSourceDefaultSubtitle(group)
+    };
+  })).toEqual({
+    definition: '<i>Escherichia coli</i> O157:H7 str. Sakai',
+    subtitle: 'Complete genome'
+  });
+
+  await expect(page.getByLabel('Default definition for file 1')).toHaveValue('<i>Escherichia coli</i> O157:H7 str. Sakai');
+  await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('Complete genome');
+
+  await page.evaluate(() => {
+    const options = document.querySelector('[data-linear-record-options]');
+    if (options) options.open = true;
+  });
+
+  const recordDefInput = page.getByLabel('Definition for sequence 1');
+  await expect(recordDefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
+  await expect(page.getByText('Using file default').first()).toBeVisible();
+});
+
+

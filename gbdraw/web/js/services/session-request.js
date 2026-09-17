@@ -2366,7 +2366,9 @@ export const buildCanonicalRenderRequest = ({
   if (state.mode.value === 'linear') {
     webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => ({
       recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
-      losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
+      losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1,
+      fileDefinition: String(filesData.linearSeqs[sourceIndex]?.file_definition || ''),
+      fileSubtitle: String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '')
     }));
   }
 
@@ -3515,6 +3517,8 @@ export const projectCanonicalSessionRequest = ({
         ),
         definition: record.presentation?.label || '',
         record_subtitle: record.presentation?.subtitle || '',
+        file_definition: String(savedMetadata.fileDefinition ?? savedMetadata.file_definition ?? ''),
+        file_subtitle: String(savedMetadata.fileSubtitle ?? savedMetadata.file_subtitle ?? ''),
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
         region_start: region?.start ?? null,
         region_end: region?.end ?? null,

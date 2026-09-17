@@ -933,6 +933,7 @@ export const createAppSetup = () => {
   ));
 
   const pendingLinearRecordExpansions = new Set();
+  const pendingLinearMetadataInference = new Set();
   const expandDiscoveredLinearRecords = ({ uid, records }) => {
     if (!pendingLinearRecordExpansions.delete(uid)) return;
     const index = linearSeqs.findIndex((seq) => seq.uid === uid);
@@ -940,18 +941,45 @@ export const createAppSetup = () => {
     const source = linearSeqs[index];
     if (source.region_record_id || source.region_start != null || source.region_end != null) return;
     const row = linearRecordRowFor(uid, index + 1);
-    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => (
-      createLinearSeq({
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => {
+      const discoveredRecord = records[recordIndex];
+      return createLinearSeq({
         ...source,
         uid: recordIndex === 0 ? uid : undefined,
-        region_record_id: record.value
-      })
-    ));
+        region_record_id: record.value,
+        ...(discoveredRecord?.plasmid && discoveredRecord?.inferredSubtitle ? {
+          record_subtitle: discoveredRecord.inferredSubtitle
+        } : {})
+      });
+    });
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
     ]);
     expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
     return true;
+  };
+  const handleLinearRecordsDiscovered = ({ uid, records }) => {
+    const isRollbackOrSessionLoad = Boolean(
+      state.sessionImportRollbackInProgress?.value ||
+      state.sessionResourceDiscoveryDeferred?.value
+    );
+    if (!isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid)) {
+      if (Array.isArray(records) && records.length > 0) {
+        const first = records[0];
+        const group = linearSourceGroups.value.find((entry) => (
+          entry.uid === uid || entry.records.some(({ sequence }) => sequence.uid === uid)
+        ));
+        if (group) {
+          if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
+            setLinearSourceDefaultDefinition(group, first.inferredDefinition);
+          }
+          if (first.inferredSubtitle && !getLinearSourceDefaultSubtitle(group)) {
+            setLinearSourceDefaultSubtitle(group, first.inferredSubtitle);
+          }
+        }
+      }
+    }
+    return expandDiscoveredLinearRecords({ uid, records });
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
@@ -964,7 +992,7 @@ export const createAppSetup = () => {
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
-    onRecordsDiscovered: expandDiscoveredLinearRecords,
+    onRecordsDiscovered: handleLinearRecordsDiscovered,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -3298,6 +3326,9 @@ export const createAppSetup = () => {
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
     });
+    pendingLinearMetadataInference.forEach((uid) => {
+      if (!activeUids.has(uid)) pendingLinearMetadataInference.delete(uid);
+    });
     const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
     replaceLinearComparisonPlan(
@@ -3342,6 +3373,7 @@ export const createAppSetup = () => {
     const replacement = createLinearSeq({
       ...group.sequence,
       [field]: nextValue,
+      ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
       ...(group.records.length > 1 ? {
         region_record_id: '', region_start: null, region_end: null, region_reverse: false
       } : {})
@@ -3352,6 +3384,7 @@ export const createAppSetup = () => {
         : members.has(entry.uid) ? [] : [entry]
     )));
     if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
+    if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
 
   const canMoveLinearSeqUp = (index) => {

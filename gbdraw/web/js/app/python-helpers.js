@@ -1595,6 +1595,7 @@ def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
     from gbdraw.api.record_planning import _detected_topology
+    from gbdraw.core.record_metadata import infer_record_source_metadata
     try:
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
@@ -1604,12 +1605,78 @@ def list_sequence_records(path, format):
             return json.dumps({"error": "No records found"})
         payload = []
         for idx, record in enumerate(records):
+            organism = ""
+            strain = ""
+            inferred_def = ""
+            inferred_sub = ""
+            if format == "genbank":
+                meta = infer_record_source_metadata(record)
+                organism = meta.organism or ""
+                strain = meta.strain or ""
+                candidatus = False
+                clean_org = organism
+                if clean_org.lower().startswith("candidatus "):
+                    candidatus = True
+                    clean_org = clean_org[11:].strip()
+                non_orgs = {"synthetic construct", "artificial sequence", "unidentified", "unidentified organism", "unknown", "vector", "cloning vector", "unidentified cloning vector", "expression vector"}
+                if clean_org.lower() in non_orgs:
+                    inferred_def = strain
+                else:
+                    words = clean_org.split()
+                    if len(words) >= 2:
+                        binom = f"<i>{' '.join(words[:2])}</i>"
+                        rest = " ".join(words[2:])
+                        if strain and strain.lower() not in rest.lower():
+                            rest = f"{rest} {strain}".strip()
+                        cand_prefix = "Candidatus " if candidatus else ""
+                        inferred_def = f"{cand_prefix}{binom} {rest}".strip()
+                    elif words:
+                        cand_prefix = "Candidatus " if candidatus else ""
+                        inferred_def = f"{cand_prefix}<i>{words[0]}</i> {strain}".strip()
+                    else:
+                        inferred_def = strain
+
+                if meta.replicon:
+                    inferred_sub = meta.replicon
+                else:
+                    import re
+                    def_line = str(record.description or "").strip()
+                    plasmid_match = re.search(r"(?:plasmid\s+([A-Za-z0-9_-]+)|(p[A-Za-z0-9_-]+)\b)", def_line, re.IGNORECASE)
+                    if plasmid_match:
+                        p_name = (plasmid_match.group(1) or plasmid_match.group(2) or "").strip()
+                        inferred_sub = p_name if p_name.lower().startswith("plasmid") else f"Plasmid {p_name}"
+                    elif "complete genome" in def_line.lower():
+                        if "mitochondri" in def_line.lower():
+                            inferred_sub = "Mitochondrion, complete genome"
+                        elif "chloroplast" in def_line.lower():
+                            inferred_sub = "Chloroplast, complete genome"
+                        else:
+                            inferred_sub = "Complete genome"
+                    elif "complete sequence" in def_line.lower():
+                        inferred_sub = "Complete sequence"
+                    else:
+                        stripped = def_line
+                        if organism and organism.lower() not in non_orgs:
+                            stripped = re.sub(rf"^{re.escape(organism)}[,\s]*", "", stripped, flags=re.IGNORECASE)
+                            stripped = re.sub(r"^(?:DNA|genomic DNA|cDNA)[,\s]*", "", stripped, flags=re.IGNORECASE).strip()
+                            if re.search(r"(?:gene cluster|biosynthetic gene cluster|cluster|operon)", stripped, re.IGNORECASE):
+                                inferred_sub = stripped[:1].upper() + stripped[1:] if stripped else ""
+                        if not inferred_sub:
+                            cluster_match = re.search(r"([A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)*\s+(?:gene cluster|biosynthetic gene cluster|cluster|operon))", def_line, re.IGNORECASE)
+                            if cluster_match:
+                                res = cluster_match.group(1).strip()
+                                inferred_sub = res[:1].upper() + res[1:] if res else ""
+
             payload.append(
                 {
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
                     "topology": _detected_topology(record, "genbank") if format == "genbank" else "unknown",
+                    "organism": organism,
+                    "strain": strain,
+                    "inferred_definition": inferred_def,
+                    "inferred_subtitle": inferred_sub,
                 }
             )
         return json.dumps({"records": payload})
