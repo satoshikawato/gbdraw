@@ -25,6 +25,7 @@ export const createPreviewFeatureSearch = ({
   computed,
   reactive,
   openFeatureEditorForFeature,
+  resolveOrthogroups = () => state.orthogroups.value,
   previewRuntime = null
 }) => {
   const {
@@ -79,14 +80,32 @@ export const createPreviewFeatureSearch = ({
   };
   const ensureSearchIndex = () => {
     if (!searchIndex) {
+      const labels = new Map((state.editableLabels?.value || []).map((entry) => [entry.featureId, entry]));
       searchIndex = buildFeatureSearchIndex({
-        features: extractedFeatures.value,
+        features: extractedFeatures.value.map((feature) => {
+          const entry = labels.get(feature.svg_id);
+          const sources = [entry?.sourceText, feature.label, feature.product, feature.gene, feature.locus_tag];
+          return {
+            ...feature,
+            search_labels: [
+              feature.search_labels,
+              entry?.text,
+              state.labelTextFeatureOverrides?.[feature.svg_id],
+              ...sources.map((source) => state.labelTextBulkOverrides?.[source])
+            ]
+          };
+        }),
         popupMode: getPopupMode(),
-        orthogroups: orthogroups.value
+        orthogroups: resolveOrthogroups()
       });
       recordStructuralMetric('featureSearchIndexBuildCount', 1, { phase: 'feature-search' });
     }
     return searchIndex;
+  };
+  const updateRenderedCount = () => {
+    previewFeatureSearchRenderedCount.value =
+      state.featureCatalog?.value?.items?.[selectedResultIndex.value]?.features?.length
+      ?? extractedFeatures.value?.length ?? 0;
   };
   const ensureFeatureElementIndex = (svg = getSvg()) => {
     if (featureElementIndexSvg !== svg || !featureElementIndex) {
@@ -144,9 +163,7 @@ export const createPreviewFeatureSearch = ({
     const previousActiveId = preserveActive ? getActiveMatchId() : '';
     const svg = getSvg();
     if (!String(previewFeatureSearchQuery.value || '').trim()) {
-      previewFeatureSearchRenderedCount.value = Array.isArray(extractedFeatures.value)
-        ? extractedFeatures.value.length
-        : 0;
+      updateRenderedCount();
       previewFeatureSearchError.value = '';
       previewFeatureSearchMatches.value = [];
       previewFeatureSearchMatchDetails.value = {};
@@ -372,18 +389,28 @@ export const createPreviewFeatureSearch = ({
     }
   );
   watch([extractedFeatures, orthogroups], () => {
+    updateRenderedCount();
     invalidateSearchIndex();
     if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
   });
   watch([selectedResultIndex, svgContent], () => {
     invalidateFeatureElementIndex();
   });
+  watch([
+    () => (state.editableLabels?.value || []).map((entry) => [entry.featureId, entry.sourceText, entry.text]),
+    () => state.labelTextFeatureOverrides,
+    () => state.labelTextBulkOverrides,
+    () => state.orthogroupNameOverrides,
+    () => state.orthogroupDescriptionOverrides
+  ], () => {
+    invalidateSearchIndex();
+    if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+  }, { deep: true });
 
-  previewFeatureSearchRenderedCount.value = Array.isArray(extractedFeatures.value)
-    ? extractedFeatures.value.length
-    : 0;
+  updateRenderedCount();
 
   const handleMountedResultReady = () => {
+    updateRenderedCount();
     invalidateFeatureElementIndex();
     clearPreviewClasses();
     if (queryIsActive()) scheduleRefreshSearch({ preserveActive: false });

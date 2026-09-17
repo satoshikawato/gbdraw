@@ -1056,14 +1056,10 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(first.outcome.rawSearchTelemetry.rawTsvEntryCount).toBe(
     first.outcome.rawSearchTelemetry.totalPairs
   );
-  expect(first.outcome.rawSearchTelemetry.rawJobs).toHaveLength(
-    first.outcome.rawSearchTelemetry.totalPairs
-  );
-  expect(first.outcome.rawSearchTelemetry.rawJobs.every(({ cacheKey, args }) => (
-    /^[0-9a-f]{64}$/.test(cacheKey)
-      && args.includes('--max-target-seqs')
-      && args[args.indexOf('--max-target-seqs') + 1] === '5'
-  ))).toBe(true);
+  // rawJobs describes executed source batches; every raw pair is cached here.
+  expect(first.outcome.rawSearchTelemetry.rawJobs).toEqual([]);
+  expect(first.outcome.rawSearchTelemetry.uniqueJobs).toBe(0);
+  expect(first.outcome.rawSearchTelemetry.workerCalls).toBe(0);
   expect(first.outcome.rawSearchTelemetry.rawTsvBytes).toBeGreaterThan(0);
   expect(first.outcome.rawSearchTelemetry.rawTsvLargestEntryBytes).toBeGreaterThan(0);
   expect(first.outcome.rawSearchTelemetry.helperRequestMetadataBytes).toBeGreaterThan(0);
@@ -1078,6 +1074,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     collinearSearchScope: 'adjacent',
     cacheHits: first.outcome.rawSearchTelemetry.totalPairs,
     cacheMisses: 0,
+    uniqueJobs: 0,
+    workerCalls: 0,
     proteinDerivedPayloadCacheHits: 0,
     proteinDerivedPayloadCacheMisses: 1,
     rawTsvEntryCount: first.outcome.rawSearchTelemetry.rawTsvEntryCount,

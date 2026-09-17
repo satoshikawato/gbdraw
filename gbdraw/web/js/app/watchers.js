@@ -89,8 +89,6 @@ export const setupWatchers = ({
     collinearGroups,
     featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
     labelTextBulkOverrides,
@@ -429,14 +427,12 @@ export const setupWatchers = ({
         replacePlainObject(state.featureVisibilitySelectorCache, {});
       }
       editableLabels.value = [];
-      orthogroups.value = [];
-      collinearGroups.value = [];
-      featureOrthogroupIndex.value = new Map();
+      orthogroups.value = features.orthogroups || [];
+      collinearGroups.value = features.collinearGroups || [];
+      featureOrthogroupIndex.value = features.featureOrthogroupIndex || new Map();
       selectedOrthogroupAlignmentFeature.value = '';
       selectedOrthogroupId.value = '';
       orthogroupSearch.value = '';
-      Object.keys(orthogroupNameOverrides).forEach((k) => delete orthogroupNameOverrides[k]);
-      Object.keys(orthogroupDescriptionOverrides).forEach((k) => delete orthogroupDescriptionOverrides[k]);
       labelOverrideBuildWarning.value = '';
       labelLayoutDirtyReason.value = '';
       labelSearch.value = '';
@@ -458,11 +454,25 @@ export const setupWatchers = ({
     }
   );
 
-  watch(() => files.d_color, async (newFile) => {
-    if (semanticFileWatchersSuppressed.value) return;
-    if (!newFile) return;
+  const pendingFileImports = new WeakMap();
+  let fileImportApplications = Promise.resolve();
+  const watchFileImport = (key, apply) => watch(() => files[key], (file) => {
+    if (semanticFileWatchersSuppressed.value || !file) return;
+    const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value;
+    const pending = readFileText(file).then((text) => {
+      // Reads may finish out of order; serialize only their live application.
+      const application = fileImportApplications.then(() => isCurrent() ? apply(text, isCurrent) : undefined);
+      fileImportApplications = application.catch(() => {});
+      return application;
+    }).catch((error) => {
+      if (isCurrent()) alert(`Failed to read ${file.name || 'uploaded table'}: ${error.message}`);
+    });
+    pendingFileImports.set(file, pending);
+  });
+  const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
+
+  watchFileImport('d_color', (text) => {
     try {
-      const text = await readFileText(newFile);
       const { colors, count } = parseColorTable(text);
       Object.entries(colors).forEach(([key, color]) => {
         currentColors.value[key] = color;
@@ -474,11 +484,8 @@ export const setupWatchers = ({
     }
   });
 
-  watch(() => files.t_color, async (newFile) => {
-    if (semanticFileWatchersSuppressed.value) return;
-    if (!newFile) return;
+  watchFileImport('t_color', async (text, isCurrent) => {
     try {
-      const text = await readFileText(newFile);
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
       const previousCaptions = Array.from(fileLegendCaptions.value);
       const previousFileIntents = buildLegendIntents(
@@ -489,6 +496,7 @@ export const setupWatchers = ({
         await nextTick();
         await syncFileLegendEntries(prepared.intents, { previousFileIntents });
       }
+      if (!isCurrent()) return;
 
       manualSpecificRules.splice(0, manualSpecificRules.length, ...prepared.nextRules);
       previousCaptions.forEach((caption) => addedLegendCaptions.value.delete(caption));
@@ -502,11 +510,8 @@ export const setupWatchers = ({
     }
   });
 
-  watch(() => files.qualifier_priority, async (newFile) => {
-    if (semanticFileWatchersSuppressed.value) return;
-    if (!newFile) return;
+  watchFileImport('qualifier_priority', (text) => {
     try {
-      const text = await readFileText(newFile);
       const { rules, count } = parsePriorityRules(text);
       rules.forEach((rule) => {
         const idx = manualPriorityRules.findIndex((r) => r.feat === rule.feat);
@@ -523,11 +528,8 @@ export const setupWatchers = ({
     }
   });
 
-  watch(() => files.whitelist, async (newFile) => {
-    if (semanticFileWatchersSuppressed.value) return;
-    if (!newFile) return;
+  watchFileImport('whitelist', (text) => {
     try {
-      const text = await readFileText(newFile);
       const { rules, count } = parseWhitelistRules(text);
       rules.forEach((rule) => manualWhitelist.push(rule));
       console.log(`Loaded ${count} whitelist rules.`);
@@ -537,11 +539,8 @@ export const setupWatchers = ({
     }
   });
 
-  watch(() => files.blacklist, async (newFile) => {
-    if (semanticFileWatchersSuppressed.value) return;
-    if (!newFile) return;
+  watchFileImport('blacklist', (text) => {
     try {
-      const text = await readFileText(newFile);
       const { words, count } = parseBlacklistWords(text);
       if (words.length > 0) {
         const existing = manualBlacklist.value ? manualBlacklist.value.trim() : '';
@@ -628,4 +627,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', error);
     }
   });
+  return { waitForAuxiliaryFileImport };
 };

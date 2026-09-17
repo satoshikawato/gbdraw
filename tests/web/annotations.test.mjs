@@ -17,6 +17,7 @@ const {
   annotationRecordSelectorValue,
   coordinateTarget,
   featureTarget,
+  featureTargetsFromSelection,
   parseAnnotationRecordSelectorValue
 } = await load('app/annotations/target-actions.js');
 const { buildAnnotationRecordCatalog } = await load('app/annotations/record-catalog.js');
@@ -52,6 +53,43 @@ const restored = parseAnnotationTable(table);
 assert.equal(restored[0].id, 'review');
 assert.equal(restored[0].annotations[0].target.start, 10);
 assert.equal(restored[0].annotations[1].target.selectors[0].value, 'ABC_1');
+
+test('malformed imported feature selectors are rejected before replacing the draft', () => {
+  for (const selector of [';', 'locus_tag=']) {
+    assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tfeature_selector\ns\ta\thighlight\t${selector}\n`), /feature_selector requires/);
+  }
+});
+
+test('invalid annotation coordinates cannot be silently clamped or truncated', () => {
+  for (const start of ['abc', '0', '-10', '1.5', '', 'Infinity']) {
+    assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t30\n`), /positive integers/);
+    const invalid = [{ id: 's', annotations: [{ id: 'a', target: coordinateTarget({ start, end: 30 }) }] }];
+    assert.match(validateAnnotationRecordTargets(invalid, { records: [] }), /positive integers/);
+  }
+  assert.equal(parseAnnotationTable('set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t10\t30\n')[0].annotations[0].target.start, 10);
+});
+
+test('TSV cannot silently replace unknown annotation choices or ignore misspelled columns', () => {
+  for (const [column, value] of [['coordinate_space', 'typo'], ['lane', '-1'], ['lane', '1.5'], ['fill_colour', 'red']]) {
+    assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\t${column}\ns\ta\tband\t1\t8\t${value}\n`));
+  }
+  const local = parseAnnotationTable('set_id\tid\tmark\tstart\tend\tcoordinate_space\ns\ta\tBAND\t1\t8\tLOCAL\n')[0].annotations[0];
+  assert.equal(local.mark, 'band');
+  assert.equal(local.target.coordinateSpace, 'local');
+});
+
+test('row style edits do not recolor sibling annotations or their inherited default', () => {
+  const state = { annotationSets: [], adv: {} };
+  const editor = createAnnotationEditor({ state });
+  const set = editor.addAnnotationSet();
+  const first = editor.addCoordinateAnnotation(set);
+  const second = editor.addCoordinateAnnotation(set);
+  const inherited = set.defaultStyle.fill;
+  editor.setAnnotationStyle(set, first, 'fill', '#ff0000');
+  assert.equal(first.style.fill, '#ff0000');
+  assert.equal(second.style, null);
+  assert.equal(set.defaultStyle.fill, inherited);
+});
 
 test('explicit no-fill survives TSV while omitted fill keeps the Web default', () => {
   const draft = [createAnnotationSet({
@@ -144,6 +182,31 @@ const state = {
   adv: { circular_track_slots: [], linear_track_slots: [] }
 };
 const editor = createAnnotationEditor({ state });
+test('delete and re-add keeps coordinate and selected-feature annotation IDs unique', () => {
+  const state = { annotationSets: [], selectedFeatures: { value: [{ selector: { hash: 'f123' } }] } };
+  const actions = createAnnotationEditor({ state });
+  const set = actions.addAnnotationSet();
+  for (let i = 0; i < 3; i += 1) actions.addCoordinateAnnotation(set);
+  actions.removeAnnotation(set, set.annotations[0]);
+  actions.addCoordinateAnnotation(set);
+  for (let i = 0; i < 3; i += 1) actions.addSelectedFeatures(set);
+  actions.removeAnnotation(set, set.annotations[3]);
+  actions.addSelectedFeatures(set);
+  const ids = set.annotations.map((item) => item.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(normalizeAnnotationSets([set])[0].annotations.map((item) => item.id), ids);
+});
+
+test('selected annotations use stable hashes, including features without named qualifiers', () => {
+  const targets = featureTargetsFromSelection([
+    { type: 'D-loop', record_id: 'mt', selector: { hash: 'fcf4827e2' } },
+    { gene: 'duplicated', record_id: 'mt', selector: { hash: 'f1234' } }
+  ]);
+  assert.deepEqual(targets.map((target) => target.selectors), [
+    [{ key: 'hash', value: 'fcf4827e2' }], [{ key: 'hash', value: 'f1234' }]
+  ]);
+  assert.throws(() => featureTargetsFromSelection([{}]), /no stable annotation selector/);
+});
 const created = editor.addAnnotationSet('review');
 const addedCoordinate = editor.addCoordinateAnnotation(created, { start: 5, end: 8 });
 assert.equal(addedCoordinate.mark, 'highlight');

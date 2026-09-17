@@ -1019,9 +1019,11 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
     const input = event?.target;
     const file = input?.files?.[0];
     if (!file) return;
+    const sourceSvg = svgContainer.value?.querySelector('svg') || null;
 
     try {
       const text = await readFileText(file);
+      if (input.files?.[0] !== file || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       const rows = parseLabelOverrideTsv(text);
 
       if (!svgContainer.value) {
@@ -1118,7 +1120,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null }) => {
       console.error('Failed to load label TSV:', error);
       window.alert(`Failed to load label TSV. ${error?.message || 'Please check the 5-column TSV format.'}`);
     } finally {
-      if (input) input.value = '';
+      if (input?.files?.[0] === file) input.value = '';
     }
   };
 

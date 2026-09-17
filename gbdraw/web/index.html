@@ -1281,7 +1281,7 @@
                             <button v-if="(cInputType === 'gff' ? files.c_gff && files.c_fasta : files.c_gb) && !recordDisplayControls.rowsFor('circular').length" type="button" @click="refreshCircularRecordOrder" class="text-xs text-blue-600">Load record rotation controls</button>
                             <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
                         </section>
-                        <details data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
+                        <details ref="circularRecordPresentationPanel" data-circular-record-presentation @toggle="$event.target.open && refreshCircularRecordOrder()" class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Circular record presentation">
                                 <i class="ph ph-selection"></i>
                                 Single-record presentation
@@ -2330,7 +2330,7 @@
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
                                 <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()"><i class="ph ph-plus"></i> Add set</button>
-                                <label class="btn btn-secondary text-[10px] flex-1 cursor-pointer"><i class="ph ph-upload-simple"></i> Import TSV<input type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile"></label>
+                                <label class="btn btn-secondary text-[10px] flex-1 cursor-pointer"><i class="ph ph-upload-simple"></i> Import TSV<input data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile"></label>
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> Download TSV</button>
                             </div>
                             <p v-if="!canDownloadAnnotationTable()" id="annotation-download-help" class="text-[10px] text-slate-500">Add an annotation row to download TSV.</p>
@@ -2344,7 +2344,7 @@
                                 <input v-model.trim="set.legendLabel" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)">
                                 <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
-                                        <input v-model.lazy.trim="item.id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id">
+                                        <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id">
                                         <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]">
                                             <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
                                         </select>
@@ -2388,9 +2388,9 @@
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-1 items-center">
-                                        <input type="color" v-model="set.defaultStyle.stroke" class="form-input h-7 p-0" title="Stroke color">
-                                        <input type="color" :value="set.defaultStyle.fill || '#94a3b8'" @input="set.defaultStyle.fill = $event.target.value" class="form-input h-7 p-0" title="Fill color">
-                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean(set.defaultStyle.hatch)" @change="set.defaultStyle.hatch = $event.target.checked ? { angle: 45, spacing: 5, color: set.defaultStyle.stroke, width: 1, cross: false } : null"> Hatch</label>
+                                        <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-7 p-0" title="Stroke color">
+                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-7 p-0" title="Fill color">
+                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)"> Hatch</label>
                                     </div>
                                 </div>
                                 <div class="flex gap-1">
@@ -3644,7 +3644,7 @@
                                 </div>
                                 <div class="mt-2">
                                     <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Override File (-d)" v-model="files.d_color" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Override File (-d)" v-model="files.d_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="text-[9px] text-slate-400 mt-1">
                                         <help-tip text="Tab-separated value (TSV) file that overrides the color palette. Feature types not specified will use the selected palette colors."></help-tip>
                                         Override default feature colors.
@@ -3706,7 +3706,7 @@
 
                                 <div class="mt-2">
                                     <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Specific Table (-t)" v-model="files.t_color" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="text-[9px] text-slate-400 mt-1">
                                         <help-tip text="TSV file that overrides the color palette for specific features based on qualifiers."></help-tip>
                                         Override colors for specific features.
@@ -3954,7 +3954,7 @@
                                         <p class="text-[10px] text-slate-500">Exclude labels containing these keywords.</p>
                                         <textarea v-model="manualBlacklist" class="form-input h-20" placeholder="hypothetical, unknown"></textarea>
                                         <div class="text-[10px] text-center text-slate-400">- OR -</div>
-                                        <file-uploader label="Blacklist File" v-model="files.blacklist" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
+                                        <file-uploader label="Blacklist File" v-model="files.blacklist" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
@@ -3967,7 +3967,7 @@
                                         </div>
                                         <button @click="manualWhitelist.push({feat:'CDS', qual:'product', key:''})" class="text-xs text-blue-600 font-bold">+ Add Rule</button>
                                         <div class="text-[10px] text-center text-slate-400 mt-2">- OR -</div>
-                                        <file-uploader label="Whitelist File" v-model="files.whitelist" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                        <file-uploader label="Whitelist File" v-model="files.whitelist" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     </div>
                                 </div>
 
@@ -3994,7 +3994,7 @@
                                     </div>
 
                                     <div class="text-[10px] text-center text-slate-400 mb-1">- OR UPLOAD FILE -</div>
-                                    <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader label="Priority File (TSV)" v-model="files.qualifier_priority" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
@@ -6279,7 +6279,7 @@
                                 <div class="flex items-center gap-2 shrink-0">
                                     <button @click="downloadLabelOverrideTable" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Label TSV</button>
                                     <button @click="$refs.labelTableInput.click()" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Label TSV</button>
-                                    <input type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable">
+                                    <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable">
                                     <button @click="resetAllLabelTextOverrides" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700">Reset Label Edits</button>
                                 </div>
                             </div>
@@ -6625,7 +6625,7 @@
 </script>
 
 <script type="text/x-template" id="file-uploader-template">
-    <div class="w-full" role="group" :aria-label="($attrs['data-input-aria-label'] || label) + ' selection'">
+    <div class="w-full" data-history-managed role="group" :aria-label="($attrs['data-input-aria-label'] || label) + ' selection'">
         <div class="flex justify-between items-end mb-1">
             <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
             <button v-if="hasSelection" @click.stop="clearFile" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>

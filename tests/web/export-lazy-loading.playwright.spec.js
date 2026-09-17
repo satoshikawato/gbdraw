@@ -91,6 +91,21 @@ const expectNoPdfOrInteractiveRequests = (requestCount) => {
   expect(requestCount(STANDALONE_ASSET_PATH)).toBe(0);
 };
 
+for (const failedAsset of [JSPDF_PATH, SVG2PDF_PATH]) {
+  test(`PDF retries after a transient ${failedAsset.split('/').at(-1)} failure`, async ({ page }) => {
+    await page.goto('/gbdraw/web/index.html');
+    await mountExportFixture(page);
+    await page.route(`**${failedAsset}`, (route) => route.abort());
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toEqual({ status: 'error' });
+    await page.unroute(`**${failedAsset}`);
+    const pending = page.waitForEvent('download');
+    await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
+    const download = await pending;
+    expect(download.suggestedFilename()).toBe('lazy-export.pdf');
+    expect(await download.failure()).toBeNull();
+  });
+}
+
 test('startup and non-PDF exports do not load PDF or interactive payloads', { tag: '@pr-smoke' }, async ({
   page
 }) => {

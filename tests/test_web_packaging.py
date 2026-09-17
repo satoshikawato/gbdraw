@@ -1417,6 +1417,11 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert "gbdraw/web/js/app/annotations/record-catalog.js" in outer_names
         assert "gbdraw/web/js/app/annotations/record-selector.js" in outer_names
         assert "gbdraw/web/js/app/annotations/validation.js" in outer_names
+        assert "gbdraw/web/js/services/pdf-fonts.js" in outer_names
+        assert {
+            f"gbdraw/web/{path.as_posix()}"
+            for path in verify_module.REQUIRED_PDF_FONT_FILES
+        } <= set(outer_names)
         assert {
             f"gbdraw/web/{path.as_posix()}"
             for path in verify_module.REQUIRED_TUTORIAL_DATA_FILES

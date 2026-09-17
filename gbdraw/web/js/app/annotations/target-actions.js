@@ -89,12 +89,14 @@ export const featureTarget = ({ selector, selectors = null, recordId = null, rec
 });
 
 export const featureTargetsFromSelection = (features, options = {}) => (
-  (Array.isArray(features) ? features : []).map((feature, index) => {
+  (Array.isArray(features) ? features : []).map((feature) => {
     const qualifier = feature?.qualifiers || {};
     const first = (value) => Array.isArray(value) ? value[0] : value;
     const locusTag = first(qualifier.locus_tag ?? feature?.locus_tag);
     const gene = first(qualifier.gene ?? feature?.gene);
-    const selector = locusTag ? `locus_tag=${locusTag}` : (gene ? `gene=${gene}` : `#${index + 1}`);
+    const hash = feature?.selector?.hash || feature?.stable_feature_id || feature?.stable_svg_id;
+    const selector = hash ? `hash=${hash}` : (locusTag ? `locus_tag=${locusTag}` : (gene ? `gene=${gene}` : ''));
+    if (!selector) throw new Error('The selected feature has no stable annotation selector.');
     return featureTarget({
       ...options,
       selector,
