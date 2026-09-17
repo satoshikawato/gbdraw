@@ -270,6 +270,7 @@ test.describe('active Result Feature fill transaction', () => {
     const fillPicker = popup.getByLabel('Feature fill color', { exact: true }).first();
     await expect(fillPicker).toHaveValue(BEFORE_COLOR);
     await fillPicker.fill(AFTER_COLOR);
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
     const scopeDialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
     await expect(scopeDialog).toBeVisible();
     const applyScopeButton = scopeDialog.getByRole('button').filter({

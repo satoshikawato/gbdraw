@@ -591,13 +591,13 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await toggle.click();
   await expect(groupAaCopy).toHaveText(/Copy aa/);
 
-  const openedFeaturePopup = await page.evaluate(() => {
+  const openedFeaturePopup = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((candidate) => (
       candidate?.orthogroupId && candidate?.type === 'CDS'
     ));
     if (!feature) return false;
-    app.openFeatureEditorFromList(feature, null);
+    await app.openFeatureEditorFromList(feature, null);
     return Boolean(app.clickedFeature);
   });
   expect(openedFeaturePopup).toBe(true);
@@ -613,13 +613,13 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(popupMemberAaCopy).toHaveText(/^\s*aa\s*$/);
   await featurePopup.getByRole('button', { name: 'Close feature popup' }).click();
 
-  expect(await page.evaluate(() => {
+  expect(await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((candidate) => (
       candidate?.orthogroupId && candidate?.type === 'CDS'
     ));
     if (!feature) return false;
-    app.openFeatureEditorFromList(feature, null);
+    await app.openFeatureEditorFromList(feature, null);
     return Boolean(app.clickedFeature);
   })).toBe(true);
   await expect(featurePopup.locator(

@@ -3105,7 +3105,7 @@ export const createAppSetup = () => {
   };
 
   const openFeatureEditorFromList = (feat, event) => {
-    openFeatureEditorForFeature(feat, event);
+    return openFeatureEditorForFeature(feat, event);
   };
 
   const getCircularRecordOrderLabel = (selector) => {
