@@ -110,7 +110,10 @@ Turn on **Arrange in rows** to assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
-links.
+links. An organism or subtitle shared by every record of a row is drawn once
+beside that row, while a value that varies within the row, such as a per-record
+replicon name, is drawn above its own record; a row whose records disagree on
+the organism gets no row-level text.
 
 **Show Coordinate Scale** controls coordinate ticks and labels while retaining
 the record axes. **Ruler on Axis** uses each record axis as its ruler only when

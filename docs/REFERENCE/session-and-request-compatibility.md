@@ -76,9 +76,13 @@ happens to repeat the default as inheritance. Session 42 and request schema 7
 are unchanged, because these fields describe Web editing state rather than the
 render request: a reader that ignores them still renders identical output.
 
-When several records of one source share a Linear row, a record does not repeat
-a label or subtitle the row's leading record already shows. Distinct per-record
-values are always drawn.
+When several records share a Linear row, a label or subtitle that no record of
+the row contradicts describes the whole row and is drawn once beside it. An
+empty value does not contradict anything, so a records table may name a row on
+its leading record alone. A value that differs from the one the leading record
+carries is record-local, and every record of the row then draws that line above
+itself, including the record that leads the row. A subtitle follows its label,
+so it is never left beside the row on its own.
 
 ## Saving settings before loading a source
 

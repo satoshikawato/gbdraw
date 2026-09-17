@@ -11,6 +11,7 @@ from __future__ import annotations
 from gbdraw.features.placement import FeaturePlacementSlot
 from ...layout.record_labels import source_ruler_ticks
 
+from collections.abc import Collection
 import copy
 from dataclasses import dataclass, replace
 import logging
@@ -893,11 +894,12 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
     return VerticalBand(float(center_y) - half_height, float(center_y) + half_height)
 
 
-_ROW_DEFINITION_LINE_KINDS = frozenset({"name", "subtitle"})
-_LEADING_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
-_ALL_LOCAL_LINE_KINDS = frozenset(
-    {"name", "subtitle", "replicon", "accession", "length"}
-)
+_ROW_ELIGIBLE_LINE_KINDS: tuple[str, ...] = ("name", "subtitle")
+_ROW_ELIGIBLE_ANNOTATIONS: dict[str, str] = {
+    "name": "gbdraw_record_label",
+    "subtitle": "gbdraw_record_subtitle",
+}
+_RECORD_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
 
 
 def _record_definition_text(record: SeqRecord, annotation: str) -> str:
@@ -906,49 +908,88 @@ def _record_definition_text(record: SeqRecord, annotation: str) -> str:
     return str(annotations.get(annotation) or "").strip()
 
 
+def _row_wide_definition_line_kinds(
+    records: list[SeqRecord],
+    row_record_indices: list[int],
+    *,
+    leading_index: int,
+) -> frozenset[str]:
+    """Return the definition line kinds that describe a whole row rather than a record.
+
+    A kind qualifies when the record leading the row names it and no other record
+    of the row contradicts that name. An empty value means the record has nothing
+    of its own to say, which is how a records table writes a row identity once on
+    its leading record; a different non-empty value makes the kind record-local, so
+    a per-record replicon name is never promoted to a row heading.
+
+    The leading record anchors the comparison because the row part is drawn from
+    that record, so a name that only a following record carries could not be
+    rendered beside the row at all.
+
+    The kinds are tested in stacking order and the scan stops at the first one
+    that does not qualify: a subtitle belongs under its own label, so it must not
+    be left alone beside the row once the label has moved above the records.
+    """
+
+    row_wide: set[str] = set()
+    for kind in _ROW_ELIGIBLE_LINE_KINDS:
+        annotation = _ROW_ELIGIBLE_ANNOTATIONS[kind]
+        leading_text = _record_definition_text(records[leading_index], annotation)
+        if not leading_text:
+            break
+        if any(
+            text and text != leading_text
+            for text in (
+                _record_definition_text(records[index], annotation)
+                for index in row_record_indices
+            )
+        ):
+            break
+        row_wide.add(kind)
+    return frozenset(row_wide)
+
+
 def _split_definition_line_kinds(
     records: list[SeqRecord],
     *,
     rows_by_record: tuple[int, ...],
     row_leading_indices: set[int],
-) -> tuple[list[frozenset[str] | None], list[frozenset[str]]]:
+) -> tuple[list[frozenset[str]], list[frozenset[str]]]:
     """Assign definition line kinds to the row part and local part of each record.
 
-    The row part carries the label and subtitle of the record that leads its row.
-    A following record in the same row keeps its own label and subtitle, except
-    where either repeats what the row part already shows: a file-level default
-    applied to every record of a source must not be drawn once per column.
+    The row part carries only what describes the whole row: a label or subtitle
+    that no record of the row contradicts, which is what a Web file-level default
+    applied to each record of a source, or a records table naming a row once on
+    its leading record, produces. Anything that varies within the row stays above
+    its own record, including for the record that leads the row.
+
+    Both lists are explicit, so the caller measures exactly the lines it draws.
     """
 
-    leading_text_by_row: dict[int, tuple[str, str]] = {
-        rows_by_record[index]: (
-            _record_definition_text(records[index], "gbdraw_record_label"),
-            _record_definition_text(records[index], "gbdraw_record_subtitle"),
+    row_record_indices: dict[int, list[int]] = {}
+    for index in range(len(records)):
+        row_record_indices.setdefault(rows_by_record[index], []).append(index)
+
+    leading_index_by_row = {
+        rows_by_record[index]: index for index in row_leading_indices
+    }
+    row_wide_by_row = {
+        row: _row_wide_definition_line_kinds(
+            records,
+            indices,
+            leading_index=leading_index_by_row[row],
         )
-        for index in row_leading_indices
+        for row, indices in row_record_indices.items()
     }
 
-    local_kinds: list[frozenset[str] | None] = []
+    local_kinds: list[frozenset[str]] = []
     row_kinds: list[frozenset[str]] = []
     for index in range(len(records)):
-        if index in row_leading_indices:
-            local_kinds.append(_LEADING_LOCAL_LINE_KINDS)
-            row_kinds.append(_ROW_DEFINITION_LINE_KINDS)
-            continue
-        row_kinds.append(frozenset())
-        leading_label, leading_subtitle = leading_text_by_row.get(
-            rows_by_record[index], ("", "")
-        )
-        repeated = set()
-        label = _record_definition_text(records[index], "gbdraw_record_label")
-        if label and label == leading_label:
-            repeated.add("name")
-        subtitle = _record_definition_text(records[index], "gbdraw_record_subtitle")
-        if subtitle and subtitle == leading_subtitle:
-            repeated.add("subtitle")
+        row_wide = row_wide_by_row[rows_by_record[index]]
         local_kinds.append(
-            _ALL_LOCAL_LINE_KINDS - repeated if repeated else None
+            _RECORD_LOCAL_LINE_KINDS | (frozenset(_ROW_ELIGIBLE_LINE_KINDS) - row_wide)
         )
+        row_kinds.append(row_wide if index in row_leading_indices else frozenset())
     return local_kinds, row_kinds
 
 
@@ -957,7 +998,7 @@ def _definition_metrics_by_record(
     canvas_config: LinearCanvasConfigurator,
     *,
     cfg: GbdrawConfig,
-    line_kinds_by_record: list[frozenset[str] | None] | None = None,
+    line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """Return the maximum width plus record-local definition widths and heights."""
@@ -1921,7 +1962,7 @@ def assemble_linear_diagram(
         feature_lane_geometries=record_feature_lane_geometries,
         record_transforms=record_transforms,
     )
-    local_definition_line_kinds: list[frozenset[str] | None] | None = None
+    local_definition_line_kinds: list[frozenset[str]] | None = None
     row_definition_line_kinds: list[frozenset[str]] = [
         frozenset() for _record in records
     ]

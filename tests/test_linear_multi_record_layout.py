@@ -34,7 +34,15 @@ from gbdraw.layout.linear_multi_record import (
     resolve_record_row_positions,
     solve_linear_layout,
 )
+from gbdraw.canvas.linear import LinearCanvasConfigurator
+from gbdraw.config.models import LinearRenderProfile
+from gbdraw.diagrams.linear.assemble import (
+    _RECORD_LOCAL_LINE_KINDS,
+    _ROW_ELIGIBLE_LINE_KINDS,
+    _split_definition_line_kinds,
+)
 from gbdraw.layout.linear import CollisionBand
+from gbdraw.render.groups.linear.definition import DefinitionGroup
 from gbdraw.layout.record_placement import parse_record_row_position
 
 
@@ -391,9 +399,10 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
     ruler_on_axis: bool,
 ) -> None:
     records = _records(1000, 800)
-    records[0].annotations["gbdraw_record_label"] = "TUMSAT-TG-2018"
+    for record in records:
+        record.annotations["gbdraw_record_label"] = "TUMSAT-TG-2018"
     records[0].annotations["gbdraw_record_subtitle"] = "chromosome 1"
-    records[1].annotations["gbdraw_record_label"] = "chromosome 2"
+    records[1].annotations["gbdraw_record_subtitle"] = "chromosome 2"
     for record in records:
         record.features.append(
             SeqFeature(
@@ -443,8 +452,9 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
             for text in group.findall(".//svg:text", namespace)
         ]
 
-    assert text_values(first_row_definition) == ["TUMSAT-TG-2018", "chromosome 1"]
-    assert text_values(first_local_definition) == []
+    # The label describes the whole row; each replicon name stays above its record.
+    assert text_values(first_row_definition) == ["TUMSAT-TG-2018"]
+    assert text_values(first_local_definition) == ["chromosome 1"]
     assert text_values(second_local_definition) == ["chromosome 2"]
     assert 0 <= _translate(first_row_definition)[0] < _translate(first_record)[0]
 
@@ -485,10 +495,10 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
 
 
 @pytest.mark.parametrize("keep_definition_left_aligned", [True, False])
-def test_multi_record_row_shows_a_repeated_label_once_but_keeps_distinct_ones(
+def test_multi_record_row_keeps_only_row_wide_definition_lines_on_the_left(
     keep_definition_left_aligned: bool,
 ) -> None:
-    """A file-level default repeats on every record; the row must not repeat it."""
+    """The row heading carries only what every record of the row repeats."""
 
     def render(labels: tuple[str, str], subtitles: tuple[str, str]) -> dict[str, list[str]]:
         records = _records(1000, 800)
@@ -529,20 +539,113 @@ def test_multi_record_row_shows_a_repeated_label_once_but_keeps_distinct_ones(
     shared = "<i>Vibrio harveyi</i>"
     # Italic markup renders as tspans, so itertext() yields the plain name.
     shared_plain = "Vibrio harveyi"
+
+    # Both lines describe the whole row, so both are drawn once beside it.
     repeated = render((shared, shared), ("SB1", "SB1"))
     assert repeated["record_1_definition_record_1_row"] == [shared_plain, "SB1"]
     assert repeated["record_1_definition_record_1"] == []
-    # The row definition already shows both lines, so the second record repeats neither.
     assert repeated["record_2_definition_record_2"] == []
     assert "record_2_definition_record_2_row" not in repeated
 
+    # Nothing describes the row as a whole, so the row gets no heading at all.
     distinct = render((shared, "<i>Vibrio owensii</i>"), ("SB1", "XSBZ03"))
-    assert distinct["record_1_definition_record_1_row"] == [shared_plain, "SB1"]
+    assert "record_1_definition_record_1_row" not in distinct
+    assert distinct["record_1_definition_record_1"] == [shared_plain, "SB1"]
     assert distinct["record_2_definition_record_2"] == ["Vibrio owensii", "XSBZ03"]
 
-    # A record that shares the row label but names its own replicon keeps the subtitle.
+    # One organism over several replicons: the replicon name is per record, so it
+    # must not be promoted to the row heading just because it leads the row.
     partly = render((shared, shared), ("Chromosome 1", "Plasmid pVh1"))
+    assert partly["record_1_definition_record_1_row"] == [shared_plain]
+    assert partly["record_1_definition_record_1"] == ["Chromosome 1"]
     assert partly["record_2_definition_record_2"] == ["Plasmid pVh1"]
+
+    # A subtitle belongs under its own label, so it follows the label down.
+    orphaned = render((shared, "<i>Vibrio owensii</i>"), ("Complete genome", "Complete genome"))
+    assert "record_1_definition_record_1_row" not in orphaned
+    assert orphaned["record_1_definition_record_1"] == [shared_plain, "Complete genome"]
+    assert orphaned["record_2_definition_record_2"] == [
+        "Vibrio owensii",
+        "Complete genome",
+    ]
+
+    # A records table names a row once on its leading record and leaves the rest
+    # blank; an empty value has nothing of its own to say, so it does not
+    # contradict the row.
+    inherited = render((shared, ""), ("SB1", ""))
+    assert inherited["record_1_definition_record_1_row"] == [shared_plain, "SB1"]
+    assert inherited["record_1_definition_record_1"] == []
+    assert inherited["record_2_definition_record_2"] == []
+
+    # The row part is drawn from the leading record, so a name only a follower
+    # carries stays above that follower rather than disappearing.
+    follower_only = render(("", "<i>Vibrio owensii</i>"), ("", "XSBZ03"))
+    assert "record_1_definition_record_1_row" not in follower_only
+    assert follower_only["record_1_definition_record_1"] == []
+    assert follower_only["record_2_definition_record_2"] == [
+        "Vibrio owensii",
+        "XSBZ03",
+    ]
+
+
+def test_row_definition_split_covers_every_definition_line_kind() -> None:
+    """No line DefinitionGroup can draw may fall outside the row/local split."""
+
+    record = _records(1000)[0]
+    record.annotations["gbdraw_record_label"] = "Label"
+    record.annotations["gbdraw_record_subtitle"] = "Subtitle"
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 10, strand=1),
+            type="source",
+            qualifiers={"chromosome": ["1"]},
+        )
+    )
+
+    config_dict = load_config_toml("gbdraw.data", "config.toml")
+    definition_cfg = config_dict["objects"]["definition"]["linear"]
+    definition_cfg["show_replicon"] = True
+    definition_cfg["show_accession"] = True
+    definition_cfg["show_length"] = True
+    cfg = GbdrawConfig.from_dict(config_dict)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1,
+        longest_genome=len(record.seq),
+        profile=LinearRenderProfile(cfg),
+        legend="none",
+    )
+
+    drawable_kinds = {
+        line.kind
+        for line in DefinitionGroup(record, canvas_config, cfg=cfg).definition_lines
+    }
+    assert drawable_kinds == (
+        set(_ROW_ELIGIBLE_LINE_KINDS) | set(_RECORD_LOCAL_LINE_KINDS)
+    )
+
+
+def test_row_definition_split_is_decided_per_row() -> None:
+    """A row that shares nothing loses its heading without affecting other rows."""
+
+    records = _records(1000, 800, 600)
+    labels = ("Lambda selected region", "Lividomycin cluster", "Ribostamycin cluster")
+    for record, label in zip(records, labels, strict=True):
+        record.annotations["gbdraw_record_label"] = label
+
+    local_kinds, row_kinds = _split_definition_line_kinds(
+        list(records),
+        rows_by_record=(0, 1, 1),
+        row_leading_indices={0, 2},
+    )
+
+    # Row 0 holds one record, so its label describes the whole row.
+    assert row_kinds[0] == frozenset({"name"})
+    assert "name" not in local_kinds[0]
+    # Row 1 holds two differently labelled records, so neither leads a heading.
+    assert row_kinds[1] == frozenset()
+    assert row_kinds[2] == frozenset()
+    assert "name" in local_kinds[1]
+    assert "name" in local_kinds[2]
 
 
 def test_multi_record_layout_rejects_normalize_length() -> None:

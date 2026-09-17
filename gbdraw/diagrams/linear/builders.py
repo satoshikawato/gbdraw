@@ -267,7 +267,9 @@ def add_record_definition_group(
     if multi_record_layout:
         if placement is None:
             raise ValueError("multi_record_layout requires a resolved record placement")
-        split_row_definition = placement.column == 0
+        # A row heading is drawn from the leading record, and only when
+        # something describes the row as a whole.
+        split_row_definition = placement.column == 0 and bool(row_line_kinds)
         definition_group_obj = DefinitionGroup(
             record,
             canvas_config,
@@ -311,6 +313,9 @@ def add_record_definition_group(
                 definition_part="row",
                 record_transform=record_transform,
             )
+            if not row_group_obj.definition_lines:
+                # Nothing describes this row as a whole, so it gets no heading.
+                return canvas
             reserved_width = (
                 max(0.0, float(row_definition_width))
                 if row_definition_width is not None
