@@ -972,10 +972,6 @@ export const createAppSetup = () => {
         if (group) {
           if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
             setLinearSourceDefaultDefinition(group, first.inferredDefinition);
-          }
-          if (first.inferredSubtitle && !getLinearSourceDefaultSubtitle(group)) {
-            setLinearSourceDefaultSubtitle(group, first.inferredSubtitle);
-          }
         }
       }
     }

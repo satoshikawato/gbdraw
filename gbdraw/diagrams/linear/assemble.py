@@ -1149,10 +1149,13 @@ def _record_collision_bands(
     row_band = definition_geometry.row_band
     actual_row_width = max(0.0, float(definition_geometry.row_width))
     if row_band is not None and actual_row_width > 0.0:
-        row_start = -(
-            max(0.0, float(definition_gap))
-            + max(0.0, float(row_definition_width))
-        )
+        if keep_definition_left_aligned:
+            row_start = -(
+                max(0.0, float(definition_gap))
+                + max(0.0, float(row_definition_width))
+            )
+        else:
+            row_start = float(record_x) - max(0.0, float(definition_gap)) - actual_row_width
         bands.append(
             CollisionBand(
                 "definition",
@@ -1665,9 +1668,7 @@ def assemble_linear_diagram(
             continue
         seen_rows.add(row)
         row_leading_indices.add(record_index)
-    split_row_definitions = (
-        multi_record_enabled and bool(canvas_config.keep_definition_left_aligned)
-    )
+    split_row_definitions = bool(multi_record_enabled)
     if multi_record_enabled and bool(cfg.canvas.linear.normalize_length):
         raise ValidationError(
             "normalize_length=True cannot be combined with multiple records in one Linear row."

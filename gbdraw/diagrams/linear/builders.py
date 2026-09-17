@@ -259,14 +259,8 @@ def add_record_definition_group(
     if multi_record_layout:
         if placement is None:
             raise ValueError("multi_record_layout requires a resolved record placement")
-        split_row_definition = (
-            keep_definition_left_aligned and placement.column == 0
-        )
-        local_line_kinds = (
-            {"replicon", "accession", "length"}
-            if split_row_definition
-            else None
-        )
+        split_row_definition = placement.column == 0
+        local_line_kinds = {"subtitle", "replicon", "accession", "length"}
         definition_group_obj = DefinitionGroup(
             record,
             canvas_config,
@@ -301,10 +295,10 @@ def add_record_definition_group(
                 record,
                 canvas_config,
                 cfg=cfg,
-                text_anchor="start",
+                text_anchor="start" if keep_definition_left_aligned else "end",
                 text_x=0.0,
                 group_id=f"{group_id or str(record.id)}_row",
-                line_kinds={"name", "subtitle"},
+                line_kinds={"name"},
                 record_index=record_index,
                 record_count=record_count,
                 definition_part="row",
@@ -316,8 +310,14 @@ def add_record_definition_group(
                 else row_group_obj.definition_bounding_box_width
             )
             row_group = row_group_obj.get_group()
+            
+            if keep_definition_left_aligned:
+                row_def_x = canvas_config.horizontal_offset - definition_gap - reserved_width
+            else:
+                row_def_x = canvas_config.horizontal_offset + placement.x - definition_gap
+                
             row_group.translate(
-                canvas_config.horizontal_offset - definition_gap - reserved_width,
+                row_def_x,
                 (
                     placement.axis_y
                     if definition_center_y is None
