@@ -256,14 +256,15 @@ def format_inferred_subtitle(
     import re
 
     desc_lower = desc.lower()
-    plasmid_match = re.search(
-        r"(?:plasmid\s+([A-Za-z0-9_-]+)|(p[A-Za-z0-9_-]+)\b)",
-        desc,
-        re.IGNORECASE,
-    )
-    if plasmid_match:
-        p_name = (plasmid_match.group(1) or plasmid_match.group(2) or "").strip()
-        return p_name if p_name.lower().startswith("plasmid") else f"Plasmid {p_name}"
+    if "plasmid" in desc_lower:
+        plasmid_match = re.search(
+            r"(?:plasmid\s+([A-Za-z0-9_-]+)|\b(p[A-Za-z0-9_-]+)\b)",
+            desc,
+            re.IGNORECASE,
+        )
+        if plasmid_match:
+            p_name = (plasmid_match.group(1) or plasmid_match.group(2) or "").strip()
+            return p_name if p_name.lower().startswith("plasmid") else f"Plasmid {p_name}"
 
     if "complete genome" in desc_lower:
         if "mitochondri" in desc_lower:

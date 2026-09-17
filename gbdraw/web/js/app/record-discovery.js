@@ -155,18 +155,23 @@ export const normalizeSequenceRecords = (payload) => {
     const selector = String(entry?.selector ?? `#${index + 1}`).trim();
     if (!selector || seenSelectors.has(selector)) return;
     seenSelectors.add(selector);
-    records.push({
+    const record = {
       selector,
       recordId: String(entry?.record_id ?? entry?.recordId ?? '').trim() || `Record_${index + 1}`,
       recordLength: normalizeRecordLength(entry?.record_length ?? entry?.recordLength),
       detectedTopology: ['circular', 'linear'].includes(entry?.topology ?? entry?.detectedTopology)
         ? (entry.topology ?? entry.detectedTopology)
-        : 'unknown',
-      organism: String(entry?.organism ?? '').trim(),
-      strain: String(entry?.strain ?? '').trim(),
-      inferredDefinition: String(entry?.inferredDefinition ?? entry?.inferred_definition ?? '').trim(),
-      inferredSubtitle: String(entry?.inferredSubtitle ?? entry?.inferred_subtitle ?? '').trim()
-    });
+        : 'unknown'
+    };
+    const organism = String(entry?.organism ?? '').trim();
+    const strain = String(entry?.strain ?? '').trim();
+    const inferredDefinition = String(entry?.inferredDefinition ?? entry?.inferred_definition ?? '').trim();
+    const inferredSubtitle = String(entry?.inferredSubtitle ?? entry?.inferred_subtitle ?? '').trim();
+    if (organism) record.organism = organism;
+    if (strain) record.strain = strain;
+    if (inferredDefinition) record.inferredDefinition = inferredDefinition;
+    if (inferredSubtitle) record.inferredSubtitle = inferredSubtitle;
+    records.push(record);
   });
 
   if (records.length === 0) throw new Error('No records found.');
