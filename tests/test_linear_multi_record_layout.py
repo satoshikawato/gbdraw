@@ -484,6 +484,67 @@ def test_multi_record_above_layout_separates_row_definitions_and_record_labels(
     )
 
 
+@pytest.mark.parametrize("keep_definition_left_aligned", [True, False])
+def test_multi_record_row_shows_a_repeated_label_once_but_keeps_distinct_ones(
+    keep_definition_left_aligned: bool,
+) -> None:
+    """A file-level default repeats on every record; the row must not repeat it."""
+
+    def render(labels: tuple[str, str], subtitles: tuple[str, str]) -> dict[str, list[str]]:
+        records = _records(1000, 800)
+        for record, label, subtitle in zip(records, labels, subtitles, strict=True):
+            record.annotations["gbdraw_record_label"] = label
+            record.annotations["gbdraw_record_subtitle"] = subtitle
+        config_dict = load_config_toml("gbdraw.data", "config.toml")
+        config_dict["canvas"]["show_gc"] = False
+        config_dict["canvas"]["show_skew"] = False
+        config_dict["labels"]["linear"]["scope"] = "none"
+        config_dict["canvas"]["linear"]["keep_definition_left_aligned"] = (
+            keep_definition_left_aligned
+        )
+        definition_cfg = config_dict["objects"]["definition"]["linear"]
+        definition_cfg["show_replicon"] = False
+        definition_cfg["show_accession"] = False
+        definition_cfg["show_length"] = False
+        svg = assemble_linear_diagram_from_records(
+            records,
+            cfg=GbdrawConfig.from_dict(config_dict),
+            layout=LinearMultiRecordOptions(
+                record_gap_px=24,
+                multi_record_positions=("#1@1", "#2@1"),
+            ),
+            legend="none",
+        ).tostring()
+        root = ET.fromstring(svg)
+        namespace = {"svg": "http://www.w3.org/2000/svg"}
+        return {
+            group.attrib["id"]: [
+                "".join(text.itertext())
+                for text in group.findall(".//svg:text", namespace)
+            ]
+            for group in root.findall(".//svg:g", namespace)
+            if "definition" in group.attrib.get("id", "")
+        }
+
+    shared = "<i>Vibrio harveyi</i>"
+    # Italic markup renders as tspans, so itertext() yields the plain name.
+    shared_plain = "Vibrio harveyi"
+    repeated = render((shared, shared), ("SB1", "SB1"))
+    assert repeated["record_1_definition_record_1_row"] == [shared_plain, "SB1"]
+    assert repeated["record_1_definition_record_1"] == []
+    # The row definition already shows both lines, so the second record repeats neither.
+    assert repeated["record_2_definition_record_2"] == []
+    assert "record_2_definition_record_2_row" not in repeated
+
+    distinct = render((shared, "<i>Vibrio owensii</i>"), ("SB1", "XSBZ03"))
+    assert distinct["record_1_definition_record_1_row"] == [shared_plain, "SB1"]
+    assert distinct["record_2_definition_record_2"] == ["Vibrio owensii", "XSBZ03"]
+
+    # A record that shares the row label but names its own replicon keeps the subtitle.
+    partly = render((shared, shared), ("Chromosome 1", "Plasmid pVh1"))
+    assert partly["record_2_definition_record_2"] == ["Plasmid pVh1"]
+
+
 def test_multi_record_layout_rejects_normalize_length() -> None:
     with pytest.raises(ValidationError, match="normalize_length"):
         assemble_linear_diagram_from_records(

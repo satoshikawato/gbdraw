@@ -893,6 +893,65 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
     return VerticalBand(float(center_y) - half_height, float(center_y) + half_height)
 
 
+_ROW_DEFINITION_LINE_KINDS = frozenset({"name", "subtitle"})
+_LEADING_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
+_ALL_LOCAL_LINE_KINDS = frozenset(
+    {"name", "subtitle", "replicon", "accession", "length"}
+)
+
+
+def _record_definition_text(record: SeqRecord, annotation: str) -> str:
+    """Return one explicit definition annotation of a record, or an empty string."""
+    annotations = getattr(record, "annotations", None) or {}
+    return str(annotations.get(annotation) or "").strip()
+
+
+def _split_definition_line_kinds(
+    records: list[SeqRecord],
+    *,
+    rows_by_record: tuple[int, ...],
+    row_leading_indices: set[int],
+) -> tuple[list[frozenset[str] | None], list[frozenset[str]]]:
+    """Assign definition line kinds to the row part and local part of each record.
+
+    The row part carries the label and subtitle of the record that leads its row.
+    A following record in the same row keeps its own label and subtitle, except
+    where either repeats what the row part already shows: a file-level default
+    applied to every record of a source must not be drawn once per column.
+    """
+
+    leading_text_by_row: dict[int, tuple[str, str]] = {
+        rows_by_record[index]: (
+            _record_definition_text(records[index], "gbdraw_record_label"),
+            _record_definition_text(records[index], "gbdraw_record_subtitle"),
+        )
+        for index in row_leading_indices
+    }
+
+    local_kinds: list[frozenset[str] | None] = []
+    row_kinds: list[frozenset[str]] = []
+    for index in range(len(records)):
+        if index in row_leading_indices:
+            local_kinds.append(_LEADING_LOCAL_LINE_KINDS)
+            row_kinds.append(_ROW_DEFINITION_LINE_KINDS)
+            continue
+        row_kinds.append(frozenset())
+        leading_label, leading_subtitle = leading_text_by_row.get(
+            rows_by_record[index], ("", "")
+        )
+        repeated = set()
+        label = _record_definition_text(records[index], "gbdraw_record_label")
+        if label and label == leading_label:
+            repeated.add("name")
+        subtitle = _record_definition_text(records[index], "gbdraw_record_subtitle")
+        if subtitle and subtitle == leading_subtitle:
+            repeated.add("subtitle")
+        local_kinds.append(
+            _ALL_LOCAL_LINE_KINDS - repeated if repeated else None
+        )
+    return local_kinds, row_kinds
+
+
 def _definition_metrics_by_record(
     records: list[SeqRecord],
     canvas_config: LinearCanvasConfigurator,
@@ -1862,18 +1921,19 @@ def assemble_linear_diagram(
         feature_lane_geometries=record_feature_lane_geometries,
         record_transforms=record_transforms,
     )
-    local_definition_line_kinds = (
-        [
-            (
-                frozenset({"replicon", "accession", "length"})
-                if index in row_leading_indices
-                else None
-            )
-            for index in range(len(records))
-        ]
-        if split_row_definitions
-        else None
-    )
+    local_definition_line_kinds: list[frozenset[str] | None] | None = None
+    row_definition_line_kinds: list[frozenset[str]] = [
+        frozenset() for _record in records
+    ]
+    if split_row_definitions:
+        (
+            local_definition_line_kinds,
+            row_definition_line_kinds,
+        ) = _split_definition_line_kinds(
+            records,
+            rows_by_record=rows_by_record,
+            row_leading_indices=row_leading_indices,
+        )
     max_def_width, definition_widths, definition_heights = _definition_metrics_by_record(
         records,
         canvas_config,
@@ -1893,12 +1953,7 @@ def assemble_linear_diagram(
             records,
             canvas_config,
             cfg=cfg,
-            line_kinds_by_record=[
-                frozenset({"name", "subtitle"})
-                if index in row_leading_indices
-                else frozenset()
-                for index in range(len(records))
-            ],
+            line_kinds_by_record=list(row_definition_line_kinds),
             record_transforms=record_transforms,
         )
 
@@ -2793,6 +2848,12 @@ def assemble_linear_diagram(
                     else None
                 ),
                 multi_record_layout=multi_record_enabled,
+                local_line_kinds=(
+                    local_definition_line_kinds[record_index]
+                    if local_definition_line_kinds is not None
+                    else None
+                ),
+                row_line_kinds=row_definition_line_kinds[record_index],
                 record_index=record_index,
                 record_count=total_records,
                 record_transform=(record_transforms[record_index] if record_transforms is not None else None),

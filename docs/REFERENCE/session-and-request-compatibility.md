@@ -54,6 +54,32 @@ Schema 2 is accepted with sessions 41–42. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
+## Linear file-level defaults
+
+A Linear source card carries a default **Organism / strain** and **Subtitle /
+title** that apply to every record read from that file. A record that leaves its
+own field empty inherits the file default; a record that fills it overrides.
+
+`renderRequest.records[].presentation` always carries the resolved text that is
+drawn. `webFiles.linearRecordMetadata[]` records the inheritance separately, so
+loading restores the same editable state:
+
+| Field | Meaning |
+|---|---|
+| `fileDefinition`, `fileSubtitle` | the source card's file-level defaults |
+| `recordDefinition`, `recordSubtitle` | the record's own value, empty when it inherits |
+
+Both pairs are written only when the source has a file-level default. Sessions
+written before these fields existed carry neither; those readers compare the
+resolved text against the file default instead, which reads an override that
+happens to repeat the default as inheritance. Session 42 and request schema 7
+are unchanged, because these fields describe Web editing state rather than the
+render request: a reader that ignores them still renders identical output.
+
+When several records of one source share a Linear row, a record does not repeat
+a label or subtitle the row's leading record already shows. Distinct per-record
+values are always drawn.
+
 ## Saving settings before loading a source
 
 **Save Session** also works before any biological source is loaded. It preserves

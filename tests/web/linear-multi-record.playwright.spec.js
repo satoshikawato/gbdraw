@@ -3308,7 +3308,7 @@ test('File-level default organism and subtitle apply across records and allow pe
   expect(resetResolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
 });
 
-test('GenBank file upload automatically populates file defaults with inferred organism and subtitle', async ({ page }) => {
+test('GenBank file upload infers the file default organism but leaves the file default subtitle empty', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.mode = 'linear';
@@ -3347,11 +3347,13 @@ FEATURES             Location/Qualifiers
     };
   })).toEqual({
     definition: '<i>Escherichia coli</i> O157:H7 str. Sakai',
-    subtitle: 'Complete genome'
+    // Only the organism is inferred as a file default. A subtitle describes one
+    // replicon, so inferring it from the first record would overwrite the others.
+    subtitle: ''
   });
 
   await expect(page.getByLabel('Default definition for file 1')).toHaveValue('<i>Escherichia coli</i> O157:H7 str. Sakai');
-  await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('Complete genome');
+  await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('');
 
   await page.evaluate(() => {
     const options = document.querySelector('[data-linear-record-options]');

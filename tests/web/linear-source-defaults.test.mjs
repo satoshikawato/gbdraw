@@ -115,7 +115,7 @@ test('resolveLinearRecordEffectiveSubtitle falls back to file default when recor
   assert.equal(resolveLinearRecordEffectiveSubtitle(seq2), 'Overridden subtitle');
 });
 
-test('projectCanonicalSessionRequest preserves inheritance when label matches fileDefinition', async () => {
+test('sessions without per-record values fall back to comparing label and fileDefinition', async () => {
   const { projectCanonicalSessionRequest, CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
   const canonicalRequest = {
     renderRequest: {
@@ -164,4 +164,62 @@ test('projectCanonicalSessionRequest preserves inheritance when label matches fi
   assert.equal(projected.files.linearSeqs[1].file_subtitle, 'Chromosome 1');
   assert.equal(projected.files.linearSeqs[1].definition, '<i>Custom Override</i>');
   assert.equal(projected.files.linearSeqs[1].record_subtitle, 'Overridden Subtitle');
+});
+
+
+test('an explicit override equal to the file default survives a save and reload', async () => {
+  const { projectCanonicalSessionRequest, CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/services/session-request.js');
+  const shared = '<i>Escherichia coli</i>';
+  const canonicalRequest = {
+    renderRequest: {
+      schema: CANONICAL_REQUEST_SCHEMA,
+      mode: 'linear',
+      grouping: 'single',
+      records: [
+        {
+          recordKey: 'rec-1',
+          source: { kind: 'genbank', resourceId: 'res-1' },
+          presentation: { label: shared, subtitle: 'Chromosome 1' },
+          display: { isCircular: null, startCoordinate: null }
+        },
+        {
+          recordKey: 'rec-2',
+          source: { kind: 'genbank', resourceId: 'res-1' },
+          presentation: { label: shared, subtitle: 'Chromosome 1' },
+          display: { isCircular: null, startCoordinate: null }
+        }
+      ],
+      diagramOptions: { featurePlacements: [] },
+      output: { prefix: 'test' }
+    },
+    webFiles: {
+      linearRecordMetadata: [
+        // Inherited: the record carries no value of its own.
+        {
+          recordKey: 'rec-1',
+          fileDefinition: shared,
+          fileSubtitle: 'Chromosome 1',
+          recordDefinition: '',
+          recordSubtitle: ''
+        },
+        // Pinned: the user typed the same text the file default happens to have.
+        {
+          recordKey: 'rec-2',
+          fileDefinition: shared,
+          fileSubtitle: 'Chromosome 1',
+          recordDefinition: shared,
+          recordSubtitle: 'Chromosome 1'
+        }
+      ]
+    },
+    resources: { 'res-1': { kind: 'file', name: 'records.gb' } }
+  };
+
+  const projected = projectCanonicalSessionRequest(canonicalRequest);
+  assert.equal(projected.files.linearSeqs[0].definition, '');
+  assert.equal(projected.files.linearSeqs[0].record_subtitle, '');
+  // Both records render the same text, but only rec-2 keeps following the file
+  // default when the user later edits it.
+  assert.equal(projected.files.linearSeqs[1].definition, shared);
+  assert.equal(projected.files.linearSeqs[1].record_subtitle, 'Chromosome 1');
 });

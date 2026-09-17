@@ -40,7 +40,11 @@ local environment or prepared command-line evidence.
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear record card
 starts with its **GenBank File** uploader, or its matched GFF3 and FASTA
-uploaders, followed by a closed **Record options** disclosure. **Add sequence**
+uploaders, followed by **File defaults (applied to all records)** and a closed
+**Record options** disclosure. Uploading a GenBank file fills the file default
+**Organism / strain** from its `/organism` and `/strain` qualifiers when that
+field is still empty; the file default **Subtitle / title** is yours to fill,
+because a subtitle names one replicon rather than the whole file. **Add sequence**
 is visible in the **Input Genomes** header. A GenBank file may contain several
 biological records. GFF3 input requires the matching FASTA sequence and exact
 sequence-ID agreement. See [Input formats and TSV
@@ -96,7 +100,9 @@ circle.
 
 Each Linear input card owns its record selector, inclusive **Start** and
 **End** coordinates, **Reverse complement** state, definition, and row
-placement. A region changes the displayed interval, not the source file.
+placement. A record whose definition or subtitle is empty inherits its file
+default and is marked **Using file default**; typing a value overrides it, and
+**Reset to default** restores inheritance. A region changes the displayed interval, not the source file.
 Reverse complementation changes displayed coordinates, feature orientation,
 and comparison endpoint mapping without rewriting the input.
 

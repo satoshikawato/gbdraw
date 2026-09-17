@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
@@ -12,40 +15,53 @@ from gbdraw.core.record_metadata import (
     infer_record_source_metadata,
 )
 
-
-def test_format_inferred_definition_binomial():
-    meta = RecordSourceMetadata(organism="Escherichia coli O157:H7", strain="Sakai", replicon=None, organelle=None)
-    assert format_inferred_definition(meta) == "<i>Escherichia coli</i> O157:H7 Sakai"
-
-
-def test_format_inferred_definition_single_word():
-    meta = RecordSourceMetadata(organism="Streptomyces", strain="sp. A", replicon=None, organelle=None)
-    assert format_inferred_definition(meta) == "<i>Streptomyces</i> sp. A"
-
-
-def test_format_inferred_definition_candidatus():
-    meta = RecordSourceMetadata(organism="Candidatus Tyloplasma litorale", strain="Fukuoka2020", replicon=None, organelle=None)
-    assert format_inferred_definition(meta) == "Candidatus <i>Tyloplasma litorale</i> Fukuoka2020"
+# The Web upload fast path reimplements this inference in
+# gbdraw/web/js/app/record-discovery.js. Both suites assert the same table, so
+# the two implementations cannot drift apart unnoticed.
+_CASES = json.loads(
+    (Path(__file__).parent / "fixtures" / "record_metadata_inference_cases.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 
-def test_format_inferred_definition_non_organism():
-    meta = RecordSourceMetadata(organism="synthetic construct", strain="cloning vector pUC19", replicon=None, organelle=None)
-    assert format_inferred_definition(meta) == "cloning vector pUC19"
+@pytest.mark.parametrize("case", _CASES["definition"], ids=lambda case: case["name"])
+def test_format_inferred_definition_matches_shared_cases(case: dict[str, str]) -> None:
+    meta = RecordSourceMetadata(
+        organism=case["organism"],
+        strain=case["strain"],
+        replicon=None,
+        organelle=None,
+    )
+    assert format_inferred_definition(meta) == case["expected"]
 
 
-def test_format_inferred_subtitle_replicon_and_organelle():
-    meta = RecordSourceMetadata(organism="E. coli", strain="", replicon="Chromosome 1", organelle=None)
-    assert format_inferred_subtitle(meta) == "Chromosome 1"
+@pytest.mark.parametrize("case", _CASES["subtitle"], ids=lambda case: case["name"])
+def test_format_inferred_subtitle_matches_shared_cases(case: dict[str, str]) -> None:
+    meta = RecordSourceMetadata(
+        organism=case["organism"],
+        strain="",
+        replicon=case["replicon"] or None,
+        organelle=case["organelle"] or None,
+    )
+    assert format_inferred_subtitle(meta, case["description"]) == case["expected"]
 
-    meta2 = RecordSourceMetadata(organism="H. sapiens", strain="", replicon=None, organelle="mitochondrion")
-    assert format_inferred_subtitle(meta2) == "Mitochondrion"
 
-
-def test_format_inferred_subtitle_from_description():
-    meta = RecordSourceMetadata(organism="Escherichia coli", strain="K-12", replicon=None, organelle=None)
-    assert format_inferred_subtitle(meta, "Escherichia coli str. K-12 substr. MG1655, complete genome.") == "Complete genome"
-    assert format_inferred_subtitle(meta, "Homo sapiens mitochondrion, complete genome.") == "Mitochondrion, complete genome"
-    assert format_inferred_subtitle(meta, "Escherichia coli plasmid pOSAK1, complete sequence.") == "Plasmid pOSAK1"
+@pytest.mark.parametrize(
+    "case",
+    [case for case in _CASES["subtitle"] if case["chromosome"] or case["plasmid"]],
+    ids=lambda case: case["name"],
+)
+def test_shared_cases_agree_with_inferred_replicon(case: dict[str, str]) -> None:
+    """The fixture's replicon must be what the qualifiers actually produce."""
+    qualifiers = {
+        key: [case[key]]
+        for key in ("chromosome", "plasmid")
+        if case[key]
+    }
+    record = SeqRecord(Seq("ATGC"), id="test")
+    record.features.append(SeqFeature(SimpleLocation(0, 4), type="source", qualifiers=qualifiers))
+    assert infer_record_source_metadata(record).replicon == case["replicon"]
 
 
 def test_infer_record_source_metadata():

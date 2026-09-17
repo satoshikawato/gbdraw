@@ -1101,9 +1101,11 @@ options:
   --align_center        Align genomes to the center (default: False).
   --keep_definition_left_aligned
                         Keep linear record definitions in the left column.
-                        With multi-record rows, the leading record label
-                        becomes the row definition while remaining record text
-                        stays above its record (default: False).
+                        Multi-record rows always promote the leading record
+                        label to a row definition and keep remaining record
+                        text above its record; this flag aligns those row
+                        definitions in a shared left column instead of placing
+                        each one beside its own row (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)

@@ -947,7 +947,7 @@ export const createAppSetup = () => {
         ...source,
         uid: recordIndex === 0 ? uid : undefined,
         region_record_id: record.value,
-        ...(discoveredRecord?.plasmid && discoveredRecord?.inferredSubtitle ? {
+        ...(discoveredRecord?.inferredSubtitleFromReplicon && discoveredRecord?.inferredSubtitle ? {
           record_subtitle: discoveredRecord.inferredSubtitle
         } : {})
       });
@@ -972,6 +972,7 @@ export const createAppSetup = () => {
         if (group) {
           if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
             setLinearSourceDefaultDefinition(group, first.inferredDefinition);
+          }
         }
       }
     }

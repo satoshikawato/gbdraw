@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   formatInferredOrganismStrain,
@@ -8,86 +9,40 @@ import {
   parseSequenceRecordText
 } from '../../gbdraw/web/js/app/record-discovery.js';
 
-test('formatInferredOrganismStrain formats binomial names with italics and appends strain', () => {
-  assert.equal(
-    formatInferredOrganismStrain({
-      organism: 'Escherichia coli O157:H7',
-      strain: 'Sakai'
-    }),
-    '<i>Escherichia coli</i> O157:H7 Sakai'
-  );
+// gbdraw/core/record_metadata.py owns this inference for the Worker and the
+// renderer; record-discovery.js reimplements it for the no-Worker upload path.
+// tests/test_record_metadata.py asserts the same table, so the two cannot drift.
+const CASES = JSON.parse(
+  readFileSync(new URL('../fixtures/record_metadata_inference_cases.json', import.meta.url), 'utf8')
+);
 
-  assert.equal(
-    formatInferredOrganismStrain({
-      organism: 'Streptomyces lividus',
-      strain: 'CBS 844.73'
-    }),
-    '<i>Streptomyces lividus</i> CBS 844.73'
-  );
-
-  assert.equal(
-    formatInferredOrganismStrain({
-      organism: 'Homo sapiens'
-    }),
-    '<i>Homo sapiens</i>'
-  );
-
-  assert.equal(
-    formatInferredOrganismStrain({
-      organism: 'Candidatus Tyloplasma litorale',
-      strain: 'Fukuoka2020'
-    }),
-    'Candidatus <i>Tyloplasma litorale</i> Fukuoka2020'
-  );
-
-  assert.equal(
-    formatInferredOrganismStrain({
-      organism: 'Escherichia coli str. K-12 substr. MG1655',
-      strain: 'K-12'
-    }),
-    '<i>Escherichia coli</i> str. K-12 substr. MG1655'
-  );
+test('formatInferredOrganismStrain matches the shared inference table', () => {
+  for (const testCase of CASES.definition) {
+    assert.equal(
+      formatInferredOrganismStrain({ organism: testCase.organism, strain: testCase.strain }),
+      testCase.expected,
+      testCase.name
+    );
+  }
 });
 
-test('formatInferredSubtitle detects complete genome, plasmids, chromosomes, and cluster titles', () => {
-  assert.equal(
-    formatInferredSubtitle({
-      definition: 'Escherichia coli O157:H7 str. Sakai DNA, complete genome.'
-    }),
-    'Complete genome'
-  );
-
-  assert.equal(
-    formatInferredSubtitle({
-      definition: 'Homo sapiens mitochondrion, complete genome.'
-    }),
-    'Mitochondrion, complete genome'
-  );
-
-  assert.equal(
-    formatInferredSubtitle({
-      plasmid: 'pOSAK1'
-    }),
-    'Plasmid pOSAK1'
-  );
-
-  assert.equal(
-    formatInferredSubtitle({
-      chromosome: '1'
-    }),
-    'Chromosome 1'
-  );
-
-  assert.equal(
-    formatInferredSubtitle({
-      definition: 'Streptomyces lividus lividomycin biosynthesis gene cluster.',
-      organism: 'Streptomyces lividus'
-    }),
-    'Lividomycin biosynthesis gene cluster'
-  );
+test('formatInferredSubtitle matches the shared inference table', () => {
+  for (const testCase of CASES.subtitle) {
+    assert.equal(
+      formatInferredSubtitle({
+        definition: testCase.description,
+        chromosome: testCase.chromosome,
+        plasmid: testCase.plasmid,
+        organelle: testCase.organelle,
+        organism: testCase.organism
+      }),
+      testCase.expected,
+      testCase.name
+    );
+  }
 });
 
-test('extractGenBankMetadata parses organism, strain, plasmid, and definition from text chunk', () => {
+test('extractGenBankMetadata parses organism, strain, and definition from a text chunk', () => {
   const sampleChunk = `LOCUS       NC_002695            5498578 bp    DNA     circular CON 12-FEB-2021
 DEFINITION  Escherichia coli O157:H7 str. Sakai DNA, complete genome.
 ACCESSION   NC_002695
@@ -109,6 +64,20 @@ FEATURES             Location/Qualifiers
   assert.equal(meta.strain, 'Sakai');
   assert.equal(meta.inferredDefinition, '<i>Escherichia coli</i> O157:H7 str. Sakai');
   assert.equal(meta.inferredSubtitle, 'Complete genome');
+  // Read from the shared DEFINITION line, so it must not seed each record.
+  assert.equal(meta.inferredSubtitleFromReplicon, false);
+});
+
+test('extractGenBankMetadata reads /isolate ahead of /strain, like infer_record_source_metadata', () => {
+  const chunk = `LOCUS       TEST                 1000 bp    DNA     circular BCT 01-JAN-2020
+DEFINITION  Bacillus subtilis genomic DNA.
+FEATURES             Location/Qualifiers
+     source          1..1000
+                     /organism="Bacillus subtilis"
+                     /strain="ignored"
+                     /isolate="168"
+`;
+  assert.equal(extractGenBankMetadata(chunk).strain, '168');
 });
 
 test('parseSequenceRecordText attaches inferred metadata to all records in multi-record file', () => {
@@ -137,7 +106,9 @@ FEATURES             Location/Qualifiers
   assert.equal(records.length, 2);
   assert.equal(records[0].inferredDefinition, '<i>Escherichia coli</i> K-12');
   assert.equal(records[0].inferredSubtitle, 'Complete genome');
+  assert.equal(records[0].inferredSubtitleFromReplicon, undefined);
   assert.equal(records[1].inferredDefinition, '<i>Escherichia coli</i> K-12');
-  assert.equal(records[1].inferredSubtitle, 'Plasmid pTEST');
+  // The /plasmid qualifier names this record alone, so it may seed the record.
+  assert.equal(records[1].inferredSubtitle, 'pTEST');
+  assert.equal(records[1].inferredSubtitleFromReplicon, true);
 });
-

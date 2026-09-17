@@ -414,6 +414,16 @@ const optionalPositiveInteger = (value) => {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 };
 
+// A record label or subtitle is saved resolved. Sessions written since file
+// defaults were introduced also record the per-record value, which says directly
+// whether the record inherited the file default or overrode it with the same
+// text. Older sessions carry no such value, so fall back to comparing them.
+const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) => {
+  if (savedOverride !== undefined && savedOverride !== null) return String(savedOverride);
+  if (!fileDefault) return resolved;
+  return resolved === fileDefault ? '' : resolved;
+};
+
 const canonicalOptionalPositiveNumber = (value, fieldName) => {
   if (value === null || value === undefined || String(value).trim() === '') return null;
   const numeric = Number(value);
@@ -2377,6 +2387,13 @@ export const buildCanonicalRenderRequest = ({
       const fileSubtitle = String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '').trim();
       if (fileDefinition) entry.fileDefinition = fileDefinition;
       if (fileSubtitle) entry.fileSubtitle = fileSubtitle;
+      // presentation.label and presentation.subtitle carry the resolved value.
+      // Record the per-record value too, so an override that happens to equal
+      // the file default is restored as an override rather than as inheritance.
+      const recordDefinition = String(filesData.linearSeqs[sourceIndex]?.definition || '');
+      const recordSubtitle = String(filesData.linearSeqs[sourceIndex]?.record_subtitle || '');
+      if (fileDefinition) entry.recordDefinition = recordDefinition;
+      if (fileSubtitle) entry.recordSubtitle = recordSubtitle;
       return entry;
     });
   }
@@ -3528,8 +3545,16 @@ export const projectCanonicalSessionRequest = ({
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),
-        definition: (fileDefinition && recordLabel === fileDefinition) ? '' : recordLabel,
-        record_subtitle: (fileSubtitle && recordSubtitle === fileSubtitle) ? '' : recordSubtitle,
+        definition: resolveSavedRecordOverride({
+          savedOverride: savedMetadata.recordDefinition,
+          fileDefault: fileDefinition,
+          resolved: recordLabel
+        }),
+        record_subtitle: resolveSavedRecordOverride({
+          savedOverride: savedMetadata.recordSubtitle,
+          fileDefault: fileSubtitle,
+          resolved: recordSubtitle
+        }),
         file_definition: fileDefinition,
         file_subtitle: fileSubtitle,
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),

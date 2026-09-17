@@ -1613,12 +1613,16 @@ def list_sequence_records(path, format):
             strain = ""
             inferred_def = ""
             inferred_sub = ""
+            sub_from_replicon = False
             if format == "genbank":
                 meta = infer_record_source_metadata(record)
                 organism = meta.organism or ""
                 strain = meta.strain or ""
                 inferred_def = format_inferred_definition(meta)
                 inferred_sub = format_inferred_subtitle(meta, str(record.description or ""))
+                # A replicon or organelle qualifier names this record alone; a
+                # subtitle read from the shared description does not.
+                sub_from_replicon = bool(meta.replicon or meta.organelle)
 
             payload.append(
                 {
@@ -1630,6 +1634,7 @@ def list_sequence_records(path, format):
                     "strain": strain,
                     "inferred_definition": inferred_def,
                     "inferred_subtitle": inferred_sub,
+                    "inferred_subtitle_from_replicon": sub_from_replicon,
                 }
             )
         return json.dumps({"records": payload})
