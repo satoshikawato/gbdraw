@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Optional, Sequence
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -244,11 +245,18 @@ def add_record_definition_group(
     definition_center_y: float | None = None,
     definition_header_center_y: float | None = None,
     multi_record_layout: bool = False,
+    local_line_kinds: Collection[str] | None = None,
+    row_line_kinds: Collection[str] | None = None,
     record_index: int = 0,
     record_count: int = 1,
     record_transform: RecordDisplayTransform | None = None,
 ) -> Drawing:
-    """Adds a record definition group to the linear canvas."""
+    """Adds a record definition group to the linear canvas.
+
+    In multi-record layouts the caller owns the split between the row-level and
+    record-local definition parts, so that measurement and drawing agree on the
+    same line kinds.
+    """
     cfg = canvas_config.profile.config
     keep_definition_left_aligned = bool(getattr(canvas_config, "keep_definition_left_aligned", False))
     try:
@@ -259,14 +267,9 @@ def add_record_definition_group(
     if multi_record_layout:
         if placement is None:
             raise ValueError("multi_record_layout requires a resolved record placement")
-        split_row_definition = (
-            keep_definition_left_aligned and placement.column == 0
-        )
-        local_line_kinds = (
-            {"replicon", "accession", "length"}
-            if split_row_definition
-            else None
-        )
+        # A row heading is drawn from the leading record, and only when
+        # something describes the row as a whole.
+        split_row_definition = placement.column == 0 and bool(row_line_kinds)
         definition_group_obj = DefinitionGroup(
             record,
             canvas_config,
@@ -301,23 +304,32 @@ def add_record_definition_group(
                 record,
                 canvas_config,
                 cfg=cfg,
-                text_anchor="start",
+                text_anchor="start" if keep_definition_left_aligned else "end",
                 text_x=0.0,
                 group_id=f"{group_id or str(record.id)}_row",
-                line_kinds={"name", "subtitle"},
+                line_kinds=row_line_kinds,
                 record_index=record_index,
                 record_count=record_count,
                 definition_part="row",
                 record_transform=record_transform,
             )
+            if not row_group_obj.definition_lines:
+                # Nothing describes this row as a whole, so it gets no heading.
+                return canvas
             reserved_width = (
                 max(0.0, float(row_definition_width))
                 if row_definition_width is not None
                 else row_group_obj.definition_bounding_box_width
             )
             row_group = row_group_obj.get_group()
+
+            if keep_definition_left_aligned:
+                row_def_x = canvas_config.horizontal_offset - definition_gap - reserved_width
+            else:
+                row_def_x = canvas_config.horizontal_offset + placement.x - definition_gap
+
             row_group.translate(
-                canvas_config.horizontal_offset - definition_gap - reserved_width,
+                row_def_x,
                 (
                     placement.axis_y
                     if definition_center_y is None

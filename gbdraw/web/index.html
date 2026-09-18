@@ -1531,6 +1531,31 @@
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
                                 ></file-uploader>
                             </div>
+                            <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :data-linear-source-defaults="source.uid">
+                                <div class="text-[10px] font-bold text-slate-500">File defaults (applied to all records)</div>
+                                <div>
+                                    <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Organism / strain</label>
+                                    <input
+                                        type="text"
+                                        :value="getLinearSourceDefaultDefinition(source)"
+                                        @input="setLinearSourceDefaultDefinition(source, $event.target.value)"
+                                        :aria-label="`Default definition for file ${sourceIndex + 1}`"
+                                        placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai"
+                                        class="form-input px-1 py-0.5 text-xs"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Subtitle / title (optional)</label>
+                                    <input
+                                        type="text"
+                                        :value="getLinearSourceDefaultSubtitle(source)"
+                                        @input="setLinearSourceDefaultSubtitle(source, $event.target.value)"
+                                        :aria-label="`Default subtitle for file ${sourceIndex + 1}`"
+                                        placeholder="e.g., Complete genome"
+                                        class="form-input px-1 py-0.5 text-xs"
+                                    >
+                                </div>
+                            </div>
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
                                 <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-2 text-xs font-normal text-slate-500">
                                     Number of records: {{ source.records.length }}
@@ -1725,12 +1750,20 @@
                                 </div>
                             </details>
                             <div class="mt-2">
-                                <div class="text-[10px] text-slate-500 font-bold mb-1">Organism / strain (optional)</div>
-                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai" class="form-input px-1 py-0.5 text-xs">
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+                                    <span>Organism / strain (optional)</span>
+                                    <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
+                                    <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="resetLinearRecordDefinition(seq)" class="text-[9px] font-normal text-slate-400 hover:text-slate-600">Reset to default</button>
+                                </div>
+                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultDefinition(source) || 'e.g., <i>Escherichia coli</i> O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2">
-                                <div class="text-[10px] text-slate-500 font-bold mb-1">Subtitle / title (optional)</div>
-                                <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" placeholder="e.g., Neomycin biosynthetic gene cluster" class="form-input px-1 py-0.5 text-xs">
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+                                    <span>Subtitle / title (optional)</span>
+                                    <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
+                                    <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="resetLinearRecordSubtitle(seq)" class="text-[9px] font-normal text-slate-400 hover:text-slate-600">Reset to default</button>
+                                </div>
+                                <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultSubtitle(source) || 'e.g., Neomycin biosynthetic gene cluster'" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">

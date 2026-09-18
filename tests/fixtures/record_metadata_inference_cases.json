@@ -1,0 +1,174 @@
+{
+  "comment": [
+    "Shared expectations for record metadata inference.",
+    "gbdraw/core/record_metadata.py owns this inference for the Pyodide Worker and the renderer.",
+    "gbdraw/web/js/app/record-discovery.js reimplements it for the no-Worker upload fast path.",
+    "tests/test_record_metadata.py and tests/web/record-metadata-inference.test.mjs both read this",
+    "file, so the two implementations cannot drift apart unnoticed.",
+    "'replicon' is the value infer_record_source_metadata builds from the /chromosome or /plasmid",
+    "qualifier: a chromosome gains a 'Chromosome ' prefix, a plasmid keeps its qualifier verbatim.",
+    "Each subtitle case carries the raw /chromosome and /plasmid qualifiers for the JS fast path and the 'replicon' that infer_record_source_metadata derives from them for the Python helper."
+  ],
+  "definition": [
+    {
+      "name": "binomial with strain",
+      "organism": "Escherichia coli O157:H7",
+      "strain": "Sakai",
+      "expected": "<i>Escherichia coli</i> O157:H7 Sakai"
+    },
+    {
+      "name": "strain already present in the organism name is not repeated",
+      "organism": "Escherichia coli str. K-12 substr. MG1655",
+      "strain": "K-12",
+      "expected": "<i>Escherichia coli</i> str. K-12 substr. MG1655"
+    },
+    {
+      "name": "binomial without strain",
+      "organism": "Homo sapiens",
+      "strain": "",
+      "expected": "<i>Homo sapiens</i>"
+    },
+    {
+      "name": "single word organism",
+      "organism": "Streptomyces",
+      "strain": "sp. A",
+      "expected": "<i>Streptomyces</i> sp. A"
+    },
+    {
+      "name": "Candidatus prefix stays upright",
+      "organism": "Candidatus Tyloplasma litorale",
+      "strain": "Fukuoka2020",
+      "expected": "Candidatus <i>Tyloplasma litorale</i> Fukuoka2020"
+    },
+    {
+      "name": "non-organism falls back to the strain",
+      "organism": "synthetic construct",
+      "strain": "cloning vector pUC19",
+      "expected": "cloning vector pUC19"
+    },
+    {
+      "name": "non-organism is recognized behind a Candidatus prefix",
+      "organism": "Candidatus unknown organism",
+      "strain": "isolate 7",
+      "expected": "isolate 7"
+    },
+    {
+      "name": "no organism at all",
+      "organism": "",
+      "strain": "Sakai",
+      "expected": "Sakai"
+    }
+  ],
+  "subtitle": [
+    {
+      "name": "chromosome qualifier wins over the description",
+      "organism": "Escherichia coli",
+      "chromosome": "1",
+      "plasmid": "",
+      "replicon": "Chromosome 1",
+      "organelle": "",
+      "description": "Escherichia coli K-12 chromosome, complete genome.",
+      "expected": "Chromosome 1"
+    },
+    {
+      "name": "plasmid qualifier keeps its verbatim name",
+      "organism": "Escherichia coli",
+      "chromosome": "",
+      "plasmid": "pOSAK1",
+      "replicon": "pOSAK1",
+      "organelle": "",
+      "description": "",
+      "expected": "pOSAK1"
+    },
+    {
+      "name": "organelle is capitalized",
+      "organism": "Homo sapiens",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "mitochondrion",
+      "description": "",
+      "expected": "Mitochondrion"
+    },
+    {
+      "name": "complete genome from the description",
+      "organism": "Escherichia coli",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Escherichia coli O157:H7 str. Sakai DNA, complete genome.",
+      "expected": "Complete genome"
+    },
+    {
+      "name": "mitochondrial complete genome from the description",
+      "organism": "Homo sapiens",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Homo sapiens mitochondrion, complete genome.",
+      "expected": "Mitochondrion, complete genome"
+    },
+    {
+      "name": "chloroplast complete genome from the description",
+      "organism": "Arabidopsis thaliana",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Arabidopsis thaliana chloroplast, complete genome.",
+      "expected": "Chloroplast, complete genome"
+    },
+    {
+      "name": "plasmid named in the description",
+      "organism": "Escherichia coli",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Escherichia coli plasmid pOSAK1, complete sequence.",
+      "expected": "Plasmid pOSAK1"
+    },
+    {
+      "name": "gene cluster after stripping the organism prefix",
+      "organism": "Streptomyces lividus",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Streptomyces lividus lividomycin biosynthesis gene cluster.",
+      "expected": "Lividomycin biosynthesis gene cluster"
+    },
+    {
+      "name": "gene cluster after stripping an organism and DNA prefix",
+      "organism": "Streptomyces lividus",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Streptomyces lividus DNA, sss biosynthetic gene cluster.",
+      "expected": "Sss biosynthetic gene cluster"
+    },
+    {
+      "name": "complete sequence from the description",
+      "organism": "Escherichia coli",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Escherichia coli K-12 DNA, complete sequence.",
+      "expected": "Complete sequence"
+    },
+    {
+      "name": "nothing inferable",
+      "organism": "Escherichia coli",
+      "chromosome": "",
+      "plasmid": "",
+      "replicon": "",
+      "organelle": "",
+      "description": "Escherichia coli partial cds.",
+      "expected": ""
+    }
+  ]
+}

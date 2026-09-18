@@ -20,6 +20,48 @@ export const groupLinearSourceRecords = (sequences) => {
   return groups;
 };
 
+export const getLinearSourceDefaultDefinition = (source) => {
+  return String(source?.records?.[0]?.sequence?.file_definition ?? source?.sequence?.file_definition ?? '');
+};
+
+export const setLinearSourceDefaultDefinition = (source, value) => {
+  const text = String(value ?? '');
+  (source?.records || []).forEach(({ sequence }) => {
+    sequence.file_definition = text;
+  });
+  if (source?.sequence) {
+    source.sequence.file_definition = text;
+  }
+};
+
+export const getLinearSourceDefaultSubtitle = (source) => {
+  return String(source?.records?.[0]?.sequence?.file_subtitle ?? source?.sequence?.file_subtitle ?? '');
+};
+
+export const setLinearSourceDefaultSubtitle = (source, value) => {
+  const text = String(value ?? '');
+  (source?.records || []).forEach(({ sequence }) => {
+    sequence.file_subtitle = text;
+  });
+  if (source?.sequence) {
+    source.sequence.file_subtitle = text;
+  }
+};
+
+export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) => {
+  const own = String(sequence?.definition ?? '').trim();
+  if (own) return sequence.definition;
+  const fileDef = String(sequence?.file_definition ?? (source ? getLinearSourceDefaultDefinition(source) : '')).trim();
+  return fileDef || '';
+};
+
+export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) => {
+  const own = String(sequence?.record_subtitle ?? '').trim();
+  if (own) return sequence.record_subtitle;
+  const fileSub = String(sequence?.file_subtitle ?? (source ? getLinearSourceDefaultSubtitle(source) : '')).trim();
+  return fileSub || '';
+};
+
 // Record-pair evidence and source-file execution have different cardinalities.
 // Explicit translation tables may require compatible subsets within one source.
 export const prepareLosatSourceBatches = async ({

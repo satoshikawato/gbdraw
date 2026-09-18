@@ -438,9 +438,12 @@ def _get_args(args) -> argparse.Namespace:
         '--keep_definition_left_aligned',
         dest='keep_definition_left_aligned',
         help=(
-            'Keep linear record definitions in the left column. With multi-record rows, '
-            'the leading record label becomes the row definition while remaining record '
-            'text stays above its record (default: False).'
+            'Keep linear record definitions in the left column. In a multi-record row, a '
+            'label or subtitle that no record of the row contradicts becomes a row '
+            'definition drawn once beside the row, and text that varies within the row '
+            'stays above its own record; this flag aligns those row definitions in a '
+            'shared left column instead of placing each one beside its own row '
+            '(default: False).'
         ),
         action='store_true')
     parser.add_argument(

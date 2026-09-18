@@ -195,4 +195,123 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
     )
 
 
-__all__ = ["RecordSourceMetadata", "infer_record_source_metadata"]
+_NON_ORGANISM_NAMES = frozenset(
+    {
+        "synthetic construct",
+        "artificial sequence",
+        "unidentified",
+        "unidentified organism",
+        "unknown",
+        "unknown organism",
+        "vector",
+        "cloning vector",
+        "unidentified cloning vector",
+        "expression vector",
+    }
+)
+
+
+def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
+    """Format organism and strain into publication-style HTML (e.g. <i>Genus species</i> strain)."""
+    organism = str(metadata.organism or "").strip()
+    strain = str(metadata.strain or "").strip()
+
+    candidatus = False
+    clean_org = organism
+    if clean_org.lower().startswith("candidatus "):
+        candidatus = True
+        clean_org = clean_org[11:].strip()
+
+    if not clean_org or clean_org.lower() in _NON_ORGANISM_NAMES:
+        return strain
+
+    words = clean_org.split()
+    cand_prefix = "Candidatus " if candidatus else ""
+    if len(words) >= 2:
+        binom = f"<i>{' '.join(words[:2])}</i>"
+        rest = " ".join(words[2:])
+        if strain and strain.lower() not in rest.lower():
+            rest = f"{rest} {strain}".strip()
+        return f"{cand_prefix}{binom} {rest}".strip()
+    if words:
+        base = f"{cand_prefix}<i>{words[0]}</i>"
+        return f"{base} {strain}".strip() if strain else base
+    return strain
+
+
+def format_inferred_subtitle(
+    metadata: RecordSourceMetadata,
+    description: str = "",
+) -> str:
+    """Infer a concise record subtitle from replicon/organelle metadata or description."""
+    if metadata.replicon:
+        return str(metadata.replicon).strip()
+    if metadata.organelle:
+        return str(metadata.organelle).strip().capitalize()
+
+    desc = str(description or "").strip().rstrip(".")
+    if not desc:
+        return ""
+
+    import re
+
+    desc_lower = desc.lower()
+    if "plasmid" in desc_lower:
+        plasmid_match = re.search(
+            r"(?:plasmid\s+([A-Za-z0-9_-]+)|\b(p[A-Za-z0-9_-]+)\b)",
+            desc,
+            re.IGNORECASE,
+        )
+        if plasmid_match:
+            p_name = (plasmid_match.group(1) or plasmid_match.group(2) or "").strip()
+            return p_name if p_name.lower().startswith("plasmid") else f"Plasmid {p_name}"
+
+    if "complete genome" in desc_lower:
+        if "mitochondri" in desc_lower:
+            return "Mitochondrion, complete genome"
+        if "chloroplast" in desc_lower:
+            return "Chloroplast, complete genome"
+        return "Complete genome"
+
+    if "complete sequence" in desc_lower:
+        return "Complete sequence"
+
+    organism = str(metadata.organism or "").strip()
+    if organism and organism.lower() not in _NON_ORGANISM_NAMES:
+        stripped = re.sub(
+            rf"^{re.escape(organism)}[,\s]*",
+            "",
+            desc,
+            flags=re.IGNORECASE,
+        )
+        stripped = re.sub(
+            r"^(?:DNA|genomic DNA|cDNA)[,\s]*",
+            "",
+            stripped,
+            flags=re.IGNORECASE,
+        ).strip()
+        if re.search(
+            r"(?:gene cluster|biosynthetic gene cluster|cluster|operon)",
+            stripped,
+            re.IGNORECASE,
+        ):
+            return stripped[:1].upper() + stripped[1:]
+
+    cluster_match = re.search(
+        r"([A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)*\s+(?:gene cluster|biosynthetic gene cluster|cluster|operon))",
+        desc,
+        re.IGNORECASE,
+    )
+    if cluster_match:
+        res = cluster_match.group(1).strip()
+        return res[:1].upper() + res[1:]
+
+    return ""
+
+
+__all__ = [
+    "RecordSourceMetadata",
+    "format_inferred_definition",
+    "format_inferred_subtitle",
+    "infer_record_source_metadata",
+]

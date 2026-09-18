@@ -1595,6 +1595,11 @@ def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
     from gbdraw.api.record_planning import _detected_topology
+    from gbdraw.core.record_metadata import (
+        format_inferred_definition,
+        format_inferred_subtitle,
+        infer_record_source_metadata,
+    )
     try:
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
@@ -1604,12 +1609,32 @@ def list_sequence_records(path, format):
             return json.dumps({"error": "No records found"})
         payload = []
         for idx, record in enumerate(records):
+            organism = ""
+            strain = ""
+            inferred_def = ""
+            inferred_sub = ""
+            sub_from_replicon = False
+            if format == "genbank":
+                meta = infer_record_source_metadata(record)
+                organism = meta.organism or ""
+                strain = meta.strain or ""
+                inferred_def = format_inferred_definition(meta)
+                inferred_sub = format_inferred_subtitle(meta, str(record.description or ""))
+                # A replicon or organelle qualifier names this record alone; a
+                # subtitle read from the shared description does not.
+                sub_from_replicon = bool(meta.replicon or meta.organelle)
+
             payload.append(
                 {
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
                     "topology": _detected_topology(record, "genbank") if format == "genbank" else "unknown",
+                    "organism": organism,
+                    "strain": strain,
+                    "inferred_definition": inferred_def,
+                    "inferred_subtitle": inferred_sub,
+                    "inferred_subtitle_from_replicon": sub_from_replicon,
                 }
             )
         return json.dumps({"records": payload})

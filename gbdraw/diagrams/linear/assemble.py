@@ -11,6 +11,7 @@ from __future__ import annotations
 from gbdraw.features.placement import FeaturePlacementSlot
 from ...layout.record_labels import source_ruler_ticks
 
+from collections.abc import Collection
 import copy
 from dataclasses import dataclass, replace
 import logging
@@ -893,12 +894,111 @@ def _centered_vertical_band(center_y: float, height: float) -> VerticalBand | No
     return VerticalBand(float(center_y) - half_height, float(center_y) + half_height)
 
 
+_ROW_ELIGIBLE_LINE_KINDS: tuple[str, ...] = ("name", "subtitle")
+_ROW_ELIGIBLE_ANNOTATIONS: dict[str, str] = {
+    "name": "gbdraw_record_label",
+    "subtitle": "gbdraw_record_subtitle",
+}
+_RECORD_LOCAL_LINE_KINDS = frozenset({"replicon", "accession", "length"})
+
+
+def _record_definition_text(record: SeqRecord, annotation: str) -> str:
+    """Return one explicit definition annotation of a record, or an empty string."""
+    annotations = getattr(record, "annotations", None) or {}
+    return str(annotations.get(annotation) or "").strip()
+
+
+def _row_wide_definition_line_kinds(
+    records: list[SeqRecord],
+    row_record_indices: list[int],
+    *,
+    leading_index: int,
+) -> frozenset[str]:
+    """Return the definition line kinds that describe a whole row rather than a record.
+
+    A kind qualifies when the record leading the row names it and no other record
+    of the row contradicts that name. An empty value means the record has nothing
+    of its own to say, which is how a records table writes a row identity once on
+    its leading record; a different non-empty value makes the kind record-local, so
+    a per-record replicon name is never promoted to a row heading.
+
+    The leading record anchors the comparison because the row part is drawn from
+    that record, so a name that only a following record carries could not be
+    rendered beside the row at all.
+
+    The kinds are tested in stacking order and the scan stops at the first one
+    that does not qualify: a subtitle belongs under its own label, so it must not
+    be left alone beside the row once the label has moved above the records.
+    """
+
+    row_wide: set[str] = set()
+    for kind in _ROW_ELIGIBLE_LINE_KINDS:
+        annotation = _ROW_ELIGIBLE_ANNOTATIONS[kind]
+        leading_text = _record_definition_text(records[leading_index], annotation)
+        if not leading_text:
+            break
+        if any(
+            text and text != leading_text
+            for text in (
+                _record_definition_text(records[index], annotation)
+                for index in row_record_indices
+            )
+        ):
+            break
+        row_wide.add(kind)
+    return frozenset(row_wide)
+
+
+def _split_definition_line_kinds(
+    records: list[SeqRecord],
+    *,
+    rows_by_record: tuple[int, ...],
+    row_leading_indices: set[int],
+) -> tuple[list[frozenset[str]], list[frozenset[str]]]:
+    """Assign definition line kinds to the row part and local part of each record.
+
+    The row part carries only what describes the whole row: a label or subtitle
+    that no record of the row contradicts, which is what a Web file-level default
+    applied to each record of a source, or a records table naming a row once on
+    its leading record, produces. Anything that varies within the row stays above
+    its own record, including for the record that leads the row.
+
+    Both lists are explicit, so the caller measures exactly the lines it draws.
+    """
+
+    row_record_indices: dict[int, list[int]] = {}
+    for index in range(len(records)):
+        row_record_indices.setdefault(rows_by_record[index], []).append(index)
+
+    leading_index_by_row = {
+        rows_by_record[index]: index for index in row_leading_indices
+    }
+    row_wide_by_row = {
+        row: _row_wide_definition_line_kinds(
+            records,
+            indices,
+            leading_index=leading_index_by_row[row],
+        )
+        for row, indices in row_record_indices.items()
+    }
+
+    local_kinds: list[frozenset[str]] = []
+    row_kinds: list[frozenset[str]] = []
+    for index in range(len(records)):
+        row_wide = row_wide_by_row[rows_by_record[index]]
+        local_kinds.append(
+            _RECORD_LOCAL_LINE_KINDS | (frozenset(_ROW_ELIGIBLE_LINE_KINDS) - row_wide)
+        )
+        row_kinds.append(row_wide if index in row_leading_indices else frozenset())
+    return local_kinds, row_kinds
+
+
 def _definition_metrics_by_record(
     records: list[SeqRecord],
     canvas_config: LinearCanvasConfigurator,
     *,
     cfg: GbdrawConfig,
-    line_kinds_by_record: list[frozenset[str] | None] | None = None,
+    line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
 ) -> tuple[float, list[float], list[float]]:
     """Return the maximum width plus record-local definition widths and heights."""
@@ -1149,10 +1249,13 @@ def _record_collision_bands(
     row_band = definition_geometry.row_band
     actual_row_width = max(0.0, float(definition_geometry.row_width))
     if row_band is not None and actual_row_width > 0.0:
-        row_start = -(
-            max(0.0, float(definition_gap))
-            + max(0.0, float(row_definition_width))
-        )
+        if keep_definition_left_aligned:
+            row_start = -(
+                max(0.0, float(definition_gap))
+                + max(0.0, float(row_definition_width))
+            )
+        else:
+            row_start = float(record_x) - max(0.0, float(definition_gap)) - actual_row_width
         bands.append(
             CollisionBand(
                 "definition",
@@ -1665,9 +1768,7 @@ def assemble_linear_diagram(
             continue
         seen_rows.add(row)
         row_leading_indices.add(record_index)
-    split_row_definitions = (
-        multi_record_enabled and bool(canvas_config.keep_definition_left_aligned)
-    )
+    split_row_definitions = bool(multi_record_enabled)
     if multi_record_enabled and bool(cfg.canvas.linear.normalize_length):
         raise ValidationError(
             "normalize_length=True cannot be combined with multiple records in one Linear row."
@@ -1861,18 +1962,19 @@ def assemble_linear_diagram(
         feature_lane_geometries=record_feature_lane_geometries,
         record_transforms=record_transforms,
     )
-    local_definition_line_kinds = (
-        [
-            (
-                frozenset({"replicon", "accession", "length"})
-                if index in row_leading_indices
-                else None
-            )
-            for index in range(len(records))
-        ]
-        if split_row_definitions
-        else None
-    )
+    local_definition_line_kinds: list[frozenset[str]] | None = None
+    row_definition_line_kinds: list[frozenset[str]] = [
+        frozenset() for _record in records
+    ]
+    if split_row_definitions:
+        (
+            local_definition_line_kinds,
+            row_definition_line_kinds,
+        ) = _split_definition_line_kinds(
+            records,
+            rows_by_record=rows_by_record,
+            row_leading_indices=row_leading_indices,
+        )
     max_def_width, definition_widths, definition_heights = _definition_metrics_by_record(
         records,
         canvas_config,
@@ -1892,12 +1994,7 @@ def assemble_linear_diagram(
             records,
             canvas_config,
             cfg=cfg,
-            line_kinds_by_record=[
-                frozenset({"name", "subtitle"})
-                if index in row_leading_indices
-                else frozenset()
-                for index in range(len(records))
-            ],
+            line_kinds_by_record=list(row_definition_line_kinds),
             record_transforms=record_transforms,
         )
 
@@ -2792,6 +2889,12 @@ def assemble_linear_diagram(
                     else None
                 ),
                 multi_record_layout=multi_record_enabled,
+                local_line_kinds=(
+                    local_definition_line_kinds[record_index]
+                    if local_definition_line_kinds is not None
+                    else None
+                ),
+                row_line_kinds=row_definition_line_kinds[record_index],
                 record_index=record_index,
                 record_count=total_records,
                 record_transform=(record_transforms[record_index] if record_transforms is not None else None),
