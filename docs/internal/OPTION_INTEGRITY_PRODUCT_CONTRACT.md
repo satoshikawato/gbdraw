@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `6`
+- Contract revision: `7`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -24,7 +24,7 @@ Status: active Product authority
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
-  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`
+  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -51,6 +51,12 @@ Status: active Product authority
   Only PATH-B and the supplied preservation, retirement and risk terms are
   recorded. The earlier decisions retain their scope. Dependent runtime still
   requires this authority on its base; this amendment contains no runtime.
+- Revision 7 addition: `PD-OI-024`, selected by `satoshikawato` on
+  `2026-09-19` through the complete `PRODUCT_DECISION` response for
+  `linear.definition-display`, scenario revision `1`. Only D1-A, D2-P,
+  D3-A and the supplied preservation, retirement and risk terms are recorded.
+  Earlier decisions retain their scope. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -759,6 +765,52 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "acceptedResidualRisk": "旧API依存コードの修正、新形式を旧バージョンで読めないこと、明示的な全量取得には大きな時間・メモリが必要になり得ること。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-15"
+}
+```
+
+### PD-OI-024: Linear Definition alignment and automatic Replicon visibility
+
+- Concern key: `linear.definition-display`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcomes: `D1-A`, `D2-P`, `D3-A`
+- Normative outcome:
+  1. **D1-A — 共通幅の中央:** Lock Definition Column=falseの既定配置では、
+     同じ開始位置の行のDefinitionを共通幅の中心にそろえる。行を移動すると
+     対応するDefinitionも追従する。単一／複数／混在行に適用する。
+     Lock=trueの共通左列を維持する。既にサポートする明示的な`text_anchor`
+     設定は、その既存の受入範囲で維持し、新しい経路へ拡張しない。
+  2. **D2-P — 保存値を保持:** 保存済みSubtitleは、自動／手入力を推測したり、
+     Replicon名と文字列が一致したりすることを理由に削除しない。
+     読み込みだけでは保存Resultを変えず、Generateで新しい表示契約を適用する。
+     不要なSubtitleは利用者が明示的にクリアし、ファイル既定値へ戻る既存の
+     継承規則を維持する。手入力Subtitleと行共通・レコード固有ラベルの区別を保つ。
+  3. **D3-A — OrganelleもReplicon行で制御:** chromosome、plasmid、organelle
+     由来の自動名をShow Repliconで制御し、対象名はオンで一つ、オフでゼロとする。
+     候補が競合するときはchromosome→plasmid→organelleの順で一つを選ぶ。
+     organelleの表記は既存の自動Subtitle表記を引き継ぐ。
+     Web・CLI・Pythonの共通描画に適用し、Show Repliconの既定値falseを維持する。
+     自動名のオン／オフは手入力Subtitleの表示を変更しない。
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-19` for issues `#543` and `#545`, reproduced
+  below.
+  The receipt below preserves the supplied fields without translating or
+  extending the rationale, preservation, retirement, risk, owner or date.
+  This is a reviewable serialization in the existing static authority document,
+  not a new decision store or a `BD-###` record. It cannot authorize dependent
+  runtime until merged into that runtime's base.
+
+```json
+{
+  "concern": "linear.definition-display",
+  "scenarioRevision": 1,
+  "choices": ["D1-A", "D2-P", "D3-A"],
+  "rationale": "名前の比較をしやすくし、自動の生物学的名称を一つの表示スイッチで制御する。",
+  "mustPreserve": "手入力Subtitle、保存済みSessionの値とプレビュー、Lock=trueの共通左列、行共通・レコード固有ラベルの区別。",
+  "mayRetire": "Replicon/Organelle名のSubtitleへの自動コピー、Lock=falseで各Definition自身の幅に基づく既定横配置。",
+  "acceptedResidualRisk": "保存済みの自動Subtitleはオフでも残りうる。再Generate後の配置は保存済みプレビューと変わりうる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-19"
 }
 ```
 
