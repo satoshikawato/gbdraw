@@ -7,9 +7,10 @@ single public page, and a scenario may support no public page. Evidence for a
 GUI, CLI, Python, or mobile surface validates that surface without requiring a
 separate surface-specific page.
 
-## Public-page decision gate
+## Public-page ownership decisions
 
-Before drafting, record one row for every reader question or affected page:
+For a new page or structural renovation, record one row for each affected
+reader question or page. Reuse an existing decision for a local update:
 
 | Reader question | Existing owner | Evidence scenarios and surfaces | Disposition | Resulting owner |
 | --- | --- | --- | --- | --- |
@@ -65,7 +66,7 @@ For every procedural page:
 - use session reload only after the reader created that session from original
   inputs in the same session-focused procedural page;
 - keep frozen repository copies internal to deterministic offline verification
-  and apply the mirror-verification gate in Step 3 of `SKILL.md`; a
+  and apply the mirror-verification requirements in [sequence-inputs.md](sequence-inputs.md); a
   `legacy-unverified` mirror cannot back a public visible result;
 - link each non-sequence supplied input to its source and state its exact save
   name, or show its complete contents or derivation on the page;

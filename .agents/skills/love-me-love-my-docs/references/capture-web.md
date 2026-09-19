@@ -1,6 +1,7 @@
 # Reproducible Web capture
 
-Use Playwright against a local or explicitly approved test host. Keep the base
+Use Playwright against the requested application; apply the external-mutation
+boundary in `SKILL.md` when the workflow writes remote state. Keep the base
 URL, viewport, device scale factor, locale, timezone, theme, and network policy
 in one configuration owner.
 
@@ -14,8 +15,9 @@ in one configuration owner.
 4. Prefer `get_by_role`, then `get_by_label` for a form control with an
    associated accessible label, then a stable `get_by_test_id`. A label locator
    is compliant and does not imply that the app needs a test ID. Record any
-   surviving CSS or bare-text selector as an application finding for missing
-   accessible semantics or a stable test ID.
+   inaccessible interactive control as an application finding. Stable CSS
+   selectors for SVG geometry or capture regions are acceptable; they are not
+   by themselves evidence of an accessibility defect.
 5. Wait for a semantic ready/result condition rather than an arbitrary delay.
 6. Assert the state named by the step before capturing.
 7. Capture the smallest truthful region that keeps the operated control,
@@ -32,7 +34,9 @@ data, credentials, local absolute paths, tokens, or transient notifications.
 For a new screenshot system, use device scale factor 2 or higher for UI text.
 An established repository may retain a lower factor only when one documented,
 tested capture contract owns it and the final text remains readable at its
-published size; treat a density change as a repository-wide artifact migration,
-not a per-scenario override. Recapture at the selected density and never upscale
-an existing bitmap. Compare replacement captures with the old image at the same
+published size. For a requested local resolution change, use a supported scoped
+capture setting when available. If changing a shared capture configuration would
+affect other outputs, identify that affected contract before broad regeneration;
+a one-image request does not authorize a repository-wide artifact migration.
+Recapture at the selected density and never upscale an existing bitmap. Compare replacement captures with the old image at the same
 rendered size before accepting them.

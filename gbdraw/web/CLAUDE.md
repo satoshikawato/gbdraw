@@ -1,6 +1,6 @@
 # Web application maintenance
 
-Read the repository-level `CLAUDE.md` first. This file describes the intended
+Read the repository-level `AGENTS.md` for shared work rules. This file describes the intended
 Web architecture and its ownership boundaries. It deliberately avoids line
 numbers and implementation-size snapshots because those become stale quickly.
 
