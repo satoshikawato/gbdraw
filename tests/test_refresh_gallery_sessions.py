@@ -63,6 +63,9 @@ from tools.refresh_gallery_sessions import (
 pytestmark = pytest.mark.gallery
 
 BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_SESSION_VERSIONS = frozenset(
+    {CURRENT_SESSION_VERSION - 1, CURRENT_SESSION_VERSION}
+)
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
@@ -401,8 +404,9 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
     assert len(paths) == 11
     for path in paths:
         session = load_cached_gallery_session(path)
-        # Existing published full Sessions stay on their released format.
-        assert session["version"] == 41, path
+        # Published Sessions advance through canonical refreshes without forcing
+        # unrelated Gallery examples into the same asset-only change.
+        assert session["version"] in BUNDLED_SESSION_VERSIONS, path
         assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
             session["proteinIdentityManifest"]["schema"]
