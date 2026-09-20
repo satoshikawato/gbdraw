@@ -396,3 +396,45 @@ browser verificationの前に、NodeとPythonのPlaywright経路を確認する�
 | architecture owner/path evidence | 未開始 |
 | remaining work or blockers | 未開始 |
 | rollback note | 未開始 |
+
+### S0実施記録
+
+| 項目 | 記録 |
+| --- | --- |
+| base SHA / branch | `origin/dev` = `eec715c70323c1dc6173a36bda2f18e600f8384d`; `fix/linear-source-reorder-20260920`。最新`origin/dev`から追跡先なしで作成し、計画文書コミットを適用した。 |
+| audited cause still present | あり。Fileカードは`linearSourceGroups`単位だがヘッダーに移動操作がなく、`moveLinearSeqUp/Down()`は`linearSeqs`の一recordだけを移動する。canonical requestは`linearSeqs`順からrecordsを構築する。 |
+| baseline commands and results | `node --test tests/web/linear-sources.test.mjs`: 1 pass。`npx playwright test tests/web/linear-multi-record.playwright.spec.js --grep "one uploaded source stays one file card" --workers=1 --retries=0`: Chromium 1 pass。 |
+| coverage gap | unitはsource groupingとLOSAT batchingだけを検証し、browserはFileカード数、collapsed record list、置換、削除を検証するが、Fileヘッダーからsource順を変更しない。既存passはSR-01〜SR-14のreorder証拠ではない。 |
+| Product Impact | `IMPLEMENT_EXISTING_AUTHORITY`。`PD-OI-018` scenario revision 2と`OIC-015`が、one source = one File cardと、reordering後のidentity、placement、pair mapping、shared resources保持を選択済み。別のProduct判断はない。 |
+| owner/path plan | source identityとblock変換は`linear-sources.js`、coordinationは`app-setup.js`から既存`applyLinearSeqMutation()`、表示は`index.html`、request projectionは既存`session-request.js`のまま。旧record-level input reorder pathを削除する。 |
+| environment | Node Playwright `1.61.0`、Python Playwright import、Node `@playwright/test`を確認。`gbdraw/web/gbdraw-0.14.0-py3-none-any.whl`が存在する。S2で現在sourceから再生成する。 |
+| S1 readiness / blockers | S1開始可能。新しいProduct判断、architecture例外、外部権限は不要。 |
+
+### S1実施記録
+
+| 項目 | 記録 |
+| --- | --- |
+| base / branch | S0と同じ`eec715c70323c1dc6173a36bda2f18e600f8384d` / `fix/linear-source-reorder-20260920`。 |
+| changed production files | `gbdraw/web/js/app/linear-sources.js`: pure source-block move。`gbdraw/web/js/app/app-setup.js`: source actionを既存mutation境界へ接続。`gbdraw/web/index.html`: File header controlsと旧record controls削除。 |
+| changed test files | `tests/web/linear-sources.test.mjs`: block、identity、boundary、same-name、Session descriptor、legacy interleave。`tests/web/linear-multi-record.playwright.spec.js`: pointer/keyboard、2+3 records、request、row/pair/cache、Result、Session、mobile、async discovery、GFF3+FASTA。`tests/ci/playwright-inventory.test.mjs`: comparison contract総数を追加後の16本へ同期。 |
+| changed docs / generated files | `docs/REFERENCE/web-app.md`: File順序とRecord Layoutの責務を説明。generated fileは未変更。 |
+| focused acceptance | SR-01〜SR-08、SR-11〜SR-14をfocused testsで確認。SR-09/SR-10のGenerateとfresh Loadも同じbrowser journeyで確認したが、S2の広いgateとwheel再生成は未実施。 |
+| exact commands and results | `node --test tests/web/linear-sources.test.mjs`: pass。`node --test tests/web/session-request.test.mjs`: pass。`npx playwright test tests/web/linear-multi-record.playwright.spec.js --grep "source.*order\|File.*order" --workers=1 --retries=0`: Chromium 3 pass。`git diff --check`: pass。 |
+| removed owner/path | Input File record-level `canMoveLinearSeqUp/Down`、`reorderLinearSeqs`、`moveLinearSeqUp/Down`とRecord optionsのUp/Downを削除。recordの同一row移動は`moveLinearRecordWithinRow()`へ収束。 |
+| architecture concise evidence draft | source identity/order semanticsは`linear-sources.js`一owner。UI -> `moveLinearSource()` -> `moveLinearSourceGroup()` -> `applyLinearSeqMutation()` -> `linearSeqs` ->既存request/Worker経路。新state、watcher、schema、compatibility pathなし。想定`OE 0 -> 0`、`PE 0 -> 0`、`CB 0 -> 0`。 |
+| remaining S2 work | browser wheel再生成、実LOSAT/Worker代表journey、全Web unit、comparison contracts、architecture contract、Web policy gate、production/test/docs/generated diff最終監査。 |
+| proposed commit title / summary | `Restore Linear source reordering from File cards` — Add accessible File-level moves that keep multi-record sources, record-owned state, comparisons, cache, and Session replay aligned while removing the obsolete record-level input reorder path. |
+
+### S2実施記録
+
+| 項目 | 記録 |
+| --- | --- |
+| browser / wheel identity | Node Playwright `1.61.0`、Python Playwright、Node `@playwright/test`を確認。`python tools/prepare_browser_wheel.py`で現在sourceから`gbdraw-0.14.0-py3-none-any.whl`を生成。SHA-256 `8b5cb22f096f7a7e646bbaec006f0ea709085f1aa25bcf4f8ac36d62806e2b55`、wheel metadata version `0.14.0`。 |
+| browser acceptance | source-order focused journey 3 pass。実LOSAT/Wasm offline journey 1 pass。comparison contract suite 16 pass。旧record順序testを正しいRecord Layout/source actionへ移した2 journeyもpass。pointer、Space、Enter、disabled boundary、Generate、fresh Load、cache/index reconciliationを確認。 |
+| mobile / visual | 390x844でFile名、Remove、Up/Down、collapsed countを検証し、各File cardで`scrollWidth <= clientWidth`。使い捨て`file-source-order-mobile.png`を目視し、横overflowまたは到達不能なし。 |
+| unit / architecture | `node --test tests/web/*.test.mjs`をPython子プロセス利用のためsandbox外で実行し606 pass。`node --test tests/web/architecture-contracts.test.mjs`は137 pass。`node --test tests/ci/*.test.mjs`は59 pass。sandbox内一覧runは既存`feature-color-actions.test.mjs`のPython childで停止したが、同じsuiteのsandbox外再実行で解消。 |
+| policy / deterministic checks | `node tools/check-web-change-budget.mjs --base origin/dev --head HEAD`: Gate PASS、Review REQUIRED（public export追加）。production 3 files、gross churn 108、net +2、cycle 0 -> 0、authority/dependency/guard deltaなし。`git diff --check`はpass。 |
+| acceptance IDs | SR-01〜SR-14 pass。source block、same-name別upload、boundary no-op、collapsed records、record state、UID-row、explicit pair/cache、draft Result、Generate、Session、keyboard/mobile、旧path削除、async discovery、GFF3+FASTAを自動testまたは同等browser evidenceで確認。 |
+| architecture concise evidence | Before: source groupingは`linear-sources.js`、旧input reorder semanticsは`app-setup.js`のrecord-level path。After: source identityとblock変換は`linear-sources.js`一owner、UI -> `moveLinearSource()` -> `moveLinearSourceGroup()` ->既存`applyLinearSeqMutation()` -> `linearSeqs` ->既存request/Worker path。旧record-level pathを削除。新state、watcher、schema、compatibility pathなし。通常non-increasing changeで`OE 0 -> 0`、`PE 0 -> 0`、`CB 0 -> 0`。 |
+| rollback | File header controls、source action、pure helper、tests/docsを同じ単位で戻す。Session migration、resource変換、reference SVGのrollbackは不要。旧record-level input reorderだけは復活させない。 |
+| remaining work | ローカル実装・受入は完了。push、PR、CI確認、問題がなければmerge。 |

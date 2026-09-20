@@ -130,10 +130,16 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   const wheelPath = new URL(servedWheels[0].url).pathname.replace(/^\//, '');
   expect(servedWheels[0].sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
   await testInfo.attach('browser-wheel.json', { body: JSON.stringify(servedWheels), contentType: 'application/json' });
-  await page.evaluate(() => window.__GBDRAW_APP__.moveLinearSeqDown(0));
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearRecordWithinRow(app.linearSeqs[0].uid, 1);
+  });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect((await definitionLines(page)).filter(line => ['subtitle', 'replicon'].includes(line.kind))).toEqual([]);
-  await page.evaluate(() => window.__GBDRAW_APP__.moveLinearSeqUp(1));
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearRecordWithinRow(app.linearSeqs[1].uid, -1);
+  });
   await page.locator('[data-linear-source-records] > summary').click();
   await page.locator('[data-linear-record-options]').first().locator('summary').first().click();
   await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('p1');
@@ -1717,8 +1723,8 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     const app = window.__GBDRAW_APP__;
     app.linearComparisonPlan.mode = 'selected';
     app.setLinearRecordLayoutEnabled(true);
-    app.moveLinearSeqUp(2);
-    app.moveLinearSeqUp(1);
+    app.moveLinearSource(2, -1);
+    app.moveLinearSource(1, -1);
     return [app.linearSeqs.map((record) => record.uid), app.linearComparisonResolution.edges.map(
       (edge) => [edge.edgeKey, edge.queryIndex, edge.subjectIndex]
     ), app.losatCacheInfo.map(
@@ -2950,6 +2956,214 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
     sourceCount: new Set(request.records.map((record) => record.source.resourceId)).size,
     jobs: window.__GBDRAW_COMPLETE_RECORD_JOBS__
   };
+});
+
+test('@comparison-contract File source order moves multi-record blocks through pointer, keyboard, Generate, and Session Load', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await installCompleteRecordComparisonExecutor(page);
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+
+  const sources = page.locator('[data-linear-source-card]');
+  await expect(sources).toHaveCount(2);
+  await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
+  await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
+  await expect(sources.nth(0).locator('[data-linear-source-records]')).not.toHaveAttribute('open', '');
+  await expect(page.getByRole('button', { name: 'Move File 1 up' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 down' })).toBeDisabled();
+
+  const before = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__ = app.results[0].content;
+    return {
+      selectors: app.linearSeqs.map((seq) => seq.region_record_id),
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      rows: Object.fromEntries(app.linearRecordRows.map(({ uid, row }) => [uid, row])),
+      edges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey).sort(),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )).sort(([left], [right]) => left.localeCompare(right)),
+      runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
+    };
+  });
+  expect(before.selectors).toEqual(['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC']);
+
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(sources.nth(0)).toContainText('lower.gbff');
+  await expect(sources.nth(1)).toContainText('upper.gbff');
+  const moved = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      selectors: app.linearSeqs.map((seq) => seq.region_record_id),
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      groups: app.linearSourceGroups.map((source) => source.records.map(({ sequence }) => sequence.region_record_id)),
+      domUids: [...document.querySelectorAll('[data-linear-source-card]')]
+        .map((card) => card.dataset.linearSourceCard),
+      sourceUids: app.linearSourceGroups.map((source) => source.uid),
+      rows: Object.fromEntries(app.linearRecordRows.map(({ uid, row }) => [uid, row])),
+      edges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey).sort(),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )).sort(([left], [right]) => left.localeCompare(right)),
+      resultPreserved: app.results[0].content === window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__,
+      runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
+    };
+  });
+  expect(moved).toMatchObject({
+    selectors: ['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB'],
+    groups: [['LowerA', 'LowerB', 'LowerC'], ['UpperA', 'UpperB']],
+    domUids: moved.sourceUids,
+    rows: before.rows,
+    edges: before.edges,
+    resultPreserved: true,
+    runCount: before.runCount
+  });
+  expect(moved.uids).toEqual([...before.uids.slice(2), ...before.uids.slice(0, 2)]);
+  expect(moved.cache.map(([edgeKey]) => edgeKey)).toEqual(before.cache.map(([edgeKey]) => edgeKey));
+  expect(moved.cache).not.toEqual(before.cache);
+
+  await page.getByRole('button', { name: 'Move File 1 down' }).press('Space');
+  await expect(sources.nth(0)).toContainText('upper.gbff');
+  await page.getByRole('button', { name: 'Move File 2 up' }).press('Enter');
+  await expect(sources.nth(0)).toContainText('lower.gbff');
+  await expect(page.getByRole('button', { name: 'Move File 1 up' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 down' })).toBeDisabled();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sources.first().scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeVisible();
+  await expect(sources.first().getByRole('button', { name: 'Remove' })).toBeVisible();
+  expect(await sources.evaluateAll((cards) => cards.every((card) => card.scrollWidth <= card.clientWidth))).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('file-source-order-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const generated = await page.evaluate(() => {
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      selectors: request.records.map((record) => record.selector.value),
+      sourceIds: request.records.map((record) => record.source.resourceId)
+    };
+  });
+  expect(generated.selectors).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+  expect(new Set(generated.sourceIds.slice(0, 3)).size).toBe(1);
+  expect(new Set(generated.sourceIds.slice(3)).size).toBe(1);
+  expect(generated.sourceIds[0]).not.toBe(generated.sourceIds[3]);
+
+  const saved = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'linear-source-order';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await saved).path();
+  expect(readFileSync(savedPath, 'utf8')).not.toContain('"fileOrder"');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  const loaded = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  const loadDialog = await loaded;
+  expect(loadDialog.message()).toBe('Session loaded successfully!');
+  await loadDialog.accept();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+  await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');
+  await expect(page.locator('[data-linear-source-card]').nth(1)).toContainText('upper.gbff');
+  expect(await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows
+    .map(({ uid, row }) => [uid, row])))).toEqual(before.rows);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).records
+    .map((record) => record.selector.value))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+});
+
+test('@comparison-contract source order survives pending multi-record discovery', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(async ({ readyText, delayedText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([readyText], 'ready.gbff', {
+      type: 'text/plain', lastModified: 1
+    }));
+    await app.refreshLinearRecordSelectors();
+    app.addLinearSeq();
+
+    const delayedBytes = new TextEncoder().encode(delayedText).buffer;
+    const delayedFile = new File([delayedText], 'delayed.gbff', {
+      type: 'text/plain', lastModified: 2
+    });
+    delayedFile.arrayBuffer = () => new Promise((resolve) => {
+      window.__GBDRAW_RELEASE_DELAYED_DISCOVERY__ = () => resolve(delayedBytes);
+    });
+    app.setLinearSeqPrimaryFile(app.linearSeqs.length - 1, 'gb', delayedFile);
+    window.__GBDRAW_DELAYED_DISCOVERY__ = app.refreshLinearRecordSelectors();
+  }, {
+    readyText: makeDerivedOptionGenbank('Ready'),
+    delayedText: makeDerivedOptionGenbank('DelayedA') + makeDerivedOptionGenbank('DelayedB')
+  });
+
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(page.locator('[data-linear-source-card]').first()).toContainText('delayed.gbff');
+  await page.evaluate(async () => {
+    window.__GBDRAW_RELEASE_DELAYED_DISCOVERY__();
+    await window.__GBDRAW_DELAYED_DISCOVERY__;
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual(['DelayedA', 'DelayedB', '']);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSourceGroups
+    .map((source) => source.records.map(({ sequence }) => sequence.region_record_id))))
+    .toEqual([['DelayedA', 'DelayedB'], ['']]);
+});
+
+test('@comparison-contract GFF3 and FASTA source order moves both bindings with every record', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  const sourceText = (ids) => ({
+    gff: `##gff-version 3\n${ids.map((id) => `##sequence-region ${id} 1 12\n${id}\ttest\tgene\t1\t3\t.\t+\t.\tID=${id}_gene`).join('\n')}\n`,
+    fasta: `${ids.map((id) => `>${id}\nACGTACGTACGT`).join('\n')}\n`
+  });
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gff';
+    const upload = async (index, source, stem) => {
+      app.setLinearSeqPrimaryFile(index, 'gff', new File([source.gff], `${stem}.gff3`, {
+        type: 'text/plain', lastModified: 1
+      }));
+      app.setLinearSeqPrimaryFile(index, 'fasta', new File([source.fasta], `${stem}.fasta`, {
+        type: 'text/plain', lastModified: 2
+      }));
+      await app.refreshLinearRecordSelectors();
+    };
+    await upload(0, first, 'first');
+    app.addLinearSeq();
+    await upload(app.linearSeqs.length - 1, second, 'second');
+  }, { first: sourceText(['GffA', 'GffB']), second: sourceText(['GffC']) });
+
+  const sources = page.locator('[data-linear-source-card]');
+  await expect(sources).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GFF3|FASTA)$/ })).toHaveCount(4);
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(sources.nth(0)).toContainText('second.gff3');
+  await expect(sources.nth(0)).toContainText('second.fasta');
+  expect(await page.evaluate(() => ({
+    selectors: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.region_record_id),
+    files: window.__GBDRAW_APP__.linearSourceGroups.map((source) => ({
+      gff: source.sequence.gff.name,
+      fasta: source.sequence.fasta.name,
+      bindingsPreserved: source.records.every(({ sequence }) => (
+        sequence.gff === source.sequence.gff && sequence.fasta === source.sequence.fasta
+      ))
+    }))
+  }))).toEqual({
+    selectors: ['', 'GffA', 'GffB'],
+    files: [
+      { gff: 'second.gff3', fasta: 'second.fasta', bindingsPreserved: true },
+      { gff: 'first.gff3', fasta: 'first.fasta', bindingsPreserved: true }
+    ]
+  });
 });
 
 test('@comparison-contract real LOSAT Wasm searches two multi-record sources in one job offline', async ({ page }) => {

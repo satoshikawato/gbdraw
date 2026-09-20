@@ -35,6 +35,7 @@ import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
 import {
   groupLinearSourceRecords,
+  moveLinearSourceGroup,
   getLinearSourceDefaultDefinition,
   setLinearSourceDefaultDefinition,
   getLinearSourceDefaultSubtitle,
@@ -3380,36 +3381,19 @@ export const createAppSetup = () => {
     if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
 
-  const canMoveLinearSeqUp = (index) => {
-    const idx = Number(index);
-    return Number.isInteger(idx) && idx > 0 && idx < linearSeqs.length;
+  const canMoveLinearSource = (sourceIndex, direction) => {
+    const index = sourceIndex;
+    const offset = direction;
+    const target = index + offset;
+    return Number.isInteger(index) && [-1, 1].includes(offset)
+      && index >= 0 && index < linearSourceGroups.value.length
+      && target >= 0 && target < linearSourceGroups.value.length;
   };
 
-  const canMoveLinearSeqDown = (index) => {
-    const idx = Number(index);
-    return Number.isInteger(idx) && idx >= 0 && idx < linearSeqs.length - 1;
-  };
-
-  const reorderLinearSeqs = (fromIndex, toIndex) => {
-    const from = Number(fromIndex);
-    const to = Number(toIndex);
-    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
-    if (from < 0 || to < 0 || from >= linearSeqs.length || to >= linearSeqs.length || from === to) return;
-
-    const current = Array.from(linearSeqs);
-    const [moved] = current.splice(from, 1);
-    current.splice(to, 0, moved);
-    applyLinearSeqMutation(current, { preserveLosatCacheInfo: true });
-  };
-
-  const moveLinearSeqUp = (index) => {
-    if (!canMoveLinearSeqUp(index)) return;
-    reorderLinearSeqs(index, Number(index) - 1);
-  };
-
-  const moveLinearSeqDown = (index) => {
-    if (!canMoveLinearSeqDown(index)) return;
-    reorderLinearSeqs(index, Number(index) + 1);
+  const moveLinearSource = (sourceIndex, direction) => {
+    if (!canMoveLinearSource(sourceIndex, direction)) return;
+    const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
+    applyLinearSeqMutation(next, { preserveLosatCacheInfo: true });
   };
 
   const resetLinearRecordDefinition = (seq) => {
@@ -3575,10 +3559,8 @@ export const createAppSetup = () => {
     addLinearSeq,
     removeLastLinearSeq,
     setLinearSeqPrimaryFile,
-    canMoveLinearSeqUp,
-    canMoveLinearSeqDown,
-    moveLinearSeqUp,
-    moveLinearSeqDown,
+    canMoveLinearSource,
+    moveLinearSource,
     getLinearSourceDefaultDefinition,
     setLinearSourceDefaultDefinition,
     getLinearSourceDefaultSubtitle,
