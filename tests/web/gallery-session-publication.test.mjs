@@ -83,7 +83,7 @@ for (const name of sessionNames) {
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
 assert.equal(admitGallerySession(lambda).version, 42);
-assert.equal(lambda.version, 41);
+assert.equal(lambda.version, 42);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,
