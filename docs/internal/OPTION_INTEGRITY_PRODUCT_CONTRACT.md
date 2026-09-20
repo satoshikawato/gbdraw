@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `8`
+- Contract revision: `9`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -24,7 +24,7 @@ Status: active Product authority
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
-  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`
+  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -66,6 +66,14 @@ Status: active Product authority
   and records the supplied preservation, retirement, and risk terms. Earlier
   decisions retain their scope. Dependent runtime requires this authority
   merged into its base; this amendment contains no runtime.
+- Revision 9 addition: `PD-OI-025`, selected by `satoshikawato` on
+  `2026-09-21` through the complete `PRODUCT_DECISION` response for
+  `diagram-generation.linear-depth-source-scope-and-discoverability`, scenario
+  revision `1`. The selected `FILE-BULK-WITH-RECORD-OVERRIDES` outcome exposes
+  common Depth TSV assignment on each Linear File card while preserving sparse
+  per-record bindings. Earlier decisions retain their scope. Dependent runtime
+  requires this authority merged into its base; this amendment contains no
+  runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -897,6 +905,65 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
+### PD-OI-025: Linear Depth source scope and discoverability
+
+- Concern key: `diagram-generation.linear-depth-source-scope-and-discoverability`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `FILE-BULK-WITH-RECORD-OVERRIDES`
+- Normative outcome:
+  1. Each Linear File card exposes the common Depth TSV assignment without
+     requiring the user to expand its record list or any record options.
+     Applying or clearing a File-level value updates every record binding for
+     that File and logical series as one undoable operation.
+  2. Sparse per-record Depth bindings remain editable. A File card distinguishes
+     empty, common, and mixed record bindings. Applying a File-level value to a
+     mixed series replaces every record binding in that File and series; the UI
+     discloses this effect before the action.
+  3. Logical-series settings shared across records are presented once rather
+     than repeated inside every record card. Per-record controls expose only the
+     record-specific source assignment. A single-record File does not receive a
+     duplicate record-level uploader for the same binding.
+  4. The canonical state remains the record-major Depth matrix. Null cells,
+     logical series indexes, per-record overrides, source isolation, one-step
+     Undo/Redo, Session round trips, regeneration, and canonical render-request
+     semantics remain supported. The outcome introduces no new render path or
+     requirement for a new persisted Depth-default field.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-21` for issue `#554`, reproduced below. The
+  receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+- Acceptance contracts: `OIC-004`, `OIC-005`, `OIC-006`, `OIC-020`.
+
+```json
+{
+  "concern": "diagram-generation.linear-depth-source-scope-and-discoverability",
+  "scenarioRevision": 1,
+  "choice": "FILE-BULK-WITH-RECORD-OVERRIDES",
+  "rationale": "Common Depth TSV input should be available once on the File card, while supported sparse per-record bindings remain editable.",
+  "mustPreserve": [
+    "Record-major Depth matrices",
+    "Null cells and logical series indexes",
+    "Per-record overrides",
+    "Source isolation",
+    "One-step Undo/Redo",
+    "Session round trips",
+    "Regeneration",
+    "Existing canonical request semantics"
+  ],
+  "mayRetire": [
+    "Duplicated global Depth settings inside every record card",
+    "The need to expand every record before finding Depth input"
+  ],
+  "acceptedResidualRisk": "Applying or clearing a File-level value replaces or clears every record binding for that File and series; the UI must disclose this and Undo must restore the previous matrix.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-21"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -920,6 +987,24 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-017` | Web raw/member defaults are 5/5 in Collinear and unbounded/unbounded in Similarity. Each mode restores its own edits repeatedly, including blanks; Session round trips retain both modes; Reset Settings restores defaults. |
 | `OIC-018` | Collinear inference defaults OFF; actual raw jobs exclude every self-comparison, including within multi-record source batches, and the real Python path skips orthogroup inference. ON retains the existing inference; request, cache, provenance, and legacy Session interpretation agree. |
 | `OIC-019` | Completed raw searches survive downstream cancellation for matching retries; member-only edits do not rerun LOSAT. Raw-setting/input changes, Clear Cache, and Session/History replacement prevent incompatible reuse; the committed Result remains intact. |
+| `OIC-020` | Linear File cards expose common Depth TSV assignment without expanding records. File-level apply and clear update only that File and logical series as one undoable operation; empty, common, and mixed states remain truthful. Per-record sparse overrides, logical indexes, canonical requests, Session replay, and regeneration remain unchanged. |
+
+### OIC-020 required regression coverage
+
+The normal automated PR gate must observe all of the following:
+
+- A multi-record Linear GenBank File exposes its Depth TSV assignment while its
+  record list and record options remain closed. Applying one file binds the same
+  logical series to every record in that File and does not affect another File.
+- One per-record replacement produces a truthful mixed File state. Applying or
+  clearing the File-level value then replaces or clears every record cell in
+  that File and series, and one Undo restores the complete prior matrix.
+- Empty cells and later logical columns do not shift when a source is cleared.
+  Same-named independent files remain distinct, including after Session
+  restoration.
+- Save, fresh Load, canonical request construction, generation, and subsequent
+  regeneration preserve common and mixed bindings without a new Session schema,
+  request schema, Worker protocol, or rendering path.
 
 ### OIC-015 required regression coverage
 
