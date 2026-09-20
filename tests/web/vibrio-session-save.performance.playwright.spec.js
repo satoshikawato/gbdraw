@@ -164,8 +164,15 @@ const extractResultSvg = (sessionPath, outputPath) => {
 const compareResultSvgs = (expectedPath, actualPath) => {
   const comparisonScript = [
     'import sys',
-    'from tests.utils.svg_compare import compare_svgs',
-    'result = compare_svgs(sys.argv[1], sys.argv[2])',
+    'import xml.etree.ElementTree as ET',
+    'from pathlib import Path',
+    'from tests.utils.svg_compare import compare_svgs, parse_svg',
+    'expected = parse_svg(Path(sys.argv[1]).read_text(encoding="utf-8"))',
+    'actual = parse_svg(Path(sys.argv[2]).read_text(encoding="utf-8"))',
+    // Browser DOM serialization drops this legacy SVG profile declaration.
+    'if expected.attrib.get("baseProfile") == "full" and "baseProfile" not in actual.attrib: expected.attrib.pop("baseProfile")',
+    'normalized_expected = ET.tostring(expected, encoding="unicode")',
+    'result = compare_svgs(normalized_expected, sys.argv[2])',
     'print(result.message)',
     'print("\\n".join(result.differences))',
     'raise SystemExit(0 if result.equal else 1)'
