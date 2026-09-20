@@ -2152,6 +2152,8 @@ export const createAppSetup = () => {
   });
 
   const sessionImportPending = ref(false);
+  const sessionSavePending = ref(false);
+  let sessionSaveInFlight = null;
   const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
   const importSession = async (event) => {
@@ -3112,27 +3114,53 @@ export const createAppSetup = () => {
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const saveSessionWithTitle = async () => {
-    let title = normalizeSessionTitle(sessionTitle.value);
-    if (!title) {
-      const input = prompt('Session title', '');
-      if (input === null) return;
-      title = normalizeSessionTitle(input);
-      sessionTitle.value = title;
+  const saveSessionWithTitle = () => {
+    if (sessionSaveInFlight) {
+      recordSessionLifecycleEvent('session-save-joined');
+      return sessionSaveInFlight;
     }
-    try {
-      const comparisonPlanSnapshot = mode.value === 'linear'
-        ? linearComparisonResolution.value
-        : null;
-      const { catalog, error } = await prepareLinearRecordCatalog(
-        comparisonPlanSnapshot?.hasComparisonIntent
-      );
-      if (error) throw new Error(error);
-      return await exportSession(title, { linearRecordCatalog: catalog });
-    } catch (error) {
-      errorLog.value = normalizeUserFacingError(error);
-      return { status: 'error' };
-    }
+
+    const operation = Promise.resolve().then(async () => {
+      try {
+        let title = normalizeSessionTitle(sessionTitle.value);
+        if (!title) {
+          const input = prompt('Session title', '');
+          if (input === null) {
+            recordSessionLifecycleEvent('session-save-title-canceled');
+            return;
+          }
+          title = normalizeSessionTitle(input);
+          sessionTitle.value = title;
+        }
+        sessionSavePending.value = true;
+        recordSessionLifecycleEvent('session-save-pending-published');
+        await nextTick();
+        await afterPaint();
+        recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
+
+        recordSessionLifecycleEvent('session-save-catalog-preparation-start');
+        const comparisonPlanSnapshot = mode.value === 'linear'
+          ? linearComparisonResolution.value
+          : null;
+        const { catalog, error } = await prepareLinearRecordCatalog(
+          comparisonPlanSnapshot?.hasComparisonIntent
+        );
+        recordSessionLifecycleEvent('session-save-catalog-preparation-end');
+        if (error) throw new Error(error);
+        return await exportSession(title, { linearRecordCatalog: catalog });
+      } catch (error) {
+        errorLog.value = normalizeUserFacingError(error);
+        recordSessionLifecycleEvent('session-save-error');
+        return { status: 'error' };
+      }
+    });
+
+    sessionSaveInFlight = operation.finally(() => {
+      sessionSavePending.value = false;
+      sessionSaveInFlight = null;
+      recordSessionLifecycleEvent('session-save-pending-cleared');
+    });
+    return sessionSaveInFlight;
   };
 
   const openFeatureEditorFromList = (feat, event) => {
@@ -3432,6 +3460,7 @@ export const createAppSetup = () => {
     processing,
     processingStatus,
     sessionImportPending,
+    sessionSavePending,
     generationCancelRequested,
     errorLog,
     errorDisplay,

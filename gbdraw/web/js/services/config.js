@@ -2424,13 +2424,23 @@ const serializeLosatCache = () => {
   const entries = [];
   const seen = new Set();
 
-  const buildEntry = (key, cached, infoEntry = {}) => ({
-    ...(adoptedLosatCacheValues.has(cached) ? cached : cloneJsonData(cached)),
-    key: String(key),
-    filename: String(infoEntry.filename || ''),
-    display: Boolean(infoEntry.display),
-    ...losatCacheInfoIdentity(infoEntry)
-  });
+  const buildEntry = (key, cached, infoEntry = {}) => {
+    let serialized = cached;
+    if (!adoptedLosatCacheValues.has(cached)) {
+      const { text, ...metadata } = cached;
+      serialized = {
+        ...cloneJsonData(metadata),
+        text: String(text ?? '')
+      };
+    }
+    return {
+      ...serialized,
+      key: String(key),
+      filename: String(infoEntry.filename || ''),
+      display: Boolean(infoEntry.display),
+      ...losatCacheInfoIdentity(infoEntry)
+    };
+  };
 
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
@@ -3841,9 +3851,15 @@ export const exportSession = async (
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
-    if (!proceed) return { status: 'canceled' };
+    if (!proceed) {
+      recordSessionLifecycleEvent('session-save-download-canceled', {
+        reason: 'repeat-download'
+      });
+      return { status: 'canceled' };
+    }
   }
 
+  recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeResults();
   const editorState = buildEditorStateData({ preserveAdoptedCatalog: true });
   if (logicalResults.length > 0) {
@@ -4031,11 +4047,23 @@ export const exportSession = async (
     throw new Error('Save Session could not validate the session data.');
   }
 
+  recordSessionLifecycleEvent('session-save-projection-end');
+  recordSessionLifecycleEvent('session-save-compression-start');
   const compressed = await compressSessionData(sessionData);
+  recordSessionLifecycleEvent('session-save-compression-end', {
+    compressedSize: compressed.size
+  });
   if (!confirmLargeSessionBlob(compressed)) {
+    recordSessionLifecycleEvent('session-save-download-canceled', {
+      reason: 'large-download',
+      compressedSize: compressed.size
+    });
     return { status: 'canceled', compressedSize: compressed.size };
   }
   downloadBlob(compressed, sessionFilename);
+  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
+    compressedSize: compressed.size
+  });
   lastSessionFilename = sessionFilename;
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };

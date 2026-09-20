@@ -224,7 +224,21 @@ try {
   ];
   state.losatCache.value = new Map(entries);
   state.losatCacheInfo.value = [{ key: 'old-displayed' }, { key: 'current' }];
-  const regenerated = await exportSession('replacement-source');
+  const originalJsonStringify = JSON.stringify;
+  let rawTextCloneAttempts = 0;
+  JSON.stringify = function observedJsonStringify(value, ...args) {
+    if (value && typeof value === 'object' && value.text === currentRaw.text) {
+      rawTextCloneAttempts += 1;
+    }
+    return originalJsonStringify.call(this, value, ...args);
+  };
+  let regenerated;
+  try {
+    regenerated = await exportSession('replacement-source');
+  } finally {
+    JSON.stringify = originalJsonStringify;
+  }
+  assert.equal(rawTextCloneAttempts, 0, 'fresh raw LOSAT text must not be deep-cloned');
   const replacementSession = JSON.parse(gunzipSync(
     Buffer.from(await regenerated.blob.arrayBuffer())
   ).toString('utf8'));
