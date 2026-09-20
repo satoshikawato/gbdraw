@@ -3531,6 +3531,41 @@ def encode_canonical_typed_resource(value_kind: str, value: object) -> bytes:
         ) from exc
 
 
+def decode_canonical_typed_resource(
+    content: bytes,
+    *,
+    value_kind: str,
+    expected: object,
+    path: str = "typed resource",
+) -> Any:
+    """Decode one canonical typed JSON resource from its published bytes."""
+
+    if not isinstance(content, bytes):
+        raise CanonicalRequestDecodingError(
+            f"Canonical JSON resource for {path} must be bytes."
+        )
+    try:
+        raw = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CanonicalRequestDecodingError(
+            f"Could not decode canonical JSON resource for {path}."
+        ) from exc
+    payload = _object(
+        raw, path=f"{path} resource", required={"schema", "kind", "value"}
+    )
+    resource_schema = payload["schema"]
+    if resource_schema not in {1, 2, 3} or payload["kind"] != value_kind:
+        raise CanonicalRequestDecodingError(
+            f"Canonical JSON resource metadata does not match {path}."
+        )
+    return _decode_typed_tree(
+        payload["value"],
+        expected,
+        path=f"{path}.value",
+        resource_schema=resource_schema,
+    )
+
+
 def _read_typed_json_resource(
     resource_id: object,
     *,
@@ -3545,24 +3580,16 @@ def _read_typed_json_resource(
 
     def decode() -> Any:
         try:
-            raw = json.loads(resource_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            content = resource_path.read_bytes()
+        except OSError as exc:
             raise CanonicalRequestDecodingError(
                 f"Could not decode canonical JSON resource for {path}."
             ) from exc
-        payload = _object(
-            raw, path=f"{path} resource", required={"schema", "kind", "value"}
-        )
-        resource_schema = payload["schema"]
-        if resource_schema not in {1, 2, 3} or payload["kind"] != value_kind:
-            raise CanonicalRequestDecodingError(
-                f"Canonical JSON resource metadata does not match {path}."
-            )
-        return _decode_typed_tree(
-            payload["value"],
-            expected,
-            path=f"{path}.value",
-            resource_schema=resource_schema,
+        return decode_canonical_typed_resource(
+            content,
+            value_kind=value_kind,
+            expected=expected,
+            path=path,
         )
 
     from gbdraw.api.prepared import get_or_build_decoded_resource
@@ -3985,6 +4012,7 @@ __all__ = [
     "CanonicalRequestEncodingError",
     "CanonicalRequestResource",
     "EncodedCanonicalRequest",
+    "decode_canonical_typed_resource",
     "decode_canonical_request",
     "encode_canonical_typed_resource",
     "encode_canonical_request",

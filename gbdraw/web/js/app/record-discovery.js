@@ -13,6 +13,73 @@ const normalizeRecordLength = (value) => {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 };
 
+const NON_ORGANISM_PATTERN = /^(?:synthetic construct|artificial sequence|unidentified(?: organism)?|unknown(?: organism)?|vector|(?:unidentified )?cloning vector|expression vector)$/i;
+
+// This fast path mirrors gbdraw/core/record_metadata.py, which owns the same
+// inference for the Worker. tests/web/record-metadata-inference.test.mjs and
+// tests/test_record_metadata.py share one fixture table so the two cannot drift.
+export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}) => {
+  const rawOrganism = String(organism || '').trim();
+  const rawStrain = String(strain || '').trim();
+
+  const isCandidatus = /^Candidatus\s+/i.test(rawOrganism);
+  const nameWithoutCand = isCandidatus ? rawOrganism.replace(/^Candidatus\s+/i, '').trim() : rawOrganism;
+  if (!nameWithoutCand || NON_ORGANISM_PATTERN.test(nameWithoutCand)) {
+    return rawStrain;
+  }
+
+  const words = nameWithoutCand.split(/\s+/).filter(Boolean);
+
+  let speciesPart = '';
+  let rest = '';
+
+  if (words.length >= 2) {
+    const binomial = `${words[0]} ${words[1]}`;
+    speciesPart = `${isCandidatus ? 'Candidatus ' : ''}<i>${binomial}</i>`;
+    rest = words.slice(2).join(' ');
+  } else if (words.length === 1) {
+    speciesPart = `${isCandidatus ? 'Candidatus ' : ''}<i>${words[0]}</i>`;
+  } else {
+    speciesPart = rawOrganism;
+  }
+
+  if (rawStrain && !rest.toLowerCase().includes(rawStrain.toLowerCase())) {
+    rest = rest ? `${rest} ${rawStrain}` : rawStrain;
+  }
+
+  return rest ? `${speciesPart} ${rest}`.trim() : speciesPart.trim();
+};
+
+export const extractGenBankMetadata = (chunk) => {
+  const text = String(chunk || '');
+  const sourceMatch = text.match(/^ {5}source\s+[\s\S]*?(?=^ {5}[a-z]|\/\/)/mi);
+  const sourceBlock = sourceMatch ? sourceMatch[0] : text;
+
+  const extractQualifier = (key, block) => {
+    const regex = new RegExp(`/${key}="([^"]*(?:\\r?\\n {21}[^"]*)*)"`, 'i');
+    const match = block.match(regex);
+    if (!match) return '';
+    return match[1].replace(/\r?\n\s+/g, ' ').trim();
+  };
+
+  let organism = extractQualifier('organism', sourceBlock);
+  if (!organism) {
+    const orgLine = text.match(/^ {2}ORGANISM\s+([^\r\n]+)/m);
+    if (orgLine) organism = orgLine[1].trim();
+  }
+
+  const strain = extractQualifier('strain', sourceBlock);
+  const isolate = extractQualifier('isolate', sourceBlock);
+
+  // infer_record_source_metadata reads /isolate before /strain.
+  const effectiveStrain = isolate || strain || '';
+  const inferredDefinition = formatInferredOrganismStrain({
+    organism,
+    strain: effectiveStrain
+  });
+  return { organism, strain: effectiveStrain, inferredDefinition };
+};
+
 export const normalizeSequenceRecords = (payload) => {
   if (payload?.error) throw new Error(String(payload.error));
   if (!Array.isArray(payload?.records)) throw new Error('Record list response is invalid.');
@@ -23,12 +90,21 @@ export const normalizeSequenceRecords = (payload) => {
     const selector = String(entry?.selector ?? `#${index + 1}`).trim();
     if (!selector || seenSelectors.has(selector)) return;
     seenSelectors.add(selector);
-    records.push({
+    const record = {
       selector,
-      recordId: String(entry?.record_id ?? '').trim() || `Record_${index + 1}`,
-      recordLength: normalizeRecordLength(entry?.record_length),
-      detectedTopology: ['circular', 'linear'].includes(entry?.topology) ? entry.topology : 'unknown'
-    });
+      recordId: String(entry?.record_id ?? entry?.recordId ?? '').trim() || `Record_${index + 1}`,
+      recordLength: normalizeRecordLength(entry?.record_length ?? entry?.recordLength),
+      detectedTopology: ['circular', 'linear'].includes(entry?.topology ?? entry?.detectedTopology)
+        ? (entry.topology ?? entry.detectedTopology)
+        : 'unknown'
+    };
+    const organism = String(entry?.organism ?? '').trim();
+    const strain = String(entry?.strain ?? '').trim();
+    const inferredDefinition = String(entry?.inferredDefinition ?? entry?.inferred_definition ?? '').trim();
+    if (organism) record.organism = organism;
+    if (strain) record.strain = strain;
+    if (inferredDefinition) record.inferredDefinition = inferredDefinition;
+    records.push(record);
   });
 
   if (records.length === 0) throw new Error('No records found.');
@@ -43,11 +119,15 @@ const parseGenBankRecordText = (text) => {
       if (!locus) return null;
       const accession = chunk.match(/^ACCESSION\s+(\S+)/m)?.[1];
       const version = chunk.match(/^VERSION\s+(\S+)/m)?.[1];
+      const metadata = extractGenBankMetadata(chunk);
       return {
         selector: `#${index + 1}`,
         record_id: version || accession || locus[1],
         record_length: locus[2] ? Number(locus[2]) : null,
-        topology: chunk.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b[^\r\n]*\s(circular|linear)(?:\s|$)/m)?.[1] || 'unknown'
+        topology: chunk.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b[^\r\n]*\s(circular|linear)(?:\s|$)/m)?.[1] || 'unknown',
+        organism: metadata.organism,
+        strain: metadata.strain,
+        inferredDefinition: metadata.inferredDefinition
       };
     })
     .filter(Boolean)

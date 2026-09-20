@@ -1,0 +1,41 @@
+{
+  "scope": "Local Linux candidate archive and real search integration; transport supplied by fixture, not public URL acceptance",
+  "candidate_sha": "0dd6c2b83f437a940d5fcbea5ca8a247934b48f3",
+  "target": "x86_64-unknown-linux-gnu",
+  "archive": {
+    "filename": "LOSAT-0.1.0-x86_64-unknown-linux-gnu.tar.gz",
+    "sha256": "291dda1573fe5a462646d170f76e4c5e74a20ad8225d7f552c345ea615e15699",
+    "size": 1308735,
+    "binary": "LOSAT",
+    "binary_sha256": "c442f970ad1684e514e6c085078e7abafeacacf2a2353a8762a275c55b93b744",
+    "binary_size": 3119432
+  },
+  "gbdraw_package": "/tmp/losat-release-20260917/gbdraw-clean-env/lib/python3.13/site-packages/gbdraw/losat_setup.py",
+  "cases": [
+    {
+      "case": "release_blastp_smoke_offline",
+      "output_sha256": "fd4b010800e32ce6c823cb38b42a10b7845f3342edae892acccc8f554f9edf34",
+      "rows": 475,
+      "status": "PASS"
+    },
+    {
+      "case": "pairwise",
+      "rows": 6,
+      "managed_equals_explicit": true,
+      "status": "PASS"
+    },
+    {
+      "case": "similarity_groups",
+      "rows": 6,
+      "managed_equals_explicit": true,
+      "status": "PASS"
+    },
+    {
+      "case": "collinear",
+      "rows": 1,
+      "managed_equals_explicit": true,
+      "status": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

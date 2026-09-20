@@ -50,6 +50,10 @@ import {
   orderedOptionalConservationFiles
 } from '../app/conservation-series.js';
 import {
+  resolveLinearRecordEffectiveDefinition,
+  resolveLinearRecordEffectiveSubtitle
+} from '../app/linear-sources.js';
+import {
   assertValidCustomTrackPlan,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
@@ -410,6 +414,16 @@ const optionalPositiveInteger = (value) => {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 };
 
+// A record label or subtitle is saved resolved. Sessions written since file
+// defaults were introduced also record the per-record value, which says directly
+// whether the record inherited the file default or overrode it with the same
+// text. Older sessions carry no such value, so fall back to comparing them.
+const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) => {
+  if (savedOverride !== undefined && savedOverride !== null) return String(savedOverride);
+  if (!fileDefault) return resolved;
+  return resolved === fileDefault ? '' : resolved;
+};
+
 const canonicalOptionalPositiveNumber = (value, fieldName) => {
   if (value === null || value === undefined || String(value).trim() === '') return null;
   const numeric = Number(value);
@@ -712,8 +726,8 @@ const buildRecords = ({ state, filesData, resources }) => {
         region,
         presentation: {
           ...presentationPayload({
-            label: seq.definition,
-            subtitle: seq.record_subtitle,
+            label: resolveLinearRecordEffectiveDefinition(seq),
+            subtitle: resolveLinearRecordEffectiveSubtitle(seq),
             gridRow: resolvedRows[index] ?? null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
@@ -2364,10 +2378,24 @@ export const buildCanonicalRenderRequest = ({
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
   if (state.mode.value === 'linear') {
-    webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => ({
-      recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
-      losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
-    }));
+    webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
+      const entry = {
+        recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
+        losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
+      };
+      const fileDefinition = String(filesData.linearSeqs[sourceIndex]?.file_definition || '').trim();
+      const fileSubtitle = String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '').trim();
+      if (fileDefinition) entry.fileDefinition = fileDefinition;
+      if (fileSubtitle) entry.fileSubtitle = fileSubtitle;
+      // presentation.label and presentation.subtitle carry the resolved value.
+      // Record the per-record value too, so an override that happens to equal
+      // the file default is restored as an override rather than as inheritance.
+      const recordDefinition = String(filesData.linearSeqs[sourceIndex]?.definition || '');
+      const recordSubtitle = String(filesData.linearSeqs[sourceIndex]?.record_subtitle || '');
+      if (fileDefinition) entry.recordDefinition = recordDefinition;
+      if (fileSubtitle) entry.recordSubtitle = recordSubtitle;
+      return entry;
+    });
   }
 
   return {
@@ -2584,6 +2612,8 @@ const applyWebFileBindings = (
       losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
+      file_definition: String(sequence?.file_definition || ''),
+      file_subtitle: String(sequence?.file_subtitle || ''),
       region_record_id: String(sequence?.region_record_id || ''),
       region_start: sequence?.region_start ?? null,
       region_end: sequence?.region_end ?? null,
@@ -3486,6 +3516,10 @@ export const projectCanonicalSessionRequest = ({
       const sourceIndex = normalizedRecordOrdering.sourceIndexByProjectedIndex[index];
       const savedMetadata = savedLinearRecordMetadataByKey.get(String(record.recordKey || '')) ||
         savedLinearRecordMetadata[sourceIndex] || legacyLinearSequences[sourceIndex] || {};
+      const fileDefinition = String(savedMetadata.fileDefinition ?? savedMetadata.file_definition ?? '');
+      const fileSubtitle = String(savedMetadata.fileSubtitle ?? savedMetadata.file_subtitle ?? '');
+      const recordLabel = String(record.presentation?.label || '');
+      const recordSubtitle = String(record.presentation?.subtitle || '');
       return {
         uid: String(record.recordKey || `canonical-seq-${index + 1}`),
         gb: source.kind === 'genbank'
@@ -3511,8 +3545,18 @@ export const projectCanonicalSessionRequest = ({
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),
-        definition: record.presentation?.label || '',
-        record_subtitle: record.presentation?.subtitle || '',
+        definition: resolveSavedRecordOverride({
+          savedOverride: savedMetadata.recordDefinition,
+          fileDefault: fileDefinition,
+          resolved: recordLabel
+        }),
+        record_subtitle: resolveSavedRecordOverride({
+          savedOverride: savedMetadata.recordSubtitle,
+          fileDefault: fileSubtitle,
+          resolved: recordSubtitle
+        }),
+        file_definition: fileDefinition,
+        file_subtitle: fileSubtitle,
         region_record_id: selector?.kind === 'recordId' ? selector.value : (selector?.kind === 'recordIndex' ? `#${selector.index + 1}` : ''),
         region_start: region?.start ?? null,
         region_end: region?.end ?? null,

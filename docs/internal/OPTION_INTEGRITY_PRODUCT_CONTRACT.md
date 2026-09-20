@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `6`
+- Contract revision: `8`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -24,7 +24,7 @@ Status: active Product authority
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
-  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`
+  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -51,6 +51,21 @@ Status: active Product authority
   Only PATH-B and the supplied preservation, retirement and risk terms are
   recorded. The earlier decisions retain their scope. Dependent runtime still
   requires this authority on its base; this amendment contains no runtime.
+- Revision 7 addition: `PD-OI-024`, selected by `satoshikawato` on
+  `2026-09-19` through the complete `PRODUCT_DECISION` response for
+  `linear.definition-display`, scenario revision `1`. Only D1-A, D2-P,
+  D3-A and the supplied preservation, retirement and risk terms are recorded.
+  Earlier decisions retain their scope. Dependent runtime requires this
+  authority merged into its base; this amendment contains no runtime.
+- Revision 8 change: `PD-OI-018` is replaced for scenario revision `3`,
+  selected by `satoshikawato` on `2026-09-20` through the complete
+  `PRODUCT_DECISION` response for
+  `diagram-generation.linear-record-universe-and-search-scope`. The selected
+  `LINEAR-FILE-ROW-BLOCK` outcome makes normal-layout File-card order and
+  visual row order one operation, blocks File-card moves for custom layouts,
+  and records the supplied preservation, retirement, and risk terms. Earlier
+  decisions retain their scope. Dependent runtime requires this authority
+  merged into its base; this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -510,9 +525,10 @@ corrected. Passing evidence does not make incorrect behavior normative.
 ### PD-OI-018: Complete Linear records, placement, and comparison scope
 
 - Concern key: `diagram-generation.linear-record-universe-and-search-scope`
-- Scenario revision: `2`
-- Supersedes: `PD-OI-018`, scenario revision `1`.
+- Scenario revision: `3`
+- Supersedes: `PD-OI-018`, scenario revision `2`.
 - Status: `ACCEPTED`
+- Selected option: `LINEAR-FILE-ROW-BLOCK`
 - Normative outcome:
   1. Without an explicit record selector or crop, Linear includes every record
      from each GenBank or paired GFF3/FASTA source. Enabling comparisons does
@@ -542,10 +558,37 @@ corrected. Passing evidence does not make incorrect behavior normative.
      a single occupied row, does not restrict the selected search scope.
   5. Explicit comparison endpoints stay explicit through decoding and
      rendering, including endpoints whose numeric indices are consecutive.
-  6. Save, fresh Load, regeneration, reordering, and cache reuse preserve the
-     selected record set, endpoints, and independent placements. Explicit
-     selection/cropping, comparison omission, and imported read-only intent
-     remain supported. `OIPC-C07` governs failed, canceled, and stale work.
+  6. A File card number and its up/down controls represent both input-source
+     order and visual row order in a normal Linear layout. Moving a File moves
+     every record belonging to that source as one block. All records in the
+     moved File remain in the same File-owned row, and File-owned rows follow
+     File-card order. The move is one atomic, undoable draft operation.
+     Record identity, source association, selector, crop, reverse complement,
+     definition, subtitle, depth binding, feature state, and within-File
+     record order remain attached to the same record.
+
+     A normal layout has exactly one occupied row per File and no row shared
+     by records from another File. When one File spans multiple rows or one row
+     is shared by multiple Files, the File move is unavailable. The application
+     explains that custom Record Layout controls visual placement and directs
+     the user to Record Layout. A blocked move makes no partial change to File
+     order, row assignments, comparisons, cache metadata, or the current
+     Result.
+
+     Explicit comparison endpoints remain attached by stable record UID and
+     are reindexed without changing their biological endpoints. Adjacent
+     comparison is resolved from the new occupied-row adjacency after the File
+     move. Compatible raw LOSAT evidence remains reusable; incompatible
+     derived comparison artifacts are recalculated.
+
+     Save, fresh Load, regeneration, keyboard operation, and Session replay
+     preserve the resulting File and row order. The last successful Result
+     remains unchanged until Generate succeeds. Failed, canceled, superseded,
+     or stale Generate does not replace it. Explicit selection/cropping,
+     comparison omission, and imported read-only intent remain supported.
+     `OIPC-C07` governs failed, canceled, and stale work. No new File-order
+     state, Session field, compatibility migration, request schema, Worker
+     protocol, or rendering path is introduced.
   7. Shared source bytes remain shared. Complete comparisons may require more
      jobs, but no hidden record or pair cap is permitted.
      LOSAT batches compatible records by input source file. A source job searches
@@ -570,7 +613,10 @@ corrected. Passing evidence does not make incorrect behavior normative.
      settings are unchanged. Only display coordinates and derived presentation
      are updated; display transforms do not become raw-search identity.
 - Rationale: Prevent recurrence of incomplete-record search and per-record
-  placement regressions reported by the maintainer.
+  placement regressions reported by the maintainer. With Arrange in rows
+  enabled by default, changing File order while retaining the File's previous
+  absolute row produces a visible result that contradicts the explicit reorder
+  action. Source order and visual row order therefore change as one operation.
 - Must preserve: All seven outcomes above; `PD-OI-006` keeps the fresh Collinear
   scope `adjacent`, and `PD-OI-014` continues to govern evidence versus displayed
   links. A fresh no-comparison document does not gain comparison intent.
@@ -588,11 +634,21 @@ corrected. Passing evidence does not make incorrect behavior normative.
   The maintainer specified these command order, default, and disclosure
   requirements on `2026-09-14`; the existing execution modes and their support
   checks remain.
-- May retire: Mandatory Collinear within-record evidence when inference is OFF.
-  Other record coverage, placement, and comparison capabilities remain supported.
+- May retire: Mandatory Collinear within-record evidence when inference is OFF;
+  preservation of a moved File's absolute numeric row in a normal
+  one-File-per-row layout; File-card movement that changes input source order
+  while leaving visible row order unchanged; and any acceptance test that
+  disables Arrange in rows before proving the primary default-layout
+  File-reorder outcome. Other record coverage, placement, and comparison
+  capabilities remain supported.
 - Accepted residual risk: Increased computation time and memory from complete
   all-record comparisons. The maintainer explicitly accepted this cost as the
   original behavior. This does not permit silent truncation or hidden caps.
+  Moving a File can change the derived Adjacent comparison pair set and can
+  require comparison recomputation on the next Generate. Custom layouts require
+  the user to edit or normalize Record Layout before File-card reordering is
+  available. No silent loss of custom placement or comparison intent is
+  accepted.
 - Acceptance contracts: `OIC-005`, `OIC-006`, `OIC-007`, `OIC-013`, `OIC-015`.
 - Original decision source: The maintainer explicitly specified Cartesian Adjacent and
   complete all-record scopes, requested durable regression protection, accepted
@@ -600,7 +656,40 @@ corrected. Passing evidence does not make incorrect behavior normative.
   the decision date.
 - Amendment source: The maintainer requested Collinear self-comparison and
   orthogroup inference be optional and default OFF on `2026-09-14`.
-- Owner and decision date: `satoshikawato`, `2026-09-14`.
+- File-row amendment source: The maintainer supplied the complete
+  `PRODUCT_DECISION` response reproduced below on `2026-09-20`.
+- Owner and decision date: `satoshikawato`, `2026-09-20`.
+
+```json
+{
+  "concern": "diagram-generation.linear-record-universe-and-search-scope",
+  "scenarioRevision": 3,
+  "choice": "LINEAR-FILE-ROW-BLOCK",
+  "rationale": "A File card number and its up/down controls communicate the source's visual order in a Linear diagram. With Arrange in rows enabled by default, changing File order while retaining the File's previous absolute row number produces a visible result that contradicts the user's explicit reorder action. File reordering must therefore update source order and visual row order as one operation.",
+  "mustPreserve": [
+    "Each uploaded GenBank file or paired GFF3/FASTA source remains one File card.",
+    "Moving a File moves every record belonging to that source as one block.",
+    "In the normal layout, every record from the moved File remains in the same File-owned row, and File rows follow File-card order.",
+    "Record identity, source association, selector, crop, reverse complement, definition, subtitle, depth binding, feature state, and within-File record order remain attached to the same record.",
+    "Explicit comparison endpoints remain attached by stable record UID and are reindexed without changing their biological endpoints.",
+    "Compatible raw LOSAT evidence remains reusable; incompatible derived comparison artifacts are recalculated.",
+    "Adjacent comparison is resolved from the new occupied-row adjacency after the File move.",
+    "The move is one atomic, undoable draft operation.",
+    "The last successful Result remains unchanged until Generate succeeds. Failed, canceled, superseded, or stale Generate does not replace it.",
+    "Save, fresh Load, regeneration, keyboard operation, and Session replay preserve the resulting File and row order.",
+    "No new File-order state, Session field, compatibility migration, request schema, Worker protocol, or rendering path is introduced."
+  ],
+  "customLayoutRule": "A normal layout means that every File occupies exactly one row and no row is shared by records from another File. If one File spans multiple rows or one row is shared by multiple Files, the File move is unavailable. The application must explain that the custom Record Layout controls visual placement and direct the user to Record Layout. A blocked move makes no partial change to File order, row assignments, comparisons, cache metadata, or the current Result.",
+  "mayRetire": [
+    "Preservation of a moved File's absolute numeric row in a normal one-File-per-row layout.",
+    "File-card movement that changes input source order while leaving the visible row order unchanged.",
+    "Any acceptance test that disables Arrange in rows before proving the primary default-layout File-reorder outcome."
+  ],
+  "acceptedResidualRisk": "Moving a File can change the derived Adjacent comparison pair set and can therefore require comparison recomputation on the next Generate. Custom layouts require the user to edit or normalize Record Layout before File-card reordering becomes available. No silent loss of custom placement or comparison intent is accepted.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-20"
+}
+```
 
 ### PD-OI-019: Fresh Web multi-record layout defaults
 
@@ -759,6 +848,52 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "acceptedResidualRisk": "旧API依存コードの修正、新形式を旧バージョンで読めないこと、明示的な全量取得には大きな時間・メモリが必要になり得ること。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-15"
+}
+```
+
+### PD-OI-024: Linear Definition alignment and automatic Replicon visibility
+
+- Concern key: `linear.definition-display`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcomes: `D1-A`, `D2-P`, `D3-A`
+- Normative outcome:
+  1. **D1-A — 共通幅の中央:** Lock Definition Column=falseの既定配置では、
+     同じ開始位置の行のDefinitionを共通幅の中心にそろえる。行を移動すると
+     対応するDefinitionも追従する。単一／複数／混在行に適用する。
+     Lock=trueの共通左列を維持する。既にサポートする明示的な`text_anchor`
+     設定は、その既存の受入範囲で維持し、新しい経路へ拡張しない。
+  2. **D2-P — 保存値を保持:** 保存済みSubtitleは、自動／手入力を推測したり、
+     Replicon名と文字列が一致したりすることを理由に削除しない。
+     読み込みだけでは保存Resultを変えず、Generateで新しい表示契約を適用する。
+     不要なSubtitleは利用者が明示的にクリアし、ファイル既定値へ戻る既存の
+     継承規則を維持する。手入力Subtitleと行共通・レコード固有ラベルの区別を保つ。
+  3. **D3-A — OrganelleもReplicon行で制御:** chromosome、plasmid、organelle
+     由来の自動名をShow Repliconで制御し、対象名はオンで一つ、オフでゼロとする。
+     候補が競合するときはchromosome→plasmid→organelleの順で一つを選ぶ。
+     organelleの表記は既存の自動Subtitle表記を引き継ぐ。
+     Web・CLI・Pythonの共通描画に適用し、Show Repliconの既定値falseを維持する。
+     自動名のオン／オフは手入力Subtitleの表示を変更しない。
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-19` for issues `#543` and `#545`, reproduced
+  below.
+  The receipt below preserves the supplied fields without translating or
+  extending the rationale, preservation, retirement, risk, owner or date.
+  This is a reviewable serialization in the existing static authority document,
+  not a new decision store or a `BD-###` record. It cannot authorize dependent
+  runtime until merged into that runtime's base.
+
+```json
+{
+  "concern": "linear.definition-display",
+  "scenarioRevision": 1,
+  "choices": ["D1-A", "D2-P", "D3-A"],
+  "rationale": "名前の比較をしやすくし、自動の生物学的名称を一つの表示スイッチで制御する。",
+  "mustPreserve": "手入力Subtitle、保存済みSessionの値とプレビュー、Lock=trueの共通左列、行共通・レコード固有ラベルの区別。",
+  "mayRetire": "Replicon/Organelle名のSubtitleへの自動コピー、Lock=falseで各Definition自身の幅に基づく既定横配置。",
+  "acceptedResidualRisk": "保存済みの自動Subtitleはオフでも残りうる。再Generate後の配置は保存済みプレビューと変わりうる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-19"
 }
 ```
 

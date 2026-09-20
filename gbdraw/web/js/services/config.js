@@ -815,7 +815,13 @@ let preservedCliOptions = null;
 let committedCanonicalSession = null;
 let activeSessionResourceTable = null;
 let adoptedProteinIdentityManifest = null;
-const adoptedLosatCacheValues = new WeakSet();
+// Current-session preflight receipts pair each adopted cache value with the
+// exact manifest that already validated its protein references and raw text.
+const adoptedLosatCacheValues = new WeakMap();
+
+const rawReactiveValue = (value) => (
+  globalThis.window?.Vue?.toRaw?.(value) ?? value
+);
 
 const cloneCanonicalSession = (canonical) => {
   if (
@@ -947,6 +953,15 @@ const defaultEditorStateData = () => ({
   featureCatalog: null
 });
 
+const serializableFeatureCatalog = (preserveAdoptedCatalog) => {
+  const liveCatalog = state.featureCatalog?.value;
+  // Vue proxies obscure the identity used by the validated/adopted catalog cache.
+  const rawCatalog = rawReactiveValue(liveCatalog);
+  return preserveAdoptedCatalog && isAdoptedFeatureCatalog(rawCatalog)
+    ? rawCatalog
+    : cloneJsonValue(liveCatalog, null);
+};
+
 export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
@@ -966,10 +981,7 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
-  featureCatalog: preserveAdoptedCatalog
-    && isAdoptedFeatureCatalog(state.featureCatalog?.value)
-    ? state.featureCatalog.value
-    : cloneJsonValue(state.featureCatalog?.value, null)
+  featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
 });
 
 const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
@@ -2419,18 +2431,41 @@ const restoredLosatCacheInfoIdentity = (entry) => {
 
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
-  if (!cacheMap || cacheMap.size === 0) return [];
+  if (!cacheMap || cacheMap.size === 0) {
+    return { entries: [], validatedManifest: null, manifestValidated: false };
+  }
+  const manifest = state.proteinIdentityManifest.value;
+  const rawManifest = rawReactiveValue(manifest);
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   const entries = [];
   const seen = new Set();
+  const prevalidatedProteinEntries = new WeakSet();
 
-  const buildEntry = (key, cached, infoEntry = {}) => ({
-    ...(adoptedLosatCacheValues.has(cached) ? cached : cloneJsonData(cached)),
-    key: String(key),
-    filename: String(infoEntry.filename || ''),
-    display: Boolean(infoEntry.display),
-    ...losatCacheInfoIdentity(infoEntry)
-  });
+  const buildEntry = (key, cached, infoEntry = {}) => {
+    const rawCached = rawReactiveValue(cached);
+    let serialized = rawCached;
+    if (!adoptedLosatCacheValues.has(rawCached)) {
+      const { text, ...metadata } = rawCached;
+      serialized = {
+        ...cloneJsonData(metadata),
+        text: String(text ?? '')
+      };
+    }
+    const entry = {
+      ...serialized,
+      key: String(key),
+      filename: String(infoEntry.filename || ''),
+      display: Boolean(infoEntry.display),
+      ...losatCacheInfoIdentity(infoEntry)
+    };
+    if (
+      classifyRawLosatCacheEntry(entry) === 'protein-current'
+      && adoptedLosatCacheValues.get(rawCached) === rawManifest
+    ) {
+      prevalidatedProteinEntries.add(entry);
+    }
+    return entry;
+  };
 
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
@@ -2452,25 +2487,38 @@ const serializeLosatCache = () => {
 
   // A replaced source can leave earlier bindings in the live cache. Persist
   // only protein evidence that the Session's current manifest can resolve.
-  const manifest = state.proteinIdentityManifest.value;
-  const identityIndex = buildValidatedProteinIdentityIndex(manifest);
+  let identityIndex = null;
+  let reusedValidation = false;
   try {
-    return entries.filter((entry) => {
-      if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
-      if (!identityIndex) {
-        throw new Error('Save Session requires a valid protein identity manifest.');
-      }
-      return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
-    });
+    return {
+      entries: entries.filter((entry) => {
+        if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
+        if (prevalidatedProteinEntries.has(entry)) {
+          reusedValidation = true;
+          recordStructuralMetric('sessionSaveProteinRawTextValidationReuseCount');
+          return true;
+        }
+        if (!identityIndex) {
+          identityIndex = buildValidatedProteinIdentityIndex(manifest);
+        }
+        if (!identityIndex) {
+          throw new Error('Save Session requires a valid protein identity manifest.');
+        }
+        recordStructuralMetric('sessionSaveProteinRawTextValidationCount');
+        return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
+      }),
+      validatedManifest: identityIndex || reusedValidation ? manifest : null,
+      manifestValidated: Boolean(identityIndex || reusedValidation)
+    };
   } finally {
-    releaseValidatedProteinIdentityIndex(identityIndex);
+    if (identityIndex) releaseValidatedProteinIdentityIndex(identityIndex);
   }
 };
 
 const applyLosatCache = (
   entries,
   legacyEnvelope = null,
-  { adoptCurrent = false } = {}
+  { adoptCurrent = false, validatedManifest = null } = {}
 ) => {
   const map = new Map();
   const info = [];
@@ -2505,7 +2553,7 @@ const applyLosatCache = (
       if (!adoptCurrent) {
         excludedFields.forEach((field) => delete restored[field]);
       } else {
-        adoptedLosatCacheValues.add(restored);
+        adoptedLosatCacheValues.set(restored, rawReactiveValue(validatedManifest));
       }
       map.set(entry.key, restored);
       if (entry.display === false) return;
@@ -2707,6 +2755,8 @@ export const serializeActiveRenderFiles = async (
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
+      file_definition: seq.file_definition ?? '',
+      file_subtitle: seq.file_subtitle ?? '',
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
@@ -3025,6 +3075,8 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
+      file_definition: seq.file_definition ?? '',
+      file_subtitle: seq.file_subtitle ?? '',
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
@@ -3365,8 +3417,9 @@ const captureSessionImportSnapshot = () => ({
   runState: buildRunStateData(),
   losatCache: new Map(state.losatCache.value),
   losatDerivedCache: new Map(state.losatDerivedCache.value),
-  proteinIdentityManifest: state.proteinIdentityManifest.value === adoptedProteinIdentityManifest
-    ? state.proteinIdentityManifest.value
+  proteinIdentityManifest: rawReactiveValue(state.proteinIdentityManifest.value)
+    === adoptedProteinIdentityManifest
+    ? rawReactiveValue(state.proteinIdentityManifest.value)
     : cloneJsonData(state.proteinIdentityManifest.value),
   adoptedProteinIdentityManifest,
   legacyProteinRawCandidates: cloneJsonData(state.legacyProteinRawCandidates.value),
@@ -3837,9 +3890,15 @@ export const exportSession = async (
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
-    if (!proceed) return { status: 'canceled' };
+    if (!proceed) {
+      recordSessionLifecycleEvent('session-save-download-canceled', {
+        reason: 'repeat-download'
+      });
+      return { status: 'canceled' };
+    }
   }
 
+  recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeResults();
   const editorState = buildEditorStateData({ preserveAdoptedCatalog: true });
   if (logicalResults.length > 0) {
@@ -3861,7 +3920,11 @@ export const exportSession = async (
     editorState.featureCatalog = null;
   }
 
-  const losatEntries = serializeLosatCache();
+  const {
+    entries: losatEntries,
+    validatedManifest,
+    manifestValidated
+  } = serializeLosatCache();
   const lastRunInvocation = state.lastRunInfo.value?.invocation;
   const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
     ? cloneJsonData(lastRunInvocation)
@@ -3942,7 +4005,10 @@ export const exportSession = async (
   const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
     state.legacyProteinDerivedEvidence.value
   );
-  if (!validateProteinIdentityManifest(state.proteinIdentityManifest.value)) {
+  if (
+    (!manifestValidated || validatedManifest !== state.proteinIdentityManifest.value)
+    && !validateProteinIdentityManifest(state.proteinIdentityManifest.value)
+  ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
   const sessionData = {
@@ -4007,8 +4073,9 @@ export const exportSession = async (
     losatDerivedCache: {
       entries: []
     },
-    proteinIdentityManifest: state.proteinIdentityManifest.value === adoptedProteinIdentityManifest
-      ? state.proteinIdentityManifest.value
+    proteinIdentityManifest: rawReactiveValue(state.proteinIdentityManifest.value)
+      === adoptedProteinIdentityManifest
+      ? rawReactiveValue(state.proteinIdentityManifest.value)
       : cloneJsonData(state.proteinIdentityManifest.value),
     cliInvocation: exportableCliInvocation
   };
@@ -4027,11 +4094,23 @@ export const exportSession = async (
     throw new Error('Save Session could not validate the session data.');
   }
 
+  recordSessionLifecycleEvent('session-save-projection-end');
+  recordSessionLifecycleEvent('session-save-compression-start');
   const compressed = await compressSessionData(sessionData);
+  recordSessionLifecycleEvent('session-save-compression-end', {
+    compressedSize: compressed.size
+  });
   if (!confirmLargeSessionBlob(compressed)) {
+    recordSessionLifecycleEvent('session-save-download-canceled', {
+      reason: 'large-download',
+      compressedSize: compressed.size
+    });
     return { status: 'canceled', compressedSize: compressed.size };
   }
   downloadBlob(compressed, sessionFilename);
+  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
+    compressedSize: compressed.size
+  });
   lastSessionFilename = sessionFilename;
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };
@@ -4170,7 +4249,10 @@ export const importSession = async (e, options = {}) => {
       applyLosatCache(
         projectionResult.artifactState.losatCache?.entries,
         projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
-        { adoptCurrent: currentSchemaSession }
+        {
+          adoptCurrent: currentSchemaSession,
+          validatedManifest: projectionResult.artifactState.proteinIdentityManifest
+        }
       );
       applyLosatDerivedCache(
         projectionResult.artifactState.losatDerivedCache?.entries,

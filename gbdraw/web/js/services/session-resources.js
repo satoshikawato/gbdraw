@@ -312,6 +312,8 @@ export const buildSessionResources = async (state, committedRequest) => {
       losat_gencode: sequence?.losat_gencode ?? 1,
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
+      file_definition: String(sequence?.file_definition || ''),
+      file_subtitle: String(sequence?.file_subtitle || ''),
       region_record_id: String(sequence?.region_record_id || ''),
       region_start: sequence?.region_start ?? null,
       region_end: sequence?.region_end ?? null,

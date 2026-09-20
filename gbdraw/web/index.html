@@ -1219,13 +1219,14 @@
                     <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
                     </button>
-                    <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
-                        <i class="ph ph-archive"></i> Save Session
+                    <button @click="saveSessionWithTitle" :disabled="sessionSavePending" :aria-busy="sessionSavePending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait" title="Save Session" aria-label="Save Session">
+                        <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'"></i> Save Session
                     </button>
                     <button data-history-managed @click="$refs.sessionInput.click()" :disabled="sessionImportPending" :aria-busy="sessionImportPending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
+                    <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Saving session…</span>
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Loading session…</span>
                 </div>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
@@ -1497,6 +1498,10 @@
                             <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                             <span>{{ linearReorderNotice }}</span>
                         </div>
+                        <div v-if="linearSourceMoveBlockedReason" data-linear-source-move-blocked class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
+                            <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                            <span>{{ linearSourceMoveBlockedReason }}</span>
+                        </div>
                         <div data-linear-record-list class="min-w-0 space-y-3">
                             <section
                                 v-for="(source, sourceIndex) in linearSourceGroups"
@@ -1505,8 +1510,32 @@
                                 class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
                                 :aria-label="`Linear input file ${sourceIndex + 1}`"
                             >
-                                <div class="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
-                                    <span>File {{ sourceIndex + 1 }}</span>
+                                <div class="mb-2 flex min-w-0 items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
+                                    <span class="shrink-0">File {{ sourceIndex + 1 }}</span>
+                                    <div class="flex shrink-0 items-center gap-1">
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary px-1.5 py-0.5 text-xs"
+                                            @click="moveLinearSource(sourceIndex, -1)"
+                                            :disabled="!canMoveLinearSource(sourceIndex, -1)"
+                                            :aria-label="`Move File ${sourceIndex + 1} up`"
+                                            :title="linearSourceMoveBlockedReason || `Move File ${sourceIndex + 1} up`"
+                                            data-linear-source-move="up"
+                                        >
+                                            <i class="ph ph-arrow-up" aria-hidden="true"></i>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary px-1.5 py-0.5 text-xs"
+                                            @click="moveLinearSource(sourceIndex, 1)"
+                                            :disabled="!canMoveLinearSource(sourceIndex, 1)"
+                                            :aria-label="`Move File ${sourceIndex + 1} down`"
+                                            :title="linearSourceMoveBlockedReason || `Move File ${sourceIndex + 1} down`"
+                                            data-linear-source-move="down"
+                                        >
+                                            <i class="ph ph-arrow-down" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
                                 <file-uploader
@@ -1530,6 +1559,31 @@
                                     :model-value="source.sequence.fasta"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
                                 ></file-uploader>
+                            </div>
+                            <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :data-linear-source-defaults="source.uid">
+                                <div class="text-[10px] font-bold text-slate-500">File defaults (applied to all records)</div>
+                                <div>
+                                    <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Organism / strain</label>
+                                    <input
+                                        type="text"
+                                        :value="getLinearSourceDefaultDefinition(source)"
+                                        @input="setLinearSourceDefaultDefinition(source, $event.target.value)"
+                                        :aria-label="`Default definition for file ${sourceIndex + 1}`"
+                                        placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai"
+                                        class="form-input px-1 py-0.5 text-xs"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="text-[9px] font-semibold text-slate-500 block mb-0.5">Subtitle / title (optional)</label>
+                                    <input
+                                        type="text"
+                                        :value="getLinearSourceDefaultSubtitle(source)"
+                                        @input="setLinearSourceDefaultSubtitle(source, $event.target.value)"
+                                        :aria-label="`Default subtitle for file ${sourceIndex + 1}`"
+                                        placeholder="e.g., Complete genome"
+                                        class="form-input px-1 py-0.5 text-xs"
+                                    >
+                                </div>
                             </div>
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
                                 <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-2 text-xs font-normal text-slate-500">
@@ -1556,26 +1610,8 @@
                                     >Gencode required</span>
                                 </summary>
                                 <div class="min-w-0 space-y-2 pt-2">
-                            <div class="mb-2 flex items-center justify-between gap-2">
+                            <div class="mb-2 flex items-center gap-2">
                                 <div class="text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
-                                <div class="flex items-center gap-1 shrink-0">
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary text-[10px] py-0.5 px-1.5"
-                                        @click="moveLinearSeqUp(idx)"
-                                        :disabled="!canMoveLinearSeqUp(idx)"
-                                    >
-                                        Up
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary text-[10px] py-0.5 px-1.5"
-                                        @click="moveLinearSeqDown(idx)"
-                                        :disabled="!canMoveLinearSeqDown(idx)"
-                                    >
-                                        Down
-                                    </button>
-                                </div>
                             </div>
 
                                     <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600">Load record rotation controls</button>
@@ -1725,12 +1761,20 @@
                                 </div>
                             </details>
                             <div class="mt-2">
-                                <div class="text-[10px] text-slate-500 font-bold mb-1">Organism / strain (optional)</div>
-                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai" class="form-input px-1 py-0.5 text-xs">
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+                                    <span>Organism / strain (optional)</span>
+                                    <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
+                                    <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="resetLinearRecordDefinition(seq)" class="text-[9px] font-normal text-slate-400 hover:text-slate-600">Reset to default</button>
+                                </div>
+                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultDefinition(source) || 'e.g., <i>Escherichia coli</i> O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2">
-                                <div class="text-[10px] text-slate-500 font-bold mb-1">Subtitle / title (optional)</div>
-                                <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" placeholder="e.g., Neomycin biosynthetic gene cluster" class="form-input px-1 py-0.5 text-xs">
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
+                                    <span>Subtitle / title (optional)</span>
+                                    <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
+                                    <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="resetLinearRecordSubtitle(seq)" class="text-[9px] font-normal text-slate-400 hover:text-slate-600">Reset to default</button>
+                                </div>
+                                <input type="text" v-model="seq.record_subtitle" :aria-label="`Subtitle / title for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultSubtitle(source) || 'e.g., Neomycin biosynthetic gene cluster'" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
@@ -2626,7 +2670,7 @@
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Keep the linear record-label block in the left column when records are center-aligned or aligned by a gbdraw similarity group."></help-tip></span>
+                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Align Linear definitions in a shared left column. When off, definitions use a common column center and follow their row offset, including center or similarity alignment."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
@@ -3424,7 +3468,7 @@
                                     >
                                     <span class="inline-flex items-center gap-1">
                                         Show Replicon
-                                        <help-tip text="Linear only. Adds an inferred replicon line above the accession when source qualifiers include chromosome or plasmid. Default: off."></help-tip>
+                                        <help-tip text="Linear only. Show one automatic name per record, using chromosome, plasmid, then organelle source qualifiers in that order. Subtitles are independent. Apply with Generate. Default: off."></help-tip>
                                     </span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">

@@ -33,7 +33,16 @@ import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
-import { groupLinearSourceRecords } from './linear-sources.js';
+import {
+  groupLinearSourceRecords,
+  moveLinearSourceGroup,
+  getLinearSourceDefaultDefinition,
+  setLinearSourceDefaultDefinition,
+  getLinearSourceDefaultSubtitle,
+  setLinearSourceDefaultSubtitle,
+  resolveLinearRecordEffectiveDefinition,
+  resolveLinearRecordEffectiveSubtitle
+} from './linear-sources.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -102,6 +111,7 @@ import {
 import {
   linearRecordPositionTokens,
   moveLinearRecordInRow,
+  planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from './linear-record-layout.js';
@@ -925,6 +935,7 @@ export const createAppSetup = () => {
   ));
 
   const pendingLinearRecordExpansions = new Set();
+  const pendingLinearMetadataInference = new Set();
   const expandDiscoveredLinearRecords = ({ uid, records }) => {
     if (!pendingLinearRecordExpansions.delete(uid)) return;
     const index = linearSeqs.findIndex((seq) => seq.uid === uid);
@@ -932,18 +943,38 @@ export const createAppSetup = () => {
     const source = linearSeqs[index];
     if (source.region_record_id || source.region_start != null || source.region_end != null) return;
     const row = linearRecordRowFor(uid, index + 1);
-    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => (
-      createLinearSeq({
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => {
+      return createLinearSeq({
         ...source,
         uid: recordIndex === 0 ? uid : undefined,
         region_record_id: record.value
-      })
-    ));
+      });
+    });
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
     ]);
     expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
     return true;
+  };
+  const handleLinearRecordsDiscovered = ({ uid, records }) => {
+    const isRollbackOrSessionLoad = Boolean(
+      state.sessionImportRollbackInProgress?.value ||
+      state.sessionResourceDiscoveryDeferred?.value
+    );
+    if (!isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid)) {
+      if (Array.isArray(records) && records.length > 0) {
+        const first = records[0];
+        const group = linearSourceGroups.value.find((entry) => (
+          entry.uid === uid || entry.records.some(({ sequence }) => sequence.uid === uid)
+        ));
+        if (group) {
+          if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
+            setLinearSourceDefaultDefinition(group, first.inferredDefinition);
+          }
+        }
+      }
+    }
+    return expandDiscoveredLinearRecords({ uid, records });
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
@@ -956,7 +987,7 @@ export const createAppSetup = () => {
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
-    onRecordsDiscovered: expandDiscoveredLinearRecords,
+    onRecordsDiscovered: handleLinearRecordsDiscovered,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -2121,6 +2152,8 @@ export const createAppSetup = () => {
   });
 
   const sessionImportPending = ref(false);
+  const sessionSavePending = ref(false);
+  let sessionSaveInFlight = null;
   const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
   const importSession = async (event) => {
@@ -3081,27 +3114,63 @@ export const createAppSetup = () => {
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const saveSessionWithTitle = async () => {
-    let title = normalizeSessionTitle(sessionTitle.value);
-    if (!title) {
-      const input = prompt('Session title', '');
-      if (input === null) return;
-      title = normalizeSessionTitle(input);
-      sessionTitle.value = title;
+  const saveSessionWithTitle = () => {
+    if (sessionSaveInFlight) {
+      recordSessionLifecycleEvent('session-save-joined');
+      return sessionSaveInFlight;
     }
-    try {
-      const comparisonPlanSnapshot = mode.value === 'linear'
-        ? linearComparisonResolution.value
-        : null;
-      const { catalog, error } = await prepareLinearRecordCatalog(
-        comparisonPlanSnapshot?.hasComparisonIntent
-      );
-      if (error) throw new Error(error);
-      return await exportSession(title, { linearRecordCatalog: catalog });
-    } catch (error) {
-      errorLog.value = normalizeUserFacingError(error);
-      return { status: 'error' };
-    }
+
+    const operation = Promise.resolve().then(async () => {
+      try {
+        let title = normalizeSessionTitle(sessionTitle.value);
+        if (!title) {
+          const input = prompt('Session title', '');
+          if (input === null) {
+            recordSessionLifecycleEvent('session-save-title-canceled');
+            return;
+          }
+          title = normalizeSessionTitle(input);
+          sessionTitle.value = title;
+        }
+        sessionSavePending.value = true;
+        recordSessionLifecycleEvent('session-save-pending-published');
+        await nextTick();
+        await afterPaint();
+        recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
+
+        recordSessionLifecycleEvent('session-save-catalog-preparation-start');
+        const committedSession = getCommittedCanonicalSession();
+        let catalog = null;
+        let error = '';
+        // A committed request already owns its record selections and resources.
+        // Catalog discovery is only needed while projecting an uncommitted draft.
+        if (!committedSession) {
+          const comparisonPlanSnapshot = mode.value === 'linear'
+            ? linearComparisonResolution.value
+            : null;
+          ({ catalog, error } = await prepareLinearRecordCatalog(
+            comparisonPlanSnapshot?.hasComparisonIntent
+          ));
+          await afterPaint();
+        }
+        recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
+          reusedCommittedSession: Boolean(committedSession)
+        });
+        if (error) throw new Error(error);
+        return await exportSession(title, { linearRecordCatalog: catalog });
+      } catch (error) {
+        errorLog.value = normalizeUserFacingError(error);
+        recordSessionLifecycleEvent('session-save-error');
+        return { status: 'error' };
+      }
+    });
+
+    sessionSaveInFlight = operation.finally(() => {
+      sessionSavePending.value = false;
+      sessionSaveInFlight = null;
+      recordSessionLifecycleEvent('session-save-pending-cleared');
+    });
+    return sessionSaveInFlight;
   };
 
   const openFeatureEditorFromList = (feat, event) => {
@@ -3277,7 +3346,10 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
-  const applyLinearSeqMutation = (items, { preserveLosatCacheInfo = false } = {}) => {
+  const applyLinearSeqMutation = (
+    items,
+    { preserveLosatCacheInfo = false, layoutEntries = linearRecordRows } = {}
+  ) => {
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
@@ -3290,7 +3362,10 @@ export const createAppSetup = () => {
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
     });
-    const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
+    pendingLinearMetadataInference.forEach((uid) => {
+      if (!activeUids.has(uid)) pendingLinearMetadataInference.delete(uid);
+    });
+    const nextRows = reconcileLinearRecordLayout(linearSeqs, layoutEntries);
     linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
     replaceLinearComparisonPlan(
       reconcileLinearComparisonPlan(linearComparisonPlan, linearSeqs),
@@ -3334,6 +3409,7 @@ export const createAppSetup = () => {
     const replacement = createLinearSeq({
       ...group.sequence,
       [field]: nextValue,
+      ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
       ...(group.records.length > 1 ? {
         region_record_id: '', region_start: null, region_end: null, region_reverse: false
       } : {})
@@ -3344,38 +3420,48 @@ export const createAppSetup = () => {
         : members.has(entry.uid) ? [] : [entry]
     )));
     if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
+    if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
 
-  const canMoveLinearSeqUp = (index) => {
-    const idx = Number(index);
-    return Number.isInteger(idx) && idx > 0 && idx < linearSeqs.length;
+  const linearSourceMovePlan = (sourceIndex, direction) => planLinearSourceRowMove({
+    sourceGroups: linearSourceGroups.value,
+    entries: linearRecordRows,
+    sourceIndex,
+    direction
+  });
+  const linearSourceMoveBlockedReason = computed(() => (
+    linearSourceMovePlan(0, 1).reason === 'custom-layout'
+      ? 'File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to restore one row per File with no shared rows.'
+      : ''
+  ));
+  const canMoveLinearSource = (sourceIndex, direction) => (
+    linearSourceMovePlan(sourceIndex, direction).allowed
+  );
+
+  const moveLinearSource = (sourceIndex, direction) => {
+    const plan = linearSourceMovePlan(sourceIndex, direction);
+    if (!plan.allowed) return;
+    const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
+    return history.runUndoable('Move File', () => {
+      applyLinearSeqMutation(next, {
+        preserveLosatCacheInfo: true,
+        layoutEntries: plan.rows
+      });
+    });
   };
 
-  const canMoveLinearSeqDown = (index) => {
-    const idx = Number(index);
-    return Number.isInteger(idx) && idx >= 0 && idx < linearSeqs.length - 1;
+  const resetLinearRecordDefinition = (seq) => {
+    if (!seq) return;
+    history.runUndoable('Reset record definition', () => {
+      seq.definition = '';
+    });
   };
 
-  const reorderLinearSeqs = (fromIndex, toIndex) => {
-    const from = Number(fromIndex);
-    const to = Number(toIndex);
-    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
-    if (from < 0 || to < 0 || from >= linearSeqs.length || to >= linearSeqs.length || from === to) return;
-
-    const current = Array.from(linearSeqs);
-    const [moved] = current.splice(from, 1);
-    current.splice(to, 0, moved);
-    applyLinearSeqMutation(current, { preserveLosatCacheInfo: true });
-  };
-
-  const moveLinearSeqUp = (index) => {
-    if (!canMoveLinearSeqUp(index)) return;
-    reorderLinearSeqs(index, Number(index) - 1);
-  };
-
-  const moveLinearSeqDown = (index) => {
-    if (!canMoveLinearSeqDown(index)) return;
-    reorderLinearSeqs(index, Number(index) + 1);
+  const resetLinearRecordSubtitle = (seq) => {
+    if (!seq) return;
+    history.runUndoable('Reset record subtitle', () => {
+      seq.record_subtitle = '';
+    });
   };
 
   return {
@@ -3384,6 +3470,7 @@ export const createAppSetup = () => {
     processing,
     processingStatus,
     sessionImportPending,
+    sessionSavePending,
     generationCancelRequested,
     errorLog,
     errorDisplay,
@@ -3527,10 +3614,17 @@ export const createAppSetup = () => {
     addLinearSeq,
     removeLastLinearSeq,
     setLinearSeqPrimaryFile,
-    canMoveLinearSeqUp,
-    canMoveLinearSeqDown,
-    moveLinearSeqUp,
-    moveLinearSeqDown,
+    linearSourceMoveBlockedReason,
+    canMoveLinearSource,
+    moveLinearSource,
+    getLinearSourceDefaultDefinition,
+    setLinearSourceDefaultDefinition,
+    getLinearSourceDefaultSubtitle,
+    setLinearSourceDefaultSubtitle,
+    resolveLinearRecordEffectiveDefinition,
+    resolveLinearRecordEffectiveSubtitle,
+    resetLinearRecordDefinition,
+    resetLinearRecordSubtitle,
     linearRecordOptions: linearRecordSelector.optionsFor,
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     linearRecordSelectorDisabled: linearRecordSelector.isDisabled,

@@ -66,11 +66,13 @@ The full PR job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
 browser suite, which together took approximately 65–70 seconds historically.
-`web-pr-smoke` runs only the ten selected Playwright cases. They execute in
-parallel jobs instead of sharing one 15-minute serialized budget. Both jobs keep
-independent working directories, dependency installs, wheels, and browser state.
-The contracts job also runs when the trusted plan requires `web-pr-smoke`, so the
-pre-redesign base planner still requires all three original suites during rollout.
+`web-pr-smoke` runs the ten selected Playwright cases and the common-nine Gallery
+first-Generate parity command. The `web-contracts-pr` and `web-pr-smoke` jobs
+execute in parallel instead of sharing one 15-minute serialized budget. Both
+jobs keep independent working directories, dependency installs, wheels, and
+browser state. The contracts job also runs when the trusted plan requires
+`web-pr-smoke`, so the pre-redesign base planner still requires all three
+original suites during rollout.
 
 Web unit/browser tests and their helpers route to the Web, session, Gallery, or
 LOSAT capability they exercise. Adding a normal Web regression therefore does not
@@ -141,8 +143,9 @@ start on all relevant events and filter at job level; they never use workflow
 
 Install locked Node dependencies, then run `node --test tests/ci/*.test.mjs` and
 `node --test tests/web/architecture-contracts.test.mjs`. For browser execution,
-prepare the browser wheel and run `npm run test:web:pr-smoke`. Full functional
-coverage remains `npm run test:web:functional-full`.
+prepare the browser wheel and run `npm run test:web:pr-smoke` plus
+`npm run test:web:gallery-publication`. Full functional coverage remains
+`npm run test:web:functional-full`.
 
 The [timing CSV](CI_TIER_TIMINGS_2026-09-11.csv) records each historical job's setup,
 dependency, wheel, test, teardown, and wall-clock times with direct job URLs.

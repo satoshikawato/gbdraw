@@ -29,7 +29,7 @@ carries both attributes.
 | Element | Supported attributes | Meaning |
 |---|---|---|
 | Record group | `data-gbdraw-record-id`, `data-gbdraw-record-index` | Source record identity and displayed instance |
-| Record definition | `data-gbdraw-role="record-definition"` or `"record-definition-row"`, `data-gbdraw-definition-part`, record ID/index | Main record text or a row-level definition |
+| Record definition | `data-gbdraw-role="record-definition"` or `"record-definition-row"`, `data-gbdraw-definition-part`, record ID/index | Main record text or a row-level definition. A row emits `record-definition-row` only when some text describes the whole row, so do not assume one per row |
 | Plot title | `data-gbdraw-role="plot-title"` | Shared Circular title |
 | Comparison legend | `data-gbdraw-role="comparison-legend"`, `data-gbdraw-orientation` | Identity legend; orientation is `h`, `v`, or `circular` |
 | Track group | `data-gbdraw-slot-id`, `data-gbdraw-slot-renderer` | Raw logical slot ID and the renderer selected for that slot |

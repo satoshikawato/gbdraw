@@ -90,6 +90,7 @@ def print_help_message() -> NoReturn:
     print("Subcommands:")
     print("  circular  Generate a circular genome diagram")
     print("  linear    Generate a linear genome diagram")
+    print("  setup-losat  Install the pinned native LOSAT release")
     print("  gui       Launch the local web UI in your browser")
     print("")
     print("For each subcommand, you can get additional help by running:")
@@ -152,6 +153,9 @@ def main() -> None:
             circular_main(args)
         elif command == "linear":
             linear_main(args)
+        elif command == "setup-losat":
+            from .losat_setup import setup_main
+            setup_main(args)
         elif command == "gui":
             try:
                 # Python 3.9+
@@ -164,7 +168,7 @@ def main() -> None:
             start_local_server(str(web_dir))
         else:
             print(
-                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, or gui; "
+                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, setup-losat, or gui; "
                 "run gbdraw --help for usage.",
                 file=sys.stderr,
             )

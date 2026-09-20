@@ -2362,7 +2362,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
     resources = session.get("resources", {})
     if (
         session.get("format") != "gbdraw-session"
-        or session.get("version") != 41
+        or session.get("version") != 42
         or session.get("renderRequest", {}).get("schema") != 7
         or session.get("renderRequest", {}).get("mode") != "circular"
         or len(resources) < 2

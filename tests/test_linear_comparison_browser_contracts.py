@@ -7,9 +7,10 @@ import pytest
 
 
 @pytest.mark.browser
-def test_linear_comparison_browser_contracts():
+@pytest.mark.parametrize("shard", ("1/2", "2/2"))
+def test_linear_comparison_browser_contracts(shard):
     result = subprocess.run(
-        ["npm", "run", "test:web:comparison-contracts"],
+        ["npm", "run", "test:web:comparison-contracts", "--", f"--shard={shard}"],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,

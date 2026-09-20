@@ -1595,6 +1595,10 @@ def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
     from gbdraw.api.record_planning import _detected_topology
+    from gbdraw.core.record_metadata import (
+        format_inferred_definition,
+        infer_record_source_metadata,
+    )
     try:
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
@@ -1604,12 +1608,24 @@ def list_sequence_records(path, format):
             return json.dumps({"error": "No records found"})
         payload = []
         for idx, record in enumerate(records):
+            organism = ""
+            strain = ""
+            inferred_def = ""
+            if format == "genbank":
+                meta = infer_record_source_metadata(record)
+                organism = meta.organism or ""
+                strain = meta.strain or ""
+                inferred_def = format_inferred_definition(meta)
+
             payload.append(
                 {
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
                     "topology": _detected_topology(record, "genbank") if format == "genbank" else "unknown",
+                    "organism": organism,
+                    "strain": strain,
+                    "inferred_definition": inferred_def,
                 }
             )
         return json.dumps({"records": payload})

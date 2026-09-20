@@ -164,6 +164,8 @@ const state = {
     losat_gencode: 11,
     definition: 'Linear record',
     record_subtitle: 'Subtitle',
+    file_definition: 'Default organism',
+    file_subtitle: 'Default subtitle',
     region_record_id: '#1',
     region_start: 2,
     region_end: 9,
@@ -218,6 +220,8 @@ assert.deepEqual(bindings.linearSeqs[0].gb, {
   lastModified: 202
 });
 assert.equal(bindings.linearSeqs[0].uid, 'linear-uid-1');
+assert.equal(bindings.linearSeqs[0].file_definition, 'Default organism');
+assert.equal(bindings.linearSeqs[0].file_subtitle, 'Default subtitle');
 assert.equal(bindings.linearComparisons[0].id, 'comparison-uid-1');
 assert.deepEqual(Object.keys(bindings.linearComparisons[0]), ['id', 'file']);
 assert.equal(Object.hasOwn(bindings, 'linearCanonicalComparisons'), false);

@@ -2,19 +2,20 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { createHash } = require('node:crypto');
 const { openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
 test.describe.configure({ retries: 0 });
 
-const makeComparisonGenbank = (recordId, base = 'atg') => {
-  const sequence = base.repeat(100);
+const makeComparisonGenbank = (recordId, base = 'atg', repeats = 100) => {
+  const sequence = base.repeat(repeats);
   const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
     const groups = chunk.match(/.{1,10}/g).join(' ');
     return `${String(index * 60 + 1).padStart(9)} ${groups}`;
   }).join('\n');
-  return `LOCUS       ${recordId.padEnd(24)} 300 bp    DNA     linear   UNA 01-JAN-2000
+  return `LOCUS       ${recordId.padEnd(24)} ${sequence.length} bp    DNA     linear   UNA 01-JAN-2000
 DEFINITION  linear comparison browser test.
 ACCESSION   ${recordId}
 VERSION     ${recordId}
@@ -60,6 +61,252 @@ ${origin}
 //
 `;
 };
+
+const makeDefinitionGenbank = (id, qualifiers = '') => makeComparisonGenbank(id)
+  .replace(/FEATURES[^\n]*\n/, `FEATURES             Location/Qualifiers
+     source          1..300
+                     /organism="Aeromonas hydrophila"
+                     /strain="A1"
+${qualifiers}`);
+
+const definitionLines = (page) => page.evaluate(() => {
+  const svg = window.__GBDRAW_APP__.results[0]?.content || '';
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  return [...doc.querySelectorAll('text[data-definition-line-kind]')].map((text) => ({
+    kind: text.dataset.definitionLineKind, text: text.textContent,
+    fill: text.getAttribute('fill'), weight: text.getAttribute('font-weight'),
+    size: Number(text.getAttribute('font-size'))
+  }));
+});
+
+const loadDefinitionSession = async (page, path) => {
+  const loaded = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  const dialog = await loaded;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+};
+
+test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  const wheelResponses = [];
+  await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
+    const response = await route.fetch();
+    const body = await response.body();
+    if (route.request().method() === 'GET') {
+      wheelResponses.push({url: response.url(), sha256: createHash('sha256').update(body).digest('hex')});
+    }
+    await route.fulfill({ response, body });
+  });
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+  });
+  const source = makeDefinitionGenbank('P1', '                     /plasmid="p1"\n')
+    + makeDefinitionGenbank('C')
+    + makeDefinitionGenbank('P2', '                     /plasmid="p2"\n')
+    + makeDefinitionGenbank('O', '                     /organelle="plastid:chloroplast"\n');
+  const upload = page.locator('[data-linear-source-card] input[type="file"]').first();
+  await upload.setInputFiles({ name: 'replicons.gb', mimeType: 'text/plain', buffer: Buffer.from(source) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((s) => s.record_subtitle)))
+    .toEqual(['', '', '', '']);
+  await page.locator('summary[aria-label="Title & Legend"]').click();
+  const show = page.getByRole('checkbox', { name: 'Show Replicon', exact: true });
+  for (const enabled of [false, true, false]) {
+    await show.setChecked(enabled);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const lines = await definitionLines(page);
+    expect(lines.filter((line) => line.kind === 'subtitle')).toEqual([]);
+    expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
+      .toEqual(enabled ? ['p1', 'p2', 'Plastid:chloroplast'] : []);
+  }
+  const servedWheels = wheelResponses;
+  expect(servedWheels).toHaveLength(1);
+  const wheelPath = new URL(servedWheels[0].url).pathname.replace(/^\//, '');
+  expect(servedWheels[0].sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
+  await testInfo.attach('browser-wheel.json', { body: JSON.stringify(servedWheels), contentType: 'application/json' });
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearRecordWithinRow(app.linearSeqs[0].uid, 1);
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter(line => ['subtitle', 'replicon'].includes(line.kind))).toEqual([]);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearRecordWithinRow(app.linearSeqs[1].uid, -1);
+  });
+  await page.locator('[data-linear-source-records] > summary').click();
+  await page.locator('[data-linear-record-options]').first().locator('summary').first().click();
+  await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('p1');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setDefinitionLineStyleColor('replicon', '#ff0000');
+    app.setDefinitionLineStyleWeight('replicon', 'bold');
+    app.setDefinitionLineStyleSize('replicon', '15');
+    app.setDefinitionLineStyleColor('subtitle', '#0000ff');
+    app.setDefinitionLineStyleSize('subtitle', '11');
+  });
+  await show.check();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const styled = await definitionLines(page);
+  expect(styled.filter((line) => line.kind === 'subtitle')).toMatchObject([
+    { text: 'p1', fill: '#0000ff', size: 11 }
+  ]);
+  expect(styled.filter((line) => line.kind === 'replicon')).toMatchObject([
+    { text: 'p1', fill: '#ff0000', weight: 'bold', size: 15 },
+    { text: 'p2', fill: '#ff0000', weight: 'bold', size: 15 },
+    { text: 'Plastid:chloroplast', fill: '#ff0000', weight: 'bold', size: 15 }
+  ]);
+  // Save a draft with Replicon off while the committed preview still has it on.
+  await show.uncheck();
+  const download = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'replicon-display';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const saved = await (await download).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await loadDefinitionSession(page, saved);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  expect(await definitionLines(page)).toEqual(styled);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.linear_show_replicon)).toBe(false);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('p1');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter((line) => line.kind === 'replicon')).toEqual([]);
+  expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'p1' }]);
+  // An explicit clear returns to the file default, including after another load.
+  await page.getByLabel('Default subtitle for file 1').fill('File default');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].record_subtitle = '';
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.file_subtitle)))
+    .toEqual(['File default', 'File default', 'File default', 'File default']);
+  const clearedDownload = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const cleared = await (await clearedDownload).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await loadDefinitionSession(page, cleared);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'File default' }]);
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'single.gb', mimeType: 'text/plain', buffer: Buffer.from(makeDefinitionGenbank('P1', '                     /plasmid="p1"\n'))
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(1);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
+});
+
+test('Released Linear session preserves its subtitles and preview until Generate', async ({ page }) => {
+  test.setTimeout(120000);
+  const fixturePath = join(repoRoot, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json');
+  const session = JSON.parse(readFileSync(fixturePath, 'utf8'));
+  const subtitles = session.renderRequest.records.map(record => record.presentation.subtitle);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadDefinitionSession(page, fixturePath);
+  // Normal ingestion removes XML headers and adds editor metadata. Compare all
+  // displayed primitives, text, and geometry instead of serialized SVG bytes.
+  const previews = await page.evaluate(saved => {
+    const snapshot = source => {
+      const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+      const attrs = ['transform', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height',
+        'viewBox', 'points', 'r', 'cx', 'cy', 'fill', 'stroke', 'stroke-width', 'style',
+        'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor'];
+      return [...doc.querySelectorAll('svg,g,path,text,tspan,line,rect,circle,ellipse,polygon,polyline')]
+        .map(el => [el.tagName, el.tagName === 'text' ? el.textContent : '',
+          attrs.map(attr => el.getAttribute(attr))]);
+    };
+    return [snapshot(saved), snapshot(window.__GBDRAW_APP__.results[0].content)];
+  }, session.results[0].content);
+  expect(previews[1]).toEqual(previews[0]);
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.record_subtitle))).toEqual(subtitles);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.adv.linear_show_replicon = false;
+    window.__GBDRAW_APP__.form.keep_definition_left_aligned = false;
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter(line => line.kind === 'subtitle').map(line => line.text)).toEqual(subtitles);
+  expect((await definitionLines(page)).filter(line => line.kind === 'replicon')).toEqual([]);
+});
+
+test('Linear Lock Definition Column applies common centers and left edges after Generate', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  const source = ['A', 'B', 'C', 'D'].map((id, i) => makeComparisonGenbank(id, 'atg', i < 2 ? 100 : 60)).join('');
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+    await app.setLinearRecordLayoutEnabled(true);
+    app.linearSeqs.forEach((seq, i) => {
+      seq.definition = i < 2 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
+      seq.record_subtitle = i < 2 ? 'A1' : 'B';
+      app.setLinearRecordRow(seq.uid, i < 2 ? 1 : 2);
+    });
+  });
+  const measure = () => page.evaluate(async () => {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;visibility:hidden';
+    host.innerHTML = window.__GBDRAW_APP__.results[0].content;
+    document.body.append(host);
+    await document.fonts.ready;
+    const svg = host.querySelector('svg');
+    const box = el => {
+      const b = el.getBBox(), m = svg.getCTM().inverse().multiply(el.getCTM());
+      const left = new DOMPoint(b.x, b.y).matrixTransform(m).x;
+      const right = new DOMPoint(b.x + b.width, b.y).matrixTransform(m).x;
+      return { left, right, center: (left + right) / 2 };
+    };
+    const headings = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition-row"]')].map(g => {
+      const index = g.dataset.gbdrawRecordIndex;
+      const axis = svg.querySelector(`g[data-record-index="${index}"]`);
+      const axisX = new DOMPoint(0, 0).matrixTransform(svg.getCTM().inverse().multiply(axis.getCTM())).x;
+      return { ...box(g), axisX, lines: [...g.querySelectorAll('text')].map(box) };
+    });
+    host.remove();
+    return headings;
+  });
+  for (const locked of [false, true]) {
+    await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const headings = await measure();
+    expect(headings).toHaveLength(2);
+    const coord = box => locked ? box.left : box.center;
+    const delta = locked ? 0 : headings[1].axisX - headings[0].axisX;
+    expect(Math.abs(coord(headings[1]) - coord(headings[0]) - delta)).toBeLessThanOrEqual(1);
+    for (const heading of headings) {
+      expect(heading.lines).toHaveLength(2);
+      expect(Math.abs(coord(heading.lines[0]) - coord(heading.lines[1]))).toBeLessThanOrEqual(1);
+      expect(heading.axisX - heading.right).toBeGreaterThanOrEqual(19);
+    }
+  }
+  const beforeSave = await measure();
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-columns'; });
+  const download = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const saved = await (await download).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await loadDefinitionSession(page, saved);
+  expect(await measure()).toEqual(beforeSave);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await measure()).toEqual(beforeSave);
+});
 
 const linearRecordCard = (page, uid) => (
   page.locator(`[data-linear-record-card="${uid}"]`)
@@ -1472,12 +1719,12 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   expect(firstMixed.jobs[0][0].slice(0, 4)).toEqual([`${uidB}->${uidC}`, 1, 1, 2]);
   expect(firstMixed.jobs[0][0][4]).not.toBe('');
 
-  const reordered = await page.evaluate(() => {
+  const reordered = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.linearComparisonPlan.mode = 'selected';
-    app.setLinearRecordLayoutEnabled(true);
-    app.moveLinearSeqUp(2);
-    app.moveLinearSeqUp(1);
+    await app.setLinearRecordLayoutEnabled(true);
+    await app.moveLinearSource(2, -1);
+    await app.moveLinearSource(1, -1);
     return [app.linearSeqs.map((record) => record.uid), app.linearComparisonResolution.edges.map(
       (edge) => [edge.edgeKey, edge.queryIndex, edge.subjectIndex]
     ), app.losatCacheInfo.map(
@@ -1496,13 +1743,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const losatRawResult = page.locator(
     `[data-linear-raw-result="${uidB}->${uidC}"]`
   );
+  const losatUnplaced = page.locator('[data-linear-unplaced-draft="selected-losat-b-c"]');
+  const losatRawUnplaced = page.locator('[data-linear-raw-unplaced="selected-losat-b-c"]');
   await expect(uploadPair).toBeVisible();
-  await expect(losatPair).toBeVisible();
+  await expect(losatUnplaced).toBeVisible();
   expect(await uploadPair.evaluate((element) => (
-    element.closest('[data-linear-comparison-boundary]')
-      ?.dataset.linearComparisonBoundary
-  ))).toBe('1->2');
-  expect(await losatPair.evaluate((element) => (
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
   ))).toBe('2->3');
@@ -1510,18 +1755,16 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     'input[type="file"][aria-label="BLAST TSV for #2 to #3"]'
   )).toHaveCount(1);
   await expect(uploadPair).toContainText('mixed-a-to-b.tsv');
-  await expect(losatRawResult.getByRole('textbox', {
-    name: 'Raw LOSAT filename for #3 to #1'
+  await expect(losatRawUnplaced.getByRole('textbox', {
+    name: 'Raw LOSAT filename for unplaced comparison selected-losat-b-c'
   })).toHaveValue('selected-b-to-c.tsv');
-  await expect(losatRawResult.getByRole('button', {
-    name: 'Save Raw LOSAT TSV for #3 to #1'
-  })).toBeEnabled();
 
-  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 1), uidC);
+  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 2), uidC);
+  await expect(losatPair).toBeVisible();
   expect(await losatPair.evaluate((element) => (
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
-  ))).toBe('1->2');
+  ))).toBe('2->3');
   await expect(losatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
@@ -1550,11 +1793,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
 
-  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 3), uidC);
+  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 4), uidC);
   expect(await losatPair.evaluate((element) => (
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
-  ))).toBe('2->3');
+  ))).toBe('3->4');
   await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
@@ -2711,6 +2954,302 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
   };
 });
 
+test('@comparison-contract File source order moves multi-record blocks through pointer, keyboard, Generate, and Session Load', async ({ page }, testInfo) => {
+  test.setTimeout(300000);
+  await installCompleteRecordComparisonExecutor(page);
+  await openApp(page);
+  await uploadCompleteRecordSources(page);
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+
+  const sources = page.locator('[data-linear-source-card]');
+  await expect(sources).toHaveCount(2);
+  await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
+  await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
+  await expect(sources.nth(0).locator('[data-linear-source-records]')).not.toHaveAttribute('open', '');
+  await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Move File 1 up' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 down' })).toBeDisabled();
+
+  const before = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__ = app.results[0].content;
+    return {
+      selectors: app.linearSeqs.map((seq) => seq.region_record_id),
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      rows: Object.fromEntries(app.linearRecordRows.map(({ uid, row }) => [uid, row])),
+      edges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey).sort(),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )).sort(([left], [right]) => left.localeCompare(right)),
+      undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
+      runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
+    };
+  });
+  expect(before.selectors).toEqual(['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC']);
+  const upperRow = before.rows[before.uids[0]];
+  const lowerRow = before.rows[before.uids[2]];
+  const expectedMovedRows = Object.fromEntries([
+    ...before.uids.slice(2).map((uid) => [uid, upperRow]),
+    ...before.uids.slice(0, 2).map((uid) => [uid, lowerRow])
+  ]);
+  const expectedMovedEdges = before.uids.slice(2).flatMap((queryUid) => (
+    before.uids.slice(0, 2).map((subjectUid) => `${queryUid}->${subjectUid}`)
+  )).sort();
+
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(sources.nth(0)).toContainText('lower.gbff');
+  await expect(sources.nth(1)).toContainText('upper.gbff');
+  const moved = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      selectors: app.linearSeqs.map((seq) => seq.region_record_id),
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      groups: app.linearSourceGroups.map((source) => source.records.map(({ sequence }) => sequence.region_record_id)),
+      domUids: [...document.querySelectorAll('[data-linear-source-card]')]
+        .map((card) => card.dataset.linearSourceCard),
+      sourceUids: app.linearSourceGroups.map((source) => source.uid),
+      rows: Object.fromEntries(app.linearRecordRows.map(({ uid, row }) => [uid, row])),
+      edges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey).sort(),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )).sort(([left], [right]) => left.localeCompare(right)),
+      canonicalComparisonCount: app.files.linearCanonicalComparisons.length,
+      undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
+      resultPreserved: app.results[0].content === window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__,
+      runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
+    };
+  });
+  expect(moved).toMatchObject({
+    selectors: ['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB'],
+    groups: [['LowerA', 'LowerB', 'LowerC'], ['UpperA', 'UpperB']],
+    domUids: moved.sourceUids,
+    rows: expectedMovedRows,
+    edges: expectedMovedEdges,
+    canonicalComparisonCount: 0,
+    undoCount: before.undoCount + 1,
+    resultPreserved: true,
+    runCount: before.runCount
+  });
+  expect(moved.uids).toEqual([...before.uids.slice(2), ...before.uids.slice(0, 2)]);
+  expect(moved.cache.map(([edgeKey]) => edgeKey)).toEqual(before.cache.map(([edgeKey]) => edgeKey));
+  expect(moved.cache).not.toEqual(before.cache);
+
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => page.evaluate(() => ({
+    uids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid),
+    rows: Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows.map(({ uid, row }) => [uid, row]))
+  }))).toEqual({ uids: before.uids, rows: before.rows });
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await expect.poll(() => page.evaluate(() => ({
+    uids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid),
+    rows: Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows.map(({ uid, row }) => [uid, row]))
+  }))).toEqual({ uids: moved.uids, rows: expectedMovedRows });
+
+  await page.getByRole('button', { name: 'Move File 1 down' }).press('Space');
+  await expect(sources.nth(0)).toContainText('upper.gbff');
+  await page.getByRole('button', { name: 'Move File 2 up' }).press('Enter');
+  await expect(sources.nth(0)).toContainText('lower.gbff');
+  await expect(page.getByRole('button', { name: 'Move File 1 up' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 down' })).toBeDisabled();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sources.first().scrollIntoViewIfNeeded();
+  await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeVisible();
+  await expect(sources.first().getByRole('button', { name: 'Remove' })).toBeVisible();
+  expect(await sources.evaluateAll((cards) => cards.every((card) => card.scrollWidth <= card.clientWidth))).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('file-source-order-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const generated = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+    return {
+      selectors: request.records.map((record) => record.selector.value),
+      rows: request.records.map((record) => record.presentation.gridRow),
+      sourceIds: request.records.map((record) => record.source.resourceId),
+      svgRows: [...svg.querySelectorAll('[data-record-row]')].map((group) => ({
+        key: group.getAttribute('data-record-key'),
+        row: Number(group.getAttribute('data-record-row'))
+      }))
+    };
+  });
+  expect(generated.selectors).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+  expect(generated.rows).toEqual([upperRow, upperRow, upperRow, lowerRow, lowerRow]);
+  expect(generated.svgRows.map(({ row }) => row)).toEqual([0, 0, 0, 1, 1]);
+  expect(new Set(generated.sourceIds.slice(0, 3)).size).toBe(1);
+  expect(new Set(generated.sourceIds.slice(3)).size).toBe(1);
+  expect(generated.sourceIds[0]).not.toBe(generated.sourceIds[3]);
+
+  const saved = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'linear-source-order';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await saved).path();
+  expect(readFileSync(savedPath, 'utf8')).not.toContain('"fileOrder"');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  const loaded = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+  const loadDialog = await loaded;
+  expect(loadDialog.message()).toBe('Session loaded successfully!');
+  await loadDialog.accept();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+  await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');
+  await expect(page.locator('[data-linear-source-card]').nth(1)).toContainText('upper.gbff');
+  expect(await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows
+    .map(({ uid, row }) => [uid, row])))).toEqual(expectedMovedRows);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => {
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      selectors: request.records.map((record) => record.selector.value),
+      rows: request.records.map((record) => record.presentation.gridRow)
+    };
+  })).toEqual({
+    selectors: ['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB'],
+    rows: [upperRow, upperRow, upperRow, lowerRow, lowerRow]
+  });
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordRow(app.linearSeqs[0].uid, app.linearRecordRows.at(-1).row);
+  });
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
+  await expect(page.getByLabel('Arrange linear records in rows')).not.toBeChecked();
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
+
+  const customBefore = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      rows: app.linearRecordRows.map(({ uid, row }) => [uid, row]),
+      comparisonPlan: JSON.stringify(app.linearComparisonPlan),
+      resolvedEdges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey),
+      canonicalComparisons: JSON.stringify(app.files.linearCanonicalComparisons),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )),
+      result: app.results[0].content,
+      history: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  const customAfter = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearSource(1, -1);
+    return {
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      rows: app.linearRecordRows.map(({ uid, row }) => [uid, row]),
+      comparisonPlan: JSON.stringify(app.linearComparisonPlan),
+      resolvedEdges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey),
+      canonicalComparisons: JSON.stringify(app.files.linearCanonicalComparisons),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )),
+      result: app.results[0].content,
+      history: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  expect(customAfter).toEqual(customBefore);
+});
+
+test('@comparison-contract source order survives pending multi-record discovery', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(async ({ readyText, delayedText }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([readyText], 'ready.gbff', {
+      type: 'text/plain', lastModified: 1
+    }));
+    await app.refreshLinearRecordSelectors();
+    app.addLinearSeq();
+
+    const delayedBytes = new TextEncoder().encode(delayedText).buffer;
+    const delayedFile = new File([delayedText], 'delayed.gbff', {
+      type: 'text/plain', lastModified: 2
+    });
+    delayedFile.arrayBuffer = () => new Promise((resolve) => {
+      window.__GBDRAW_RELEASE_DELAYED_DISCOVERY__ = () => resolve(delayedBytes);
+    });
+    app.setLinearSeqPrimaryFile(app.linearSeqs.length - 1, 'gb', delayedFile);
+    window.__GBDRAW_DELAYED_DISCOVERY__ = app.refreshLinearRecordSelectors();
+  }, {
+    readyText: makeDerivedOptionGenbank('Ready'),
+    delayedText: makeDerivedOptionGenbank('DelayedA') + makeDerivedOptionGenbank('DelayedB')
+  });
+
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(page.locator('[data-linear-source-card]').first()).toContainText('delayed.gbff');
+  await page.evaluate(async () => {
+    window.__GBDRAW_RELEASE_DELAYED_DISCOVERY__();
+    await window.__GBDRAW_DELAYED_DISCOVERY__;
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
+    .map((seq) => seq.region_record_id))).toEqual(['DelayedA', 'DelayedB', '']);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSourceGroups
+    .map((source) => source.records.map(({ sequence }) => sequence.region_record_id))))
+    .toEqual([['DelayedA', 'DelayedB'], ['']]);
+});
+
+test('@comparison-contract GFF3 and FASTA source order moves both bindings with every record', async ({ page }) => {
+  await openApp(page, { waitForPalette: false });
+  const sourceText = (ids) => ({
+    gff: `##gff-version 3\n${ids.map((id) => `##sequence-region ${id} 1 12\n${id}\ttest\tgene\t1\t3\t.\t+\t.\tID=${id}_gene`).join('\n')}\n`,
+    fasta: `${ids.map((id) => `>${id}\nACGTACGTACGT`).join('\n')}\n`
+  });
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gff';
+    const upload = async (index, source, stem) => {
+      app.setLinearSeqPrimaryFile(index, 'gff', new File([source.gff], `${stem}.gff3`, {
+        type: 'text/plain', lastModified: 1
+      }));
+      app.setLinearSeqPrimaryFile(index, 'fasta', new File([source.fasta], `${stem}.fasta`, {
+        type: 'text/plain', lastModified: 2
+      }));
+      await app.refreshLinearRecordSelectors();
+    };
+    await upload(0, first, 'first');
+    app.addLinearSeq();
+    await upload(app.linearSeqs.length - 1, second, 'second');
+  }, { first: sourceText(['GffA', 'GffB']), second: sourceText(['GffC']) });
+
+  const sources = page.locator('[data-linear-source-card]');
+  await expect(sources).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GFF3|FASTA)$/ })).toHaveCount(4);
+  await page.getByRole('button', { name: 'Move File 2 up' }).click();
+  await expect(sources.nth(0)).toContainText('second.gff3');
+  await expect(sources.nth(0)).toContainText('second.fasta');
+  expect(await page.evaluate(() => ({
+    selectors: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.region_record_id),
+    files: window.__GBDRAW_APP__.linearSourceGroups.map((source) => ({
+      gff: source.sequence.gff.name,
+      fasta: source.sequence.fasta.name,
+      bindingsPreserved: source.records.every(({ sequence }) => (
+        sequence.gff === source.sequence.gff && sequence.fasta === source.sequence.fasta
+      ))
+    }))
+  }))).toEqual({
+    selectors: ['', 'GffA', 'GffB'],
+    files: [
+      { gff: 'second.gff3', fasta: 'second.fasta', bindingsPreserved: true },
+      { gff: 'first.gff3', fasta: 'first.fasta', bindingsPreserved: true }
+    ]
+  });
+});
+
 test('@comparison-contract real LOSAT Wasm searches two multi-record sources in one job offline', async ({ page }) => {
   test.setTimeout(300000);
   await page.context().route('**/*', (route) => (
@@ -3213,4 +3752,154 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
   expect(restored.status, JSON.stringify(restored.error)).toEqual({ status: 'ok' });
   expect(restored.calls).toBe(on.calls);
   expect(restored.cache.proteinDerivedPayloadCacheHits).toBe(1);
+});
+
+test('File-level default organism and subtitle apply across records and allow per-record override', async ({ page }) => {
+  test.setTimeout(120000);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+
+  await page.evaluate(async ({ content, name }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    const source = new File([content], name, { type: 'text/plain', lastModified: 1 });
+    app.setLinearSeqPrimaryFile(0, 'gb', source);
+    Object.assign(app.form, {
+      legend: 'none',
+      show_gc: false,
+      show_skew: false,
+      show_depth: false,
+      show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('none');
+  }, {
+    content: makeComparisonGenbank('DefTestA', 'atg') + makeComparisonGenbank('DefTestB', 'gct'),
+    name: 'file-default-test.gbk'
+  });
+
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+
+  const defInput = page.getByLabel('Default definition for file 1');
+  const subInput = page.getByLabel('Default subtitle for file 1');
+  await expect(defInput).toBeVisible();
+  await expect(subInput).toBeVisible();
+
+  await defInput.fill('<i>Escherichia coli</i> O157:H7');
+  await subInput.fill('Default Cluster');
+
+  const defaultValues = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const group = app.linearSourceGroups[0];
+    return {
+      definition: app.getLinearSourceDefaultDefinition(group),
+      subtitle: app.getLinearSourceDefaultSubtitle(group),
+      seq1_file_def: app.linearSeqs[0].file_definition,
+      seq2_file_def: app.linearSeqs[1].file_definition,
+      seq1_file_sub: app.linearSeqs[0].file_subtitle,
+      seq2_file_sub: app.linearSeqs[1].file_subtitle
+    };
+  });
+  expect(defaultValues.definition).toBe('<i>Escherichia coli</i> O157:H7');
+  expect(defaultValues.subtitle).toBe('Default Cluster');
+  expect(defaultValues.seq1_file_def).toBe('<i>Escherichia coli</i> O157:H7');
+  expect(defaultValues.seq2_file_def).toBe('<i>Escherichia coli</i> O157:H7');
+  expect(defaultValues.seq1_file_sub).toBe('Default Cluster');
+  expect(defaultValues.seq2_file_sub).toBe('Default Cluster');
+
+  await page.evaluate(() => {
+    const sourceRecords = document.querySelector('[data-linear-source-records]');
+    if (sourceRecords) sourceRecords.open = true;
+    const options = document.querySelector('[data-linear-record-options]');
+    if (options) options.open = true;
+  });
+
+  const record1Card = page.locator('[data-linear-record-card]').first();
+  const record1DefInput = page.getByLabel('Definition for sequence 1');
+  await expect(record1DefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7');
+  await expect(record1Card.getByText('Using file default').first()).toBeVisible();
+
+  await record1DefInput.fill('<i>Custom Strain Override</i>');
+  await expect(record1Card.getByRole('button', { name: 'Reset to default' }).first()).toBeVisible();
+
+  const resolved = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.linearSeqs.map((seq) => ({
+      label: app.resolveLinearRecordEffectiveDefinition(seq),
+      subtitle: app.resolveLinearRecordEffectiveSubtitle(seq)
+    }));
+  });
+  expect(resolved[0]).toEqual({ label: '<i>Custom Strain Override</i>', subtitle: 'Default Cluster' });
+  expect(resolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
+
+  await record1Card.getByRole('button', { name: 'Reset to default' }).first().click();
+  await expect(record1DefInput).toHaveValue('');
+  await expect(record1Card.getByText('Using file default').first()).toBeVisible();
+
+  const resetResolved = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.linearSeqs.map((seq) => ({
+      label: app.resolveLinearRecordEffectiveDefinition(seq),
+      subtitle: app.resolveLinearRecordEffectiveSubtitle(seq)
+    }));
+  });
+  expect(resetResolved[0]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
+  expect(resetResolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
+});
+
+test('GenBank file upload infers the file default organism but leaves the file default subtitle empty', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.mode = 'linear';
+  });
+
+  const sampleGenbank = `LOCUS       NC_002695            1000 bp    DNA     circular BCT 12-FEB-2021
+DEFINITION  Escherichia coli O157:H7 str. Sakai DNA, complete genome.
+ACCESSION   NC_002695
+VERSION     NC_002695.2
+FEATURES             Location/Qualifiers
+     source          1..1000
+                     /organism="Escherichia coli O157:H7 str. Sakai"
+                     /mol_type="genomic DNA"
+                     /strain="Sakai"
+                     /sub_strain="RIMD 0509952"
+                     /serovar="O157:H7"
+     gene            1..100
+                     /gene="testA"
+     CDS             1..100
+                     /gene="testA"
+                     /product="test protein"
+//
+`;
+
+  await page.evaluate((content) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'Sakai_sample.gbk', { type: 'text/plain' }));
+  }, sampleGenbank);
+
+  await expect.poll(() => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const group = app.linearSourceGroups[0];
+    return {
+      definition: app.getLinearSourceDefaultDefinition(group),
+      subtitle: app.getLinearSourceDefaultSubtitle(group)
+    };
+  })).toEqual({
+    definition: '<i>Escherichia coli</i> O157:H7 str. Sakai',
+    // Only the organism is inferred as a file default. A subtitle describes one
+    // replicon, so inferring it from the first record would overwrite the others.
+    subtitle: ''
+  });
+
+  await expect(page.getByLabel('Default definition for file 1')).toHaveValue('<i>Escherichia coli</i> O157:H7 str. Sakai');
+  await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('');
+
+  await page.evaluate(() => {
+    const options = document.querySelector('[data-linear-record-options]');
+    if (options) options.open = true;
+  });
+
+  const recordDefInput = page.getByLabel('Definition for sequence 1');
+  await expect(recordDefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
+  await expect(page.getByText('Using file default').first()).toBeVisible();
 });

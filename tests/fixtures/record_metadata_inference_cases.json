@@ -1,0 +1,59 @@
+{
+  "comment": [
+    "Shared expectations for record metadata inference.",
+    "gbdraw/core/record_metadata.py owns this inference for the Pyodide Worker and the renderer.",
+    "gbdraw/web/js/app/record-discovery.js reimplements it for the no-Worker upload fast path.",
+    "tests/test_record_metadata.py and tests/web/record-metadata-inference.test.mjs both read this",
+    "file, so the two implementations cannot drift apart unnoticed."
+  ],
+  "definition": [
+    {
+      "name": "binomial with strain",
+      "organism": "Escherichia coli O157:H7",
+      "strain": "Sakai",
+      "expected": "<i>Escherichia coli</i> O157:H7 Sakai"
+    },
+    {
+      "name": "strain already present in the organism name is not repeated",
+      "organism": "Escherichia coli str. K-12 substr. MG1655",
+      "strain": "K-12",
+      "expected": "<i>Escherichia coli</i> str. K-12 substr. MG1655"
+    },
+    {
+      "name": "binomial without strain",
+      "organism": "Homo sapiens",
+      "strain": "",
+      "expected": "<i>Homo sapiens</i>"
+    },
+    {
+      "name": "single word organism",
+      "organism": "Streptomyces",
+      "strain": "sp. A",
+      "expected": "<i>Streptomyces</i> sp. A"
+    },
+    {
+      "name": "Candidatus prefix stays upright",
+      "organism": "Candidatus Tyloplasma litorale",
+      "strain": "Fukuoka2020",
+      "expected": "Candidatus <i>Tyloplasma litorale</i> Fukuoka2020"
+    },
+    {
+      "name": "non-organism falls back to the strain",
+      "organism": "synthetic construct",
+      "strain": "cloning vector pUC19",
+      "expected": "cloning vector pUC19"
+    },
+    {
+      "name": "non-organism is recognized behind a Candidatus prefix",
+      "organism": "Candidatus unknown organism",
+      "strain": "isolate 7",
+      "expected": "isolate 7"
+    },
+    {
+      "name": "no organism at all",
+      "organism": "",
+      "strain": "Sakai",
+      "expected": "Sakai"
+    }
+  ]
+}

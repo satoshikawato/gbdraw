@@ -22,7 +22,6 @@ import pytest
 from PIL import Image
 
 from gbdraw.session_io import (
-    CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
@@ -255,6 +254,10 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     package_data_patterns = build_support.get_package_data_patterns(
         include_browser_wheel=True
     )
+    assert "data/losat-release.json" in package_data_patterns
+    assert not any(pattern.startswith("bin/") for pattern in package_data_patterns)
+    assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=True)
+    assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)
 
     assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
         "web/gallery/palettes/palettes.json"
@@ -270,6 +273,7 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert "gbdraw/web/gallery" not in manifest_in
     assert "recursive-include gbdraw/web/tutorial-data *" in manifest_in
     assert "include tools/build_lambda_gff3_fixture.py" in manifest_in
+    assert "prune gbdraw/bin" in manifest_in
     assert "gbdraw/web/gallery/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
     assert (
         "gbdraw/web/tutorial-data/" in build_support._BROWSER_WHEEL_FORBIDDEN_PREFIXES
@@ -679,8 +683,6 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
             re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text)
         )
 
-        # A new writer does not require rewriting the published full Sessions.
-        assert session.get("version") == 41, session_name
         assert (
             session.get("renderRequest", {}).get("schema")
             in BUNDLED_REQUEST_SCHEMAS

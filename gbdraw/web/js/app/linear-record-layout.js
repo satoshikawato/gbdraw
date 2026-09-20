@@ -13,6 +13,53 @@ export const reconcileLinearRecordLayout = (sequences, entries = []) => {
   }));
 };
 
+export const planLinearSourceRowMove = ({
+  sourceGroups,
+  entries,
+  sourceIndex,
+  direction
+}) => {
+  const groups = Array.isArray(sourceGroups) ? sourceGroups : [];
+  const sequences = groups.flatMap((group) => (
+    Array.isArray(group?.records) ? group.records.map((record) => record.sequence) : []
+  ));
+  const layout = reconcileLinearRecordLayout(sequences, entries);
+  const index = sourceIndex;
+  const offset = direction;
+
+  const rowByUid = new Map(layout.map((entry) => [entry.uid, entry.row]));
+  const occupiedRows = new Set();
+  const sourceRows = groups.map((group) => {
+    const rows = new Set(
+      group.records.map(({ sequence }) => rowByUid.get(String(sequence?.uid || '')))
+    );
+    if (rows.size !== 1) return null;
+    const row = [...rows][0];
+    if (occupiedRows.has(row)) return null;
+    occupiedRows.add(row);
+    return row;
+  });
+  if (sourceRows.some((row) => row === null)) {
+    return { allowed: false, reason: 'custom-layout', rows: layout };
+  }
+
+  const target = index + offset;
+  if (!Number.isInteger(index) || ![-1, 1].includes(offset)
+      || index < 0 || index >= groups.length || target < 0 || target >= groups.length) {
+    return { allowed: false, reason: 'boundary', rows: layout };
+  }
+  const reorderedGroups = [...groups];
+  [reorderedGroups[index], reorderedGroups[target]] = [reorderedGroups[target], reorderedGroups[index]];
+  const rowSlots = [...sourceRows].sort((left, right) => left - right);
+  const rows = reorderedGroups.flatMap((group, groupIndex) => (
+    group.records.map(({ sequence }) => ({
+      uid: String(sequence?.uid || ''),
+      row: rowSlots[groupIndex]
+    }))
+  ));
+  return { allowed: true, reason: '', rows };
+};
+
 export const linearRecordPositionTokens = (sequences, entries) => {
   const rows = new Map(reconcileLinearRecordLayout(sequences, entries).map((entry) => [entry.uid, entry.row]));
   return (Array.isArray(sequences) ? sequences : [])

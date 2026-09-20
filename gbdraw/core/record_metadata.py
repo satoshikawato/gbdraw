@@ -195,4 +195,58 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
     )
 
 
-__all__ = ["RecordSourceMetadata", "infer_record_source_metadata"]
+_NON_ORGANISM_NAMES = frozenset(
+    {
+        "synthetic construct",
+        "artificial sequence",
+        "unidentified",
+        "unidentified organism",
+        "unknown",
+        "unknown organism",
+        "vector",
+        "cloning vector",
+        "unidentified cloning vector",
+        "expression vector",
+    }
+)
+
+
+def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
+    """Format organism and strain into publication-style HTML (e.g. <i>Genus species</i> strain)."""
+    organism = str(metadata.organism or "").strip()
+    strain = str(metadata.strain or "").strip()
+
+    candidatus = False
+    clean_org = organism
+    if clean_org.lower().startswith("candidatus "):
+        candidatus = True
+        clean_org = clean_org[11:].strip()
+
+    if not clean_org or clean_org.lower() in _NON_ORGANISM_NAMES:
+        return strain
+
+    words = clean_org.split()
+    cand_prefix = "Candidatus " if candidatus else ""
+    if len(words) >= 2:
+        binom = f"<i>{' '.join(words[:2])}</i>"
+        rest = " ".join(words[2:])
+        if strain and strain.lower() not in rest.lower():
+            rest = f"{rest} {strain}".strip()
+        return f"{cand_prefix}{binom} {rest}".strip()
+    if words:
+        base = f"{cand_prefix}<i>{words[0]}</i>"
+        return f"{base} {strain}".strip() if strain else base
+    return strain
+
+
+def format_replicon_label(metadata: RecordSourceMetadata) -> str:
+    """Name a replicon, falling back to the existing capitalized organelle label."""
+    return str(metadata.replicon or "").strip() or str(metadata.organelle or "").strip().capitalize()
+
+
+__all__ = [
+    "RecordSourceMetadata",
+    "format_inferred_definition",
+    "format_replicon_label",
+    "infer_record_source_metadata",
+]

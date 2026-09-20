@@ -23,7 +23,21 @@ def load_frozen(current):
     # public classes; private accumulators and their methods remain frozen.
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and not node.name.startswith('_'):
-            assert ast.dump(node) == ast.dump(live[node.name]), node.name
+            live_node = live[node.name]
+            if node.name == 'ProteinBlastpRuntime':
+                # S07.7 predates the managed LOSAT source. Its addition expands
+                # only this Literal annotation, not the frozen execution path.
+                live_source = next(
+                    field for field in live_node.body
+                    if isinstance(field, ast.AnnAssign)
+                    and getattr(field.target, 'id', None) == 'source')
+                assert ast.unparse(live_source.annotation) == \
+                       "Literal['explicit', 'managed', 'bundled', 'path']"
+                live_source.annotation = next(
+                    field.annotation for field in node.body
+                    if isinstance(field, ast.AnnAssign)
+                    and getattr(field.target, 'id', None) == 'source')
+            assert ast.dump(node) == ast.dump(live_node), node.name
             setattr(module, node.name, getattr(current, node.name))
     return module
 
