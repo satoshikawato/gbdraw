@@ -48,6 +48,7 @@ from tools.refresh_gallery_sessions import (
     VIBRIO_GZIP_REGRESSION_CEILING,
     VIBRIO_RAW_ENTRY_COUNT,
     _gallery_file_transaction,
+    _canonicalize_orthogroup_resources,
     _public_gallery_session_files,
     _refresh_one_session,
     _refresh_session_paths,
@@ -249,6 +250,61 @@ def test_session_artifact_measurements_report_component_bytes(
         "losatDerivedCacheBytes",
     ):
         assert measurements[key] > 0
+
+
+def test_gallery_refresh_canonicalizes_legacy_orthogroup_resource_once() -> None:
+    legacy_payload = {
+        "schema": 2,
+        "kind": "orthogroupResult",
+        "value": {
+            "type": "OrthogroupResult",
+            "fields": {
+                "orthogroups": {},
+                "memberByProteinId": {},
+                "namesByOrthogroupId": {},
+                "descriptionsByOrthogroupId": {},
+                "nameCandidatesByOrthogroupId": {},
+                "confidenceByOrthogroupId": {},
+                "rbhOrthogroups": {},
+                "orthologEdgesByOrthogroupId": {},
+                "orthologPathsByOrthogroupId": {},
+                "relatedEdgesByOrthogroupId": {},
+                "scopeByOrthogroupId": {},
+                "sourceRecordIndexByOrthogroupId": {},
+            },
+        },
+    }
+    published = json.dumps(legacy_payload, separators=(",", ":")).encode("utf-8")
+    resource = {
+        "kind": "orthogroup-result",
+        "name": "orthogroups.json",
+        "type": "application/json",
+        "size": len(published),
+        "lastModified": 0,
+        "encoding": "base64",
+        "data": base64.b64encode(published).decode("ascii"),
+    }
+    session = {
+        "renderRequest": {
+            "comparisons": [
+                {
+                    "kind": "orthogroupResult",
+                    "resourceId": "orthogroups",
+                    "encoding": "canonicalJson",
+                }
+            ]
+        },
+        "resources": {"orthogroups": resource},
+    }
+
+    assert _canonicalize_orthogroup_resources(session) == 1
+    canonical = base64.b64decode(resource["data"], validate=True)
+    canonical_payload = json.loads(canonical)
+    assert canonical_payload["schema"] == 3
+    assert canonical_payload["kind"] == "orthogroupResult"
+    assert canonical_payload["value"]["type"] == "OrthogroupGraphResult"
+    assert resource["size"] == len(canonical)
+    assert _canonicalize_orthogroup_resources(session) == 0
 
 
 def test_current_session_catalog_structure_rejects_duplicate_payloads(
