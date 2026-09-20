@@ -1719,12 +1719,12 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   expect(firstMixed.jobs[0][0].slice(0, 4)).toEqual([`${uidB}->${uidC}`, 1, 1, 2]);
   expect(firstMixed.jobs[0][0][4]).not.toBe('');
 
-  const reordered = await page.evaluate(() => {
+  const reordered = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     app.linearComparisonPlan.mode = 'selected';
-    app.setLinearRecordLayoutEnabled(true);
-    app.moveLinearSource(2, -1);
-    app.moveLinearSource(1, -1);
+    await app.setLinearRecordLayoutEnabled(true);
+    await app.moveLinearSource(2, -1);
+    await app.moveLinearSource(1, -1);
     return [app.linearSeqs.map((record) => record.uid), app.linearComparisonResolution.edges.map(
       (edge) => [edge.edgeKey, edge.queryIndex, edge.subjectIndex]
     ), app.losatCacheInfo.map(
@@ -1743,13 +1743,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const losatRawResult = page.locator(
     `[data-linear-raw-result="${uidB}->${uidC}"]`
   );
+  const losatUnplaced = page.locator('[data-linear-unplaced-draft="selected-losat-b-c"]');
+  const losatRawUnplaced = page.locator('[data-linear-raw-unplaced="selected-losat-b-c"]');
   await expect(uploadPair).toBeVisible();
-  await expect(losatPair).toBeVisible();
+  await expect(losatUnplaced).toBeVisible();
   expect(await uploadPair.evaluate((element) => (
-    element.closest('[data-linear-comparison-boundary]')
-      ?.dataset.linearComparisonBoundary
-  ))).toBe('1->2');
-  expect(await losatPair.evaluate((element) => (
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
   ))).toBe('2->3');
@@ -1757,18 +1755,16 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     'input[type="file"][aria-label="BLAST TSV for #2 to #3"]'
   )).toHaveCount(1);
   await expect(uploadPair).toContainText('mixed-a-to-b.tsv');
-  await expect(losatRawResult.getByRole('textbox', {
-    name: 'Raw LOSAT filename for #3 to #1'
+  await expect(losatRawUnplaced.getByRole('textbox', {
+    name: 'Raw LOSAT filename for unplaced comparison selected-losat-b-c'
   })).toHaveValue('selected-b-to-c.tsv');
-  await expect(losatRawResult.getByRole('button', {
-    name: 'Save Raw LOSAT TSV for #3 to #1'
-  })).toBeEnabled();
 
-  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 1), uidC);
+  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 2), uidC);
+  await expect(losatPair).toBeVisible();
   expect(await losatPair.evaluate((element) => (
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
-  ))).toBe('1->2');
+  ))).toBe('2->3');
   await expect(losatRawResult.getByRole('textbox', {
     name: 'Raw LOSAT filename for #3 to #1'
   })).toHaveValue('selected-b-to-c.tsv');
@@ -1797,11 +1793,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
 
-  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 3), uidC);
+  await page.evaluate((uid) => window.__GBDRAW_APP__.setLinearRecordRow(uid, 4), uidC);
   expect(await losatPair.evaluate((element) => (
     element.closest('[data-linear-comparison-boundary]')
       ?.dataset.linearComparisonBoundary
-  ))).toBe('2->3');
+  ))).toBe('3->4');
   await expect(losatRawResult.getByRole('button', {
     name: 'Save Raw LOSAT TSV for #3 to #1'
   })).toBeEnabled();
@@ -2971,6 +2967,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
   await expect(sources.nth(0).locator('[data-linear-source-records]')).not.toHaveAttribute('open', '');
+  await expect(page.getByLabel('Arrange linear records in rows')).toBeChecked();
   await expect(page.getByRole('button', { name: 'Move File 1 up' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move File 2 down' })).toBeDisabled();
 
@@ -2985,10 +2982,20 @@ test('@comparison-contract File source order moves multi-record blocks through p
       cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
         [edgeKey, queryIndex, subjectIndex]
       )).sort(([left], [right]) => left.localeCompare(right)),
+      undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
       runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
     };
   });
   expect(before.selectors).toEqual(['UpperA', 'UpperB', 'LowerA', 'LowerB', 'LowerC']);
+  const upperRow = before.rows[before.uids[0]];
+  const lowerRow = before.rows[before.uids[2]];
+  const expectedMovedRows = Object.fromEntries([
+    ...before.uids.slice(2).map((uid) => [uid, upperRow]),
+    ...before.uids.slice(0, 2).map((uid) => [uid, lowerRow])
+  ]);
+  const expectedMovedEdges = before.uids.slice(2).flatMap((queryUid) => (
+    before.uids.slice(0, 2).map((subjectUid) => `${queryUid}->${subjectUid}`)
+  )).sort();
 
   await page.getByRole('button', { name: 'Move File 2 up' }).click();
   await expect(sources.nth(0)).toContainText('lower.gbff');
@@ -3007,6 +3014,8 @@ test('@comparison-contract File source order moves multi-record blocks through p
       cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
         [edgeKey, queryIndex, subjectIndex]
       )).sort(([left], [right]) => left.localeCompare(right)),
+      canonicalComparisonCount: app.files.linearCanonicalComparisons.length,
+      undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
       resultPreserved: app.results[0].content === window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__,
       runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
     };
@@ -3015,14 +3024,27 @@ test('@comparison-contract File source order moves multi-record blocks through p
     selectors: ['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB'],
     groups: [['LowerA', 'LowerB', 'LowerC'], ['UpperA', 'UpperB']],
     domUids: moved.sourceUids,
-    rows: before.rows,
-    edges: before.edges,
+    rows: expectedMovedRows,
+    edges: expectedMovedEdges,
+    canonicalComparisonCount: 0,
+    undoCount: before.undoCount + 1,
     resultPreserved: true,
     runCount: before.runCount
   });
   expect(moved.uids).toEqual([...before.uids.slice(2), ...before.uids.slice(0, 2)]);
   expect(moved.cache.map(([edgeKey]) => edgeKey)).toEqual(before.cache.map(([edgeKey]) => edgeKey));
   expect(moved.cache).not.toEqual(before.cache);
+
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => page.evaluate(() => ({
+    uids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid),
+    rows: Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows.map(({ uid, row }) => [uid, row]))
+  }))).toEqual({ uids: before.uids, rows: before.rows });
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await expect.poll(() => page.evaluate(() => ({
+    uids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid),
+    rows: Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows.map(({ uid, row }) => [uid, row]))
+  }))).toEqual({ uids: moved.uids, rows: expectedMovedRows });
 
   await page.getByRole('button', { name: 'Move File 1 down' }).press('Space');
   await expect(sources.nth(0)).toContainText('upper.gbff');
@@ -3039,16 +3061,24 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await page.screenshot({ path: testInfo.outputPath('file-source-order-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const generated = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
     return {
       selectors: request.records.map((record) => record.selector.value),
-      sourceIds: request.records.map((record) => record.source.resourceId)
+      rows: request.records.map((record) => record.presentation.gridRow),
+      sourceIds: request.records.map((record) => record.source.resourceId),
+      svgRows: [...svg.querySelectorAll('[data-record-row]')].map((group) => ({
+        key: group.getAttribute('data-record-key'),
+        row: Number(group.getAttribute('data-record-row'))
+      }))
     };
   });
   expect(generated.selectors).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+  expect(generated.rows).toEqual([upperRow, upperRow, upperRow, lowerRow, lowerRow]);
+  expect(generated.svgRows.map(({ row }) => row)).toEqual([0, 0, 0, 1, 1]);
   expect(new Set(generated.sourceIds.slice(0, 3)).size).toBe(1);
   expect(new Set(generated.sourceIds.slice(3)).size).toBe(1);
   expect(generated.sourceIds[0]).not.toBe(generated.sourceIds[3]);
@@ -3073,10 +3103,64 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await expect(page.locator('[data-linear-source-card]').nth(0)).toContainText('lower.gbff');
   await expect(page.locator('[data-linear-source-card]').nth(1)).toContainText('upper.gbff');
   expect(await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows
-    .map(({ uid, row }) => [uid, row])))).toEqual(before.rows);
+    .map(({ uid, row }) => [uid, row])))).toEqual(expectedMovedRows);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).records
-    .map((record) => record.selector.value))).toEqual(['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB']);
+  expect(await page.evaluate(() => {
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    return {
+      selectors: request.records.map((record) => record.selector.value),
+      rows: request.records.map((record) => record.presentation.gridRow)
+    };
+  })).toEqual({
+    selectors: ['LowerA', 'LowerB', 'LowerC', 'UpperA', 'UpperB'],
+    rows: [upperRow, upperRow, upperRow, lowerRow, lowerRow]
+  });
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordRow(app.linearSeqs[0].uid, app.linearRecordRows.at(-1).row);
+  });
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
+  await page.evaluate(() => window.__GBDRAW_APP__.setLinearRecordLayoutEnabled(false));
+  await expect(page.getByLabel('Arrange linear records in rows')).not.toBeChecked();
+  await expect(page.locator('[data-linear-source-move-blocked]')).toContainText('Record Layout is custom');
+  await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move File 2 up' })).toBeDisabled();
+
+  const customBefore = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      rows: app.linearRecordRows.map(({ uid, row }) => [uid, row]),
+      comparisonPlan: JSON.stringify(app.linearComparisonPlan),
+      resolvedEdges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey),
+      canonicalComparisons: JSON.stringify(app.files.linearCanonicalComparisons),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )),
+      result: app.results[0].content,
+      history: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  const customAfter = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLinearSource(1, -1);
+    return {
+      uids: app.linearSeqs.map((seq) => seq.uid),
+      rows: app.linearRecordRows.map(({ uid, row }) => [uid, row]),
+      comparisonPlan: JSON.stringify(app.linearComparisonPlan),
+      resolvedEdges: app.linearComparisonResolution.edges.map(({ edgeKey }) => edgeKey),
+      canonicalComparisons: JSON.stringify(app.files.linearCanonicalComparisons),
+      cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
+        [edgeKey, queryIndex, subjectIndex]
+      )),
+      result: app.results[0].content,
+      history: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  });
+  expect(customAfter).toEqual(customBefore);
 });
 
 test('@comparison-contract source order survives pending multi-record discovery', async ({ page }) => {
