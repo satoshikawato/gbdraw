@@ -1497,6 +1497,10 @@
                             <i class="ph ph-warning-circle text-sm mt-0.5"></i>
                             <span>{{ linearReorderNotice }}</span>
                         </div>
+                        <div v-if="linearSourceMoveBlockedReason" data-linear-source-move-blocked class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
+                            <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                            <span>{{ linearSourceMoveBlockedReason }}</span>
+                        </div>
                         <div data-linear-record-list class="min-w-0 space-y-3">
                             <section
                                 v-for="(source, sourceIndex) in linearSourceGroups"
@@ -1514,7 +1518,7 @@
                                             @click="moveLinearSource(sourceIndex, -1)"
                                             :disabled="!canMoveLinearSource(sourceIndex, -1)"
                                             :aria-label="`Move File ${sourceIndex + 1} up`"
-                                            :title="`Move File ${sourceIndex + 1} up`"
+                                            :title="linearSourceMoveBlockedReason || `Move File ${sourceIndex + 1} up`"
                                             data-linear-source-move="up"
                                         >
                                             <i class="ph ph-arrow-up" aria-hidden="true"></i>
@@ -1525,7 +1529,7 @@
                                             @click="moveLinearSource(sourceIndex, 1)"
                                             :disabled="!canMoveLinearSource(sourceIndex, 1)"
                                             :aria-label="`Move File ${sourceIndex + 1} down`"
-                                            :title="`Move File ${sourceIndex + 1} down`"
+                                            :title="linearSourceMoveBlockedReason || `Move File ${sourceIndex + 1} down`"
                                             data-linear-source-move="down"
                                         >
                                             <i class="ph ph-arrow-down" aria-hidden="true"></i>

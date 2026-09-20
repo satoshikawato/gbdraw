@@ -111,6 +111,7 @@ import {
 import {
   linearRecordPositionTokens,
   moveLinearRecordInRow,
+  planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from './linear-record-layout.js';
@@ -3307,7 +3308,10 @@ export const createAppSetup = () => {
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
-  const applyLinearSeqMutation = (items, { preserveLosatCacheInfo = false } = {}) => {
+  const applyLinearSeqMutation = (
+    items,
+    { preserveLosatCacheInfo = false, layoutEntries = linearRecordRows } = {}
+  ) => {
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
@@ -3323,7 +3327,7 @@ export const createAppSetup = () => {
     pendingLinearMetadataInference.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearMetadataInference.delete(uid);
     });
-    const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
+    const nextRows = reconcileLinearRecordLayout(linearSeqs, layoutEntries);
     linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
     replaceLinearComparisonPlan(
       reconcileLinearComparisonPlan(linearComparisonPlan, linearSeqs),
@@ -3381,19 +3385,31 @@ export const createAppSetup = () => {
     if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
 
-  const canMoveLinearSource = (sourceIndex, direction) => {
-    const index = sourceIndex;
-    const offset = direction;
-    const target = index + offset;
-    return Number.isInteger(index) && [-1, 1].includes(offset)
-      && index >= 0 && index < linearSourceGroups.value.length
-      && target >= 0 && target < linearSourceGroups.value.length;
-  };
+  const linearSourceMovePlan = (sourceIndex, direction) => planLinearSourceRowMove({
+    sourceGroups: linearSourceGroups.value,
+    entries: linearRecordRows,
+    sourceIndex,
+    direction
+  });
+  const linearSourceMoveBlockedReason = computed(() => (
+    linearSourceMovePlan(0, 1).reason === 'custom-layout'
+      ? 'File order is unavailable because Record Layout is custom. Use Advanced comparison and layout → Record Layout to restore one row per File with no shared rows.'
+      : ''
+  ));
+  const canMoveLinearSource = (sourceIndex, direction) => (
+    linearSourceMovePlan(sourceIndex, direction).allowed
+  );
 
   const moveLinearSource = (sourceIndex, direction) => {
-    if (!canMoveLinearSource(sourceIndex, direction)) return;
+    const plan = linearSourceMovePlan(sourceIndex, direction);
+    if (!plan.allowed) return;
     const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
-    applyLinearSeqMutation(next, { preserveLosatCacheInfo: true });
+    return history.runUndoable('Move File', () => {
+      applyLinearSeqMutation(next, {
+        preserveLosatCacheInfo: true,
+        layoutEntries: plan.rows
+      });
+    });
   };
 
   const resetLinearRecordDefinition = (seq) => {
@@ -3559,6 +3575,7 @@ export const createAppSetup = () => {
     addLinearSeq,
     removeLastLinearSeq,
     setLinearSeqPrimaryFile,
+    linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
     getLinearSourceDefaultDefinition,
