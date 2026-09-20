@@ -1,11 +1,13 @@
 import { getSessionResourceSource } from '../services/file-content-cache.js';
+import { depthFileSlotsFromValue } from './depth-track-state.js';
+
+const sourceFileIdentity = (file) => getSessionResourceSource(file)?.descriptor || file;
 
 export const groupLinearSourceRecords = (sequences) => {
   const groups = [];
   const bySource = new Map();
-  const identity = (file) => getSessionResourceSource(file)?.descriptor || file;
   sequences.forEach((sequence, index) => {
-    const files = [sequence.gb, sequence.gff, sequence.fasta].map(identity);
+    const files = [sequence.gb, sequence.gff, sequence.fasta].map(sourceFileIdentity);
     const key = files.find(Boolean) || sequence.uid;
     const candidates = bySource.get(key) || [];
     let group = candidates.find((entry) => entry.files.every((file, position) => file === files[position]));
@@ -18,6 +20,27 @@ export const groupLinearSourceRecords = (sequences) => {
     group.records.push({ sequence, index });
   });
   return groups;
+};
+
+export const linearSourceDepthStatus = (source, trackIndex) => {
+  const index = Number(trackIndex);
+  const records = Array.isArray(source?.records) ? source.records : [];
+  const files = records.map(({ sequence }) => (
+    Number.isInteger(index) && index >= 0
+      ? depthFileSlotsFromValue(sequence?.depth)[index] || null
+      : null
+  ));
+  const selected = files.filter(Boolean);
+  const commonIdentity = selected.length === records.length && selected.length > 0
+    ? sourceFileIdentity(selected[0])
+    : null;
+  const common = commonIdentity && selected.every((file) => sourceFileIdentity(file) === commonIdentity);
+  return {
+    state: selected.length === 0 ? 'empty' : common ? 'common' : 'mixed',
+    file: common ? selected[0] : null,
+    selectedCount: selected.length,
+    recordCount: records.length
+  };
 };
 
 export const moveLinearSourceGroup = (sequences, groupIndex, direction) => {
