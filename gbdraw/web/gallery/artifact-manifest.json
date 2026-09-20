@@ -33,16 +33,16 @@
       "sha256": "43a8908974a43eadf7e4d597092c02c46f5bdc0591317455273e1a1390afc735"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
-      "bytes": 15517913,
-      "sha256": "0ae9fa62679dcb6fb6521656566bd4b18329d5bae7a1983c4f56fc2bc892daa6"
+      "bytes": 15519012,
+      "sha256": "fdc527dea337657395ea3036046a734fdbd1269fcc059c2c16d13392767e54fd"
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
-      "bytes": 18567905,
-      "sha256": "e20cc89065cf270b51169b14a327a0517d6b79e201f49c2f407c2361dcb1567d"
+      "bytes": 18568994,
+      "sha256": "ec3c698ac822857878d3f69fc4feb99a3cbe5fd38dc9f3d9d379530eb50bfcc7"
     },
     "gallery/examples/lambda_basic_linear.svg": {
-      "bytes": 762646,
-      "sha256": "c445d24148501b8deb62eaa666d5832c501ed1235825fd20673aa2baa3e1a053"
+      "bytes": 762612,
+      "sha256": "e9cdf143dc15a46d7393799810944cf31cd9d4b57e47149ed29065819b2f21bc"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
       "bytes": 7108949,
@@ -73,16 +73,16 @@
       "sha256": "11009dd28a1d98afa79e8b5d22b94217f61d9f53cb6353010095c983c3a9d90e"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
-      "bytes": 11408728,
-      "sha256": "8d4069026221d85c3ca4cac5bfae42f13d3ab38e7f01ae8e458de1be38a33ea7"
+      "bytes": 11415221,
+      "sha256": "685364ea58e072cca360cd6f1ed72257cefe0a614f1247cdfd139e951869f6d3"
     },
     "gallery/sessions/hepatoplasmataceae_orthogroup.gbdraw-session.json.gz": {
-      "bytes": 14984099,
-      "sha256": "fabd91df737270d2ffaf24030e3489658f016f305108bd399ce3bbd220c81399"
+      "bytes": 14988230,
+      "sha256": "5a562714748fa63b5c212a65824269023496f652afa4c74e63e16ee285a123fb"
     },
     "gallery/sessions/lambda_basic_linear.gbdraw-session.json": {
-      "bytes": 748379,
-      "sha256": "ee7274558d89a560b70a2032c16666186f794887c723f224672da25eb6bcd350"
+      "bytes": 748614,
+      "sha256": "eaab81afefe9b009a52fa29533b760cb3db749415896df6ac846dec6d1598333"
     },
     "gallery/sessions/majanivirus_orthogroup.gbdraw-session.json.gz": {
       "bytes": 6275729,
@@ -113,16 +113,16 @@
       "sha256": "40fd3a5bb72ab266dececc2787e7c9add6fc7a9639dc764920abbbc8fba59ba4"
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
-      "bytes": 6251210,
-      "sha256": "ccf4a5d4ebe91dae024e717b8a78295f61f9ad6a4da2f80f0ce939ad1386c1fb"
+      "bytes": 6251201,
+      "sha256": "f122fbe03e6517e9db209e99ae39c730ae844dd8360cf5dfaaff0eb96e7e49a6"
     },
     "gallery/sources/hepatoplasmataceae_orthogroup.svg": {
-      "bytes": 8370146,
-      "sha256": "2cb47da12d461476bf55e65ddbc97b5eba3437baa1edc466f40327e3822fc676"
+      "bytes": 8370137,
+      "sha256": "3fa1259d09840fea4e1462fbedf41ffdf08ae57d6b4c92e3ebb08fdc8ac7f1be"
     },
     "gallery/sources/lambda_basic_linear.svg": {
-      "bytes": 66122,
-      "sha256": "b7aa06a2dcc305e84bdf8383a778e72f0c11f50d8df9df61b9bed6596eb4f782"
+      "bytes": 66088,
+      "sha256": "7df6cc4717f558719d4e9e4e86a30f1b6ded203b1660dcacbf9c66d1e8445aae"
     },
     "gallery/sources/majanivirus_orthogroup.svg": {
       "bytes": 1894029,
@@ -153,16 +153,16 @@
       "sha256": "7ffeb8878c0aee4fc66c05c4d53b6a5a07182bcac7b6dd95ddfc4952074aebbc"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
-      "bytes": 20470,
-      "sha256": "5aa2ca1840e8e01a434ecdef17d309a13ca45ca4cde48c5758f3677282cf17a5"
+      "bytes": 20402,
+      "sha256": "590421107d04feb8f753c47a5e2c16d900879fdc547c93cfd7f06c20fa6f5616"
     },
     "gallery/thumbnails/hepatoplasmataceae_orthogroup.webp": {
-      "bytes": 22506,
-      "sha256": "f558652ddff9ec62f112197ac12365b4f678ff8d3fcd8eafdfcd7388362e652f"
+      "bytes": 22384,
+      "sha256": "e6b4fced24656fe968a308ae761ca12ee2094014c45792fa1bf3d5aaaef68d72"
     },
     "gallery/thumbnails/lambda_basic_linear.webp": {
-      "bytes": 22532,
-      "sha256": "8d71fb7e59136768bd964ab894f64b3e437d580c619ea49f86c88cc5f34f8cfb"
+      "bytes": 22414,
+      "sha256": "9ffeaa8a41c181d02fd950f99960f5c948a17e7d3364b13cd5429a8f83277b51"
     },
     "gallery/thumbnails/majanivirus_orthogroup.webp": {
       "bytes": 15862,

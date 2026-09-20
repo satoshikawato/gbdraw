@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import gc
 import gzip
 import hashlib
@@ -32,8 +34,17 @@ from gbdraw.session_io import (  # noqa: E402
     load_session,
     session_mode,
     validate_session,
+    write_session_json,
 )
-from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
+from gbdraw.analysis.protein_colinearity import (  # noqa: E402
+    OrthogroupGraphResult,
+    OrthogroupResult,
+)
+from gbdraw.session_request_codec import (  # noqa: E402
+    CANONICAL_REQUEST_SCHEMA,
+    decode_canonical_typed_resource,
+    encode_canonical_typed_resource,
+)
 from gbdraw.tracks.circular import (  # noqa: E402
     CircularTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -925,6 +936,82 @@ def _validate_staged_gallery_session(
     _validate_session_interactive_orthogroups(example, session)
 
 
+def _canonicalize_orthogroup_resources(session: dict[str, Any]) -> int:
+    """Rewrite referenced orthogroup payloads through the current typed codec."""
+
+    render_request = session.get("renderRequest")
+    resources = session.get("resources")
+    if not isinstance(render_request, Mapping) or not isinstance(resources, Mapping):
+        raise ValueError("Gallery session requires renderRequest and resources objects")
+    comparisons = render_request.get("comparisons", [])
+    if not isinstance(comparisons, list):
+        raise ValueError("Gallery renderRequest.comparisons must be an array")
+
+    rewritten = 0
+    seen_resource_ids: set[str] = set()
+    for index, comparison in enumerate(comparisons):
+        if not isinstance(comparison, Mapping):
+            raise ValueError(
+                f"Gallery renderRequest.comparisons[{index}] must be an object"
+            )
+        if comparison.get("kind") != "orthogroupResult":
+            continue
+        resource_id = comparison.get("resourceId")
+        if not isinstance(resource_id, str) or not resource_id:
+            raise ValueError(
+                f"Gallery renderRequest.comparisons[{index}] has no resourceId"
+            )
+        if resource_id in seen_resource_ids:
+            continue
+        seen_resource_ids.add(resource_id)
+        resource = resources.get(resource_id)
+        if (
+            not isinstance(resource, dict)
+            or resource.get("kind") != "orthogroup-result"
+            or resource.get("encoding") != "base64"
+            or not isinstance(resource.get("data"), str)
+        ):
+            raise ValueError(
+                f"Gallery orthogroup resource {resource_id!r} is not canonical base64"
+            )
+        try:
+            published = base64.b64decode(resource["data"], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(
+                f"Gallery orthogroup resource {resource_id!r} has invalid base64"
+            ) from exc
+        path = f"renderRequest.comparisons[{index}]"
+        decoded = decode_canonical_typed_resource(
+            published,
+            value_kind="orthogroupResult",
+            expected=OrthogroupResult | OrthogroupGraphResult,
+            path=path,
+        )
+        canonical = encode_canonical_typed_resource(
+            "orthogroupResult",
+            decoded,
+        )
+        verified = decode_canonical_typed_resource(
+            canonical,
+            value_kind="orthogroupResult",
+            expected=OrthogroupResult | OrthogroupGraphResult,
+            path=f"{path} canonical migration",
+        )
+        if verified != decoded or (
+            encode_canonical_typed_resource("orthogroupResult", verified)
+            != canonical
+        ):
+            raise ValueError(
+                f"Gallery orthogroup resource {resource_id!r} did not round-trip"
+            )
+        if canonical == published:
+            continue
+        resource["size"] = len(canonical)
+        resource["data"] = base64.b64encode(canonical).decode("ascii")
+        rewritten += 1
+    return rewritten
+
+
 def _refresh_one_session(
     session_path: Path,
     *,
@@ -934,8 +1021,6 @@ def _refresh_one_session(
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
-    del session
-    gc.collect()
 
     env = os.environ.copy()
     env["PYTHONPATH"] = (
@@ -948,9 +1033,17 @@ def _refresh_one_session(
         prepared_path = staging_root / f"prepared-{session_path.name}"
         replayed_path = staging_root / f"replayed-{session_path.name}"
         finalized_path = staging_root / session_path.name
+        publication_input_path = session_path
+        if _canonicalize_orthogroup_resources(session):
+            publication_input_path = (
+                staging_root / f"canonicalized-{session_path.name}"
+            )
+            write_session_json(publication_input_path, session)
+        del session
+        gc.collect()
         _run_publication_bridge(
             "prepare",
-            session_path,
+            publication_input_path,
             prepared_path,
             env=env,
         )
