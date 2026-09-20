@@ -1071,10 +1071,14 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webContracts, /-m "browser and not slow"/);
   assert.doesNotMatch(webPrSmoke, /Run fast Web JavaScript contracts|python -m pytest/);
   assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
+  assert.match(
+    webPrSmoke,
+    /Prepare browser wheel[\s\S]+Run Playwright PR smoke[\s\S]+Verify Gallery first-Generate parity[\s\S]+npm run test:web:gallery-publication/
+  );
   assert.match(webPrSmoke, /if: failure\(\)[\s\S]+path: test-results\//);
   assert.doesNotMatch(
     webPrSmoke,
-    /functional-full|perf-smoke|losat-cache|gallery-publication|Vibrio/
+    /functional-full|perf-smoke|losat-cache|Vibrio/
   );
 
   const gate = workflowJob('pr-gate');
@@ -1289,6 +1293,10 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
   assert.match(browser, /requiredJobs, 'browser'/);
   assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(browser, /npm run test:web:gallery-publication/);
+  assert.equal(
+    [...TEST_WORKFLOW.matchAll(/npm run test:web:gallery-publication/g)].length,
+    1
+  );
   assert.doesNotMatch(browser, /matrix|Vibrio|test:web:vibrio-generate/);
   assert.equal(
     PACKAGE_SCRIPTS['test:web:vibrio-generate'],

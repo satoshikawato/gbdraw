@@ -425,6 +425,9 @@ jobs:
       - name: Run Playwright PR smoke
         run: npm run test:web:pr-smoke
 
+      - name: Verify Gallery first-Generate parity
+        run: npm run test:web:gallery-publication
+
       - name: Upload Playwright PR smoke traces
         if: failure()
         uses: actions/upload-artifact@v4
