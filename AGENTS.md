@@ -57,6 +57,9 @@ python -m build
 - Allow at least 30 minutes for test commands before treating them as timed
   out, and monitor long runs incrementally. Keep shorter test-owned timeout
   assertions unchanged unless the task explicitly requires changing them.
+- When monitoring CI or other remote status, poll no more often than once every
+  five minutes unless the user explicitly requests a different interval. Do not
+  use 10-second polling loops.
 
 ## Browser / Playwright Checks
 
