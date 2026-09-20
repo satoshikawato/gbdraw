@@ -1393,6 +1393,7 @@ test('steady-state topology removes legacy main producers without changing final
   assert.deepEqual(WORKFLOW_NAMES, [
     'deploy_web.yml',
     'gallery-publication.yml',
+    'losat-distribution.yml',
     'release.yml',
     'test.yml',
     'web-base-policy.yml'
