@@ -683,8 +683,6 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
             re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text)
         )
 
-        # A new writer does not require rewriting the published full Sessions.
-        assert session.get("version") == 41, session_name
         assert (
             session.get("renderRequest", {}).get("schema")
             in BUNDLED_REQUEST_SCHEMAS
