@@ -13,8 +13,6 @@ const normalizeRecordLength = (value) => {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 };
 
-const escapeRegex = (string) => String(string ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 const NON_ORGANISM_PATTERN = /^(?:synthetic construct|artificial sequence|unidentified(?: organism)?|unknown(?: organism)?|vector|(?:unidentified )?cloning vector|expression vector)$/i;
 
 // This fast path mirrors gbdraw/core/record_metadata.py, which owns the same
@@ -52,64 +50,8 @@ export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}
   return rest ? `${speciesPart} ${rest}`.trim() : speciesPart.trim();
 };
 
-export const formatInferredSubtitle = (
-  { definition = '', plasmid = '', chromosome = '', organelle = '', organism = '' } = {}
-) => {
-  // Replicon precedence and spelling follow infer_record_source_metadata: a
-  // chromosome gains the "Chromosome " prefix and a plasmid keeps its qualifier
-  // verbatim, because the rendered replicon line reads the same value.
-  const rawChromosome = String(chromosome || '').trim();
-  const rawPlasmid = String(plasmid || '').trim();
-  if (rawChromosome) return `Chromosome ${rawChromosome}`;
-  if (rawPlasmid) return rawPlasmid;
-
-  const rawOrganelle = String(organelle || '').trim();
-  if (rawOrganelle) {
-    return rawOrganelle.charAt(0).toUpperCase() + rawOrganelle.slice(1).toLowerCase();
-  }
-
-  const rawDef = String(definition || '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
-  if (!rawDef) return '';
-
-  if (/plasmid\b/i.test(rawDef)) {
-    const plasmidMatch = rawDef.match(/(?:plasmid\s+([A-Za-z0-9_-]+)|\b(p[A-Za-z0-9_-]+)\b)/i);
-    if (plasmidMatch) {
-      const pName = (plasmidMatch[1] || plasmidMatch[2] || '').trim();
-      return pName.toLowerCase().startsWith('plasmid') ? pName : `Plasmid ${pName}`;
-    }
-  }
-
-  if (/complete\s+genome/i.test(rawDef)) {
-    if (/mitochondri/i.test(rawDef)) return 'Mitochondrion, complete genome';
-    if (/chloroplast/i.test(rawDef)) return 'Chloroplast, complete genome';
-    return 'Complete genome';
-  }
-  if (/complete\s+sequence/i.test(rawDef)) {
-    return 'Complete sequence';
-  }
-
-  if (organism && !NON_ORGANISM_PATTERN.test(organism)) {
-    const orgPrefix = new RegExp(`^${escapeRegex(organism)}[,\\s]*`, 'i');
-    const stripped = rawDef.replace(orgPrefix, '').replace(/^(?:DNA|genomic DNA|cDNA)[,\s]*/i, '').trim();
-    if (/(?:gene cluster|biosynthetic gene cluster|cluster|operon)/i.test(stripped)) {
-      return stripped.charAt(0).toUpperCase() + stripped.slice(1);
-    }
-  }
-
-  const clusterMatch = rawDef.match(/([A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)*\s+(?:gene cluster|biosynthetic gene cluster|cluster|operon))/i);
-  if (clusterMatch) {
-    const res = clusterMatch[1].trim();
-    return res.charAt(0).toUpperCase() + res.slice(1);
-  }
-
-  return '';
-};
-
 export const extractGenBankMetadata = (chunk) => {
   const text = String(chunk || '');
-  const defMatch = text.match(/^DEFINITION\s+([\s\S]*?)(?=^[A-Z]|\/\/)/m);
-  const definition = defMatch ? defMatch[1].replace(/\r?\n\s+/g, ' ').trim() : '';
-
   const sourceMatch = text.match(/^ {5}source\s+[\s\S]*?(?=^ {5}[a-z]|\/\/)/mi);
   const sourceBlock = sourceMatch ? sourceMatch[0] : text;
 
@@ -128,9 +70,6 @@ export const extractGenBankMetadata = (chunk) => {
 
   const strain = extractQualifier('strain', sourceBlock);
   const isolate = extractQualifier('isolate', sourceBlock);
-  const plasmid = extractQualifier('plasmid', sourceBlock);
-  const chromosome = extractQualifier('chromosome', sourceBlock);
-  const organelle = extractQualifier('organelle', sourceBlock);
 
   // infer_record_source_metadata reads /isolate before /strain.
   const effectiveStrain = isolate || strain || '';
@@ -138,27 +77,7 @@ export const extractGenBankMetadata = (chunk) => {
     organism,
     strain: effectiveStrain
   });
-  const inferredSubtitle = formatInferredSubtitle({
-    definition,
-    plasmid,
-    chromosome,
-    organelle,
-    organism
-  });
-
-  return {
-    organism,
-    strain: effectiveStrain,
-    plasmid,
-    chromosome,
-    organelle,
-    definition,
-    inferredDefinition,
-    inferredSubtitle,
-    // A replicon qualifier names this record alone, so the subtitle may seed the
-    // record. A subtitle read from the shared DEFINITION line may not.
-    inferredSubtitleFromReplicon: Boolean(chromosome || plasmid || organelle)
-  };
+  return { organism, strain: effectiveStrain, inferredDefinition };
 };
 
 export const normalizeSequenceRecords = (payload) => {
@@ -182,14 +101,9 @@ export const normalizeSequenceRecords = (payload) => {
     const organism = String(entry?.organism ?? '').trim();
     const strain = String(entry?.strain ?? '').trim();
     const inferredDefinition = String(entry?.inferredDefinition ?? entry?.inferred_definition ?? '').trim();
-    const inferredSubtitle = String(entry?.inferredSubtitle ?? entry?.inferred_subtitle ?? '').trim();
     if (organism) record.organism = organism;
     if (strain) record.strain = strain;
     if (inferredDefinition) record.inferredDefinition = inferredDefinition;
-    if (inferredSubtitle) record.inferredSubtitle = inferredSubtitle;
-    if (entry?.inferredSubtitleFromReplicon ?? entry?.inferred_subtitle_from_replicon) {
-      record.inferredSubtitleFromReplicon = true;
-    }
     records.push(record);
   });
 
@@ -213,9 +127,7 @@ const parseGenBankRecordText = (text) => {
         topology: chunk.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b[^\r\n]*\s(circular|linear)(?:\s|$)/m)?.[1] || 'unknown',
         organism: metadata.organism,
         strain: metadata.strain,
-        inferredDefinition: metadata.inferredDefinition,
-        inferredSubtitle: metadata.inferredSubtitle,
-        inferredSubtitleFromReplicon: metadata.inferredSubtitleFromReplicon
+        inferredDefinition: metadata.inferredDefinition
       };
     })
     .filter(Boolean)

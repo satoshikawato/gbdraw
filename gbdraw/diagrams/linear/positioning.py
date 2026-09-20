@@ -31,18 +31,9 @@ def position_linear_track_group(
     return group
 
 
-def position_record_definition_group(
-    record_definition_group: Group, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator
-) -> Group:
-    """Places the record definition group in the correct position on the canvas."""
-    record_definition_group.translate(canvas_config.horizontal_offset - offset_x, offset)
-    return record_definition_group
-
-
 __all__ = [
     "position_linear_track_group",
     "position_record_group",
-    "position_record_definition_group",
 ]
 
 

@@ -942,14 +942,10 @@ export const createAppSetup = () => {
     if (source.region_record_id || source.region_start != null || source.region_end != null) return;
     const row = linearRecordRowFor(uid, index + 1);
     const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => {
-      const discoveredRecord = records[recordIndex];
       return createLinearSeq({
         ...source,
         uid: recordIndex === 0 ? uid : undefined,
-        region_record_id: record.value,
-        ...(discoveredRecord?.inferredSubtitleFromReplicon && discoveredRecord?.inferredSubtitle ? {
-          record_subtitle: discoveredRecord.inferredSubtitle
-        } : {})
+        region_record_id: record.value
       });
     });
     applyLinearSeqMutation([

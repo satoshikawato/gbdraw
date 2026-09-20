@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 
 import {
   formatInferredOrganismStrain,
-  formatInferredSubtitle,
   extractGenBankMetadata,
   parseSequenceRecordText
 } from '../../gbdraw/web/js/app/record-discovery.js';
@@ -26,23 +25,7 @@ test('formatInferredOrganismStrain matches the shared inference table', () => {
   }
 });
 
-test('formatInferredSubtitle matches the shared inference table', () => {
-  for (const testCase of CASES.subtitle) {
-    assert.equal(
-      formatInferredSubtitle({
-        definition: testCase.description,
-        chromosome: testCase.chromosome,
-        plasmid: testCase.plasmid,
-        organelle: testCase.organelle,
-        organism: testCase.organism
-      }),
-      testCase.expected,
-      testCase.name
-    );
-  }
-});
-
-test('extractGenBankMetadata parses organism, strain, and definition from a text chunk', () => {
+test('extractGenBankMetadata parses organism and strain without automatic subtitles', () => {
   const sampleChunk = `LOCUS       NC_002695            5498578 bp    DNA     circular CON 12-FEB-2021
 DEFINITION  Escherichia coli O157:H7 str. Sakai DNA, complete genome.
 ACCESSION   NC_002695
@@ -63,9 +46,8 @@ FEATURES             Location/Qualifiers
   assert.equal(meta.organism, 'Escherichia coli O157:H7 str. Sakai');
   assert.equal(meta.strain, 'Sakai');
   assert.equal(meta.inferredDefinition, '<i>Escherichia coli</i> O157:H7 str. Sakai');
-  assert.equal(meta.inferredSubtitle, 'Complete genome');
-  // Read from the shared DEFINITION line, so it must not seed each record.
-  assert.equal(meta.inferredSubtitleFromReplicon, false);
+  assert.equal(Object.hasOwn(meta, 'inferredSubtitle'), false);
+  assert.equal(Object.hasOwn(meta, 'inferredSubtitleFromReplicon'), false);
 });
 
 test('extractGenBankMetadata reads /isolate ahead of /strain, like infer_record_source_metadata', () => {
@@ -105,10 +87,10 @@ FEATURES             Location/Qualifiers
   const records = parseSequenceRecordText(multiRecordGenBank, 'genbank');
   assert.equal(records.length, 2);
   assert.equal(records[0].inferredDefinition, '<i>Escherichia coli</i> K-12');
-  assert.equal(records[0].inferredSubtitle, 'Complete genome');
-  assert.equal(records[0].inferredSubtitleFromReplicon, undefined);
+
   assert.equal(records[1].inferredDefinition, '<i>Escherichia coli</i> K-12');
-  // The /plasmid qualifier names this record alone, so it may seed the record.
-  assert.equal(records[1].inferredSubtitle, 'pTEST');
-  assert.equal(records[1].inferredSubtitleFromReplicon, true);
+  for (const record of records) {
+    assert.equal(Object.hasOwn(record, 'inferredSubtitle'), false);
+    assert.equal(Object.hasOwn(record, 'inferredSubtitleFromReplicon'), false);
+  }
 });

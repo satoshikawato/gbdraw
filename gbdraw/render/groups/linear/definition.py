@@ -11,7 +11,7 @@ from svgwrite.container import Group
 from svgwrite.text import Text, TSpan
 
 from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ....core.record_metadata import infer_record_source_metadata
+from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.text import (
     calculate_bbox_dimensions,
     calculate_svg_bbox_dimensions,
@@ -196,7 +196,7 @@ class DefinitionGroup:
         ).strip()
 
         metadata = infer_record_source_metadata(self.record)
-        self.replicon_label = str(metadata.replicon or "").strip()
+        self.replicon_label = format_replicon_label(metadata)
         self.accession_label = self.track_id
 
         self.record_length: int = len(self.record.seq)

@@ -11,7 +11,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.core.record_metadata import (
     RecordSourceMetadata,
     format_inferred_definition,
-    format_inferred_subtitle,
+    format_replicon_label,
     infer_record_source_metadata,
 )
 
@@ -36,32 +36,22 @@ def test_format_inferred_definition_matches_shared_cases(case: dict[str, str]) -
     assert format_inferred_definition(meta) == case["expected"]
 
 
-@pytest.mark.parametrize("case", _CASES["subtitle"], ids=lambda case: case["name"])
-def test_format_inferred_subtitle_matches_shared_cases(case: dict[str, str]) -> None:
-    meta = RecordSourceMetadata(
-        organism=case["organism"],
-        strain="",
-        replicon=case["replicon"] or None,
-        organelle=case["organelle"] or None,
-    )
-    assert format_inferred_subtitle(meta, case["description"]) == case["expected"]
-
-
-@pytest.mark.parametrize(
-    "case",
-    [case for case in _CASES["subtitle"] if case["chromosome"] or case["plasmid"]],
-    ids=lambda case: case["name"],
-)
-def test_shared_cases_agree_with_inferred_replicon(case: dict[str, str]) -> None:
-    """The fixture's replicon must be what the qualifiers actually produce."""
-    qualifiers = {
-        key: [case[key]]
-        for key in ("chromosome", "plasmid")
-        if case[key]
-    }
-    record = SeqRecord(Seq("ATGC"), id="test")
+@pytest.mark.parametrize("qualifiers,expected", [
+    ({"chromosome": ["1"], "plasmid": ["p1"], "organelle": ["chloroplast"]}, "Chromosome 1"),
+    ({"plasmid": ["p1"], "organelle": ["mitochondrion"]}, "p1"),
+    ({"organelle": ["mitochondrion"]}, "Mitochondrion"),
+    ({"organelle": ["plastid:chloroplast"]}, "Plastid:chloroplast"),
+    ({}, ""),
+])
+def test_replicon_label_uses_source_qualifiers(qualifiers: dict, expected: str) -> None:
+    record = SeqRecord(Seq("ATGC"), id="test", description="plasmid pDescription, complete genome")
     record.features.append(SeqFeature(SimpleLocation(0, 4), type="source", qualifiers=qualifiers))
-    assert infer_record_source_metadata(record).replicon == case["replicon"]
+    metadata = infer_record_source_metadata(record)
+    assert format_replicon_label(metadata) == expected
+    # Circular consumes these distinct fields; formatting a Linear label cannot mutate them.
+    assert metadata.organelle == qualifiers.get("organelle", [None])[0]
+    if not qualifiers.get("chromosome") and not qualifiers.get("plasmid"):
+        assert metadata.replicon is None
 
 
 def test_infer_record_source_metadata():

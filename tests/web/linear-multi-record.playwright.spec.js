@@ -2,19 +2,20 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { createHash } = require('node:crypto');
 const { openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
 test.describe.configure({ retries: 0 });
 
-const makeComparisonGenbank = (recordId, base = 'atg') => {
-  const sequence = base.repeat(100);
+const makeComparisonGenbank = (recordId, base = 'atg', repeats = 100) => {
+  const sequence = base.repeat(repeats);
   const origin = sequence.match(/.{1,60}/g).map((chunk, index) => {
     const groups = chunk.match(/.{1,10}/g).join(' ');
     return `${String(index * 60 + 1).padStart(9)} ${groups}`;
   }).join('\n');
-  return `LOCUS       ${recordId.padEnd(24)} 300 bp    DNA     linear   UNA 01-JAN-2000
+  return `LOCUS       ${recordId.padEnd(24)} ${sequence.length} bp    DNA     linear   UNA 01-JAN-2000
 DEFINITION  linear comparison browser test.
 ACCESSION   ${recordId}
 VERSION     ${recordId}
@@ -60,6 +61,246 @@ ${origin}
 //
 `;
 };
+
+const makeDefinitionGenbank = (id, qualifiers = '') => makeComparisonGenbank(id)
+  .replace(/FEATURES[^\n]*\n/, `FEATURES             Location/Qualifiers
+     source          1..300
+                     /organism="Aeromonas hydrophila"
+                     /strain="A1"
+${qualifiers}`);
+
+const definitionLines = (page) => page.evaluate(() => {
+  const svg = window.__GBDRAW_APP__.results[0]?.content || '';
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  return [...doc.querySelectorAll('text[data-definition-line-kind]')].map((text) => ({
+    kind: text.dataset.definitionLineKind, text: text.textContent,
+    fill: text.getAttribute('fill'), weight: text.getAttribute('font-weight'),
+    size: Number(text.getAttribute('font-size'))
+  }));
+});
+
+const loadDefinitionSession = async (page, path) => {
+  const loaded = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
+  const dialog = await loaded;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+};
+
+test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  const wheelResponses = [];
+  await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
+    const response = await route.fetch();
+    const body = await response.body();
+    if (route.request().method() === 'GET') {
+      wheelResponses.push({url: response.url(), sha256: createHash('sha256').update(body).digest('hex')});
+    }
+    await route.fulfill({ response, body });
+  });
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+  });
+  const source = makeDefinitionGenbank('P1', '                     /plasmid="p1"\n')
+    + makeDefinitionGenbank('C')
+    + makeDefinitionGenbank('P2', '                     /plasmid="p2"\n')
+    + makeDefinitionGenbank('O', '                     /organelle="plastid:chloroplast"\n');
+  const upload = page.locator('[data-linear-source-card] input[type="file"]').first();
+  await upload.setInputFiles({ name: 'replicons.gb', mimeType: 'text/plain', buffer: Buffer.from(source) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((s) => s.record_subtitle)))
+    .toEqual(['', '', '', '']);
+  await page.locator('summary[aria-label="Title & Legend"]').click();
+  const show = page.getByRole('checkbox', { name: 'Show Replicon', exact: true });
+  for (const enabled of [false, true, false]) {
+    await show.setChecked(enabled);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const lines = await definitionLines(page);
+    expect(lines.filter((line) => line.kind === 'subtitle')).toEqual([]);
+    expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
+      .toEqual(enabled ? ['p1', 'p2', 'Plastid:chloroplast'] : []);
+  }
+  const servedWheels = wheelResponses;
+  expect(servedWheels).toHaveLength(1);
+  const wheelPath = new URL(servedWheels[0].url).pathname.replace(/^\//, '');
+  expect(servedWheels[0].sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
+  await testInfo.attach('browser-wheel.json', { body: JSON.stringify(servedWheels), contentType: 'application/json' });
+  await page.evaluate(() => window.__GBDRAW_APP__.moveLinearSeqDown(0));
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter(line => ['subtitle', 'replicon'].includes(line.kind))).toEqual([]);
+  await page.evaluate(() => window.__GBDRAW_APP__.moveLinearSeqUp(1));
+  await page.locator('[data-linear-source-records] > summary').click();
+  await page.locator('[data-linear-record-options]').first().locator('summary').first().click();
+  await page.getByLabel('Subtitle / title for sequence 1', { exact: true }).fill('p1');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setDefinitionLineStyleColor('replicon', '#ff0000');
+    app.setDefinitionLineStyleWeight('replicon', 'bold');
+    app.setDefinitionLineStyleSize('replicon', '15');
+    app.setDefinitionLineStyleColor('subtitle', '#0000ff');
+    app.setDefinitionLineStyleSize('subtitle', '11');
+  });
+  await show.check();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  const styled = await definitionLines(page);
+  expect(styled.filter((line) => line.kind === 'subtitle')).toMatchObject([
+    { text: 'p1', fill: '#0000ff', size: 11 }
+  ]);
+  expect(styled.filter((line) => line.kind === 'replicon')).toMatchObject([
+    { text: 'p1', fill: '#ff0000', weight: 'bold', size: 15 },
+    { text: 'p2', fill: '#ff0000', weight: 'bold', size: 15 },
+    { text: 'Plastid:chloroplast', fill: '#ff0000', weight: 'bold', size: 15 }
+  ]);
+  // Save a draft with Replicon off while the committed preview still has it on.
+  await show.uncheck();
+  const download = page.waitForEvent('download');
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'replicon-display';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const saved = await (await download).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await loadDefinitionSession(page, saved);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  expect(await definitionLines(page)).toEqual(styled);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.linear_show_replicon)).toBe(false);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('p1');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter((line) => line.kind === 'replicon')).toEqual([]);
+  expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'p1' }]);
+  // An explicit clear returns to the file default, including after another load.
+  await page.getByLabel('Default subtitle for file 1').fill('File default');
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].record_subtitle = '';
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.file_subtitle)))
+    .toEqual(['File default', 'File default', 'File default', 'File default']);
+  const clearedDownload = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const cleared = await (await clearedDownload).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await loadDefinitionSession(page, cleared);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'File default' }]);
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'single.gb', mimeType: 'text/plain', buffer: Buffer.from(makeDefinitionGenbank('P1', '                     /plasmid="p1"\n'))
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(1);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
+});
+
+test('Released Linear session preserves its subtitles and preview until Generate', async ({ page }) => {
+  test.setTimeout(120000);
+  const fixturePath = join(repoRoot, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json');
+  const session = JSON.parse(readFileSync(fixturePath, 'utf8'));
+  const subtitles = session.renderRequest.records.map(record => record.presentation.subtitle);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadDefinitionSession(page, fixturePath);
+  // Normal ingestion removes XML headers and adds editor metadata. Compare all
+  // displayed primitives, text, and geometry instead of serialized SVG bytes.
+  const previews = await page.evaluate(saved => {
+    const snapshot = source => {
+      const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+      const attrs = ['transform', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height',
+        'viewBox', 'points', 'r', 'cx', 'cy', 'fill', 'stroke', 'stroke-width', 'style',
+        'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor'];
+      return [...doc.querySelectorAll('svg,g,path,text,tspan,line,rect,circle,ellipse,polygon,polyline')]
+        .map(el => [el.tagName, el.tagName === 'text' ? el.textContent : '',
+          attrs.map(attr => el.getAttribute(attr))]);
+    };
+    return [snapshot(saved), snapshot(window.__GBDRAW_APP__.results[0].content)];
+  }, session.results[0].content);
+  expect(previews[1]).toEqual(previews[0]);
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.record_subtitle))).toEqual(subtitles);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.adv.linear_show_replicon = false;
+    window.__GBDRAW_APP__.form.keep_definition_left_aligned = false;
+  });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter(line => line.kind === 'subtitle').map(line => line.text)).toEqual(subtitles);
+  expect((await definitionLines(page)).filter(line => line.kind === 'replicon')).toEqual([]);
+});
+
+test('Linear Lock Definition Column applies common centers and left edges after Generate', async ({ page }) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  const source = ['A', 'B', 'C', 'D'].map((id, i) => makeComparisonGenbank(id, 'atg', i < 2 ? 100 : 60)).join('');
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+    await app.setLinearRecordLayoutEnabled(true);
+    app.linearSeqs.forEach((seq, i) => {
+      seq.definition = i < 2 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
+      seq.record_subtitle = i < 2 ? 'A1' : 'B';
+      app.setLinearRecordRow(seq.uid, i < 2 ? 1 : 2);
+    });
+  });
+  const measure = () => page.evaluate(async () => {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-10000px;visibility:hidden';
+    host.innerHTML = window.__GBDRAW_APP__.results[0].content;
+    document.body.append(host);
+    await document.fonts.ready;
+    const svg = host.querySelector('svg');
+    const box = el => {
+      const b = el.getBBox(), m = svg.getCTM().inverse().multiply(el.getCTM());
+      const left = new DOMPoint(b.x, b.y).matrixTransform(m).x;
+      const right = new DOMPoint(b.x + b.width, b.y).matrixTransform(m).x;
+      return { left, right, center: (left + right) / 2 };
+    };
+    const headings = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition-row"]')].map(g => {
+      const index = g.dataset.gbdrawRecordIndex;
+      const axis = svg.querySelector(`g[data-record-index="${index}"]`);
+      const axisX = new DOMPoint(0, 0).matrixTransform(svg.getCTM().inverse().multiply(axis.getCTM())).x;
+      return { ...box(g), axisX, lines: [...g.querySelectorAll('text')].map(box) };
+    });
+    host.remove();
+    return headings;
+  });
+  for (const locked of [false, true]) {
+    await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const headings = await measure();
+    expect(headings).toHaveLength(2);
+    const coord = box => locked ? box.left : box.center;
+    const delta = locked ? 0 : headings[1].axisX - headings[0].axisX;
+    expect(Math.abs(coord(headings[1]) - coord(headings[0]) - delta)).toBeLessThanOrEqual(1);
+    for (const heading of headings) {
+      expect(heading.lines).toHaveLength(2);
+      expect(Math.abs(coord(heading.lines[0]) - coord(heading.lines[1]))).toBeLessThanOrEqual(1);
+      expect(heading.axisX - heading.right).toBeGreaterThanOrEqual(19);
+    }
+  }
+  const beforeSave = await measure();
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-columns'; });
+  const download = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const saved = await (await download).path();
+  await page.reload();
+  await waitForAppShell(page);
+  await loadDefinitionSession(page, saved);
+  expect(await measure()).toEqual(beforeSave);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await measure()).toEqual(beforeSave);
+});
 
 const linearRecordCard = (page, uid) => (
   page.locator(`[data-linear-record-card="${uid}"]`)
@@ -3364,5 +3605,3 @@ FEATURES             Location/Qualifiers
   await expect(recordDefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
   await expect(page.getByText('Using file default').first()).toBeVisible();
 });
-
-
