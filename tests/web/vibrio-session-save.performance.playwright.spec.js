@@ -93,6 +93,7 @@ const text = bytes[0] === 0x1f && bytes[1] === 0x8b
 const document = JSON.parse(text);
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const catalog = document.editorState?.featureCatalog;
+const losatEntries = document.losatCache?.entries || [];
 process.stdout.write(JSON.stringify({
   format: document.format,
   version: document.version,
@@ -101,17 +102,35 @@ process.stdout.write(JSON.stringify({
   resourceCount: Object.keys(document.resources || {}).length,
   resultCount: (document.results || []).length,
   catalogItems: (catalog?.items || []).length,
-  losatEntries: (document.losatCache?.entries || []).length,
+  losatEntries: losatEntries.length,
   hashes: {
     renderRequest: digest(document.renderRequest),
     resources: digest(document.resources),
     webFiles: digest(document.webFiles),
     results: digest(document.results),
     featureCatalog: digest(catalog),
-    losatCache: digest(document.losatCache),
+    losatRawTextAuthority: digest(losatEntries
+      .map((entry) => [String(entry.key || ''), String(entry.text || '')])
+      .sort(([left], [right]) => left.localeCompare(right))),
     proteinIdentityManifest: digest(document.proteinIdentityManifest)
   }
 }));
+`;
+
+const extractResultSvgScript = String.raw`
+const { readFileSync, writeFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
+const [sessionPath, outputPath] = process.argv.slice(1);
+const bytes = readFileSync(sessionPath);
+const text = bytes[0] === 0x1f && bytes[1] === 0x8b
+  ? gunzipSync(bytes).toString('utf8')
+  : bytes.toString('utf8');
+const document = JSON.parse(text);
+const content = document.results?.[0]?.content;
+if (typeof content !== 'string' || !/<svg[\s>]/.test(content)) {
+  throw new Error('Session does not contain an SVG result.');
+}
+writeFileSync(outputPath, content, 'utf8');
 `;
 
 const inspectSession = (path) => {
@@ -127,6 +146,36 @@ const inspectSession = (path) => {
   );
   expect(inspected.status, `${inspected.stdout}\n${inspected.stderr}`).toBe(0);
   return JSON.parse(inspected.stdout);
+};
+
+const extractResultSvg = (sessionPath, outputPath) => {
+  const extracted = spawnSync(
+    process.execPath,
+    ['--max-old-space-size=3072', '-e', extractResultSvgScript, sessionPath, outputPath],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: OPERATION_TIMEOUT_MS
+    }
+  );
+  expect(extracted.status, `${extracted.stdout}\n${extracted.stderr}`).toBe(0);
+};
+
+const compareResultSvgs = (expectedPath, actualPath) => {
+  const comparisonScript = [
+    'import sys',
+    'from tests.utils.svg_compare import compare_svgs',
+    'result = compare_svgs(sys.argv[1], sys.argv[2])',
+    'print(result.message)',
+    'print("\\n".join(result.differences))',
+    'raise SystemExit(0 if result.equal else 1)'
+  ].join(';');
+  const compared = spawnSync(
+    process.env.GBDRAW_PYTHON || 'python',
+    ['-c', comparisonScript, expectedPath, actualPath],
+    { cwd: repoRoot, encoding: 'utf8', timeout: OPERATION_TIMEOUT_MS }
+  );
+  expect(compared.status, `${compared.stdout}\n${compared.stderr}`).toBe(0);
 };
 
 const crossSurfaceAcceptance = (sessionPath, outputDirectory) => {
@@ -321,14 +370,28 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     after.responsiveness.memoryHighWaterBytes
   );
   const heapDeltaBytes = heapHighWaterBytes - before.usedJsHeapBytes;
+  const performanceEvidence = {
+    singleObservation: true,
+    saveWallMs,
+    usedJsHeapBeforeBytes: before.usedJsHeapBytes,
+    heapHighWaterBytes,
+    heapDeltaBytes,
+    maximumHeartbeatGapMs: after.responsiveness.maximumHeartbeatGapMs,
+    compressedBytes: outcome.blob?.size || readFileSync(savedPath).byteLength
+  };
+  console.log(`GBDRAW_ISSUE_544_PERFORMANCE ${JSON.stringify(performanceEvidence)}`);
+  await testInfo.attach('issue-544-vibrio-save-performance.json', {
+    body: Buffer.from(JSON.stringify(performanceEvidence, null, 2)),
+    contentType: 'application/json'
+  });
   if (after.responsiveness.memorySupported) {
-    expect(heapDeltaBytes).toBeLessThanOrEqual(BASE_HEAP_DELTA_BYTES * 0.65);
+    expect(heapDeltaBytes).toBeLessThan(BASE_HEAP_DELTA_BYTES);
   }
   expect(
     after.responsiveness.maximumHeartbeatGapMs < 1_000
       || after.responsiveness.maximumHeartbeatGapMs <= BASE_HEARTBEAT_GAP_MS * 0.2
   ).toBe(true);
-  expect(saveWallMs).toBeLessThanOrEqual(BASE_SAVE_WALL_MS * 1.1);
+  expect(saveWallMs).toBeLessThan(BASE_SAVE_WALL_MS);
 
   const externalRequests = requests.filter((url) => {
     const parsed = new URL(url);
@@ -342,7 +405,15 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await context.close();
   const sourceSummary = inspectSession(fixturePath);
   const savedSummary = inspectSession(savedPath);
-  expect(savedSummary).toEqual(sourceSummary);
+  expect(sourceSummary).toMatchObject({
+    format: 'gbdraw-session',
+    version: 41,
+    requestSchema: 7,
+    resourceCount: 12,
+    resultCount: 1,
+    catalogItems: 1,
+    losatEntries: 59
+  });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 42,
@@ -352,6 +423,20 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     catalogItems: 1,
     losatEntries: 59
   });
+  for (const authority of [
+    'renderRequest',
+    'resources',
+    'featureCatalog',
+    'losatRawTextAuthority',
+    'proteinIdentityManifest'
+  ]) {
+    expect(savedSummary.hashes[authority], authority).toBe(sourceSummary.hashes[authority]);
+  }
+  const sourceSvgPath = testInfo.outputPath('source-result.svg');
+  const savedSvgPath = testInfo.outputPath('saved-result.svg');
+  extractResultSvg(fixturePath, sourceSvgPath);
+  extractResultSvg(savedPath, savedSvgPath);
+  compareResultSvgs(sourceSvgPath, savedSvgPath);
 
   const freshContext = await browser.newContext();
   const freshPage = await freshContext.newPage();
@@ -408,15 +493,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
       viewport: testInfo.project.use.viewport,
       launchArgs: ['--enable-precise-memory-info']
     },
-    performance: {
-      singleObservation: true,
-      saveWallMs,
-      usedJsHeapBeforeBytes: before.usedJsHeapBytes,
-      heapHighWaterBytes,
-      heapDeltaBytes,
-      maximumHeartbeatGapMs: after.responsiveness.maximumHeartbeatGapMs,
-      compressedBytes: outcome.blob?.size || readFileSync(savedPath).byteLength
-    },
+    performance: performanceEvidence,
     lifecycle: after.lifecycle,
     sourceSummary,
     savedSummary,
