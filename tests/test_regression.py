@@ -66,7 +66,7 @@ class TestBasicFunctionality:
 
         assert result.returncode == 1
         assert result.stdout == ""
-        assert "circular, linear, or gui" in result.stderr
+        assert "circular, linear, setup-losat, or gui" in result.stderr
         assert "--help" in result.stderr
 
 
