@@ -377,7 +377,8 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     heapHighWaterBytes,
     heapDeltaBytes,
     maximumHeartbeatGapMs: after.responsiveness.maximumHeartbeatGapMs,
-    compressedBytes: outcome.blob?.size || readFileSync(savedPath).byteLength
+    compressedBytes: outcome.blob?.size || readFileSync(savedPath).byteLength,
+    lifecycle: after.lifecycle
   };
   console.log(`GBDRAW_ISSUE_544_PERFORMANCE ${JSON.stringify(performanceEvidence)}`);
   await testInfo.attach('issue-544-vibrio-save-performance.json', {

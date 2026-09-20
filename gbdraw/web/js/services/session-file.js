@@ -2,6 +2,7 @@ const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
 const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
 const JSON_CHUNK_TARGET_BYTES = 256 * 1024;
+const JSON_CHUNKS_PER_TASK_YIELD = 8;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
 export const confirmLargeSessionBlob = (
@@ -59,6 +60,88 @@ const unsupportedJsonValue = (value) => {
   const type = typeof value;
   return type === 'undefined' || type === 'function' || type === 'symbol';
 };
+
+const boundedJsonUpperBytes = (value, ancestors, container, limit) => {
+  if (value === null) return limit >= 4 ? 4 : -1;
+  const type = typeof value;
+  if (type === 'string') {
+    const upperBytes = 2 + (value.length * 6);
+    return upperBytes <= limit ? upperBytes : -1;
+  }
+  if (type === 'boolean') {
+    const upperBytes = value ? 4 : 5;
+    return upperBytes <= limit ? upperBytes : -1;
+  }
+  if (type === 'number') return limit >= 25 ? 25 : -1;
+  if (type === 'bigint') return -1;
+  if (unsupportedJsonValue(value)) {
+    if (container !== 'array') return 0;
+    return limit >= 4 ? 4 : -1;
+  }
+  if (!Array.isArray(value) && !isPlainObject(value)) return -1;
+  if (ancestors.has(value)) return -1;
+
+  const toJsonDescriptor = Object.getOwnPropertyDescriptor(value, 'toJSON');
+  if (
+    toJsonDescriptor?.get
+    || typeof toJsonDescriptor?.value === 'function'
+    || (!toJsonDescriptor && typeof value.toJSON === 'function')
+  ) return -1;
+
+  ancestors.add(value);
+  try {
+    let upperBytes = 2;
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        if (index > 0) upperBytes += 1;
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor && index in value) return -1;
+        if (descriptor?.get || descriptor?.set) return -1;
+        const itemBytes = boundedJsonUpperBytes(
+          descriptor?.value,
+          ancestors,
+          'array',
+          limit - upperBytes
+        );
+        if (itemBytes < 0) return -1;
+        upperBytes += itemBytes;
+        if (upperBytes > limit) return -1;
+      }
+      return upperBytes;
+    }
+
+    let emitted = 0;
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || descriptor.get || descriptor.set) return -1;
+      const entryBytes = boundedJsonUpperBytes(
+        descriptor.value,
+        ancestors,
+        'object',
+        limit - upperBytes
+      );
+      if (entryBytes < 0) return -1;
+      if (entryBytes === 0) continue;
+      upperBytes += (emitted > 0 ? 1 : 0) + 3 + (key.length * 6) + entryBytes;
+      if (upperBytes > limit) return -1;
+      emitted += 1;
+    }
+    return upperBytes;
+  } finally {
+    ancestors.delete(value);
+  }
+};
+
+const boundedNativeJson = (value, ancestors, container) => (
+  boundedJsonUpperBytes(
+    value,
+    ancestors,
+    container,
+    Math.floor(JSON_CHUNK_TARGET_BYTES / 2)
+  ) >= 0
+    ? JSON.stringify(value)
+    : null
+);
 
 function* quotedJsonFragments(value) {
   yield '"';
@@ -120,6 +203,12 @@ function* jsonFragments(value, ancestors = new Set(), container = 'root') {
     throw new TypeError('Session data contains a cyclic value.');
   }
 
+  const nativeJson = boundedNativeJson(value, ancestors, container);
+  if (nativeJson !== null) {
+    yield nativeJson;
+    return;
+  }
+
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
@@ -155,9 +244,14 @@ const jsonByteStream = (data) => {
   let fragment = '';
   let fragmentOffset = 0;
   let complete = false;
+  let chunksSinceTaskYield = 0;
 
   return new ReadableStream({
-    pull(controller) {
+    async pull(controller) {
+      if (chunksSinceTaskYield >= JSON_CHUNKS_PER_TASK_YIELD) {
+        chunksSinceTaskYield = 0;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       const chunk = new Uint8Array(JSON_CHUNK_TARGET_BYTES);
       let byteLength = 0;
       while (byteLength < JSON_CHUNK_TARGET_BYTES) {
@@ -180,7 +274,10 @@ const jsonByteStream = (data) => {
         fragmentOffset += encoded.read;
         byteLength += encoded.written;
       }
-      if (byteLength > 0) controller.enqueue(chunk.subarray(0, byteLength));
+      if (byteLength > 0) {
+        controller.enqueue(chunk.subarray(0, byteLength));
+        chunksSinceTaskYield += 1;
+      }
       if (complete) controller.close();
     },
     cancel() {

@@ -2419,6 +2419,9 @@ const restoredLosatCacheInfoIdentity = (entry) => {
 
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
+  if (!cacheMap || cacheMap.size === 0) {
+    return { entries: [], validatedManifest: null, manifestValidated: false };
+  }
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   const entries = [];
   const seen = new Set();
@@ -2443,7 +2446,7 @@ const serializeLosatCache = () => {
 
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
-    const cached = cacheMap?.get(entry.key);
+    const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
     entries.push(buildEntry(entry.key, cached, {
       ...entry,
@@ -2453,7 +2456,7 @@ const serializeLosatCache = () => {
     seen.add(entry.key);
   });
 
-  cacheMap?.forEach((value, key) => {
+  cacheMap.forEach((value, key) => {
     if (seen.has(key)) return;
     if (!isCurrentRawLosatCacheEntry(value)) return;
     entries.push(buildEntry(key, value));
@@ -2462,24 +2465,18 @@ const serializeLosatCache = () => {
   // A replaced source can leave earlier bindings in the live cache. Persist
   // only protein evidence that the Session's current manifest can resolve.
   const manifest = state.proteinIdentityManifest.value;
-  const hasProteinEntries = entries.some(
-    (entry) => classifyRawLosatCacheEntry(entry) === 'protein-current'
-  );
-  if (!hasProteinEntries) {
-    return { entries, validatedManifest: null, manifestValidated: false };
-  }
   const identityIndex = buildValidatedProteinIdentityIndex(manifest);
-  if (!identityIndex) {
-    throw new Error('Save Session requires a valid protein identity manifest.');
-  }
   try {
     return {
       entries: entries.filter((entry) => {
         if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
+        if (!identityIndex) {
+          throw new Error('Save Session requires a valid protein identity manifest.');
+        }
         return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
       }),
-      validatedManifest: manifest,
-      manifestValidated: true
+      validatedManifest: identityIndex ? manifest : null,
+      manifestValidated: Boolean(identityIndex)
     };
   } finally {
     releaseValidatedProteinIdentityIndex(identityIndex);

@@ -66,6 +66,20 @@ const immutableBefore = structuredClone(immutablePayload);
 await assertJsonParity(immutablePayload);
 assert.deepEqual(immutablePayload, immutableBefore);
 
+let accessorReads = 0;
+const accessorPayload = { rows: [{ id: 1 }, { id: 2 }] };
+Object.defineProperty(accessorPayload, 'derived', {
+  enumerable: true,
+  get() {
+    accessorReads += 1;
+    return { value: 'read-once' };
+  }
+});
+const accessorExpected = JSON.stringify(accessorPayload);
+accessorReads = 0;
+assert.equal(await compressedJsonText(accessorPayload), accessorExpected);
+assert.equal(accessorReads, 1, 'bounded subtree probing must not invoke accessors twice');
+
 const currentSession = JSON.parse(readFileSync(new URL(
   '../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
   import.meta.url
