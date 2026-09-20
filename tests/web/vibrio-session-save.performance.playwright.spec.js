@@ -487,7 +487,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshContext.close();
 
   const crossSurface = crossSurfaceAcceptance(savedPath, testInfo.outputPath('cross-surface'));
-  expect(crossSurface.reader).toEqual({ version: 42, mode: 'linear', records: 5 });
+  expect(crossSurface.reader).toEqual({ version: 42, mode: 'linear', records: 11 });
   expect(crossSurface.cliExitCode).toBe(0);
   expect(crossSurface.cliSvgBytes).toBeGreaterThan(0);
 
