@@ -1505,8 +1505,32 @@
                                 class="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
                                 :aria-label="`Linear input file ${sourceIndex + 1}`"
                             >
-                                <div class="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
-                                    <span>File {{ sourceIndex + 1 }}</span>
+                                <div class="mb-2 flex min-w-0 items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
+                                    <span class="shrink-0">File {{ sourceIndex + 1 }}</span>
+                                    <div class="flex shrink-0 items-center gap-1">
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary px-1.5 py-0.5 text-xs"
+                                            @click="moveLinearSource(sourceIndex, -1)"
+                                            :disabled="!canMoveLinearSource(sourceIndex, -1)"
+                                            :aria-label="`Move File ${sourceIndex + 1} up`"
+                                            :title="`Move File ${sourceIndex + 1} up`"
+                                            data-linear-source-move="up"
+                                        >
+                                            <i class="ph ph-arrow-up" aria-hidden="true"></i>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-secondary px-1.5 py-0.5 text-xs"
+                                            @click="moveLinearSource(sourceIndex, 1)"
+                                            :disabled="!canMoveLinearSource(sourceIndex, 1)"
+                                            :aria-label="`Move File ${sourceIndex + 1} down`"
+                                            :title="`Move File ${sourceIndex + 1} down`"
+                                            data-linear-source-move="down"
+                                        >
+                                            <i class="ph ph-arrow-down" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
                                 <file-uploader
@@ -1581,26 +1605,8 @@
                                     >Gencode required</span>
                                 </summary>
                                 <div class="min-w-0 space-y-2 pt-2">
-                            <div class="mb-2 flex items-center justify-between gap-2">
+                            <div class="mb-2 flex items-center gap-2">
                                 <div class="text-[10px] font-bold text-white bg-slate-400 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
-                                <div class="flex items-center gap-1 shrink-0">
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary text-[10px] py-0.5 px-1.5"
-                                        @click="moveLinearSeqUp(idx)"
-                                        :disabled="!canMoveLinearSeqUp(idx)"
-                                    >
-                                        Up
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary text-[10px] py-0.5 px-1.5"
-                                        @click="moveLinearSeqDown(idx)"
-                                        :disabled="!canMoveLinearSeqDown(idx)"
-                                    >
-                                        Down
-                                    </button>
-                                </div>
                             </div>
 
                                     <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600">Load record rotation controls</button>

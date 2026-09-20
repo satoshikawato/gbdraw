@@ -20,6 +20,20 @@ export const groupLinearSourceRecords = (sequences) => {
   return groups;
 };
 
+export const moveLinearSourceGroup = (sequences, groupIndex, direction) => {
+  const ordered = Array.from(sequences || []);
+  const index = groupIndex;
+  const offset = direction;
+  if (!Number.isInteger(index) || ![-1, 1].includes(offset)) return ordered;
+
+  const groups = groupLinearSourceRecords(ordered);
+  const target = index + offset;
+  if (index < 0 || index >= groups.length || target < 0 || target >= groups.length) return ordered;
+
+  [groups[index], groups[target]] = [groups[target], groups[index]];
+  return groups.flatMap(({ records }) => records.map(({ sequence }) => sequence));
+};
+
 export const getLinearSourceDefaultDefinition = (source) => {
   return String(source?.records?.[0]?.sequence?.file_definition ?? source?.sequence?.file_definition ?? '');
 };

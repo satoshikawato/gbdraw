@@ -38,10 +38,13 @@ local environment or prepared command-line evidence.
 | Circular | One GenBank/GBFF container or one matched GFF3 + FASTA pair | One Circular result, separate results, or one multi-record canvas |
 | Linear | Ordered GenBank rows or matched GFF3 + FASTA rows | One Linear result with an independent comparison plan |
 
-A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear record card
+A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by **File defaults (applied to all records)** and a closed
-**Record options** disclosure. Uploading a GenBank file fills the file default
+**Record options** disclosure. Use the up and down buttons in a File header to
+move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
+moves together, while the record order inside the source stays unchanged.
+Uploading a GenBank file fills the file default
 **Organism / strain** from its `/organism` and `/strain` qualifiers when that
 field is still empty; the file default **Subtitle / title** is yours to fill,
 because a subtitle names one replicon rather than the whole file. **Add sequence**
@@ -110,7 +113,11 @@ Turn on **Arrange in rows** to assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
-links. An organism or subtitle shared by every record of a row is drawn once
+links. Moving a File does not renumber explicit rows: Record Layout continues to
+own row assignment and movement within a row. With **Arrange in rows** off, the
+File-card order determines the canonical record order; with it on, row assignment
+comes first and the moved record order determines left-to-right placement within
+the same row. An organism or subtitle shared by every record of a row is drawn once
 beside that row, while a value that varies within the row, such as a per-record
 replicon name, is drawn above its own record; a row whose records disagree on
 the organism gets no row-level text.
