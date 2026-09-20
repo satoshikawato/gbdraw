@@ -261,7 +261,7 @@ test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async (
   await expect(page.getByLabel('FASTA File', { exact: true })).toHaveCount(1);
 });
 
-test('Circular enabled options render without an undefined-property warning', { tag: '@pr-smoke' }, async ({ page }) => {
+test('Circular enabled options render without an undefined-property warning', async ({ page }) => {
   const warnings = [];
   page.on('console', (message) => {
     if (message.type() === 'warning' && message.text().includes('enabledOptionClass')) {
@@ -513,7 +513,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
       trackOneSlot
     );
     app.adv.linear_track_slots_axis_index = 2;
-    app.removeLinearDepthTrack(app.linearSeqs[0], 0);
+    app.removeLinearDepthTrack(0);
     const manualSlot = app.adv.linear_track_slots.find((slot) => slot.id === 'custom_depth');
     const { linearTrackAxisIndexForEnabledSlots } = await import(
       new URL('./js/app/linear-track-slots.js', window.location.href).href
@@ -573,6 +573,182 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
   expect(result.afterRemove.emittedAxisIndex).toBe(0);
   expect(result.afterRemove.emittedSlotIds).toEqual(['features', 'depth_2']);
   expect(result.afterRepair).toEqual({ enabled: false, trackIndex: 0, error: null });
+});
+
+test('Linear File-level Depth assignment preserves history, sessions, and regeneration', { tag: '@pr-smoke' }, async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page, { waitForPalette: false });
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.addLinearSeq();
+    app.addLinearSeq();
+    const multiRecordFile = new File(['LOCUS       MULTI\n'], 'multi.gbk', { type: 'text/plain' });
+    const singleRecordFile = new File(['LOCUS       SINGLE\n'], 'single.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = multiRecordFile;
+    app.linearSeqs[1].gb = multiRecordFile;
+    app.linearSeqs[2].gb = singleRecordFile;
+  });
+
+  const firstSource = page.locator('[data-linear-source-depth]').first();
+  const firstSourceRecords = page.locator('[data-linear-source-records]').first();
+  await expect(firstSource).toBeVisible();
+  expect(await firstSourceRecords.evaluate((element) => element.open)).toBe(false);
+  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(1);
+  await expect(page.locator('[data-linear-source-records]').nth(1).getByText('Per-record Depth TSV')).toHaveCount(0);
+
+  await page.getByTestId('linear-source-depth-1-1').setInputFiles({
+    name: 'common.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('position\tdepth\n1\t10\n')
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'common.tsv', null]);
+  await expect(firstSource.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearDepthFile(
+      app.linearSeqs[1],
+      0,
+      new File(['position\tdepth\n1\t20\n'], 'override.tsv', { type: 'text/tab-separated-values' })
+    );
+  });
+  await expect(firstSource.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  await expect(firstSource.getByText(/Choosing a file replaces all record bindings/)).toBeVisible();
+
+  await firstSource.getByRole('button', { name: 'Clear all record bindings' }).click();
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual([null, null, null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'override.tsv', null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.redoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual([null, null, null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'override.tsv', null]);
+
+  await page.getByTestId('linear-source-depth-1-1').setInputFiles({
+    name: 'replacement.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('position\tdepth\n1\t30\n')
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['replacement.tsv', 'replacement.tsv', null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'override.tsv', null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.redoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['replacement.tsv', 'replacement.tsv', null]);
+  // Continue through the real request, Session, Worker, and renderer path.
+  const genbankA = readFileSync(sparseGenbankAPath, 'utf8');
+  const genbankB = readFileSync(sparseGenbankBPath, 'utf8');
+  const depthRows = (recordId, length, value) => Array.from(
+    { length: Math.ceil(length / 1000) },
+    (_, index) => `${recordId}\t${Math.min(length, index * 1000 + 1)}\t${value + (index % 3)}`
+  );
+  const commonDepth = [
+    'reference_name\tposition\tdepth',
+    ...depthRows('BGC0000708', 40579, 10),
+    ...depthRows('BGC0000709', 50466, 30)
+  ].join('\n');
+  const overrideDepth = [
+    'reference_name\tposition\tdepth',
+    ...depthRows('BGC0000709', 50466, 50)
+  ].join('\n');
+
+  const saveAndReload = async (title) => {
+    const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+    await page.evaluate(async (sessionTitle) => {
+      const app = window.__GBDRAW_APP__;
+      app.sessionTitle = sessionTitle;
+      await app.saveSessionWithTitle();
+    }, title);
+    const savedPath = await (await downloadPromise).path();
+    expect(savedPath).toBeTruthy();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppShell(page, { waitForPalette: false });
+    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+    await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+    const dialog = await dialogPromise;
+    expect(dialog.message()).toBe('Session loaded successfully!');
+    await dialog.accept();
+    await expect.poll(() => page.evaluate(() => (
+      window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
+    ))).toBe(2);
+  };
+
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([first, second], 'multi-depth.gbk', {
+      type: 'text/plain', lastModified: 1
+    }));
+    Object.assign(app.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('none');
+  }, { first: genbankA, second: genbankB });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSourceDepthFile(
+      app.linearSourceGroups[0],
+      0,
+      new File([text], 'common.tsv', { type: 'text/tab-separated-values', lastModified: 2 })
+    );
+  }, commonDepth);
+  await expect(page.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
+
+  await saveAndReload('multi-record-common-depth');
+  await expect(page.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (sequence) => sequence.depth?.[0]?.name || null
+  ))).toEqual(['common.tsv', 'common.tsv']);
+
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearDepthFile(
+      app.linearSeqs[1],
+      0,
+      new File([text], 'override.tsv', { type: 'text/tab-separated-values', lastModified: 3 })
+    );
+  }, overrideDepth);
+  await expect(page.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
+
+  await saveAndReload('multi-record-mixed-depth');
+  await expect(page.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (sequence) => sequence.depth?.[0]?.name || null
+  ))).toEqual(['common.tsv', 'override.tsv']);
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
 });
 
 test('Linear custom slot panel and enable state preserve the explicit stack', async ({ page }) => {

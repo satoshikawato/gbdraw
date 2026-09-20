@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   groupLinearSourceRecords,
+  linearSourceDepthStatus,
   moveLinearSourceGroup,
   prepareLosatSourceBatches,
   splitLosatSourceResult
@@ -72,6 +73,47 @@ assert.deepEqual(
   ['other', 'session-1', 'session-2'],
   'records backed by one Session descriptor move as one source'
 );
+
+const sharedDepth = { name: 'depth.tsv' };
+const sameNamedDepth = { name: 'depth.tsv' };
+const depthSourceRecords = [
+  { ...sourceRecord('depth-1', sourceA), depth: [] },
+  { ...sourceRecord('depth-2', sourceA), depth: [] }
+];
+const depthSource = groupLinearSourceRecords(depthSourceRecords)[0];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'empty', file: null, selectedCount: 0, recordCount: 2
+});
+depthSourceRecords[0].depth = [sharedDepth];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'mixed', file: null, selectedCount: 1, recordCount: 2
+});
+depthSourceRecords[1].depth = [sharedDepth];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'common', file: sharedDepth, selectedCount: 2, recordCount: 2
+});
+depthSourceRecords[1].depth = [sameNamedDepth];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'mixed', file: null, selectedCount: 2, recordCount: 2
+}, 'same-named independent Depth uploads remain mixed');
+
+const depthDescriptor = {
+  kind: 'web-file', name: 'saved-depth.tsv', type: 'text/tab-separated-values', encoding: 'base64',
+  data: '', size: 0, lastModified: 0
+};
+const depthSessionTable = adoptCurrentSessionResources({ depth: depthDescriptor });
+depthSourceRecords[0].depth = [createSessionResourceFileView(depthSessionTable, 'depth')];
+depthSourceRecords[1].depth = [createSessionResourceFileView(depthSessionTable, 'depth')];
+assert.equal(linearSourceDepthStatus(depthSource, 0).state, 'common',
+  'views backed by one Session descriptor are one common assignment');
+const distinctDepthSessionTable = adoptCurrentSessionResources({
+  first: depthDescriptor,
+  second: { ...depthDescriptor }
+});
+depthSourceRecords[0].depth = [createSessionResourceFileView(distinctDepthSessionTable, 'first')];
+depthSourceRecords[1].depth = [createSessionResourceFileView(distinctDepthSessionTable, 'second')];
+assert.equal(linearSourceDepthStatus(depthSource, 0).state, 'mixed',
+  'same-named independent Session resources remain mixed');
 
 const interleavedRecords = [
   sourceRecord('a-1', sourceA), sourceRecord('b-1', sourceB),
