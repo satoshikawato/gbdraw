@@ -6,6 +6,11 @@ import {
 
 const cleanText = (value) => String(value ?? '').trim();
 
+export const validateAnnotationCoordinates = ({ start, end }) => (
+  [start, end].every((value) => cleanText(value) !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 1)
+    ? '' : 'start and end must be positive integers (1-based coordinates).'
+);
+
 const annotationLabel = (set, annotation) => (
   `${cleanText(set?.id) || 'annotations'}/${cleanText(annotation?.id) || 'region'}`
 );
@@ -35,6 +40,10 @@ export const validateAnnotationRecordTargets = (sets, catalog) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   for (const { set, annotation } of annotations) {
     const label = annotationLabel(set, annotation);
+    if (annotation.target?.kind === 'coordinateSpan') {
+      const coordinateError = validateAnnotationCoordinates(annotation.target);
+      if (coordinateError) return `Region annotation ${label}: ${coordinateError}`;
+    }
     const parsed = annotationRecordSelectorFromTarget(annotation);
     if (parsed.error) return `Choose a valid target record for region annotation ${label}.`;
     if (!parsed.selector) {

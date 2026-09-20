@@ -1,3 +1,4 @@
+import { createRulePreparation } from './rule-matching.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
@@ -32,8 +33,17 @@ import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
-import { groupLinearSourceRecords } from './linear-sources.js';
-import { serializeCleanSvg } from '../services/svg-serialization.js';
+import {
+  groupLinearSourceRecords,
+  moveLinearSourceGroup,
+  getLinearSourceDefaultDefinition,
+  setLinearSourceDefaultDefinition,
+  getLinearSourceDefaultSubtitle,
+  setLinearSourceDefaultSubtitle,
+  resolveLinearRecordEffectiveDefinition,
+  resolveLinearRecordEffectiveSubtitle
+} from './linear-sources.js';
+import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
@@ -924,6 +934,7 @@ export const createAppSetup = () => {
   ));
 
   const pendingLinearRecordExpansions = new Set();
+  const pendingLinearMetadataInference = new Set();
   const expandDiscoveredLinearRecords = ({ uid, records }) => {
     if (!pendingLinearRecordExpansions.delete(uid)) return;
     const index = linearSeqs.findIndex((seq) => seq.uid === uid);
@@ -931,18 +942,38 @@ export const createAppSetup = () => {
     const source = linearSeqs[index];
     if (source.region_record_id || source.region_start != null || source.region_end != null) return;
     const row = linearRecordRowFor(uid, index + 1);
-    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => (
-      createLinearSeq({
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => {
+      return createLinearSeq({
         ...source,
         uid: recordIndex === 0 ? uid : undefined,
         region_record_id: record.value
-      })
-    ));
+      });
+    });
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
     ]);
     expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
     return true;
+  };
+  const handleLinearRecordsDiscovered = ({ uid, records }) => {
+    const isRollbackOrSessionLoad = Boolean(
+      state.sessionImportRollbackInProgress?.value ||
+      state.sessionResourceDiscoveryDeferred?.value
+    );
+    if (!isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid)) {
+      if (Array.isArray(records) && records.length > 0) {
+        const first = records[0];
+        const group = linearSourceGroups.value.find((entry) => (
+          entry.uid === uid || entry.records.some(({ sequence }) => sequence.uid === uid)
+        ));
+        if (group) {
+          if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
+            setLinearSourceDefaultDefinition(group, first.inferredDefinition);
+          }
+        }
+      }
+    }
+    return expandDiscoveredLinearRecords({ uid, records });
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
@@ -955,7 +986,7 @@ export const createAppSetup = () => {
   const linearRecordSelector = createLinearRecordSelector({
     state,
     reactive,
-    onRecordsDiscovered: expandDiscoveredLinearRecords,
+    onRecordsDiscovered: handleLinearRecordsDiscovered,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
         ? discoverGffFastaRecords({
@@ -1131,13 +1162,21 @@ export const createAppSetup = () => {
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
+  const ruleMatchingPending = ref(false);
+  const rulePreparation = createRulePreparation({
+    state,
+    pending: ruleMatchingPending,
+    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+  });
   const legendActions = createLegendManager({
     state,
+    rulePreparation,
     history,
     previewRuntime
   });
   const svgActions = createSvgStyles({
     state,
+    rulePreparation,
     watch,
     nextTick,
     legendActions
@@ -1145,6 +1184,7 @@ export const createAppSetup = () => {
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   const featureActions = createFeatureEditor({
     state,
+    rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
@@ -1162,6 +1202,11 @@ export const createAppSetup = () => {
     computed,
     reactive,
     previewRuntime,
+    resolveOrthogroups: () => orthogroups.value.map((group) => ({
+      ...group,
+      display_name: orthogroupActions.resolveOrthogroupName(group),
+      description: orthogroupActions.resolveOrthogroupDescription(group)
+    })),
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
@@ -2085,8 +2130,9 @@ export const createAppSetup = () => {
     rerenderLinearDefinitions: runLabelReflow
   });
 
-  setupWatchers({
+  const { waitForAuxiliaryFileImport } = setupWatchers({
     state,
+    rulePreparation,
     watch,
     nextTick,
     onMounted,
@@ -2105,6 +2151,7 @@ export const createAppSetup = () => {
   });
 
   const sessionImportPending = ref(false);
+  const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
   const importSession = async (event) => {
     const input = event?.target;
@@ -2164,6 +2211,7 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('history-baseline-start');
         await history.initializeIntentBaseline('Loaded session');
         recordSessionLifecycleEvent('history-baseline-end');
+        if (circularRecordPresentationPanel.value?.open) await refreshCircularRecordOrder();
       }
       return result;
     } finally {
@@ -2264,6 +2312,7 @@ export const createAppSetup = () => {
       legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
     }
     if (changedDomains.has('config') || changedDomains.has('features')) {
+      if (!await rulePreparation.prepare()) return;
       svgActions.applyPaletteToSvg();
       svgActions.applySpecificRulesToSvg();
     }
@@ -2467,6 +2516,7 @@ export const createAppSetup = () => {
       await focusLinearComparisonIssue();
     }
     if (result?.status === 'ok') {
+      await rulePreparation.prepare();
       featureSelection.clearFeatureSelection({ clearStatus: true });
     }
     return result;
@@ -2989,13 +3039,22 @@ export const createAppSetup = () => {
   };
 
   const runExportAction = async (methodName, label) => {
+    const previousError = errorLog.value;
     try {
+      const snapshot = captureSvgExport(state, { interactive: methodName === 'downloadInteractiveSVG' });
       const exportService = await loadExportService();
       const exportMethod = exportService?.[methodName];
       if (typeof exportMethod !== 'function') {
         throw new Error('The export service did not provide the requested action.');
       }
-      return await exportMethod();
+      const result = await exportMethod(snapshot, {
+        loadPdfFont: async (filename) => {
+          const result = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT, { filename });
+          return result.result.base64;
+        }
+      });
+      if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
+      return result;
     } catch (error) {
       const normalized = normalizeUserFacingError(error);
       errorLog.value = {
@@ -3076,7 +3135,7 @@ export const createAppSetup = () => {
   };
 
   const openFeatureEditorFromList = (feat, event) => {
-    openFeatureEditorForFeature(feat, event);
+    return openFeatureEditorForFeature(feat, event);
   };
 
   const getCircularRecordOrderLabel = (selector) => {
@@ -3261,6 +3320,9 @@ export const createAppSetup = () => {
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
     });
+    pendingLinearMetadataInference.forEach((uid) => {
+      if (!activeUids.has(uid)) pendingLinearMetadataInference.delete(uid);
+    });
     const nextRows = reconcileLinearRecordLayout(linearSeqs, linearRecordRows);
     linearRecordRows.splice(0, linearRecordRows.length, ...nextRows);
     replaceLinearComparisonPlan(
@@ -3305,6 +3367,7 @@ export const createAppSetup = () => {
     const replacement = createLinearSeq({
       ...group.sequence,
       [field]: nextValue,
+      ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
       ...(group.records.length > 1 ? {
         region_record_id: '', region_start: null, region_end: null, region_reverse: false
       } : {})
@@ -3315,38 +3378,36 @@ export const createAppSetup = () => {
         : members.has(entry.uid) ? [] : [entry]
     )));
     if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
+    if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
 
-  const canMoveLinearSeqUp = (index) => {
-    const idx = Number(index);
-    return Number.isInteger(idx) && idx > 0 && idx < linearSeqs.length;
+  const canMoveLinearSource = (sourceIndex, direction) => {
+    const index = sourceIndex;
+    const offset = direction;
+    const target = index + offset;
+    return Number.isInteger(index) && [-1, 1].includes(offset)
+      && index >= 0 && index < linearSourceGroups.value.length
+      && target >= 0 && target < linearSourceGroups.value.length;
   };
 
-  const canMoveLinearSeqDown = (index) => {
-    const idx = Number(index);
-    return Number.isInteger(idx) && idx >= 0 && idx < linearSeqs.length - 1;
+  const moveLinearSource = (sourceIndex, direction) => {
+    if (!canMoveLinearSource(sourceIndex, direction)) return;
+    const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
+    applyLinearSeqMutation(next, { preserveLosatCacheInfo: true });
   };
 
-  const reorderLinearSeqs = (fromIndex, toIndex) => {
-    const from = Number(fromIndex);
-    const to = Number(toIndex);
-    if (!Number.isInteger(from) || !Number.isInteger(to)) return;
-    if (from < 0 || to < 0 || from >= linearSeqs.length || to >= linearSeqs.length || from === to) return;
-
-    const current = Array.from(linearSeqs);
-    const [moved] = current.splice(from, 1);
-    current.splice(to, 0, moved);
-    applyLinearSeqMutation(current, { preserveLosatCacheInfo: true });
+  const resetLinearRecordDefinition = (seq) => {
+    if (!seq) return;
+    history.runUndoable('Reset record definition', () => {
+      seq.definition = '';
+    });
   };
 
-  const moveLinearSeqUp = (index) => {
-    if (!canMoveLinearSeqUp(index)) return;
-    reorderLinearSeqs(index, Number(index) - 1);
-  };
-
-  const moveLinearSeqDown = (index) => {
-    if (!canMoveLinearSeqDown(index)) return;
-    reorderLinearSeqs(index, Number(index) + 1);
+  const resetLinearRecordSubtitle = (seq) => {
+    if (!seq) return;
+    history.runUndoable('Reset record subtitle', () => {
+      seq.record_subtitle = '';
+    });
   };
 
   return {
@@ -3404,7 +3465,9 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
-    importAnnotationTableFile: annotationEditor.importAnnotationTableFile,
+    importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
+    renameAnnotation: annotationEditor.renameAnnotation,
+    setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
     downloadAnnotationTable: annotationEditor.downloadAnnotationTable,
     annotationRecordOptions: annotationEditor.recordOptionsFor,
@@ -3496,10 +3559,16 @@ export const createAppSetup = () => {
     addLinearSeq,
     removeLastLinearSeq,
     setLinearSeqPrimaryFile,
-    canMoveLinearSeqUp,
-    canMoveLinearSeqDown,
-    moveLinearSeqUp,
-    moveLinearSeqDown,
+    canMoveLinearSource,
+    moveLinearSource,
+    getLinearSourceDefaultDefinition,
+    setLinearSourceDefaultDefinition,
+    getLinearSourceDefaultSubtitle,
+    setLinearSourceDefaultSubtitle,
+    resolveLinearRecordEffectiveDefinition,
+    resolveLinearRecordEffectiveSubtitle,
+    resetLinearRecordDefinition,
+    resetLinearRecordSubtitle,
     linearRecordOptions: linearRecordSelector.optionsFor,
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     linearRecordSelectorDisabled: linearRecordSelector.isDisabled,
@@ -3683,6 +3752,8 @@ export const createAppSetup = () => {
     closeRightDrawer: rightDrawerActions.closeRightDrawer,
     openOrthogroupInDrawer,
     circularRecordList,
+    refreshCircularRecordOrder,
+    waitForAuxiliaryFileImport,
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
@@ -3728,6 +3799,7 @@ export const createAppSetup = () => {
     getFeatureShape,
     setFeatureShape,
     manualSpecificRules,
+    ruleMatchingPending,
     newSpecRule,
     specificRulePresets,
     specificRuleQualifierSuggestions,
@@ -3950,6 +4022,7 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,
     undoHistoryTitle,

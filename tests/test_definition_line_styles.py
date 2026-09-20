@@ -7,12 +7,15 @@ from typing import Any
 
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, FeatureLocation
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.session_io as session_io
+from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.requests import GffFastaInputSource, LinearDiagramRequest, RecordInput, RenderOutputRequest
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
@@ -53,6 +56,70 @@ def _text_with_kind(svg: str, kind: str) -> str:
     )
     assert match is not None
     return match.group(1)
+
+
+@pytest.mark.parametrize("show", [False, True])
+def test_gff_replicon_switch_matches_cli_and_typed_request(tmp_path, show) -> None:
+    import xml.etree.ElementTree as ET
+
+    gff = tmp_path / "organelle.gff3"
+    fasta = tmp_path / "organelle.fa"
+    gff.write_text("##gff-version 3\nO\ttest\tsource\t1\t100\t.\t+\t.\tID=source;organelle=plastid:chloroplast\n")
+    fasta.write_text(">O\n" + "ATGC" * 25 + "\n")
+    config = _linear_definition_config()
+    config["objects"]["definition"]["linear"]["show_replicon"] = show
+    typed = request_render_module.render_request(LinearDiagramRequest(
+        records=(RecordInput(source=GffFastaInputSource(gff, fasta)),),
+        options=LinearDiagramOptions(config=config, selected_features_set=("source",)),
+        output=RenderOutputRequest(output_directory=tmp_path, output_prefix="typed"),
+    )).drawing.tostring()
+    output = tmp_path / "cli"
+    linear_cli_module.linear_main([
+        "--gff", str(gff), "--fasta", str(fasta), "-k", "source", "--format", "svg", "-o", str(output),
+        *(["--show_replicon"] if show else []),
+    ])
+    for svg in (typed, output.with_suffix(".svg").read_text()):
+        texts = [t for t in ET.fromstring(svg).iter("{http://www.w3.org/2000/svg}text")
+                 if t.get("data-definition-line-kind") in {"subtitle", "replicon"}]
+        assert [(t.get("data-definition-line-kind"), "".join(t.itertext())) for t in texts] == (
+            [("replicon", "Plastid:chloroplast")] if show else []
+        )
+
+
+@pytest.mark.parametrize("qualifiers,expected", [
+    ({"chromosome": ["1"], "plasmid": ["p1"], "organelle": ["chloroplast"]}, "Chromosome 1"),
+    ({"plasmid": ["p1"], "organelle": ["chloroplast"]}, "p1"),
+    ({"organelle": ["plastid:chloroplast"]}, "Plastid:chloroplast"),
+    ({}, ""),
+])
+@pytest.mark.parametrize("show", [False, True])
+@pytest.mark.parametrize("subtitle", ["", "p1", "Handwritten subtitle"])
+def test_replicon_switch_preserves_explicit_subtitle_and_line_styles(
+    qualifiers: dict, expected: str, show: bool, subtitle: str,
+) -> None:
+    import xml.etree.ElementTree as ET
+
+    record = _record()
+    record.annotations["gbdraw_record_subtitle"] = subtitle
+    record.features = [SeqFeature(FeatureLocation(0, 100), type="source", qualifiers=qualifiers)]
+    config = _linear_definition_config()
+    config["objects"]["definition"]["linear"].update(
+        show_replicon=show, show_accession=False, show_length=False,
+        line_styles={"replicon": {"fill": "red", "font_weight": "bold", "font_size": 15},
+                     "subtitle": {"fill": "blue", "font_weight": "normal", "font_size": 11}},
+    )
+    group = DefinitionGroup(record, _canvas_config(), cfg=GbdrawConfig.from_dict(config))
+    root = ET.fromstring(group.get_group().tostring())
+    lines = list(root.iter("text"))
+    assert [(t.get("data-definition-line-kind"), "".join(t.itertext())) for t in lines] == (
+        ([("subtitle", subtitle)] if subtitle else [])
+        + ([("replicon", expected)] if show and expected else [])
+    )
+    for line in lines:
+        is_replicon = line.get("data-definition-line-kind") == "replicon"
+        assert line.get("fill") == ("red" if is_replicon else "blue")
+        assert float(line.get("font-size")) == (15 if is_replicon else 11)
+        assert line.get("font-weight") == ("bold" if is_replicon else "normal")
 
 
 def test_parse_definition_line_style_overrides_valid_and_last_wins() -> None:

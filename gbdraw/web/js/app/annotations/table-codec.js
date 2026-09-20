@@ -1,4 +1,5 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from './state.js';
+import { validateAnnotationCoordinates } from './validation.js';
 import {
   annotationRecordSelectorValue,
   coordinateTarget,
@@ -13,6 +14,16 @@ const COLUMNS = [
   'stroke_dasharray', 'line_cap', 'fill', 'fill_opacity', 'hatch_angle', 'hatch_spacing', 'hatch_color',
   'hatch_width', 'hatch_cross', 'label_color', 'label_font_size', 'label_orientation', 'label_position', 'label_offset'
 ];
+const ENUM_COLUMNS = {
+  mark: ['line', 'bracket', 'band', 'highlight'],
+  coordinate_space: ['source', 'local'],
+  out_of_bounds: ['clip', 'skip', 'error'],
+  envelope: ['outer_bounds', 'segments'],
+  circular_path: ['shortest', 'forward', 'reverse'],
+  line_cap: ['none', 'tick', 'arrow'],
+  label_orientation: ['auto', 'horizontal', 'tangent', 'radial', 'arc'],
+  label_position: ['center', 'start', 'end']
+};
 const splitTsv = (line) => line.split('\t').map((value) => value.trim());
 const boolValue = (value, fallback = false) => {
   if (value == null || value === '') return fallback;
@@ -51,12 +62,20 @@ export const parseAnnotationTable = (text) => {
   if (lines.length === 0) return [];
   const header = splitTsv(lines[0]);
   REQUIRED.forEach((name) => { if (!header.includes(name)) throw new Error(`Annotation table is missing required column: ${name}`); });
+  if (new Set(header).size !== header.length) throw new Error('Annotation table has duplicate columns.');
+  const unknown = header.filter((name) => !COLUMNS.includes(name));
+  if (unknown.length) throw new Error(`Annotation table has unknown columns: ${unknown.join(', ')}.`);
   const sets = new Map();
   lines.slice(1).forEach((line, index) => {
     const values = splitTsv(line);
     const row = Object.fromEntries(header.map((name, column) => [name, values[column] ?? '']));
     const rowNumber = index + 2;
-    if (!row.set_id || !row.id) throw new Error(`Annotation table row ${rowNumber}: set_id and id are required.`);
+    if (!row.set_id || !row.id || !row.mark) throw new Error(`Annotation table row ${rowNumber}: set_id, id, and mark are required.`);
+    for (const [column, choices] of Object.entries(ENUM_COLUMNS)) {
+      if (!row[column]) continue;
+      row[column] = row[column].toLowerCase();
+      if (!choices.includes(row[column])) throw new Error(`Annotation table row ${rowNumber}, column '${column}': expected ${choices.join(', ')}.`);
+    }
     const parsedRecord = parseAnnotationRecordSelectorValue(row.record);
     if (parsedRecord.error) {
       throw new Error(`Annotation table row ${rowNumber}, column 'record': ${parsedRecord.error}`);
@@ -68,9 +87,19 @@ export const parseAnnotationTable = (text) => {
     const hasCoordinates = Boolean(row.start || row.end);
     const hasFeature = Boolean(row.feature_selector);
     if (hasCoordinates === hasFeature) throw new Error(`Annotation table row ${rowNumber}: provide exactly one coordinate or feature target.`);
+    if (hasCoordinates) {
+      const error = validateAnnotationCoordinates(row);
+      if (error) throw new Error(`Annotation table row ${rowNumber}: ${error}`);
+    }
+    if (row.lane && (!Number.isSafeInteger(Number(row.lane)) || Number(row.lane) < 0)) {
+      throw new Error(`Annotation table row ${rowNumber}: lane must be a non-negative integer.`);
+    }
     const target = hasCoordinates
       ? coordinateTarget({ ...record, start: row.start, end: row.end, coordinateSpace: row.coordinate_space })
       : featureTarget({ ...record, selector: row.feature_selector, extent: row.envelope, circularPath: row.circular_path });
+    if (hasFeature && (!target.selectors.length || target.selectors.some((selector) => !selector.value))) {
+      throw new Error(`Annotation table row ${rowNumber}: feature_selector requires a nonempty feature value.`);
+    }
     if (hasCoordinates) {
       target.wrapsOrigin = boolValue(row.wraps_origin, Number(row.start) > Number(row.end));
       target.outOfBounds = row.out_of_bounds || 'clip';

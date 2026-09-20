@@ -4,6 +4,7 @@ import copy
 from pathlib import Path
 import re
 from types import SimpleNamespace
+import xml.etree.ElementTree as ET
 
 import pytest
 from Bio.Seq import Seq
@@ -11,13 +12,14 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
-from gbdraw.api import save_figure_to
+from gbdraw.api import LinearMultiRecordOptions, save_figure_to
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
 from gbdraw.config.toml import load_config_toml
 from gbdraw.core import text as text_module
 from gbdraw.diagrams.linear import precalc as linear_precalc
+from gbdraw.diagrams.linear import assemble as linear_assemble
 from gbdraw.diagrams.linear.builders import add_record_definition_group
 from gbdraw.render.groups.linear import DefinitionGroup
 
@@ -191,6 +193,163 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
     )
 
     assert _definition_translate_x(canvas_b) == pytest.approx(_definition_translate_x(canvas_a) + 30)
+
+
+def _definition_row_canvas(
+    row_sizes: tuple[int, int], locked: bool, align_center: bool,
+    *, subtitles: bool = True, show_replicon: bool = False, text_anchor: str = "middle",
+) -> Drawing:
+    records = []
+    positions = []
+    for row, count in enumerate(row_sizes):
+        for _ in range(count):
+            record = _record(
+                "Aeromonas hydrophila" if row == 0 else "Aeromonas sp.",
+                f"record_{len(records)}",
+            )
+            if subtitles:
+                record.annotations["gbdraw_record_subtitle"] = "A1" if row == 0 else "B"
+            # Unequal row lengths make centered sequence alignment move one row.
+            record.seq = Seq("ATGC" * (250 if row == 0 else 150))
+            record.features = [SeqFeature(
+                FeatureLocation(0, len(record)), type="source",
+                qualifiers={"plasmid": [f"p{len(records)}"]},
+            )]
+            records.append(record)
+            positions.append(f"#{len(records)}@{row + 1}")
+    config = _definition_only_config()
+    config["canvas"]["linear"].update(
+        keep_definition_left_aligned=locked, align_center=align_center,
+    )
+    config["objects"]["definition"]["linear"].update(
+        show_replicon=show_replicon, text_anchor=text_anchor,
+    )
+    return assemble_linear_diagram_from_records(
+        records, cfg=GbdrawConfig.from_dict(config), selected_features_set=[],
+        layout=LinearMultiRecordOptions(multi_record_positions=tuple(positions)),
+        legend="none",
+    )
+
+
+@pytest.mark.parametrize("row_sizes", [(1, 1), (2, 2), (1, 2)])
+@pytest.mark.parametrize("locked", [False, True])
+@pytest.mark.parametrize("align_center", [False, True])
+def test_definition_column_aligns_long_and_short_rows(
+    row_sizes: tuple[int, int], locked: bool, align_center: bool,
+) -> None:
+    drawing = _definition_row_canvas(row_sizes, locked, align_center)
+    root = ET.fromstring(drawing.tostring())
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    headings = [g for g in root.findall("s:g", ns)
+                if g.find("s:text[@data-definition-line-kind='name']", ns) is not None]
+    assert len(headings) == 2
+    assert [["".join(t.itertext()) for t in g.findall("s:text", ns)] for g in headings] == [
+        ["Aeromonas hydrophila", "A1"], ["Aeromonas sp.", "B"],
+    ]
+    assert {t.get("text-anchor") for g in headings for t in g.findall("s:text", ns)} == {
+        "start" if locked else "middle"
+    }
+
+    def x(group: ET.Element) -> float:
+        return sum(float(v) for v in re.findall(r"translate\(\s*([-+0-9.eE]+)", group.get("transform", "")))
+
+    axes = [next(g for g in root.findall("s:g", ns)
+                 if g.get("data-gbdraw-record-id") == rid and g.get("data-gbdraw-role") != "record-definition"
+                 and g.get("data-gbdraw-role") != "record-definition-row")
+            for rid in ("record_0", f"record_{row_sizes[0]}")]
+    expected_shift = 0.0 if locked else x(axes[1]) - x(axes[0])
+    assert x(headings[1]) - x(headings[0]) == pytest.approx(expected_shift)
+
+
+@pytest.mark.parametrize("anchor", ["start", "end"])
+@pytest.mark.parametrize("row_sizes", [(1, 1), (2, 2), (1, 2)])
+@pytest.mark.parametrize("locked", [False, True])
+def test_explicit_anchor_keeps_its_existing_single_record_scope(anchor, row_sizes, locked) -> None:
+    drawing = _definition_row_canvas(row_sizes, locked, False, text_anchor=anchor)
+    root = ET.fromstring(drawing.tostring())
+    anchors = {text.get("text-anchor") for text in root.iter("{http://www.w3.org/2000/svg}text")
+               if text.get("data-definition-line-kind")}
+    assert anchors == {"start" if locked else anchor if row_sizes == (1, 1) else "middle"}
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize("row_sizes", [(1, 1), (2, 2), (1, 2)])
+@pytest.mark.parametrize("locked", [False, True])
+@pytest.mark.parametrize("subtitles", [False, True])
+def test_browser_definition_column_matches_collision_bounds(
+    monkeypatch, row_sizes, locked, subtitles,
+) -> None:
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    measured = []
+    original = linear_assemble._record_collision_bands
+
+    def capture(**kwargs):
+        bands = original(**kwargs)
+        measured.append(bands)
+        return bands
+
+    monkeypatch.setattr(linear_assemble, "_record_collision_bands", capture)
+    drawing = _definition_row_canvas(
+        row_sizes, locked, True, subtitles=subtitles, show_replicon=True,
+    )
+    # The assembler's last pass uses final record positions. Compare those
+    # domains to actual SVG text, without copying the placement formula.
+    final_bands = measured[-sum(row_sizes):]
+    with playwright_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.set_content(drawing.tostring())
+        result = page.evaluate("""async () => {
+          await document.fonts.ready;
+          const svg = document.querySelector('svg');
+          const matrix = (el) => svg.getCTM().inverse().multiply(el.getCTM());
+          const origin = (el) => new DOMPoint(0, 0).matrixTransform(matrix(el)).x;
+          const box = (el) => {
+            const b = el.getBBox(), m = matrix(el);
+            const p = new DOMPoint(b.x, b.y).matrixTransform(m);
+            const q = new DOMPoint(b.x + b.width, b.y + b.height).matrixTransform(m);
+            return {left: p.x, right: q.x, top: p.y, bottom: q.y};
+          };
+          const defs = [...svg.querySelectorAll('g')].filter(g =>
+            [...g.children].some(t => t.hasAttribute('data-definition-line-kind')));
+          const axes = [...svg.querySelectorAll('g[data-gbdraw-record-id]')].filter(g =>
+            !g.getAttribute('data-gbdraw-role')?.startsWith('record-definition'));
+          return {
+            width: svg.viewBox.baseVal.width || svg.width.baseVal.value,
+            height: svg.viewBox.baseVal.height || svg.height.baseVal.value,
+            axes: axes.map(g => ({id: g.dataset.gbdrawRecordId, x: origin(g)})),
+            defs: defs.map(g => ({id: g.dataset.gbdrawRecordId, ...box(g),
+              lines: [...g.querySelectorAll('text')].map(t => ({kind: t.dataset.definitionLineKind, ...box(t)}))
+            }))
+          };
+        }""")
+        browser.close()
+    tolerance = 1.0  # Font glyph bearings may differ by at most one SVG pixel.
+    assert len(result["axes"]) == sum(row_sizes)
+    headings = []
+    for index, bands in enumerate(final_bands):
+        axis = next(a for a in result["axes"] if a["id"] == f"record_{index}")
+        origin = axis["x"] - bands[0].x_start
+        definitions = sorted((d for d in result["defs"] if d["id"] == f"record_{index}"), key=lambda d: d["left"])
+        expected = sorted((b for b in bands if b.kind == "definition"), key=lambda b: b.x_start)
+        assert len(definitions) == len(expected)
+        for definition, band in zip(definitions, expected):
+            assert definition["left"] == pytest.approx(origin + band.x_start, abs=tolerance)
+            assert definition["right"] == pytest.approx(origin + band.x_end, abs=tolerance)
+            assert definition["left"] >= 0
+            assert definition["right"] <= result["width"]
+            assert 0 <= definition["top"] < definition["bottom"] <= result["height"]
+            names = [t for t in definition["lines"] if t["kind"] == "name"]
+            if names:
+                headings.append((names[0], axis["x"]))
+                assert axis["x"] - definition["right"] >= 20 - tolerance
+                for line in definition["lines"]:
+                    coordinate = lambda b: b["left"] if locked else (b["left"] + b["right"]) / 2
+                    assert coordinate(line) == pytest.approx(coordinate(names[0]), abs=tolerance)
+    assert len(headings) == 2
+    (first, axis_a), (second, axis_b) = headings
+    coordinate = lambda b: b["left"] if locked else (b["left"] + b["right"]) / 2
+    assert coordinate(second) - coordinate(first) == pytest.approx(0 if locked else axis_b - axis_a, abs=tolerance)
 
 
 @pytest.mark.linear
@@ -372,7 +531,7 @@ def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.Monkey
     monkeypatch.setattr(linear_precalc, "DefinitionGroup", FakeDefinitionGroup)
 
     canvas_config = _canvas_config(keep_definition_left_aligned=True)
-    max_width, heights, half_heights = linear_precalc._precalculate_definition_metrics(
+    max_width, measured_widths, heights = linear_precalc._precalculate_definition_metrics(
         records,
         canvas_config,
         cfg=canvas_config.profile.config,
@@ -380,7 +539,7 @@ def test_precalculated_max_definition_width_is_ceiled(monkeypatch: pytest.Monkey
 
     assert max_width == 13
     assert heights == [10.0, 10.0]
-    assert half_heights == [5.0, 5.0]
+    assert measured_widths == [12.01, 7.5]
 
 
 @pytest.mark.linear

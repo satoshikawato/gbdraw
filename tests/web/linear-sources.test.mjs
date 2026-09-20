@@ -1,8 +1,88 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { groupLinearSourceRecords, prepareLosatSourceBatches, splitLosatSourceResult } from '../../gbdraw/web/js/app/linear-sources.js';
+import {
+  groupLinearSourceRecords,
+  moveLinearSourceGroup,
+  prepareLosatSourceBatches,
+  splitLosatSourceResult
+} from '../../gbdraw/web/js/app/linear-sources.js';
+import {
+  adoptCurrentSessionResources,
+  createSessionResourceFileView
+} from '../../gbdraw/web/js/services/session-resource-backing.js';
 
 const hashText = async (value) => createHash('sha256').update(value).digest('hex');
+
+const sourceRecord = (uid, gb) => ({ uid, gb, gff: null, fasta: null });
+const sourceA = { name: 'a.gb' };
+const sourceB = { name: 'b.gb' };
+const sourceC = { name: 'c.gb' };
+const singleSourceRecords = [
+  sourceRecord('a-1', sourceA),
+  sourceRecord('b-1', sourceB),
+  sourceRecord('c-1', sourceC)
+];
+const singleSourceOrder = moveLinearSourceGroup(singleSourceRecords, 1, -1);
+assert.deepEqual(singleSourceOrder.map(({ uid }) => uid), ['b-1', 'a-1', 'c-1']);
+assert.strictEqual(singleSourceOrder[0], singleSourceRecords[1], 'record object identity is preserved');
+assert.deepEqual(singleSourceRecords.map(({ uid }) => uid), ['a-1', 'b-1', 'c-1'], 'input order is not mutated');
+
+const blockRecords = [
+  sourceRecord('a-1', sourceA), sourceRecord('a-2', sourceA),
+  sourceRecord('b-1', sourceB), sourceRecord('b-2', sourceB), sourceRecord('b-3', sourceB)
+];
+assert.deepEqual(
+  moveLinearSourceGroup(blockRecords, 1, -1).map(({ uid }) => uid),
+  ['b-1', 'b-2', 'b-3', 'a-1', 'a-2'],
+  'a multi-record source moves as one block without changing its internal order'
+);
+
+for (const [index, direction] of [
+  [0, -1], [2, 1], [-1, 1], [3, -1], [1.5, 1], ['1', -1], [1, 0], [1, 2], [1, '-1']
+]) {
+  assert.deepEqual(
+    moveLinearSourceGroup(singleSourceRecords, index, direction),
+    singleSourceRecords,
+    `invalid source move ${index}:${direction} is a no-op`
+  );
+}
+
+const duplicateNameA = { name: 'duplicate.gb' };
+const duplicateNameB = { name: 'duplicate.gb' };
+const duplicateNameRecords = [sourceRecord('same-a', duplicateNameA), sourceRecord('same-b', duplicateNameB)];
+assert.deepEqual(
+  moveLinearSourceGroup(duplicateNameRecords, 1, -1).map(({ uid }) => uid),
+  ['same-b', 'same-a'],
+  'distinct uploads with the same filename remain separate sources'
+);
+
+const sharedDescriptor = {
+  kind: 'web-file', name: 'session.gb', type: 'text/plain', encoding: 'base64',
+  data: '', size: 0, lastModified: 0
+};
+const sessionTable = adoptCurrentSessionResources({ source: sharedDescriptor });
+const sessionRecords = [
+  sourceRecord('session-1', createSessionResourceFileView(sessionTable, 'source')),
+  sourceRecord('session-2', createSessionResourceFileView(sessionTable, 'source')),
+  sourceRecord('other', sourceC)
+];
+assert.deepEqual(groupLinearSourceRecords(sessionRecords).map(({ records }) => records.length), [2, 1]);
+assert.deepEqual(
+  moveLinearSourceGroup(sessionRecords, 0, 1).map(({ uid }) => uid),
+  ['other', 'session-1', 'session-2'],
+  'records backed by one Session descriptor move as one source'
+);
+
+const interleavedRecords = [
+  sourceRecord('a-1', sourceA), sourceRecord('b-1', sourceB),
+  sourceRecord('a-2', sourceA), sourceRecord('b-2', sourceB), sourceRecord('c-1', sourceC)
+];
+assert.deepEqual(
+  moveLinearSourceGroup(interleavedRecords, 1, -1).map(({ uid }) => uid),
+  ['b-1', 'b-2', 'a-1', 'a-2', 'c-1'],
+  'an explicit move makes legacy interleaved source records contiguous'
+);
+
 const files = [{ name: 'same.gb' }, { name: 'same.gb' }];
 const sequences = Array.from({ length: 8 }, (_, index) => ({
   uid: `record-${index}`, gb: files[index < 6 ? 0 : 1], gff: null, fasta: null

@@ -18,6 +18,46 @@ LinearFeatureTrackLayout = Literal["above", "middle", "below"]
 
 
 @dataclass(frozen=True)
+class LinearDefinitionPlacement:
+    """Text origin and measured horizontal bounds, relative to the record column."""
+
+    x: float
+    left: float
+    right: float
+
+
+def place_linear_definition(
+    *,
+    width: float,
+    column_width: float,
+    record_x: float,
+    gap: float,
+    keep_left: bool,
+    text_anchor: str = "middle",
+    sequence_width: float | None = None,
+) -> LinearDefinitionPlacement:
+    """Share definition positioning between SVG drawing and collision planning."""
+    if sequence_width is not None:
+        x = record_x + 0.5 * sequence_width
+        text_anchor = "middle"
+    elif keep_left:
+        x = -(column_width or width) - gap
+        text_anchor = "start"
+    else:
+        # The default shares the reserved column's center. Explicit non-middle
+        # anchors retain their existing text origin on the ordinary record path.
+        reference_width = (column_width or width) if text_anchor == "middle" else width
+        x = record_x - gap - 0.5 * reference_width
+    if text_anchor == "start":
+        left = x
+    elif text_anchor == "end":
+        left = x - width
+    else:
+        left = x - 0.5 * width
+    return LinearDefinitionPlacement(x, left, left + width)
+
+
+@dataclass(frozen=True)
 class LinearResolvedTrack:
     """One normalized Linear track resolved into concrete axis-local geometry."""
 
@@ -674,6 +714,7 @@ __all__ = [
     "CollisionBand",
     "CollisionBandKind",
     "LinearFeatureLane",
+    "LinearDefinitionPlacement",
     "LinearFeatureLaneGeometry",
     "LinearFeatureTrackLayout",
     "LinearRecordRenderContext",
@@ -684,6 +725,7 @@ __all__ = [
     "collision_x_intervals_overlap",
     "measure_linear_feature_lanes",
     "measure_linear_label_band",
+    "place_linear_definition",
     "resolve_feature_axis_gap_linear",
     "required_axis_gap",
     "resolve_axis_gap",

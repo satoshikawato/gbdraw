@@ -1,3 +1,4 @@
+import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,6 +17,7 @@ await writeFile(
   colorActionsSource,
   'utf8'
 );
+await writeFile(join(tempDir, 'app', 'rule-matching.js'), await readFile(join(sourceDir, 'app', 'rule-matching.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'app', 'feature-utils.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'app', 'feature-selector.js'), 'utf8'), 'utf8');
 await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
@@ -141,7 +143,9 @@ const previewRuntime = {
   }
 };
 
+const { createRulePreparation } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
 const actions = createFeatureColorActions({
+  rulePreparation: createRulePreparation({ state: { extractedFeatures, biologicalFeatures, manualSpecificRules }, evaluate: evaluatePythonRules }),
   state: {
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -666,6 +670,17 @@ assert.deepEqual(legendStrokeOverrides.Core, {
   strokeWidth: 1
 });
 assert.equal(previewFlushCount, resetStrokeFlushCount + 1);
+
+// Rule scope uses Python's wildcard feature type and inline flags too.
+const wildcardRule = { feat: '*', qual: 'gene_kind', val: '(?i)core', color: '#111111', cap: '' };
+manualSpecificRules.splice(0, manualSpecificRules.length, wildcardRule);
+extractedFeatures.value = [featureB, hashOnlyFeature];
+biologicalFeatures.value = [featureB, hashOnlyFeature];
+Object.assign(featureStyleScopeDialog, { show: true, kind: 'stroke', feat: featureB,
+  matchingRule: wildcardRule, strokeColor: '#abcdef', strokeWidth: 2 });
+assert.equal(await actions.handleFeatureStyleScopeChoice('rule'), true);
+assert.equal(siblingStrokeAttributes[0].get('stroke'), '#abcdef');
+assert.equal(siblingStrokeAttributes[1].get('stroke'), '#445566');
 
 clickedFeature.value = null;
 featureElementsById.clear();

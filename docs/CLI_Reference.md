@@ -1101,10 +1101,14 @@ options:
                         > 0).
   --align_center        Align genomes to the center (default: False).
   --keep_definition_left_aligned
-                        Keep linear record definitions in the left column.
-                        With multi-record rows, the leading record label
-                        becomes the row definition while remaining record text
-                        stays above its record (default: False).
+                        Keep linear record definitions in the left column. In
+                        a multi-record row, a label or subtitle that no record
+                        of the row contradicts becomes a row definition drawn
+                        once beside the row, and text that varies within the
+                        row stays above its own record; this flag aligns those
+                        row definitions in a shared left column. By default,
+                        definitions are centered within a shared column width
+                        and follow their row offset (default: False).
   --evalue EVALUE       evalue threshold (default=1e-2)
   --bitscore BITSCORE   bitscore threshold (default=50)
   --identity IDENTITY   identity threshold (default=0)
@@ -1166,8 +1170,10 @@ options:
   --record_subtitle RECORD_SUBTITLE
                         Optional second record-label line (repeatable; order
                         matches input records)
-  --show_replicon       Show inferred replicon labels in linear record-label
-                        blocks (default: False).
+  --show_replicon       Show one automatic name per record, using chromosome,
+                        plasmid, then organelle source qualifiers in that
+                        order. Explicit subtitles are independent (default:
+                        False).
   --hide_accession      Hide accession labels in linear record-label blocks
                         (default: False).
   --hide_length         Hide length/coordinate labels in linear record-label

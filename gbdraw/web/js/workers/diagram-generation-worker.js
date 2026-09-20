@@ -492,6 +492,18 @@ const callJsonHelper = (pyodide, helperName, args) => {
 const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
+  [DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES]: {
+    keys: ['features', 'rules', 'kind'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'evaluate_rules_json', [
+      jsonArgument(payload.features, []), jsonArgument(payload.rules, []), String(payload.kind || 'color')
+    ])
+  },
+  [DIAGRAM_HELPER_OPERATIONS.READ_PDF_FONT]: {
+    keys: ['filename'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'read_pdf_font', [String(payload.filename || '')])
+  },
   [DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES]: {
     keys: [
       'mode',

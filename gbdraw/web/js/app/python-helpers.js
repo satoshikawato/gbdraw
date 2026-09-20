@@ -17,6 +17,7 @@ from gbdraw.web_support.request_render import (
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.api.prepared import PreparedBiologicalInputCache
+from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
@@ -24,6 +25,18 @@ _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
 _WEB_LOSATP_CACHE_ORDER = []
 _WEB_LOSATP_CACHE_LIMIT = 64
 _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
+
+def read_pdf_font(filename):
+    import base64
+    from importlib.resources import files
+    allowed = {
+        f"Liberation{family}-{style}.ttf"
+        for family in ("Sans", "Serif", "Mono")
+        for style in ("Regular", "Bold", "Italic", "BoldItalic")
+    }
+    if filename not in allowed:
+        raise ValueError("Unknown PDF font")
+    return json.dumps({"base64": base64.b64encode(files("gbdraw.data").joinpath(filename).read_bytes()).decode("ascii")})
 
 def _web_losatp_cache_by_name(name):
     if name == "filtered":
@@ -1582,6 +1595,10 @@ def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
     from Bio import SeqIO
     from gbdraw.api.record_planning import _detected_topology
+    from gbdraw.core.record_metadata import (
+        format_inferred_definition,
+        infer_record_source_metadata,
+    )
     try:
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
@@ -1591,12 +1608,24 @@ def list_sequence_records(path, format):
             return json.dumps({"error": "No records found"})
         payload = []
         for idx, record in enumerate(records):
+            organism = ""
+            strain = ""
+            inferred_def = ""
+            if format == "genbank":
+                meta = infer_record_source_metadata(record)
+                organism = meta.organism or ""
+                strain = meta.strain or ""
+                inferred_def = format_inferred_definition(meta)
+
             payload.append(
                 {
                     "selector": f"#{idx + 1}",
                     "record_id": str(record.id or f"Record_{idx + 1}"),
                     "record_length": len(record.seq),
                     "topology": _detected_topology(record, "genbank") if format == "genbank" else "unknown",
+                    "organism": organism,
+                    "strain": strain,
+                    "inferred_definition": inferred_def,
                 }
             )
         return json.dumps({"records": payload})

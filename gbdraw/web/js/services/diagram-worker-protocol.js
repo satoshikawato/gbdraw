@@ -1,4 +1,6 @@
 export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
+  EVALUATE_RULES: 'evaluateRules',
+  READ_PDF_FONT: 'readPdfFont',
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
   CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV: 'convertLosatNucleotideToDisplayTsv',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',

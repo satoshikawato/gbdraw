@@ -1,3 +1,4 @@
+import { ruleMatchesReady, ruleMatchesFeature, firstMatchingRule } from './rule-matching.js';
 import {
   estimateColorFactor,
   interpolateColor,
@@ -16,7 +17,6 @@ import {
   getFeaturePart,
   isFeatureFillTarget
 } from './feature-dom.js';
-import { ruleMatchesFeature } from './feature-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { serializeCleanSvg } from '../services/svg-serialization.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
@@ -46,7 +46,7 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
-export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
+export const createSvgStyles = ({ state, watch, nextTick, legendActions, rulePreparation }) => {
   const {
     svgContent,
     extractedFeatures,
@@ -100,6 +100,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
   } = {}) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
+    if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -368,6 +369,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!manualSpecificRules.length) return;
     if (!svgContainer.value) return;
+    if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -378,25 +380,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
     extractedFeatures.value.forEach((feat) => {
       if (!feat.svg_id) return;
 
-      let matchingRule = null;
-
-      for (const rule of manualSpecificRules) {
-        if ((rule.qual || '').toLowerCase() !== 'hash') continue;
-        if (ruleMatchesFeature(feat, rule)) {
-          matchingRule = rule;
-          break;
-        }
-      }
-
-      if (!matchingRule) {
-        for (const rule of manualSpecificRules) {
-          if ((rule.qual || '').toLowerCase() === 'hash') continue;
-          if (ruleMatchesFeature(feat, rule)) {
-            matchingRule = rule;
-            break;
-          }
-        }
-      }
+      const matchingRule = firstMatchingRule(feat, manualSpecificRules);
 
       const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {
@@ -628,7 +612,7 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
   watch(
     appliedPaletteColors,
     (colors, previousColors) => {
-      if (paletteColorsEqual(colors, previousColors)) return;
+      if (state.semanticFileWatchersSuppressed?.value || paletteColorsEqual(colors, previousColors)) return;
       // Inferred comparison factors are lossy, so only re-interpolate a family
       // when one of its palette endpoints actually changed.
       const recolorPairwise = !paletteColorKeysEqual(
@@ -646,7 +630,8 @@ export const createSvgStyles = ({ state, watch, nextTick, legendActions }) => {
           'collinear_block_minus'
         ]
       );
-      nextTick(() => {
+      nextTick(async () => {
+        if (!await rulePreparation.prepare()) return;
         applyPaletteToSvg({ recolorPairwise, recolorCollinear });
         applySpecificRulesToSvg();
       });

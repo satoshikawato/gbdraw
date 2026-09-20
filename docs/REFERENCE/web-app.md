@@ -38,9 +38,16 @@ local environment or prepared command-line evidence.
 | Circular | One GenBank/GBFF container or one matched GFF3 + FASTA pair | One Circular result, separate results, or one multi-record canvas |
 | Linear | Ordered GenBank rows or matched GFF3 + FASTA rows | One Linear result with an independent comparison plan |
 
-A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear record card
+A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank File** uploader, or its matched GFF3 and FASTA
-uploaders, followed by a closed **Record options** disclosure. **Add sequence**
+uploaders, followed by **File defaults (applied to all records)** and a closed
+**Record options** disclosure. Use the up and down buttons in a File header to
+move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
+moves together, while the record order inside the source stays unchanged.
+Uploading a GenBank file fills the file default
+**Organism / strain** from its `/organism` and `/strain` qualifiers when that
+field is still empty; the file default **Subtitle / title** is yours to fill,
+because a subtitle names one replicon rather than the whole file. **Add sequence**
 is visible in the **Input Genomes** header. A GenBank file may contain several
 biological records. GFF3 input requires the matching FASTA sequence and exact
 sequence-ID agreement. See [Input formats and TSV
@@ -96,7 +103,9 @@ circle.
 
 Each Linear input card owns its record selector, inclusive **Start** and
 **End** coordinates, **Reverse complement** state, definition, and row
-placement. A region changes the displayed interval, not the source file.
+placement. A record whose definition or subtitle is empty inherits its file
+default and is marked **Using file default**; typing a value overrides it, and
+**Reset to default** restores inheritance. A region changes the displayed interval, not the source file.
 Reverse complementation changes displayed coordinates, feature orientation,
 and comparison endpoint mapping without rewriting the input.
 
@@ -104,7 +113,26 @@ Turn on **Arrange in rows** to assign records to rows. Record-card order is the
 left-to-right order within a row, and **Record gap (px)** separates records in
 that row. Records that share a row use one bp-per-pixel scale. Row placement is
 independent of the comparison plan: **No comparison** draws the records without
-links.
+links. Moving a File does not renumber explicit rows: Record Layout continues to
+own row assignment and movement within a row. With **Arrange in rows** off, the
+File-card order determines the canonical record order; with it on, row assignment
+comes first and the moved record order determines left-to-right placement within
+the same row. An organism or subtitle shared by every record of a row is drawn once
+beside that row, while a value that varies within the row, such as a per-record
+replicon name, is drawn above its own record; a row whose records disagree on
+the organism gets no row-level text.
+
+With **Lock Definition Column** off, definitions beside rows use a common column
+center and follow each row's horizontal offset. Turning it on aligns them at a
+shared left edge. The definition gap separates the reserved column from the row;
+shorter text can leave more space. Record-local text stays above its own sequence.
+
+**Show Replicon** controls one automatic name per record, taking the first available
+source qualifier in the order chromosome, plasmid, organelle. It is off by default.
+Automatic names use the **Replicon** line style; explicit subtitles use **Subtitle**
+and remain visible independently, even when their text matches the automatic name.
+Apply these settings with **Generate**. Saved subtitles and previews retain their
+values on load; see [Session compatibility](session-and-request-compatibility.md#linear-file-level-defaults).
 
 **Show Coordinate Scale** controls coordinate ticks and labels while retaining
 the record axes. **Ruler on Axis** uses each record axis as its ruler only when
