@@ -1,0 +1,94 @@
+name: Public LOSAT distribution acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Platforms to verify
+        type: choice
+        default: all
+        options: [all, macos]
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.targets.outputs.include }}
+    steps:
+      - id: targets
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          python - <<'PYTHON'
+          import json, os
+          rows = [
+              dict(id="linux-x64", runner="ubuntu-24.04", architecture="x64", execution_mode="native"),
+              dict(id="windows-x64", runner="windows-2025", architecture="x64", execution_mode="native"),
+              dict(id="macos-arm64", runner="macos-15", architecture="arm64", execution_mode="native"),
+              dict(id="macos-x64", runner="macos-15-intel", architecture="x64", execution_mode="native"),
+              dict(id="macos-rosetta", runner="macos-15", architecture="x64", execution_mode="rosetta"),
+          ]
+          if os.environ["PLATFORMS"] == "macos":
+              rows = [row for row in rows if row["id"].startswith("macos-")]
+          for row in rows:
+              row["python"] = "/usr/bin/arch -x86_64 python" if row["execution_mode"] == "rosetta" else "python"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("include=" + json.dumps(rows) + "\n")
+          PYTHON
+  native-install:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - name: Read the verified public release pin
+        id: pin
+        run: |
+          ${{ matrix.python }} - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          lock = json.loads(Path('gbdraw/data/losat-release.json').read_text())
+          sha = lock['candidate_sha']
+          if not isinstance(sha, str) or not re.fullmatch('[0-9a-f]{40}', sha):
+              raise SystemExit('Public release pin is required before acceptance')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'candidate_sha={sha}\n')
+          PY
+      - uses: actions/checkout@v4
+        with:
+          repository: satoshikawato/LOSAT
+          ref: ${{ steps.pin.outputs.candidate_sha }}
+          path: losat-source
+      - name: Build and install the Python wheel
+        run: |
+          ${{ matrix.python }} -m pip install build
+          ${{ matrix.python }} -m build --wheel --outdir "$RUNNER_TEMP/gbdraw-dist"
+          ${{ matrix.python }} -m pip install "$RUNNER_TEMP"/gbdraw-dist/*.whl
+      - name: Download the public binary and verify offline use
+        working-directory: ${{ runner.temp }}
+        run: |
+          ${{ matrix.python }} "$GITHUB_WORKSPACE/tools/verify_losat_installation.py" \
+            --losat-source "$GITHUB_WORKSPACE/losat-source" \
+            --execution-mode "${{ matrix.execution_mode }}" \
+            --output "$RUNNER_TEMP/losat-acceptance/result.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: losat-installation-${{ matrix.id }}
+          path: ${{ runner.temp }}/losat-acceptance
+          if-no-files-found: warn
+          retention-days: 30

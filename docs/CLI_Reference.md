@@ -36,6 +36,7 @@ Usage:
 Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
+  setup-losat  Install the pinned native LOSAT release
   gui       Launch the local web UI in your browser
 
 For each subcommand, you can get additional help by running:

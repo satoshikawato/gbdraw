@@ -1,0 +1,39 @@
+{
+  "artifacts": {
+    "aarch64-apple-darwin": {
+      "binary": "LOSAT",
+      "binary_sha256": "c4bc01e12992021e8ff04e0193812980bd1324b1934fea1e364689da18d3872a",
+      "binary_size": 2320400,
+      "filename": "LOSAT-0.1.0-aarch64-apple-darwin.tar.gz",
+      "sha256": "cfcee5b17694c031b024fd2b345aa044e850aaf4c7cb41330371941f4478b213",
+      "size": 1128572
+    },
+    "x86_64-apple-darwin": {
+      "binary": "LOSAT",
+      "binary_sha256": "6ca9d981986add31be5696b7b92e8a8123de9fdb600287cf1518b1b399362167",
+      "binary_size": 2842808,
+      "filename": "LOSAT-0.1.0-x86_64-apple-darwin.tar.gz",
+      "sha256": "840f1dd63f85075677c5da1388d87fcc7b96556087406e6579f04e2b837ed5c2",
+      "size": 1251392
+    },
+    "x86_64-pc-windows-msvc": {
+      "binary": "LOSAT.exe",
+      "binary_sha256": "7d9d8a610562dcf938f50b51bdbb67c991624281f08315547b0349d636b938ec",
+      "binary_size": 2496512,
+      "filename": "LOSAT-0.1.0-x86_64-pc-windows-msvc.zip",
+      "sha256": "049b69f18f0e471b9d460f0769698999b03a3765107c600c59d608edb2d7baa5",
+      "size": 1109931
+    },
+    "x86_64-unknown-linux-gnu": {
+      "binary": "LOSAT",
+      "binary_sha256": "fb01e0f6561a57f58772d154d68a4a190626c3029186995db353ef7486cb4fb4",
+      "binary_size": 3119432,
+      "filename": "LOSAT-0.1.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "4e8416e4928cfe486d9563185af22e95b5d9db87a3a6650669925d68a60c0e3d",
+      "size": 1310242
+    }
+  },
+  "candidate_sha": "6bfb1b09b6cb9451fa771e687c82cbb860e8c779",
+  "schema_version": 1,
+  "version": "0.1.0"
+}
