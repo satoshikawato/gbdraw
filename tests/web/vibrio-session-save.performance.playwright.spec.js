@@ -32,6 +32,7 @@ test.use({
 
 const installSaveAcceptanceProbe = (page) => page.addInitScript(() => {
   const lifecycle = [];
+  const structuralMetrics = {};
   const responsiveness = {
     heartbeatCount: 0,
     maximumHeartbeatGapMs: 0,
@@ -42,9 +43,11 @@ const installSaveAcceptanceProbe = (page) => page.addInitScript(() => {
 
   window.__GBDRAW_SAVE_ACCEPTANCE__ = {
     lifecycle,
+    structuralMetrics,
     responsiveness,
     reset() {
       lifecycle.length = 0;
+      Object.keys(structuralMetrics).forEach((name) => delete structuralMetrics[name]);
       responsiveness.heartbeatCount = 0;
       responsiveness.maximumHeartbeatGapMs = 0;
       responsiveness.memoryHighWaterBytes = Number(performance.memory?.usedJSHeapSize || 0);
@@ -53,12 +56,18 @@ const installSaveAcceptanceProbe = (page) => page.addInitScript(() => {
     snapshot() {
       return {
         lifecycle: lifecycle.map((event) => ({ ...event })),
+        structuralMetrics: { ...structuralMetrics },
         responsiveness: { ...responsiveness },
         usedJsHeapBytes: Number(performance.memory?.usedJSHeapSize || 0)
       };
     }
   };
   window.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      const name = String(metric?.name || '');
+      structuralMetrics[name] = Number(structuralMetrics[name] || 0)
+        + Number(metric?.value || 0);
+    },
     onSessionLifecycleEvent(event) {
       lifecycle.push({ ...event });
     }
@@ -176,7 +185,7 @@ const compareResultSvgs = (expectedPath, actualPath) => {
     'print(result.message)',
     'print("\\n".join(result.differences))',
     'raise SystemExit(0 if result.equal else 1)'
-  ].join(';');
+  ].join('\n');
   const compared = spawnSync(
     process.env.GBDRAW_PYTHON || 'python',
     ['-c', comparisonScript, expectedPath, actualPath],
@@ -375,6 +384,9 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     ({ name }) => name === 'session-save-catalog-preparation-end'
   )?.reusedCommittedSession).toBe(true);
   expect(lifecycleNames).not.toContain('catalog.admission-started');
+  expect(after.structuralMetrics.sessionSaveProteinRawTextValidationReuseCount)
+    .toBeGreaterThan(0);
+  expect(after.structuralMetrics.sessionSaveProteinRawTextValidationCount || 0).toBe(0);
 
   const heapHighWaterBytes = Math.max(
     after.usedJsHeapBytes,
@@ -389,6 +401,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     heapDeltaBytes,
     maximumHeartbeatGapMs: after.responsiveness.maximumHeartbeatGapMs,
     compressedBytes: outcome.blob?.size || readFileSync(savedPath).byteLength,
+    structuralMetrics: after.structuralMetrics,
     lifecycle: after.lifecycle
   };
   console.log(`GBDRAW_ISSUE_544_PERFORMANCE ${JSON.stringify(performanceEvidence)}`);
