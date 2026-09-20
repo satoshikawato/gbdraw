@@ -947,6 +947,15 @@ const defaultEditorStateData = () => ({
   featureCatalog: null
 });
 
+const serializableFeatureCatalog = (preserveAdoptedCatalog) => {
+  const liveCatalog = state.featureCatalog?.value;
+  // Vue proxies obscure the identity used by the validated/adopted catalog cache.
+  const rawCatalog = globalThis.window?.Vue?.toRaw?.(liveCatalog) ?? liveCatalog;
+  return preserveAdoptedCatalog && isAdoptedFeatureCatalog(rawCatalog)
+    ? rawCatalog
+    : cloneJsonValue(liveCatalog, null);
+};
+
 export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
@@ -966,10 +975,7 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
-  featureCatalog: preserveAdoptedCatalog
-    && isAdoptedFeatureCatalog(state.featureCatalog?.value)
-    ? state.featureCatalog.value
-    : cloneJsonValue(state.featureCatalog?.value, null)
+  featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
 });
 
 const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {

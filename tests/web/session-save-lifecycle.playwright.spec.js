@@ -197,6 +197,10 @@ test('Save Session is single-flight, paints pending state, and releases every se
   expect(eventNames(successProbe).filter(
     (name) => name === 'session-save-download-handoff-completed'
   )).toHaveLength(1);
+  expect(eventNames(successProbe)).not.toContain('catalog.admission-started');
+  expect(successProbe.events.find(
+    ({ name }) => name === 'session-save-catalog-preparation-end'
+  )?.reusedCommittedSession).toBe(true);
   expectOrderedEvents(successProbe, [
     'session-save-pending-published',
     'session-save-paint-opportunity-completed',

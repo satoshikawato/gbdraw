@@ -3139,13 +3139,23 @@ export const createAppSetup = () => {
         recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
 
         recordSessionLifecycleEvent('session-save-catalog-preparation-start');
-        const comparisonPlanSnapshot = mode.value === 'linear'
-          ? linearComparisonResolution.value
-          : null;
-        const { catalog, error } = await prepareLinearRecordCatalog(
-          comparisonPlanSnapshot?.hasComparisonIntent
-        );
-        recordSessionLifecycleEvent('session-save-catalog-preparation-end');
+        const committedSession = getCommittedCanonicalSession();
+        let catalog = null;
+        let error = '';
+        // A committed request already owns its record selections and resources.
+        // Catalog discovery is only needed while projecting an uncommitted draft.
+        if (!committedSession) {
+          const comparisonPlanSnapshot = mode.value === 'linear'
+            ? linearComparisonResolution.value
+            : null;
+          ({ catalog, error } = await prepareLinearRecordCatalog(
+            comparisonPlanSnapshot?.hasComparisonIntent
+          ));
+          await afterPaint();
+        }
+        recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
+          reusedCommittedSession: Boolean(committedSession)
+        });
         if (error) throw new Error(error);
         return await exportSession(title, { linearRecordCatalog: catalog });
       } catch (error) {

@@ -364,6 +364,10 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(downloadCount).toBe(1);
   expect(dialogs.filter(({ message }) => message.startsWith('Compressed session size is ')))
     .toHaveLength(1);
+  expect(after.lifecycle.find(
+    ({ name }) => name === 'session-save-catalog-preparation-end'
+  )?.reusedCommittedSession).toBe(true);
+  expect(lifecycleNames).not.toContain('catalog.admission-started');
 
   const heapHighWaterBytes = Math.max(
     after.usedJsHeapBytes,
