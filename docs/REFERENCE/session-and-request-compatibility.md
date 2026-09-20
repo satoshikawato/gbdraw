@@ -84,6 +84,14 @@ carries is record-local, and every record of the row then draws that line above
 itself, including the record that leads the row. A subtitle follows its label,
 so it is never left beside the row on its own.
 
+Older Linear sessions may contain automatically inferred replicon or organelle
+names saved as subtitles. These values remain visible when **Show Replicon** is
+off: loading does not guess their origin or remove matching text. Clear an
+unwanted record subtitle to restore its file default; clear that default too if
+no subtitle is wanted. New uploads leave automatic names to **Show Replicon**.
+Loading preserves the saved preview. **Generate** applies the current settings
+and definition alignment, so its placement can differ from an older preview.
+
 ## Saving settings before loading a source
 
 **Save Session** also works before any biological source is loaded. It preserves

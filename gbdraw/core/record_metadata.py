@@ -239,79 +239,14 @@ def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
     return strain
 
 
-def format_inferred_subtitle(
-    metadata: RecordSourceMetadata,
-    description: str = "",
-) -> str:
-    """Infer a concise record subtitle from replicon/organelle metadata or description."""
-    if metadata.replicon:
-        return str(metadata.replicon).strip()
-    if metadata.organelle:
-        return str(metadata.organelle).strip().capitalize()
-
-    desc = str(description or "").strip().rstrip(".")
-    if not desc:
-        return ""
-
-    import re
-
-    desc_lower = desc.lower()
-    if "plasmid" in desc_lower:
-        plasmid_match = re.search(
-            r"(?:plasmid\s+([A-Za-z0-9_-]+)|\b(p[A-Za-z0-9_-]+)\b)",
-            desc,
-            re.IGNORECASE,
-        )
-        if plasmid_match:
-            p_name = (plasmid_match.group(1) or plasmid_match.group(2) or "").strip()
-            return p_name if p_name.lower().startswith("plasmid") else f"Plasmid {p_name}"
-
-    if "complete genome" in desc_lower:
-        if "mitochondri" in desc_lower:
-            return "Mitochondrion, complete genome"
-        if "chloroplast" in desc_lower:
-            return "Chloroplast, complete genome"
-        return "Complete genome"
-
-    if "complete sequence" in desc_lower:
-        return "Complete sequence"
-
-    organism = str(metadata.organism or "").strip()
-    if organism and organism.lower() not in _NON_ORGANISM_NAMES:
-        stripped = re.sub(
-            rf"^{re.escape(organism)}[,\s]*",
-            "",
-            desc,
-            flags=re.IGNORECASE,
-        )
-        stripped = re.sub(
-            r"^(?:DNA|genomic DNA|cDNA)[,\s]*",
-            "",
-            stripped,
-            flags=re.IGNORECASE,
-        ).strip()
-        if re.search(
-            r"(?:gene cluster|biosynthetic gene cluster|cluster|operon)",
-            stripped,
-            re.IGNORECASE,
-        ):
-            return stripped[:1].upper() + stripped[1:]
-
-    cluster_match = re.search(
-        r"([A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)*\s+(?:gene cluster|biosynthetic gene cluster|cluster|operon))",
-        desc,
-        re.IGNORECASE,
-    )
-    if cluster_match:
-        res = cluster_match.group(1).strip()
-        return res[:1].upper() + res[1:]
-
-    return ""
+def format_replicon_label(metadata: RecordSourceMetadata) -> str:
+    """Name a replicon, falling back to the existing capitalized organelle label."""
+    return str(metadata.replicon or "").strip() or str(metadata.organelle or "").strip().capitalize()
 
 
 __all__ = [
     "RecordSourceMetadata",
     "format_inferred_definition",
-    "format_inferred_subtitle",
+    "format_replicon_label",
     "infer_record_source_metadata",
 ]

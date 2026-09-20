@@ -115,6 +115,18 @@ beside that row, while a value that varies within the row, such as a per-record
 replicon name, is drawn above its own record; a row whose records disagree on
 the organism gets no row-level text.
 
+With **Lock Definition Column** off, definitions beside rows use a common column
+center and follow each row's horizontal offset. Turning it on aligns them at a
+shared left edge. The definition gap separates the reserved column from the row;
+shorter text can leave more space. Record-local text stays above its own sequence.
+
+**Show Replicon** controls one automatic name per record, taking the first available
+source qualifier in the order chromosome, plasmid, organelle. It is off by default.
+Automatic names use the **Replicon** line style; explicit subtitles use **Subtitle**
+and remain visible independently, even when their text matches the automatic name.
+Apply these settings with **Generate**. Saved subtitles and previews retain their
+values on load; see [Session compatibility](session-and-request-compatibility.md#linear-file-level-defaults).
+
 **Show Coordinate Scale** controls coordinate ticks and labels while retaining
 the record axes. **Ruler on Axis** uses each record axis as its ruler only when
 the scale is visible, **Ruler (Ticks)** is selected, and **Track Layout** is

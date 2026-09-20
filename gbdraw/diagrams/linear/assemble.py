@@ -11,7 +11,6 @@ from __future__ import annotations
 from gbdraw.features.placement import FeaturePlacementSlot
 from ...layout.record_labels import source_ruler_ticks
 
-from collections.abc import Collection
 import copy
 from dataclasses import dataclass, replace
 import logging
@@ -69,6 +68,7 @@ from ...legend.table import (  # type: ignore[reportMissingImports]
     prepare_legend_table,
 )
 from ...layout.linear import (  # type: ignore[reportMissingImports]
+    place_linear_definition,
     AxisGapResolution,
     CollisionBand,
     LinearFeatureLaneGeometry,
@@ -993,36 +993,6 @@ def _split_definition_line_kinds(
     return local_kinds, row_kinds
 
 
-def _definition_metrics_by_record(
-    records: list[SeqRecord],
-    canvas_config: LinearCanvasConfigurator,
-    *,
-    cfg: GbdrawConfig,
-    line_kinds_by_record: Sequence[Collection[str] | None] | None = None,
-    record_transforms: Sequence[RecordDisplayTransform] | None = None,
-) -> tuple[float, list[float], list[float]]:
-    """Return the maximum width plus record-local definition widths and heights."""
-
-    widths: list[float] = []
-    heights: list[float] = []
-    for index, record in enumerate(records):
-        line_kinds = (
-            line_kinds_by_record[index]
-            if line_kinds_by_record is not None
-            else None
-        )
-        width, record_heights, _half_heights = _precalculate_definition_metrics(
-            [record],
-            canvas_config,
-            cfg=cfg,
-            line_kinds_by_record=[line_kinds],
-            record_transforms=([record_transforms[index]] if record_transforms is not None else None),
-        )
-        widths.append(float(width))
-        heights.append(float(record_heights[0]))
-    return max(widths, default=0.0), widths, heights
-
-
 def _linear_record_vertical_offset(
     plans: list[LinearRecordVerticalPlan],
     rows_by_record: tuple[int, ...],
@@ -1198,6 +1168,7 @@ def _record_collision_bands(
     definition_column_width: float,
     row_definition_width: float,
     definition_gap: float,
+    text_anchor: str = "middle",
 ) -> tuple[CollisionBand, ...]:
     """Build alignment-local collision domains for one placed record."""
 
@@ -1223,24 +1194,16 @@ def _record_collision_bands(
     local_band = definition_geometry.local_band
     local_width = max(0.0, float(definition_geometry.local_width))
     if local_band is not None and local_width > 0.0:
-        if multi_record_enabled:
-            center_x = x + (0.5 * width)
-            definition_start = center_x - (0.5 * local_width)
-            definition_end = center_x + (0.5 * local_width)
-        elif keep_definition_left_aligned:
-            definition_start = -(
-                max(0.0, float(definition_column_width))
-                + max(0.0, float(definition_gap))
-            )
-            definition_end = definition_start + local_width
-        else:
-            definition_end = x - max(0.0, float(definition_gap))
-            definition_start = definition_end - local_width
+        placement = place_linear_definition(
+            width=local_width, column_width=definition_column_width, record_x=x,
+            gap=max(0.0, float(definition_gap)), keep_left=keep_definition_left_aligned,
+            text_anchor=text_anchor, sequence_width=width if multi_record_enabled else None,
+        )
         bands.append(
             CollisionBand(
                 "definition",
-                definition_start,
-                definition_end,
+                placement.left,
+                placement.right,
                 local_band.top_y,
                 local_band.bottom_y,
             )
@@ -1249,18 +1212,15 @@ def _record_collision_bands(
     row_band = definition_geometry.row_band
     actual_row_width = max(0.0, float(definition_geometry.row_width))
     if row_band is not None and actual_row_width > 0.0:
-        if keep_definition_left_aligned:
-            row_start = -(
-                max(0.0, float(definition_gap))
-                + max(0.0, float(row_definition_width))
-            )
-        else:
-            row_start = float(record_x) - max(0.0, float(definition_gap)) - actual_row_width
+        placement = place_linear_definition(
+            width=actual_row_width, column_width=row_definition_width, record_x=x,
+            gap=max(0.0, float(definition_gap)), keep_left=keep_definition_left_aligned,
+        )
         bands.append(
             CollisionBand(
                 "definition",
-                row_start,
-                row_start + actual_row_width,
+                placement.left,
+                placement.right,
                 row_band.top_y,
                 row_band.bottom_y,
             )
@@ -1975,7 +1935,7 @@ def assemble_linear_diagram(
             rows_by_record=rows_by_record,
             row_leading_indices=row_leading_indices,
         )
-    max_def_width, definition_widths, definition_heights = _definition_metrics_by_record(
+    max_def_width, definition_widths, definition_heights = _precalculate_definition_metrics(
         records,
         canvas_config,
         cfg=cfg,
@@ -1990,7 +1950,7 @@ def assemble_linear_diagram(
             row_definition_width,
             row_definition_widths,
             row_definition_heights,
-        ) = _definition_metrics_by_record(
+        ) = _precalculate_definition_metrics(
             records,
             canvas_config,
             cfg=cfg,
@@ -2391,6 +2351,7 @@ def assemble_linear_diagram(
                 sequence_width=sequence_width,
                 record_x=record_offsets_x[index],
                 multi_record_enabled=False,
+                text_anchor=cfg.objects.definition.linear.text_anchor,
                 keep_definition_left_aligned=bool(
                     canvas_config.keep_definition_left_aligned
                 ),

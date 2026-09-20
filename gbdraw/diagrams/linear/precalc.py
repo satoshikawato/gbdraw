@@ -74,9 +74,9 @@ def _precalculate_definition_metrics(
     """
     max_definition_width = 0
     definition_heights: list[float] = []
-    definition_half_heights: list[float] = []
+    definition_widths: list[float] = []
     if not records:
-        return 0.0, definition_heights, definition_half_heights
+        return 0.0, definition_widths, definition_heights
 
     if line_kinds_by_record is not None and len(line_kinds_by_record) != len(records):
         raise ValueError("line_kinds_by_record must match the number of records")
@@ -97,8 +97,8 @@ def _precalculate_definition_metrics(
             max_definition_width = def_group.definition_bounding_box_width
         definition_height = float(def_group.definition_bounding_box_height)
         definition_heights.append(definition_height)
-        definition_half_heights.append(0.5 * definition_height)
-    return math.ceil(max_definition_width), definition_heights, definition_half_heights
+        definition_widths.append(float(def_group.definition_bounding_box_width))
+    return math.ceil(max_definition_width), definition_widths, definition_heights
 
 
 def _precalculate_feature_layers(

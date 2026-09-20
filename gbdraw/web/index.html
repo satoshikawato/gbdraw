@@ -2659,7 +2659,7 @@
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.keep_definition_left_aligned" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Keep the linear record-label block in the left column when records are center-aligned or aligned by a gbdraw similarity group."></help-tip></span>
+                                        <span class="inline-flex items-center gap-1">Lock Definition Column <help-tip text="Align Linear definitions in a shared left column. When off, definitions use a common column center and follow their row offset, including center or similarity alignment."></help-tip></span>
                                     </label>
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="form.normalize_length" class="form-checkbox">
@@ -3457,7 +3457,7 @@
                                     >
                                     <span class="inline-flex items-center gap-1">
                                         Show Replicon
-                                        <help-tip text="Linear only. Adds an inferred replicon line above the accession when source qualifiers include chromosome or plasmid. Default: off."></help-tip>
+                                        <help-tip text="Linear only. Show one automatic name per record, using chromosome, plasmid, then organelle source qualifiers in that order. Subtitles are independent. Apply with Generate. Default: off."></help-tip>
                                     </span>
                                 </label>
                                 <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">

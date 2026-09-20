@@ -16,7 +16,7 @@ from svgwrite.container import Group  # type: ignore[reportMissingImports]
 from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from ...features.factory import FeatureBuildResult
 from ...layout.linear_multi_record import LinearRecordPlacement
-from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
+from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
 from ...linear_comparison import LinearComparison
 from ...configurators import (  # type: ignore[reportMissingImports]
     FeatureDrawingConfigurator,
@@ -35,7 +35,6 @@ from ...render.groups.linear import (  # type: ignore[reportMissingImports]
 )
 from .positioning import (
     position_linear_track_group,
-    position_record_definition_group,
     position_record_group,
 )
 
@@ -292,19 +291,19 @@ def add_record_definition_group(
                 + 0.5 * definition_group_obj.definition_bounding_box_height
             )
         )
-        record_definition_group.translate(
-            canvas_config.horizontal_offset
-            + placement.x
-            + 0.5 * placement.sequence_width,
-            header_y,
+        local_position = place_linear_definition(
+            width=definition_group_obj.definition_bounding_box_width,
+            column_width=0.0, record_x=placement.x, gap=definition_gap,
+            keep_left=keep_definition_left_aligned, sequence_width=placement.sequence_width,
         )
+        record_definition_group.translate(canvas_config.horizontal_offset + local_position.x, header_y)
         canvas.add(record_definition_group)
         if split_row_definition:
             row_group_obj = DefinitionGroup(
                 record,
                 canvas_config,
                 cfg=cfg,
-                text_anchor="start" if keep_definition_left_aligned else "end",
+                text_anchor="start" if keep_definition_left_aligned else "middle",
                 text_x=0.0,
                 group_id=f"{group_id or str(record.id)}_row",
                 line_kinds=row_line_kinds,
@@ -323,13 +322,14 @@ def add_record_definition_group(
             )
             row_group = row_group_obj.get_group()
 
-            if keep_definition_left_aligned:
-                row_def_x = canvas_config.horizontal_offset - definition_gap - reserved_width
-            else:
-                row_def_x = canvas_config.horizontal_offset + placement.x - definition_gap
+            row_position = place_linear_definition(
+                width=row_group_obj.definition_bounding_box_width,
+                column_width=reserved_width, record_x=placement.x, gap=definition_gap,
+                keep_left=keep_definition_left_aligned,
+            )
 
             row_group.translate(
-                row_def_x,
+                canvas_config.horizontal_offset + row_position.x,
                 (
                     placement.axis_y
                     if definition_center_y is None
@@ -339,60 +339,26 @@ def add_record_definition_group(
             canvas.add(row_group)
         return canvas
 
-    if keep_definition_left_aligned:
-        try:
-            definition_column_width = max(0.0, float(max_def_width))
-        except (TypeError, ValueError):
-            definition_column_width = 0.0
-
-        if definition_column_width == 0.0:
-            provisional_group_obj = DefinitionGroup(
-                record,
-                canvas_config,
-                cfg=cfg,
-                group_id=group_id,
-                record_index=record_index,
-                record_count=record_count,
-                record_transform=record_transform,
-            )
-            definition_column_width = provisional_group_obj.definition_bounding_box_width
-
-        definition_group_obj = DefinitionGroup(
-            record,
-            canvas_config,
-            cfg=cfg,
-            text_anchor="start",
-            text_x=0.0,
-            group_id=group_id,
-            record_index=record_index,
-            record_count=record_count,
-            record_transform=record_transform,
-        )
-        positioned_definition_offset_x = definition_column_width + definition_gap
-    else:
-        definition_group_obj = DefinitionGroup(
-            record,
-            canvas_config,
-            cfg=cfg,
-            group_id=group_id,
-            record_index=record_index,
-            record_count=record_count,
-            record_transform=record_transform,
-        )
-        definition_offset_x = (definition_group_obj.definition_bounding_box_width / 2) + definition_gap
-        positioned_definition_offset_x = definition_offset_x - record_offset_x
-
-    record_definition_group: Group = definition_group_obj.get_group()
-
-    position_record_definition_group(
-        record_definition_group,
-        (
-            record_offset_y
-            if definition_center_y is None
-            else float(definition_center_y)
-        ),
-        positioned_definition_offset_x,
+    definition_group_obj = DefinitionGroup(
+        record,
         canvas_config,
+        cfg=cfg,
+        text_anchor="start" if keep_definition_left_aligned else None,
+        group_id=group_id,
+        record_index=record_index,
+        record_count=record_count,
+        record_transform=record_transform,
+    )
+    definition_position = place_linear_definition(
+        width=definition_group_obj.definition_bounding_box_width,
+        column_width=max(0.0, float(max_def_width)), record_x=record_offset_x,
+        gap=definition_gap, keep_left=keep_definition_left_aligned,
+        text_anchor=definition_group_obj.linear_text_anchor,
+    )
+    record_definition_group = definition_group_obj.get_group()
+    record_definition_group.translate(
+        canvas_config.horizontal_offset + definition_position.x,
+        record_offset_y if definition_center_y is None else float(definition_center_y),
     )
 
     canvas.add(record_definition_group)

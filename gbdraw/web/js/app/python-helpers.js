@@ -1597,7 +1597,6 @@ def list_sequence_records(path, format):
     from gbdraw.api.record_planning import _detected_topology
     from gbdraw.core.record_metadata import (
         format_inferred_definition,
-        format_inferred_subtitle,
         infer_record_source_metadata,
     )
     try:
@@ -1612,17 +1611,11 @@ def list_sequence_records(path, format):
             organism = ""
             strain = ""
             inferred_def = ""
-            inferred_sub = ""
-            sub_from_replicon = False
             if format == "genbank":
                 meta = infer_record_source_metadata(record)
                 organism = meta.organism or ""
                 strain = meta.strain or ""
                 inferred_def = format_inferred_definition(meta)
-                inferred_sub = format_inferred_subtitle(meta, str(record.description or ""))
-                # A replicon or organelle qualifier names this record alone; a
-                # subtitle read from the shared description does not.
-                sub_from_replicon = bool(meta.replicon or meta.organelle)
 
             payload.append(
                 {
@@ -1633,8 +1626,6 @@ def list_sequence_records(path, format):
                     "organism": organism,
                     "strain": strain,
                     "inferred_definition": inferred_def,
-                    "inferred_subtitle": inferred_sub,
-                    "inferred_subtitle_from_replicon": sub_from_replicon,
                 }
             )
         return json.dumps({"records": payload})

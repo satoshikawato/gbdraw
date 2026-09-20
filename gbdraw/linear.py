@@ -442,7 +442,8 @@ def _get_args(args) -> argparse.Namespace:
             'label or subtitle that no record of the row contradicts becomes a row '
             'definition drawn once beside the row, and text that varies within the row '
             'stays above its own record; this flag aligns those row definitions in a '
-            'shared left column instead of placing each one beside its own row '
+            'shared left column. By default, definitions are centered within a shared '
+            'column width and follow their row offset '
             '(default: False).'
         ),
         action='store_true')
@@ -544,7 +545,11 @@ def _get_args(args) -> argparse.Namespace:
         default=[])
     parser.add_argument(
         '--show_replicon',
-        help='Show inferred replicon labels in linear record-label blocks (default: False).',
+        help=(
+            'Show one automatic name per record, using chromosome, plasmid, then '
+            'organelle source qualifiers in that order. Explicit subtitles are '
+            'independent (default: False).'
+        ),
         action='store_true')
     parser.add_argument(
         '--hide_accession',
