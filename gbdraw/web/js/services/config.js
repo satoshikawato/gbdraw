@@ -947,6 +947,15 @@ const defaultEditorStateData = () => ({
   featureCatalog: null
 });
 
+const serializableFeatureCatalog = (preserveAdoptedCatalog) => {
+  const liveCatalog = state.featureCatalog?.value;
+  // Vue proxies obscure the identity used by the validated/adopted catalog cache.
+  const rawCatalog = globalThis.window?.Vue?.toRaw?.(liveCatalog) ?? liveCatalog;
+  return preserveAdoptedCatalog && isAdoptedFeatureCatalog(rawCatalog)
+    ? rawCatalog
+    : cloneJsonValue(liveCatalog, null);
+};
+
 export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
@@ -966,10 +975,7 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
-  featureCatalog: preserveAdoptedCatalog
-    && isAdoptedFeatureCatalog(state.featureCatalog?.value)
-    ? state.featureCatalog.value
-    : cloneJsonValue(state.featureCatalog?.value, null)
+  featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
 });
 
 const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
@@ -2419,18 +2425,30 @@ const restoredLosatCacheInfoIdentity = (entry) => {
 
 const serializeLosatCache = () => {
   const cacheMap = state.losatCache?.value;
-  if (!cacheMap || cacheMap.size === 0) return [];
+  if (!cacheMap || cacheMap.size === 0) {
+    return { entries: [], validatedManifest: null, manifestValidated: false };
+  }
   const info = Array.isArray(state.losatCacheInfo.value) ? state.losatCacheInfo.value : [];
   const entries = [];
   const seen = new Set();
 
-  const buildEntry = (key, cached, infoEntry = {}) => ({
-    ...(adoptedLosatCacheValues.has(cached) ? cached : cloneJsonData(cached)),
-    key: String(key),
-    filename: String(infoEntry.filename || ''),
-    display: Boolean(infoEntry.display),
-    ...losatCacheInfoIdentity(infoEntry)
-  });
+  const buildEntry = (key, cached, infoEntry = {}) => {
+    let serialized = cached;
+    if (!adoptedLosatCacheValues.has(cached)) {
+      const { text, ...metadata } = cached;
+      serialized = {
+        ...cloneJsonData(metadata),
+        text: String(text ?? '')
+      };
+    }
+    return {
+      ...serialized,
+      key: String(key),
+      filename: String(infoEntry.filename || ''),
+      display: Boolean(infoEntry.display),
+      ...losatCacheInfoIdentity(infoEntry)
+    };
+  };
 
   info.forEach((entry, idx) => {
     if (!entry || !entry.key) return;
@@ -2455,13 +2473,17 @@ const serializeLosatCache = () => {
   const manifest = state.proteinIdentityManifest.value;
   const identityIndex = buildValidatedProteinIdentityIndex(manifest);
   try {
-    return entries.filter((entry) => {
-      if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
-      if (!identityIndex) {
-        throw new Error('Save Session requires a valid protein identity manifest.');
-      }
-      return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
-    });
+    return {
+      entries: entries.filter((entry) => {
+        if (classifyRawLosatCacheEntry(entry) !== 'protein-current') return true;
+        if (!identityIndex) {
+          throw new Error('Save Session requires a valid protein identity manifest.');
+        }
+        return validateProteinRawEntryReferences(entry, manifest, { identityIndex });
+      }),
+      validatedManifest: identityIndex ? manifest : null,
+      manifestValidated: Boolean(identityIndex)
+    };
   } finally {
     releaseValidatedProteinIdentityIndex(identityIndex);
   }
@@ -3841,9 +3863,15 @@ export const exportSession = async (
   const sessionFilename = buildSessionFilename(resolvedTitle);
   if (lastSessionFilename && lastSessionFilename === sessionFilename) {
     const proceed = confirm(`Download "${sessionFilename}" again? Your browser may overwrite or rename the file.`);
-    if (!proceed) return { status: 'canceled' };
+    if (!proceed) {
+      recordSessionLifecycleEvent('session-save-download-canceled', {
+        reason: 'repeat-download'
+      });
+      return { status: 'canceled' };
+    }
   }
 
+  recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeResults();
   const editorState = buildEditorStateData({ preserveAdoptedCatalog: true });
   if (logicalResults.length > 0) {
@@ -3865,7 +3893,11 @@ export const exportSession = async (
     editorState.featureCatalog = null;
   }
 
-  const losatEntries = serializeLosatCache();
+  const {
+    entries: losatEntries,
+    validatedManifest,
+    manifestValidated
+  } = serializeLosatCache();
   const lastRunInvocation = state.lastRunInfo.value?.invocation;
   const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
     ? cloneJsonData(lastRunInvocation)
@@ -3946,7 +3978,10 @@ export const exportSession = async (
   const legacyDerivedEvidence = normalizeLegacyDerivedEvidence(
     state.legacyProteinDerivedEvidence.value
   );
-  if (!validateProteinIdentityManifest(state.proteinIdentityManifest.value)) {
+  if (
+    (!manifestValidated || validatedManifest !== state.proteinIdentityManifest.value)
+    && !validateProteinIdentityManifest(state.proteinIdentityManifest.value)
+  ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
   const sessionData = {
@@ -4031,11 +4066,23 @@ export const exportSession = async (
     throw new Error('Save Session could not validate the session data.');
   }
 
+  recordSessionLifecycleEvent('session-save-projection-end');
+  recordSessionLifecycleEvent('session-save-compression-start');
   const compressed = await compressSessionData(sessionData);
+  recordSessionLifecycleEvent('session-save-compression-end', {
+    compressedSize: compressed.size
+  });
   if (!confirmLargeSessionBlob(compressed)) {
+    recordSessionLifecycleEvent('session-save-download-canceled', {
+      reason: 'large-download',
+      compressedSize: compressed.size
+    });
     return { status: 'canceled', compressedSize: compressed.size };
   }
   downloadBlob(compressed, sessionFilename);
+  recordSessionLifecycleEvent('session-save-download-handoff-completed', {
+    compressedSize: compressed.size
+  });
   lastSessionFilename = sessionFilename;
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };

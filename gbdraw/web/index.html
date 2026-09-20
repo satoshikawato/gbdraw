@@ -1219,13 +1219,14 @@
                     <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
                     </button>
-                    <button @click="saveSessionWithTitle" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5" title="Save Session" aria-label="Save Session">
-                        <i class="ph ph-archive"></i> Save Session
+                    <button @click="saveSessionWithTitle" :disabled="sessionSavePending" :aria-busy="sessionSavePending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait" title="Save Session" aria-label="Save Session">
+                        <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'"></i> Save Session
                     </button>
                     <button data-history-managed @click="$refs.sessionInput.click()" :disabled="sessionImportPending" :aria-busy="sessionImportPending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
+                    <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Saving session…</span>
                     <span v-if="sessionImportPending" data-session-import-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">Loading session…</span>
                 </div>
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
