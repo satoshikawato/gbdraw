@@ -63,9 +63,7 @@ from tools.refresh_gallery_sessions import (
 pytestmark = pytest.mark.gallery
 
 BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, CANONICAL_REQUEST_SCHEMA})
-BUNDLED_SESSION_VERSIONS = frozenset(
-    {CURRENT_SESSION_VERSION - 1, CURRENT_SESSION_VERSION}
-)
+BUNDLED_SESSION_VERSIONS = frozenset({41, 42, CURRENT_SESSION_VERSION})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:

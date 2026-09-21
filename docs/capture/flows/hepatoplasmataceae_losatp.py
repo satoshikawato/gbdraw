@@ -467,9 +467,12 @@ def _boxes_overlap(left: Mapping[str, float], right: Mapping[str, float]) -> boo
 
 
 def _assert_input_capture_framing(page: Page) -> None:
-    depth_disclosures = page.locator("[data-linear-source-depth][open]")
-    while depth_disclosures.count():
-        depth_disclosures.first.locator("summary").click()
+    depth_disclosures = page.get_by_role(
+        "button",
+        name=re.compile(r"^Depth TSV assignments for file \d+:"),
+    )
+    for index in range(depth_disclosures.count()):
+        depth_disclosures.nth(index).click()
     selected_files = page.get_by_role(
         "group", name="GenBank File selection", exact=True
     )

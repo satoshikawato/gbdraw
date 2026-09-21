@@ -643,13 +643,16 @@ def capture_bgc_losatp(
                 expect(separate_strands_control).not_to_be_checked()
         if "input" in screenshot_names:
             name = screenshot_names["input"]
-            fifth_source = page.locator("[data-linear-source-card]").nth(4)
+            fifth_source = page.get_by_role(
+                "region", name="Linear input file 5", exact=True
+            )
             fifth_file = fifth_source.get_by_role(
                 "group", name="GenBank File selection", exact=True
             )
-            fifth_depth = fifth_source.locator("[data-linear-source-depth]")
-            if fifth_depth.get_attribute("open") is not None:
-                fifth_depth.locator("summary").click()
+            fifth_source.get_by_role(
+                "button",
+                name=re.compile(r"^Depth TSV assignments for file 5:"),
+            ).click()
             reverse_complement = page.get_by_label(
                 "Reverse complement for sequence 5", exact=True
             )
