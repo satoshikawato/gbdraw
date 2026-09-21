@@ -1,6 +1,7 @@
 import ctypes
 import errno
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -139,3 +140,58 @@ def test_conda_subdir_is_limited_to_initial_targets(
     monkeypatch.setattr(acceptance.platform, "system", lambda: system)
     monkeypatch.setattr(acceptance.platform, "machine", lambda: machine)
     assert acceptance.conda_subdir() == expected
+
+
+def test_python_api_smoke_uses_public_package_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = [SimpleNamespace(id="one"), SimpleNamespace(id="two")]
+    captured = {}
+
+    class FakeDiagram:
+        def save(self, path):
+            Path(path).write_text("<svg/>", encoding="utf-8")
+            return Path(path)
+
+    def fake_draw_linear(actual_records, *, options):
+        captured["records"] = actual_records
+        captured["options"] = options
+        return FakeDiagram()
+
+    monkeypatch.setattr(acceptance.gbdraw, "draw_linear", fake_draw_linear)
+
+    report = acceptance.run_python_api_smoke(records, tmp_path)
+
+    assert captured["records"] is records
+    assert captured["options"].comparisons.protein_mode == "pairwise"
+    assert captured["options"].comparisons.threads == 1
+    assert report["entrypoint"] == "gbdraw.draw_linear"
+    assert Path(report["svg"]).read_text(encoding="utf-8") == "<svg/>"
+
+
+def test_cli_smoke_runs_installed_cli_in_process_for_native_argv_capture(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    records = []
+    for index in range(2):
+        record = acceptance.SeqRecord(acceptance.Seq("ATG"), id=f"record{index}")
+        record.annotations["molecule_type"] = "DNA"
+        records.append(record)
+
+    def fake_main() -> None:
+        raw_output = Path(sys.argv[sys.argv.index("--protein_blastp_output") + 1])
+        output_prefix = Path(sys.argv[sys.argv.index("--output") + 1])
+        raw_output.write_text("query\tsubject\n", encoding="utf-8")
+        output_prefix.with_suffix(".svg").write_text("<svg/>", encoding="utf-8")
+
+    monkeypatch.setattr(acceptance.gbdraw_cli, "main", fake_main)
+
+    report = acceptance.run_cli_smoke(records, tmp_path)
+
+    assert report["returncode"] == 0
+    assert report["comparison_rows"] == 1
+    assert report["entrypoint"] == "gbdraw.cli.main"
+    assert report["argv"][0] == "gbdraw"
+    assert report["replay_command"][:3] == [sys.executable, "-m", "gbdraw.cli"]

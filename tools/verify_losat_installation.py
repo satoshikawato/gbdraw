@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 import ctypes
 import errno
 import hashlib
+from io import StringIO
 import json
 from pathlib import Path
 import platform
@@ -23,6 +24,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 import gbdraw
+from gbdraw import cli as gbdraw_cli
 from gbdraw import losat_setup as setup
 from gbdraw.analysis import collinearity, protein_colinearity as protein
 
@@ -163,10 +165,7 @@ def run_cli_smoke(records: list[SeqRecord], output_dir: Path) -> dict:
         inputs.append(path)
     output_prefix = cli_dir / "diagram"
     raw_output = cli_dir / "protein-search.tsv"
-    command = [
-        sys.executable,
-        "-m",
-        "gbdraw.cli",
+    cli_args = [
         "linear",
         "--gbk",
         *(str(path) for path in inputs),
@@ -181,13 +180,23 @@ def run_cli_smoke(records: list[SeqRecord], output_dir: Path) -> dict:
         "--output",
         str(output_prefix),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
-    (cli_dir / "stdout.txt").write_text(completed.stdout, encoding="utf-8")
-    (cli_dir / "stderr.txt").write_text(completed.stderr, encoding="utf-8")
-    if completed.returncode != 0:
+    command = ["gbdraw", *cli_args]
+    stdout = StringIO()
+    stderr = StringIO()
+    returncode = 0
+    try:
+        with patch.object(sys, "argv", ["gbdraw", *cli_args]), redirect_stdout(
+            stdout
+        ), redirect_stderr(stderr):
+            gbdraw_cli.main()
+    except SystemExit as exc:
+        returncode = int(exc.code or 0)
+    (cli_dir / "stdout.txt").write_text(stdout.getvalue(), encoding="utf-8")
+    (cli_dir / "stderr.txt").write_text(stderr.getvalue(), encoding="utf-8")
+    if returncode != 0:
         raise ValueError(
-            f"Installed-package CLI smoke failed with exit code {completed.returncode}: "
-            f"{completed.stderr.strip()}"
+            f"Installed-package CLI smoke failed with exit code {returncode}: "
+            f"{stderr.getvalue().strip()}"
         )
     rows = [
         line for line in raw_output.read_text(encoding="utf-8").splitlines()
@@ -196,11 +205,38 @@ def run_cli_smoke(records: list[SeqRecord], output_dir: Path) -> dict:
     if not rows or not output_prefix.with_suffix(".svg").is_file():
         raise ValueError("Installed-package CLI smoke did not produce comparison rows and SVG output")
     return {
+        "entrypoint": "gbdraw.cli.main",
+        "execution": "in-process installed CLI entrypoint for native argv capture",
         "argv": command,
-        "returncode": completed.returncode,
+        "replay_command": [sys.executable, "-m", "gbdraw.cli", *cli_args],
+        "returncode": returncode,
         "comparison_rows": len(rows),
         "svg": str(output_prefix.with_suffix(".svg")),
         "raw_output": str(raw_output),
+    }
+
+
+def run_python_api_smoke(records: list[SeqRecord], output_dir: Path) -> dict:
+    api_dir = output_dir / "python-api-pairwise"
+    api_dir.mkdir()
+    output_path = api_dir / "diagram.svg"
+    diagram = gbdraw.draw_linear(
+        records,
+        options=gbdraw.LinearOptions(
+            comparisons=gbdraw.LinearComparisonOptions(
+                protein_mode="pairwise",
+                threads=1,
+            )
+        ),
+    )
+    saved = diagram.save(output_path)
+    if saved != output_path or not output_path.is_file():
+        raise ValueError("Installed-package Python API smoke did not produce SVG output")
+    return {
+        "entrypoint": "gbdraw.draw_linear",
+        "mode": "pairwise",
+        "svg": str(output_path),
+        "svg_sha256": setup.file_sha256(output_path),
     }
 
 
@@ -292,7 +328,8 @@ def main() -> None:
         socket, "create_connection", side_effect=AssertionError("offline connection attempted")
     ), patch.object(protein, "_run_protein_blastp_subprocess", side_effect=recorded_search):
         if args.installation_mode == "managed":
-            assert setup.setup_losat() == installed
+            if setup.setup_losat() != installed:
+                raise ValueError("Managed setup did not preserve the selected LOSAT executable")
         raw = []
         hits = protein.run_losatp_blastp(query_path.read_text(), subject_path.read_text(), threads=1, raw_output_callback=raw.append)
         digest = hashlib.sha256(raw[0].encode()).hexdigest()
@@ -306,14 +343,37 @@ def main() -> None:
             explicit = builder(records, losatp_threads=1, losatp_bin=str(installed))
             actual = collinearity.convert_collinearity_blocks_to_comparisons(automatic, records=records) if name == "collinear" else automatic.comparisons
             expected = collinearity.convert_collinearity_blocks_to_comparisons(explicit, records=records) if name == "collinear" else explicit.comparisons
-            assert len(actual) == len(expected) and all(a.equals(e) for a, e in zip(actual, expected)), name
+            if len(actual) != len(expected) or not all(
+                actual_frame.equals(expected_frame)
+                for actual_frame, expected_frame in zip(actual, expected)
+            ):
+                raise ValueError(f"Automatic and explicit LOSAT results differ for {name}")
             count = sum(len(frame) for frame in actual)
-            assert count > 0, name
+            if count <= 0:
+                raise ValueError(f"LOSAT returned no comparisons for {name}")
             for index, (actual_frame, expected_frame) in enumerate(zip(actual, expected)):
                 for kind, frame in [("automatic", actual_frame), ("explicit", expected_frame)]:
                     frame.to_csv(args.output.parent / f"{name}-{kind}-{index}.tsv", sep="\t", index=False)
             report["cases"].append({"case": name, "rows": count, "automatic_equals_explicit": True})
+        api_search_start = len(searches)
+        report["python_api"] = run_python_api_smoke(records, args.output.parent)
+        api_searches = searches[api_search_start:]
+        if not api_searches or any(
+            Path(search["argv"][0]) != installed for search in api_searches
+        ):
+            raise ValueError("Installed-package Python API did not execute the selected LOSAT")
+        report["python_api"]["native_argv"] = [
+            search["argv"] for search in api_searches
+        ]
+
+        cli_search_start = len(searches)
         report["cli"] = run_cli_smoke(records, args.output.parent)
+        cli_searches = searches[cli_search_start:]
+        if not cli_searches or any(
+            Path(search["argv"][0]) != installed for search in cli_searches
+        ):
+            raise ValueError("Installed-package CLI did not execute the selected LOSAT")
+        report["cli"]["native_argv"] = [search["argv"] for search in cli_searches]
     report["searches"] = searches
     cache_after = cache_snapshot()
     report["managed_cache"] = {"before": cache_before, "after": cache_after,
