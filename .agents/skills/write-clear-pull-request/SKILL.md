@@ -9,14 +9,14 @@ description: Write, edit, or review gbdraw pull request titles and maintainer-fa
 
 Assume the reader knows gbdraw, Git, and GitHub, but has not read an implementation plan, earlier PRs, or private discussion.
 
-## Required opening
+## Opening
 
 - Write the title as a concrete action plus a concrete object.
-- Begin the body with `## Plain-language summary` and use two to four sentences to say what changes, why, and what differs after merge.
+- Begin the body directly with a concise paragraph that says what changes, why, and what differs after merge. Do not add a heading above this paragraph.
 - Treat internal classifications and process labels as metadata, not as the primary explanation.
 - Preserve exact check names, paths, branch names, options, and code identifiers in backticks. Explain their role in ordinary language when the name is not self-explanatory.
 
-Policy terms may appear in later technical or evidence sections. They fail this standard only when they replace the concrete explanation in the title or opening summary.
+Policy terms may appear in later technical or evidence sections. They fail this standard only when they replace the concrete explanation in the title or opening paragraph.
 
 ## Workflow
 
@@ -41,7 +41,7 @@ Bad title:
 Promote steady-state CI topology and finalize main admission
 ```
 
-Bad summary:
+Bad opening:
 
 ```text
 This promotion removes the transition-only CI topology from main and completes the admission-policy cutover.
@@ -53,7 +53,7 @@ Clear title:
 Stop rerunning full CI on dev-to-main pull requests
 ```
 
-Clear summary:
+Clear opening:
 
 ```text
 This PR removes CI jobs that were needed only while the new main-merge check was being introduced. After the branch-protection update, dev-to-main pull requests will require only `Promotion / gate` and `CodeQL`.
