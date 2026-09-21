@@ -1,6 +1,7 @@
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
 import { validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
+import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
@@ -271,7 +272,7 @@ export const hasBiologicalSessionInputs = (files = {}) => (
   || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
-export const isSettingsOnlySessionDocument = data => data?.version === 42
+export const isSettingsOnlySessionDocument = data => [42, 43].includes(data?.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 const validateSettingsOnlyDocument = data => {
@@ -294,7 +295,13 @@ const validateSettingsOnlyDocument = data => {
     || bindings.c_conservation_blasts_source === 'losat-cache') {
     throw new Error('Settings-only Session cannot contain committed render artifacts.');
   }
-  validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig: data.config });
+  const storedConfig = data.version === 43 || !isPlainObject(data.config?.adv)
+    ? data.config
+    : {
+        ...data.config,
+        adv: migrateLegacyLinearLabelVisibility(data.config.adv)
+      };
+  validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig });
   const referenced = new Set();
   const visit = value => {
     if (!value || typeof value !== 'object') return;
@@ -313,8 +320,8 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   }
   assertSafeObjectKeys(sessionData, 'Session');
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
-  if (bindings?.schema === 2 && ![41, 42].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41 or 42.');
+  if (bindings?.schema === 2 && ![41, 42, 43].includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, or 43.');
   }
   if (Number(version) < 31) return;
   if (

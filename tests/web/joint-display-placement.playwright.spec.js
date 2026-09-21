@@ -160,7 +160,7 @@ for (const mode of ['circular', 'linear']) {
     await download.saveAs(savedPath);
     const bytes = await fs.readFile(savedPath);
     const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
-    expect(session.version).toBe(42);
+    expect(session.version).toBe(43);
     expect(session.renderRequest.schema).toBe(7);
     expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
     expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
@@ -207,7 +207,7 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   await download.saveAs(savedPath);
   const bytes = await fs.readFile(savedPath);
   const saved = JSON.parse(zlib.gunzipSync(bytes));
-  expect(saved.version).toBe(42);
+  expect(saved.version).toBe(43);
   expect(saved.renderRequest.schema).toBe(7);
   expect(saved.renderRequest.records.every((record) => record.display.isCircular === null
     && record.display.startCoordinate === null)).toBe(true);

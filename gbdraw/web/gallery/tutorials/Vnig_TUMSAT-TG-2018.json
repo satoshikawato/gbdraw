@@ -52,7 +52,7 @@
           ["Track Preset", "Tuckin"],
           ["Palette", "orchid"],
           ["Separate Strands", "on"],
-          ["Legend Position", "Left"],
+          ["Legend position", "Left"],
           ["Features", "CDS, rRNA, tRNA, tmRNA, ncRNA, repeat_region"]
         ]
       },
@@ -114,11 +114,11 @@
         },
         {
           "title": "Legend position selector",
-          "body": "Open Legend Position and choose Left.",
+          "body": "Open Legend position and choose Left.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-03-02-legend-position-left.webp",
-            "alt": "Title and Legend card with the Legend Position menu open and the Left option highlighted.",
-            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Left option."
+            "alt": "Legend card with the Position menu open and the Left option highlighted.",
+            "caption": "Open Position in the Legend card and choose the highlighted Left option."
           },
           "capture": {
             "source": "webapp",
@@ -130,11 +130,12 @@
               "left": 80
             },
             "openSelect": {
+              "selector": "#legend-position",
               "selectedLabel": "Left",
               "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend Position"
+              "label": "Legend position"
             },
-            "openDetails": ["Title & Legend"]
+            "openDetails": ["Legend ·"]
           }
         },
         {
@@ -232,7 +233,7 @@
           "body": "Enter the plot title, then open Plot Title Position and choose Bottom.",
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-05-01-bottom-title.webp",
-            "alt": "Compact Title and Legend controls with the Vibrio plot-title field and Plot Title Position menu open with Bottom highlighted.",
+            "alt": "Compact Plot Title controls with the Vibrio title field and Position menu open with Bottom highlighted.",
             "caption": "Enter the plot title from the table and choose the highlighted Bottom option."
           },
           "capture": {
@@ -249,11 +250,12 @@
               "left": 80
             },
             "openSelect": {
+              "selector": "select[aria-label='Plot Title Position']",
               "selectedLabel": "Bottom",
               "options": ["None (Default)", "Top", "Bottom"],
               "label": "Plot Title Position"
             },
-            "openDetails": ["Title & Legend"],
+            "openDetails": ["Titles & Record Labels"],
             "actions": [
               {
                 "type": "waitForFunction",
@@ -393,7 +395,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check the GBFF input, Track Preset Tuckin, orchid palette, Separate Strands, Legend Position Left, Plot Title Position Bottom, Record Size Mode Auto, and Min Radius Ratio 0.55."
+      "body": "Check the GBFF input, Track Preset Tuckin, orchid palette, Separate Strands, Legend position Left, Plot Title Position Bottom, Record Size Mode Auto, and Min Radius Ratio 0.55."
     }
   ],
   "related": [

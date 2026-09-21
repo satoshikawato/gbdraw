@@ -8,6 +8,23 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Session 43: independent Linear record-label visibility
+
+Session 43 stores the selected visibility mode for Linear **Accession** and
+**Length / Coordinates** independently. Each field is `auto`, `show`, or `hide`.
+Auto shows the field while every effective rendered row contains one record and
+hides that field diagram-wide when any row contains two or more records.
+Disabled Record Layout ignores dormant shared-row values, and changing row
+placement does not rewrite the selected mode.
+
+The canonical request remains schema 7 and still carries effective booleans.
+Version-42 editable `true` values migrate to Show, `false` values migrate to
+Hide, and missing booleans migrate to historical Show. A selected-mode field,
+when present, takes precedence over the retired boolean. Current writers emit
+only the selected fields. Saved Results and committed render requests are not
+regenerated during Load; the migrated selection takes effect on the next
+Generate.
+
 ## Session 42: settings before the first source
 
 Web **Save Session** can preserve settings before any biological input is loaded.
@@ -37,14 +54,14 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 42 | 27–33 and 39–42 |
+| gbdraw session | 43 | 27–33 and 39–43 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42 |
+| Web file bindings | 2 | 1; 2 in sessions 41–43 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert full session versions 31–33 and 39–42 to
+The public typed-session bridge can convert full session versions 31–33 and 39–43 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -105,7 +122,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–42.
+remain 27–33 and 39–43.
 
 ## Retired inputs
 
@@ -158,8 +175,8 @@ Current sessions use these independent payload schemas:
 Typed resource readers 1 and 2 preserve their saved ortholog path tuples as
 explicit collections in the current model. Schema 3 writers store lossless DAGs
 for newly inferred paths and explicit collections for supplied legacy corpora.
-Counts are exact decimal strings. Session 42, request 7, and derived envelope 3
-remain unchanged; derived identity includes `pathRepresentation` to prevent
+Counts are exact decimal strings. Request 7 and derived envelope 3 remain
+unchanged; derived identity includes `pathRepresentation` to prevent
 reusing an old analysis payload as a current helper result. Older releases that
 only support typed schemas 1 and 2 cannot read the new typed resources.
 

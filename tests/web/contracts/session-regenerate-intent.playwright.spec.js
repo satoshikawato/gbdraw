@@ -207,7 +207,7 @@ const saveCurrentSession = async (page, title) => {
   const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
   expect(session).toMatchObject({
     format: 'gbdraw-session',
-    version: 42,
+    version: 43,
     renderRequest: { schema: 7 }
   });
   return { path, session };
@@ -1626,7 +1626,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   });
   await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true);
 
-  const titleSummary = page.locator('summary[aria-label="Title & Legend"]');
+  const titleSummary = page.locator('summary[aria-label="Titles and Record Labels"]');
   const titleDetails = titleSummary.locator('..');
   if ((await titleDetails.getAttribute('open')) === null) await titleSummary.click();
   await page.getByLabel('Plot Title', { exact: true }).fill(DIRECT_REGENERATED_TITLE);

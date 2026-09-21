@@ -207,6 +207,8 @@ const storedConfig = {
   },
   adv: {
     ...projectedConfig.adv,
+    linear_accession_visibility: 'auto',
+    linear_length_visibility: 'auto',
     circular_track_slots: [disabledDraft, canonicalFeature],
     circular_track_slots_axis_index: 2,
     linear_track_slots_enabled: false,

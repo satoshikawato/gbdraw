@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   groupLinearSourceRecords,
+  isPristineLinearSource,
+  linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
   moveLinearSourceGroup,
+  planLinearSourceRemoval,
   prepareLosatSourceBatches,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
@@ -56,6 +59,65 @@ assert.deepEqual(
   ['same-b', 'same-a'],
   'distinct uploads with the same filename remain separate sources'
 );
+
+const removalRecords = [
+  { ...sourceRecord('a-1', sourceA), region_record_id: 'A1', depth: [{ name: 'a.tsv' }] },
+  { ...sourceRecord('a-2', sourceA), region_record_id: 'A2', depth: [null] },
+  sourceRecord('b-1', sourceB)
+];
+const clearPlan = planLinearSourceRemoval({
+  sequences: removalRecords,
+  sourceUid: 'a-1',
+  intent: 'clear'
+});
+assert.deepEqual({
+  allowed: clearPlan.allowed,
+  sourceIndex: clearPlan.sourceIndex,
+  insertionIndex: clearPlan.insertionIndex,
+  recordCount: clearPlan.recordCount,
+  removedUids: clearPlan.removedUids,
+  retainedUids: clearPlan.retainedSequences.map(({ uid }) => uid)
+}, {
+  allowed: true,
+  sourceIndex: 0,
+  insertionIndex: 0,
+  recordCount: 2,
+  removedUids: ['a-1', 'a-2'],
+  retainedUids: ['b-1']
+});
+assert.deepEqual(removalRecords.map(({ uid }) => uid), ['a-1', 'a-2', 'b-1'], 'planning does not mutate inputs');
+assert.equal(planLinearSourceRemoval({
+  sequences: removalRecords,
+  sourceUid: 'a-1',
+  intent: 'delete'
+}).allowed, true);
+assert.deepEqual(planLinearSourceRemoval({
+  sequences: [sourceRecord('only', sourceA)],
+  sourceUid: 'only',
+  intent: 'delete'
+}), { allowed: false, reason: 'sole-source', sourceIndex: 0 });
+assert.deepEqual(planLinearSourceRemoval({
+  sequences: removalRecords,
+  sourceUid: 'missing',
+  intent: 'clear'
+}), { allowed: false, reason: 'missing-source' });
+
+const pairedSource = groupLinearSourceRecords([{
+  uid: 'paired', gb: null, gff: { name: 'paired.gff3' }, fasta: { name: 'paired.fasta' },
+  depth: [], definition: '', record_subtitle: '', file_definition: '', file_subtitle: '',
+  region_record_id: '', region_start: null, region_end: null, region_reverse: false
+}])[0];
+assert.equal(linearSourceHasPrimaryInput(pairedSource), true, 'GFF3 and FASTA form one non-empty source');
+assert.equal(isPristineLinearSource(pairedSource), false);
+const pristineSource = groupLinearSourceRecords([{
+  uid: 'blank', gb: null, gff: null, fasta: null, depth: [null, null],
+  definition: '', record_subtitle: '', file_definition: '', file_subtitle: '',
+  region_record_id: '', region_start: null, region_end: null, region_reverse: false
+}])[0];
+assert.equal(linearSourceHasPrimaryInput(pristineSource), false);
+assert.equal(isPristineLinearSource(pristineSource), true);
+pristineSource.sequence.file_subtitle = 'draft';
+assert.equal(isPristineLinearSource(pristineSource), false, 'a configured blank slot is not pristine');
 
 const sharedDescriptor = {
   kind: 'web-file', name: 'session.gb', type: 'text/plain', encoding: 'base64',

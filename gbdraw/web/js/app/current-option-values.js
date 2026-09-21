@@ -56,6 +56,16 @@ export const requireCurrentLinearLabelPlacement = (value) => (
   )
 );
 
+export const normalizeCurrentPairwiseMatchStyle = (value, fallback) => {
+  const supported = ['ribbon', 'curve'];
+  const normalizedFallback = String(fallback ?? '').trim().toLowerCase();
+  if (!supported.includes(normalizedFallback)) {
+    throw new Error('Pairwise match style fallback must be one of: ribbon, curve.');
+  }
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return supported.includes(normalized) ? normalized : normalizedFallback;
+};
+
 export const requireCurrentProteinBlastpMode = (value) => (
   requireCurrentValue(
     value,
@@ -236,6 +246,11 @@ export const migratePersistedWebStateFieldNames = (config) => {
 
 export const requireCurrentWebStateFieldNames = (config) => {
   const adv = isPlainObject(config) ? config.adv : null;
+  for (const field of ['linear_show_accession', 'linear_show_length']) {
+    if (hasOwn(adv, field)) {
+      throw new Error(`Web state field adv.${field} is obsolete; use the selected visibility mode.`);
+    }
+  }
   if (hasOwn(adv, 'depth_tick_interval')) {
     throw new Error(
       'Web state field adv.depth_tick_interval is obsolete; use adv.depth_large_tick_interval.'

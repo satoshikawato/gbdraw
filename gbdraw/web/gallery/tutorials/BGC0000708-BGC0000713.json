@@ -470,7 +470,7 @@
           ["Default CDS color", "#dddddd"],
           ["Show Coordinate Scale", "On"],
           ["Scale Style", "Ruler (Ticks)"],
-          ["Legend Position", "Bottom"],
+          ["Legend position", "Bottom"],
           ["Lock Definition Column", "On"]
         ]
       },
@@ -554,8 +554,8 @@
           "title": "Legend position selector",
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-05-03-legend-position-bottom.webp",
-            "alt": "Title and Legend card with the Legend Position menu open and the Bottom option highlighted.",
-            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Bottom option."
+            "alt": "Legend card with the Position menu open and the Bottom option highlighted.",
+            "caption": "Open Position in the Legend card and choose the highlighted Bottom option."
           },
           "capture": {
             "source": "webapp",
@@ -567,11 +567,12 @@
               "left": 80
             },
             "openSelect": {
+              "selector": "#legend-position",
               "selectedLabel": "Bottom",
               "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend Position"
+              "label": "Legend position"
             },
-            "openDetails": ["Title & Legend"]
+            "openDetails": ["Legend ·"]
           }
         }
       ]
@@ -584,10 +585,10 @@
         "rows": [
           ["Plot Title", "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp."],
           ["Plot Title Position", "Bottom (Default)"],
-          ["Definition Font Size", "Auto"],
+          ["Default font size", "Auto"],
           ["Show Replicon", "Off"],
-          ["Show Accession", "On"],
-          ["Show Length / Coordinates", "On"],
+          ["Accession visibility", "Show"],
+          ["Length / Coordinates visibility", "Show"],
           ["Definition line: Name", "20; Bold; default color"],
           ["Definition line: Subtitle", "20; Normal; default color"],
           ["Definition line: Accession", "20; Normal; #7b7c7d"],
@@ -598,8 +599,8 @@
         {
           "media": {
             "src": "./media/BGC0000708-BGC0000713/manual-06-01-title-record-text.webp",
-            "alt": "Compact Title and Legend controls with the Plot Title input, Bottom position, and linear definition-text settings.",
-            "caption": "Use the Plot Title field for the title in the table and keep the listed position and definition-text settings."
+            "alt": "Plot Title controls with the Streptomyces title and Bottom position.",
+            "caption": "Use the Plot Title field for the title in the table and keep Bottom position."
           },
           "capture": {
             "source": "webapp",
@@ -608,11 +609,11 @@
               "width": 1600,
               "height": 1100
             },
-            "openDetails": ["Title & Legend"],
+            "openDetails": ["Titles & Record Labels"],
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Title & Legend')); const content = card?.querySelector('details > div'); const controls = Array.from(content?.children || []).slice(0, 3); if (controls.length === 0) throw new Error('BGC title controls not found.'); controls.forEach((node) => node.setAttribute('data-capture', 'bgc-title-controls')); controls[0].scrollIntoView({ block: 'center' });"
+                "script": "const card = Array.from(document.querySelectorAll('.card')).find((node) => node.querySelector('summary')?.textContent?.includes('Titles & Record Labels')); const section = card?.querySelector('section[aria-labelledby=\"plot-title-settings-heading\"]'); if (!section) throw new Error('BGC title controls not found.'); section.setAttribute('data-capture', 'bgc-title-controls'); section.scrollIntoView({ block: 'center' });"
               }
             ],
             "clipSelectors": ["[data-capture='bgc-title-controls']"],
@@ -622,6 +623,41 @@
               "bottom": 16,
               "left": 16
             }
+          }
+        },
+        {
+          "dataDependent": true,
+          "media": {
+            "src": "./media/BGC0000708-BGC0000713/manual-06-02-record-labels.webp",
+            "alt": "Record Labels controls with Default font size and independent definition-line rows.",
+            "caption": "Use the Record Labels rows for the visibility and per-line style values in the table."
+          },
+          "capture": {
+            "source": "webapp",
+            "session": "./sessions/BGC0000708-BGC0000713.gbdraw-session.json",
+            "viewport": {
+              "width": 1600,
+              "height": 1100
+            },
+            "openDetails": ["Titles & Record Labels"],
+            "actions": [
+              {
+                "type": "evaluate",
+                "script": "const section = document.querySelector('section[aria-labelledby=\"record-label-settings-heading\"]'); const accession = section?.querySelector('select[aria-label=\"Accession visibility\"]')?.closest('.rounded'); const length = section?.querySelector('select[aria-label=\"Length / Coordinates visibility\"]')?.closest('.rounded'); const heading = section?.querySelector('#record-label-settings-heading'); const defaultSize = Array.from(section?.querySelectorAll('label') || []).find((node) => node.textContent.includes('Default font size'))?.closest('div'); if (!heading || !defaultSize || !accession || !length) throw new Error('BGC Record Labels controls not found.'); heading.setAttribute('data-capture', 'bgc-record-label-heading'); defaultSize.setAttribute('data-capture', 'bgc-record-label-default'); accession.setAttribute('data-capture', 'bgc-record-label-accession'); length.setAttribute('data-capture', 'bgc-record-label-length'); accession.scrollIntoView({ block: 'center' });"
+              }
+            ],
+            "clipSelectors": ["[data-capture='bgc-record-label-heading']", "[data-capture='bgc-record-label-default']", "[data-capture='bgc-record-label-accession']", "[data-capture='bgc-record-label-length']"],
+            "cropPadding": 16,
+            "assertAppState": {
+              "mode": "linear",
+              "adv.linear_accession_visibility": "show",
+              "adv.linear_length_visibility": "show"
+            },
+            "visibleText": ["Record Labels", "Default font size", "Accession", "Length / Coordinates"],
+            "visibleControls": [
+              {"selector": "select[aria-label='Accession visibility']", "value": "Show"},
+              {"selector": "select[aria-label='Length / Coordinates visibility']", "value": "Show"}
+            ]
           }
         }
       ]

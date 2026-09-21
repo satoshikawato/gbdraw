@@ -14,6 +14,7 @@ import {
   buildCanonicalRequestState,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import {
   createLinearComparisonEdge,
   normalizeLinearComparisonPlan,
@@ -226,7 +227,11 @@ const migratePersistedGalleryConfig = (config) => {
         : migrateLegacyCircularTrackSlot(slot)
     ));
   }
-  return { ...migratedNames, form, adv };
+  return {
+    ...migratedNames,
+    form,
+    adv: migrateLegacyLinearLabelVisibility(adv)
+  };
 };
 
 const legacyComparisonSource = (value, fallback = 'losat') => {
@@ -586,7 +591,7 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const promoted = {
     ...session,
     format: 'gbdraw-session',
-    version: 42,
+    version: 43,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,

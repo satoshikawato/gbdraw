@@ -69,7 +69,7 @@ Select **Generate Diagram** again. The center label should show *Homo sapiens* i
 
 ## Step 4: Make the feature map easier to read
 
-Set the final layout values below. **Track Preset** and the three checkboxes are under **Layout**. **Label Mode** and **Priority File (TSV)** are under **Labels**, and **Legend Position** is under **Title & Legend**.
+Set the final layout values below. **Track Preset** and the three checkboxes are under **Layout**. **Label Mode** and **Priority File (TSV)** are under **Labels**, and **Legend position** is under the separate **Legend · Left** section.
 
 | Control | Value |
 | --- | --- |
@@ -79,7 +79,7 @@ Set the final layout values below. **Track Preset** and the three checkboxes are
 | Hide GC Skew | Off |
 | Label Mode | Out |
 | Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
-| Legend Position | Right |
+| Legend position | Right |
 
 ![Circular layout controls set to Middle, Labels Out, and Legend Right](../../images/t-gui-01/04-layout-settings.png)
 

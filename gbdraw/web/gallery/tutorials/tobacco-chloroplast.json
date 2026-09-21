@@ -129,8 +129,8 @@
           ["Circular Label Placement", "Radial"],
           ["Outer X / Y Offset", "0.90 / 0.90"],
           ["Inner X / Y Offset", "0.975 / 0.975"],
-          ["Legend Position", "Upper Left"],
-          ["Definition Font Size", "28"]
+          ["Legend position", "Upper Left"],
+          ["Default font size", "28"]
         ]
       },
       "operations": [

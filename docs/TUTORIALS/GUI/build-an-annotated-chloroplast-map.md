@@ -71,8 +71,8 @@ Set the main controls as follows:
 | Outer X / Y label offset | `0.9` / `0.9` |
 | Inner X / Y label offset | `0.975` / `0.975` |
 | Circular Label Placement | Radial |
-| Legend Position | Upper Left |
-| Definition Font Size | `28` |
+| Legend position | Upper Left |
+| Default font size | `28` |
 | Block / Line / Axis Stroke Width | `1` / `2` / `3` |
 | Plot Title | None |
 

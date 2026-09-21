@@ -251,15 +251,15 @@ def capture_gui_circular_layout(
         row_gap.fill("0.08")
         expect(row_gap).to_have_value("0.08")
 
-        title_and_legend = page.get_by_label("Title & Legend", exact=True)
-        title_and_legend.click()
-        plot_title = page.get_by_label("Plot Title", exact=True)
+        title_and_labels = page.get_by_label("Titles and Record Labels", exact=True)
+        title_and_labels.click()
+        plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
         plot_title.fill("Complete metazoan mitochondrial genomes")
         expect(plot_title).to_have_value("Complete metazoan mitochondrial genomes")
         title_position = page.get_by_label("Plot Title Position", exact=True)
         title_position.select_option("top")
         expect(title_position).to_have_value("top")
-        definition_font_size = page.get_by_label("Definition Font Size", exact=True)
+        definition_font_size = page.get_by_label("Default font size", exact=True)
         definition_font_size.fill("20")
         expect(definition_font_size).to_have_value("20")
         keep_definitions = page.get_by_label(
@@ -268,7 +268,7 @@ def capture_gui_circular_layout(
         )
         keep_definitions.check()
         expect(keep_definitions).to_be_checked()
-        title_and_legend.click()
+        title_and_labels.click()
 
         labels = page.get_by_label("Labels", exact=True)
         labels.click()

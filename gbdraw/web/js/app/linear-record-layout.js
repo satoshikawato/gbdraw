@@ -13,6 +13,32 @@ export const reconcileLinearRecordLayout = (sequences, entries = []) => {
   }));
 };
 
+export const resolveEffectiveLinearRecordRows = (
+  sequences,
+  entries = [],
+  { enabled = true } = {}
+) => (
+  enabled
+    ? reconcileLinearRecordLayout(sequences, entries)
+    : (Array.isArray(sequences) ? sequences : []).map((sequence, index) => ({
+        uid: String(sequence?.uid || ''),
+        row: index + 1
+      }))
+);
+
+export const linearRecordLayoutHasSharedRow = (
+  sequences,
+  entries = [],
+  { enabled = true } = {}
+) => {
+  const seenRows = new Set();
+  return resolveEffectiveLinearRecordRows(sequences, entries, { enabled }).some(({ row }) => {
+    if (seenRows.has(row)) return true;
+    seenRows.add(row);
+    return false;
+  });
+};
+
 export const planLinearSourceRowMove = ({
   sourceGroups,
   entries,

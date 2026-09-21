@@ -9,7 +9,8 @@ const COMPARISON_STATE_FIELDS = Object.freeze([
 ]);
 const PROFILE_MANAGED_ADV_FIELDS = Object.freeze([
   ...COMPARISON_STATE_FIELDS,
-  'axis_stroke_color'
+  'axis_stroke_color',
+  'pairwise_match_style'
 ]);
 const isPlainObject = (value) => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -94,7 +95,8 @@ export const comparisonProfileDefault = (mode, field) => {
 
 export const managedAdvStateForMode = (mode) => ({
   ...comparisonStateForMode(mode),
-  axis_stroke_color: modeProfile(mode).linearAxisColor
+  axis_stroke_color: modeProfile(mode).linearAxisColor,
+  pairwise_match_style: normalizeMode(mode) === 'linear' ? 'curve' : 'ribbon'
 });
 
 export const effectiveLinearAxisColor = ({

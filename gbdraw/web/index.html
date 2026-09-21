@@ -1543,7 +1543,9 @@
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
                                     accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gb"
+                                    :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)"
+                                    @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
                             <div v-else class="space-y-2 mb-2">
@@ -1551,13 +1553,17 @@
                                     label="GFF3"
                                     accept=".gff,.gff3,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gff"
+                                    :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)"
+                                    @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                                 <file-uploader
                                     label="FASTA"
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
                                     :model-value="source.sequence.fasta"
+                                    :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
+                                    @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
                             <div class="mt-2 p-2 bg-white/70 rounded border border-slate-200 space-y-1.5" :data-linear-source-defaults="source.uid">
@@ -1585,56 +1591,70 @@
                                     >
                                 </div>
                             </div>
-                            <div class="mt-2 rounded border border-slate-200 bg-white/70 p-2 space-y-1.5" :data-linear-source-depth="source.uid">
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="text-[10px] font-bold text-slate-500">Depth TSV files (applied to all records)</div>
-                                    <span class="text-[9px] text-slate-400">{{ source.records.length }} record{{ source.records.length === 1 ? '' : 's' }}</span>
-                                </div>
-                                <div
-                                    v-for="track in linearSourceDepthRows(source)"
-                                    :key="`${source.uid}-source-depth-${track.key}`"
-                                    class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1"
-                                    :data-linear-source-depth-series="track.index"
+                            <details open class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
+                                <summary
+                                    role="button"
+                                    :aria-label="`Depth TSV assignments for file ${sourceIndex + 1}: ${linearSourceDepthSummary(source)}`"
+                                    class="min-w-0 text-[10px]"
                                 >
-                                    <div class="flex items-center justify-between gap-2 text-[9px]">
-                                        <span class="font-bold text-slate-500">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</span>
-                                        <span
-                                            :class="track.status.state === 'mixed' ? 'text-amber-700' : 'text-slate-400'"
-                                            :data-linear-source-depth-state="track.status.state"
-                                        >
-                                            {{ track.status.state === 'common'
-                                                ? 'Common'
-                                                : track.status.state === 'mixed'
-                                                    ? 'Mixed'
-                                                    : 'Empty' }}
-                                            · {{ track.status.selectedCount }}/{{ track.status.recordCount }}
-                                        </span>
-                                    </div>
-                                    <p v-if="track.status.state === 'mixed'" class="rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] leading-snug text-amber-800">
-                                        Records use different files or include empty bindings. Choosing a file replaces all record bindings for this File and series.
-                                    </p>
-                                    <file-uploader
-                                        label="Depth TSV"
-                                        small
-                                        accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
-                                        :model-value="track.status.file"
-                                        @update:model-value="setLinearSourceDepthFile(source, track.index, $event)"
-                                        :data-input-aria-label="sourceIndex === 0 && track.index === 0
-                                            ? 'Depth TSV'
-                                            : `Depth TSV for file ${sourceIndex + 1}, series ${track.index + 1}`"
-                                        :test-id="`linear-source-depth-${sourceIndex + 1}-${track.index + 1}`"
-                                    ></file-uploader>
-                                    <button
-                                        v-if="track.status.state === 'mixed'"
-                                        type="button"
-                                        data-history-managed
-                                        @click="clearLinearSourceDepthFile(source, track.index)"
-                                        class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"
+                                    <span class="min-w-0 truncate">{{ linearSourceDepthSummary(source) }}</span>
+                                </summary>
+                                <div class="min-w-0 space-y-1.5 pt-1">
+                                    <div
+                                        v-for="track in linearSourceDepthRows(source)"
+                                        :key="`${source.uid}-source-depth-${track.key}`"
+                                        class="min-w-0 rounded border border-slate-200 bg-slate-50 p-2 space-y-1"
+                                        :data-linear-source-depth-series="track.index"
                                     >
-                                        <i class="ph ph-trash"></i> Clear all record bindings
+                                        <div class="flex min-w-0 items-center justify-between gap-2 text-[9px]">
+                                            <span class="min-w-0 truncate font-bold text-slate-500">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</span>
+                                            <span
+                                                class="shrink-0"
+                                                :class="track.status.state === 'mixed' ? 'text-amber-700' : 'text-slate-400'"
+                                                :data-linear-source-depth-state="track.status.state"
+                                            >
+                                                {{ track.status.state === 'common'
+                                                    ? 'Common'
+                                                    : track.status.state === 'mixed'
+                                                        ? 'Mixed'
+                                                        : 'Empty' }}
+                                                · {{ track.status.selectedCount }}/{{ track.status.recordCount }}
+                                            </span>
+                                        </div>
+                                        <p v-if="track.status.state === 'mixed'" class="rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] leading-snug text-amber-800">
+                                            Records use different files or include empty bindings. Choosing a file replaces all record bindings for this File and series.
+                                        </p>
+                                        <file-uploader
+                                            label="Depth TSV"
+                                            small
+                                            accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
+                                            :model-value="track.status.file"
+                                            @update:model-value="setLinearSourceDepthFile(source, track.index, $event)"
+                                            :data-input-aria-label="sourceIndex === 0 && track.index === 0
+                                                ? 'Depth TSV'
+                                                : `Depth TSV for file ${sourceIndex + 1}, series ${track.index + 1}`"
+                                            :test-id="`linear-source-depth-${sourceIndex + 1}-${track.index + 1}`"
+                                        ></file-uploader>
+                                        <button
+                                            v-if="track.status.state === 'mixed'"
+                                            type="button"
+                                            data-history-managed
+                                            @click="clearLinearSourceDepthFile(source, track.index)"
+                                            class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"
+                                        >
+                                            <i class="ph ph-trash"></i> Clear all record bindings
+                                        </button>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @click="addLinearDepthTrack()"
+                                        :aria-label="`Add Depth TSV series from file ${sourceIndex + 1}`"
+                                        class="btn btn-secondary min-w-0 w-full text-xs"
+                                    >
+                                        <i class="ph ph-plus"></i> Add Depth TSV series
                                     </button>
                                 </div>
-                            </div>
+                            </details>
                             <details :data-linear-source-records="source.uid" :open="source.records.length === 1" class="min-w-0">
                                 <summary v-show="source.records.length > 1" role="button" :aria-label="`Records for file ${sourceIndex + 1}`" class="mt-2 text-xs font-normal text-slate-500">
                                     Number of records: {{ source.records.length }}
@@ -1760,9 +1780,9 @@
                             </details>
                             </section>
                         </div>
-                        <div class="flex min-w-0 gap-2">
-                            <button type="button" aria-label="Add sequence" @click="addLinearSeq()" class="btn btn-secondary min-w-0 w-full text-xs"><i class="ph ph-plus"></i> Add sequence</button>
-                            <button v-if="linearSourceGroups.length > 1" @click="removeLastLinearSeq()" class="btn btn-danger min-w-0 w-full text-xs"><i class="ph ph-minus"></i> Remove</button>
+                        <div class="grid min-w-0 grid-cols-2 gap-2" role="group" aria-label="Linear File actions">
+                            <button type="button" aria-label="Add sequence" data-linear-file-add @click="addLinearSeq()" class="btn btn-secondary min-w-0 w-full py-2.5 text-sm font-bold"><i class="ph ph-plus"></i> Add sequence</button>
+                            <button type="button" aria-label="Remove last sequence" data-history-managed @click="removeLastLinearSeq($event)" :disabled="linearSourceGroups.length <= 1" class="btn btn-danger min-w-0 w-full py-2.5 text-sm font-bold"><i class="ph ph-minus"></i> Remove</button>
                         </div>
                         <details data-linear-depth-settings class="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                             <summary role="button" aria-label="Depth track settings" class="linear-primary-label">
@@ -1892,9 +1912,6 @@
                                         </div>
                                     </div>
                                 </div>
-                                <button type="button" @click="addLinearDepthTrack()" class="btn btn-secondary text-xs w-full">
-                                    <i class="ph ph-plus"></i> Add series for all records
-                                </button>
                             </div>
                         </details>
                         <section data-linear-comparison-card class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
@@ -3458,199 +3475,102 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Title &amp; Legend"><i class="ph ph-textbox"></i> Title &amp; Legend <help-tip text="Adjust the plot title, record-label text, and legend."></help-tip></summary>
-                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
-                            <div>
-                                <label class="input-label text-[10px] mb-1">
-                                    Plot Title
-                                    <help-tip :text="mode === 'circular'
-                                        ? 'Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.'
-                                        : 'Global title shown once for the whole linear plot.'"></help-tip>
-                                </label>
-                                <auto-value-field :visible="autoValueVisible(form.plot_title, 'plotTitle')" :text="autoValueText('plotTitle')">
-                                    <input
-                                        type="text"
-                                        v-model="form.plot_title"
-                                        class="form-input form-input-compact auto-value-input"
-                                        aria-label="Plot Title"
-                                        :placeholder="mode === 'circular' ? '' : 'Optional plot title'"
-                                    >
-                                </auto-value-field>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-1.5">
+                        <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
+                        <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
+                            <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
+                                <h4 id="plot-title-settings-heading" class="text-[11px] font-bold text-slate-600">Plot Title</h4>
                                 <div>
                                     <label class="input-label text-[10px] mb-1">
-                                        Plot Title Position
-                                        <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record center labels stay in place.' : 'Placement of the linear plot title.'"></help-tip>
+                                        Text
+                                        <help-tip :text="mode === 'circular'
+                                            ? 'Optional circular plot title used when the title position is Top or Bottom. Leave blank to use the default species + strain title.'
+                                            : 'Global title shown once for the whole linear plot.'"></help-tip>
                                     </label>
-                                    <select v-model="adv.plot_title_position" class="form-input text-xs py-1" aria-label="Plot Title Position">
-                                        <option v-if="mode === 'circular'" value="none">None (Default)</option>
-                                        <option v-if="mode === 'linear'" value="center">Center</option>
-                                        <option value="top">Top</option>
-                                        <option :value="mode === 'linear' ? 'bottom' : 'bottom'">{{ mode === 'linear' ? 'Bottom (Default)' : 'Bottom' }}</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px] mb-0">
-                                        Plot Title Font Size
-                                        <help-tip :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        :value="optionalNumberInputValue(adv.plot_title_font_size)"
-                                        @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)"
-                                        class="form-input form-input-compact"
-                                        placeholder="Auto (32)"
-                                    >
-                                </div>
-                                <div>
-                                    <label class="input-label text-[10px] mb-0">
-                                        Definition Font Size
-                                        <help-tip text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip>
-                                    </label>
-                                    <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
-                                        <input
-                                            type="number"
-                                            :value="optionalNumberInputValue(adv.def_font_size)"
-                                            @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)"
-                                            class="form-input form-input-compact auto-value-input"
-                                            aria-label="Definition Font Size"
-                                        >
+                                    <auto-value-field :visible="autoValueVisible(form.plot_title, 'plotTitle')" :text="autoValueText('plotTitle')">
+                                        <input type="text" v-model="form.plot_title" class="form-input form-input-compact auto-value-input" aria-label="Plot Title" :placeholder="mode === 'circular' ? '' : 'Optional plot title'">
                                     </auto-value-field>
                                 </div>
-                            </div>
-
-                            <div v-if="mode === 'linear'" class="grid grid-cols-1 gap-1.5">
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        v-model="adv.linear_show_replicon"
-                                        class="form-checkbox"
-                                    >
-                                    <span class="inline-flex items-center gap-1">
-                                        Show Replicon
-                                        <help-tip text="Linear only. Show one automatic name per record, using chromosome, plasmid, then organelle source qualifiers in that order. Subtitles are independent. Apply with Generate. Default: off."></help-tip>
-                                    </span>
-                                </label>
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        v-model="adv.linear_show_accession"
-                                        class="form-checkbox"
-                                    >
-                                    <span class="inline-flex items-center gap-1">
-                                        Show Accession
-                                        <help-tip text="Linear only. Shows the accession line in each record-label block. Default: on."></help-tip>
-                                    </span>
-                                </label>
-                                <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        v-model="adv.linear_show_length"
-                                        class="form-checkbox"
-                                    >
-                                    <span class="inline-flex items-center gap-1">
-                                        Show Length / Coordinates
-                                        <help-tip text="Linear only. Shows bp length, or coordinate span when a region crop is active. Default: on."></help-tip>
-                                    </span>
-                                </label>
-                            </div>
-
-                            <div v-if="mode === 'linear'" class="border-t border-slate-200 pt-2 space-y-1.5">
-                                <div class="flex items-center justify-between">
-                                    <h4 class="text-[11px] font-bold text-slate-500">
-                                        Definition Line Styles
-                                    <help-tip text="Linear only. Optional line-specific size, weight, and fill overrides for the record-label block."></help-tip>
-                                    </h4>
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <div>
+                                        <label class="input-label text-[10px] mb-1">Position <help-tip :text="mode === 'circular' ? 'Placement of the shared circular plot title. Per-record center labels stay in place.' : 'Placement of the linear plot title.'"></help-tip></label>
+                                        <select v-model="adv.plot_title_position" class="form-input text-xs py-1" aria-label="Plot Title Position">
+                                            <option v-if="mode === 'circular'" value="none">None (Default)</option>
+                                            <option v-if="mode === 'linear'" value="center">Center</option>
+                                            <option value="top">Top</option>
+                                            <option value="bottom">{{ mode === 'linear' ? 'Bottom (Default)' : 'Bottom' }}</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="input-label text-[10px] mb-0">Font size <help-tip :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip></label>
+                                        <input type="number" :value="optionalNumberInputValue(adv.plot_title_font_size)" @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)" class="form-input form-input-compact" placeholder="Auto (32)" aria-label="Plot Title Font Size">
+                                    </div>
                                 </div>
-                                <div class="grid grid-cols-[minmax(6rem,1fr)_3.75rem_max-content_minmax(8rem,1.2fr)] gap-1.5 items-center">
-                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Line</div>
-                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Size</div>
-                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Weight</div>
-                                    <div class="text-[9px] font-bold text-slate-400 uppercase">Color</div>
+                                <label v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="adv.keep_full_definition_with_plot_title" class="form-checkbox">
+                                    <span class="inline-flex items-center gap-1">Keep Full Definition with Plot Title <help-tip text="Circular only. Keeps species and strain in the center label when a plot title is shown, including shared multi-record canvases."></help-tip></span>
+                                </label>
+                            </section>
 
-                                    <template v-for="row in definitionLineStyleRows" :key="row.key">
-                                        <div :class="['text-[10px] font-semibold text-slate-600 truncate', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']" :title="row.label">
-                                            {{ row.label }}
-                                        </div>
-                                        <input
-                                            type="number"
-                                            min="0.1"
-                                            step="0.5"
-                                            :value="getDefinitionLineStyleSize(row.key)"
-                                            @input="setDefinitionLineStyleSize(row.key, $event.target.value)"
-                                            :class="['form-input form-input-compact px-1', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']"
-                                            placeholder="Default"
-                                        >
-                                        <div :class="['inline-flex items-center rounded border border-slate-200 bg-white p-0.5', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']">
-                                            <button
-                                                type="button"
-                                                @click="setDefinitionLineStyleWeight(row.key, '')"
-                                                :class="[
-                                                    'h-5 px-1.5 text-[9px] font-semibold rounded',
-                                                    getDefinitionLineStyleWeight(row.key) === '' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
-                                                ]"
-                                            >Normal</button>
-                                            <button
-                                                type="button"
-                                                @click="setDefinitionLineStyleWeight(row.key, 'bold')"
-                                                :class="[
-                                                    'h-5 px-1.5 text-[9px] font-semibold rounded',
-                                                    getDefinitionLineStyleWeight(row.key) === 'bold' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
-                                                ]"
-                                            >Bold</button>
-                                        </div>
-                                        <div :class="['flex items-center gap-1 min-w-0', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']">
-                                            <input
-                                                v-if="getDefinitionLineStyleColorMode(row.key) === 'color'"
-                                                type="color"
-                                                :value="getDefinitionLineStyleSwatchValue(row.key)"
-                                                @input="setDefinitionLineStyleColor(row.key, $event.target.value)"
-                                                class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white"
-                                                :title="row.label + ' color'"
-                                                :aria-label="row.label + ' definition line color'"
-                                            >
-                                            <span
-                                                v-else
-                                                class="h-6 w-8 px-0.5 border border-slate-200 rounded shrink-0 bg-slate-50 text-[8px] text-slate-500 inline-flex items-center justify-center"
-                                                :title="row.label + ' color: ' + (getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto')"
-                                                :aria-label="row.label + ' definition line color state'"
-                                                :data-definition-line-color-state="getDefinitionLineStyleColorMode(row.key)"
-                                            >
-                                                {{ getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto' }}
-                                            </span>
-                                            <input
-                                                type="text"
-                                                :value="getDefinitionLineStyleFill(row.key)"
-                                                @input="setDefinitionLineStyleColor(row.key, $event.target.value)"
-                                                class="form-input form-input-compact min-w-0 px-1"
-                                                placeholder="Default"
-                                                :aria-label="row.label + ' definition line fill value'"
-                                            >
-                                        </div>
-                                    </template>
+                            <section aria-labelledby="record-label-settings-heading" class="space-y-2 border-t border-slate-200 pt-3">
+                                <h4 id="record-label-settings-heading" class="text-[11px] font-bold text-slate-600">Record Labels</h4>
+                                <div>
+                                    <label class="input-label text-[10px] mb-0">Default font size <help-tip text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip></label>
+                                    <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
+                                        <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" aria-label="Default font size">
+                                    </auto-value-field>
                                 </div>
-                            </div>
 
-                            <label
-                                v-if="mode === 'circular' && adv.plot_title_position !== 'none'"
-                                class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none"
-                            >
-                                <input
-                                    type="checkbox"
-                                    v-model="adv.keep_full_definition_with_plot_title"
-                                    class="form-checkbox"
-                                >
-                                <span class="inline-flex items-center gap-1">
-                                    Keep Full Definition with Plot Title
-                                    <help-tip text="Circular only. Keeps species and strain in the center label when a plot title is shown, including shared multi-record canvases."></help-tip>
-                                </span>
-                            </label>
+                                <div v-if="mode === 'linear'" class="space-y-1.5">
+                                    <div v-for="row in definitionLineStyleRows" :key="row.key" class="rounded border border-slate-200 bg-white px-2 py-1.5">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="text-[10px] font-semibold text-slate-700">{{ row.label }}</span>
+                                            <label v-if="row.visibilityType === 'boolean'" class="option-label inline-flex items-center gap-1.5 text-[10px] text-slate-600 cursor-pointer select-none">
+                                                <input type="checkbox" v-model="adv[row.visibilityKey]" class="form-checkbox" :aria-label="row.label + ' visibility'">
+                                                <span>Show</span>
+                                            </label>
+                                            <select v-else-if="row.visibilityType === 'mode'" v-model="adv[row.visibilityKey]" class="form-input form-input-compact w-28 text-[10px]" :aria-label="row.label + ' visibility'">
+                                                <option value="auto">{{ linearLabelVisibilitySummary('auto') }}</option>
+                                                <option value="show">Show</option>
+                                                <option value="hide">Hide</option>
+                                            </select>
+                                        </div>
+                                        <details class="mt-1" :data-definition-line-style="row.key">
+                                            <summary :aria-label="row.label + ' style'" class="text-[10px]">Style</summary>
+                                            <div :class="['grid grid-cols-1 gap-2 pt-1.5', isDefinitionLineStyleMuted(row) ? 'opacity-50' : '']">
+                                                <label class="input-label text-[9px]">Size
+                                                    <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" placeholder="Default" :aria-label="row.label + ' style size'">
+                                                </label>
+                                                <div>
+                                                    <div class="input-label text-[9px] mb-1">Weight</div>
+                                                    <div class="inline-flex items-center rounded border border-slate-200 bg-white p-0.5">
+                                                        <button type="button" @click="setDefinitionLineStyleWeight(row.key, '')" :aria-label="row.label + ' normal weight'" :class="['h-5 px-1.5 text-[9px] font-semibold rounded', getDefinitionLineStyleWeight(row.key) === '' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100']">Normal</button>
+                                                        <button type="button" @click="setDefinitionLineStyleWeight(row.key, 'bold')" :aria-label="row.label + ' bold weight'" :class="['h-5 px-1.5 text-[9px] font-semibold rounded', getDefinitionLineStyleWeight(row.key) === 'bold' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100']">Bold</button>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div class="input-label text-[9px] mb-1">Color</div>
+                                                    <div class="flex items-center gap-1 min-w-0">
+                                                        <input v-if="getDefinitionLineStyleColorMode(row.key) === 'color'" type="color" :value="getDefinitionLineStyleSwatchValue(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white" :title="row.label + ' color'" :aria-label="row.label + ' definition line color'">
+                                                        <span v-else class="h-6 w-8 px-0.5 border border-slate-200 rounded shrink-0 bg-slate-50 text-[8px] text-slate-500 inline-flex items-center justify-center" :title="row.label + ' color: ' + (getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto')" :aria-label="row.label + ' definition line color state'" :data-definition-line-color-state="getDefinitionLineStyleColorMode(row.key)">{{ getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto' }}</span>
+                                                        <input type="text" :value="getDefinitionLineStyleFill(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="form-input form-input-compact min-w-0 px-1" placeholder="Default" :aria-label="row.label + ' definition line fill value'">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </details>
+                </div>
 
+                <div class="card bg-slate-50/50">
+                    <details>
+                        <summary aria-label="Legend settings"><i class="ph ph-list-bullets"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
+                        <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <label for="legend-position" class="input-label text-[10px] mb-1">Legend Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
-                                <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1">
+                                <label for="legend-position" class="input-label text-[10px] mb-1">Position <help-tip text="Position of the legend. 'None' hides the legend."></help-tip></label>
+                                <select id="legend-position" v-model="form.legend" class="form-input text-xs py-1" aria-label="Legend position">
                                     <option value="right">Right</option>
                                     <option value="left">Left</option>
                                     <option value="top">Top</option>
@@ -3662,18 +3582,17 @@
                                     <option value="none">None</option>
                                 </select>
                             </div>
-
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
-                                    <label class="input-label text-[10px]">Legend Box Size <help-tip text="Size of the color boxes in the legend."></help-tip></label>
+                                    <label class="input-label text-[10px]">Swatch size <help-tip text="Size of the color boxes in the legend."></help-tip></label>
                                     <auto-value-field :visible="autoValueVisible(adv.legend_box_size, 'legendBoxSize')" :text="autoValueText('legendBoxSize')">
-                                        <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact auto-value-input">
+                                        <input type="number" v-model.number="adv.legend_box_size" class="form-input form-input-compact auto-value-input" aria-label="Legend swatch size">
                                     </auto-value-field>
                                 </div>
                                 <div>
-                                    <label class="input-label text-[10px]">Legend Font Size <help-tip text="Font size for the legend text."></help-tip></label>
+                                    <label class="input-label text-[10px]">Font size <help-tip text="Font size for the legend text."></help-tip></label>
                                     <auto-value-field :visible="autoValueVisible(adv.legend_font_size, 'legendFontSize')" :text="autoValueText('legendFontSize')">
-                                        <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact auto-value-input">
+                                        <input type="number" v-model.number="adv.legend_font_size" class="form-input form-input-compact auto-value-input" aria-label="Legend font size">
                                     </auto-value-field>
                                 </div>
                             </div>
@@ -6684,6 +6603,62 @@
         </span>
         <!-- GBDRAW_HOSTED_BUILD_LABEL -->
     </footer>
+    <Teleport to="body">
+        <div
+            v-if="linearSourceRemovalDialog.open"
+            class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"
+            data-linear-source-removal-overlay
+            @keydown.esc.prevent.stop="cancelLinearSourceRemoval"
+            @keydown.tab="trapLinearSourceRemovalFocus"
+        >
+            <section
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="linear-source-removal-title"
+                aria-describedby="linear-source-removal-description"
+                data-linear-source-removal-dialog
+                class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl"
+            >
+                <h2 id="linear-source-removal-title" class="text-base font-bold text-slate-800">
+                    {{ linearSourceRemovalDialog.origin === 'global' ? 'Remove last File?' : 'Clear or delete File?' }}
+                </h2>
+                <p id="linear-source-removal-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                    <strong class="break-all text-slate-800">{{ linearSourceRemovalTargetName }}</strong>
+                    contains {{ linearSourceRemovalTarget?.records?.length || 0 }} record{{ (linearSourceRemovalTarget?.records?.length || 0) === 1 ? '' : 's' }}.
+                    <template v-if="linearSourceRemovalDialog.origin === 'card'">
+                        Clear file only leaves a pristine blank File in this position. Delete card removes the whole File.
+                    </template>
+                    <template v-else>
+                        Removing it deletes the whole File card.
+                    </template>
+                </p>
+                <p v-if="!linearSourceRemovalTarget" class="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                    This File is no longer available. Cancel and try again.
+                </p>
+                <div class="mt-4 grid min-w-0 gap-2" :class="linearSourceRemovalDialog.origin === 'card' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'">
+                    <button
+                        v-if="linearSourceRemovalDialog.origin === 'card'"
+                        type="button"
+                        data-linear-source-removal-primary
+                        :disabled="!linearSourceRemovalTarget"
+                        @click="applyLinearSourceRemoval('clear')"
+                        class="btn btn-secondary min-w-0 py-2 text-xs font-bold"
+                    >Clear file only</button>
+                    <button
+                        type="button"
+                        :data-linear-source-removal-primary="linearSourceRemovalDialog.origin === 'global' ? '' : undefined"
+                        :disabled="!linearSourceRemovalTarget || !linearSourceRemovalCanDelete"
+                        @click="applyLinearSourceRemoval('delete')"
+                        class="btn btn-danger min-w-0 py-2 text-xs font-bold"
+                    >Delete card</button>
+                    <button type="button" @click="cancelLinearSourceRemoval" class="btn btn-secondary min-w-0 py-2 text-xs font-bold">Cancel</button>
+                </div>
+                <p v-if="linearSourceRemovalDialog.origin === 'card' && !linearSourceRemovalCanDelete" class="mt-2 text-[10px] text-slate-500">
+                    The only File cannot be deleted; use Clear file only to keep one input slot.
+                </p>
+            </section>
+        </div>
+    </Teleport>
 </div>
 
 <div id="app-boot-splash" role="status" aria-live="polite">

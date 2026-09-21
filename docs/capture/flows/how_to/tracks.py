@@ -549,17 +549,18 @@ def _fit_circular_preview(
 
 
 def _configure_title(page: Page, title: str) -> None:
-    page.get_by_label("Title & Legend", exact=True).click()
-    plot_title = page.get_by_label("Plot Title", exact=True)
+    page.get_by_label("Titles and Record Labels", exact=True).click()
+    plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
     plot_title.fill(title)
     expect(plot_title).to_have_value(title)
     title_position = page.get_by_label("Plot Title Position", exact=True)
     title_position.select_option("top")
     expect(title_position).to_have_value("top")
-    definition_size = page.get_by_label("Definition Font Size", exact=True)
+    definition_size = page.get_by_label("Default font size", exact=True)
     definition_size.fill("17")
     expect(definition_size).to_have_value("17")
-    legend_position = page.get_by_label("Legend Position", exact=True)
+    page.get_by_label("Legend settings", exact=True).click()
+    legend_position = page.get_by_label("Legend position", exact=True)
     legend_position.select_option("right")
     expect(legend_position).to_have_value("right")
 

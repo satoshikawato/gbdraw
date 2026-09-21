@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
+const { gunzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -53,6 +54,193 @@ const focusAfterHistoryCapture = async (page, locator) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   }));
 };
+
+test('Titles, Record Labels, and Legend expose one responsive control hierarchy', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+
+  const titles = page.getByLabel('Titles and Record Labels', { exact: true });
+  const legend = page.getByLabel('Legend settings', { exact: true });
+  await expect(titles).toHaveCount(1);
+  await expect(legend).toHaveCount(1);
+  await titles.focus();
+  await page.keyboard.press('Enter');
+  await expect(titles.locator('..')).toHaveAttribute('open', '');
+  await expect(page.getByRole('heading', { name: 'Plot Title', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Record Labels', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Default font size', { exact: true })).toHaveCount(1);
+
+  const rows = ['Name / Species', 'Subtitle', 'Replicon', 'Accession', 'Length / Coordinates'];
+  for (const row of rows) {
+    await expect(page.getByLabel(`${row} style`, { exact: true })).toHaveCount(1);
+  }
+  for (const row of ['Replicon', 'Accession', 'Length / Coordinates']) {
+    await expect(page.getByLabel(`${row} visibility`, { exact: true })).toHaveCount(1);
+    await expect(page.locator(`[data-definition-line-style]`).getByLabel(
+      `${row} visibility`, { exact: true }
+    )).toHaveCount(0);
+  }
+
+  const nameStyle = page.getByLabel('Name / Species style', { exact: true });
+  await nameStyle.focus();
+  await page.keyboard.press('Space');
+  await page.getByLabel('Name / Species style size', { exact: true }).fill('21');
+  await page.getByRole('button', { name: 'Name / Species bold weight', exact: true }).click();
+  await page.getByLabel('Name / Species definition line fill value', { exact: true }).fill('#123456');
+
+  await expect(legend).toContainText('Legend · Bottom');
+  await legend.focus();
+  await page.keyboard.press('Enter');
+  await page.getByLabel('Legend position', { exact: true }).selectOption('right');
+  await expect(legend).toContainText('Legend · Right');
+  await page.getByLabel('Legend swatch size', { exact: true }).fill('18');
+  expect(await page.evaluate(() => ({
+    style: window.__GBDRAW_APP__.adv.linear_definition_line_styles.name,
+    legend: window.__GBDRAW_APP__.form.legend,
+    swatch: window.__GBDRAW_APP__.adv.legend_box_size,
+    overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+  }))).toEqual({
+    style: { font_size: '21', font_weight: 'bold', fill: '#123456' },
+    legend: 'right',
+    swatch: 18,
+    overflow: false
+  });
+});
+
+test('Linear Accession and Length resolve independent Auto modes from rendered rows', async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.getByRole('group', { name: 'Linear File actions' })
+    .getByRole('button', { name: 'Add sequence', exact: true }).click();
+  await page.getByTestId('linear-genbank-1').setInputFiles(genbankPath);
+  await page.getByTestId('linear-genbank-2').setInputFiles(genbankPath);
+  await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
+
+  const titles = page.getByLabel('Titles and Record Labels', { exact: true });
+  await titles.click();
+  const accession = page.getByLabel('Accession visibility', { exact: true });
+  const length = page.getByLabel('Length / Coordinates visibility', { exact: true });
+  await expect(accession).toHaveValue('auto');
+  await expect(length).toHaveValue('auto');
+  await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Shown');
+  await expect(length.locator('option[value="auto"]')).toHaveText('Auto · Shown');
+
+  await page.getByLabel('Advanced comparison and layout', { exact: true }).click();
+  await page.getByLabel('Arrange linear records in rows', { exact: true }).check();
+  const secondRow = page.getByLabel('Linear record row for sequence 2', { exact: true });
+  await focusAfterHistoryCapture(page, secondRow);
+  await secondRow.fill('1');
+  await secondRow.press('Tab');
+  await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Hidden');
+  await expect(length.locator('option[value="auto"]')).toHaveText('Auto · Hidden');
+
+  await focusAfterHistoryCapture(page, accession);
+  await accession.selectOption('show');
+  await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Hidden');
+  expect(await runDiagram(page)).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  const shared = await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const request = getCommittedCanonicalSession().renderRequest;
+    const text = new DOMParser()
+      .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml')
+      .documentElement.textContent;
+    return { overrides: request.diagramOptions.configOverrides, text };
+  });
+  expect(shared.overrides['objects.definition.linear.show_accession']).toBe(true);
+  expect(shared.overrides['objects.definition.linear.show_length']).toBe(false);
+  expect(shared.text).toContain('NC_012920.1');
+  expect(shared.text).not.toContain('16,569 bp');
+
+  await focusAfterHistoryCapture(page, accession);
+  await accession.selectOption('auto');
+  await focusAfterHistoryCapture(page, length);
+  await length.selectOption('show');
+  await focusAfterHistoryCapture(page, secondRow);
+  await secondRow.fill('2');
+  await secondRow.press('Tab');
+  await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Shown');
+  expect(await page.evaluate(() => ({
+    accession: window.__GBDRAW_APP__.adv.linear_accession_visibility,
+    length: window.__GBDRAW_APP__.adv.linear_length_visibility
+  }))).toEqual({ accession: 'auto', length: 'show' });
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(secondRow).toHaveValue('1');
+  await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Hidden');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect(secondRow).toHaveValue('2');
+  await expect(accession.locator('option[value="auto"]')).toHaveText('Auto · Shown');
+  expect(await page.evaluate(() => ({
+    accession: window.__GBDRAW_APP__.adv.linear_accession_visibility,
+    length: window.__GBDRAW_APP__.adv.linear_length_visibility
+  }))).toEqual({ accession: 'auto', length: 'show' });
+
+  expect(await runDiagram(page)).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  const separate = await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const request = getCommittedCanonicalSession().renderRequest;
+    const text = new DOMParser()
+      .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml')
+      .documentElement.textContent;
+    return { overrides: request.diagramOptions.configOverrides, text };
+  });
+  expect(separate.overrides['objects.definition.linear.show_accession']).toBe(true);
+  expect(separate.overrides['objects.definition.linear.show_length']).toBe(true);
+  expect(separate.text).toContain('NC_012920.1');
+  expect(separate.text).toContain('16,569 bp');
+
+  const savedPath = await saveSession(page, 'linear-label-visibility');
+  const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
+  expect(saved.version).toBe(43);
+  expect(saved.config.adv.linear_accession_visibility).toBe('auto');
+  expect(saved.config.adv.linear_length_visibility).toBe('show');
+  expect(saved.config.adv).not.toHaveProperty('linear_show_accession');
+  expect(saved.config.adv).not.toHaveProperty('linear_show_length');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(page, savedPath);
+  await page.getByLabel('Advanced comparison and layout', { exact: true }).click();
+  const restoredSecondRow = page.getByLabel('Linear record row for sequence 2', { exact: true });
+  await focusAfterHistoryCapture(page, restoredSecondRow);
+  await restoredSecondRow.fill('1');
+  await restoredSecondRow.press('Tab');
+  expect(await runDiagram(page)).toEqual({
+    result: { status: 'ok' },
+    errorSummary: '',
+    errorDetails: []
+  });
+  const restored = await page.evaluate(async () => {
+    const { getCommittedCanonicalSession } = await import('./js/services/config.js');
+    const request = getCommittedCanonicalSession().renderRequest;
+    const text = new DOMParser()
+      .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml')
+      .documentElement.textContent;
+    return {
+      selected: [
+        window.__GBDRAW_APP__.adv.linear_accession_visibility,
+        window.__GBDRAW_APP__.adv.linear_length_visibility
+      ],
+      overrides: request.diagramOptions.configOverrides,
+      text
+    };
+  });
+  expect(restored.selected).toEqual(['auto', 'show']);
+  expect(restored.overrides['objects.definition.linear.show_accession']).toBe(false);
+  expect(restored.overrides['objects.definition.linear.show_length']).toBe(true);
+  expect(restored.text).not.toContain('NC_012920.1');
+  expect(restored.text).toContain('16,569 bp');
+});
 
 test('independent Linear typography follows linked, imported, and History journeys', async ({ page }, testInfo) => {
   test.setTimeout(300000);

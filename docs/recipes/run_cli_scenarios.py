@@ -20,6 +20,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from xml.etree import ElementTree
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
+
 if __package__:
     from ._scenario_support import (
         PUBLISHED_IMAGE_ROOT,
@@ -2138,7 +2140,7 @@ def _assert_session_roundtrip(
     for payload in (plain, compressed):
         if (
             payload.get("format") != "gbdraw-session"
-            or payload.get("version") != 42
+            or payload.get("version") != CURRENT_SESSION_VERSION
             or payload.get("renderRequest", {}).get("schema") != 7
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):
@@ -2362,7 +2364,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
     resources = session.get("resources", {})
     if (
         session.get("format") != "gbdraw-session"
-        or session.get("version") != 42
+        or session.get("version") != CURRENT_SESSION_VERSION
         or session.get("renderRequest", {}).get("schema") != 7
         or session.get("renderRequest", {}).get("mode") != "circular"
         or len(resources) < 2

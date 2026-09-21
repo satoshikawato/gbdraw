@@ -239,17 +239,12 @@ def _set_gallery_quality_presentation(
     expect(axis_stroke_width).to_have_value("5")
     axis_and_scale.click()
 
-    title_and_legend = page.get_by_label("Title & Legend", exact=True)
-    title_and_legend.click()
-    page.get_by_label("Plot Title", exact=True).fill(title)
+    title_and_labels = page.get_by_label("Titles and Record Labels", exact=True)
+    title_and_labels.click()
+    page.get_by_role("textbox", name="Plot Title", exact=True).fill(title)
     page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
-    page.get_by_label("Legend Position", exact=True).select_option("bottom")
 
     if match_gallery_definitions:
-        definition_styles = page.get_by_text(
-            "Definition Line Styles", exact=True
-        ).locator("xpath=../following-sibling::div[1]")
-
         def set_definition_line(
             label: str,
             *,
@@ -257,13 +252,14 @@ def _set_gallery_quality_presentation(
             bold: bool = False,
             color: str | None = None,
         ) -> None:
-            line_label = definition_styles.get_by_text(label, exact=True)
-            size_input = line_label.locator("xpath=following-sibling::input[1]")
+            page.get_by_label(f"{label} style", exact=True).click()
+            size_input = page.get_by_label(f"{label} style size", exact=True)
             size_input.fill(size)
             expect(size_input).to_have_value(size)
-            weight_controls = size_input.locator("xpath=following-sibling::div[1]")
-            weight_controls.get_by_role(
-                "button", name="Bold" if bold else "Normal", exact=True
+            page.get_by_role(
+                "button",
+                name=f"{label} {'bold' if bold else 'normal'} weight",
+                exact=True,
             ).click()
             if color is not None:
                 fill_input = page.get_by_label(
@@ -275,8 +271,12 @@ def _set_gallery_quality_presentation(
         set_definition_line("Name / Species", size="20", bold=True)
         set_definition_line("Subtitle", size="20")
         set_definition_line("Accession", size="20", color="#7b7c7d")
-        set_definition_line("Length / Coord.", size="20", color="#7b7c7d")
-    title_and_legend.click()
+        set_definition_line("Length / Coordinates", size="20", color="#7b7c7d")
+    title_and_labels.click()
+    legend_panel = page.get_by_label("Legend settings", exact=True)
+    legend_panel.click()
+    page.get_by_label("Legend position", exact=True).select_option("bottom")
+    legend_panel.click()
 
     track_layout = page.get_by_label("Track Layout", exact=True)
     track_layout.select_option("middle")
@@ -351,19 +351,19 @@ def _configure_losatp(
         "advanced",
         "Advanced comparison and layout",
     )
-    execution = advanced.get_by_role(
+    execution = settings.get_by_role(
         "combobox", name="LOSAT execution", exact=True
     )
     execution.select_option("serial")
-    total_threads = advanced.get_by_role(
+    total_threads = settings.get_by_role(
         "combobox", name="LOSAT total threads", exact=True
     )
     total_threads.select_option("1")
-    parallel_runs = advanced.get_by_role(
+    parallel_runs = settings.get_by_role(
         "combobox", name="LOSAT parallel runs", exact=True
     )
     parallel_runs.select_option("1")
-    threads_per_run = advanced.get_by_role(
+    threads_per_run = settings.get_by_role(
         "combobox", name="LOSAT threads per run", exact=True
     )
     if threads_per_run.is_enabled():
@@ -643,12 +643,16 @@ def capture_bgc_losatp(
                 expect(separate_strands_control).not_to_be_checked()
         if "input" in screenshot_names:
             name = screenshot_names["input"]
-            fifth_record = page.get_by_role(
-                "group", name="Linear sequence 5", exact=True
+            fifth_source = page.get_by_role(
+                "region", name="Linear input file 5", exact=True
             )
-            fifth_file = fifth_record.get_by_role(
+            fifth_file = fifth_source.get_by_role(
                 "group", name="GenBank File selection", exact=True
             )
+            fifth_source.get_by_role(
+                "button",
+                name=re.compile(r"^Depth TSV assignments for file 5:"),
+            ).click()
             reverse_complement = page.get_by_label(
                 "Reverse complement for sequence 5", exact=True
             )
@@ -658,11 +662,10 @@ def capture_bgc_losatp(
                 exact=True,
             )
             fifth_options.click()
-            fifth_file.evaluate(
-                "(element) => element.scrollIntoView({ block: 'start' })"
+            reverse_complement.evaluate(
+                "(element) => element.scrollIntoView({ block: 'end' })"
             )
             expect(fifth_file).to_contain_text("BGC0000713.gbk")
-            expect(fifth_file).to_be_in_viewport()
             expect(reverse_complement).to_be_checked()
             expect(reverse_complement).to_be_in_viewport()
             screenshot_bytes[name] = capture_screenshot(

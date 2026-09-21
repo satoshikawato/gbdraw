@@ -35,7 +35,7 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
         ("Output Prefix", "output-prefix"),
         ("Species", "circular-species"),
         ("Track Preset", "circular-track-preset"),
-        ("Legend Position", "legend-position"),
+        ("Legend position", "legend-position"),
         ("Label Mode", "circular-label-mode"),
     ):
         assert f'<label for="{control_id}"' in index, label
@@ -44,7 +44,8 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
     for name in ("Separate Strands", "Hide GC Content", "Hide GC Skew"):
         assert f'aria-label="{name}"' in index
 
-    assert '<summary aria-label="Title &amp; Legend">' in index
+    assert '<summary aria-label="Titles and Record Labels">' in index
+    assert '<summary aria-label="Legend settings">' in index
     assert '<summary aria-label="Labels">' in index
     assert 'aria-label="Generate Diagram" @click="runAnalysis"' in index
     assert 'role="region" aria-label="Result Preview"' in index
@@ -96,7 +97,10 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
     assert "sectionKeys.settings.includes('losatp-mode')" in index
     assert 'Comparison search method' not in index
     assert 'role="alert" aria-label="Generation Error"' in index
-    assert 'aria-label="Add sequence" @click="addLinearSeq()"' in index
+    assert (
+        'aria-label="Add sequence" data-linear-file-add '
+        '@click="addLinearSeq()"'
+    ) in index
 
 
 def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order() -> None:

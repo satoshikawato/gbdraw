@@ -13,13 +13,15 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
-  linearRecordLayoutHasSharedRow,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+);
+const { linearRecordLayoutHasSharedRow } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
 );
 const {
   createDefaultLinearComparisonPlan,
@@ -2804,8 +2806,8 @@ assert.equal(pythonConfigProjection.config.form.show_labels_linear, 'orthogroup_
 assert.equal(pythonConfigProjection.config.adv.comparison_height, 31);
 assert.equal(pythonConfigProjection.config.adv.track_axis_gap, 7);
 assert.equal(pythonConfigProjection.config.adv.linear_show_replicon, true);
-assert.equal(pythonConfigProjection.config.adv.linear_show_accession, false);
-assert.equal(pythonConfigProjection.config.adv.linear_show_length, false);
+assert.equal(pythonConfigProjection.config.adv.linear_accession_visibility, 'hide');
+assert.equal(pythonConfigProjection.config.adv.linear_length_visibility, 'hide');
 assert.equal(pythonConfigProjection.config.adv.block_stroke_width, 1);
 assert.equal(pythonConfigProjection.config.adv.block_stroke_color, '#111111');
 assert.equal(pythonConfigProjection.config.adv.line_stroke_width, 2);

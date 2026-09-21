@@ -1028,9 +1028,9 @@ def assert_first_circular_svg(report: dict[str, Any]) -> None:
 
     ids = set(report.get("ids", []))
     for expected_id in ("gc_content", "skew"):
-        if expected_id not in ids:
+        if not ({expected_id, f"{expected_id}_0"} & ids):
             raise AssertionError(f"Missing SVG track group: {expected_id}")
-    if not ({"tick", "ticks"} & ids):
+    if not ({"tick", "ticks", "tick_0", "ticks_0"} & ids):
         raise AssertionError("Missing the Circular coordinate-tick group")
 
     texts = set(report.get("texts", []))

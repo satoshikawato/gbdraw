@@ -57,6 +57,21 @@ biological records. GFF3 input requires the matching FASTA sequence and exact
 sequence-ID agreement. See [Input formats and TSV
 schemas](input-formats-and-tsv-schemas.md) for the file contract.
 
+The prominent **Add sequence** and **Remove** actions add or remove whole File
+cards. Clearing a populated Linear primary uploader opens a choice: **Clear file
+only** keeps a pristine blank File in the same position, while **Delete card**
+removes that File and all records it supplied. Either operation removes its
+record selectors, crop and reverse-complement drafts, labels, Depth bindings,
+comparison endpoints, and source-derived state as one undoable change. The only
+File cannot be deleted. Removing an empty final File is immediate; removing a
+populated final File asks for confirmation. Cancel and Escape change nothing.
+
+Each Linear File card starts with its **Depth TSV** disclosure open. Its summary
+reports the File's record count, logical series count, and whether any series
+has mixed per-record assignments. Collapse it to shorten the sidebar; the open
+state is not saved. Use **Add Depth TSV series** there to add one logical series
+for every record while preserving existing assignments.
+
 ## Main workflow
 
 1. Select **Circular** or **Linear**.
@@ -141,6 +156,19 @@ and remain visible independently, even when their text matches the automatic nam
 Apply these settings with **Generate**. Saved subtitles and previews retain their
 values on load; see [Session compatibility](session-and-request-compatibility.md#linear-file-level-defaults).
 
+Under **Titles & Record Labels**, **Accession** and **Length / Coordinates**
+each have an independent **Auto**, **Show**, or **Hide** selection. Auto is shown
+as **Auto · Shown** while every rendered row contains one record. If any rendered
+row contains two or more records, that Auto field becomes **Auto · Hidden** for
+the entire diagram. Turning **Arrange in rows** off ignores dormant shared-row
+assignments. Changing the layout recalculates Auto but never rewrites an explicit
+Show or Hide selection. **Replicon** remains a separate checkbox.
+
+Plot-title text, position, and size share the **Plot Title** subsection. Record
+label defaults and the per-line **Style** disclosures share **Record Labels**.
+The independent **Legend · position** section owns legend position, swatch size,
+and font size. Opening or closing these native disclosures is not saved.
+
 **Show Coordinate Scale** controls coordinate ticks and labels while retaining
 the record axes. **Ruler on Axis** uses each record axis as its ruler only when
 the scale is visible, **Ruler (Ticks)** is selected, and **Track Layout** is
@@ -155,6 +183,8 @@ biological coordinates.
 | Legend | Left | Bottom |
 | Feature placement | Tuckin preset | Features on axis |
 | Comparison | No rings until configured | No comparison until a command creates a plan |
+| Pairwise match style | Ribbon | Curve |
+| Accession / Length visibility | Not applicable | Auto · Shown |
 
 Loading a session restores its saved values instead of applying these
 defaults. Turning off **Use custom stack** preserves its draft slots. **Reset
@@ -210,10 +240,11 @@ filters appear in the same disclosure. LOSATN,
 TLOSATX, LOSATP Pairwise matches, and uploaded evidence also show **Comparison
 appearance**, with **Match style** and **Match height**. Similarity groups and
 Collinear blocks keep those appearance drafts but hide the controls. To
-reproduce a Curve-based recipe from fresh state, select **LOSATP** under
-**LOSAT Mode**, choose **Pairwise matches** under **LOSATP mode**, set **Match
-style** to **Curve**, then choose the final LOSATP mode. Changing either mode
-control does not rewrite the saved style.
+change the fresh Linear **Curve** default, select **LOSATP** under **LOSAT Mode**,
+choose **Pairwise matches** under **LOSATP mode**, and set **Match style** to
+**Ribbon**. Changing either mode control does not rewrite the saved style.
+Supported historical sessions that did not save the field retain their former
+Ribbon appearance; an explicit saved Curve or Ribbon remains explicit.
 
 Similarity groups always computes all-vs-all protein-search evidence across
 the loaded records; it has no evidence-scope selector. Collinear blocks uses
@@ -296,7 +327,7 @@ compatibility](session-and-request-compatibility.md).
 Primary controls have stable accessible names: **Circular**, **Linear**,
 **GenBank/DDBJ File**, **GenBank File**, **Add sequence**, **Output Prefix**,
 **Species**, **Track Preset**, **Separate Strands**, **Hide GC Content**,
-**Hide GC Skew**, **Label Mode**, **Legend Position**, **Generate Diagram**,
+**Hide GC Skew**, **Label Mode**, **Legend position**, **Generate Diagram**,
 **Result Preview**, and **SVG**. The visible **Show Coordinate Scale** control
 has the mode-qualified accessible name **Show Coordinate Scale (Circular)** or
 **Show Coordinate Scale (Linear)**. The visible annotation **Labels** toggle

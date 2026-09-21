@@ -227,13 +227,16 @@ def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Axis Stroke Width", exact=True).fill("3")
     axis.click()
 
-    title = page.get_by_label("Title & Legend", exact=True)
+    title = page.get_by_label("Titles and Record Labels", exact=True)
     title.click()
-    page.get_by_label("Plot Title", exact=True).fill("")
+    page.get_by_role("textbox", name="Plot Title", exact=True).fill("")
     page.get_by_label("Plot Title Position", exact=True).select_option("none")
-    page.get_by_label("Definition Font Size", exact=True).fill("28")
-    page.get_by_label("Legend Position", exact=True).select_option("upper_left")
+    page.get_by_label("Default font size", exact=True).fill("28")
     title.click()
+    legend = page.get_by_label("Legend settings", exact=True)
+    legend.click()
+    page.get_by_label("Legend position", exact=True).select_option("upper_left")
+    legend.click()
 
 
 def _remove_slot_if_present(page: Page, slot_id: str) -> None:

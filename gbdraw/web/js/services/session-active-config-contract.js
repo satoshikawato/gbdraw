@@ -4,6 +4,7 @@ import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAncho
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateRecordDisplayDrafts } from '../app/record-display-options.js';
+import { requireLinearLabelVisibilityMode } from '../app/linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -23,13 +24,13 @@ export const createDefaultAdv = (mode = 'circular') => ({
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
   legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: 0, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
-  linear_show_accession: true, linear_show_length: true, linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
+  linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
   depth_height: null, depth_color: '#4A90E2', depth_tracks: [], depth_window_size: null, depth_step_size: null, depth_share_axis: false,
   depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_large_tick_interval: null,
   depth_small_tick_interval: null, depth_tick_font_size: null, linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,
   gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
-  gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: 'ribbon', ...comparisonStateForMode(mode), scale_interval: null,
+  gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), scale_interval: null,
   scale_font_size: null, ruler_label_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto', multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10, multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [], tick_label_font_size: null, plot_title_font_size: null, keep_full_definition_with_plot_title: false,
@@ -148,6 +149,14 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
   if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
   if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
+  requireLinearLabelVisibilityMode(
+    config.adv.linear_accession_visibility,
+    'Linear Accession visibility'
+  );
+  requireLinearLabelVisibilityMode(
+    config.adv.linear_length_visibility,
+    'Linear Length / Coordinates visibility'
+  );
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
     if (value !== undefined && !['blastn', 'tblastx', 'blastp'].includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
