@@ -26,35 +26,48 @@ Linux/Windows ARM64 and musl/Alpine are outside this distribution. Final minimum
 OS versions require the release's platform evidence. Signing/notarization is
 not claimed.
 
-**Preparation status:** v0.1.0 is not yet publicly verified. The shipped lock
-contains no artifact hashes and setup fails with an explicit message until the
-release is published and its lock is generated. No previous RC is substituted.
-Explicit `--losatp_bin /absolute/path/LOSAT` remains available.
-
-Once a public release is pinned, setup verifies the archive SHA-256 before
-reading its members, accepts only the expected release contents, verifies the
-binary hash and `--version`, then atomically installs it. It preserves `LOSAT`
+The shipped lock pins the published v0.1.0 source commit and per-target archive
+and binary hashes. Setup verifies the archive SHA-256 before reading its
+members, accepts only the expected release contents, verifies the binary hash
+and `--version`, then atomically installs it. It preserves `LOSAT`
 (`LOSAT.exe` on Windows). Cache locations are:
 
 - Linux: `$XDG_CACHE_HOME/gbdraw/losat/0.1.0/<target>` (default `~/.cache`).
 - macOS: `~/Library/Caches/gbdraw/losat/0.1.0/<target>`.
 - Windows: `%LOCALAPPDATA%/gbdraw/losat/0.1.0/<target>`.
 
-Searches never download. Explicit LOSAT/NCBI executable selections take
-priority; otherwise the verified managed cache precedes existing bundled and
-PATH discovery. A missing cache preserves existing discovery. A corrupt cache
-stops with its directory and cause; remove that version/target directory and
-rerun setup to repair it. A concurrent installer fails clearly and can be
-retried. Interrupted temporary downloads are never treated as installations.
-Subsequent setup/searches reuse a valid cache offline. `INSTALL.json` records
-the URL, version, target, source commit, archive hash and binary hash.
+Searches never download. Automatic native selection uses this order:
+
+1. a non-default `--losatp_bin` or an explicit `--ncbi_blastp_bin`;
+2. lowercase `bin/losat` in the running Python's conda prefix;
+3. the verified managed cache;
+4. a source-checkout bundled binary;
+5. `losat` on `PATH`;
+6. NCBI `blastp` on `PATH`.
+
+A conda prefix is recognized only when `Path(sys.prefix) / "conda-meta"` is a
+directory. The resolver does not use `CONDA_PREFIX`, `PATH`, or
+`sys.base_prefix` to identify that environment, and it does not call the conda
+CLI. A present conda candidate that is a broken link, not a regular file, or
+not executable fails with its path; gbdraw does not modify it or silently use a
+different backend. If the candidate is absent, normal fallback continues.
+
+The string `losat` remains the automatic-selection token for compatibility.
+Use an absolute path such as `--losatp_bin /absolute/path/LOSAT` to force a
+specific executable. A corrupt managed cache still stops with its directory and
+cause when fallback reaches it; remove that version/target directory and rerun
+setup to repair it. A concurrent installer fails clearly and can be retried.
+Interrupted temporary downloads are never treated as installations. Subsequent
+setup/searches reuse a valid cache offline. `INSTALL.json` records the URL,
+version, target, source commit, archive hash and binary hash.
 
 Explicit native LOSAT executables must support CLI v2 (`-max_hsps`,
 `-max_target_seqs`, and `-num_threads`).
 
-Native executables are excluded from the platform-independent wheel and sdist;
-existing source-checkout bundled discovery is retained. Web Wasm execution and
-its assets are unchanged.
+Native executables are excluded from the platform-independent wheel and sdist.
+The conda package owns its `bin/losat`; PyPI metadata has no native LOSAT
+dependency. Existing source-checkout bundled discovery is retained. Web Wasm
+execution and its assets are unchanged.
 
 
 ## Shared input rules

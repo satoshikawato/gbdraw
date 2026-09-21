@@ -1,5 +1,6 @@
 import ctypes
 import errno
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -60,3 +61,81 @@ def test_macos_metadata_uses_read_only_native_xattr(monkeypatch, tmp_path):
     assert metadata["quarantine_present"]
     assert metadata["extended_attributes_hex"] == {"com.apple.quarantine": "30303831"}
     assert len(calls) == 2
+
+
+def test_extracted_source_identity_requires_declared_commit(tmp_path: Path) -> None:
+    source = tmp_path / "LOSAT-0.1.0"
+    source.mkdir()
+    sha = "6bfb1b09b6cb9451fa771e687c82cbb860e8c779"
+    assert acceptance.source_identity(source, sha) == sha
+    with pytest.raises(ValueError, match="--losat-source-sha"):
+        acceptance.source_identity(source, None)
+
+
+def test_conda_prepare_uses_running_prefix_without_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix = tmp_path / "conda"
+    (prefix / "conda-meta").mkdir(parents=True)
+    binary = prefix / "bin" / "losat"
+    binary.parent.mkdir()
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary.chmod(0o755)
+    original = binary.read_bytes()
+    monkeypatch.setattr(acceptance.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        acceptance.setup,
+        "setup_losat",
+        lambda: (_ for _ in ()).throw(AssertionError("setup must not run")),
+    )
+    monkeypatch.setattr(
+        acceptance.setup,
+        "managed_losat",
+        lambda: (_ for _ in ()).throw(AssertionError("cache must not be read")),
+    )
+
+    runtime = acceptance.prepare_runtime("conda", ["unused-python"])
+
+    assert runtime.source == "conda"
+    assert runtime.executable == str(binary.absolute())
+    assert binary.read_bytes() == original
+
+
+def test_conda_prepare_rejects_normal_path_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix = tmp_path / "conda"
+    (prefix / "conda-meta").mkdir(parents=True)
+    path_binary = tmp_path / "other-environment" / "losat"
+    monkeypatch.setattr(acceptance.sys, "prefix", str(prefix))
+    monkeypatch.setattr(acceptance.setup, "managed_losat", lambda: None)
+    monkeypatch.setattr(acceptance.protein, "_bundled_losatp_resource", lambda: None)
+    monkeypatch.setattr(
+        acceptance.protein,
+        "_path_executable",
+        lambda name: str(path_binary) if name == "losat" else None,
+    )
+
+    with pytest.raises(ValueError, match="requires source=conda"):
+        acceptance.prepare_runtime("conda", ["unused-python"])
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "expected"),
+    [
+        ("Linux", "x86_64", "linux-64"),
+        ("Darwin", "x86_64", "osx-64"),
+        ("Darwin", "arm64", "osx-arm64"),
+    ],
+)
+def test_conda_subdir_is_limited_to_initial_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    system: str,
+    machine: str,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(acceptance.platform, "system", lambda: system)
+    monkeypatch.setattr(acceptance.platform, "machine", lambda: machine)
+    assert acceptance.conda_subdir() == expected

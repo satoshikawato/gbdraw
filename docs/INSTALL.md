@@ -56,6 +56,14 @@ conda activate gbdraw
 gbdraw -h
 ```
 
+The 0.14.0 conda recipe requires native `losat ==0.1.0`. On the initial
+supported conda targets (`linux-64`, `osx-64`, and `osx-arm64`), installing
+`gbdraw` therefore installs lowercase `bin/losat` into the same environment.
+Protein comparisons select that executable automatically, without running
+`gbdraw setup-losat`. This describes packages built from the 0.14.0 recipe;
+channel publication and target availability still need to be confirmed for the
+specific build being installed.
+
 Optional: launch the local GUI:
 
 ```bash
@@ -76,6 +84,10 @@ supported Python version (3.10, 3.11, or 3.12):
 python -m pip install gbdraw
 gbdraw -h
 ```
+
+The PyPI package does not declare or bundle native LOSAT. For native protein
+comparisons in a pip environment, use `gbdraw setup-losat`, place `losat` on
+`PATH`, or pass an explicit executable path.
 
 Use an isolated virtual environment rather than modifying the system Python installation.
 An unpinned command selects the version available on PyPI, not an unpublished
