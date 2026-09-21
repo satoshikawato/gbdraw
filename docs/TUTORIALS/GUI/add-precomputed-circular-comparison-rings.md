@@ -86,7 +86,7 @@ Keep the ring order and enter the labels shown in the input table. Set **Label
 Mode** to **Out** and load `cds_gene_qualifier_priority.tsv` as **Priority File
 (TSV)**. Set the title to
 `Precomputed TLOSATX rings around Homo sapiens mtDNA`, and the legend to the
-right. Set **Plot Title Position** to **Bottom**.
+right in the separate Legend section. Set **Plot Title Position** to **Bottom**.
 
 ![Three TLOSATX tables and companion FASTA files configured as Circular rings](../../images/t-gui-06/03-ring-settings.png)
 

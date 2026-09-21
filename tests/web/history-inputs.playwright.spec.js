@@ -133,3 +133,119 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     expect(externalRequests).toEqual([]);
   });
 }
+
+test('Linear File removal choices are atomic, undoable, and preserve one slot', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await preparePage(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const first = new File(['LOCUS A\n'], 'first.gbk', { type: 'text/plain', lastModified: 1 });
+    const last = new File(['LOCUS B\n'], 'last.gbk', { type: 'text/plain', lastModified: 2 });
+    app.linearSeqs[0].gb = first;
+    app.linearSeqs[0].region_record_id = 'A1';
+    app.linearSeqs[0].definition = 'First one';
+    app.linearSeqs[0].depth = [new File(['1\t10\n'], 'first.tsv')];
+    app.addLinearSeq();
+    app.linearSeqs[1].gb = first;
+    app.linearSeqs[1].region_record_id = 'A2';
+    app.linearSeqs[1].definition = 'First two';
+    app.addLinearSeq();
+    app.linearSeqs[2].gb = last;
+    app.linearSeqs[2].region_record_id = 'B1';
+  });
+
+  const sources = page.locator('[data-linear-source-card]');
+  const dialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  await expect(sources).toHaveCount(2);
+  const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const firstRemove = sources.first().getByRole('button', { name: /Remove$/ });
+
+  await firstRemove.click();
+  expect(await page.evaluate(() => ({
+    dialog: { ...window.__GBDRAW_APP__.linearSourceRemovalDialog },
+    target: window.__GBDRAW_APP__.linearSourceRemovalTarget?.uid || null
+  }))).toEqual({
+    dialog: { open: true, sourceUid: expect.any(String), origin: 'card' },
+    target: expect.any(String)
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('first.gbk');
+  await expect(dialog).toContainText('2 records');
+  const clearFile = dialog.getByRole('button', { name: 'Clear file only', exact: true });
+  const cancel = dialog.getByRole('button', { name: 'Cancel', exact: true });
+  await expect(clearFile).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(clearFile).toBeFocused();
+  await cancel.click();
+  await expect(dialog).toHaveCount(0);
+  await expect(firstRemove).toBeFocused();
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline);
+
+  await firstRemove.focus();
+  await firstRemove.press('Enter');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline);
+
+  await firstRemove.click();
+  await dialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
+  await expect(sources).toHaveCount(2);
+  await expect(sources.first().getByRole('button', { name: 'Choose GenBank File', exact: true })).toBeFocused();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
+    uid: sequence.uid,
+    file: sequence.gb?.name || null,
+    selector: sequence.region_record_id,
+    definition: sequence.definition,
+    depth: (sequence.depth || []).map((file) => file?.name || null)
+  })))).toEqual([
+    expect.objectContaining({ file: null, selector: '', definition: '', depth: [null] }),
+    expect.objectContaining({ file: 'last.gbk', selector: 'B1' })
+  ]);
+  await expectHistory(page, baseline + 1, 0, 'Clear Linear File');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (sequence) => sequence.region_record_id
+  ))).toEqual(['A1', 'A2', 'B1']);
+  await expect.poll(() => page.evaluate(() => [
+    window.__GBDRAW_HISTORY__.getUndoCount(),
+    window.__GBDRAW_HISTORY__.getRedoCount()
+  ])).toEqual([baseline, 1]);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (sequence) => sequence.region_record_id
+  ))).toEqual(['', 'B1']);
+  await expectHistory(page, baseline + 1, 0, 'Clear Linear File');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+
+  const globalRemove = page.getByRole('button', { name: 'Remove last sequence', exact: true });
+  await globalRemove.click();
+  const globalDialog = page.getByRole('dialog', { name: 'Remove last File?' });
+  await expect(globalDialog).toBeVisible();
+  await expect(globalDialog).toContainText('last.gbk');
+  await globalDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline);
+  await globalRemove.click();
+  await globalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
+  await expect(sources).toHaveCount(1);
+  await expect(sources.first().getByRole('button', { name: 'Choose GenBank File', exact: true })).toBeFocused();
+  await expectHistory(page, baseline + 1, 0, 'Delete Linear File');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(sources).toHaveCount(2);
+
+  await page.getByRole('group', { name: 'Linear File actions' })
+    .getByRole('button', { name: 'Add sequence', exact: true }).click();
+  await expect(sources).toHaveCount(3);
+  const beforeBlankRemoval = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await globalRemove.click();
+  await expect(globalDialog).toHaveCount(0);
+  await expect(sources).toHaveCount(2);
+  await expectHistory(page, beforeBlankRemoval + 1, 0, 'Delete Linear File');
+  expect(await page.locator('[data-linear-record-list]').evaluate(
+    (element) => element.scrollWidth <= element.clientWidth + 1
+  )).toBe(true);
+});

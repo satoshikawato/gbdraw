@@ -437,13 +437,14 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(18);
+  await expect(mediaImages).toHaveCount(19);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-first-comparison-boundary.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-02-select-losatp-orthogroups.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-06-02-record-labels.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-specific-rules-all.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-align-og1.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-set-thresholds.webp"]')).toHaveCount(0);

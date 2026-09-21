@@ -108,12 +108,12 @@ def apply_finished_human_settings(page: Page, *, output_prefix: str) -> None:
     hide_gc_skew.uncheck()
     expect(hide_gc_skew).not_to_be_checked()
 
-    title_and_legend = page.get_by_label("Title & Legend", exact=True)
-    title_and_legend.click()
-    legend_position = page.get_by_label("Legend Position", exact=True)
+    legend_panel = page.get_by_label("Legend settings", exact=True)
+    legend_panel.click()
+    legend_position = page.get_by_label("Legend position", exact=True)
     legend_position.select_option("right")
     expect(legend_position).to_have_value("right")
-    title_and_legend.click()
+    legend_panel.click()
 
     labels = page.get_by_label("Labels", exact=True)
     labels.click()

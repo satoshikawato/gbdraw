@@ -1,6 +1,7 @@
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
+import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
-const CURRENT_VERSION = 42, CURRENT_REQUEST_SCHEMA = 7, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CURRENT_VERSION = 43, CURRENT_REQUEST_SCHEMA = 7, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -92,13 +93,19 @@ const mergeReplayResources = (prepared, replayed) => {
   return resources;
 };
 export const createGallerySessionPublication = (owners) => {
+  const promoteVisibilityState = (session) => ({
+    ...session,
+    config: isObject(session?.config) && isObject(session.config.adv)
+      ? { ...session.config, adv: migrateLegacyLinearLabelVisibility(session.config.adv) }
+      : session?.config
+  });
   const admit = (session) => {
     const version = Number(session?.version);
     if (version === CURRENT_VERSION) return validateCurrent(session);
-    if (version === 40 || version === 41) return validateCurrent({ ...session, version: CURRENT_VERSION,
-      renderRequest: publicationCanonicalRequest(session.renderRequest, owners.promoteRequest) });
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 42 or historical versions 31-33/39-41; received ${String(session?.version)}.`);
-    return validateCurrent(owners.promoteSession(session));
+    if (version === 40 || version === 41 || version === 42) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
+      renderRequest: publicationCanonicalRequest(session.renderRequest, owners.promoteRequest) }));
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 43 or historical versions 31-33/39-42; received ${String(session?.version)}.`);
+    return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
   };
   const rebuild = (session) => rebuildIntent(session, owners);
   const prepare = async (source) => {

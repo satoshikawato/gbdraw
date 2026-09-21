@@ -421,7 +421,7 @@
     },
     {
       "title": "Set the Linear layout and definitions",
-      "body": "Use Above track layout, separate the strands, and turn on Lock Definition Column. Use a ruler with 750,000 bp spacing. In Title & Legend, turn off Show Replicon, Show Accession, and Show Length / Coordinates so each left definition contains only the species and strain lines. Set the species line to 18 px Bold and the strain line to 16 px Normal. The two-line definition is centered on the feature record itself, independent of the Axis and ruler.",
+      "body": "Use Above track layout, separate the strands, and turn on Lock Definition Column. Use a ruler with 750,000 bp spacing. In Titles & Record Labels, turn off Replicon and set Accession and Length / Coordinates to Hide so each left definition contains only the species and strain lines. Set the species line to 18 px Bold and the strain line to 16 px Normal. The two-line definition is centered on the feature record itself, independent of the Axis and ruler.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
@@ -431,10 +431,10 @@
           ["Scale Style", "Ruler (Ticks)"],
           ["Ruler on Axis", "On"],
           ["Scale Interval", "750000"],
-          ["Definition Font Size", "16"],
+          ["Default font size", "16"],
           ["Definition line: Organism / strain", "18; Bold"],
           ["Definition line: Subtitle / title", "16; Normal"],
-          ["Show Replicon / Accession / Length", "Off / Off / Off"]
+          ["Replicon / Accession / Length", "Off / Hide / Hide"]
         ]
       },
       "operations": [
@@ -463,20 +463,20 @@
     },
     {
       "title": "Place the legend at the bottom and leave the title blank",
-      "body": "Leave Plot Title empty and set Legend Position to Bottom.",
+      "body": "Leave Plot Title empty and set Legend position to Bottom.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
           ["Plot Title", "Blank"],
-          ["Legend Position", "Bottom"]
+          ["Legend position", "Bottom"]
         ]
       },
       "operations": [
         {
           "media": {
             "src": "./media/vibrio-harveyi-group-collinear/manual-07-02-bottom-legend.webp",
-            "alt": "Title and Legend card with the Legend Position menu open and Bottom highlighted.",
-            "caption": "Choose Bottom for Legend Position."
+            "alt": "Legend card with the Position menu open and Bottom highlighted.",
+            "caption": "Choose Bottom for Legend position."
           },
           "capture": {
             "source": "webapp",
@@ -484,11 +484,12 @@
             "crop": "openSelect",
             "cropPadding": {"top": 54, "right": 80, "bottom": 24, "left": 80},
             "openSelect": {
+              "selector": "#legend-position",
               "selectedLabel": "Bottom",
               "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend Position"
+              "label": "Legend position"
             },
-            "openDetails": ["Title & Legend"]
+            "openDetails": ["Legend ·"]
           }
         }
       ]
@@ -580,7 +581,7 @@
     },
     {
       "title": "Definitions contain extra lines",
-      "body": "Turn off Show Replicon, Show Accession, and Show Length / Coordinates, and keep Lock Definition Column on."
+      "body": "Turn off Replicon, set Accession and Length / Coordinates to Hide, and keep Lock Definition Column on."
     },
     {
       "title": "The block colors do not match the Gallery",

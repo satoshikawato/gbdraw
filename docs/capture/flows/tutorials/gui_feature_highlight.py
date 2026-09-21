@@ -441,12 +441,15 @@ def capture_gui_feature_highlight(
         page.get_by_label("Axis Stroke Width", exact=True).fill("4")
         axis.click()
 
-        title = page.get_by_label("Title & Legend", exact=True)
+        title = page.get_by_label("Titles and Record Labels", exact=True)
         title.click()
-        page.get_by_label("Plot Title", exact=True).fill(TITLE)
+        page.get_by_role("textbox", name="Plot Title", exact=True).fill(TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("top")
-        page.get_by_label("Legend Position", exact=True).select_option("right")
         title.click()
+        legend = page.get_by_label("Legend settings", exact=True)
+        legend.click()
+        page.get_by_label("Legend position", exact=True).select_option("right")
+        legend.click()
 
         page.get_by_role(
             "group", name="Circular track slot mitochondrial_regions", exact=True

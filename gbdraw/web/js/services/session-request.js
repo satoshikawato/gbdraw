@@ -54,6 +54,11 @@ import {
   resolveLinearRecordEffectiveSubtitle
 } from '../app/linear-sources.js';
 import {
+  linearRecordLayoutHasSharedRow,
+  resolveEffectiveLinearRecordRows
+} from '../app/linear-record-layout.js';
+import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import {
   assertValidCustomTrackPlan,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
@@ -702,9 +707,11 @@ const linearRegionPayload = (seq) => {
 
 const buildRecords = ({ state, filesData, resources }) => {
   if (state.mode.value === 'linear') {
-    const resolvedRows = state.linearRecordLayoutEnabled?.value
-      ? resolvedLinearRecordRows(filesData.linearSeqs, state.linearRecordRows)
-      : [];
+    const resolvedRows = resolveEffectiveLinearRecordRows(
+      filesData.linearSeqs,
+      state.linearRecordRows,
+      { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
+    );
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
@@ -728,7 +735,9 @@ const buildRecords = ({ state, filesData, resources }) => {
           ...presentationPayload({
             label: resolveLinearRecordEffectiveDefinition(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
-            gridRow: resolvedRows[index] ?? null
+            gridRow: state.linearRecordLayoutEnabled?.value
+              ? (resolvedRows[index]?.row ?? null)
+              : null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
         }
@@ -884,7 +893,8 @@ const buildConfigOverrides = (
   state,
   {
     depthRequested = Boolean(state.form.show_depth),
-    hasComparisonIntent = false
+    hasComparisonIntent = false,
+    linearHasSharedRow = false
   } = {}
 ) => {
   const { form, adv } = state;
@@ -991,9 +1001,13 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.linearDefinitionShowReplicon]:
             Boolean(adv.linear_show_replicon),
           [CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession]:
-            Boolean(adv.linear_show_accession),
+            resolveLinearLabelVisibility(adv.linear_accession_visibility, {
+              hasSharedRow: linearHasSharedRow
+            }),
           [CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength]:
-            Boolean(adv.linear_show_length),
+            resolveLinearLabelVisibility(adv.linear_length_visibility, {
+              hasSharedRow: linearHasSharedRow
+            }),
           [CONFIG_OVERRIDE_PATHS.linearLabelSpacing]:
             optionalNumber(adv.linear_label_spacing),
           [CONFIG_OVERRIDE_PATHS.labelPlacement]: linearLabelPlacement,
@@ -1950,26 +1964,6 @@ const buildComparisons = ({
   return comparisons;
 };
 
-const resolvedLinearRecordRows = (sequences, layoutRows) => {
-  const rowsByUid = new Map(
-    (Array.isArray(layoutRows) ? layoutRows : [])
-      .map((entry) => [String(entry?.uid || ''), Number(entry?.row)])
-  );
-  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => {
-    const row = rowsByUid.get(String(sequence?.uid || ''));
-    return Number.isInteger(row) && row > 0 ? row : index + 1;
-  });
-};
-
-export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
-  const seenRows = new Set();
-  return resolvedLinearRecordRows(sequences, layoutRows).some((row) => {
-    if (seenRows.has(row)) return true;
-    seenRows.add(row);
-    return false;
-  });
-};
-
 const buildLayout = (state, filesData, records = []) => {
   if (state.mode.value === 'linear') {
     if (!state.linearRecordLayoutEnabled?.value && !records.some((record) => record.presentation.gridRow != null)) return {};
@@ -2196,7 +2190,12 @@ export const buildCanonicalRenderRequest = ({
     featurePlacements: canonicalFeaturePlacements(state.featurePlacementOverrides || {}, state.mode.value),
     configOverrides: buildConfigOverrides(state, {
       depthRequested: trackPlan.depthRequested,
-      hasComparisonIntent: hasLinearComparisonIntent
+      hasComparisonIntent: hasLinearComparisonIntent,
+      linearHasSharedRow: state.mode.value === 'linear' && linearRecordLayoutHasSharedRow(
+        filesData.linearSeqs,
+        state.linearRecordRows,
+        { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
+      )
     }),
     tracks: trackPlan.tracks,
     output: {
@@ -4141,8 +4140,12 @@ export const projectCanonicalSessionRequest = ({
     track_axis_gap: overrides.linear_track_axis_gap ?? null,
     linear_definition_line_styles: overrides.linear_definition_line_styles || {},
     linear_show_replicon: Boolean(overrides.linear_definition_show_replicon),
-    linear_show_accession: overrides.linear_definition_show_accession !== false,
-    linear_show_length: overrides.linear_definition_show_length !== false,
+    linear_accession_visibility: overrides.linear_definition_show_accession !== false
+      ? 'show'
+      : 'hide',
+    linear_length_visibility: overrides.linear_definition_show_length !== false
+      ? 'show'
+      : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     gc_content_mode: overrides.gc_content_mode || 'deviation',
     gc_content_min_percent: overrides.gc_content_min_percent ?? 0,

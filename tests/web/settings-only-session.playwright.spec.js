@@ -62,6 +62,44 @@ const loadFile = async (page, file, message = 'Session loaded successfully!') =>
   else expect(actual).toMatch(message);
 };
 
+test('version 42 Linear settings migrate historical Ribbon and label visibility', async ({ page }, testInfo) => {
+  const source = JSON.parse(gunzipSync(await fs.readFile(
+    path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz')
+  )));
+  source.ui.mode = 'linear';
+  source.config.modeProfiles.activeMode = 'linear';
+  delete source.config.adv.pairwise_match_style;
+  delete source.config.adv.linear_show_accession;
+  delete source.config.adv.linear_show_length;
+  delete source.config.modeProfiles.profiles.linear.values.pairwise_match_style;
+  delete source.config.modeProfiles.profiles.linear.managed.pairwise_match_style;
+  const missing = testInfo.outputPath('v42-linear-missing-match-style.json');
+  await fs.writeFile(missing, JSON.stringify(source));
+
+  page.on('dialog', dialog => dialog.accept());
+  await openApp(page);
+  await loadFile(page, missing);
+  expect((await snapshot(page)).config.adv).toMatchObject({
+    pairwise_match_style: 'ribbon',
+    linear_accession_visibility: 'show',
+    linear_length_visibility: 'show'
+  });
+
+  const explicit = structuredClone(source);
+  explicit.config.adv.pairwise_match_style = 'curve';
+  explicit.config.adv.linear_show_accession = false;
+  explicit.config.adv.linear_show_length = true;
+  explicit.config.adv.linear_accession_visibility = 'auto';
+  const explicitFile = testInfo.outputPath('v42-linear-explicit-curve.json');
+  await fs.writeFile(explicitFile, JSON.stringify(explicit));
+  await loadFile(page, explicitFile);
+  expect((await snapshot(page)).config.adv).toMatchObject({
+    pairwise_match_style: 'curve',
+    linear_accession_visibility: 'auto',
+    linear_length_visibility: 'show'
+  });
+});
+
 test('settings-only Session preserves non-default Circular and Linear profiles through real Save and fresh Load', async ({ browser, viewport }, testInfo) => {
   test.setTimeout(1_800_000);
   const contexts = [];
@@ -92,6 +130,9 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     expect(before.config.form.labels_mode).toBe('both');
     expect(before.config.form.track_type).toBe('middle');
     const saved = await save(page, testInfo, 'first');
+    expect(saved.document.version).toBe(43);
+    expect(saved.document.config.adv).not.toHaveProperty('linear_show_accession');
+    expect(saved.document.config.adv).not.toHaveProperty('linear_show_length');
     assertSourceFree(await snapshot(page));
     await assertDiagramWorkerIdle(page);
 

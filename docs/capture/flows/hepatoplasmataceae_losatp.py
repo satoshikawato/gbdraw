@@ -178,12 +178,15 @@ def _set_presentation(page: Page, *, title: str) -> None:
     page.get_by_label("Palette", exact=True).select_option("ajisai")
     colors.click()
 
-    title_panel = page.get_by_label("Title & Legend", exact=True)
+    title_panel = page.get_by_label("Titles and Record Labels", exact=True)
     title_panel.click()
-    page.get_by_label("Plot Title", exact=True).fill(title)
+    page.get_by_role("textbox", name="Plot Title", exact=True).fill(title)
     page.get_by_label("Plot Title Position", exact=True).select_option("top")
-    page.get_by_label("Legend Position", exact=True).select_option("right")
     title_panel.click()
+    legend_panel = page.get_by_label("Legend settings", exact=True)
+    legend_panel.click()
+    page.get_by_label("Legend position", exact=True).select_option("right")
+    legend_panel.click()
 
 
 def _configure_all_record_collinear(
@@ -264,16 +267,16 @@ def _configure_all_record_collinear(
         "advanced",
         "Advanced comparison and layout",
     )
-    advanced.get_by_label("LOSAT execution", exact=True).select_option(
+    settings.get_by_label("LOSAT execution", exact=True).select_option(
         "threaded" if evidence_scope == "all" else "auto"
     )
-    total_threads = advanced.get_by_label("LOSAT total threads", exact=True)
+    total_threads = settings.get_by_label("LOSAT total threads", exact=True)
     total_threads.select_option("32" if evidence_scope == "all" else "safe")
     expect(total_threads).to_have_value("32" if evidence_scope == "all" else "safe")
-    threads = advanced.get_by_label("LOSAT threads per run", exact=True)
+    threads = settings.get_by_label("LOSAT threads per run", exact=True)
     if threads.is_enabled():
         threads.select_option("8" if evidence_scope == "all" else "auto")
-    parallel_runs = advanced.get_by_label("LOSAT parallel runs", exact=True)
+    parallel_runs = settings.get_by_label("LOSAT parallel runs", exact=True)
     if evidence_scope == "all":
         parallel_runs.select_option("4")
     else:
@@ -464,6 +467,9 @@ def _boxes_overlap(left: Mapping[str, float], right: Mapping[str, float]) -> boo
 
 
 def _assert_input_capture_framing(page: Page) -> None:
+    depth_disclosures = page.locator("[data-linear-source-depth][open]")
+    while depth_disclosures.count():
+        depth_disclosures.first.locator("summary").click()
     selected_files = page.get_by_role(
         "group", name="GenBank File selection", exact=True
     )

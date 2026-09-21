@@ -144,8 +144,8 @@ def capture_first_circular(
         hide_gc_skew.uncheck()
         expect(hide_gc_skew).not_to_be_checked()
 
-        page.get_by_label("Title & Legend", exact=True).click()
-        legend_position = page.get_by_label("Legend Position", exact=True)
+        page.get_by_label("Legend settings", exact=True).click()
+        legend_position = page.get_by_label("Legend position", exact=True)
         legend_position.select_option("right")
         expect(legend_position).to_have_value("right")
         page.get_by_label("Labels", exact=True).click()

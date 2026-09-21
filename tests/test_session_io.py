@@ -521,9 +521,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 42
+    assert CURRENT_SESSION_VERSION == 43
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -3307,7 +3307,7 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (42, 2, 7)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (43, 2, 7)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()

@@ -22,6 +22,53 @@ export const groupLinearSourceRecords = (sequences) => {
   return groups;
 };
 
+export const linearSourceHasPrimaryInput = (source) => Boolean(
+  source?.records?.some(({ sequence }) => sequence?.gb || sequence?.gff || sequence?.fasta)
+);
+
+export const isPristineLinearSource = (source) => {
+  const records = Array.isArray(source?.records) ? source.records : [];
+  if (records.length !== 1) return false;
+  const sequence = records[0]?.sequence;
+  if (!sequence || linearSourceHasPrimaryInput(source)) return false;
+  const depth = depthFileSlotsFromValue(sequence.depth);
+  return (
+    depth.every((file) => !file) &&
+    String(sequence.definition || '') === '' &&
+    String(sequence.record_subtitle || '') === '' &&
+    String(sequence.file_definition || '') === '' &&
+    String(sequence.file_subtitle || '') === '' &&
+    String(sequence.region_record_id || '') === '' &&
+    sequence.region_start == null &&
+    sequence.region_end == null &&
+    !sequence.region_reverse
+  );
+};
+
+export const planLinearSourceRemoval = ({ sequences, sourceUid, intent }) => {
+  const ordered = Array.from(sequences || []);
+  const groups = groupLinearSourceRecords(ordered);
+  const sourceIndex = groups.findIndex((source) => source.uid === sourceUid);
+  if (sourceIndex < 0) return { allowed: false, reason: 'missing-source' };
+  if (!['clear', 'delete'].includes(intent)) return { allowed: false, reason: 'invalid-intent' };
+  if (intent === 'delete' && groups.length <= 1) {
+    return { allowed: false, reason: 'sole-source', sourceIndex };
+  }
+
+  const source = groups[sourceIndex];
+  const removedUids = new Set(source.records.map(({ sequence }) => sequence.uid));
+  return {
+    allowed: true,
+    intent,
+    sourceIndex,
+    insertionIndex: source.index,
+    sourceUid: source.uid,
+    recordCount: source.records.length,
+    removedUids: [...removedUids],
+    retainedSequences: ordered.filter((sequence) => !removedUids.has(sequence.uid))
+  };
+};
+
 export const linearSourceDepthStatus = (source, trackIndex) => {
   const index = Number(trackIndex);
   const records = Array.isArray(source?.records) ? source.records : [];

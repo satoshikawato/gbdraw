@@ -67,6 +67,7 @@ import {
 import {
   normalizeDefinitionLineStyleState
 } from './definition-line-style-state.js';
+import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
@@ -76,6 +77,7 @@ import {
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
 import {
+  normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentCollinearAnchorMode,
   requireCurrentCollinearColorMode,
@@ -864,10 +866,6 @@ const normalizeCircularConservationLosatProgram = (value) => {
 const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
-const normalizePairwiseMatchStyle = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
@@ -2825,7 +2823,10 @@ export const createRunAnalysis = ({
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
           setProcessingStatus('Preparing comparisons...');
-          adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
+          adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+            adv.pairwise_match_style,
+            'ribbon'
+          );
           adv.min_bitscore = normalizeBlastThresholdNumber(
             adv.min_bitscore,
             DEFAULT_LINEAR_BLAST_FILTERS.bitscore
@@ -2971,8 +2972,14 @@ export const createRunAnalysis = ({
             ? parsedPlotTitleFontSize
             : null;
         adv.linear_show_replicon = adv.linear_show_replicon === true;
-        adv.linear_show_accession = adv.linear_show_accession !== false;
-        adv.linear_show_length = adv.linear_show_length !== false;
+        adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+          adv.linear_accession_visibility,
+          'Linear Accession visibility'
+        );
+        adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+          adv.linear_length_visibility,
+          'Linear Length / Coordinates visibility'
+        );
         adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
         form.plot_title = normalizedPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;

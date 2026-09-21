@@ -187,7 +187,7 @@
             "Ruler (Ticks)"
           ],
           [
-            "Legend Position",
+            "Legend position",
             "Left"
           ]
         ]
@@ -345,8 +345,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/lambda_basic_linear/manual-03-04-legend-position-left.webp",
-            "alt": "Legend Position selector with Left highlighted.",
-            "caption": "Set Legend Position to Left."
+            "alt": "Legend card Position menu with Left highlighted.",
+            "caption": "Set Legend position to Left."
           },
           "capture": {
             "source": "webapp",
@@ -356,12 +356,20 @@
               "height": 900
             },
             "openDetails": [
-              "Title & Legend"
+              "Legend ·"
             ],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; app.form.legend = 'left';"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              },
+              {
+                "type": "evaluate",
+                "script": "const details = document.querySelector('#legend-position')?.closest('details'); if (!details) throw new Error('Legend details not found.'); details.open = true;"
               }
             ],
             "crop": "openSelect",
@@ -372,6 +380,7 @@
               "left": 100
             },
             "openSelect": {
+              "selector": "#legend-position",
               "selectedLabel": "Left",
               "options": [
                 "Right",
@@ -380,7 +389,7 @@
                 "Bottom",
                 "None"
               ],
-              "label": "Legend Position"
+              "label": "Legend position"
             },
             "assertAppState": {
               "mode": "linear",
@@ -388,7 +397,7 @@
             },
             "visibleControls": [
               {
-                "label": "Legend Position",
+                "selector": "#legend-position",
                 "value": "Left"
               }
             ]

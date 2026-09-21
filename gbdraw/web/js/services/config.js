@@ -46,6 +46,10 @@ import {
   normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
+import {
+  migrateLegacyLinearLabelVisibility,
+  requireLinearLabelVisibilityMode
+} from '../app/linear-label-visibility.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
   normalizeCircularPlotTitlePosition,
@@ -184,6 +188,7 @@ import {
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames,
+  normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
@@ -209,11 +214,11 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 42;
+export const SESSION_VERSION = 43;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -456,6 +461,54 @@ const normalizeLabelRendering = (value) => {
   return ['auto', 'embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
 };
 
+const withHistoricalPairwiseMatchStyleFallback = (configData, mode = null) => {
+  if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
+  const adv = Object.prototype.hasOwnProperty.call(configData.adv, 'pairwise_match_style')
+    ? configData.adv
+    : { ...configData.adv, pairwise_match_style: 'ribbon' };
+  const profiles = configData.modeProfiles;
+  const activeMode = ['circular', 'linear'].includes(mode)
+    ? mode
+    : profiles?.activeMode;
+  if (
+    !isPlainObject(profiles)
+    || !isPlainObject(profiles.profiles)
+    || !['circular', 'linear'].includes(activeMode)
+    || !isPlainObject(profiles.profiles[activeMode])
+  ) {
+    return adv === configData.adv ? configData : { ...configData, adv };
+  }
+  const activeProfile = profiles.profiles[activeMode];
+  const values = isPlainObject(activeProfile.values) ? activeProfile.values : {};
+  if (Object.prototype.hasOwnProperty.call(values, 'pairwise_match_style')) {
+    return adv === configData.adv ? configData : { ...configData, adv };
+  }
+  const managed = isPlainObject(activeProfile.managed) ? activeProfile.managed : {};
+  return {
+    ...configData,
+    adv,
+    modeProfiles: {
+      ...profiles,
+      profiles: {
+        ...profiles.profiles,
+        [activeMode]: {
+          ...activeProfile,
+          values: { ...values, pairwise_match_style: adv.pairwise_match_style },
+          managed: { ...managed, pairwise_match_style: false }
+        }
+      }
+    }
+  };
+};
+
+const withCurrentLinearLabelVisibility = (configData) => {
+  if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
+  return {
+    ...configData,
+    adv: migrateLegacyLinearLabelVisibility(configData.adv)
+  };
+};
+
 const normalizePositiveNumberOrNull = (value) => {
   if (
     value === null ||
@@ -523,11 +576,11 @@ const migratePersistedWebOptionValues = (configData = {}) => {
       adv.multi_record_size_mode
     );
   }
-  return {
+  return withCurrentLinearLabelVisibility(withHistoricalPairwiseMatchStyleFallback({
     ...migratedNames,
     ...(form === undefined ? {} : { form }),
     ...(adv === undefined ? {} : { adv })
-  };
+  }));
 };
 
 const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion = null) => {
@@ -596,11 +649,6 @@ const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
-};
-
-const normalizePairwiseMatchStyle = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 
 const normalizeCircularConservationSource = (value) => {
@@ -1550,9 +1598,15 @@ const preflightSessionImport = (rawData) => {
   )
     ? { ...data.renderRequest, comparisons: [] }
     : data.renderRequest;
+  const currentStoredConfig = sourceSessionVersion < SESSION_VERSION
+    ? withCurrentLinearLabelVisibility(data.config)
+    : data.config;
   const runtimeStoredConfig = currentSession && Object.prototype.hasOwnProperty.call(data, 'config')
     ? migrateImportedLinearTrackSlots(
-        migrateImportedCircularTrackSlots(data.config),
+        migrateImportedCircularTrackSlots(withHistoricalPairwiseMatchStyleFallback(
+          currentStoredConfig,
+          data.ui?.mode || data.renderRequest?.mode
+        )),
         sourceSessionVersion
       )
     : data.config;
@@ -1593,6 +1647,9 @@ const preflightSessionImport = (rawData) => {
           )
         }
     : data.config;
+  if (sourceSessionVersion < SESSION_VERSION && restoredConfig) {
+    restoredConfig = withCurrentLinearLabelVisibility(restoredConfig);
+  }
   if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
     const sourceStoredConfig = isPlainObject(normalizedData.config)
       ? normalizedData.config
@@ -2040,12 +2097,21 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     state.adv.gc_content_max_percent = state.adv.gc_content_min_percent;
   }
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
-  state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
-  state.adv.linear_show_length = state.adv.linear_show_length !== false;
+  state.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+    state.adv.linear_accession_visibility,
+    'Linear Accession visibility'
+  );
+  state.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+    state.adv.linear_length_visibility,
+    'Linear Length / Coordinates visibility'
+  );
   state.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(
     state.adv.linear_definition_line_styles
   );
-  state.adv.pairwise_match_style = normalizePairwiseMatchStyle(state.adv.pairwise_match_style);
+  state.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+    state.adv.pairwise_match_style,
+    'ribbon'
+  );
   if (data.losat) {
     safeDeepMerge(state.losat, data.losat);
     const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();

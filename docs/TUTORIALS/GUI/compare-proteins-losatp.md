@@ -113,8 +113,8 @@ Match the Interactive SVG Gallery presentation with these display settings:
 | Definition accession / length | `20` px, Normal |
 
 The first record therefore carries readable CDS `gene` labels; the remaining
-four records stay unlabeled. Under **Title & Legend**, set the four visible
-Definition line sizes to `20`, choose **Bold** only for **Name / Species**, and
+four records stay unlabeled. Under **Titles & Record Labels**, open each line's
+**Style**, set the four visible line sizes to `20`, choose **Bold** only for **Name / Species**, and
 leave the other lines at **Normal**. Fit the complete final preview at **40%**
 before capturing or exporting it.
 

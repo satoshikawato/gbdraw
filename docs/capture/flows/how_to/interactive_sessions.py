@@ -68,7 +68,7 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 42
+CURRENT_SESSION_VERSION = 43
 CURRENT_RENDER_REQUEST_SCHEMA = 7
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
@@ -665,13 +665,19 @@ def _frame_finished_preview_with_legend(page: Page) -> dict[str, float]:
         """
         (element) => {
           const margin = 16;
-          const legend = element.querySelector('#legend');
-          const diagramParts = [
-            element.querySelector('#Axis'),
-            element.querySelector('#label_leaders'),
-            element.querySelector('#label_text')
-          ].filter(Boolean);
-          if (!legend || diagramParts.length !== 3) return null;
+          const selectors = {
+            legend: '#legend',
+            Axis: '[id="Axis"], [id^="Axis_"]',
+            label_leaders: '#label_leaders',
+            label_text: '#label_text'
+          };
+          const groups = Object.fromEntries(Object.entries(selectors).map(
+            ([id, selector]) => [id, element.querySelector(selector)]
+          ));
+          const missing = Object.keys(selectors).filter((id) => !groups[id]);
+          if (missing.length) return {error: 'missing preview groups', missing};
+          const legend = groups.legend;
+          const diagramParts = [groups.Axis, groups.label_leaders, groups.label_text];
 
           const canvasRect = element.getBoundingClientRect();
           const legendRect = legend.getBoundingClientRect();
@@ -1159,13 +1165,12 @@ def _load_current_session(page: Page, path: Path) -> None:
 
 
 def _set_history_marker(page: Page, marker: str) -> Any:
-    panel = page.get_by_label("Title & Legend", exact=True)
+    panel = page.get_by_label("Titles and Record Labels", exact=True)
     panel.click()
-    title = page.get_by_label("Plot Title", exact=True)
+    title = page.get_by_role("textbox", name="Plot Title", exact=True)
     title.fill(marker)
     title.press("Tab")
     expect(title).to_have_value(marker)
-    panel.click()
     return title
 
 

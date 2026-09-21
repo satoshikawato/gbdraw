@@ -348,10 +348,10 @@ def capture_gui_quantitative_map(
         _number_control(dinucleotide, "Large Tick").fill("10")
         _number_control(dinucleotide, "Small Tick").fill("5")
 
-        title = page.get_by_label("Title & Legend", exact=True)
-        title.click()
-        page.get_by_label("Legend Position", exact=True).select_option("right")
-        title.click()
+        legend = page.get_by_label("Legend settings", exact=True)
+        legend.click()
+        page.get_by_label("Legend position", exact=True).select_option("right")
+        legend.click()
 
         slots = _configure_slots(page)
         state = _capture_state(page)

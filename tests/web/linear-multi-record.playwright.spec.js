@@ -104,7 +104,11 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
-    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+    Object.assign(app.adv, {
+      linear_show_replicon: false,
+      linear_accession_visibility: 'hide',
+      linear_length_visibility: 'hide'
+    });
   });
   const source = makeDefinitionGenbank('P1', '                     /plasmid="p1"\n')
     + makeDefinitionGenbank('C')
@@ -115,8 +119,8 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((s) => s.record_subtitle)))
     .toEqual(['', '', '', '']);
-  await page.locator('summary[aria-label="Title & Legend"]').click();
-  const show = page.getByRole('checkbox', { name: 'Show Replicon', exact: true });
+  await page.locator('summary[aria-label="Titles and Record Labels"]').click();
+  const show = page.getByRole('checkbox', { name: 'Replicon visibility', exact: true });
   for (const enabled of [false, true, false]) {
     await show.setChecked(enabled);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -251,7 +255,11 @@ test('Linear Lock Definition Column applies common centers and left edges after 
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
-    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+    Object.assign(app.adv, {
+      linear_show_replicon: false,
+      linear_accession_visibility: 'hide',
+      linear_length_visibility: 'hide'
+    });
     await app.setLinearRecordLayoutEnabled(true);
     app.linearSeqs.forEach((seq, i) => {
       seq.definition = i < 2 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
@@ -3492,10 +3500,15 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(1);
   await sources.nth(1).getByRole('button', { name: /Remove$/ }).click();
+  const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  await expect(removalDialog).toContainText('upper.gbff');
+  await removalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['UpperA', 'UpperB']);
   await sources.first().getByRole('button', { name: /Remove$/ }).click();
+  await expect(removalDialog.getByRole('button', { name: 'Delete card', exact: true })).toBeDisabled();
+  await removalDialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => ({ file: seq.gb, selector: seq.region_record_id }))))

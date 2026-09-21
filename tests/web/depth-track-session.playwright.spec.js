@@ -577,6 +577,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
 
 test('Linear File-level Depth assignment preserves history, sessions, and regeneration', { tag: '@pr-smoke' }, async ({ page }) => {
   test.setTimeout(300000);
+  await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page, { waitForPalette: false });
 
   await page.evaluate(() => {
@@ -593,10 +594,26 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
 
   const firstSource = page.locator('[data-linear-source-depth]').first();
   const firstSourceRecords = page.locator('[data-linear-source-records]').first();
+  const firstSourceSummary = firstSource.locator(':scope > summary');
   await expect(firstSource).toBeVisible();
+  await expect(firstSource).toHaveAttribute('open', '');
+  await expect(firstSourceSummary).toContainText('Depth TSV');
+  await expect(firstSourceSummary).toContainText('2 records');
+  await expect(firstSourceSummary).toContainText('1 series');
   expect(await firstSourceRecords.evaluate((element) => element.open)).toBe(false);
   await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(1);
+  await expect(page.locator('[data-linear-depth-settings]').getByRole('button', {
+    name: 'Add series for all records', exact: true
+  })).toHaveCount(0);
   await expect(page.locator('[data-linear-source-records]').nth(1).getByText('Per-record Depth TSV')).toHaveCount(0);
+
+  const openHeight = await firstSource.evaluate((element) => element.getBoundingClientRect().height);
+  await firstSourceSummary.press('Enter');
+  await expect(firstSource).not.toHaveAttribute('open', '');
+  expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(openHeight);
+  await firstSourceSummary.press('Space');
+  await expect(firstSource).toHaveAttribute('open', '');
+  await expect(page.getByRole('button', { name: /Add Depth TSV series from file/ })).toHaveCount(2);
 
   await page.getByTestId('linear-source-depth-1-1').setInputFiles({
     name: 'common.tsv',
@@ -609,6 +626,20 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await expect(firstSource.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
   await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
 
+  await page.getByRole('button', {
+    name: 'Add Depth TSV series from file 1', exact: true
+  }).click();
+  await expect(firstSourceSummary).toContainText('2 series');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
+    width: sequence.depth.length,
+    files: sequence.depth.map((file) => file?.name || null)
+  })))).toEqual([
+    { width: 2, files: ['common.tsv', null] },
+    { width: 2, files: ['common.tsv', null] },
+    { width: 2, files: [null, null] }
+  ]);
+  expect(await firstSource.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.setLinearDepthFile(
@@ -618,6 +649,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     );
   });
   await expect(firstSource.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  await expect(firstSourceSummary).toContainText('Mixed');
   await expect(firstSource.getByText(/Choosing a file replaces all record bindings/)).toBeVisible();
 
   await firstSource.getByRole('button', { name: 'Clear all record bindings' }).click();
@@ -1776,7 +1808,7 @@ ORIGIN
     'circularMultiRecordLegendPosition',
     'circularMultiRecordPlotTitlePosition'
   ];
-  expect(exportedSession.version).toBe(42);
+  expect(exportedSession.version).toBe(43);
   expect(exportedSession).not.toHaveProperty('files');
   expect(exportedSession.webFiles).toEqual(expect.any(Object));
   expect(exportedSession.webFiles.bindings.schema).toBe(2);
@@ -2230,7 +2262,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const initialSession = JSON.parse(
     gunzipSync(readFileSync(initialPath)).toString('utf8')
   );
-  expect(initialSession.version).toBe(42);
+  expect(initialSession.version).toBe(43);
   const expectedDraft = p3Draft(initialSession);
   expect(expectedDraft.circularEnabled).toBe(true);
   expect(expectedDraft.linearEnabled).toBe(false);

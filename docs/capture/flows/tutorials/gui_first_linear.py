@@ -130,12 +130,12 @@ def capture_first_linear(
         expect(selected_priority).to_contain_text("cds_gene_qualifier_priority.tsv")
         labels_panel.click()
 
-        title_legend_panel = page.get_by_label("Title & Legend", exact=True)
-        title_legend_panel.click()
-        legend_position = page.get_by_label("Legend Position", exact=True)
+        legend_panel = page.get_by_label("Legend settings", exact=True)
+        legend_panel.click()
+        legend_position = page.get_by_label("Legend position", exact=True)
         legend_position.select_option("left")
         expect(legend_position).to_have_value("left")
-        title_legend_panel.click()
+        legend_panel.click()
 
         axis_panel = page.get_by_label("Axis & Scale", exact=True)
         axis_panel.click()

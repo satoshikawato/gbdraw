@@ -327,9 +327,9 @@
           ["Align to Center", "On"],
           ["Separate Strands", "On"],
           ["Lock Definition Column", "On"],
-          ["Show Length / Coordinates", "Off"],
-          ["Definition Font Size", "18"],
-          ["Legend Position", "Right"],
+          ["Length / Coordinates visibility", "Hide"],
+          ["Default font size", "18"],
+          ["Legend position", "Right"],
           ["Legend Font Size", "18"]
         ]
       },
@@ -351,8 +351,8 @@
           "title": "Legend position",
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-04-02-legend-position-right.webp",
-            "alt": "Title and Legend card with the Legend Position menu open and Right highlighted.",
-            "caption": "Open Legend Position and choose Right."
+            "alt": "Legend card with the Position menu open and Right highlighted.",
+            "caption": "Open Position in the Legend card and choose Right."
           },
           "capture": {
             "source": "webapp",
@@ -369,15 +369,24 @@
               "left": 80
             },
             "openSelect": {
+              "selector": "#legend-position",
               "selectedLabel": "Right",
               "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend Position"
+              "label": "Legend position"
             },
-            "openDetails": ["Title & Legend"],
+            "openDetails": ["Legend ·"],
             "actions": [
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app?.form) app.form.legend = 'right';"
+              },
+              {
+                "type": "wait",
+                "ms": 100
+              },
+              {
+                "type": "evaluate",
+                "script": "const details = document.querySelector('#legend-position')?.closest('details'); if (!details) throw new Error('Legend details not found.'); details.open = true;"
               }
             ]
           }
@@ -481,7 +490,7 @@
               "mode": "linear",
               "linearSeqs.length": 9,
               "form.legend": "right",
-              "adv.linear_show_length": false,
+              "adv.linear_length_visibility": "hide",
               "form.show_labels_linear": "none"
             },
             "visibleText": [
@@ -606,7 +615,7 @@
     },
     {
       "title": "The rows do not match the Gallery figure",
-      "body": "Check Align to Center, Separate Strands, Show Length / Coordinates set to Off, record labels, and the nine-record input order."
+      "body": "Check Align to Center, Separate Strands, Length / Coordinates set to Hide, record labels, and the nine-record input order."
     },
     {
       "title": "Feature categories are not colored",

@@ -91,6 +91,35 @@ const selectedPairs = (page) => page.locator(
   'details[data-linear-comparison-disclosure="selected-pairs"]'
 );
 
+test('fresh and reset Linear use Curve without overwriting an explicit style', async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('ribbon');
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('curve');
+  await page.evaluate(async () => {
+    await window.__GBDRAW_APP__.setLinearComparisonGlobalAction('losat');
+  });
+  const style = page.getByRole('combobox', { name: 'Comparison match style' });
+  await expect(style).toHaveValue('curve');
+  await style.selectOption('ribbon');
+  await page.locator('#linear-track-layout').selectOption('above');
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearComparisonGlobalAction('losat');
+    app.setLinearComparisonLosatMode('blastp');
+    app.setLinearComparisonLosatpMode('orthogroup');
+  });
+  await expect(style).toHaveValue('ribbon');
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('curve');
+  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('ribbon');
+});
+
 const expectInside = async (child, parent) => {
   const [childBox, parentBox] = await Promise.all([
     child.boundingBox(),

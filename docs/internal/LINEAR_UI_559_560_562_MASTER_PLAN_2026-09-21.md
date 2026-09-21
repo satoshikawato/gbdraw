@@ -774,3 +774,140 @@ Proposed commit summary (English):
 計画策定時点ではruntime変更、test実行、Product Decisionの受領は行っていない。作業ツリーには
 本計画と無関係な未追跡ディレクトリが存在する可能性があるため、実装者は毎回`git status`で
 確認し、削除・stage・変更しない。
+
+### 2026-09-22 実装記録
+
+```text
+Session:
+  Linear UI #559 / #560 / #562 implementation and documentation evidence
+Date / actor:
+  2026-09-22 / Codex, with explicit Product Decision Owner authorization in the
+  current conversation
+Base SHA / branch / upstream:
+  HEAD 17305e7f2e24426cc98268b4f9328626f6a82460
+  origin/dev f4760476915194fc0586642e0b03ec561b96ab01
+  fix/linear-ui-559-560-562-20260921
+  origin/fix/linear-ui-559-560-562-20260921
+Authority SHA and selected outcome:
+  No additional durable-authority SHA was present in this runtime base. The
+  Product Decision Owner explicitly authorized implementation in this
+  conversation and confirmed that the Product decisions had been split. The
+  implementation is limited to D560-A, CURVE-FRESH-RESET,
+  REGROUP-TITLES-LABELS-LEGEND, and INDEPENDENT-AUTO-SHOW-HIDE. It does not
+  serialize inferred rationale, retirement intent, residual-risk acceptance,
+  or a fabricated BD identifier.
+Pre-existing unrelated changes preserved:
+  .agents/skills/write-clear-pull-request/SKILL.md
+  .github/pull_request_template.md
+  tests/web/pr-language.test.mjs
+  tools/check-pr-language.mjs
+  docs/internal/LOSAT_CONDA_GBDRAW_CODEX_PACKAGE_2026-09-20/ (untracked)
+Production files changed:
+  gbdraw/session_io.py; gbdraw/web/index.html; gbdraw/web/js/components.js;
+  gbdraw/web/js/mode-profiles.js; focused owners under gbdraw/web/js/app/ and
+  gbdraw/web/js/services/ for Linear source removal, record-row resolution,
+  match-style defaults, label visibility, current Session validation/migration,
+  canonical request projection, and Gallery promotion/publication.
+Test files changed:
+  Focused Python Session/docs contracts, Node pure-policy/Session tests, and
+  Playwright tests for Depth, removal/History/focus, typography organization,
+  Auto visibility, settings-only v42 migration, Gallery, and comparison paths.
+Docs / generated files changed:
+  Existing Web reference, Session compatibility, release notes, affected GUI
+  tutorials/capture flows, deterministic screenshots, seven Gallery tutorials,
+  their operation media, and the Gallery screenshot register. No new public
+  page was added. examples/gbdraw_social_preview.png was not changed. The
+  generated browser wheel remains gitignored and is not a commit target.
+Acceptance IDs completed:
+  DPT-01..DPT-08; RM-01..RM-12; MSD-01..MSD-04; ORG-01..ORG-06;
+  AV-01..AV-12.
+Commands and exact results:
+  node --test focused Linear/Session modules: 10 passed.
+  npx --yes node@20 --test --test-reporter=dot tests/web/*.test.mjs:
+    606 passed, 1 failed only because the current sparse fixture omitted the
+    new required visibility fields; after adding those fixture fields, the
+    isolated session-draft-authority test passed.
+  npx playwright test depth-track-session, history-inputs,
+    linear-typography, settings-only-session, comparison-ui, and
+    linear-multi-record with one worker: 78 passed in 7.4 minutes.
+  npx playwright test tests/web/linear-typography.playwright.spec.js
+    --workers=1 --retries=0 after final Auto-option review fix: 3 passed.
+  npm run test:web:comparison-contracts: 16 passed in 2.6 minutes.
+  node --test tests/web/architecture-contracts.test.mjs: 137 passed.
+  npx --yes node@20 --test tests/ci/*.test.mjs: 59 passed.
+  focused Python API/Session/docs/composition/run-info suite: 326 passed.
+  documentation contract suite after capture-source updates: 50 passed.
+  Gallery strict static checks: 13/13, 9/9, 19/19, 10/10, 11/11,
+    11/11, and 12/12 for the seven affected tutorials.
+  Gallery browser suite: 22/23 passed before updating the BGC operation count
+    from 18 to 19; the corrected focused case passed.
+  Deterministic --check capture results passed for T-GUI-01, T-GUI-02,
+    T-GUI-04, T-GUI-05, T-GUI-06, H-GUI-02, H-GUI-09, H-GUI-11,
+    H-GUI-12, and H-GUI-14. H-GUI-14 additionally validated a fresh-context
+    v43 Session reload and reloaded_diagram.svg.
+  ruff check gbdraw/: All checks passed.
+  git diff --check: passed with no output.
+Browser wheel/source identity:
+  python tools/prepare_browser_wheel.py succeeded after the last runtime edit.
+  gbdraw-0.14.0-py3-none-any.whl SHA-256:
+  e35cfc9e435c78f19ff90686a8c6ca22e9e9ecd578b0172bba2bf175871ed405.
+  The wheel is ignored and must not be committed.
+Architecture owner/path evidence:
+  Depth matrix remains the sole data owner; each File card adds only a native
+  disclosure and an action into the existing matrix mutation.
+  planLinearSourceRemoval is the pure removal planner; app-setup owns the one
+  modal and one History transaction; existing reconciliation remains downstream.
+  mode-profiles owns fresh/reset pairwise style and current-option-values owns
+  its normalization.
+  Titles/Record Labels/Legend reuse existing state and renderer keys.
+  linear-label-visibility.js is the sole selected-mode/legacy/effective policy
+  owner; linear-record-layout.js owns effective rendered-row facts;
+  session-request.js consumes the resulting effective booleans.
+  Architecture inventory: 152 modules, 482 edges, zero cycles; all four active
+  hard owner/path rules passed. Production change: 15 files, +675/-316 before
+  the final one-line option-label correction, requiring recorded size review.
+  OE before: adv.linear_show_accession, adv.linear_show_length.
+  OE after: adv.linear_accession_visibility, adv.linear_length_visibility.
+  PE: v42 Web import, settings-only import, Gallery promotion/publication map
+  true/false/missing to Show/Hide/historical Show and preserve historical
+  missing pairwise style as Ribbon.
+  CB: tests/fixtures/sessions/settings-only.v42.json.gz plus the existing v42
+  Gallery documents.
+  Canonical current owner: selected modes in active config, pure resolution in
+  linear-label-visibility.js, effective booleans only in request schema 7.
+  Compatibility removal condition: remove the v42 promotion path only after
+  v42 is formally removed from supported Session versions and Gallery inputs.
+Product evidence:
+  Fresh Linear and Reset use Curve; historical missing values use Ribbon.
+  Fresh Accession/Length modes are independently Auto and report
+  Auto · Shown until an actually rendered shared row makes Auto hidden.
+  Manual Show/Hide is independent and survives row changes. v42 booleans and
+  missing fields retain their historic outcomes; v43 is the sole current writer
+  and does not dual-write legacy booleans. Gallery screenshots sourced from v42
+  correctly display Show rather than rewriting those explicit historic values
+  to Auto. Replicon remains the intentionally separate boolean control.
+Known limitations / failed checks:
+  WEB_ARCHITECTURE_CHANGE=true node tools/check-web-change-budget.mjs --base HEAD
+  reported its sole blocking violation because production runtime and the
+  pre-existing unrelated .github/pull_request_template.md modification coexist
+  in the working tree. No privileged owner, canonical path, cycle, vendored
+  runtime, or dependency violation was found; size review remains required.
+  The following broader documentation scenarios still fail pre-existing
+  semantic expectations that were not weakened: T-GUI-08 expected 500
+  Collinear matches but observed 462; T-GUI-10 lacked the required named gene
+  labels; T-GUI-12 lacked GC content (%); H-GUI-10 lacked AT skew (+/-);
+  H-GUI-16 stopped on an existing record-scoped rendered-feature identity
+  mismatch after placement editing. Partial outputs from failed captures were
+  restored and are not included.
+Next session and start condition:
+  A separate cleanup may investigate the five unrelated documentation semantic
+  failures. Publication/commit should begin only after reviewing this diff and
+  excluding the preserved unrelated files listed above.
+Proposed commit title (English):
+  Implement Linear file controls, defaults, and label visibility
+Proposed commit summary (English):
+  Make per-file Depth and removal workflows discoverable and atomic, adopt the
+  selected Linear Curve and Auto label policies with Session 43 migration, and
+  reorganize title, record-label, and legend controls with updated tests and
+  reproducible documentation evidence.
+```

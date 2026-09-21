@@ -119,8 +119,8 @@ export const ColorValueControl = {
 
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange'],
-  emits: ['update:modelValue'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear'],
+  emits: ['update:modelValue', 'clearRequest'],
   setup(props, { emit }) {
     const input = ref(null);
     const selectedFiles = computed(() => {
@@ -157,7 +157,11 @@ export const FileUploader = {
       }
       e.target.value = '';
     };
-    const clearFile = () => {
+    const clearFile = (event) => {
+      if (props.requestClear) {
+        emit('clearRequest', event?.currentTarget || null);
+        return;
+      }
       const history = window.__GBDRAW_HISTORY__;
       if (history?.runUndoable) {
         void history.runUndoable('Change uploaded file', async () => {

@@ -123,12 +123,15 @@ const managedState = managedAdvStateForMode('circular');
 const manager = createModeProfileStateManager('circular', managedState);
 manager.transition(managedState, 'circular', 'linear');
 assert.deepEqual(managedState, managedAdvStateForMode('linear'));
+assert.equal(managedState.pairwise_match_style, 'curve');
 managedState.identity = 70;
 managedState.alignment_length = '';
+managedState.pairwise_match_style = 'ribbon';
 manager.transition(managedState, 'linear', 'circular');
 assert.deepEqual(managedState, managedAdvStateForMode('circular'));
 manager.transition(managedState, 'circular', 'linear');
 assert.equal(managedState.identity, 70);
+assert.equal(managedState.pairwise_match_style, 'ribbon');
 assert.equal(
   managedState.alignment_length,
   '',

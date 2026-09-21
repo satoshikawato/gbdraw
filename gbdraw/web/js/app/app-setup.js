@@ -35,8 +35,11 @@ import { cloneJsonData } from '../services/json-clone.js';
 import { readFileText } from '../services/file-content-cache.js';
 import {
   groupLinearSourceRecords,
+  isPristineLinearSource,
+  linearSourceHasPrimaryInput,
   linearSourceDepthStatus,
   moveLinearSourceGroup,
+  planLinearSourceRemoval,
   getLinearSourceDefaultDefinition,
   setLinearSourceDefaultDefinition,
   getLinearSourceDefaultSubtitle,
@@ -110,12 +113,17 @@ import {
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
 import {
+  linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
   moveLinearRecordInRow,
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from './linear-record-layout.js';
+import {
+  describeLinearLabelVisibility,
+  resolveLinearLabelVisibility
+} from './linear-label-visibility.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -570,6 +578,21 @@ export const createAppSetup = () => {
   }));
 
   const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
+  const linearSourceRemovalDialog = reactive({ open: false, sourceUid: '', origin: '' });
+  const linearSourceRemovalReturnFocus = ref(null);
+  const linearSourceRemovalTarget = computed(() => (
+    linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
+  ));
+  const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
+  const linearSourceRemovalTargetName = computed(() => {
+    const source = linearSourceRemovalTarget.value;
+    if (!source) return 'Unavailable File';
+    const sequence = source.sequence || source.records?.[0]?.sequence || {};
+    const names = [sequence.gb, sequence.gff, sequence.fasta]
+      .filter(Boolean)
+      .map((file) => String(file?.name || 'Unnamed file'));
+    return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
+  });
   const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
     sequences: linearSeqs,
     layout: effectiveLinearComparisonLayout(),
@@ -1433,6 +1456,12 @@ export const createAppSetup = () => {
     ...track,
     status: linearSourceDepthStatus(source, track.index)
   }));
+  const linearSourceDepthSummary = (source) => {
+    const tracks = linearSourceDepthRows(source);
+    const recordCount = Array.isArray(source?.records) ? source.records.length : 0;
+    const mixedSuffix = tracks.some((track) => track.status.state === 'mixed') ? ' · Mixed' : '';
+    return `Depth TSV · ${recordCount} record${recordCount === 1 ? '' : 's'} · ${tracks.length} series${mixedSuffix}`;
+  };
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
   const linearDepthTrackCoverageLabel = (trackIndex) => {
     const covered = depthTrackCoverageCount(linearDepthRows(), trackIndex);
@@ -1452,10 +1481,29 @@ export const createAppSetup = () => {
   const definitionLineStyleRows = Object.freeze([
     { key: 'name', label: 'Name / Species' },
     { key: 'subtitle', label: 'Subtitle' },
-    { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon' },
-    { key: 'accession', label: 'Accession', visibilityKey: 'linear_show_accession' },
-    { key: 'length', label: 'Length / Coord.', visibilityKey: 'linear_show_length' }
+    { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon', visibilityType: 'boolean' },
+    { key: 'accession', label: 'Accession', visibilityKey: 'linear_accession_visibility', visibilityType: 'mode' },
+    { key: 'length', label: 'Length / Coordinates', visibilityKey: 'linear_length_visibility', visibilityType: 'mode' }
   ]);
+  const linearLabelHasSharedRow = computed(() => linearRecordLayoutHasSharedRow(
+    linearSeqs,
+    linearRecordRows,
+    { enabled: Boolean(linearRecordLayoutEnabled.value) }
+  ));
+  const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
+    hasSharedRow: linearLabelHasSharedRow.value
+  });
+  const legendPositionLabel = (position) => ({
+    right: 'Right',
+    left: 'Left',
+    top: 'Top',
+    bottom: 'Bottom',
+    upper_left: 'Upper Left',
+    upper_right: 'Upper Right',
+    lower_left: 'Lower Left',
+    lower_right: 'Lower Right',
+    none: 'None'
+  })[String(position || '').trim().toLowerCase()] || 'None';
   const ensureDefinitionLineStyle = (kind) => {
     const key = String(kind || '');
     if (
@@ -1499,7 +1547,13 @@ export const createAppSetup = () => {
   };
   const isDefinitionLineStyleMuted = (row) => {
     const key = row?.visibilityKey;
-    return key ? adv[key] === false : false;
+    if (!key) return false;
+    if (row.visibilityType === 'mode') {
+      return !resolveLinearLabelVisibility(adv[key], {
+        hasSharedRow: linearLabelHasSharedRow.value
+      });
+    }
+    return adv[key] === false;
   };
   const normalizeDepthSlotTrackIndex = (slot) => {
     const rawTrackIndex = Number(slot?.params?.track_index);
@@ -3397,19 +3451,89 @@ export const createAppSetup = () => {
     applyLinearSeqMutation([...linearSeqs, createLinearSeq()]);
   };
 
-  const removeLinearSeqAt = (index) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
-    const current = Array.from(linearSeqs);
-    const next = current.filter((_, currentIndex) => currentIndex !== idx);
-    applyLinearSeqMutation(next);
+  const restoreLinearSourceRemovalFocus = async () => {
+    await nextTick();
+    const target = linearSourceRemovalReturnFocus.value;
+    linearSourceRemovalReturnFocus.value = null;
+    if (target?.isConnected && typeof target.focus === 'function') target.focus();
   };
-
-  const removeLastLinearSeq = () => {
-    if (linearSeqs.length <= 1) return;
-    const group = linearSourceGroups.value.at(-1);
-    const removed = new Set(group.records.map(({ sequence }) => sequence.uid));
-    applyLinearSeqMutation(linearSeqs.filter((seq) => !removed.has(seq.uid)));
+  const closeLinearSourceRemovalDialog = ({ restoreFocus = true } = {}) => {
+    linearSourceRemovalDialog.open = false;
+    linearSourceRemovalDialog.sourceUid = '';
+    linearSourceRemovalDialog.origin = '';
+    if (restoreFocus) void restoreLinearSourceRemovalFocus();
+    else linearSourceRemovalReturnFocus.value = null;
+  };
+  const focusLinearSourceRemovalDialog = async () => {
+    await nextTick();
+    document.querySelector('[data-linear-source-removal-primary]')?.focus();
+  };
+  const trapLinearSourceRemovalFocus = (event) => {
+    const dialog = document.querySelector('[data-linear-source-removal-dialog]');
+    const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []);
+    if (!controls.length) return;
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  const focusLinearSourceAfterRemoval = async (sourceIndex) => {
+    await nextTick();
+    const cards = document.querySelectorAll('[data-linear-source-card]');
+    const targetIndex = Math.max(0, Math.min(Number(sourceIndex) || 0, cards.length - 1));
+    const target = cards[targetIndex]?.querySelector('.upload-zone[tabindex="0"]')
+      || document.querySelector('[data-linear-file-add]');
+    if (typeof target?.focus === 'function') target.focus();
+  };
+  const openLinearSourceRemovalDialog = (source, origin, returnFocus = null) => {
+    if (!source?.uid) return false;
+    linearSourceRemovalDialog.sourceUid = source.uid;
+    linearSourceRemovalDialog.origin = origin;
+    linearSourceRemovalDialog.open = true;
+    linearSourceRemovalReturnFocus.value = returnFocus;
+    void focusLinearSourceRemovalDialog();
+    return true;
+  };
+  const cancelLinearSourceRemoval = () => closeLinearSourceRemovalDialog();
+  const applyLinearSourceRemoval = async (intent) => {
+    if (linearSourceRemovalDialog.origin === 'global' && intent !== 'delete') return false;
+    const plan = planLinearSourceRemoval({
+      sequences: linearSeqs,
+      sourceUid: linearSourceRemovalDialog.sourceUid,
+      intent
+    });
+    if (!plan.allowed) {
+      closeLinearSourceRemovalDialog();
+      return false;
+    }
+    const next = [...plan.retainedSequences];
+    if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
+    const operation = await history.runUndoable(
+      intent === 'clear' ? 'Clear Linear File' : 'Delete Linear File',
+      () => applyLinearSeqMutation(next)
+    );
+    closeLinearSourceRemovalDialog({ restoreFocus: false });
+    await focusLinearSourceAfterRemoval(plan.sourceIndex);
+    return operation;
+  };
+  const requestLinearSourceRemoval = (source, returnFocus = null) => {
+    if (!source || !linearSourceHasPrimaryInput(source)) return false;
+    return openLinearSourceRemovalDialog(source, 'card', returnFocus);
+  };
+  const removeLastLinearSeq = (event = null) => {
+    const source = linearSourceGroups.value.at(-1);
+    if (!source || linearSourceGroups.value.length <= 1) return false;
+    if (isPristineLinearSource(source)) {
+      linearSourceRemovalDialog.sourceUid = source.uid;
+      linearSourceRemovalDialog.origin = 'global';
+      return applyLinearSourceRemoval('delete');
+    }
+    return openLinearSourceRemovalDialog(source, 'global', event?.currentTarget || null);
   };
 
   const setLinearSeqPrimaryFile = (index, field, value) => {
@@ -3565,6 +3689,7 @@ export const createAppSetup = () => {
     circularDepthTrackRows,
     linearDepthTrackRows,
     linearSourceDepthRows,
+    linearSourceDepthSummary,
     linearDepthTrackCoverageLabel,
     linearDepthTrackIndexOptions,
     hasCircularDepthFiles,
@@ -3634,6 +3759,14 @@ export const createAppSetup = () => {
     linearReorderNotice,
     addLinearSeq,
     removeLastLinearSeq,
+    requestLinearSourceRemoval,
+    applyLinearSourceRemoval,
+    cancelLinearSourceRemoval,
+    trapLinearSourceRemovalFocus,
+    linearSourceRemovalDialog,
+    linearSourceRemovalTarget,
+    linearSourceRemovalTargetName,
+    linearSourceRemovalCanDelete,
     setLinearSeqPrimaryFile,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
@@ -4073,6 +4206,8 @@ export const createAppSetup = () => {
     showCanvasControls,
     resetCanvasPadding,
     definitionLineStyleRows,
+    linearLabelVisibilitySummary,
+    legendPositionLabel,
     getDefinitionLineStyleSize,
     setDefinitionLineStyleSize,
     getDefinitionLineStyleWeight,

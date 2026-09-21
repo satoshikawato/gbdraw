@@ -2,13 +2,13 @@
 
 # Session and request compatibility
 
-Current writers emit session version 42 and canonical `renderRequest` schema 7.
+Current writers emit session version 43 and canonical `renderRequest` schema 7.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 42 | 27–33 and 39–42 |
+| gbdraw session | 43 | 27–33 and 39–43 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42 |
+| Web file bindings | 2 | 1; 2 in sessions 41–43 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -50,7 +50,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings retain their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42. Unknown or malformed bindings reject
+Schema 2 is accepted with sessions 41–43. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
@@ -72,9 +72,18 @@ loading restores the same editable state:
 Both pairs are written only when the source has a file-level default. Sessions
 written before these fields existed carry neither; those readers compare the
 resolved text against the file default instead, which reads an override that
-happens to repeat the default as inheritance. Session 42 and request schema 7
-are unchanged, because these fields describe Web editing state rather than the
+happens to repeat the default as inheritance. Request schema 7 is unchanged,
+because these fields describe Web editing state rather than the
 render request: a reader that ignores them still renders identical output.
+
+Session 43 replaces the two editable Linear visibility booleans with independent
+selected modes: `linear_accession_visibility` and `linear_length_visibility`,
+each set to `auto`, `show`, or `hide`. Auto resolves from the effective rendered
+rows and is projected to the existing request-schema-7 booleans; the request and
+Python render model did not gain a new field. A version-42 `true` becomes Show,
+`false` becomes Hide, and a missing boolean becomes historical Show. If a
+selected-mode field is already present, it takes precedence. Current writers do
+not write the retired booleans.
 
 When several records share a Linear row, a label or subtitle that no record of
 the row contradicts describes the whole row and is drawn once beside it. An
@@ -101,15 +110,18 @@ priorities. **Load Session** replaces the current Session with those settings,
 clearing any previous sources and Result. A rejected Load restores the previous
 work. Load a real source and Generate to apply the saved settings to a diagram.
 
-This settings-only variant uses session 42 with explicit `renderRequest: null`,
+This settings-only variant was introduced in session 42 with explicit
+`renderRequest: null`,
 empty `results`, and a null feature catalog. It has no committed render. Missing
 requests, dangling resources, or biological inputs in either mode cannot select
 this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
-render request. Existing supported full Sessions remain readable. Readers that
-support only session 41 reject new session-42 files, including full Sessions.
+render request. Existing supported full Sessions remain readable. Current
+settings-only writers emit session 43, while current readers also accept the
+released session-42 form. Readers whose maximum version is 42 reject newly
+written session-43 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -135,7 +147,7 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33 and 39–42;
+envelopes. Public typed session conversion accepts full versions 31–33 and 39–43;
 versions 27–30 are CLI replay inputs only. Canonical schema 7 retains schema 6's
 input cardinality, including selectorless `all` inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.

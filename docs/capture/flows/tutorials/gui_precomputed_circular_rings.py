@@ -290,11 +290,12 @@ def capture_gui_precomputed_circular_rings(
         page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
             FIRST_LINEAR_LABEL_RULE_PATH
         )
-        page.get_by_label("Title & Legend", exact=True).click()
-        page.get_by_label("Plot Title", exact=True).fill(TITLE)
+        page.get_by_label("Titles and Record Labels", exact=True).click()
+        page.get_by_role("textbox", name="Plot Title", exact=True).fill(TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
-        page.get_by_label("Legend Position", exact=True).select_option("right")
-        page.get_by_label("Definition Font Size", exact=True).fill("18")
+        page.get_by_label("Default font size", exact=True).fill("18")
+        page.get_by_label("Legend settings", exact=True).click()
+        page.get_by_label("Legend position", exact=True).select_option("right")
 
         page.get_by_label(
             "Comparison ring label 1", exact=True

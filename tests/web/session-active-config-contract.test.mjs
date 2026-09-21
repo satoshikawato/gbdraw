@@ -11,6 +11,9 @@ const {
   createDefaultLosat,
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+const { normalizeCurrentPairwiseMatchStyle } = await import(
+  '../../gbdraw/web/js/app/current-option-values.js'
+);
 
 const storedConfig = {
   form: createDefaultForm(),
@@ -34,6 +37,15 @@ assert.equal(createDefaultLosat().blastp.candidateLimit, null);
 assert.equal(createDefaultLosat().executionMode, 'threaded');
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
 assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
+assert.equal(createDefaultAdv('circular').pairwise_match_style, 'ribbon');
+assert.equal(createDefaultAdv('linear').pairwise_match_style, 'curve');
+assert.equal(normalizeCurrentPairwiseMatchStyle('curve', 'ribbon'), 'curve');
+assert.equal(normalizeCurrentPairwiseMatchStyle(undefined, 'ribbon'), 'ribbon');
+assert.equal(normalizeCurrentPairwiseMatchStyle('invalid', 'curve'), 'curve');
+assert.throws(
+  () => normalizeCurrentPairwiseMatchStyle(undefined, 'invalid'),
+  /fallback must be one of/
+);
 
 assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
   mode: 'circular',

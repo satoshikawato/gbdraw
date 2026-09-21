@@ -1,9 +1,28 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-11
+Last updated: 2026-09-21
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Titles, Record Labels, and Legend regrouping (#562)
+
+The combined **Title & Legend** card was replaced by **Titles & Record Labels**
+and a separate **Legend · position** card. Recapture only operations that showed
+the replaced controls; retain input, comparison, and generated-preview media.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `HmmtDNA_ATskew` | `manual-03-03-legend-position-left.webp` | Replace | Separate Legend card; Position menu open with Left selected | Recaptured at DSF 3, quality 94; visually accepted |
+| `lambda_basic_linear` | `manual-03-04-legend-position-left.webp` | Replace | Separate Legend card; Position menu open with Left selected | Recaptured at DSF 3, quality 94; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-05-03-legend-position-bottom.webp`, `manual-06-01-title-record-text.webp`, `manual-06-02-record-labels.webp` | Replace/add | Bottom Legend menu; focused Plot Title subsection; focused Record Labels rows with Show/Show visibility | Recaptured at DSF 3, quality 94; old/new same-size review accepted the smaller focused crops |
+| `Vnig_TUMSAT-TG-2018` | `manual-03-02-legend-position-left.webp`, `manual-05-01-bottom-title.webp` | Replace | Separate Legend card; focused Plot Title subsection with Bottom selected | Recaptured at DSF 3, quality 94; old/new review accepted |
+| `majanivirus_orthogroup` | `manual-04-02-legend-position-right.webp` | Replace | Separate Legend card; Position menu open with Right selected | Recaptured at DSF 3, quality 94; visually accepted |
+| `vibrio-harveyi-group-collinear` | `manual-07-02-bottom-legend.webp` | Replace | Separate Legend card; Position menu open with Bottom selected | Recaptured at DSF 3, quality 94; visually accepted |
+
+The tobacco tutorial changes table labels only; its referenced operations do
+not show the replaced controls. No generated preview or session artifact is
+recaptured for this UI-only organization change.
 
 ## Comparison commands in History (05A4-02)
 

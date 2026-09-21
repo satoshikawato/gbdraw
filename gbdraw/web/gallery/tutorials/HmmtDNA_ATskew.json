@@ -59,12 +59,12 @@
     },
     {
       "title": "Set the basic circular layout",
-      "body": "Set Track Preset to Middle, Label Mode to Out, and Legend Position to Left.",
+      "body": "Set Track Preset to Middle, Label Mode to Out, and Legend position to Left.",
       "table": {
         "columns": ["Setting", "Value"],
         "rows": [
           ["Track Preset", "Middle"],
-          ["Legend Position", "Left"],
+          ["Legend position", "Left"],
           ["Label Mode", "Out"],
           ["Palette", "ajisai"],
           ["Definition font size", "28"],
@@ -131,11 +131,11 @@
         },
         {
           "title": "Legend position selector",
-          "body": "Open Legend Position and choose Left.",
+          "body": "Open Legend position and choose Left.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-03-03-legend-position-left.webp",
-            "alt": "Title and Legend card with the Legend Position menu open and the Left option highlighted.",
-            "caption": "Open Legend Position in the Title & Legend card and choose the highlighted Left option."
+            "alt": "Legend card with the Position menu open and the Left option highlighted.",
+            "caption": "Open Position in the Legend card and choose the highlighted Left option."
           },
           "capture": {
             "source": "webapp",
@@ -147,11 +147,12 @@
               "left": 80
             },
             "openSelect": {
+              "selector": "#legend-position",
               "selectedLabel": "Left",
               "options": ["Right", "Left", "Top", "Bottom", "None"],
-              "label": "Legend Position"
+              "label": "Legend position"
             },
-            "openDetails": ["Title & Legend"]
+            "openDetails": ["Legend ·"]
           }
         }
       ]
@@ -527,7 +528,7 @@
     },
     {
       "title": "The generated diagram differs from the Gallery image",
-      "body": "Check input record NC_012920.1, Track Preset Middle, Label Mode Out, Legend Position Left, Window 500, Step 50, AT skew colors, and the tick label layout."
+      "body": "Check input record NC_012920.1, Track Preset Middle, Label Mode Out, Legend position Left, Window 500, Step 50, AT skew colors, and the tick label layout."
     }
   ],
   "related": [

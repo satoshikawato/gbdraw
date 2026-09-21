@@ -640,23 +640,26 @@ def _open_human_circular(page: Page, prefix: str) -> None:
 
 
 def _set_plot_title(page: Page, title: str) -> None:
-    title_panel = page.get_by_label("Title & Legend", exact=True)
+    title_panel = page.get_by_label("Titles and Record Labels", exact=True)
     title_panel.click()
-    plot_title = page.get_by_label("Plot Title", exact=True)
+    plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
     plot_title.fill(title)
     expect(plot_title).to_have_value(title)
     title_position = page.get_by_label("Plot Title Position", exact=True)
     title_position.select_option("top")
     expect(title_position).to_have_value("top")
-    legend_position = page.get_by_label("Legend Position", exact=True)
-    legend_position.select_option("right")
-    expect(legend_position).to_have_value("right")
     keep_definition = page.get_by_label(
         "Keep Full Definition with Plot Title", exact=True
     )
     keep_definition.check()
     expect(keep_definition).to_be_checked()
     title_panel.click()
+    legend_panel = page.get_by_label("Legend settings", exact=True)
+    legend_panel.click()
+    legend_position = page.get_by_label("Legend position", exact=True)
+    legend_position.select_option("right")
+    expect(legend_position).to_have_value("right")
+    legend_panel.click()
 
 
 def _fit_finished_circular_preview(page: Page) -> None:
