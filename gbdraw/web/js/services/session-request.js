@@ -4477,7 +4477,7 @@ const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
       }
     };
   });
-  if (materialized.length < 2
+  if (materialized.length < 1
     || materialized.filter((entry) => entry.recordKey === target.recordKey).length !== 1) {
     throw new Error('Target record collection does not resolve to exactly one record.');
   }

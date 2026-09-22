@@ -2062,6 +2062,33 @@ for (const field of ['schema', 'mode', 'grouping', 'diagramOptions', 'layout', '
 }
 assert.deepEqual(projected.canonical.resources, unchangedOneSource.resources);
 
+const singletonMember = collectionMembers[0];
+const singletonProjected = projectCommittedRecordTransform({
+  committed: unchangedOneSource,
+  target: {
+    ...singletonMember,
+    scope: 'linear',
+    source: structuredClone(collectionRecord.source),
+    effectiveCircular: true,
+    cropped: false,
+    members: [singletonMember]
+  },
+  transform: { recordLength: 100, startCoordinate: 41, reverseComplement: false }
+});
+assert.deepEqual(singletonProjected.receipt, {
+  recordKey: 'one-source:1', canonicalRecordKey: 'one-source', recordIndex: 0,
+  materialized: true, startCoordinate: 41, reverseComplement: false
+});
+assert.deepEqual(singletonProjected.canonical.renderRequest.records.map((record) => ({
+  recordKey: record.recordKey,
+  cardinality: record.cardinality,
+  selector: record.selector,
+  start: record.display.startCoordinate
+})), [{
+  recordKey: 'one-source:1', cardinality: 'exactly_one',
+  selector: { kind: 'recordIndex', index: 0 }, start: 41
+}]);
+
 const exactCommitted = structuredClone(projected.canonical);
 const exactTarget = {
   ...projectedTarget,
