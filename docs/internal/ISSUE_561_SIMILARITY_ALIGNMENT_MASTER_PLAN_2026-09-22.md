@@ -696,13 +696,58 @@ private conversation as evidence.
 | --- | --- | --- | --- | --- |
 | Planning | complete | base `11aae136694a4433cabc68c0dae31edf77222740` | Issue updated `2026-09-21T05:25:23Z`; code and policy audit on 2026-09-22 | S01 |
 | Authority | complete | `origin/dev@a9eaeadd105e0c26e46086626feaa695bdd33c94` | PR #570 merged six separate Product Decision receipts as `PD-OI-026`–`PD-OI-031`; branch rebased onto the merge | S01 may start |
-| S01 | pending | | | |
+| S01 | complete | base `11e49d32accd0b00753ec7df9bcb6fb0c71d62f5`; head is the commit containing this ledger entry | Typed immutable plan/candidate/choice/edge/outcome models and one pure deterministic resolver; focused and existing identity/alignment tests pass | S02 may start; request/Session/runtime wiring remains intentionally absent |
 | S02 | pending | | | |
 | S03 | pending | | | |
 | S04 | pending | | | |
 | S05 | pending | | | |
 | S06 | pending | | | |
 | S07 | pending | | | |
+
+### S01 evidence — 2026-09-22
+
+- Authority/base: fetched `origin`; both `origin/dev` and this branch contain
+  authority merge `a9eaeadd105e0c26e46086626feaa695bdd33c94` with
+  `PD-OI-026`–`PD-OI-031`. The S01 commit containing this ledger entry is based
+  on `11e49d32accd0b00753ec7df9bcb6fb0c71d62f5`.
+- Files: added `gbdraw/layout/similarity_alignment.py` and
+  `tests/test_similarity_alignment.py`; updated this ledger only. No renderer,
+  Web, request/Session schema, CLI, public documentation, or generated artifact
+  changed.
+- Verification:
+  - `ruff check gbdraw/layout/similarity_alignment.py tests/test_similarity_alignment.py`
+    — passed.
+  - `python -m pytest tests/test_similarity_alignment.py -v` — 30 passed.
+  - `python -m pytest tests/test_protein_colinearity.py -v -k 'orthogroup_alignment' tests/test_record_display_comparisons.py tests/test_linear_duplicate_record_ids.py::test_orthogroup_label_sets_keep_duplicate_ids_separate_by_record_index`
+    — 8 passed, 304 deselected.
+  - Explicit legacy projected-center and duplicate-record label-identity nodes
+    from `tests/test_record_display_comparisons.py` and
+    `tests/test_linear_duplicate_record_ids.py` — 2 passed.
+  - Six focused `tests/test_web_feature_catalog.py` stable-identity tests — 10
+    passed, including their parameterized cases.
+- Manual/diff review: production and test additions were reviewed separately.
+  The resolver preserves the supplied canonical record order; permutations of
+  candidates and edges produce the same result. Its import boundary is checked
+  to exclude analysis/LOSAT, diagrams, renderer, Web/UI, BioPython, and pandas.
+- Architecture evidence: before S01, new deterministic Similarity Alignment
+  resolution had no typed semantic owner or runtime path; after S01,
+  `gbdraw/layout/similarity_alignment.py::resolve_similarity_alignment` is its
+  single owner and future shared entry. Existing
+  `gbdraw/diagrams/linear/orthogroup_alignment.py` remains unchanged solely as
+  the current runtime and future bounded legacy behavior required by S01; the
+  new types neither import nor call it. No current production entry is added,
+  duplicated, or redirected, and no compatibility path is added in S01, so the
+  ordinary review is non-increasing for `OE`, `PE`, and `CB`; no Architecture
+  exception applies.
+- Product Impact: `IMPLEMENT_EXISTING_AUTHORITY`; the model and resolver encode
+  `PD-OI-026`–`PD-OI-031` without selecting a new Product outcome. S01 has no
+  reachable user-visible runtime delta.
+- Remaining risks: adapters must still derive unique canonical identities,
+  crop-mappable centers, displayed strands, and canonical edge endpoints from
+  committed evidence. S02 must add the canonical request/base-translation and
+  released-Session migration boundary without creating a second writer or
+  allowing current requests to enter the legacy resolver.
+- Next permitted session: S02 only.
 
 ## 17. Handoff rules
 
