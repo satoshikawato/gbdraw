@@ -2,6 +2,7 @@
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
+import { cloneJsonData } from '../services/json-clone.js';
 
 export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
   if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
@@ -367,7 +368,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     return {
       key,
       index,
-      draft: index >= 0 ? structuredClone(state.recordDisplayDrafts[index]) : null
+      draft: index >= 0 ? cloneJsonData(state.recordDisplayDrafts[index]) : null
     };
   };
   const restoreTargetDraft = (checkpoint) => {
@@ -380,7 +381,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
         checkpoint.index,
         state.recordDisplayDrafts.length
       ));
-      state.recordDisplayDrafts.splice(insertAt, 0, structuredClone(checkpoint.draft));
+      state.recordDisplayDrafts.splice(insertAt, 0, cloneJsonData(checkpoint.draft));
     }
   };
   return { rows, allRows, draftFor, surfaceFor, shortcutState, hasPendingChanges,

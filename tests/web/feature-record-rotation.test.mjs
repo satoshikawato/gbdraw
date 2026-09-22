@@ -129,3 +129,34 @@ test('disabled source profile rejects before candidate execution', async () => {
   }), /Generate again/);
   assert.equal(executions, 0);
 });
+
+test('Apply re-resolves the stable popup identity and rejects a stale feature', async () => {
+  let currentFeature = feature;
+  let executions = 0;
+  const action = createFeatureRecordRotationAction({
+    recordDisplayControls: { targetForFeature: () => ({ row, target }) },
+    getCommittedSession: () => committed,
+    projectCommittedRecordTransform,
+    resolveCurrentFeature: () => currentFeature,
+    isCurrentFeature: () => true,
+    runCommittedCanonicalCandidate: async () => {
+      executions += 1;
+      return { status: 'ok' };
+    }
+  });
+  assert.equal(action.resolve({
+    feature,
+    intent: {
+      placement: 'anchor', anchor: 'five-prime', offsetBp: 0, orientForward: false
+    }
+  }).resolved.eligibility.enabled, true);
+
+  currentFeature = null;
+  await assert.rejects(action.apply({
+    feature,
+    intent: {
+      placement: 'anchor', anchor: 'five-prime', offsetBp: 0, orientForward: false
+    }
+  }), /no longer present/);
+  assert.equal(executions, 0);
+});

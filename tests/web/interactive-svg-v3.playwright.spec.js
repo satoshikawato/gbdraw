@@ -1,6 +1,111 @@
 const fs = require('node:fs');
+const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test, expect } = require('@playwright/test');
+const {
+  generateAndWaitForResult,
+  openApp
+} = require('./helpers/app-lifecycle.cjs');
+
+test('feature popup record rotation works by pointer and keyboard in rich and simple layouts', async ({
+  page
+}) => {
+  test.setTimeout(240000);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(join(
+    process.cwd(), 'tests/test_inputs/HmmtDNA.gbk'
+  ));
+  await generateAndWaitForResult(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.adv.rich_feature_popup = true;
+    app.form.prefix = 'UNRELATED_PENDING_PREFIX';
+  });
+
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill('tRNA');
+  await search.press('Enter');
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const actions = page.getByRole('region', { name: 'Record actions' });
+  await expect(actions).toBeVisible();
+  await expect(actions).toContainText('Coordinates refer to the original record.');
+  await expect(actions.getByLabel('Record rotation anchor')).toHaveValue('five-prime');
+  await expect(actions.getByLabel('Record rotation signed offset')).toHaveValue('0');
+
+  await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
+  await actions.getByLabel('Record rotation signed offset').fill('2');
+  const expectedStart = await page.evaluate(() => (
+    window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
+  ));
+  expect(expectedStart).toBeGreaterThan(0);
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toContainText('Regenerating');
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
+    timeout: 240000
+  });
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.'
+  );
+  expect(await search.inputValue()).toBe('tRNA');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.prefix))
+    .toBe('UNRELATED_PENDING_PREFIX');
+  expect(await page.evaluate(() => {
+    const controls = window.__GBDRAW_APP__.recordDisplayControls;
+    const rows = controls.rows?.value || controls.rows || [];
+    const row = rows.find((entry) => entry.recordId === 'NC_012920.1') || rows[0];
+    const draft = controls.draftFor(row);
+    return {
+      startCoordinate: draft.startCoordinate,
+      anchorFeatureId: draft.anchorIntent?.biologicalFeatureId || ''
+    };
+  })).toMatchObject({
+    startCoordinate: expectedStart
+  });
+
+  await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = false; });
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const simplePopup = page.locator('.feature-popup--simple');
+  await expect(simplePopup).toBeVisible();
+  const bounds = await simplePopup.boundingBox();
+  expect(bounds.x).toBeGreaterThanOrEqual(0);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+
+  const simpleActions = simplePopup.getByRole('region', { name: 'Record actions' });
+  const anchor = simpleActions.getByLabel('Record rotation anchor');
+  await anchor.focus();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowDown');
+  await expect(anchor).toHaveValue('midpoint');
+  const offset = simpleActions.getByLabel('Record rotation signed offset');
+  await offset.focus();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.type('-3');
+  await expect(offset).toHaveValue('-3');
+  const cancel = simpleActions.getByRole('button', { name: 'Cancel', exact: true });
+  await cancel.focus();
+  await page.keyboard.press('Enter');
+  await expect(simplePopup).toBeHidden();
+
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const staleActions = page.locator('.feature-popup--simple')
+    .getByRole('region', { name: 'Record actions' });
+  const previousResult = await page.evaluate(() => window.__GBDRAW_APP__.svgContent);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.files.c_gb = new File(
+      ['LOCUS       replacement 1 bp DNA circular\n//\n'],
+      'replacement.gbk',
+      { type: 'text/plain' }
+    );
+  });
+  await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await expect(staleActions.locator('[aria-live="polite"]')).toContainText(
+    'source changed'
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(previousResult);
+});
 
 test('browser export embeds the exact selected schema-3 item and expands references', async ({
   page

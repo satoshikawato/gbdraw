@@ -362,6 +362,19 @@ non-circular topology or unknown length disables the start control with a reason
 Turning **Circular record** off retains the inactive start draft; turning it back
 on restores that value.
 
+To rotate directly from one feature, open its popup and use the separate
+**Record actions** section. Choose its 5′ end, midpoint, or 3′ end, enter a
+signed offset in source base pairs, and optionally orient the feature forward.
+**Place this feature at the end** uses the outgoing boundary after the feature;
+it is distinct from placing the feature's 3′ base at the display start. The
+preview reports the new 1-based source coordinate and resulting orientation.
+Select **Apply and regenerate** to update only that feature's record and the
+current Result as one undoable action. Other pending form edits remain pending.
+Cancel, a failed render, or a stale/replaced source keeps the previous Result
+and record transform. Operation-specific messages explain unavailable actions
+for non-circular, cropped, fuzzy, unordered, mixed-strand, or otherwise unsafe
+targets.
+
 Open the feature popup and choose **Feature placement**: Auto, Main, or an
 available directional lane 1. Bulk selection uses **Selected feature placements**.
 The [resolved-layout and resolver tables](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
