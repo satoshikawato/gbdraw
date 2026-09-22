@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `9`
+- Contract revision: `10`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -24,7 +24,9 @@ Status: active Product authority
 - Initial candidate modification: `PD-OI-014`, as recorded below
 - Revision 2 change: `PD-OI-007`, as recorded below
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
-  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`
+  `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`,
+  `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`, and
+  `PD-OI-031`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -74,6 +76,13 @@ Status: active Product authority
   per-record bindings. Earlier decisions retain their scope. Dependent runtime
   requires this authority merged into its base; this amendment contains no
   runtime.
+- Revision 10 additions: `PD-OI-026` through `PD-OI-031`, selected by
+  `satoshikawato` on `2026-09-22` through six complete `PRODUCT_DECISION`
+  responses for issue `#561`. These additions record only the supplied choices,
+  preservation requirements, retirement permissions, and accepted residual
+  risks for deterministic Similarity Group alignment. Earlier decisions retain
+  their scope. Dependent runtime requires this authority merged into its base;
+  this amendment contains no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -961,6 +970,267 @@ corrected. Passing evidence does not make incorrect behavior normative.
   "acceptedResidualRisk": "Applying or clearing a File-level value replaces or clears every record binding for that File and series; the UI must disclose this and Undo must restore the previous matrix.",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-21"
+}
+```
+
+### PD-OI-026: Deterministic Similarity Group anchor resolution
+
+- Concern key: `diagram-generation.similarity-alignment.anchor-resolution`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / EXPLICIT_DETERMINISTIC_RESOLUTION`
+- Normative outcome:
+  1. The reference anchor is the exact feature selected by the user, identified
+     by stable record and biological-feature identity. A source feature index
+     may disambiguate repeated source identifiers, but must not replace stable
+     identity.
+  2. Each non-reference record resolves independently in this order: an
+     explicit user selection; the only usable member candidate; the only
+     distinct usable candidate connected directly to the reference by RBH
+     evidence; otherwise explicit Select or Skip. A record with no usable
+     candidate is left unchanged.
+  3. RBH direction is normalized so query/subject ordering does not change the
+     result. Multiple distinct direct-RBH candidates are ambiguous. Coortholog
+     status, representative status, confidence score, supporting-edge count,
+     and multi-hop evidence do not break ties.
+  4. A candidate is usable only when it is a member of the selected group, its
+     stable record and feature identity resolves uniquely, and its feature
+     center maps into the current crop and display coordinates. A hidden feature
+     can be usable; a feature whose center is outside the crop is unusable even
+     when another part overlaps the crop.
+  5. Resolution does not depend on viewport, scroll position, feature
+     visibility, ribbon display or geometry, source coordinate order, or
+     rendering heuristics. Every resolved or skipped record retains a
+     deterministic rationale.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.anchor-resolution",
+  "scenarioRevision": 1,
+  "choice": "A / EXPLICIT_DETERMINISTIC_RESOLUTION",
+  "rationale": "Similarity Group alignment must use the exact feature selected by the user and must not convert inparalog ambiguity into an arbitrary visual choice. Automatic resolution is permitted only when there is one usable candidate or one distinct candidate connected directly to the reference by RBH evidence.",
+  "mustPreserve": "The exact clicked reference; stable record and feature identity; explicit user selections; unchanged position and orientation for records with no usable candidate or an explicit Skip; deterministic rationale for every resolved or skipped record; and independence from viewport, visibility, ribbon geometry, representative status, confidence score, and edge count.",
+  "mayRetire": "Group-ID-only representative selection; score-based member fallback; coordinate or rendering heuristics; and multi-hop evidence as an automatic selection rule.",
+  "acceptedResidualRisk": "Ambiguous records require explicit Select or Skip, and a feature whose center cannot be mapped into the current crop is treated as unusable even when another part overlaps the crop.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
+}
+```
+
+### PD-OI-027: Separate Similarity Group position and orientation semantics
+
+- Concern key: `diagram-generation.similarity-alignment.transform-semantics`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / SEPARATE_POSITION_AND_ORIENTATION`
+- Normative outcome:
+  1. The reference record's position and orientation remain unchanged.
+     `Align` changes each resolved target's horizontal position only; it
+     preserves the target's vertical position and effective orientation.
+  2. `Align & orient` first determines effective orientations, then aligns
+     anchor centers. It reverses a target's whole displayed record only when
+     both reference and target anchor strands are known and opposite. If either
+     strand is unknown, it performs position alignment only and preserves the
+     target's orientation.
+  3. Whole-record reversal keeps text readable. The visible reverse indicator
+     is derived from effective orientation rather than maintained as an
+     independent flag.
+  4. The resulting anchor-center translation is exact and idempotent. Repeating
+     the same operation with the same inputs does not accumulate an offset.
+     Every displayed record is handled independently, including multiple
+     records assigned to the same row.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.transform-semantics",
+  "scenarioRevision": 1,
+  "choice": "A / SEPARATE_POSITION_AND_ORIENTATION",
+  "rationale": "Position alignment and orientation are different user intents and must remain separately controllable. Alignment must be exact and idempotent without changing vertical placement or inferring orientation from unknown strand data.",
+  "mustPreserve": "The reference record's position and orientation; target Y positions in position-only Align; existing orientation in position-only Align; whole-record reverse display only when Align & orient has been selected and both anchor strands are known and opposite; readable text; a persistent rev indicator derived from effective orientation; and independent treatment of every displayed record, including multiple records in one row.",
+  "mayRetire": "Any alignment behavior that changes orientation without explicit Align & orient intent or guesses orientation when either anchor strand is unknown.",
+  "acceptedResidualRisk": "When either strand is unknown, position is aligned but orientation is not changed, so the resulting visual direction may remain different from other records.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
+}
+```
+
+### PD-OI-028: Active Similarity Group alignment-plan lifecycle
+
+- Concern key: `diagram-generation.similarity-alignment.plan-lifecycle`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / PERSISTED_ACTIVE_ALIGNMENT_PLAN`
+- Normative outcome:
+  1. A successful alignment creates an active alignment plan that survives
+     regeneration after style, label, and canvas-size changes. It also survives
+     record reordering when every stable record identity remains resolvable.
+  2. Manual record movement, manual orientation changes, source replacement,
+     crop changes, and record-selector changes clear the active plan and notify
+     the user. Clearing does not silently discard the current effective
+     geometry.
+  3. The active plan is validated before regeneration. A stale reference blocks
+     regeneration and requires reference reselection or Clear Alignment. A stale
+     target requires explicit reselection or Skip for that record.
+  4. No representative, same-coordinate feature, or other anchor is substituted
+     automatically. The last successful Result remains visible while stale
+     anchors are repaired.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.plan-lifecycle",
+  "scenarioRevision": 1,
+  "choice": "A / PERSISTED_ACTIVE_ALIGNMENT_PLAN",
+  "rationale": "A saved alignment is continuing display intent and must survive ordinary regeneration, while edits that invalidate its record or coordinate assumptions must terminate it explicitly rather than silently applying stale anchors.",
+  "mustPreserve": "Alignment after style, label, and canvas-size changes; preservation across record reorder when stable record identities remain; explicit clearing and notification after manual record movement, manual orientation changes, source replacement, crop changes, or record-selector changes; validation before regeneration; the last successful Result while a stale plan is repaired; and explicit reselect, Skip, or Clear actions without automatic anchor substitution.",
+  "mayRetire": "One-shot alignment that silently disappears on regeneration and silent continuation of an active plan after an invalidating edit.",
+  "acceptedResidualRisk": "Stale references block regeneration until reselected or cleared, and stale target anchors require explicit reselection or Skip.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
+}
+```
+
+### PD-OI-029: Immediate-baseline Reset and artifact history
+
+- Concern key: `diagram-generation.similarity-alignment.reset-and-history`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / IMMEDIATE_PREALIGN_BASELINE`
+- Normative outcome:
+  1. Each successful `Align` or `Align & orient` replaces the preceding active
+     plan and records the effective position and orientation immediately before
+     that operation as its reset baseline.
+  2. `Reset Align` restores that immediate baseline and clears the active
+     alignment plan. It does not traverse a separate alignment-specific
+     history.
+  3. Apply, Reset, and manual clearing each commit as one atomic artifact-history
+     transaction. Normal Undo restores the complete prior artifact, including
+     any prior active plan.
+  4. Failed, canceled, superseded, or stale alignment work commits no history
+     entry.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.reset-and-history",
+  "scenarioRevision": 1,
+  "choice": "A / IMMEDIATE_PREALIGN_BASELINE",
+  "rationale": "Reset must have a local and predictable meaning after sequential alignments, and alignment operations should reuse the application's artifact history rather than introduce a second history model.",
+  "mustPreserve": "The position and orientation immediately before each Align as that operation's baseline; replacement of the prior active plan by a new Align; restoration of the immediate baseline by Reset Align; one atomic history transaction for Apply, Reset, and manual clearing; normal Undo of the complete prior artifact; and no committed history entry after failed, canceled, superseded, or stale work.",
+  "mayRetire": "Reset behavior that only clears the selected target without restoring its immediate baseline and any alignment-specific deep-history stack.",
+  "acceptedResidualRisk": "Reset restores the preceding geometry but clears the active alignment plan; restoring an older active plan requires normal Undo rather than Reset Align.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
+}
+```
+
+### PD-OI-030: Reader-only legacy Similarity Group alignment compatibility
+
+- Concern key: `diagram-generation.similarity-alignment.session-compatibility`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / LEGACY_READER_ONLY`
+- Normative outcome:
+  1. New Sessions persist the exact resolved alignment plan and do not write the
+     legacy `alignOrthogroupFeature` group-ID string. Saving and loading a new
+     Session preserves the exact reference, per-record resolved anchors, skips,
+     effective transform intent, and reset baseline required by the other
+     accepted decisions.
+  2. Existing Sessions remain loadable through a bounded reader-only adapter
+     that reproduces their historical implicit group-resolution behavior. The
+     legacy resolver is unavailable to new alignment requests and to the normal
+     writer path.
+  3. A new alignment or supported edit converts the loaded state to the new
+     resolved representation. The writer never downgrades a resolved plan to the
+     legacy representation.
+  4. Malformed or unsupported legacy values produce an explicit error without
+     automatic substitution. The last successful Result remains visible when
+     migration or validation fails.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.session-compatibility",
+  "scenarioRevision": 1,
+  "choice": "A / LEGACY_READER_ONLY",
+  "rationale": "Existing Sessions must remain loadable, but new Sessions must not perpetuate the ambiguous group-ID representation. Compatibility therefore belongs in a bounded reader-only adapter rather than the normal writer and runtime path.",
+  "mustPreserve": "Reader-only reproduction of existing Sessions; the exact resolved plan in new Session round trips; explicit errors for malformed or unsupported legacy values; the last successful Result on migration or validation failure; and conversion to the new representation after a new Align or supported edit.",
+  "mayRetire": "Writing the legacy alignOrthogroupFeature string in new Sessions; normal-runtime use of the legacy group resolver; and downgrade writing from a resolved plan to the ambiguous legacy representation.",
+  "acceptedResidualRisk": "Replaying an old Session remains dependent on an isolated legacy resolver and can retain its historical implicit selection until the user creates a new alignment.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
+}
+```
+
+### PD-OI-031: Initial Similarity Group alignment surface scope
+
+- Concern key: `diagram-generation.similarity-alignment.surface-scope`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / WEB_TYPED_CORE_STRICT_CLI`
+- Normative outcome:
+  1. The Web Similarity Groups workflow provides exact reference selection,
+     `Align`, `Align & orient`, per-record Select and Skip for ambiguity, and
+     a reviewable resolution summary.
+  2. The Python surface accepts a typed, fully resolved alignment plan and uses
+     the shared resolution and validation semantics.
+  3. The CLI accepts an exact reference and runs only when every target record
+     resolves uniquely under the shared rules. Remaining ambiguity produces an
+     actionable error. New CLI and Python requests do not infer a representative
+     from a group ID.
+  4. The initial scope does not add an anchor TSV format, an equivalent
+     Collinear-mode alignment UI, or smart, scored, or multi-hop selection.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#561`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.similarity-alignment.surface-scope",
+  "scenarioRevision": 1,
+  "choice": "A / WEB_TYPED_CORE_STRICT_CLI",
+  "rationale": "The initial release should provide the complete interactive journey where ambiguity can be resolved, while all programmatic surfaces share the same typed plan and validation semantics. Adding a new TSV format or Collinear editing workflow is not required to deliver the Similarity Group use case.",
+  "mustPreserve": "A complete Web Similarity Groups workflow with exact reference selection, Align, Align & orient, Select, and Skip; a typed Python API for resolved plans; CLI support for exact references when every record resolves uniquely; actionable CLI errors for ambiguity; shared resolution and validation rules across surfaces; and accurate disclosure of deferred or unsupported scopes.",
+  "mayRetire": "Group-ID-only implicit representative selection for new CLI and Python alignment requests.",
+  "acceptedResidualRisk": "CLI does not provide an interactive ambiguity picker, and the first implementation does not add an anchor TSV format or equivalent Collinear-mode UI.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
 }
 ```
 
