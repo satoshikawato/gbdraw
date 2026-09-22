@@ -54,10 +54,10 @@ The workflow creates these files:
 Select **Linear**. Under **Input Genomes**, keep **GenBank** selected and
 confirm the fresh **Current: No comparison** status below the record list.
 
-1. In the first **GenBank File** control, choose `AP027078.gb`.
-2. Select **Add sequence** in the **Input Genomes** header, then choose
+1. In the first **GenBank / DDBJ File** control, choose `AP027078.gb`.
+2. Select **Add sequence** below the File list, then choose
    `AP027131.gb` in the new card.
-3. Repeat the header **Add sequence** action for `AP027133.gb`, `AP027132.gb`, and
+3. Repeat the **Add sequence** action for `AP027133.gb`, `AP027132.gb`, and
    `NZ_CP006932.gb`, in that order.
 
 Keep all optional regions empty so every row uses its complete record. Confirm

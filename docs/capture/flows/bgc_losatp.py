@@ -123,14 +123,14 @@ def _set_bgc_inputs(page: Page) -> None:
     )
 
     add_sequence = page.get_by_role("button", name="Add sequence", exact=True)
-    expect(add_sequence).to_have_count(2)
+    expect(add_sequence).to_have_count(1)
     for _ in range(4):
-        add_sequence.first.click()
+        add_sequence.click()
     for index, fixture in enumerate(GUI_BGC_FIXTURES, start=1):
         page.get_by_test_id(f"linear-genbank-{index}").set_input_files(fixture[0])
 
     selected_files = page.get_by_role(
-        "group", name="GenBank File selection", exact=True
+        "group", name="GenBank / DDBJ File selection", exact=True
     )
     expect(selected_files).to_have_count(5)
     for index, fixture in enumerate(GUI_BGC_FIXTURES):
@@ -647,11 +647,12 @@ def capture_bgc_losatp(
                 "region", name="Linear input file 5", exact=True
             )
             fifth_file = fifth_source.get_by_role(
-                "group", name="GenBank File selection", exact=True
+                "group", name="GenBank / DDBJ File selection", exact=True
             )
             fifth_source.get_by_role(
                 "button",
-                name=re.compile(r"^Depth TSV assignments for file 5:"),
+                name="Depth tracks for file 5",
+                exact=True,
             ).click()
             reverse_complement = page.get_by_label(
                 "Reverse complement for sequence 5", exact=True

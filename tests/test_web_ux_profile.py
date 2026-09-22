@@ -101,6 +101,7 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
         'aria-label="Add sequence" data-linear-file-add '
         '@click="addLinearSeq()"'
     ) in index
+    assert index.count('aria-label="Add sequence"') == 1
 
 
 def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order() -> None:
@@ -149,17 +150,17 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
         'pair.edgeKey)"' in index
     )
 
-    header_add = index.index('aria-label="Add sequence"')
+    add_action = index.index('aria-label="Add sequence"')
     record_list = index.index("data-linear-record-list")
     comparison = index.index("data-linear-comparison-card")
     timeline = index.index("data-linear-comparison-timeline")
     basic = index.index('<div class="card basic-settings">')
     generate = index.index('<div class="generate-bar')
     advanced = index.index("data-linear-advanced-comparison")
-    assert header_add < record_list < comparison < timeline < basic < generate < advanced
+    assert record_list < add_action < comparison < timeline < basic < generate < advanced
     assert index.count('aria-label="Generate Diagram" @click="runAnalysis"') == 1
 
-    first_record_uploader = index.index('label="GenBank File"', record_list)
+    first_record_uploader = index.index('label="GenBank / DDBJ File"', record_list)
     first_record_options = index.index(':data-linear-record-options="seq.uid"')
     assert first_record_uploader < first_record_options < comparison
 
@@ -179,6 +180,46 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert ">Selected pairs and retained drafts</" not in index
     raw_results = index.index(">Raw LOSAT results</div>")
     assert advanced < raw_results
+
+
+def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
+    index = WEB_INDEX.read_text(encoding="utf-8")
+    app_setup = (WEB_INDEX.parent / "js" / "app" / "app-setup.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert '<details :open="mode === \'linear\'">' in index
+    assert '<details open class="mt-2' not in index
+    assert (
+        '<details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" '
+        'data-linear-depth-settings' in index
+    )
+    assert 'v-if="linearSourceGroups.length > 1" class="flex shrink-0' in index
+    assert (
+        '<button v-if="linearSourceGroups.length > 1" type="button" '
+        'aria-label="Remove last sequence"' in index
+    )
+    assert 'class="btn btn-primary min-w-0 w-full bg-blue-600' in index
+    assert 'class="linear-secondary-summary"' in index
+    assert 'label="GenBank / DDBJ File"' in index
+    assert '{{ linearSourceDepthSummary(source) }}' in index
+    assert "if (attachedCount === 0) return 'No depth track attached';" in app_setup
+    assert 'Attached to all records' in index
+    assert 'Requires at least 2 loaded sequences to compare' in index
+    assert 'v-if="linearComparisonUi.intentKey !== \'none\'"' in index
+    assert 'placeholder="e.g., <i>' not in index
+    assert "'e.g., <i>" not in index
+    assert '[class~="text-[9px]"]' in index
+    assert '[class~="text-[10px]"]' in index
+    assert index.count(
+        'Separate Strands <help-tip text="Display features on separate strands '
+        'for better distinction."></help-tip>'
+    ) == 1
+    assert 'Resolve Overlaps <help-tip' not in index
+    assert 'Multi-Record Canvas <help-tip' not in index
+    assert 'Hide GC Content <help-tip' not in index
+    assert 'Hide GC Skew <help-tip' not in index
+    assert index.count('Show Depth <help-tip') == 1
 
 
 def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:

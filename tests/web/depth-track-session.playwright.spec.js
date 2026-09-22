@@ -596,24 +596,17 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   const firstSourceRecords = page.locator('[data-linear-source-records]').first();
   const firstSourceSummary = firstSource.locator(':scope > summary');
   await expect(firstSource).toBeVisible();
-  await expect(firstSource).toHaveAttribute('open', '');
-  await expect(firstSourceSummary).toContainText('Depth TSV');
-  await expect(firstSourceSummary).toContainText('2 records');
-  await expect(firstSourceSummary).toContainText('1 series');
+  await expect(firstSource).not.toHaveAttribute('open', '');
+  await expect(firstSourceSummary).toHaveText('No depth track attached');
   expect(await firstSourceRecords.evaluate((element) => element.open)).toBe(false);
-  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(1);
-  await expect(page.locator('[data-linear-depth-settings]').getByRole('button', {
-    name: 'Add series for all records', exact: true
-  })).toHaveCount(0);
+  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(0);
   await expect(page.locator('[data-linear-source-records]').nth(1).getByText('Per-record Depth TSV')).toHaveCount(0);
 
-  const openHeight = await firstSource.evaluate((element) => element.getBoundingClientRect().height);
+  const closedHeight = await firstSource.evaluate((element) => element.getBoundingClientRect().height);
   await firstSourceSummary.press('Enter');
-  await expect(firstSource).not.toHaveAttribute('open', '');
-  expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(openHeight);
-  await firstSourceSummary.press('Space');
   await expect(firstSource).toHaveAttribute('open', '');
-  await expect(page.getByRole('button', { name: /Add Depth TSV series from file/ })).toHaveCount(2);
+  expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(closedHeight);
+  await expect(page.getByRole('button', { name: /Add Depth TSV series from file/ })).toHaveCount(1);
 
   await page.getByTestId('linear-source-depth-1-1').setInputFiles({
     name: 'common.tsv',
@@ -623,13 +616,16 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
   ))).toEqual(['common.tsv', 'common.tsv', null]);
+  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(1);
+  await expect(firstSourceSummary).toHaveText('1 depth track attached');
   await expect(firstSource.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  await page.locator('[data-linear-source-depth]').nth(1).locator(':scope > summary').click();
   await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
 
   await page.getByRole('button', {
     name: 'Add Depth TSV series from file 1', exact: true
   }).click();
-  await expect(firstSourceSummary).toContainText('2 series');
+  await expect(firstSourceSummary).toHaveText('1 depth track attached');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
     width: sequence.depth.length,
     files: sequence.depth.map((file) => file?.name || null)
@@ -649,10 +645,10 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     );
   });
   await expect(firstSource.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
-  await expect(firstSourceSummary).toContainText('Mixed');
-  await expect(firstSource.getByText(/Choosing a file replaces all record bindings/)).toBeVisible();
+  await expect(firstSource).toContainText('Attached to some records');
+  await expect(firstSource.getByText(/Choosing a file applies it to every record/)).toBeVisible();
 
-  await firstSource.getByRole('button', { name: 'Clear all record bindings' }).click();
+  await firstSource.getByRole('button', { name: 'Remove from all records' }).click();
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
   ))).toEqual([null, null, null]);
@@ -722,6 +718,12 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
       window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
     ))).toBe(2);
   };
+  const showDepthRows = async () => {
+    const disclosure = page.locator('[data-linear-source-depth]').first();
+    if (!(await disclosure.evaluate((element) => element.open))) {
+      await disclosure.locator(':scope > summary').click();
+    }
+  };
 
   await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ first, second }) => {
@@ -746,6 +748,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
       new File([text], 'common.tsv', { type: 'text/tab-separated-values', lastModified: 2 })
     );
   }, commonDepth);
+  await showDepthRows();
   await expect(page.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
   expect(await runDiagramWithDiagnostics(page)).toEqual({
     result: { status: 'ok' }, errorSummary: '', errorDetails: []
@@ -755,6 +758,7 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
   });
 
   await saveAndReload('multi-record-common-depth');
+  await showDepthRows();
   await expect(page.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
     (sequence) => sequence.depth?.[0]?.name || null
@@ -768,12 +772,14 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
       new File([text], 'override.tsv', { type: 'text/tab-separated-values', lastModified: 3 })
     );
   }, overrideDepth);
+  await showDepthRows();
   await expect(page.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
   expect(await runDiagramWithDiagnostics(page)).toEqual({
     result: { status: 'ok' }, errorSummary: '', errorDetails: []
   });
 
   await saveAndReload('multi-record-mixed-depth');
+  await showDepthRows();
   await expect(page.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
     (sequence) => sequence.depth?.[0]?.name || null

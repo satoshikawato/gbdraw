@@ -122,8 +122,8 @@ def capture_gui_losatn(
         add_sequence = page.get_by_role(
             "button", name="Add sequence", exact=True
         )
-        expect(add_sequence).to_have_count(2)
-        add_sequence.first.click()
+        expect(add_sequence).to_have_count(1)
+        add_sequence.click()
         page.get_by_test_id("linear-genbank-1").set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
@@ -131,7 +131,7 @@ def capture_gui_losatn(
             GUI_LOSATN_DE3_FIXTURE_PATH
         )
         selected_files = page.get_by_role(
-            "group", name="GenBank File selection", exact=True
+            "group", name="GenBank / DDBJ File selection", exact=True
         )
         expect(selected_files).to_have_count(2)
         expect(selected_files.nth(0)).to_contain_text("NC_001416.gb")

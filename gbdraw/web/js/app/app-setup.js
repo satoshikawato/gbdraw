@@ -576,6 +576,11 @@ export const createAppSetup = () => {
       alignment_length: adv.alignment_length
     }
   }));
+  const canRunLinearLosat = computed(() => linearSeqs.filter((sequence) => (
+    lInputType.value === 'gff'
+      ? sequence.gff && sequence.fasta
+      : sequence.gb
+  )).length >= 2);
 
   const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
   const linearSourceRemovalDialog = reactive({ open: false, sourceUid: '', origin: '' });
@@ -1458,9 +1463,9 @@ export const createAppSetup = () => {
   }));
   const linearSourceDepthSummary = (source) => {
     const tracks = linearSourceDepthRows(source);
-    const recordCount = Array.isArray(source?.records) ? source.records.length : 0;
-    const mixedSuffix = tracks.some((track) => track.status.state === 'mixed') ? ' · Mixed' : '';
-    return `Depth TSV · ${recordCount} record${recordCount === 1 ? '' : 's'} · ${tracks.length} series${mixedSuffix}`;
+    const attachedCount = tracks.filter((track) => track.status.selectedCount > 0).length;
+    if (attachedCount === 0) return 'No depth track attached';
+    return `${attachedCount} depth track${attachedCount === 1 ? '' : 's'} attached`;
   };
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
   const linearDepthTrackCoverageLabel = (trackIndex) => {
@@ -3724,6 +3729,7 @@ export const createAppSetup = () => {
     linearComparisonResolution,
     linearComparisonGlobalAction,
     linearComparisonUi,
+    canRunLinearLosat,
     hasLinearComparisonIntent,
     hasActiveLinearLosatIntent,
     hasActiveLinearUploadIntent,

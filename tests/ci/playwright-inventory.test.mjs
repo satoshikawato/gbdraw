@@ -20,10 +20,10 @@ const collect = (...args) => {
   return visit(report.suites);
 };
 
-test('expanded PR smoke has 8–12 cases and each remains in full functional acceptance', () => {
+test('expanded PR smoke has 8–13 cases and each remains in full functional acceptance', () => {
   const smoke = collect('test', '--config=playwright.pr-smoke.config.js');
   const full = new Set(collect('test', '--config=playwright.functional.config.js'));
-  assert.ok(smoke.length >= 8 && smoke.length <= 12, `collected ${smoke.length} PR cases`);
+  assert.ok(smoke.length >= 8 && smoke.length <= 13, `collected ${smoke.length} PR cases`);
   for (const title of smoke) assert.ok(full.has(title), `missing full regression: ${title}`);
   for (const path of [
     'mode-transition-editor-state.playwright.spec.js',

@@ -39,7 +39,7 @@ local environment or prepared command-line evidence.
 | Linear | Ordered GenBank rows or matched GFF3 + FASTA rows | One Linear result with an independent comparison plan |
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
-starts with its **GenBank File** uploader, or its matched GFF3 and FASTA
+starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
 uploaders, followed by **File defaults (applied to all records)** and a closed
 **Record options** disclosure. Use the up and down buttons in a File header to
 move that source. Every record in a multi-record GenBank or GFF3 + FASTA source
@@ -51,15 +51,16 @@ placement first.
 Uploading a GenBank file fills the file default
 **Organism / strain** from its `/organism` and `/strain` qualifiers when that
 field is still empty; the file default **Subtitle / title** is yours to fill,
-because a subtitle names one replicon rather than the whole file. **Add sequence**
-is visible in the **Input Genomes** header. A GenBank file may contain several
-biological records. GFF3 input requires the matching FASTA sequence and exact
-sequence-ID agreement. See [Input formats and TSV
+because a subtitle names one replicon rather than the whole file. The prominent
+**Add sequence** action appears below the Linear File list. A GenBank file may
+contain several biological records. GFF3 input requires the matching FASTA
+sequence and exact sequence-ID agreement. See [Input formats and TSV
 schemas](input-formats-and-tsv-schemas.md) for the file contract.
 
-The prominent **Add sequence** and **Remove** actions add or remove whole File
-cards. Clearing a populated Linear primary uploader opens a choice: **Clear file
-only** keeps a pristine blank File in the same position, while **Delete card**
+The **Add sequence** action and the **Remove** action shown for multiple Files
+add or remove whole File cards. Clearing a populated Linear primary uploader
+opens a choice: **Clear file only** keeps a pristine blank File in the same
+position, while **Delete card**
 removes that File and all records it supplied. Either operation removes its
 record selectors, crop and reverse-complement drafts, labels, Depth bindings,
 comparison endpoints, and source-derived state as one undoable change. The only
@@ -325,7 +326,7 @@ compatibility](session-and-request-compatibility.md).
 ## Accessibility
 
 Primary controls have stable accessible names: **Circular**, **Linear**,
-**GenBank/DDBJ File**, **GenBank File**, **Add sequence**, **Output Prefix**,
+**GenBank/DDBJ File**, **GenBank / DDBJ File**, **Add sequence**, **Output Prefix**,
 **Species**, **Track Preset**, **Separate Strands**, **Hide GC Content**,
 **Hide GC Skew**, **Label Mode**, **Legend position**, **Generate Diagram**,
 **Result Preview**, and **SVG**. The visible **Show Coordinate Scale** control

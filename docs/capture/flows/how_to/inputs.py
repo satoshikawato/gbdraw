@@ -113,11 +113,11 @@ def capture_gui_inputs(
 
         genbank = page.get_by_role("radio", name="GenBank", exact=True)
         genbank.check()
-        page.get_by_label("GenBank File", exact=True).set_input_files(
+        page.get_by_label("GenBank / DDBJ File", exact=True).set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
         expect(
-            page.get_by_role("group", name="GenBank File selection", exact=True)
+            page.get_by_role("group", name="GenBank / DDBJ File selection", exact=True)
         ).to_contain_text("NC_001416.gb")
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("lambda_genbank")

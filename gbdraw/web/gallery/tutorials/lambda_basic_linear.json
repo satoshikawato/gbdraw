@@ -39,7 +39,7 @@
         ],
         "rows": [
           [
-            "GenBank File",
+            "GenBank / DDBJ File",
             "NC_001416.gb"
           ],
           [
@@ -66,7 +66,7 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; const seq = app?.linearSeqs?.[0]; const file = seq?.gb; if (!file || app.linearSeqs.length !== 1) throw new Error('Lambda GenBank input was not restored.'); seq.gb = new File([file], 'NC_001416.gb', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const row = document.querySelector(`[data-linear-record-card=\"${seq.uid}\"]`); const badge = Array.from(row?.querySelectorAll('div') || []).find((node) => node.textContent?.trim() === '#1' && node.classList.contains('font-bold')); const label = Array.from(row?.querySelectorAll('label') || []).find((node) => node.textContent.trim() === 'GenBank File'); const uploader = label?.parentElement?.parentElement; if (!row || !badge || !uploader) throw new Error('Lambda Linear input row was not found.'); badge.dataset.capture = 'lambda-record-badge'; uploader.dataset.capture = 'lambda-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
+                "script": "const app = window.__GBDRAW_APP__; const seq = app?.linearSeqs?.[0]; const file = seq?.gb; const source = app?.linearSourceGroups?.[0]; if (!file || !source || app.linearSeqs.length !== 1) throw new Error('Lambda GenBank input was not restored.'); seq.gb = new File([file], 'NC_001416.gb', { type: file.type, lastModified: file.lastModified }); app.form.prefix = 'lambda_basic_linear'; app.form.separate_strands = true; app.form.show_labels_linear = 'all'; app.form.scale_style = 'ruler'; app.form.legend = 'left'; app.adv.linear_track_slots_enabled = false; const sourceCard = document.querySelector(`[data-linear-source-card=\"${source.uid}\"]`); const sourceHeader = sourceCard?.querySelector(':scope > div'); const label = Array.from(sourceCard?.querySelectorAll('label') || []).find((node) => node.textContent.trim() === 'GenBank / DDBJ File'); const uploader = label?.parentElement?.parentElement; if (!sourceCard || sourceHeader?.textContent.trim() !== 'File 1' || !uploader) throw new Error('Lambda Linear input row was not found.'); sourceHeader.dataset.capture = 'lambda-source-header'; uploader.dataset.capture = 'lambda-genbank-upload'; uploader.scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "waitForFunction",
@@ -74,7 +74,7 @@
               }
             ],
             "clipSelectors": [
-              "[data-capture='lambda-record-badge']",
+              "[data-capture='lambda-source-header']",
               "[data-capture='lambda-genbank-upload']"
             ],
             "cropPadding": 14,

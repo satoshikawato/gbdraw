@@ -44,9 +44,9 @@ filename, `lambda-de3.losatn.tsv`.
 Select **Linear**. A fresh Linear page reports **Current: No comparison** under
 the record list. Under **Input Genomes**, keep **GenBank** selected.
 
-1. In the first **GenBank File** control, choose `NC_001416.gb`.
-2. Select **Add sequence** in the **Input Genomes** header.
-3. In the second **GenBank File** control, choose `NC_042057.1.gb`.
+1. In the first **GenBank / DDBJ File** control, choose `NC_001416.gb`.
+2. Select **Add sequence** below the File list.
+3. In the second **GenBank / DDBJ File** control, choose `NC_042057.1.gb`.
 
 Keep Lambda first and DE3 second. Leave both **Region (optional)** sections unchanged so the inputs remain the complete `NC_001416.1` (48,502 bp) and `NC_042057.1` (42,925 bp) records.
 

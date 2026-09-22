@@ -1293,7 +1293,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
 
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
   expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
@@ -1343,7 +1343,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(1);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
 
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1401,7 +1401,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   ];
   const chooseSource = async (index) => {
     const chooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index).click();
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({
       name: sources[index].name,
@@ -2593,7 +2593,7 @@ AAAAAAAAAA
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['RecB', 'RecA']);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
-  await expect(page.locator('[data-linear-source-card]').getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await expect(page.locator('[data-linear-source-card]').getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   await page.getByText('Region Annotations', { exact: false }).click();
   await expect(page.getByLabel('Annotation target record').locator('option')).toHaveText([
     'Select target record',
@@ -3306,7 +3306,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const controls = page.getByRole('spinbutton', { name: /^Linear record row for sequence \d+$/ });
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);
   const expectedPairs = [[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]];
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const generated = await completeComparisonSnapshot(page);
@@ -3337,7 +3337,7 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const restored = await completeComparisonSnapshot(page);
   expect(restored.rows).toEqual([1, 1, 2, 2, 3]);
@@ -3455,7 +3455,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources).toHaveCount(2);
   await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
-  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   const recordList = sources.first().locator('[data-linear-source-records]');
   const recordSummary = recordList.locator(':scope > summary');
   await expect(recordSummary).toHaveText('Number of records: 2');
@@ -3469,10 +3469,10 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(recordList).not.toHaveAttribute('open', '');
   await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gff'; });
   await expect(sources).toHaveCount(2);
-  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(4);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(4);
   await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gb'; });
   await expect(sources).toHaveCount(2);
-  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.setLinearRecordRow(app.linearSeqs.at(-1).uid, 3);
@@ -3486,7 +3486,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await page.screenshot({ path: testInfo.outputPath('source-files-and-records-desktop.png') });
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await sources.nth(1).getByRole('button', { name: 'Choose GenBank File' }).click();
+  await sources.nth(1).getByRole('button', { name: 'Choose GenBank / DDBJ File' }).click();
   await (await chooserPromise).setFiles({
     // The name deliberately matches the first source; distinct uploads remain distinct.
     name: 'upper.gbff', mimeType: 'text/plain',

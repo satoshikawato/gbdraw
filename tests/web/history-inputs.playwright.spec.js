@@ -195,7 +195,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   await firstRemove.click();
   await dialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
   await expect(sources).toHaveCount(2);
-  await expect(sources.first().getByRole('button', { name: 'Choose GenBank File', exact: true })).toBeFocused();
+  await expect(sources.first().getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true })).toBeFocused();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
     uid: sequence.uid,
     file: sequence.gb?.name || null,
@@ -232,7 +232,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   await globalRemove.click();
   await globalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
   await expect(sources).toHaveCount(1);
-  await expect(sources.first().getByRole('button', { name: 'Choose GenBank File', exact: true })).toBeFocused();
+  await expect(sources.first().getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true })).toBeFocused();
   await expectHistory(page, baseline + 1, 0, 'Delete Linear File');
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(sources).toHaveCount(2);

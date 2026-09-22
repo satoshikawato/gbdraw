@@ -501,8 +501,8 @@ def capture_gui_linear_layout(
         add_sequence = page.get_by_role(
             "button", name="Add sequence", exact=True
         )
-        expect(add_sequence).to_have_count(2)
-        add_sequence.first.click()
+        expect(add_sequence).to_have_count(1)
+        add_sequence.click()
         page.get_by_test_id("linear-genbank-1").set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
