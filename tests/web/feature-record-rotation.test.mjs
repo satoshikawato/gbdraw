@@ -14,12 +14,21 @@ const catalogFeatures = committed.editorState.featureCatalog.items[0].biological
 const sourceFeature = catalogFeatures.find((feature) => (
   feature.anchorProfile?.precision === 'exact'
   && feature.anchorProfile?.strand === '+'
-  && feature.location_parts?.length === 1
+  && Number.isSafeInteger(feature.start)
+  && Number.isSafeInteger(feature.end)
 ));
 const feature = {
   record_key: canonicalRecord.recordKey,
   biological_feature_id: sourceFeature.biologicalFeatureId,
-  location_parts: sourceFeature.location_parts,
+  start: sourceFeature.start,
+  end: sourceFeature.end,
+  strand: sourceFeature.strand,
+  location_parts: [{
+    start: sourceFeature.start,
+    end: sourceFeature.end,
+    strand: sourceFeature.strand,
+    display: `${sourceFeature.start + 1}..${sourceFeature.end}`
+  }],
   anchorProfile: sourceFeature.anchorProfile
 };
 const row = { key: 'target-row' };

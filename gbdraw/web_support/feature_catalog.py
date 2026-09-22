@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, MutableMapping, Sequence
+import copy
 from dataclasses import dataclass
 import math
 import re
@@ -33,6 +34,7 @@ from gbdraw.render.interactive_svg import (
 )
 
 FEATURE_CATALOG_SCHEMA = 4
+LEGACY_FEATURE_CATALOG_SCHEMA = 3
 
 _BIOLOGICAL_ALIAS_KEYS = {
     "id",
@@ -138,6 +140,113 @@ def _text(value: object | None) -> str:
     if value is None:
         return ""
     return _first_text(value)
+
+
+def _legacy_feature_strand(
+    feature: Mapping[str, object],
+    parts: Sequence[Mapping[str, object]],
+) -> str:
+    strands: set[str] = set()
+    for part in parts or (feature,):
+        value = part.get("strand")
+        if value in (1, "1", "+"):
+            strands.add("+")
+        elif value in (-1, "-1", "-"):
+            strands.add("-")
+    if len(strands) > 1:
+        return "mixed"
+    if strands:
+        return next(iter(strands))
+    return "unstranded"
+
+
+def _legacy_exact_coordinate(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    if isinstance(value, str) and value.strip() != str(number):
+        return None
+    return number if abs(number) <= 9_007_199_254_740_991 else None
+
+
+def promote_legacy_feature_catalog(
+    catalog: Mapping[str, object],
+) -> dict[str, object]:
+    """Promote schema 3 with only safely inferred source-anchor metadata."""
+
+    if catalog.get("schema") != LEGACY_FEATURE_CATALOG_SCHEMA:
+        raise GbdrawError(
+            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA}."
+        )
+    migrated = copy.deepcopy(dict(catalog))
+    items = migrated.get("items")
+    if not isinstance(items, list):
+        raise GbdrawError("Feature catalog items must be an array.")
+    migrated["schema"] = FEATURE_CATALOG_SCHEMA
+    for item in items:
+        if not isinstance(item, dict):
+            raise GbdrawError("Feature catalog items must contain objects.")
+        features = item.get("biologicalFeatures")
+        if not isinstance(features, list):
+            raise GbdrawError(
+                "Feature catalog item is missing biologicalFeatures."
+            )
+        for feature in features:
+            if not isinstance(feature, dict):
+                raise GbdrawError(
+                    "Feature catalog biologicalFeatures must contain objects."
+                )
+            raw_parts = feature.get("location_parts", feature.get("locationParts"))
+            parts = (
+                raw_parts
+                if isinstance(raw_parts, list) and raw_parts
+                else [feature]
+            )
+            mapping_parts = [part for part in parts if isinstance(part, Mapping)]
+            exact_single = len(mapping_parts) == len(parts) == 1
+            start = (
+                _legacy_exact_coordinate(mapping_parts[0].get("start"))
+                if exact_single
+                else None
+            )
+            end = (
+                _legacy_exact_coordinate(mapping_parts[0].get("end"))
+                if exact_single
+                else None
+            )
+            exact_single = exact_single and start is not None and end is not None
+            strand = _legacy_feature_strand(feature, mapping_parts)
+            feature["anchorProfile"] = (
+                {
+                    "precision": "exact",
+                    "operator": "single",
+                    "partOrder": (
+                        "source-forward" if strand == "unstranded" else "biological"
+                    ),
+                    "strand": strand,
+                }
+                if exact_single
+                else {
+                    "precision": "unavailable",
+                    "operator": "unknown",
+                    "partOrder": "ambiguous",
+                    "strand": strand,
+                }
+            )
+            if (
+                exact_single
+                and "location_parts" not in feature
+                and "locationParts" not in feature
+            ):
+                feature["location_parts"] = [
+                    {"start": start, "end": end, "strand": strand}
+                ]
+    return migrated
 
 
 _MATCH_ATTRIBUTES = {
@@ -2377,5 +2486,6 @@ __all__ = [
     "build_feature_catalog_item",
     "canonical_catalog_sequence_sources",
     "materialize_catalog_nucleotide_sequence",
+    "promote_legacy_feature_catalog",
     "select_feature_catalog_item",
 ]

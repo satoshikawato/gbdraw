@@ -1,27 +1,30 @@
 # Issue #563 baseline and preflight
 
-- Status: `CLEARED_FOR_SESSION_02`
-- Session: 01
+- Status: `IMPLEMENTED_PENDING_EXACT_HEAD_ARCHITECTURE_REVIEW`
+- Session: 07
 - Recorded: 2026-09-22
 - Branch: `issue-563-feature-popup-record-rotation-20260922`
 - Session start HEAD: `3672a518e09339bffc2cc70cdee42add9103ccb2`
 - Base: `origin/dev` @ `a9eaeadd105e0c26e46086626feaa695bdd33c94`
+- Integration base: `origin/dev` @ `35b2716a33c726cac82842b839383f6ab294b3e6`
+- Session 07 start HEAD: `10075e3d0f92ec7a69ab9d5680c2af35a12e5af2`
+- PR target base observed after gates: `origin/dev` @ `1cb2a1b00ac97fe8f1213d12a63257ead0d56ded`
 - Upstream: none
 - Issue: `#563 Add feature-based rotation of circular records from the feature popup`
 
 ## Outcome
 
-Session 01 is complete. Sessions 02–07 are blocked. The latest Issue #563 body
-specifies one detailed proposed workflow, but no authority already present on
-the branch base selects that new public affordance and complete outcome. The
-current implementation request also does not contain the complete Product
-Decision Owner receipt required by the Product Impact Ratchet. Runtime files
-must not change until the selected outcome has been recorded in an
-authority-only change and that authority is present on the runtime branch's
-base.
+Sessions 01–07 are complete. The popup workflow, source-coordinate resolver,
+per-record state, schema-7 target-only projection, shared candidate admission,
+atomic History integration, Session 44/catalog 4 persistence, and browser
+acceptance coverage are implemented. Session 07 documentation, generated
+artifacts, separate reviews, and full local gates are complete.
 
-The ready-to-review choices and required response are in
-`PRODUCT_DECISION_PACKET.md` beside this document.
+The Product stop condition is resolved by `PD-OI-032` as recorded below. The
+one remaining pre-merge authority boundary is the architecture exception for
+the released Session 42/catalog 3 compatibility reader (`CB 0 -> 1`). Per the
+architecture ratchet, that decision must be made manually against the exact
+final head after CI; it cannot be supplied by the implementation agent.
 
 ## Authority resolution
 
@@ -58,7 +61,7 @@ Git history contains no completed Session result commit and this directory had
 no `BASELINE_AND_PREFLIGHT.md` or `FINAL_ACCEPTANCE.md`. Session 01 was therefore
 the first incomplete Session.
 
-## Confirmed current behavior
+## Actual implementation behavior
 
 - `RecordPresentation.reverse_complement` and
   `RecordDisplayOptions.start_coordinate` are the typed absolute display
@@ -66,26 +69,30 @@ the first incomplete Session.
   request field.
 - `RecordDisplayTransform` owns source/display base and boundary conversion for
   circular and reverse-complemented records.
-- `record-display-options.js` owns the source-bound editable display draft and
-  existing selected-feature 5′/midpoint shortcuts. Its current draft has only
-  topology and start, and its shortcut depends on the global selection.
+- `record-display-options.js` owns the source-bound editable display draft,
+  absolute orientation override, popup provenance, and existing sidebar
+  shortcuts. Popup rotation uses the explicit open-popup
+  `(recordKey, biologicalFeatureId)` and never falls back to global selection.
 - `session-request.js` is the single canonical request owner. It materializes a
   `cardinality: all` record into exact-one records when per-record display
   values differ.
-- `run-analysis.js` builds the canonical request and then uses the existing
-  diagram Worker, typed response, catalog validation, and Result admission
-  path.
-- `history.js::runUndoableArtifactReplacement()` is the artifact replacement
-  transaction owner.
-- Session current writer is 43 on `origin/dev`; feature catalog current schema
-  is 3; canonical request schema remains 7.
+- `run-analysis.js` builds the canonical request and exposes the same candidate
+  execution, diagram Worker, typed response, catalog validation, and Result
+  admission path to normal Generate and popup Apply.
+- `history.js::runUndoableArtifactReplacement()` remains the one artifact
+  replacement transaction owner and now accepts bounded target-intent
+  checkpoints so transform and Result share one Undo/Redo entry.
+- The current writer is Session 44, the normalized feature catalog is schema
+  4, and the canonical request remains schema 7. The only new compatibility
+  reader promotes released Session 42/catalog 3 documents at the existing
+  Session admission boundary; branch-only Session 43 is not supported.
 - The characterization journey submitted four LOSATP jobs initially. Changing
   display start and then reverse complement left the cumulative count at four;
   a fresh Session Load submitted zero jobs. A target-only candidate is therefore
   needed for pending-edit isolation and atomic History, not to invent a LOSAT
   bypass.
 
-## Product Impact developer preflight
+## Product Impact developer preflight (historical Session 01 record)
 
 ### Trigger and user effects
 
@@ -145,41 +152,41 @@ equivalent eligible durable decision selected by the Product Decision Owner.
 
 The ten Issue scenarios map directly to the plan:
 
-| Issue scenario | Planned contract | Current evidence |
+| Issue scenario | Contract | Actual implementation evidence |
 | --- | --- | --- |
-| 1 Popup-only | AC-01, AC-18 | Popup exists; no record action exists. |
-| 2 Both diagram modes | AC-02, AC-15 | Shared typed display transform exists. |
-| 3 Independent chromosomes | AC-03, AC-09 | Stable record keys and exact selectors exist. |
-| 4 Strand-aware offsets | AC-04 | Current shortcut resolves anchors only; signed offset is new. |
-| 5 Stable orientation | AC-05, AC-16 | Absolute typed reverse-complement value exists; popup operation is new. |
-| 6 Endpoint distinction | AC-06 | No current 3′ or feature-end popup action. |
-| 7 Circular/compound | AC-07 | Parts exist, but precision/operator/order facts are incomplete. |
-| 8 Safe eligibility | AC-08, AC-12, AC-17 | Existing source replacement/crop checks are reusable; operation reasons are new. |
-| 9 Identity/isolation | AC-03, AC-09 | Source-bound record and biological feature identities already exist. |
-| 10 State/rendering | AC-10–AC-16, AC-19–AC-20 | Existing request, transform, Result, History, Session, and LOSAT cache boundaries are reusable. |
+| 1 Popup-only | AC-01, AC-18 | Real rich/simple popup tests cover pointer, keyboard, search continuity, and 390 px layout with an explicit clicked-feature target. |
+| 2 Both diagram modes | AC-02, AC-15 | Browser acceptance resolves the same source anchor in Circular and Linear; both use the existing typed transform. |
+| 3 Independent chromosomes | AC-03, AC-09 | Same-file multi-record browser acceptance changes one exact record and preserves the other request and transform. |
+| 4 Strand-aware offsets | AC-04 | Pure resolver tests cover plus/minus signed offsets and circular wrapping. |
+| 5 Stable orientation | AC-05, AC-16 | Resolver tests cover absolute/idempotent orientation; record-state tests cover manual provenance clearing. |
+| 6 Endpoint distinction | AC-06 | Pure resolver tests distinguish the 3′ covered base from the outgoing feature-end boundary. |
+| 7 Circular/compound | AC-07 | Catalog 4 preserves capability facts; resolver tests cover multipart gaps, origin wrapping, and odd/even midpoint rules. |
+| 8 Safe eligibility | AC-08, AC-12, AC-17 | Unit/browser tests cover operation-specific reasons plus cancel, stale, failure, and superseded preservation. |
+| 9 Identity/isolation | AC-03, AC-09 | Exact source-bound identity and duplicate/split-fragment projections are covered in catalog, state, and browser tests. |
+| 10 State/rendering | AC-10–AC-16, AC-19–AC-20 | Shared request/admission/History owners, Session round trip, zero added LOSAT jobs, and architecture contracts are exercised. |
 
-| AC | Required outcome/evidence | Session 01 result |
+| AC | Required outcome/evidence | Actual implementation result |
 | --- | --- | --- |
-| AC-01 | Explicit open-popup target, no global selection fallback | Traced; runtime blocked. |
-| AC-02 | Same source coordinate in Circular and Linear | Existing shared transform confirmed; runtime test pending. |
-| AC-03 | One record only, including same-file multi-record | Stable exact selectors confirmed; runtime test pending. |
-| AC-04 | Strand-relative signed offsets and wrapping | Formula fixed by Issue; resolver pending. |
-| AC-05 | Absolute/idempotent orientation | Existing absolute request field confirmed; resolver pending. |
-| AC-06 | 3′ base differs from feature-end boundary | Product meaning specified; resolver pending. |
-| AC-07 | Covered traversal midpoint and compound/origin cases | Existing parts insufficient for safe order/precision classification; catalog 4 pending. |
-| AC-08 | Operation-specific disabled reasons | Existing crop/source checks confirmed; new reasons pending. |
-| AC-09 | Stable duplicate/split identity | Existing `(recordKey, biologicalFeatureId)` confirmed. |
-| AC-10 | One History entry for transform and Result | Existing artifact transaction owner confirmed; hook pending. |
-| AC-11 | Session round trip | Existing draft/session projection confirmed; v44 work pending. |
-| AC-12 | Failure/cancel/stale preserves prior state | OIPC-C07 and current Result admission authority confirmed. |
-| AC-13 | Pending form isolation | Requires committed-base projector; pending. |
-| AC-14 | Zero additional LOSAT executor jobs | Characterized: `4 -> 4 -> 4`, fresh Load `0`. |
-| AC-15 | One transform for all geometry | `RecordDisplayTransform` confirmed as owner. |
-| AC-16 | Manual edits clear provenance | New provenance behavior pending. |
-| AC-17 | Cancel is a complete no-op | New controller behavior pending. |
-| AC-18 | Search/rebind/keyboard/mobile continuity | Existing popup/search identity confirmed; new journey pending. |
-| AC-19 | Request 7, no new Worker/renderer path | Feasible and required; architecture gate currently passes. |
-| AC-20 | Reviewable Product/architecture evidence and full gates | Product authority unresolved; Session 01 gates pass as recorded below. |
+| AC-01 | Explicit open-popup target, no global selection fallback | PASS: controller and real popup browser journey use the captured target only. |
+| AC-02 | Same source coordinate in Circular and Linear | PASS: cross-mode browser scenario. |
+| AC-03 | One record only, including same-file multi-record | PASS: projector unit and same-file browser scenarios. |
+| AC-04 | Strand-relative signed offsets and wrapping | PASS: pure resolver vectors. |
+| AC-05 | Absolute/idempotent orientation | PASS: resolver, state, and browser assertions. |
+| AC-06 | 3′ base differs from feature-end boundary | PASS: pure resolver boundary vectors. |
+| AC-07 | Covered traversal midpoint and compound/origin cases | PASS: metadata/catalog and resolver vectors. |
+| AC-08 | Operation-specific disabled reasons | PASS: resolver and popup availability assertions. |
+| AC-09 | Stable duplicate/split identity | PASS: catalog/state/projection coverage. |
+| AC-10 | One History entry for transform and Result | PASS: transaction unit and browser Undo/Redo journeys. |
+| AC-11 | Session round trip | PASS: Session 44 save and fresh-page load browser journey. |
+| AC-12 | Failure/cancel/stale preserves prior state | PASS: candidate unit and popup browser scenarios. |
+| AC-13 | Pending form isolation | PASS: committed-base unit/browser assertions preserve unrelated drafts. |
+| AC-14 | Zero additional LOSAT executor jobs | PASS: instrumented browser count remains `4 -> 4`; fresh Load is `0`. |
+| AC-15 | One transform for all geometry | PASS: browser geometry and existing transform contracts. |
+| AC-16 | Manual edits clear provenance | PASS: record-state unit coverage. |
+| AC-17 | Cancel is a complete no-op | PASS: popup browser state/History assertions. |
+| AC-18 | Search/rebind/keyboard/mobile continuity | PASS: real popup browser journey at desktop and 390 px. |
+| AC-19 | Request 7, no new Worker/renderer path | PASS: request and architecture contracts. |
+| AC-20 | Reviewable Product/architecture evidence and full gates | PASS for the candidate: Product authority, exact changed-scope evidence, and full local gates are recorded. Merge remains blocked until the maintainer posts the required architecture decision against the exact PR head. |
 
 ## Semantic owner and privileged path inventory
 
@@ -245,12 +252,15 @@ Compatibility row:
   schema 3 on current `main`.
 - Reader location: the existing Session migration/admission owner only. Current
   runtime catalog admission remains schema 4 after normalization.
-- Implemented reader:
-  `gbdraw/web/js/services/feature-catalog.js::migrateLegacyFeatureCatalog()` is
-  the single bounded catalog 3 -> 4 reader;
-  `gbdraw/web/js/services/config.js::preflightSessionImport()` invokes that
-  existing admission owner while promoting released Session 42 to the Session
-  44 runtime state. There is no Session 43 reader.
+- Implemented compatibility behavior has one stable ID and one conservative
+  rule, realized at the two existing language boundaries that can write or
+  admit a Session. Browser admission uses
+  `gbdraw/web/js/services/feature-catalog.js::migrateLegacyFeatureCatalog()`
+  from `config.js::preflightSessionImport()`. Python replay/current-write and
+  Gallery preparation use
+  `gbdraw/web_support/feature_catalog.py::promote_legacy_feature_catalog()`
+  from their existing owners. These are parity-constrained realizations of the
+  same path, not independent migration chains. There is no Session 43 reader.
 - Current writer and normalized runtime: Session 44, feature catalog 4, and
   canonical request 7. Catalog 4 stores `anchorProfile`; legacy single-part
   integer intervals are promoted conservatively, while compound legacy
@@ -351,7 +361,7 @@ cannot express an ambiguous Biopython location in memory.
 
 ## Satisfied stop condition and resumption
 
-Session 02 runtime work may begin because all of the following are satisfied:
+Session 02 runtime work was allowed because all of the following were satisfied:
 
 1. `satoshikawato` supplied a complete response from
    `PRODUCT_DECISION_PACKET.md`;
@@ -361,6 +371,25 @@ Session 02 runtime work may begin because all of the following are satisfied:
    runtime branch ancestry through the explicitly authorized branch update;
 4. no conflicting authority has appeared.
 
-The later compatibility exception still requires an exact-final-head
-architecture decision before merge. Push, PR creation, merge, rebase, and
-branch update remain outside the current authorization.
+The compatibility exception still requires an exact-final-head architecture
+decision before merge. The user subsequently authorized push, PR creation, and
+merge for this branch; that authorization does not replace the mandatory
+manual architecture decision.
+
+## Session 07 verification
+
+The complete command/result table and environment are recorded in
+`FINAL_ACCEPTANCE.md`. The decisive full gates were:
+
+- Python non-slow suite: `6132 passed`, `17 skipped`, `11 deselected` in
+  `761.38s` after the required Chromium sandbox escalation;
+- Web Node suite: `641 passed` in `74.636s`;
+- architecture contracts: `137 passed` in `65.049s`;
+- CI contracts: `59 passed` in `13.448s`;
+- targeted Playwright: `1 passed` for linear multi-record and `3 passed` for
+  the real popup journey;
+- Ruff: PASS;
+- LOSAT executor additions: `0`.
+
+The exact-head change-budget report and manual architecture decision are
+post-commit/PR gates because the reviewed SHA must identify the final commit.

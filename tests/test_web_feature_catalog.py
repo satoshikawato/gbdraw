@@ -12,8 +12,47 @@ from gbdraw.web_support.feature_catalog import (
     build_feature_catalog_item,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
+    promote_legacy_feature_catalog,
     select_feature_catalog_item,
 )
+
+
+def test_schema_three_promotion_only_restores_exact_single_part_anchors() -> None:
+    legacy = {
+        "schema": 3,
+        "items": [
+            {
+                "biologicalFeatures": [
+                    {"start": 2, "end": 7, "strand": -1},
+                    {
+                        "location_parts": [
+                            {"start": 1, "end": 2, "strand": "+"},
+                            {"start": 4, "end": 5, "strand": "+"},
+                        ]
+                    },
+                ]
+            }
+        ],
+    }
+
+    promoted = promote_legacy_feature_catalog(legacy)
+
+    assert legacy["schema"] == 3
+    assert promoted["schema"] == 4
+    exact, compound = promoted["items"][0]["biologicalFeatures"]
+    assert exact["anchorProfile"] == {
+        "precision": "exact",
+        "operator": "single",
+        "partOrder": "biological",
+        "strand": "-",
+    }
+    assert exact["location_parts"] == [{"start": 2, "end": 7, "strand": "-"}]
+    assert compound["anchorProfile"] == {
+        "precision": "unavailable",
+        "operator": "unknown",
+        "partOrder": "ambiguous",
+        "strand": "+",
+    }
 
 
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:

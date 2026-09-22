@@ -1,6 +1,6 @@
 # Issue #563 Feature popupからのrecord回転 — 総合実装計画書
 
-- 状態: 実装前（計画と実行境界のみ確定）
+- 状態: Session 01–07実装完了、exact-head architecture exception review待ち
 - 作成日: 2026-09-22
 - 対象Issue: [#563 Add feature-based rotation of circular records from the feature popup](https://github.com/satoshikawato/gbdraw/issues/563)
 - 必須実装ブランチ: `issue-563-feature-popup-record-rotation-20260922`

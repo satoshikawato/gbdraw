@@ -18,7 +18,8 @@ const target = (recordKey = 'card', biologicalFeatureId = 'feature') => ({
   recordKey, biologicalFeatureId, placement: { kind: 'main' }
 });
 const draft = (row, startCoordinate) => ({ scope: row.scope, sourceUid: row.sourceUid,
-  selector: row.selector, recordId: row.recordId, topologyOverride: null, startCoordinate });
+  selector: row.selector, recordId: row.recordId, topologyOverride: null, startCoordinate,
+  reverseComplementOverride: null, anchorIntent: null });
 const stateFor = (mode) => buildCanonicalRequestState({
   session: { renderRequest: { records: [] } },
   projection: { mode, inputType: 'gb', files: {}, config: {} },

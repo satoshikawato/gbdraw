@@ -551,7 +551,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == 3
+            assert payload["schema"] == 4
             assert len(payload["items"]) == 1
             item = payload["items"][0]
             biological_features = item["biologicalFeatures"]
