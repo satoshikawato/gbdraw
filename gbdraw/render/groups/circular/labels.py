@@ -16,6 +16,7 @@ from ....features.factory import FeatureBuildResult  # type: ignore[reportMissin
 from ....labels.circular import prepare_label_list  # type: ignore[reportMissingImports]
 from ....layout.circular import CircularRecordRenderContext  # type: ignore[reportMissingImports]
 from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
+from ...label_binding import bind_label_part
 
 
 class LabelsGroup:
@@ -103,6 +104,7 @@ class LabelsGroup:
                     stroke_width=self.label_stroke_width,
                     stroke_linecap="round",
                 )
+                bind_label_part(line_path, label["feature_id"])
                 group.add(line_path)
                 line_path2 = Line(
                     start=(label["middle_x"], label["middle_y"]),
@@ -114,6 +116,7 @@ class LabelsGroup:
                     stroke_width=self.label_stroke_width,
                     stroke_linecap="round",
                 )
+                bind_label_part(line_path2, label["feature_id"])
                 group.add(line_path2)
             if self.phase in {"all", "text"}:
                 group = drawer.draw(label, group, record_length, feature_anchor_radius, self.canvas_config.track_ratio)

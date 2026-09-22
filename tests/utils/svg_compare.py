@@ -255,7 +255,12 @@ def normalize_attribute_value(name: str, value: str, id_map: dict = None) -> str
         return value.strip()
 
 
-def element_to_canonical(elem: ET.Element, depth: int = 0, id_map: dict = None) -> list[str]:
+def element_to_canonical(
+    elem: ET.Element,
+    depth: int = 0,
+    id_map: dict = None,
+    ignored_attributes: set[str] | None = None,
+) -> list[str]:
     """
     Convert an element to a canonical string representation for comparison.
 
@@ -263,12 +268,15 @@ def element_to_canonical(elem: ET.Element, depth: int = 0, id_map: dict = None) 
         elem: XML element
         depth: Current nesting depth
         id_map: Dictionary for normalizing dynamic IDs
+        ignored_attributes: Attribute names excluded from semantic comparison
 
     Returns:
         List of canonical string lines
     """
     if id_map is None:
         id_map = {}
+    if ignored_attributes is None:
+        ignored_attributes = set()
 
     lines = []
     indent = "  " * depth
@@ -285,6 +293,8 @@ def element_to_canonical(elem: ET.Element, depth: int = 0, id_map: dict = None) 
         # Remove namespace from attribute names
         if '}' in name:
             name = name.split('}')[1]
+        if name in ignored_attributes:
+            continue
         norm_value = normalize_attribute_value(name, value, id_map)
         attrs.append(f'{name}="{norm_value}"')
 
@@ -304,7 +314,12 @@ def element_to_canonical(elem: ET.Element, depth: int = 0, id_map: dict = None) 
 
     # Recursively process children
     for child in elem:
-        lines.extend(element_to_canonical(child, depth + 1, id_map))
+        lines.extend(element_to_canonical(
+            child,
+            depth + 1,
+            id_map,
+            ignored_attributes,
+        ))
 
     lines.append(f"{indent}</{tag}>")
 
@@ -330,7 +345,8 @@ def parse_svg(content: str) -> ET.Element:
 def compare_svgs(
     expected: Union[str, Path],
     actual: Union[str, Path],
-    max_differences: int = 10
+    max_differences: int = 10,
+    ignored_attributes: set[str] | None = None,
 ) -> SVGComparisonResult:
     """
     Compare two SVG files for semantic equivalence.
@@ -343,6 +359,7 @@ def compare_svgs(
         expected: Path to expected SVG file or SVG content string
         actual: Path to actual SVG file or SVG content string
         max_differences: Maximum number of differences to report
+        ignored_attributes: Attribute names excluded from semantic comparison
 
     Returns:
         SVGComparisonResult with comparison outcome and any differences
@@ -392,8 +409,14 @@ def compare_svgs(
         )
 
     # Convert to canonical form
-    expected_lines = element_to_canonical(expected_root)
-    actual_lines = element_to_canonical(actual_root)
+    expected_lines = element_to_canonical(
+        expected_root,
+        ignored_attributes=ignored_attributes,
+    )
+    actual_lines = element_to_canonical(
+        actual_root,
+        ignored_attributes=ignored_attributes,
+    )
 
     # Compare line by line
     differences = []

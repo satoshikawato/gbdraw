@@ -589,6 +589,8 @@ def test_linear_label_drawer_applies_rotation_transform() -> None:
     # Verify both signs are carried through into SVG transforms.
     positive_label = next(label for label in labels if label["strand"] == "positive")
     negative_label = next(label for label in labels if label["strand"] == "negative")
+    positive_label["feature_id"] = "linear-label-positive"
+    negative_label["feature_id"] = "linear-label-negative"
 
     group = Group(id="test")
     drawer = LabelDrawer()

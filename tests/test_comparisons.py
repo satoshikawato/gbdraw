@@ -29,10 +29,8 @@ from gbdraw.features.ids import (
     compute_feature_object_hash,
     make_linear_rendered_feature_id,
 )
-from gbdraw.render.groups.linear.pairwise_match import (
-    PairWiseMatchGroup,
-    build_linear_feature_dom_index,
-)
+from gbdraw.render.groups.linear import build_linear_feature_dom_index
+from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.svg.ids import instance_svg_id
 
 

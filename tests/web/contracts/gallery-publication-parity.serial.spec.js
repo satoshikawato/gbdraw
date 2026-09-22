@@ -16,7 +16,8 @@ const commonExamples = examples.filter(({ id }) => !isolatedExamples.has(id));
 const compareCommand = [
   'import sys',
   'from tests.utils.svg_compare import compare_svgs',
-  'result = compare_svgs(sys.argv[1], sys.argv[2])',
+  'ignored = {"data-label-feature-id", "data-gbdraw-label-binding-schema"}',
+  'result = compare_svgs(sys.argv[1], sys.argv[2], ignored_attributes=ignored)',
   'print(result.message)',
   'print("\\n".join(result.differences))',
   'raise SystemExit(0 if result.equal else 1)'
