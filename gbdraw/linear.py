@@ -7,23 +7,32 @@ import copy
 import logging
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Mapping, Optional, Sequence
 from .config.toml import load_config_toml
 from .render.export import parse_formats
-from .api.request_render import CurrentRequestArtifacts, render_request
+from .api.request_render import (
+    CurrentRequestArtifacts,
+    build_request_plan_diagram,
+    plan_linear_request,
+    render_request,
+)
 from .api.session_compat import render_session_compatible_request
 from .api.record_planning import (
+    ResolvedRecordCollection,
     depth_track_inputs_from_cli,
     record_input_manifest_from_paths,
     record_input_manifest_from_table,
+    resolve_cli_similarity_alignment_plan,
 )
 from .api.options import (
     AnnotationOptions,
     ColorOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearRequestTrackOptions,
 )
@@ -310,7 +319,10 @@ def _get_args(args) -> argparse.Namespace:
     parser.add_argument(
         '--align_orthogroup_feature',
         dest='align_orthogroup_feature',
-        help='Align linear records by the gbdraw similarity group containing this feature SVG hash or protein ID.',
+        help=(
+            'Align linear records using this exact feature SVG hash or protein ID; '
+            'Similarity Group IDs are not accepted.'
+        ),
         type=str,
         default="")
     parser.add_argument(
@@ -774,7 +786,7 @@ def _get_args(args) -> argparse.Namespace:
             parser.error("--protein_blastp_output must use a .tsv suffix")
     if args.losatp_threads is not None and args.losatp_threads <= 0:
         parser.error("--losatp_threads must be > 0")
-    if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup" and not args.blast:
+    if args.align_orthogroup_feature and args.protein_blastp_mode != "orthogroup":
         parser.error("--align_orthogroup_feature requires --protein_blastp_mode orthogroup")
     if args.depth_height is not None and args.depth_height <= 0:
         parser.error("--depth_height must be > 0")
@@ -1460,7 +1472,6 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             orthogroup_membership_mode=orthogroup_membership_mode,
             orthogroup_member_max_hits=orthogroup_member_max_hits,
             collinear_max_paralog_links_per_orthogroup=args.collinear_max_paralog_links_per_orthogroup,
-            align_orthogroup_feature=align_orthogroup_feature or None,
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -1477,6 +1488,52 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             overwrite=args.overwrite,
         ),
     )
+    alignment_artifacts = CurrentRequestArtifacts()
+    if align_orthogroup_feature and source_session is None:
+        analysis_plan = plan_linear_request(canonical_request)
+        prepared_analysis = build_request_plan_diagram(
+            analysis_plan,
+            artifacts=alignment_artifacts,
+        )
+        if prepared_analysis.linear_metadata is None:
+            raise ValidationError(
+                "--align_orthogroup_feature requires Linear orthogroup metadata."
+            )
+        similarity_alignment = resolve_cli_similarity_alignment_plan(
+            ResolvedRecordCollection(
+                analysis_plan.records,
+                analysis_plan.provenance,
+            ),
+            prepared_analysis.linear_metadata.orthogroups,
+            exact_reference=align_orthogroup_feature,
+        )
+        base_layout = canonical_request.layout or LinearMultiRecordOptions()
+        canonical_request = replace(
+            canonical_request,
+            options=replace(
+                canonical_request.options,
+                protein_blastp_mode="none",
+                protein_comparisons=prepared_analysis.linear_metadata.protein_comparisons,
+                linear_comparisons=prepared_analysis.linear_metadata.linear_comparisons,
+                orthogroups=prepared_analysis.linear_metadata.orthogroups,
+                collinearity_blocks=prepared_analysis.linear_metadata.collinearity_result,
+            ),
+            layout=replace(
+                base_layout,
+                record_translations=tuple(
+                    LinearRecordTranslation(record_key=record.record_key)
+                    for record in canonical_request.records
+                    if record.record_key is not None
+                ),
+            ),
+            similarity_alignment=similarity_alignment,
+        )
+        alignment_artifacts = CurrentRequestArtifacts(
+            losat_cache_entries=prepared_analysis.losat_cache_entries,
+            losat_derived_cache_entries=prepared_analysis.losat_derived_cache_entries,
+            protein_identity_manifest=prepared_analysis.protein_identity_manifest,
+            protein_source_mode="orthogroup",
+        )
     diagram_output_paths = diagram_request_output_paths(canonical_request)
     session_output_path = preflight_session_sidecar_if_requested(
         save_session=bool(args.save_session or args.session_output),
@@ -1509,7 +1566,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     else:
         render_result = render_request(
             canonical_request,
-            artifacts=CurrentRequestArtifacts(),
+            artifacts=alignment_artifacts,
             include_feature_catalog=include_feature_catalog,
         )
     canvas = render_result.drawing

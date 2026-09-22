@@ -11,6 +11,11 @@ from typing import Callable, Hashable, Literal, Sequence
 import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.protein_colinearity import (
+    OrthogroupGraphResult,
+    OrthogroupMember,
+    OrthogroupResult,
+)
 from gbdraw.exceptions import ValidationError
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.io.cli_tables import (
@@ -28,6 +33,16 @@ from gbdraw.io.record_select import (
 from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentEvidenceEdge,
+    AmbiguousAlignmentRecord,
+    SimilarityAlignmentCandidate,
+    SimilarityAlignmentMode,
+    SimilarityAlignmentPlan,
+    resolve_similarity_alignment,
+)
 from gbdraw.linear_comparison import LinearComparison
 
 from .options import (
@@ -196,6 +211,299 @@ class ResolvedRecordCollection:
         object.__setattr__(self, "provenance", tuple(provenance))
         object.__setattr__(self, "displays", tuple(displays))
         object.__setattr__(self, "transforms", tuple(transforms))
+
+
+def materialize_similarity_alignment_display(
+    collection: ResolvedRecordCollection,
+    plan: SimilarityAlignmentPlan | None,
+) -> tuple[ResolvedRecordCollection, tuple[float | None, ...]]:
+    """Apply effective orientations once, then project every selected anchor."""
+
+    if plan is None:
+        return collection, tuple(None for _ in collection.records)
+    record_keys = tuple(item.record_key for item in collection.provenance)
+    plan.validate_record_coverage(record_keys)
+    decisions = {decision.record_key: decision for decision in plan.records}
+    effective_records: list[SeqRecord] = []
+    for record, provenance in zip(
+        collection.records, collection.provenance, strict=True
+    ):
+        decision = decisions[provenance.record_key]
+        base_orientation = provenance.presentation.reverse_complement
+        effective_orientation = (
+            decision.effective_reverse_complement
+            if decision.effective_reverse_complement is not None
+            else base_orientation
+        )
+        effective_records.append(
+            reverse_records(
+                (record,),
+                effective_orientation != base_orientation,
+                log=logger,
+            )[0]
+        )
+    effective = ResolvedRecordCollection(
+        tuple(effective_records), collection.provenance
+    )
+    centers = tuple(
+        _project_alignment_anchor_center(
+            decision.anchor,
+            provenance=provenance,
+            transform=transform,
+            displayed_length=len(record),
+        )
+        if decision.status is not AlignmentDecisionStatus.SKIPPED
+        else None
+        for record, provenance, transform, decision in zip(
+            effective.records,
+            effective.provenance,
+            effective.transforms,
+            (decisions[key] for key in record_keys),
+            strict=True,
+        )
+    )
+    return effective, centers
+
+
+def _project_alignment_anchor_center(
+    anchor: AlignmentAnchorIdentity | None,
+    *,
+    provenance: ResolvedRecordProvenance,
+    transform: RecordDisplayTransform,
+    displayed_length: int,
+) -> float:
+    if anchor is None:
+        raise ValidationError(
+            f"Similarity alignment record {provenance.record_key!r} has no anchor."
+        )
+    catalog = provenance.source_feature_catalog
+    if catalog is None:
+        raise ValidationError(
+            f"Similarity alignment record {provenance.record_key!r} has no source feature catalog."
+        )
+    if anchor.source_feature_index is not None:
+        matches = [
+            feature
+            for feature in catalog
+            if feature.source_feature_index == anchor.source_feature_index
+        ]
+    elif anchor.stable_feature_svg_id is not None:
+        matches = [
+            feature
+            for feature in catalog
+            if feature.stable_feature_id == anchor.stable_feature_svg_id
+        ]
+    else:
+        matches = [
+            feature
+            for feature in catalog
+            if anchor.biological_feature_id
+            in {feature.biological_feature_id, feature.stable_feature_id}
+        ]
+    if (
+        len(matches) == 1
+        and anchor.stable_feature_svg_id is not None
+        and matches[0].stable_feature_id != anchor.stable_feature_svg_id
+    ):
+        matches = []
+    if len(matches) != 1:
+        raise ValidationError(
+            "Similarity alignment anchor must resolve to exactly one source feature "
+            f"for record {provenance.record_key!r}."
+        )
+    feature = matches[0]
+    center = (
+        min(part[0] for part in feature.location_parts)
+        + max(part[1] for part in feature.location_parts)
+    ) / 2.0
+    projected = transform.source_position_to_display_offset(center)
+    if not 0.0 <= projected <= float(displayed_length):
+        raise ValidationError(
+            "Similarity alignment anchor is outside the current crop for record "
+            f"{provenance.record_key!r}."
+        )
+    return projected
+
+
+def resolve_cli_similarity_alignment_plan(
+    collection: ResolvedRecordCollection,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    *,
+    exact_reference: str,
+) -> SimilarityAlignmentPlan:
+    """Resolve the strict non-interactive CLI adapter through the shared resolver."""
+
+    target = str(exact_reference).strip()
+    if not target or "\0" in target:
+        raise ValidationError(
+            "--align_orthogroup_feature requires a non-empty exact feature/protein ID."
+        )
+    if orthogroups is None:
+        raise ValidationError(
+            "--align_orthogroup_feature requires orthogroup metadata from the requested analysis."
+        )
+    if target in orthogroups.orthogroups:
+        raise ValidationError(
+            "--align_orthogroup_feature accepts an exact feature/protein ID, not "
+            f"Similarity Group ID {target!r}."
+        )
+    record_keys = tuple(item.record_key for item in collection.provenance)
+    candidate_rows: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
+    exact_matches: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
+    for members in orthogroups.orthogroups.values():
+        for member in members:
+            if member.record_index < 0 or member.record_index >= len(collection.records):
+                continue
+            candidate = _similarity_candidate_from_orthogroup_member(
+                collection,
+                member,
+            )
+            candidate_rows.append((member, candidate))
+            catalog_alias = candidate.anchor.biological_feature_id
+            aliases = {
+                str(value)
+                for value in (
+                    member.protein_id,
+                    member.source_protein_id,
+                    member.feature_svg_id,
+                    catalog_alias,
+                    candidate.anchor.stable_feature_svg_id,
+                )
+                if value
+            }
+            if target in aliases:
+                exact_matches.append((member, candidate))
+    if not exact_matches:
+        raise ValidationError(
+            "--align_orthogroup_feature did not match an exact feature/protein ID."
+        )
+    if len(exact_matches) != 1:
+        matches = ", ".join(
+            sorted(
+                f"{candidate.anchor.record_key}:{member.protein_id}"
+                for member, candidate in exact_matches
+            )
+        )
+        raise ValidationError(
+            "--align_orthogroup_feature is ambiguous; use one exact candidate ID "
+            f"from: {matches}."
+        )
+    reference_member, reference = exact_matches[0]
+    group_id = reference_member.orthogroup_id
+    group_candidates = tuple(
+        candidate
+        for member, candidate in candidate_rows
+        if member.orthogroup_id == group_id
+    )
+    identity_by_protein = {
+        member.protein_id: candidate.anchor
+        for member, candidate in candidate_rows
+        if member.orthogroup_id == group_id
+    }
+    edges = tuple(
+        AlignmentEvidenceEdge(
+            group_id=group_id,
+            query=identity_by_protein[edge.query_protein_id],
+            subject=identity_by_protein[edge.subject_protein_id],
+            edge_kind=str(edge.edge_kind),
+        )
+        for edge in orthogroups.ortholog_edges_by_orthogroup_id.get(group_id, ())
+        if edge.query_protein_id in identity_by_protein
+        and edge.subject_protein_id in identity_by_protein
+    )
+    resolution = resolve_similarity_alignment(
+        record_keys=record_keys,
+        group_id=group_id,
+        reference=reference.anchor,
+        candidates=group_candidates,
+        edges=edges,
+        mode=SimilarityAlignmentMode.POSITION,
+    )
+    if resolution.ambiguities:
+        details = "; ".join(
+            _cli_ambiguity_message(ambiguity, candidate_rows)
+            for ambiguity in resolution.ambiguities
+        )
+        raise ValidationError(
+            "--align_orthogroup_feature cannot choose among multiple candidates; "
+            f"select an exact candidate for each record: {details}."
+        )
+    return resolution.require_plan()
+
+
+def _similarity_candidate_from_orthogroup_member(
+    collection: ResolvedRecordCollection,
+    member: OrthogroupMember,
+) -> SimilarityAlignmentCandidate:
+    provenance = collection.provenance[member.record_index]
+    catalog = provenance.source_feature_catalog or ()
+    matches = [
+        feature
+        for feature in catalog
+        if member.feature_svg_id is not None
+        and feature.stable_feature_id == member.feature_svg_id
+    ]
+    if not matches:
+        matches = [
+            feature
+            for feature in catalog
+            if feature.source_feature_index == member.feature_index
+        ]
+    identity_is_unique = len(matches) == 1
+    feature = matches[0] if identity_is_unique else None
+    anchor = AlignmentAnchorIdentity(
+        record_key=provenance.record_key,
+        biological_feature_id=(
+            feature.biological_feature_id
+            if feature is not None
+            else str(member.feature_svg_id or member.protein_id)
+        ),
+        source_feature_index=(
+            feature.source_feature_index if feature is not None else member.feature_index
+        ),
+        stable_feature_svg_id=(
+            feature.stable_feature_id
+            if feature is not None
+            else member.feature_svg_id
+        ),
+    )
+    display_center: float | None = None
+    if feature is not None:
+        source_center = (
+            min(part[0] for part in feature.location_parts)
+            + max(part[1] for part in feature.location_parts)
+        ) / 2.0
+        projected = collection.transforms[
+            member.record_index
+        ].source_position_to_display_offset(source_center)
+        if 0.0 <= projected <= float(len(collection.records[member.record_index])):
+            display_center = projected
+    return SimilarityAlignmentCandidate(
+        group_id=member.orthogroup_id,
+        anchor=anchor,
+        displayed_strand=member.strand if member.strand in (-1, 1) else None,
+        center_mappable=display_center is not None,
+        display_center=display_center,
+        identity_is_unique=identity_is_unique,
+        effective_reverse_complement=provenance.presentation.reverse_complement,
+        representative=member.representative,
+        role=str(member.role),
+    )
+
+
+def _cli_ambiguity_message(
+    ambiguity: AmbiguousAlignmentRecord,
+    rows: Sequence[tuple[OrthogroupMember, SimilarityAlignmentCandidate]],
+) -> str:
+    protein_by_key = {
+        candidate.anchor.canonical_key: member.protein_id
+        for member, candidate in rows
+    }
+    candidate_ids = ", ".join(
+        protein_by_key.get(candidate.anchor.canonical_key, candidate.anchor.biological_feature_id)
+        for candidate in ambiguity.candidates
+    )
+    return f"record {ambiguity.record_key!r} candidates [{candidate_ids}]"
 
 
 def _detected_topology(record: SeqRecord, source_kind: str):

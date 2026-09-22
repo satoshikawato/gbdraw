@@ -164,6 +164,19 @@ class RecordDisplayTransform:
         _integer(boundary, "Source boundary", 0, self.length)
         return self._boundary_offset(boundary)
 
+    def source_position_to_display_offset(self, position: float) -> float:
+        """Project a finite source-boundary position into display coordinates."""
+        if (
+            isinstance(position, bool)
+            or not isinstance(position, (int, float))
+            or not isfinite(float(position))
+            or not 0.0 <= float(position) <= float(self.length)
+        ):
+            raise ValidationError(
+                "Source position must be finite and inside [0, source length]."
+            )
+        return float(self._boundary_offset(float(position)))
+
     def _boundary_offset(self, boundary: _Coordinate) -> _Coordinate:
         offset = self.source_step * (boundary - self._anchor_boundary)
         return offset if self.start_coordinate is None else offset % self.length

@@ -975,7 +975,6 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     orthogroup_member_max_hits: int | None = None
     collinear_infer_orthogroups: bool = True
     collinear_max_paralog_links_per_orthogroup: int = 2
-    align_orthogroup_feature: str | None = None
     comparison_table_file: str | None = None
 
     def __post_init__(self) -> None:

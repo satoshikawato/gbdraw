@@ -356,6 +356,50 @@ def test_opposite_known_strands_record_absolute_orientation_override() -> None:
     assert _decision(oriented, "reference").effective_reverse_complement is None
 
 
+@pytest.mark.parametrize(
+    ("reference_strand", "target_strand", "target_reversed", "expected"),
+    (
+        (1, 1, False, None),
+        (-1, -1, True, None),
+        (1, -1, False, True),
+        (-1, 1, True, False),
+        (None, 1, False, None),
+        (1, None, False, None),
+    ),
+    ids=(
+        "same-forward",
+        "same-reverse",
+        "opposite-to-reverse",
+        "opposite-to-forward",
+        "unknown-reference",
+        "unknown-target",
+    ),
+)
+def test_position_and_orientation_strand_matrix(
+    reference_strand: int | None,
+    target_strand: int | None,
+    target_reversed: bool,
+    expected: bool | None,
+) -> None:
+    reference = _candidate("reference", "clicked", strand=reference_strand)
+    target = _candidate(
+        "target",
+        "target",
+        strand=target_strand,
+        reversed_=target_reversed,
+    )
+
+    resolution = resolve_similarity_alignment(
+        record_keys=("reference", "target"),
+        group_id=GROUP,
+        reference=reference.anchor,
+        candidates=(reference, target),
+        mode=SimilarityAlignmentMode.POSITION_AND_ORIENTATION,
+    )
+
+    assert _decision(resolution, "target").effective_reverse_complement is expected
+
+
 def test_input_permutations_produce_identical_resolution() -> None:
     reference = _candidate("reference", "clicked")
     rbh = _candidate("target", "rbh")

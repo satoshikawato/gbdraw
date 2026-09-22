@@ -152,7 +152,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
         assert isinstance(request, LinearDiagramRequest)
-        assert request.options.align_orthogroup_feature is None
+        assert not hasattr(request.options, "align_orthogroup_feature")
         assert request._legacy_similarity_alignment is not None
         assert request._legacy_similarity_alignment.target == "og_1"
         assert request.similarity_alignment is not None
@@ -166,7 +166,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
             for record in request.records
         ]
         adapted = adapt_session_request(request, document.to_dict())
-        assert adapted.request.options.align_orthogroup_feature == "og_1"
+        assert not hasattr(adapted.request.options, "align_orthogroup_feature")
         assert adapted.request.similarity_alignment == request.similarity_alignment
         save_session_document(current_path, request)
 
@@ -207,6 +207,7 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
 ) -> None:
     output_prefix = tmp_path / "legacy-aligned"
     sidecar_path = tmp_path / "legacy-aligned.gbdraw-session.json"
+    rerendered_prefix = tmp_path / "legacy-aligned-rerendered"
 
     linear_main(
         [
@@ -232,6 +233,22 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
     assert "alignOrthogroupFeature" not in serialized
     assert "align_orthogroup_feature" not in serialized
     assert "selectedOrthogroupAlignmentFeature" not in serialized
+
+    linear_main(
+        [
+            "--session",
+            str(sidecar_path),
+            "--output",
+            str(rerendered_prefix),
+            "--format",
+            "svg",
+        ]
+    )
+
+    assert (
+        rerendered_prefix.with_suffix(".svg").read_bytes()
+        == output_prefix.with_suffix(".svg").read_bytes()
+    )
 
 
 def test_released_legacy_alignment_session_rejects_ambiguous_group_metadata(
@@ -539,9 +556,7 @@ def test_rewrite_protein_artifact_references_updates_compound_ids() -> None:
 
 
 @pytest.mark.parametrize("compound", [False, True], ids=["exact", "compound"])
-@pytest.mark.parametrize("owner", ["comparison", "alignment-target"])
 def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
-    owner: str,
     compound: bool,
     tmp_path: Path,
 ) -> None:
@@ -554,18 +569,12 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
         if compound
         else feature_analysis_id
     )
-    if owner == "comparison":
-        options = replace(
-            base_request.options,
-            protein_comparisons=(
-                DataFrame({"query_protein_id": [value]}),
-            ),
-        )
-    else:
-        options = replace(
-            base_request.options,
-            align_orthogroup_feature=value,
-        )
+    options = replace(
+        base_request.options,
+        protein_comparisons=(
+            DataFrame({"query_protein_id": [value]}),
+        ),
+    )
     request = replace(base_request, options=options)
 
     with pytest.raises(
@@ -738,38 +747,20 @@ def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(
     assert adapted.migration_report.protein_raw_candidates == ()
 
 
-def test_released_schema_v2_alignment_target_promotes_with_protein_artifacts(
+def test_released_schema_v2_typed_alignment_survives_protein_artifact_promotion(
     tmp_path: Path,
 ) -> None:
     document = load_session_document(_RELEASED_SCHEMA_V2_SESSION)
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        comparisons = request.options.linear_comparisons
-        orthogroups = request.options.orthogroups
-        assert comparisons
-        assert orthogroups is not None
-        legacy_target = str(comparisons[0].matches.iloc[0]["query_protein_id"])
-        request = replace(
-            request,
-            options=replace(
-                request.options,
-                align_orthogroup_feature=legacy_target,
-            ),
-        )
-
         adapted = adapt_session_request(request, document.to_dict())
 
-    current_target = adapted.migration_report.protein_id_map[legacy_target]
     adapted_options = adapted.request.options
-    assert adapted_options.align_orthogroup_feature == current_target
+    assert adapted.request.similarity_alignment == request.similarity_alignment
     assert adapted_options.orthogroups is not None
-    assert current_target in adapted_options.orthogroups.member_by_protein_id
     assert adapted_options.linear_comparisons
-    assert (
-        adapted_options.linear_comparisons[0].matches.iloc[0]["query_protein_id"]
-        == current_target
-    )
+    assert adapted.migration_report.protein_id_map
 
 
 def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(

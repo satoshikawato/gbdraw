@@ -698,7 +698,7 @@ private conversation as evidence.
 | Authority | complete | `origin/dev@a9eaeadd105e0c26e46086626feaa695bdd33c94` | PR #570 merged six separate Product Decision receipts as `PD-OI-026`–`PD-OI-031`; branch rebased onto the merge | S01 may start |
 | S01 | complete | base `11e49d32accd0b00753ec7df9bcb6fb0c71d62f5`; head is the commit containing this ledger entry | Typed immutable plan/candidate/choice/edge/outcome models and one pure deterministic resolver; focused and existing identity/alignment tests pass | S02 may start; request/Session/runtime wiring remains intentionally absent |
 | S02 | complete | base `0624eb821326f0022238b390a1b56f454c51151c`; head is the working-tree candidate containing this ledger entry | Canonical request schema 8 and Session 44 own the typed plan and finite record-keyed X/Y base translations; released v39/v40 legacy evidence materializes through one reader-only adapter; Python, Web, browser, recipe, documentation, and architecture checks pass | S03 may start; current renderer geometry, strict CLI/API resolution, and Web interaction remain intentionally absent |
-| S03 | pending | | | |
+| S03 | complete | base `9e319a8551e4c9df58cd79277e26fbd399ea2dcf`; head is the working-tree candidate containing this ledger entry | Typed plans now resolve effective orientation and transformed anchor centers during request planning, then drive one final per-record translation through the existing Linear geometry path; strict CLI resolution uses the shared resolver and reuses one completed analysis | S04 may start; Web Worker/controller interaction remains intentionally absent |
 | S04 | pending | | | |
 | S05 | pending | | | |
 | S06 | pending | | | |
@@ -817,6 +817,88 @@ private conversation as evidence.
   geometry, replace the normal CLI/API string path, or add Web Align lifecycle
   behavior. Those are S03, S04, and S06 responsibilities respectively.
 - Next permitted session: S03 only.
+
+### S03 evidence — 2026-09-23
+
+- Authority/base: fetched `origin/issue-561-similarity-alignment` and
+  `origin/dev`; the existing worktree started clean with local and remote heads
+  at S02 commit `9e319a8551e4c9df58cd79277e26fbd399ea2dcf`. S01 and S02 were complete and
+  S03 was the first pending ledger row.
+- Orientation and coordinate ownership: `RecordPresentation` remains the one
+  base-orientation owner. `materialize_similarity_alignment_display` derives
+  the effective boolean once, applies any whole-record reverse once, and then
+  projects every selected source-feature center through the existing
+  `RecordDisplayTransform`. The request keeps its base records, so repeated
+  planning and rendering do not accumulate orientation or translation state.
+- Geometry path: `_final_record_translations` implements the documented
+  reference-world-X/target-post-transform formula. It preserves reference and
+  skipped base X/Y plus every record's Y, replaces only aligned-target X, and
+  feeds the resulting placements to records, definitions, tracks, per-record
+  rulers, labels, annotations, comparisons, collision/content bounds, length
+  bar extents, and composition/track metadata. Same-row records are handled
+  independently, and final negative/positive, centered, normalized, and
+  same-row bounds determine the canvas without an SVG-only correction path.
+- Resolution and public surfaces: the normal renderer no longer collects,
+  ranks, or selects alignment members. The S01 shared resolver is the sole
+  candidate-decision owner; the CLI adapter only constructs canonical
+  candidates/evidence and requires an exact unique feature/protein reference.
+  Group IDs are rejected, missing records remain skipped, ambiguity names the
+  record and exact candidate IDs, and no prompt is used. The public typed
+  request and beginner Python adapter accept `SimilarityAlignmentPlan | None`;
+  the former public string field was removed and invalid strings fail during
+  request construction.
+- Analysis and compatibility: the strict CLI performs the requested
+  orthogroup analysis once, resolves the plan from that result, and reuses the
+  completed raw/derived artifacts for the final typed render. A supplied or
+  active plan starts no LOSATP work solely for resolution. Released old-schema
+  strings still enter only the S02 reader adapter, are promoted to a typed
+  plan, and then use the same current render path; rendering the released v40
+  fixture, saving its current typed sidecar, and rerendering that sidecar
+  produces byte-identical SVG.
+- Verification:
+  - alignment resolver/render, released compatibility, public Python adapter,
+    and public-contract tests — 119 passed;
+  - Linear track, track-slot, multi-record layout/comparison, and display
+    consumer tests — 255 passed;
+  - protein/orthogroup and record-display comparison tests — 302 passed,
+    1 skipped;
+  - typed API/request-render, request codec, API Session, and library forwarding
+    tests — 387 passed;
+  - Session I/O and focused CLI suites — 326 passed; the only failure is the
+    unchanged H-CLI-07 published-SVG freshness mismatch caused exclusively by
+    S02's already-recorded additive label-binding metadata;
+  - `tests/test_output_comparison.py::TestOutputComparison` — 14 passed and the
+    same two S02-base circular label-binding metadata comparisons failed;
+    no reference output was regenerated or modified;
+  - `ruff check gbdraw/` and focused changed-test Ruff checks — passed;
+  - `node tests/web/architecture-contracts.test.mjs` — 137 passed; and
+  - `node tools/check-web-change-budget.mjs` — Gate PASS, Review CLEAR, with no
+    blocking violation, import cycle, privileged change, dependency change, or
+    Web production delta.
+- Diff review: production, tests/contract fixture, generated artifacts, and
+  documentation were reviewed separately. The public-contract fixture changes
+  only for the typed `LinearComparisonOptions` field and exact-ID CLI help.
+  The H-CLI-07 recipe was regenerated from a clean directory and its record,
+  definition, comparison, ruler, bounds, and composition geometry matched the
+  published artifact; the unrelated label-binding-only output was discarded.
+  No tracked reference output or other generated artifact changed.
+- Architecture evidence: before S03, the current Python runtime still had the
+  renderer-owned implicit representative/score selection and alignment-only
+  offset/canvas path. After S03, the canonical path is typed request planning
+  -> effective `RecordDisplayTransform` -> shared final Linear placement ->
+  existing geometry consumers. The superseded renderer selection, ranking,
+  offset, canvas-extents, and same-row rejection paths were removed. The S02
+  released-schema adapter remains the one bounded compatibility path and now
+  converges into the current typed path. No parallel resolver, plan builder,
+  orientation owner, render path, or compatibility namespace was added, so
+  this is an ordinary non-increasing architecture change with no exception.
+- Product Impact: `IMPLEMENT_EXISTING_AUTHORITY`; S03 realizes
+  `PD-OI-026`–`PD-OI-031`, `PD-OI-016`, `PD-OI-018`, and the canonical-request
+  contracts without selecting a materially different Product outcome. No
+  Product Decision Pack was required.
+- Remaining scope: Web Worker resolver operation and the alignment controller
+  are intentionally deferred. S04 may start; S05–S07 must remain pending.
+- Next permitted session: S04 only.
 
 ## 17. Handoff rules
 

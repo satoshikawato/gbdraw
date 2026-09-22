@@ -38,6 +38,10 @@ from gbdraw.session_io import (
 )
 
 from .options import LinearMultiRecordOptions, LinearRecordTranslation
+from .record_planning import (
+    ResolvedRecordCollection,
+    materialize_similarity_alignment_display,
+)
 
 from .request_render import (
     CircularBatchRenderResult,
@@ -569,7 +573,6 @@ def _request_protein_artifacts(
         options.protein_comparisons,
         options.orthogroups,
         options.collinearity_blocks,
-        options.align_orthogroup_feature,
     )
 
 
@@ -663,7 +666,7 @@ def _legacy_alignment_groups(
                 anchor = AlignmentAnchorIdentity(
                     record_key,
                     stable_id,
-                    feature_index,
+                    None,
                     stable_id,
                 )
             else:
@@ -814,8 +817,6 @@ def promote_legacy_session_similarity_alignment_request(
 
     if not isinstance(request, LinearDiagramRequest):
         return request
-    if request.options.align_orthogroup_feature is not None:
-        return request
     orthogroup_state = session_artifacts.get("orthogroupState")
     session_target = (
         orthogroup_state.get("selectedOrthogroupAlignmentFeature")
@@ -916,24 +917,11 @@ def promote_legacy_session_similarity_alignment_request(
 def materialize_legacy_similarity_alignment_request(
     request: DiagramRequest,
 ) -> DiagramRequest:
-    """Materialize one old-schema string at the historical render boundary."""
+    """Keep an old-schema projection on the current typed render boundary."""
 
     if not isinstance(request, LinearDiagramRequest):
         return request
-    legacy = request._legacy_similarity_alignment
-    if legacy is None:
-        return request
-    if request.options.align_orthogroup_feature is not None:
-        raise ValidationError(
-            "A legacy request contains ambiguous similarity alignment owners."
-        )
-    return replace(
-        request,
-        options=replace(
-            request.options,
-            align_orthogroup_feature=legacy.target,
-        ),
-    )
+    return request
 
 
 def project_legacy_similarity_alignment_for_current_write(
@@ -959,7 +947,6 @@ def project_legacy_similarity_alignment_for_current_write(
         )
     return replace(
         request,
-        options=replace(request.options, align_orthogroup_feature=None),
         layout=source.layout,
         similarity_alignment=source.similarity_alignment,
     )
@@ -991,10 +978,6 @@ def _rewrite_linear_request_protein_references(
                 ),
                 collinearity_blocks=rewrite_protein_artifact_references(
                     options.collinearity_blocks,
-                    id_map,
-                ),
-                align_orthogroup_feature=rewrite_protein_artifact_references(
-                    options.align_orthogroup_feature,
                     id_map,
                 ),
             ),
@@ -1030,6 +1013,33 @@ def _deduplicate_raw_entries(
     return tuple(result)
 
 
+def _replace_plan_request(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+) -> DiagramRequestPlan:
+    if not isinstance(plan, LinearRequestPlan):
+        return replace(plan, request=request)
+    if plan.request.similarity_alignment == request.similarity_alignment:
+        return replace(plan, request=request)
+    if plan.request.similarity_alignment is not None:
+        raise ValidationError(
+            "Session compatibility cannot replace an active similarity alignment plan."
+        )
+    effective, centers = materialize_similarity_alignment_display(
+        ResolvedRecordCollection(plan.records, plan.provenance),
+        request.similarity_alignment,
+    )
+    return replace(
+        plan,
+        request=request,
+        records=effective.records,
+        provenance=effective.provenance,
+        displays=effective.displays,
+        transforms=effective.transforms,
+        alignment_anchor_centers=centers,
+    )
+
+
 def _adapt_session_plan(
     plan: DiagramRequestPlan,
     session_artifacts: Mapping[str, Any],
@@ -1040,7 +1050,7 @@ def _adapt_session_plan(
         session_artifacts,
     )
     if request is not plan.request:
-        plan = replace(plan, request=request)
+        plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
     manifest = source.protein_identity_manifest
     unresolved = source.legacy_candidates
@@ -1201,7 +1211,7 @@ def _build_session_compatible_plan(
 
     adapted = _adapt_session_plan(plan, session_artifacts)
     if adapted.request is not plan.request:
-        plan = replace(plan, request=adapted.request)
+        plan = _replace_plan_request(plan, adapted.request)
     prepared = build_request_plan_diagram(
         plan,
         artifacts=adapted.artifacts,

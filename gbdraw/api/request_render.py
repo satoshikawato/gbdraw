@@ -113,6 +113,7 @@ from .record_planning import (
     resolve_implicit_record_output_prefix,
     resolve_linear_options,
     resolve_record_inputs,
+    materialize_similarity_alignment_display,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -858,6 +859,7 @@ class LinearRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    alignment_anchor_centers: tuple[float | None, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -889,6 +891,16 @@ class LinearRequestPlan:
             )
 
         _initialize_plan_display_context(self)
+        if not self.alignment_anchor_centers:
+            object.__setattr__(
+                self,
+                "alignment_anchor_centers",
+                tuple(None for _ in self.records),
+            )
+        if len(self.alignment_anchor_centers) != len(self.records):
+            raise ValidationError(
+                "Linear alignment anchor centers must align with its records."
+            )
 
     @property
     def mode(self) -> Literal["linear"]:
@@ -917,6 +929,8 @@ class LinearRequestPlan:
             if self.inputs.placements:
                 kwargs["_resolved_placement_inputs"] = self.inputs.placements
         kwargs["_record_transforms"] = self.transforms
+        kwargs["similarity_alignment"] = self.request.similarity_alignment
+        kwargs["_alignment_anchor_centers"] = self.alignment_anchor_centers
         built = build_linear_diagram_result(self.records, **kwargs)
         if isinstance(built, LinearDiagramBuildResult):
             return built
@@ -1531,14 +1545,21 @@ def plan_linear_request(
                 options=resolved_options,
             )
         )
+        effective_collection, alignment_anchor_centers = (
+            materialize_similarity_alignment_display(
+                collection,
+                materialized_request.similarity_alignment,
+            )
+        )
     return LinearRequestPlan(
         request=materialized_request,
-        records=collection.records,
+        records=effective_collection.records,
         layout=resolved_layout,
         inputs=inputs,
-        provenance=collection.provenance,
-        displays=collection.displays,
-        transforms=collection.transforms,
+        provenance=effective_collection.provenance,
+        displays=effective_collection.displays,
+        transforms=effective_collection.transforms,
+        alignment_anchor_centers=alignment_anchor_centers,
     )
 
 

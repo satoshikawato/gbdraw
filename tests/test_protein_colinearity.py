@@ -54,11 +54,6 @@ from gbdraw.analysis.protein_colinearity import (
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.api.options import LinearDiagramOptions
-from gbdraw.diagrams.linear.orthogroup_alignment import (
-    calculate_orthogroup_alignment_canvas_adjustment,
-    calculate_orthogroup_alignment_canvas_extents,
-    calculate_orthogroup_alignment_offsets,
-)
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.record_select import reverse_records
@@ -3620,228 +3615,6 @@ def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
     result = json.loads(str(raw_result))
 
     assert "error" in result
-    assert "must be an object" in result["error"]
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_offsets_align_selected_member_to_representatives() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    comparison = pd.DataFrame.from_records(
-        [
-            {
-                **_hit_row("record_a", "record_b", bitscore=200),
-                "qstart": 100,
-                "qend": 200,
-                "sstart": 400,
-                "send": 500,
-                "query_protein_id": "prot_a",
-                "subject_protein_id": "prot_b",
-                "query_source_protein_id": "",
-                "subject_source_protein_id": "",
-                "query_record_index": 0,
-                "subject_record_index": 1,
-                "query_feature_index": 0,
-                "subject_feature_index": 0,
-                "query_feature_svg_id": "fanchor",
-                "subject_feature_svg_id": "fsubject",
-                "orthogroup_id": "og_1",
-                "query_orthogroup_representative": True,
-                "subject_orthogroup_representative": True,
-            }
-        ]
-    )
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    offsets = calculate_orthogroup_alignment_offsets(
-        records,
-        [comparison],
-        canvas_config,
-        "fanchor",
-    )
-
-    assert offsets[0] == pytest.approx(0.0)
-    assert offsets[1] == pytest.approx(-300.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_dedup_ignores_public_source_protein_id() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    rows = []
-    for source_protein_id, bitscore in (("public-a", 200), ("public-b", 150)):
-        rows.append(
-            {
-                **_hit_row("record_a", "record_b", bitscore=bitscore),
-                "qstart": 100,
-                "qend": 200,
-                "sstart": 400,
-                "send": 500,
-                "query_protein_id": f"runtime-{source_protein_id}",
-                "subject_protein_id": "runtime-b",
-                "query_source_protein_id": source_protein_id,
-                "subject_source_protein_id": "public-subject",
-                "query_record_index": 0,
-                "subject_record_index": 1,
-                "query_feature_index": 4,
-                "subject_feature_index": 7,
-                "query_feature_svg_id": "fanchor",
-                "subject_feature_svg_id": "fsubject",
-                "orthogroup_id": "og_1",
-                "query_orthogroup_representative": True,
-                "subject_orthogroup_representative": True,
-            }
-        )
-
-    offsets = calculate_orthogroup_alignment_offsets(
-        records,
-        [pd.DataFrame.from_records(rows)],
-        _orthogroup_alignment_canvas_config(),
-        "fanchor",
-    )
-
-    assert offsets[0] == pytest.approx(0.0)
-    assert offsets[1] == pytest.approx(-300.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_rejects_conflicting_group_for_one_feature() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    rows = []
-    for orthogroup_id in ("og_1", "og_2"):
-        rows.append(
-            {
-                **_hit_row("record_a", "record_b", bitscore=200),
-                "qstart": 100,
-                "qend": 200,
-                "sstart": 400,
-                "send": 500,
-                "query_protein_id": "runtime-a",
-                "subject_protein_id": f"runtime-{orthogroup_id}",
-                "query_source_protein_id": "public-a",
-                "subject_source_protein_id": f"public-{orthogroup_id}",
-                "query_record_index": 0,
-                "subject_record_index": 1,
-                "query_feature_index": 4,
-                "subject_feature_index": 7 if orthogroup_id == "og_1" else 8,
-                "query_feature_svg_id": "fanchor",
-                "subject_feature_svg_id": f"fsubject-{orthogroup_id}",
-                "orthogroup_id": orthogroup_id,
-                "query_orthogroup_representative": True,
-                "subject_orthogroup_representative": True,
-            }
-        )
-
-    with pytest.raises(ValidationError, match="conflicting orthogroups"):
-        calculate_orthogroup_alignment_offsets(
-            records,
-            [pd.DataFrame.from_records(rows)],
-            _orthogroup_alignment_canvas_config(),
-            "fanchor",
-        )
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_canvas_adjustment_fits_negative_record_offsets() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {1: -300.0},
-    )
-
-    assert shift_x == pytest.approx(300.0)
-    assert width_extension == pytest.approx(300.0)
-
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {1: -300.0},
-    )
-    assert extents.ruler_offset_x == pytest.approx(-300.0)
-    assert extents.ruler_width == pytest.approx(1300.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_canvas_adjustment_extends_positive_record_offsets() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {1: 250.0},
-    )
-
-    assert shift_x == pytest.approx(0.0)
-    assert width_extension == pytest.approx(250.0)
-
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {1: 250.0},
-    )
-    assert extents.ruler_offset_x == pytest.approx(0.0)
-    assert extents.ruler_width == pytest.approx(1250.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_canvas_extents_use_shifted_record_bounds_for_ruler() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {0: 250.0, 1: 250.0},
-    )
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {0: 250.0, 1: 250.0},
-    )
-
-    assert shift_x == pytest.approx(0.0)
-    assert width_extension == pytest.approx(250.0)
-    assert extents.ruler_offset_x == pytest.approx(250.0)
-    assert extents.ruler_width == pytest.approx(1000.0)
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {0: -300.0, 1: -300.0},
-    )
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {0: -300.0, 1: -300.0},
-    )
-
-    assert shift_x == pytest.approx(300.0)
-    assert width_extension == pytest.approx(0.0)
-    assert extents.ruler_offset_x == pytest.approx(-300.0)
-    assert extents.ruler_width == pytest.approx(1000.0)
-
-
-@pytest.mark.linear
 def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
@@ -3948,7 +3721,7 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
     assert captured["protein_blastp_max_hits"] == 7
     assert captured["protein_blastp_candidate_limit"] == 99
     assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
-    assert captured["align_orthogroup_feature"] is None
+    assert captured["similarity_alignment"] is None
 
 
 @pytest.mark.linear
@@ -3977,29 +3750,6 @@ def test_build_linear_diagram_forwards_ncbi_blastp_bin(
 
 
 @pytest.mark.linear
-def test_build_linear_diagram_forwards_orthogroup_alignment_option(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename="dummy.svg")
-
-    monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
-
-    canvas = api_diagram_module.build_linear_diagram(
-        [_record("record_a"), _record("record_b")],
-        options=LinearDiagramOptions(
-            protein_blastp_mode="orthogroup",
-            align_orthogroup_feature="fanchor",
-        ),
-    )
-
-    assert isinstance(canvas, Drawing)
-    assert captured["align_orthogroup_feature"] == "fanchor"
-
-
 @pytest.mark.linear
 def test_linear_cli_rejects_blast_with_protein_blastp_mode() -> None:
     with pytest.raises(SystemExit):
@@ -4095,7 +3845,7 @@ def test_linear_cli_forwards_protein_blastp_options(
     assert options.protein_blastp_max_hits == 9
     assert options.protein_blastp_candidate_limit == 123
     assert options.orthogroup_membership_mode == "anchor_core_v1"
-    assert options.align_orthogroup_feature is None
+    assert not hasattr(options, "align_orthogroup_feature")
 
 
 @pytest.mark.linear
@@ -4146,54 +3896,6 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
     options = canonical_request.options
     assert options.protein_blastp_mode == "pairwise"
     assert options.ncbi_blastp_bin == "/opt/ncbi/bin/blastp"
-
-
-@pytest.mark.linear
-def test_linear_cli_forwards_orthogroup_alignment_option(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    records = [_record("record_a"), _record("record_b")]
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-
-    def fake_render(canonical_request, **_kwargs):
-        resolved = request_render_module.resolve_request(canonical_request)
-        captured["canonical_request"] = resolved
-        return SimpleNamespace(
-            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
-            interactive_context=None,
-            records=tuple(item.source.record for item in resolved.records),
-            losat_cache_entries=(),
-            losat_derived_cache_entries=(),
-            protein_identity_manifest=None,
-            request=resolved,
-        )
-
-    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
-
-    linear_cli_module.linear_main(
-        [
-            "--gbk",
-            "a.gb",
-            "b.gb",
-            "--protein_blastp_mode",
-            "orthogroup",
-            "--align_orthogroup_feature",
-            "fanchor",
-            "--format",
-            "svg",
-            "-o",
-            str(tmp_path / "out"),
-        ]
-    )
-
-    canonical_request = captured["canonical_request"]
-    assert isinstance(canonical_request, LinearDiagramRequest)
-    assert canonical_request.options.align_orthogroup_feature == "fanchor"
 
 
 @pytest.mark.linear

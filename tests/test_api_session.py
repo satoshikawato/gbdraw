@@ -486,7 +486,7 @@ def test_web_resolved_protein_writer_preserves_typed_alignment_layout(
     assert request.options.protein_blastp_mode == "none"
     assert request.options.linear_comparisons is not None
     assert len(request.options.linear_comparisons) == 1
-    assert request.options.align_orthogroup_feature is None
+    assert not hasattr(request.options, "align_orthogroup_feature")
     assert request.similarity_alignment is not None
     assert request.similarity_alignment.group_id == "og-resolved"
     assert request.layout is not None

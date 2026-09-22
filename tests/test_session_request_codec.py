@@ -503,7 +503,7 @@ def test_schema7_decodes_alignment_string_only_as_private_legacy_state(
         output_directory=tmp_path / "output",
     )
     assert isinstance(decoded, LinearDiagramRequest)
-    assert decoded.options.align_orthogroup_feature is None
+    assert not hasattr(decoded.options, "align_orthogroup_feature")
     assert decoded._legacy_similarity_alignment is not None
     assert decoded._legacy_similarity_alignment.target == "og-legacy"
     assert decoded._legacy_similarity_alignment.source_schema == 7

@@ -611,11 +611,6 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("record-derived output prefix")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
-        if request.options.align_orthogroup_feature is not None:
-            raise CanonicalRequestEncodingError(
-                "Current canonical requests require a typed similarity alignment plan; "
-                "the legacy alignment string is reader-only."
-            )
         if request._legacy_similarity_alignment is not None:
             raise CanonicalRequestEncodingError(
                 "A legacy similarity alignment must be materialized before current encoding."
