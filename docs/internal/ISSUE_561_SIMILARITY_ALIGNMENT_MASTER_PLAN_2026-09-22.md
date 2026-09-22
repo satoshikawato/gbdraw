@@ -1,6 +1,6 @@
 # Issue #561 Similarity Group alignment — master implementation plan
 
-Status: implementation plan; runtime work must follow merged Product authority
+Status: implementation plan; Product authority merged; runtime work not started
 
 This document is the self-contained implementation plan for
 [GitHub Issue #561](https://github.com/satoshikawato/gbdraw/issues/561),
@@ -17,11 +17,13 @@ issue-561-similarity-alignment
 ```
 
 The branch was created without an upstream from
-`origin/dev@11aae136694a4433cabc68c0dae31edf77222740` on 2026-09-22. Before
-runtime work starts, an authority-only pull request must merge the six Product
-Decisions in section 4 into `dev`. Then this fixed branch must be rebased onto
-that merged `origin/dev`. Candidate authority on the implementation branch does
-not authorize runtime in the same candidate.
+`origin/dev@11aae136694a4433cabc68c0dae31edf77222740` on 2026-09-22.
+Authority-only PR
+[#570](https://github.com/satoshikawato/gbdraw/pull/570) then merged the six
+Product Decisions in section 4 into `dev` at
+`a9eaeadd105e0c26e46086626feaa695bdd33c94`. This fixed branch has been
+rebased onto that merge commit. Candidate authority on an implementation branch
+does not authorize runtime in the same candidate.
 
 Do not create a replacement runtime branch merely because a later session
 starts. At the beginning of every session:
@@ -86,10 +88,10 @@ The atomic unit is a displayed biological record identified by stable
 
 The Product Decision Owner `satoshikawato` accepted all six decisions on
 2026-09-22. They must be recorded separately so that one outcome can later be
-superseded without changing the others. Proposed authority IDs are shown here;
-the authority-only change must recheck the latest base before allocating them.
+superseded without changing the others. They are recorded in revision 10 of
+`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`.
 
-| Proposed ID | Concern | Selected outcome |
+| Authority ID | Concern | Selected outcome |
 | --- | --- | --- |
 | `PD-OI-026` | `diagram-generation.similarity-alignment.anchor-resolution` | `A / EXPLICIT_DETERMINISTIC_RESOLUTION` |
 | `PD-OI-027` | `diagram-generation.similarity-alignment.transform-semantics` | `A / SEPARATE_POSITION_AND_ORIENTATION` |
@@ -692,8 +694,8 @@ private conversation as evidence.
 
 | Session | Status | Base / head | Evidence | Remaining work |
 | --- | --- | --- | --- | --- |
-| Planning | complete | base `11aae136694a4433cabc68c0dae31edf77222740` | Issue updated `2026-09-21T05:25:23Z`; code and policy audit on 2026-09-22 | authority-only merge, then S01 |
-| Authority | pending | latest `origin/dev` required | six explicit Product Decision receipts dated 2026-09-22 | merge authority before runtime |
+| Planning | complete | base `11aae136694a4433cabc68c0dae31edf77222740` | Issue updated `2026-09-21T05:25:23Z`; code and policy audit on 2026-09-22 | S01 |
+| Authority | complete | `origin/dev@a9eaeadd105e0c26e46086626feaa695bdd33c94` | PR #570 merged six separate Product Decision receipts as `PD-OI-026`–`PD-OI-031`; branch rebased onto the merge | S01 may start |
 | S01 | pending | | | |
 | S02 | pending | | | |
 | S03 | pending | | | |
