@@ -137,12 +137,12 @@ class AuditSimplePathWorker {
     }
     if (message.type === 'run') {
       const response = workerResponses.shift();
-      queueMicrotask(() => this.emit('message', {
+      Promise.resolve(response).then((payload) => queueMicrotask(() => this.emit('message', {
         type: 'run',
         requestId: message.requestId,
         ok: true,
-        results: structuredClone(response)
-      }));
+        results: structuredClone(payload)
+      })));
       return;
     }
     if (message.type === 'helper') {
@@ -163,7 +163,12 @@ class AuditSimplePathWorker {
 
 globalThis.Worker = AuditSimplePathWorker;
 
-const { afterFrame, afterPaint, createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
+const {
+  afterFrame,
+  afterPaint,
+  createRunAnalysis,
+  executeCanonicalRenderCandidate
+} = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
@@ -311,7 +316,7 @@ const result = (name, marker) => ({
 });
 
 const validCatalog = (name) => ({
-  schema: 3,
+  schema: 4,
   items: [{
     resultIndex: 0,
     resultName: name,
@@ -333,6 +338,9 @@ const validCatalog = (name) => ({
       start: 0,
       end: 9,
       strand: 1,
+      anchorProfile: {
+        precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+      },
       qualifiers: { product: ['audit protein'] }
     }],
     orthogroups: [],
@@ -436,6 +444,23 @@ test('afterFrame crosses one post-bind frame before resolving', async () => {
   assert.equal(resolved, true);
 });
 
+test('superseded canonical execution stops before catalog and SVG admission', async () => {
+  let admissions = 0;
+  let commits = 0;
+  const outcome = await executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    mode: 'circular',
+    kind: 'target-record-transform',
+    generationExecutor: async () => ({ results: [], metadata: {} }),
+    shouldAdmit: () => false,
+    catalogAdmission: () => { admissions += 1; },
+    prepareCommit: () => { commits += 1; }
+  });
+  assert.equal(outcome.status, 'superseded');
+  assert.equal(admissions, 0);
+  assert.equal(commits, 0);
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
   const lifecycleEvents = [];
@@ -506,6 +531,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   });
 
   let adoptedArtifacts = 0;
+  let lastAdoptedCanonical = null;
   let failArtifactAdoption = false;
   let cancelDuringPreview = false;
   let failCandidateAdmission = false;
@@ -571,11 +597,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       return serializeActiveRenderFiles(state.mode.value, state);
     },
     canonicalSessionVersion: SESSION_VERSION,
-    adoptCanonicalRenderArtifacts: () => {
+    adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
         throw new Error('forced late canonical artifact adoption failure');
       }
       adoptedArtifacts += 1;
+      lastAdoptedCanonical = structuredClone(canonical);
     },
     prepareCandidateCommit: ({
       results,
@@ -678,9 +705,88 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.ok(firstRunPayload.resourceManifest.length > 0);
   assert.ok(firstRunPayload.stagedResources.every(({ bytes }) => bytes instanceof ArrayBuffer));
 
-  const committedState = committedFeatureState();
-  const committedExtractedFeatureIdentity = state.extractedFeatures.value;
-  const committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
+  let committedState = committedFeatureState();
+  let committedExtractedFeatureIdentity = state.extractedFeatures.value;
+  let committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
+
+  const targetCandidate = structuredClone(lastAdoptedCanonical);
+  targetCandidate.renderRequest.records[0].display.startCoordinate = 3;
+  targetCandidate.renderRequest.records[0].presentation.reverseComplement = true;
+  const committedOutputPrefix = targetCandidate.renderRequest.output.prefix;
+  state.form.prefix = 'unrelated-pending-prefix';
+  let targetIntent = {
+    startCoordinate: null,
+    reverseComplementOverride: null,
+    anchorIntent: null
+  };
+  const targetResult = result('target-only.svg', 'target-only');
+  workerResponses.push(response(targetResult, validCatalog(targetResult.name)));
+  const historyCountBeforeTarget = generationHistory.getUndoCount();
+  let targetLosatExecutorJobs = 0;
+  globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+    targetLosatExecutorJobs += jobs.length;
+    return [];
+  };
+  assert.deepEqual(await runner.runCommittedCanonicalCandidate({
+    canonical: targetCandidate,
+    captureIntentCheckpoint: () => structuredClone(targetIntent),
+    restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
+    commitIntent: () => {
+      targetIntent = {
+        startCoordinate: 3,
+        reverseComplementOverride: true,
+        anchorIntent: { schema: 1, recordKey: 'record-1' }
+      };
+    }
+  }), { status: 'ok' });
+  delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  assert.equal(targetLosatExecutorJobs, 0);
+  assert.equal(generationHistory.getUndoCount(), historyCountBeforeTarget + 1);
+  assert.equal(state.form.prefix, 'unrelated-pending-prefix');
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.deepEqual(state.results.value, [targetResult]);
+  const targetRunPayload = workerMessages.filter(({ type }) => type === 'run').at(-1).payload;
+  assert.equal(targetRunPayload.request.output.prefix, committedOutputPrefix);
+  assert.notEqual(targetRunPayload.request.output.prefix, state.form.prefix);
+  assert.equal(structuralMetrics.canonicalCandidateExecutionCount, 2);
+  await generationHistory.undo();
+  assert.deepEqual(state.results.value, [committedResult]);
+  assert.equal(targetIntent.startCoordinate, null);
+  await generationHistory.redo();
+  assert.deepEqual(state.results.value, [targetResult]);
+  assert.equal(targetIntent.startCoordinate, 3);
+  committedState = committedFeatureState();
+  committedExtractedFeatureIdentity = state.extractedFeatures.value;
+  committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
+
+  const targetHistoryCount = generationHistory.getUndoCount();
+  const targetStateBeforeFailure = committedFeatureState();
+  workerResponses.push(response(result('target-rejected.svg', 'rejected'), undefined));
+  assert.deepEqual(await runner.runCommittedCanonicalCandidate({
+    canonical: targetCandidate,
+    captureIntentCheckpoint: () => structuredClone(targetIntent),
+    restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
+    commitIntent: () => { throw new Error('must not commit rejected target intent'); }
+  }), { status: 'error' });
+  assert.deepEqual(committedFeatureState(), targetStateBeforeFailure);
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.equal(generationHistory.getUndoCount(), targetHistoryCount);
+
+  const canceledTargetResult = result('target-canceled.svg', 'canceled');
+  workerResponses.push(response(canceledTargetResult, validCatalog(canceledTargetResult.name)));
+  cancelDuringPreview = true;
+  assert.deepEqual(await runner.runCommittedCanonicalCandidate({
+    canonical: targetCandidate,
+    captureIntentCheckpoint: () => structuredClone(targetIntent),
+    restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
+    commitIntent: () => { throw new Error('must not commit canceled target intent'); }
+  }), { status: 'canceled' });
+  cancelDuringPreview = false;
+  assert.deepEqual(committedFeatureState(), targetStateBeforeFailure);
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.equal(generationHistory.getUndoCount(), targetHistoryCount);
+
+  state.form.prefix = 'audit-simple';
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
@@ -821,10 +927,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     metricsBeforePreviewCancel.generatedArtifactFinalizeCount
   );
 
-  assert.equal(activePrimaryReads, 1);
+  assert.equal(activePrimaryReads, 2);
   assert.equal(inactiveFileReads, 0);
-  assert.equal(adoptedArtifacts, 1);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 6);
+  assert.equal(adoptedArtifacts, 2);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 9);
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -840,7 +946,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
   assert.equal(state.failedGeneratePreservedResult.value, false);
-  assert.equal(activePrimaryReads, 2);
+  assert.equal(activePrimaryReads, 3);
 
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle',

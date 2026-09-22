@@ -1,6 +1,8 @@
 // Source-bound editable rotation intent. The request service owns serialization.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
+import { cloneJsonData } from '../services/json-clone.js';
 
 export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
   if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
@@ -38,17 +40,57 @@ export const parseRecordDisplayStart = (value) => {
   return number;
 };
 
+const ANCHOR_INTENT_KEYS = [
+  'anchor',
+  'biologicalFeatureId',
+  'offsetBp',
+  'orientForward',
+  'placement',
+  'recordKey',
+  'schema'
+];
+
+export const validateAnchorIntent = (intent) => {
+  if (intent === null) return null;
+  if (!intent || Object.keys(intent).sort().join(',') !== ANCHOR_INTENT_KEYS.join(',')
+    || intent.schema !== 1
+    || typeof intent.recordKey !== 'string' || !intent.recordKey || intent.recordKey.includes('\0')
+    || typeof intent.biologicalFeatureId !== 'string' || !intent.biologicalFeatureId
+    || intent.biologicalFeatureId.includes('\0')
+    || !['anchor', 'feature-end'].includes(intent.placement)
+    || (intent.placement === 'anchor'
+      ? !['five-prime', 'midpoint', 'three-prime'].includes(intent.anchor)
+      : intent.anchor !== null)
+    || !Number.isSafeInteger(intent.offsetBp)
+    || typeof intent.orientForward !== 'boolean') {
+    throw new Error('Invalid record display anchor intent.');
+  }
+  return intent;
+};
+
+export const migrateLegacyRecordDisplayDrafts = (drafts) => {
+  if (!Array.isArray(drafts)) return drafts;
+  return drafts.map((draft) => {
+    if (!draft || Object.hasOwn(draft, 'reverseComplementOverride')
+      || Object.hasOwn(draft, 'anchorIntent')) return draft;
+    return { ...draft, reverseComplementOverride: null, anchorIntent: null };
+  });
+};
+
 export const validateRecordDisplayDrafts = (drafts) => {
   if (!Array.isArray(drafts)) throw new Error('Record display drafts must be an array.');
   const identities = new Set();
   for (const draft of drafts) {
-    if (!draft || Object.keys(draft).sort().join(',') !== 'recordId,scope,selector,sourceUid,startCoordinate,topologyOverride'
+    if (!draft || Object.keys(draft).sort().join(',') !== 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
       || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
       || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
       || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
+      || (draft.reverseComplementOverride !== null
+        && typeof draft.reverseComplementOverride !== 'boolean')
       || (draft.startCoordinate !== null && (!Number.isSafeInteger(draft.startCoordinate) || draft.startCoordinate < 1))) {
       throw new Error('Invalid record display draft; only source-bound requested intent is supported.');
     }
+    validateAnchorIntent(draft.anchorIntent);
     const key = recordDisplayKey(draft);
     if (identities.has(key)) throw new Error('Duplicate record display draft identity.');
     identities.add(key);
@@ -79,6 +121,28 @@ export const requestedRecordDisplay = (row, draft = {}, context = {}) => {
   }
   return { isCircular: draft.topologyOverride ?? null,
     startCoordinate: surface.startEnabled ? start : null };
+};
+
+export const effectiveRecordReverseComplement = (row, draft = {}, context = {}) => {
+  const inherited = Boolean(context.reverse ?? row.reverse);
+  if (Boolean(context.cropped ?? row.cropped)) return inherited;
+  const override = draft.reverseComplementOverride ?? null;
+  if (override !== null && typeof override !== 'boolean') {
+    throw new Error('Reverse-complement override must be boolean or null.');
+  }
+  return override ?? inherited;
+};
+
+export const requestedRecordTransform = (row, draft = {}, context = {}) => ({
+  display: requestedRecordDisplay(row, draft, context),
+  reverseComplement: effectiveRecordReverseComplement(row, draft, context)
+});
+
+const requireReverseComplementOverride = (value) => {
+  if (value !== null && typeof value !== 'boolean') {
+    throw new Error('Reverse-complement override must be boolean or null.');
+  }
+  return value;
 };
 
 export const createRecordDisplayControls = ({ state, computed, watch, linearRecordSelector, history, getCommittedRequest, getCommittedSession }) => {
@@ -115,12 +179,41 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     let draft = state.recordDisplayDrafts.find((entry) => recordDisplayKey(entry) === row.key);
     if (!draft) {
       draft = { scope: row.scope, sourceUid: row.sourceUid, selector: row.selector,
-        recordId: row.recordId, topologyOverride: null, startCoordinate: null };
+        recordId: row.recordId, topologyOverride: null, startCoordinate: null,
+        reverseComplementOverride: null, anchorIntent: null };
       state.recordDisplayDrafts.push(draft);
       draft = state.recordDisplayDrafts[state.recordDisplayDrafts.length - 1];
     }
     Object.assign(draft, patch);
   });
+  const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
+    if (typeof reverseComplement !== 'boolean') {
+      throw new Error('Resolved record orientation must be boolean.');
+    }
+    const resolvedStart = parseRecordDisplayStart(startCoordinate);
+    const resolvedIntent = validateAnchorIntent(anchorIntent);
+    let draft = state.recordDisplayDrafts.find(
+      (entry) => recordDisplayKey(entry) === row.key
+    );
+    if (!draft) {
+      draft = {
+        scope: row.scope,
+        sourceUid: row.sourceUid,
+        selector: row.selector,
+        recordId: row.recordId,
+        topologyOverride: null,
+        startCoordinate: null,
+        reverseComplementOverride: null,
+        anchorIntent: null
+      };
+      state.recordDisplayDrafts.push(draft);
+    }
+    Object.assign(draft, {
+      startCoordinate: resolvedStart,
+      reverseComplementOverride: reverseComplement,
+      anchorIntent: resolvedIntent
+    });
+  };
   const matchesSavedSource = (file, resourceId) => {
     const expected = getCommittedSession()?.resources?.[resourceId];
     return matchesSessionResourceDescriptor(file, expected);
@@ -155,7 +248,15 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       const source = selected.source;
       if (!matchesSavedSource(row.source, source.resourceId || source.gffResourceId)
         || (row.paired && !matchesSavedSource(row.paired, source.fastaResourceId))) return [];
-      return [{ ...row, committedDisplay: selected.display || { isCircular: null, startCoordinate: null }, recordKey: selected.cardinality === 'all'
+      return [{ ...row,
+        committedDisplay: selected.display || { isCircular: null, startCoordinate: null },
+        committedReverseComplement: selected.region
+          ? Boolean(selected.region.reverseComplement)
+          : Boolean(selected.presentation?.reverseComplement),
+        committedCropped: Boolean(selected.region),
+        canonicalRecordKey: selected.recordKey,
+        canonicalSource: selected.source,
+        recordKey: selected.cardinality === 'all'
         && allRows.value.filter((entry) => entry.sourceUid === row.sourceUid).length > 1
         ? `${selected.recordKey}:${Number(row.selector.slice(1))}` : selected.recordKey }];
     });
@@ -165,9 +266,13 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     refreshCommittedRows();
     if (!surfaceFor(row).startEnabled) return { enabled: false, reason: surfaceFor(row).disabledReason };
     try {
+      const selectedFeatures = state.selectedFeatures.value;
+      if (selectedFeatures.length !== 1) {
+        throw new Error('Select one feature bound to the current source record.');
+      }
       const start = selectedFeatureDisplayStart({ row,
         committedRow: committedRows.find((entry) => entry.key === row.key && entry.paired === row.paired),
-        selectedFeatures: state.selectedFeatures.value, shortcut });
+        feature: selectedFeatures[0], shortcut });
       return { enabled: true, start, reason: '' };
     } catch (error) { return { enabled: false, reason: error.message }; }
   };
@@ -205,10 +310,80 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
         return !target || ['kind', 'side', 'level'].some((field) => target[field] !== row.placement[field]);
       })) return true;
     return committedRows.some((row) => {
-      try { return JSON.stringify(requestedRecordDisplay(row, draftFor(row), row)) !== JSON.stringify(row.committedDisplay); }
+      try {
+        return JSON.stringify(requestedRecordTransform(row, draftFor(row), row))
+          !== JSON.stringify({
+            display: row.committedDisplay,
+            reverseComplement: row.committedReverseComplement
+          });
+      }
       catch { return true; }
     });
   });
+  const targetForFeature = (feature) => {
+    refreshCommittedRows();
+    const recordKey = String(feature?.record_key || '');
+    const matches = committedRows.filter((row) => row.recordKey === recordKey);
+    if (matches.length !== 1) {
+      throw new Error('The popup feature target is stale or ambiguous.');
+    }
+    const row = matches[0];
+    const members = committedRows
+      .filter((member) => member.scope === row.scope
+        && member.sourceUid === row.sourceUid
+        && member.canonicalRecordKey === row.canonicalRecordKey)
+      .map((member) => ({
+        canonicalRecordKey: member.canonicalRecordKey,
+        recordKey: member.recordKey,
+        selector: member.selector,
+        recordId: member.recordId,
+        recordLength: member.recordLength,
+        committedDisplay: { ...member.committedDisplay },
+        committedReverseComplement: member.committedReverseComplement
+      }));
+    return {
+      row,
+      target: {
+        scope: row.scope,
+        sourceUid: row.sourceUid,
+        selector: row.selector,
+        recordId: row.recordId,
+        recordLength: row.recordLength,
+        recordKey: row.recordKey,
+        canonicalRecordKey: row.canonicalRecordKey,
+        source: { ...row.canonicalSource },
+        effectiveCircular: row.committedDisplay?.isCircular
+          ?? row.detectedTopology === 'circular',
+        cropped: row.committedCropped,
+        committedReverseComplement: row.committedReverseComplement,
+        members
+      }
+    };
+  };
+  const captureTargetDraft = (row) => {
+    const key = recordDisplayKey(row);
+    const index = state.recordDisplayDrafts.findIndex(
+      (draft) => recordDisplayKey(draft) === key
+    );
+    return {
+      key,
+      index,
+      draft: index >= 0 ? cloneJsonData(state.recordDisplayDrafts[index]) : null
+    };
+  };
+  const restoreTargetDraft = (checkpoint) => {
+    const index = state.recordDisplayDrafts.findIndex(
+      (draft) => recordDisplayKey(draft) === checkpoint.key
+    );
+    if (index >= 0) state.recordDisplayDrafts.splice(index, 1);
+    if (checkpoint.draft) {
+      const insertAt = Math.max(0, Math.min(
+        checkpoint.index,
+        state.recordDisplayDrafts.length
+      ));
+      state.recordDisplayDrafts.splice(insertAt, 0, cloneJsonData(checkpoint.draft));
+    }
+  };
   return { rows, allRows, draftFor, surfaceFor, shortcutState, hasPendingChanges,
     applyShortcut: (row, shortcut) => {
       const result = shortcutState(row, shortcut);
@@ -227,35 +402,45 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     },
     rowsFor: (uid) => rows.value.filter((row) => row.sourceUid === uid),
     setTopology: (row, value) => edit(row, { topologyOverride: value }, 'Change record topology'),
-    setStart: (row, value) => edit(row, { startCoordinate: parseRecordDisplayStart(value) }, 'Change record display start'),
-    resetStart: (row) => edit(row, { startCoordinate: null }, 'Reset record display start') };
+    setStart: (row, value) => edit(row, {
+      startCoordinate: parseRecordDisplayStart(value), anchorIntent: null
+    }, 'Change record display start'),
+    resetStart: (row) => edit(row, { startCoordinate: null, anchorIntent: null }, 'Reset record display start'),
+    setReverseComplement: (row, value) => edit(row, {
+      reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
+    }, 'Change record orientation'),
+    setResolvedTransform: (row, transform) => history.runUndoable(
+      'Rotate record to feature',
+      () => writeResolvedTransform(row, transform)
+    ),
+    commitResolvedTransform: writeResolvedTransform,
+    captureTargetDraft,
+    restoreTargetDraft,
+    targetForFeature };
 };
 
-export const selectedFeatureDisplayStart = ({ row, committedRow, selectedFeatures, shortcut }) => {
+export const selectedFeatureDisplayStart = ({ row, committedRow, feature, shortcut }) => {
   if (!committedRow || recordDisplayKey(row) !== recordDisplayKey(committedRow)
     || !row.source || row.source !== committedRow.source
-    || row.recordLength !== committedRow.recordLength || !committedRow.recordKey
-    || selectedFeatures.length !== 1) {
+    || row.recordLength !== committedRow.recordLength || !committedRow.recordKey) {
     throw new Error('Select one feature bound to the current source record.');
   }
-  const feature = selectedFeatures[0];
   if (feature?.record_key !== committedRow.recordKey) throw new Error('Selected feature belongs to another record.');
   const parts = feature.location_parts;
-  const strand = feature.strand;
-  if (!['+', '-'].includes(strand) || !Array.isArray(parts) || !parts.length
-    || !Number.isSafeInteger(row.recordLength) || row.recordLength <= 0
-    || parts.some((part) => part.strand !== strand
-      || !Number.isSafeInteger(part.start) || !Number.isSafeInteger(part.end)
-      || part.start < 0 || part.end <= part.start || part.end > row.recordLength)) {
-    throw new Error('Feature shortcut requires nonempty source parts with one known strand.');
-  }
   if (!['five-prime', 'midpoint'].includes(shortcut)) throw new Error('Unknown feature shortcut.');
-  const length = parts.reduce((sum, part) => sum + part.end - part.start, 0);
-  let offset = shortcut === 'five-prime' ? 0 : Math.floor((length - 1) / 2);
-  for (const part of parts) {
-    if (offset < part.end - part.start) {
-      return strand === '+' ? part.start + 1 + offset : part.end - offset;
-    }
-    offset -= part.end - part.start;
-  }
+  const result = resolveFeatureAnchor({
+    recordLength: row.recordLength,
+    effectiveCircular: true,
+    cropped: false,
+    currentReverseComplement: false,
+    identity: {
+      recordKey: committedRow.recordKey,
+      biologicalFeatureId: feature.biological_feature_id
+    },
+    parts,
+    profile: feature.anchorProfile,
+    intent: { placement: 'anchor', anchor: shortcut, offsetBp: 0, orientForward: false }
+  });
+  if (!result.eligibility.enabled) throw new Error(result.eligibility.message);
+  return result.startCoordinate;
 };

@@ -426,12 +426,24 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 "stable_feature_id": "feature-1",
                 "record_idx": 0,
                 "nucleotide_sequence": "ATGC",
+                "anchorProfile": {
+                    "precision": "exact",
+                    "operator": "single",
+                    "partOrder": "biological",
+                    "strand": "+",
+                },
             },
             {
                 "svg_id": "feature-2",
                 "stable_feature_id": "feature-2",
                 "record_idx": 1,
                 "nucleotide_sequence": "ATGA",
+                "anchorProfile": {
+                    "precision": "exact",
+                    "operator": "single",
+                    "partOrder": "biological",
+                    "strand": "+",
+                },
             },
         ),
         orthogroup_metadata=(
@@ -469,7 +481,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert payload["features"] == {}
     assert payload["orthogroupState"] == {}
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 3
+    assert catalog["schema"] == 4
     item = catalog["items"][0]
     assert item["resultIndex"] == 0
     assert item["resultName"] == "diagram"
@@ -521,7 +533,7 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 43
+    assert CURRENT_SESSION_VERSION == 44
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
         {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
     )
@@ -565,7 +577,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,
 ) -> None:
     catalog = {
-        "schema": 3,
+        "schema": 4,
         "items": [
             {
                 "resultIndex": 0,
@@ -591,6 +603,12 @@ def test_current_session_feature_catalog_is_single_and_lossless(
                         "qualifiers": {"product": ["example"]},
                         "nucleotide_sequence": "ATG",
                         "amino_acid_sequence": "M",
+                        "anchorProfile": {
+                            "precision": "exact",
+                            "operator": "single",
+                            "partOrder": "biological",
+                            "strand": "unstranded",
+                        },
                     }
                 ],
                 "orthogroups": [],
@@ -1365,7 +1383,7 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         assert "blastSource" not in payload["config"]
         assert "comparisons" not in payload["config"]["linearRecordLayout"]
         assert payload["editorState"]["legend"] == source["editorState"]["legend"]
-        assert payload["editorState"]["featureCatalog"]["schema"] == 3
+        assert payload["editorState"]["featureCatalog"]["schema"] == 4
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
         assert payload["features"] == {"selectedFeatureRecordIdx": 0}
         assert (
@@ -1799,7 +1817,7 @@ def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> N
     validate_session(session)
 
 
-@pytest.mark.parametrize("version", (34, 35, 36, 37, 38))
+@pytest.mark.parametrize("version", (34, 35, 36, 37, 38, 43))
 def test_branch_internal_session_versions_are_rejected_at_read_and_rewrite_boundaries(
     version: int,
 ) -> None:
@@ -3040,7 +3058,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 3
+    assert catalog["schema"] == 4
     assert len(catalog["items"]) == len(payload["results"]) == 1
     assert catalog["items"][0]["features"]
     assert catalog["items"][0]["biologicalFeatures"]
@@ -3307,13 +3325,13 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (43, 2, 7)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, 7)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
     assert result['results'] != source['results']
     catalog = result['editorState']['featureCatalog']
-    assert catalog['schema'] == 3 and len(catalog['items']) == 1
+    assert catalog['schema'] == 4 and len(catalog['items']) == 1
     assert catalog['items'][0]['resultName'] == result['results'][0]['name']
     return result
 

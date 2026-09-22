@@ -139,7 +139,7 @@ import {
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
-import { recordDisplayKey, requestedRecordDisplay } from '../app/record-display-options.js';
+import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 7;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -2089,27 +2089,37 @@ export const buildCanonicalRenderRequest = ({
     const selector = record.region?.selector || record.selector;
     const selectedRows = sourceRows.filter((row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
-    const displayFor = (row) => requestedRecordDisplay(row,
+    const transformFor = (row) => requestedRecordTransform(row,
       drafts.find((draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
-      const displays = selectedRows.map(displayFor);
-      if (new Set(displays.map((display) => JSON.stringify(display))).size > 1) {
+      const transforms = selectedRows.map(transformFor);
+      if (new Set(transforms.map((transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((row, rowIndex) => ({ ...record,
           recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
-          presentation: { ...record.presentation, gridRow: record.presentation.gridRow ?? index + 1 },
-          display: displays[rowIndex] }));
+          presentation: { ...record.presentation,
+            reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,
+            gridRow: record.presentation.gridRow ?? index + 1 },
+          display: transforms[rowIndex].display }));
       }
     }
     const selected = selectedRows[0];
     const savedDraft = drafts.find((draft) => draft.scope === state.mode.value && draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
+    const transform = selected ? transformFor(selected) : {
+      display: record.display || { isCircular: savedDraft?.topologyOverride ?? null,
+        startCoordinate: savedDraft?.startCoordinate ?? null },
+      reverseComplement: record.region
+        ? Boolean(record.region.reverseComplement)
+        : savedDraft?.reverseComplementOverride ?? Boolean(record.presentation?.reverseComplement)
+    };
     sourceInputIndexes.push(index);
-    return [{ ...record, display: selected ? displayFor(selected)
-      : record.display || { isCircular: savedDraft?.topologyOverride ?? null,
-        startCoordinate: savedDraft?.startCoordinate ?? null } }];
+    return [{ ...record,
+      presentation: { ...record.presentation,
+        reverseComplement: record.region ? false : transform.reverseComplement },
+      display: transform.display }];
   });
   if (state.mode.value === 'linear' && records.length !== recordPlan.records.length) {
     records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
@@ -4270,7 +4280,9 @@ export const projectCanonicalSessionRequest = ({
         selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
         recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
         topologyOverride: record.display?.isCircular ?? null,
-        startCoordinate: record.display?.startCoordinate ?? null
+        startCoordinate: record.display?.startCoordinate ?? null,
+        reverseComplementOverride: null,
+        anchorIntent: null
       }] : []),
       featurePlacementOverrides: Object.fromEntries(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
@@ -4398,6 +4410,199 @@ export const promoteCanonicalRenderRequestToCurrent = (request) => {
   }
   return promoted;
 };
+
+const sameCanonicalValue = (left, right) => (
+  JSON.stringify(left) === JSON.stringify(right)
+);
+
+const materializedRecordSelector = (selector) => {
+  const match = String(selector || '').match(/^#([1-9]\d*)$/);
+  if (!match) {
+    throw new Error('Target record materialization requires an exact record selector.');
+  }
+  return { kind: 'recordIndex', index: Number(match[1]) - 1 };
+};
+
+const validateRecordTransformTarget = (target, transform, mode) => {
+  if (!target || target.scope !== mode || typeof target.recordKey !== 'string'
+    || !target.recordKey || typeof target.canonicalRecordKey !== 'string'
+    || !target.canonicalRecordKey || !target.source || typeof target.source !== 'object') {
+    throw new Error('Record transform target is stale or incomplete.');
+  }
+  if (target.cropped) {
+    throw new Error('A cropped record cannot be rotated from a feature.');
+  }
+  if (target.effectiveCircular !== true) {
+    throw new Error('Feature-based record rotation requires a circular record.');
+  }
+  const recordLength = Number(target.recordLength);
+  if (!Number.isSafeInteger(recordLength) || recordLength < 1
+    || Number(transform?.recordLength) !== recordLength) {
+    throw new Error('The target record length changed after the feature popup opened.');
+  }
+  if (!Number.isSafeInteger(transform?.startCoordinate)
+    || transform.startCoordinate < 1 || transform.startCoordinate > recordLength
+    || typeof transform?.reverseComplement !== 'boolean') {
+    throw new Error('Resolved record transform is invalid for the target record.');
+  }
+};
+
+const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
+  const members = Array.isArray(target.members) ? target.members : [];
+  const identities = new Set();
+  const selectors = new Set();
+  const materialized = members.map((member) => {
+    const selector = materializedRecordSelector(member?.selector);
+    const recordKey = String(member?.recordKey || '');
+    if (!recordKey || identities.has(recordKey) || selectors.has(selector.index)
+      || member?.canonicalRecordKey !== target.canonicalRecordKey
+      || !Number.isSafeInteger(Number(member?.recordLength))
+      || Number(member.recordLength) < 1
+      || !member?.committedDisplay || typeof member.committedDisplay !== 'object'
+      || typeof member?.committedReverseComplement !== 'boolean') {
+      throw new Error('Committed record collection cannot be materialized safely.');
+    }
+    identities.add(recordKey);
+    selectors.add(selector.index);
+    return {
+      ...cloneCanonicalJsonValue(record),
+      recordKey,
+      cardinality: 'exactly_one',
+      selector,
+      display: cloneCanonicalJsonValue(member.committedDisplay),
+      presentation: {
+        ...(cloneCanonicalJsonValue(record.presentation) || {}),
+        reverseComplement: member.committedReverseComplement,
+        gridRow: record.presentation?.gridRow ?? recordIndex + 1
+      }
+    };
+  });
+  if (materialized.length < 1
+    || materialized.filter((entry) => entry.recordKey === target.recordKey).length !== 1) {
+    throw new Error('Target record collection does not resolve to exactly one record.');
+  }
+  return materialized;
+};
+
+const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) => (
+  (Array.isArray(comparisons) ? comparisons : []).map((comparison) => {
+    const shifted = cloneCanonicalJsonValue(comparison);
+    for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
+      const index = Number(shifted?.[field]);
+      if (Number.isInteger(index) && index > recordIndex) shifted[field] = index + expansion;
+    }
+    if (Array.isArray(shifted?.pairs)) {
+      shifted.pairs = shifted.pairs.map((pair) => {
+        const next = { ...pair };
+        for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
+          const index = Number(next[field]);
+          if (Number.isInteger(index) && index > recordIndex) next[field] = index + expansion;
+        }
+        return next;
+      });
+    }
+    return shifted;
+  })
+);
+
+/**
+ * Clone the last committed canonical Session and overlay one record transform.
+ * No live form state participates in this projection.
+ */
+export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
+  const request = committed?.renderRequest;
+  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
+    || !['circular', 'linear'].includes(request.mode)
+    || !committed?.resources || typeof committed.resources !== 'object') {
+    throw new Error('A current committed canonical Session is required.');
+  }
+  validateRecordTransformTarget(target, transform, request.mode);
+  const matchingIndexes = request.records
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => record?.recordKey === target.canonicalRecordKey);
+  if (matchingIndexes.length !== 1) {
+    throw new Error('Target record does not resolve uniquely in the committed request.');
+  }
+  const { record: sourceRecord, index: sourceIndex } = matchingIndexes[0];
+  if (!sameCanonicalValue(sourceRecord.source, target.source)) {
+    throw new Error('Target record resource binding is stale.');
+  }
+  if (sourceRecord.region || target.cropped) {
+    throw new Error('A cropped record cannot be rotated from a feature.');
+  }
+
+  const candidate = cloneCanonicalJsonValue(committed);
+  let records = candidate.renderRequest.records;
+  let targetIndex = sourceIndex;
+  let materialized = false;
+  if (sourceRecord.cardinality === 'all') {
+    const replacements = materializeCanonicalRecordCollection(
+      sourceRecord,
+      target,
+      sourceIndex
+    );
+    records.splice(sourceIndex, 1, ...replacements);
+    targetIndex = sourceIndex + replacements.findIndex(
+      (entry) => entry.recordKey === target.recordKey
+    );
+    const expansion = replacements.length - 1;
+    candidate.renderRequest.comparisons = shiftCanonicalComparisonIndexes(
+      candidate.renderRequest.comparisons,
+      sourceIndex,
+      expansion
+    );
+    const depthFiles = candidate.renderRequest.diagramOptions?.depthTrackFiles;
+    if (Array.isArray(depthFiles) && depthFiles.length === request.records.length) {
+      depthFiles.splice(
+        sourceIndex,
+        1,
+        ...replacements.map(() => cloneCanonicalJsonValue(depthFiles[sourceIndex]))
+      );
+    }
+    const metadata = candidate.webFiles?.linearRecordMetadata;
+    if (Array.isArray(metadata) && metadata.length === request.records.length) {
+      const sourceMetadata = metadata[sourceIndex] || {};
+      metadata.splice(sourceIndex, 1, ...replacements.map((entry) => ({
+        ...cloneCanonicalJsonValue(sourceMetadata),
+        recordKey: entry.recordKey
+      })));
+    }
+    materialized = true;
+  } else if (sourceRecord.cardinality !== 'exactly_one'
+    || target.recordKey !== target.canonicalRecordKey) {
+    throw new Error('Target record identity is stale.');
+  }
+
+  const candidateTarget = records[targetIndex];
+  candidateTarget.display = {
+    ...(candidateTarget.display || { isCircular: null }),
+    startCoordinate: transform.startCoordinate
+  };
+  candidateTarget.presentation = {
+    ...(candidateTarget.presentation || {}),
+    reverseComplement: transform.reverseComplement
+  };
+
+  projectCanonicalSessionRequest({
+    renderRequest: candidate.renderRequest,
+    resources: candidate.resources,
+    webFiles: candidate.webFiles || {},
+    storedConfig: candidate.config || null,
+    deferResourceContent: true
+  });
+  return {
+    canonical: candidate,
+    receipt: Object.freeze({
+      recordKey: target.recordKey,
+      canonicalRecordKey: target.canonicalRecordKey,
+      recordIndex: targetIndex,
+      materialized,
+      startCoordinate: transform.startCoordinate,
+      reverseComplement: transform.reverseComplement
+    })
+  };
+};
+
 const normalizePublicationRequestAliases = (request) => {
   const normalized = [5, 6].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)

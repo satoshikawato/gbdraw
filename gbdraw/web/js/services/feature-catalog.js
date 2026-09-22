@@ -13,7 +13,8 @@ import {
 const FEATURE_CATALOG_RELOAD_MESSAGE =
   'The diagram engine returned incompatible feature metadata. Reload the page and Generate again.';
 
-export const FEATURE_CATALOG_SCHEMA = 3;
+export const FEATURE_CATALOG_SCHEMA = 4;
+const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 const adoptedFeatureCatalogs = new WeakSet();
 const featureCatalogAdmissions = new WeakMap();
 
@@ -29,6 +30,71 @@ const cloneJson = (value) => {
 };
 
 const catalogError = () => new Error(FEATURE_CATALOG_RELOAD_MESSAGE);
+
+const normalizedFeatureStrand = (feature, parts) => {
+  const strands = new Set((parts.length ? parts : [feature])
+    .map((part) => {
+      if (Number(part?.strand) === 1) return '+';
+      if (Number(part?.strand) === -1) return '-';
+      return text(part?.strand);
+    })
+    .filter((strand) => strand === '+' || strand === '-'));
+  if (strands.size > 1) return 'mixed';
+  if (strands.size === 1) return [...strands][0];
+  return 'unstranded';
+};
+
+const legacyAnchorProfile = (feature) => {
+  const rawParts = feature?.location_parts ?? feature?.locationParts;
+  const parts = Array.isArray(rawParts) && rawParts.length ? rawParts : [feature];
+  const exactSingle = parts.length === 1
+    && Number.isSafeInteger(Number(parts[0]?.start))
+    && Number.isSafeInteger(Number(parts[0]?.end));
+  return exactSingle ? {
+    precision: 'exact',
+    operator: 'single',
+    partOrder: normalizedFeatureStrand(feature, parts) === 'unstranded'
+      ? 'source-forward' : 'biological',
+    strand: normalizedFeatureStrand(feature, parts)
+  } : {
+    precision: 'unavailable',
+    operator: 'unknown',
+    partOrder: 'ambiguous',
+    strand: normalizedFeatureStrand(feature, parts)
+  };
+};
+
+export const migrateLegacyFeatureCatalog = (catalog) => {
+  if (!isObject(catalog) || catalog.schema !== LEGACY_FEATURE_CATALOG_SCHEMA) {
+    throw catalogError();
+  }
+  const migrated = cloneJson(catalog);
+  migrated.schema = FEATURE_CATALOG_SCHEMA;
+  requireArray(migrated.items).forEach((item) => {
+    requireArray(item?.biologicalFeatures).forEach((feature) => {
+      if (!isObject(feature)) throw catalogError();
+      const profile = legacyAnchorProfile(feature);
+      feature.anchorProfile = profile;
+      if (profile.precision === 'exact'
+        && !Array.isArray(feature.location_parts)
+        && !Array.isArray(feature.locationParts)) {
+        feature.location_parts = [{
+          start: Number(feature.start),
+          end: Number(feature.end),
+          strand: profile.strand
+        }];
+      }
+    });
+  });
+  return migrated;
+};
+
+const validAnchorProfile = (profile) => isObject(profile)
+  && Object.keys(profile).sort().join(',') === 'operator,partOrder,precision,strand'
+  && ['exact', 'fuzzy', 'unavailable'].includes(profile.precision)
+  && ['single', 'join', 'order', 'unknown'].includes(profile.operator)
+  && ['biological', 'source-forward', 'ambiguous'].includes(profile.partOrder)
+  && ['+', '-', 'unstranded', 'mixed'].includes(profile.strand);
 
 const requireArray = (value) => {
   if (!Array.isArray(value)) throw catalogError();
@@ -171,6 +237,7 @@ const validateAndProjectCatalogItem = (item, result, resultIndex, context) => {
   const expandedBiological = [];
   biologicalFeatures.forEach((feature) => {
     if (!isObject(feature)) throw catalogError();
+    if (!validAnchorProfile(feature.anchorProfile)) throw catalogError();
     const sourceFeatureIndex = nonnegativeIntegerAliasStatus(
       feature,
       SOURCE_FEATURE_INDEX_KEYS
@@ -491,7 +558,7 @@ const cachedAdmissionMatches = (admission, results, mode) => {
 };
 
 /**
- * Validate and project one schema-3 catalog in one admission traversal.
+ * Validate and project one current catalog in one admission traversal.
  *
  * The returned runtime object is never persisted. Its catalog-derived indexes
  * bind current Results to editor projections without rescanning catalog rows.
@@ -502,7 +569,8 @@ export const admitFeatureCatalog = (
   { adopt = false, mode = '' } = {}
 ) => {
   const logicalResults = requireArray(results);
-  if (!isObject(catalog) || catalog.schema !== FEATURE_CATALOG_SCHEMA) {
+  if (!isObject(catalog)
+    || ![LEGACY_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA].includes(catalog.schema)) {
     throw catalogError();
   }
   const cached = featureCatalogAdmissions.get(catalog);
@@ -511,7 +579,9 @@ export const admitFeatureCatalog = (
     return cached;
   }
 
-  const validated = adopt ? catalog : cloneJson(catalog);
+  const validated = catalog.schema === LEGACY_FEATURE_CATALOG_SCHEMA
+    ? migrateLegacyFeatureCatalog(catalog)
+    : adopt ? catalog : cloneJson(catalog);
   const items = requireArray(validated.items);
   if (items.length !== logicalResults.length) throw catalogError();
 
@@ -585,6 +655,7 @@ export const admitFeatureCatalog = (
     featureState
   });
   featureCatalogAdmissions.set(validated, admission);
+  featureCatalogAdmissions.set(catalog, admission);
   if (adopt) adoptedFeatureCatalogs.add(validated);
   recordStructuralMetric('featureCatalogSecondaryTraversalCount', 0);
   recordSessionLifecycleEvent('catalog.admission-completed', {

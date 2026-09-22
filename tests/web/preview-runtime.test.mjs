@@ -224,7 +224,7 @@ const readinessRoot = makeSvg([]);
 const readinessState = {
   results: ref([readinessResult]),
   selectedResultIndex: ref(0),
-  featureCatalog: ref({ schema: 3, items: [] }),
+  featureCatalog: ref({ schema: 4, items: [] }),
   svgContainer: ref({
     querySelector: (selector) => (selector === 'svg' ? readinessRoot : null)
   })

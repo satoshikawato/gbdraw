@@ -201,7 +201,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
 
   const savedPath = await saveSession(page, 'linear-label-visibility');
   const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
-  expect(saved.version).toBe(43);
+  expect(saved.version).toBe(44);
   expect(saved.config.adv.linear_accession_visibility).toBe('auto');
   expect(saved.config.adv.linear_length_visibility).toBe('show');
   expect(saved.config.adv).not.toHaveProperty('linear_show_accession');

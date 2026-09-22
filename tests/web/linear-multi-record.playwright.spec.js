@@ -2013,7 +2013,7 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
       ].join('')
     };
     const catalog = {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'candidate.svg',
@@ -2037,6 +2037,9 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
           start: 0,
           end: 10,
           strand: 1,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+          },
           qualifiers: {}
         }, {
           recordKey: 'record-1',
@@ -2048,6 +2051,9 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
           start: 20,
           end: 30,
           strand: 1,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+          },
           qualifiers: {}
         }],
         orthogroups: [],
@@ -3566,7 +3572,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
 });
 
-test('@comparison-contract LOSATP source jobs are reused after display start, reverse complement, and fresh Load', async ({ page }) => {
+test('@comparison-contract record rotation adds zero LOSATP source jobs and survives reverse complement and fresh Load', async ({ page }) => {
   test.setTimeout(300000);
   await installCompleteRecordComparisonExecutor(page);
   await openApp(page);
@@ -3599,9 +3605,68 @@ test('@comparison-contract LOSATP source jobs are reused after display start, re
   const shifted = await run();
   expect(shifted.result).toEqual({ status: 'ok' });
   expect(shifted.jobCount).toBe(4);
-  expect(shifted.firstRecord.display.startCoordinate).toBe(31);
-  expect(shifted.geometry).not.toBe(original.geometry);
-  await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[0].region_reverse = true; });
+  expect(shifted.firstRecord.display).toMatchObject({
+    isCircular: true,
+    startCoordinate: 31
+  });
+  const beforePopupRequest = await page.evaluate(() => (
+    JSON.parse(JSON.stringify(window.__GBDRAW_DIAGRAM_RUNS__.at(-1)))
+  ));
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill('UpperA_a');
+  await search.press('Enter');
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const actions = page.getByRole('region', { name: 'Record actions' });
+  await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
+  await actions.getByLabel('Record rotation signed offset').fill('2');
+  const popupStart = await page.evaluate(() => (
+    window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
+  ));
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
+    timeout: 240000
+  });
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.'
+  );
+  const popup = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(app.results[0]?.content || '', 'image/svg+xml');
+    return {
+      firstRecord: request.records[0],
+      records: request.records,
+      comparisons: request.comparisons,
+      resources: request.resources,
+      jobCount: window.__GBDRAW_COMPLETE_RECORD_JOBS__.flat().length,
+      geometry: [...svg.querySelectorAll('path')]
+        .map((path) => path.getAttribute('d')).join('\n')
+    };
+  });
+  expect(popup.jobCount).toBe(4);
+  expect(popup.firstRecord.display.startCoordinate).toBe(popupStart);
+  expect(popup.records.slice(1)).toEqual(beforePopupRequest.records.slice(1));
+  expect(popup.comparisons).toEqual(beforePopupRequest.comparisons);
+  expect(popup.resources).toEqual(beforePopupRequest.resources);
+  expect(popup.geometry).not.toBe(shifted.geometry);
+  await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.recordDisplayControls
+      .draftFor(window.__GBDRAW_APP__.recordDisplayControls
+        .rowsFor(window.__GBDRAW_APP__.linearSeqs[0].uid)[0]).startCoordinate
+  ))).toBe(31);
+  await expect.poll(() => page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(
+      window.__GBDRAW_APP__.results[0]?.content || '',
+      'image/svg+xml'
+    );
+    return [...svg.querySelectorAll('path')]
+      .map((path) => path.getAttribute('d')).join('\n');
+  })).toBe(shifted.geometry);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.linearSeqs[0].region_reverse = true;
+  });
   const reversed = await run();
   expect(reversed.result, JSON.stringify(reversed.error)).toEqual({ status: 'ok' });
   expect(reversed.jobCount).toBe(4);

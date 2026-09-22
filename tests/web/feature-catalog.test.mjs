@@ -6,6 +6,7 @@ import {
   admitFeatureCatalog,
   biologicalFeatureKey,
   featureStateFromCatalog,
+  migrateLegacyFeatureCatalog,
   stableFeatureOverrideKey,
   validateFeatureCatalog
 } from '../../gbdraw/web/js/services/feature-catalog.js';
@@ -18,7 +19,7 @@ const featureCatalogSource = await readFile(
 const fullNote = `${'x'.repeat(49)}😀tail`;
 const compactNote = `${'x'.repeat(49)}😀`;
 const catalog = {
-  schema: 3,
+  schema: 4,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -40,6 +41,9 @@ const catalog = {
       start: 1,
       end: 5,
       strand: -1,
+      anchorProfile: {
+        precision: 'exact', operator: 'single', partOrder: 'biological', strand: '-'
+      },
       sequenceSourceIndex: 0,
       gene: 'curated-gene',
       amino_acid_sequence: 'MPEPTIDE',
@@ -72,7 +76,7 @@ const catalog = {
   }]
 };
 
-test('schema-3 catalog validates and expands stable biological identities', () => {
+test('schema-4 catalog validates and expands stable biological identities', () => {
   const validated = validateFeatureCatalog(catalog, results);
   const state = featureStateFromCatalog(validated);
   const expectedKey = biologicalFeatureKey('record-instance-a', 'source-feature-a');
@@ -111,6 +115,34 @@ test('schema-3 catalog validates and expands stable biological identities', () =
   assert.equal(state.orthogroups[0].members[0].renderedFeatureSvgId, 'f0001');
   assert.equal(state.orthogroups[0].members[0].proteinId, 'public-protein');
   assert.equal(state.orthogroups[0].members[0].featureIndex, 4);
+});
+
+test('schema-3 migration proves only exact single-part anchors and disables ambiguous compounds', () => {
+  const legacy = structuredClone(catalog);
+  legacy.schema = 3;
+  delete legacy.items[0].biologicalFeatures[0].anchorProfile;
+  const safe = migrateLegacyFeatureCatalog(legacy);
+  assert.equal(safe.schema, 4);
+  assert.deepEqual(safe.items[0].biologicalFeatures[0].anchorProfile, {
+    precision: 'exact', operator: 'single', partOrder: 'biological', strand: '-'
+  });
+  assert.deepEqual(safe.items[0].biologicalFeatures[0].location_parts, [{
+    start: 1, end: 5, strand: '-'
+  }]);
+  legacy.items[0].biologicalFeatures[0].location_parts = [
+    { start: 1, end: 2, strand: '-' },
+    { start: 4, end: 5, strand: '-' }
+  ];
+  assert.deepEqual(
+    validateFeatureCatalog(legacy, results).items[0].biologicalFeatures[0].anchorProfile,
+    { precision: 'unavailable', operator: 'unknown', partOrder: 'ambiguous', strand: '-' }
+  );
+  for (const invalid of [
+    { ...catalog, schema: 5 },
+    { ...catalog, schema: 4, items: [{ ...catalog.items[0], biologicalFeatures: [
+      { ...catalog.items[0].biologicalFeatures[0], anchorProfile: null }
+    ] }] }
+  ]) assert.throws(() => validateFeatureCatalog(invalid, results));
 });
 
 test('duplicate-location source indexes survive catalog validation and expansion', () => {
@@ -348,7 +380,10 @@ test('catalog validates ordered plural comparison endpoint references', () => {
     type: 'CDS',
     start: 5,
     end: 6,
-    strand: 1
+    strand: 1,
+    anchorProfile: {
+      precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+    }
   });
   plural.items[0].comparisonMatches.push({
     id: 'plural-match',
@@ -656,7 +691,10 @@ test('linear catalog state uses global record indexes and matching display label
     type: 'CDS',
     start: 60,
     end: 90,
-    strand: 1
+    strand: 1,
+    anchorProfile: {
+      precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+    }
   });
 
   const state = featureStateFromCatalog(

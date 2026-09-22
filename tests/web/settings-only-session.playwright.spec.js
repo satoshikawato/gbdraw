@@ -130,7 +130,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     expect(before.config.form.labels_mode).toBe('both');
     expect(before.config.form.track_type).toBe('middle');
     const saved = await save(page, testInfo, 'first');
-    expect(saved.document.version).toBe(43);
+    expect(saved.document.version).toBe(44);
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_accession');
     expect(saved.document.config.adv).not.toHaveProperty('linear_show_length');
     assertSourceFree(await snapshot(page));

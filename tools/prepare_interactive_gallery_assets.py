@@ -24,6 +24,7 @@ from gbdraw.web_support.feature_catalog import (
     FEATURE_CATALOG_SCHEMA,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
+    promote_legacy_feature_catalog,
     select_feature_catalog_item,
 )
 
@@ -456,12 +457,17 @@ def _session_feature_catalog(
     )
     if catalog is None:
         return None
+    if isinstance(catalog, dict) and catalog.get("schema") == 3:
+        return promote_legacy_feature_catalog(catalog)
     if (
         not isinstance(catalog, dict)
         or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
         or not isinstance(catalog.get("items"), list)
     ):
-        raise ValueError("Session contains an invalid schema-3 feature catalog.")
+        raise ValueError(
+            "Session contains an invalid schema-3/"
+            f"schema-{FEATURE_CATALOG_SCHEMA} feature catalog."
+        )
     return catalog
 
 

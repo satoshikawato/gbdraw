@@ -10,6 +10,7 @@ import {
 } from '../services/diagram-generation.js';
 import {
   buildCanonicalRenderRequest,
+  projectCommittedRecordTransform,
   readCanonicalResourceRecordCount
 } from '../services/session-request.js';
 import {
@@ -951,6 +952,87 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
     normalizeMultiRecordPositions(nextPositions, { maxRow: availableSelectors.length })
   );
 };
+
+export const executeCanonicalRenderCandidate = async ({
+  canonical,
+  mode,
+  kind = 'generate',
+  onProgress = null,
+  shouldAdmit = () => true,
+  generationExecutor = null,
+  catalogAdmission = admitFeatureCatalog,
+  prepareCommit = prepareCandidateRenderCommit,
+  prepareCommitInput = {},
+  timingEntries = []
+}) => {
+  if (!canonical?.renderRequest || !canonical?.resources) {
+    throw new Error('Canonical candidate execution requires a request and resources.');
+  }
+  recordStructuralMetric('canonicalCandidateExecutionCount', 1, { kind });
+  const startedAt = getNow();
+  const generationResponse = generationExecutor
+    ? await generationExecutor({
+        request: canonical.renderRequest,
+        resources: canonical.resources
+      }, { onProgress })
+    : await runDiagramGeneration({
+        request: canonical.renderRequest,
+        resources: canonical.resources
+      }, { onProgress: onProgress });
+  const results = generationResponse.results;
+  if (!shouldAdmit()) {
+    return { status: 'superseded', generationResponse, elapsedMs: getNow() - startedAt };
+  }
+  if (results?.error) {
+    return {
+      status: 'engine-error',
+      generationResponse,
+      engineError: results.error,
+      elapsedMs: getNow() - startedAt
+    };
+  }
+  if (!Array.isArray(results)) {
+    throw new Error('The diagram engine returned an invalid Result list.');
+  }
+  const metadata = generationResponse.metadata
+    && typeof generationResponse.metadata === 'object'
+    && !Array.isArray(generationResponse.metadata)
+    ? generationResponse.metadata
+    : {};
+  recordSessionLifecycleEvent('candidate-result-validation-start');
+  const catalogState = catalogAdmission(metadata.featureCatalog, results, {
+    adopt: true,
+    mode
+  });
+  recordSessionLifecycleEvent('candidate-result-validation-end');
+  recordSessionLifecycleEvent('result-admission-start');
+  const commit = measureTiming(
+    timingEntries,
+    kind === 'reflow'
+      ? 'run-analysis commit sanitized reflow results'
+      : 'run-analysis sanitize and reapply editor overrides',
+    () => prepareCommit({
+      generationResponse,
+      catalogAdmission: catalogState,
+      results,
+      catalog: catalogState.catalog,
+      mode,
+      ...prepareCommitInput
+    })
+  );
+  recordSessionLifecycleEvent('result-admission-end');
+  return {
+    status: 'ok',
+    generationResponse,
+    generationMetadata: metadata,
+    results,
+    catalogAdmission: catalogState,
+    catalog: catalogState.catalog,
+    commit,
+    elapsedMs: getNow() - startedAt
+  };
+};
+
 export const createRunAnalysis = ({
   state,
   isCurrentFeature,
@@ -974,6 +1056,7 @@ export const createRunAnalysis = ({
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
   losatExecutor = runLosatPairsParallel,
+  executeCanonicalCandidate = executeCanonicalRenderCandidate,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   prepareReflowCommit = prepareReflowResultCommit
 }) => {
@@ -4489,11 +4572,13 @@ export const createRunAnalysis = ({
         });
         throwIfGenerationCanceled();
       }
-      const gbdrawStartedAt = getNow();
-      const generationResponse = await runDiagramGeneration({
-        request: canonical.renderRequest,
-        resources: canonical.resources
-      }, {
+      const postGbdrawTimingEntries = [];
+      const canonicalExecution = await executeCanonicalCandidate({
+        canonical,
+        mode: mode.value,
+        kind: isReflow ? 'reflow' : 'generate',
+        shouldAdmit: () => generationToken === latestGenerationToken
+          && (isReflow || !generationCancelRequested.value),
         onProgress: ({ stage }) => {
           const message = {
             'preparing-runtime': 'Preparing diagram runtime (first use)...',
@@ -4502,41 +4587,70 @@ export const createRunAnalysis = ({
             finalizing: 'Finalizing diagram results...'
           }[stage];
           if (message) setProcessingStatus(message);
-        }
+        },
+        prepareCommit: isReflow ? prepareReflowCommit : prepareCandidateCommit,
+        prepareCommitInput: isReflow ? {
+          featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules
+        } : {
+          sourceReplaced,
+          featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules
+        },
+        timingEntries: postGbdrawTimingEntries
       });
-      console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
+      console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
       setProcessingStatus('Preparing preview...');
       await nextTick();
       await waitForAfterPaint();
       throwIfGenerationCanceled();
-      const postGbdrawTimingEntries = [];
-      const res = generationResponse.results;
-      const generationMetadata = (
-        generationResponse.metadata &&
-        typeof generationResponse.metadata === 'object' &&
-        !Array.isArray(generationResponse.metadata)
-      )
-        ? generationResponse.metadata
-        : {};
-      if (generationToken !== latestGenerationToken) {
+      if (canonicalExecution.status === 'superseded'
+        || generationToken !== latestGenerationToken) {
         if (!isReflow && generationAbortSignal?.aborted) {
           return finishCanceledManualRun();
         }
         return { status: 'stale' };
       }
-      if (res?.error) {
+      if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
         if (isReflow) {
-          labelReflowLastError.value = formatPythonError(res.error)?.summary || 'Auto reflow failed';
+          labelReflowLastError.value = formatPythonError(
+            canonicalExecution.engineError
+          )?.summary || 'Auto reflow failed';
           return { status: 'error' };
         }
         await restoreCommittedArtifact();
-        errorLog.value = formatPythonError(res.error);
+        errorLog.value = formatPythonError(canonicalExecution.engineError);
         return { status: 'error' };
       }
-      if (!Array.isArray(res)) {
-        throw new Error('The diagram engine returned an invalid Result list.');
-      }
+      const {
+        generationResponse,
+        generationMetadata,
+        results: res,
+        catalogAdmission: candidateCatalogAdmission,
+        catalog: candidateCatalog,
+        commit: candidateCommit
+      } = canonicalExecution;
 
       if (isReflow && requestId !== pendingReflowRequestId) {
         return { status: 'stale' };
@@ -4546,63 +4660,6 @@ export const createRunAnalysis = ({
         skipCaptureBaseConfig.value = true;
         skipPositionReapply.value = true;
       }
-
-      recordSessionLifecycleEvent('candidate-result-validation-start');
-      const candidateCatalogAdmission = admitFeatureCatalog(
-        generationMetadata.featureCatalog,
-        res,
-        { adopt: true, mode: mode.value }
-      );
-      const candidateCatalog = candidateCatalogAdmission.catalog;
-      recordSessionLifecycleEvent('candidate-result-validation-end');
-      recordSessionLifecycleEvent('result-admission-start');
-      const candidateCommit = isReflow
-        ? measureTiming(
-            postGbdrawTimingEntries,
-            'run-analysis commit sanitized reflow results',
-            () => prepareReflowCommit({
-              generationResponse,
-              catalogAdmission: candidateCatalogAdmission,
-              results: res,
-              featureColorOverrides,
-              featureStrokeOverrides,
-              featureVisibilityOverrides,
-              labelTextFeatureOverrides,
-              labelVisibilityOverrides,
-              legendEntries: legendEntries.value,
-              deletedLegendEntries: deletedLegendEntries.value,
-              originalLegendOrder: originalLegendOrder.value,
-              addedLegendCaptions: addedLegendCaptions.value,
-              legendColorOverrides,
-              legendStrokeOverrides,
-              manualSpecificRules
-            })
-          )
-        : measureTiming(
-            postGbdrawTimingEntries,
-            'run-analysis sanitize and reapply editor overrides',
-            () => prepareCandidateCommit({
-              generationResponse,
-              sourceReplaced,
-              catalogAdmission: candidateCatalogAdmission,
-              results: res,
-              catalog: candidateCatalog,
-              mode: mode.value,
-              featureColorOverrides,
-              featureStrokeOverrides,
-              featureVisibilityOverrides,
-              labelTextFeatureOverrides,
-              labelVisibilityOverrides,
-              legendEntries: legendEntries.value,
-              deletedLegendEntries: deletedLegendEntries.value,
-              originalLegendOrder: originalLegendOrder.value,
-              addedLegendCaptions: addedLegendCaptions.value,
-              legendColorOverrides,
-              legendStrokeOverrides,
-              manualSpecificRules
-            })
-          );
-      recordSessionLifecycleEvent('result-admission-end');
 
       if (generationToken !== latestGenerationToken) {
         if (!isReflow && generationAbortSignal?.aborted) {
@@ -4981,6 +5038,268 @@ export const createRunAnalysis = ({
     }
   };
 
+  const runCommittedCanonicalCandidateInternal = async ({
+    canonical,
+    generatedArtifactHandle = null,
+    commitIntent = null
+  }) => {
+    const generationToken = ++latestGenerationToken;
+    const generationAbortController = typeof AbortController === 'function'
+      ? new AbortController()
+      : null;
+    const generationAbortSignal = generationAbortController?.signal || null;
+    activeLosatAbortController = generationAbortController;
+    const committedArtifactHandle = generatedArtifactHandle
+      || await captureGeneratedArtifactHandle();
+    let activatedCandidate = null;
+    let acceptedReadyReceipt = null;
+    const restoreCommittedArtifact = async () => {
+      if (!activatedCandidate) return false;
+      if (acceptedReadyReceipt) {
+        previewRuntime.invalidateReadyReceipt(
+          acceptedReadyReceipt,
+          'The target-only candidate entered rollback.'
+        );
+      } else {
+        previewRuntime.invalidateReadinessExpectation(
+          String(generationToken),
+          new Error('The target-only candidate entered rollback.')
+        );
+      }
+      recordSessionLifecycleEvent('artifact.rollback-started');
+      await previewRuntime.restorePreviousSelectedResult({
+        handle: committedArtifactHandle,
+        restore: () => generatedArtifactTransactionOwner.restore(committedArtifactHandle)
+      });
+      activatedCandidate = null;
+      acceptedReadyReceipt = null;
+      recordSessionLifecycleEvent('artifact.rollback-completed');
+      return true;
+    };
+    const finishCanceled = async () => {
+      await restoreCommittedArtifact();
+      errorLog.value = null;
+      processingStatus.value = 'Canceled.';
+      return { status: 'canceled' };
+    };
+    try {
+      const timingEntries = [];
+      const execution = await executeCanonicalCandidate({
+        canonical,
+        mode: canonical.renderRequest.mode,
+        kind: 'target-record-transform',
+        shouldAdmit: () => generationToken === latestGenerationToken
+          && !generationCancelRequested.value,
+        onProgress: ({ stage }) => {
+          const message = {
+            'preparing-runtime': 'Preparing diagram runtime (first use)...',
+            'preparing-resources': 'Preparing diagram input resources...',
+            rendering: 'Rendering diagram...',
+            finalizing: 'Finalizing diagram results...'
+          }[stage];
+          if (message && generationToken === latestGenerationToken) {
+            processingStatus.value = message;
+          }
+        },
+        prepareCommit: prepareCandidateCommit,
+        prepareCommitInput: {
+          sourceReplaced: false,
+          featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules
+        },
+        timingEntries
+      });
+      if (execution.status === 'superseded'
+        || generationToken !== latestGenerationToken) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceled();
+        }
+        return { status: 'stale' };
+      }
+      if (execution.status === 'engine-error') {
+        errorLog.value = formatPythonError(execution.engineError);
+        return { status: 'error' };
+      }
+      processingStatus.value = 'Preparing preview...';
+      const candidateCommit = execution.commit;
+      const candidateCatalogAdmission = execution.catalogAdmission;
+      const candidateCatalog = execution.catalog;
+      const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
+        ? candidateCommit.featureState.orthogroups
+        : [];
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      const candidateOwnerSet = {
+        ...currentOwnerSet,
+        results: candidateCommit.results,
+        featureCatalog: candidateCatalog,
+        extractedFeatures: candidateCommit.featureState.extractedFeatures,
+        biologicalFeatures: candidateCommit.featureState.biologicalFeatures,
+        featureSelectorSafetyScope:
+          candidateCommit.featureState.featureSelectorSafetyScope,
+        featureRecordIds: candidateCommit.featureState.featureRecordIds,
+        orthogroups: candidateGroups,
+        featureOrthogroupIndex: candidateCommit.featureState.featureOrthogroupIndex,
+        collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
+          ? candidateCommit.featureState.collinearGroups
+          : [],
+        trackSlotResolvedGeometry:
+          execution.generationMetadata.trackSlotGeometry || null,
+        matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
+          candidateCommit.featureState.sequenceSources
+        ) || currentOwnerSet.matchSequenceOwner,
+        editableLabels: []
+      };
+      const preservedRuntimeState = captureGeneratedArtifactRuntimeState();
+      const generatedCandidate = generatedArtifactTransactionOwner.build(
+        candidateOwnerSet,
+        { runtimeState: {
+          files: preservedRuntimeState.latestCliHelperFiles,
+          archiveName: preservedRuntimeState.latestCliHelperArchiveName,
+          losatTelemetry: preservedRuntimeState.losatTelemetry
+        } }
+      );
+      const nextSelectedResultIndex = Math.max(
+        0,
+        Math.min(
+          selectedResultIndex.value,
+          Math.max(0, candidateCommit.results.length - 1)
+        )
+      );
+      const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex];
+      if (!selectedCandidateResult) {
+        throw new Error('The generated artifact has no selected preview Result.');
+      }
+      const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
+        result: selectedCandidateResult,
+        resultIndex: nextSelectedResultIndex,
+        artifactIdentity: execution.generationResponse.artifactIdentity,
+        generationToken: String(generationToken),
+        catalogState: candidateCatalogAdmission,
+        phase: 'target-record-transform',
+        bindingOptions: { isIncrementalEdit: false },
+        isCurrent: () => generationToken === latestGenerationToken
+          && !generationCancelRequested.value
+          && Number(selectedResultIndex.value) === nextSelectedResultIndex
+      });
+      activatedCandidate = generatedCandidate;
+      generatedArtifactTransactionOwner.activate(generatedCandidate, {
+        selectedResultIndex: nextSelectedResultIndex
+      });
+      if (resultGenerationKey) resultGenerationKey.value += 1;
+      featureExtractionPending.value = false;
+      featureExtractionError.value = null;
+      setFeatureEditorStatus({
+        status: candidateOwnerSet.extractedFeatures.length ? 'summary-ready' : 'idle',
+        generationId: featureExtractionRequestId,
+        error: null,
+        summaryCount: candidateOwnerSet.extractedFeatures.length,
+        detailsCacheSize: 0
+      });
+      resultPanelTab.value = 'preview';
+      acceptedReadyReceipt = await candidatePreviewReadiness.promise;
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceled();
+        }
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      await waitForPostBindFrame();
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceled();
+        }
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      if (typeof setGeneratedArtifactIdentity === 'function') {
+        setGeneratedArtifactIdentity(execution.generationResponse.artifactIdentity, {
+          results: candidateCommit.results
+        });
+      }
+      if (typeof adoptCanonicalRenderArtifacts === 'function') {
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      if (typeof commitIntent === 'function') await commitIntent();
+      logPostGbdrawTimings(timingEntries);
+      return { status: 'ok', generatedArtifactCandidate: activatedCandidate };
+    } catch (error) {
+      if (isDiagramGenerationCanceled(error)) return finishCanceled();
+      if (generationToken !== latestGenerationToken) {
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      await restoreCommittedArtifact();
+      errorLog.value = formatJsError(error);
+      return { status: 'error' };
+    } finally {
+      if (activeLosatAbortController === generationAbortController) {
+        activeLosatAbortController = null;
+      }
+      if (generationToken === latestGenerationToken) {
+        generationCancelRequested.value = false;
+      }
+    }
+  };
+
+  const runCommittedCanonicalCandidate = async ({
+    canonical,
+    label = 'Rotate record to feature',
+    captureIntentCheckpoint = null,
+    restoreIntentCheckpoint = null,
+    commitIntent = null
+  }) => {
+    let outcome = null;
+    processing.value = true;
+    processingStatus.value = 'Preparing target record...';
+    generationCancelRequested.value = false;
+    try {
+      await nextTick();
+      await waitForAfterPaint();
+      const execute = (beforeHandle) => runCommittedCanonicalCandidateInternal({
+        canonical,
+        generatedArtifactHandle: beforeHandle,
+        commitIntent
+      });
+      outcome = typeof runGeneratedArtifactReplacement === 'function'
+        ? await runGeneratedArtifactReplacement(label, execute, {
+            shouldCommit: (result) => result?.status === 'ok',
+            captureIntentCheckpoint,
+            restoreIntentCheckpoint,
+            onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
+            restoreAppliedArtifact: async (beforeHandle) => {
+              await previewRuntime.restorePreviousSelectedResult({
+                handle: beforeHandle,
+                phase: 'target-history-finalization-rollback',
+                restore: () => generatedArtifactTransactionOwner.restore(beforeHandle)
+              });
+            }
+          })
+        : await execute(await captureGeneratedArtifactHandle());
+      if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
+        generatedArtifactTransactionOwner.finalize();
+      }
+      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+        outcome = { status: outcome.status };
+      }
+      return outcome;
+    } finally {
+      if (outcome?.status !== 'canceled') processingStatus.value = '';
+      generationCancelRequested.value = false;
+      processing.value = false;
+    }
+  };
+
   const cancelRunAnalysis = () => {
     const canceledGenerationToken = latestGenerationToken;
     latestGenerationToken += 1;
@@ -5058,6 +5377,8 @@ export const createRunAnalysis = ({
 
   return {
     runAnalysis,
+    runCommittedCanonicalCandidate,
+    projectCommittedRecordTransform,
     cancelRunAnalysis,
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState,

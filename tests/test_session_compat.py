@@ -809,6 +809,12 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
+    assert rewritten["editorState"]["featureCatalog"]["schema"] == 4
+    assert all(
+        "anchorProfile" in feature
+        for item in rewritten["editorState"]["featureCatalog"]["items"]
+        for feature in item["biologicalFeatures"]
+    )
     rewritten_ids = rewritten_web_files["conservationLosatFastaSources"]
     fasta_bindings = rewritten_web_files["bindings"]["c_conservation_fastas"]
     assert rewritten_ids == [binding["resourceId"] for binding in fasta_bindings]

@@ -786,6 +786,17 @@ def _project_session_adjunct_for_current_write(
             "files",
         }
     }
+    editor_state_value = adjunct.get("editorState")
+    if isinstance(editor_state_value, Mapping):
+        editor_state = dict(editor_state_value)
+        catalog = editor_state.get("featureCatalog")
+        if isinstance(catalog, Mapping) and catalog.get("schema") == 3:
+            from gbdraw.web_support.feature_catalog import (
+                promote_legacy_feature_catalog,
+            )
+
+            editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
+            adjunct["editorState"] = editor_state
     web_file_inventory = _project_web_file_inventory(session)
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return adjunct, web_file_inventory

@@ -2,6 +2,7 @@ import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
 import { validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 
 export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   format: 'document',
@@ -272,7 +273,7 @@ export const hasBiologicalSessionInputs = (files = {}) => (
   || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
-export const isSettingsOnlySessionDocument = data => [42, 43].includes(data?.version)
+export const isSettingsOnlySessionDocument = data => [42, 44].includes(data?.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 const validateSettingsOnlyDocument = data => {
@@ -295,12 +296,21 @@ const validateSettingsOnlyDocument = data => {
     || bindings.c_conservation_blasts_source === 'losat-cache') {
     throw new Error('Settings-only Session cannot contain committed render artifacts.');
   }
-  const storedConfig = data.version === 43 || !isPlainObject(data.config?.adv)
+  let storedConfig = data.version === 44 || !isPlainObject(data.config?.adv)
     ? data.config
     : {
         ...data.config,
         adv: migrateLegacyLinearLabelVisibility(data.config.adv)
       };
+  if (data.version < 44 && isPlainObject(storedConfig)
+    && Object.prototype.hasOwnProperty.call(storedConfig, 'recordDisplayDrafts')) {
+    storedConfig = {
+      ...storedConfig,
+      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
+        storedConfig.recordDisplayDrafts
+      )
+    };
+  }
   validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig });
   const referenced = new Set();
   const visit = value => {
@@ -320,8 +330,8 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   }
   assertSafeObjectKeys(sessionData, 'Session');
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
-  if (bindings?.schema === 2 && ![41, 42, 43].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41, 42, or 43.');
+  if (bindings?.schema === 2 && ![41, 42, 44].includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, or 44.');
   }
   if (Number(version) < 31) return;
   if (
@@ -403,12 +413,13 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
       );
     }
     const featureCatalog = editorState.featureCatalog;
+    const expectedCatalogSchema = Number(version) === 44 ? 4 : 3;
     if (
       featureCatalog !== null
-      && (!isPlainObject(featureCatalog) || featureCatalog.schema !== 3)
+      && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
     ) {
       throw new Error(
-        `Session version ${String(version)} requires a schema-3 editorState.featureCatalog.`
+        `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
       );
     }
     if (

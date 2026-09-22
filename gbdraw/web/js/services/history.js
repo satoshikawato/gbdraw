@@ -617,8 +617,35 @@ export const createHistoryManager = ({
     }
   };
 
+  const captureReplacementIntentCheckpoint = async (options, phase) => {
+    if (typeof options?.captureIntentCheckpoint !== 'function') {
+      return { enabled: false, value: undefined };
+    }
+    return {
+      enabled: true,
+      value: await options.captureIntentCheckpoint({ phase })
+    };
+  };
+
+  const restoreReplacementIntentCheckpoint = async (checkpoint, restore) => {
+    if (!checkpoint?.enabled || typeof restore !== 'function') return;
+    restoring.value = true;
+    try {
+      await restore(checkpoint.value);
+    } finally {
+      restoring.value = false;
+    }
+  };
+
   const beginArtifactReplacement = async (label = 'Generate diagram', options = {}) => {
     if (restoring.value || capturing.value) return null;
+    const capturesIntent = typeof options.captureIntentCheckpoint === 'function';
+    const restoresIntent = typeof options.restoreIntentCheckpoint === 'function';
+    if (capturesIntent !== restoresIntent) {
+      throw new Error(
+        'Artifact replacement intent checkpoints require capture and restore hooks.'
+      );
+    }
     if (activeTransaction && !activeTransaction.closed) {
       const pendingIntent = activeTransaction;
       const previousDeferred = Boolean(pendingIntent.deferAdapterCommit);
@@ -634,11 +661,16 @@ export const createHistoryManager = ({
     recordSessionLifecycleEvent('history.before-capture-started');
     const before = await captureArtifactHandle('before');
     recordSessionLifecycleEvent('history.before-capture-completed');
+    const beforeIntentCheckpoint = await captureReplacementIntentCheckpoint(
+      options,
+      'before'
+    );
     notifyCheckpointCapture(options, 'before-end');
     emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-replacement', label });
     return {
       label,
       before,
+      beforeIntentCheckpoint,
       closed: false,
       source: options.source || ''
     };
@@ -667,11 +699,26 @@ export const createHistoryManager = ({
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
     const after = await captureArtifactHandle('after');
+    const afterIntentCheckpoint = await captureReplacementIntentCheckpoint(
+      options,
+      'after'
+    );
     transaction.closed = true;
     currentFileIds = artifactHandleFileIds(after);
     clearCurrentCheckpoint();
 
-    if (sameArtifactHandles(transaction.before, after)) {
+    const intentChanged = transaction.beforeIntentCheckpoint.enabled
+      && afterIntentCheckpoint.enabled
+      && (typeof options.compareIntentCheckpoints === 'function'
+        ? !options.compareIntentCheckpoints(
+            transaction.beforeIntentCheckpoint.value,
+            afterIntentCheckpoint.value
+          )
+        : !sameJsonValue(
+            transaction.beforeIntentCheckpoint.value,
+            afterIntentCheckpoint.value
+          ));
+    if (sameArtifactHandles(transaction.before, after) && !intentChanged) {
       emitHistoryDiagnostic({
         type: 'commit',
         scope: 'artifact-replacement',
@@ -686,6 +733,16 @@ export const createHistoryManager = ({
 
     const fileIds = artifactHandleFileIds(transaction.before);
     artifactHandleFileIds(after).forEach((id) => fileIds.add(id));
+    if (intentChanged) {
+      collectHistoryFileIds(transaction.beforeIntentCheckpoint.value, fileIds);
+      collectHistoryFileIds(afterIntentCheckpoint.value, fileIds);
+    }
+    const intentCheckpointBytes = intentChanged
+      ? (JSON.stringify([
+          transaction.beforeIntentCheckpoint.value,
+          afterIntentCheckpoint.value
+        ]) || '').length * 2
+      : 0;
     const entry = {
       type: 'artifact-replacement',
       label: transaction.label || options.label || 'Generate diagram',
@@ -694,8 +751,15 @@ export const createHistoryManager = ({
       byteSize: Math.max(
         1,
         (Number(transaction.before.retainedBytes) || 0) + (Number(after.retainedBytes) || 0)
-      ),
-      fileIds
+      ) + intentCheckpointBytes,
+      fileIds,
+      ...(intentChanged ? {
+        intentCheckpoint: {
+          before: transaction.beforeIntentCheckpoint,
+          after: afterIntentCheckpoint,
+          restore: options.restoreIntentCheckpoint
+        }
+      } : {})
     };
     diagnostics.byteEstimateComputations += 1;
     diagnostics.artifactReplacementHistoryEntryCount += 1;
@@ -770,6 +834,11 @@ export const createHistoryManager = ({
           recordStructuralMetric('generatedArtifactRollbackCount', 1);
           await restoreArtifactHandle(transaction.before, { refreshIntent: false });
         }
+        await restoreReplacementIntentCheckpoint(
+          transaction.beforeIntentCheckpoint,
+          options.restoreIntentCheckpoint
+        );
+        await refreshCurrentIntent();
       }
       releaseUnreferencedFiles();
       throw error;
@@ -864,8 +933,21 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
   };
 
-  const applyArtifactReplacementEntry = async (handle) => {
-    await restoreArtifactHandle(handle);
+  const applyArtifactReplacementEntry = async (entry, direction) => {
+    const handle = direction === 'undo' ? entry.before : entry.after;
+    if (!entry.intentCheckpoint) {
+      await restoreArtifactHandle(handle);
+      return;
+    }
+    await restoreArtifactHandle(handle, { refreshIntent: false });
+    const checkpoint = direction === 'undo'
+      ? entry.intentCheckpoint.before
+      : entry.intentCheckpoint.after;
+    await restoreReplacementIntentCheckpoint(
+      checkpoint,
+      entry.intentCheckpoint.restore
+    );
+    await refreshCurrentIntent();
   };
 
   const applyCommandWithFlag = async (entry, direction) => {
@@ -891,7 +973,7 @@ export const createHistoryManager = ({
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.before);
     } else if (entry.type === 'artifact-replacement') {
-      await applyArtifactReplacementEntry(entry.before);
+      await applyArtifactReplacementEntry(entry, 'undo');
     } else {
       await applyIntentEntry(entry, 'undo');
     }
@@ -915,7 +997,7 @@ export const createHistoryManager = ({
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.after);
     } else if (entry.type === 'artifact-replacement') {
-      await applyArtifactReplacementEntry(entry.after);
+      await applyArtifactReplacementEntry(entry, 'redo');
     } else {
       await applyIntentEntry(entry, 'redo');
     }
