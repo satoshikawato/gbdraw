@@ -81,6 +81,10 @@ const loadSessionThroughUi = async (page, sessionPath) => {
 };
 
 const openCustomTrackSlots = async (page) => {
+  const layoutSummary = page.locator('summary[aria-label="Layout"]');
+  if (!await layoutSummary.evaluate((summary) => summary.parentElement.open)) {
+    await layoutSummary.click();
+  }
   const panel = page.locator('#circular-custom-track-slots-panel');
   if (!await panel.isVisible()) {
     await page.getByRole('button', { name: 'Custom Track Slots' }).click();
