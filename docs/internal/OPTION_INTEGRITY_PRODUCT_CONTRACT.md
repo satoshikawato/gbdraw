@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `10`
+- Contract revision: `11`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -26,7 +26,7 @@ Status: active Product authority
 - Additional approved decision IDs: `PD-OI-018`, `PD-OI-019`, `PD-OI-020`,
   `PD-OI-021`, `PD-OI-022`, `PD-OI-023`, `PD-OI-024`, `PD-OI-025`,
   `PD-OI-026`, `PD-OI-027`, `PD-OI-028`, `PD-OI-029`, `PD-OI-030`, and
-  `PD-OI-031`
+  `PD-OI-031`, and `PD-OI-032`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -83,6 +83,13 @@ Status: active Product authority
   risks for deterministic Similarity Group alignment. Earlier decisions retain
   their scope. Dependent runtime requires this authority merged into its base;
   this amendment contains no runtime.
+- Revision 11 addition: `PD-OI-032`, selected by `satoshikawato` on
+  `2026-09-22` through the complete `PRODUCT_DECISION` response for issue
+  `#563`. This addition records the selected feature-popup record-rotation
+  outcome, preservation requirements, lack of retirement permission, and
+  accepted residual risk. Earlier decisions retain their scope. Dependent
+  runtime requires this authority merged into its base; this amendment contains
+  no runtime.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -1234,6 +1241,81 @@ corrected. Passing evidence does not make incorrect behavior normative.
 }
 ```
 
+### PD-OI-032: Feature-popup rotation for one circular record
+
+- Concern key: `diagram-generation.feature-popup-record-rotation`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / POPUP-RECORD-ROTATION`
+- Normative outcome:
+  1. The open feature popup targets exactly one source-bound feature through its
+     explicit stable record and biological-feature identity. It never falls
+     back to a global selection. The operation is available for a complete,
+     effectively circular record in either Circular or Linear diagram mode.
+  2. Record actions expose the selected feature's 5-prime base, covered
+     midpoint, and 3-prime base; a signed strand-relative offset; optional
+     absolute forward orientation; and a distinct feature-end placement.
+     Preview and resolution use original source coordinates, exact multipart
+     traversal, and non-negative circular wrapping. Feature-end placement does
+     not collapse into the 3-prime-base anchor.
+  3. Apply updates only the target record's absolute display start and, when
+     requested, absolute reverse-complement state. Leaving orientation off
+     preserves its current value. Repeating the same operation is idempotent;
+     every target-external record and layout value remains unchanged.
+  4. Apply derives a target-only candidate from the last committed request, so
+     unrelated pending form edits remain pending and are neither applied nor
+     discarded. The existing sidebar workflow remains available and resolves
+     the same display-transform meaning.
+  5. Successful Apply admits the fresh Result, absolute transform, and
+     non-authoritative provenance as one artifact-history transaction. One Undo
+     or Redo restores or reapplies them together. Cancel and failed, stale, or
+     superseded work leave the prior Result, transform, provenance, and History
+     unchanged.
+  6. New Sessions persist the absolute transform and provenance in Session 44,
+     catalog 4. A bounded reader conservatively accepts released catalog 3;
+     provenance never becomes rendering authority. Manual display-start or
+     orientation changes clear stale anchor provenance without changing the
+     effective transform.
+  7. Invalid offsets and unsafe, ambiguous, fuzzy, cropped, linear, stale, or
+     otherwise unsupported operations expose operation-specific reasons instead
+     of truncating, guessing, or substituting another target. Duplicate record
+     identifiers and split feature fragments retain stable source-bound
+     identity.
+  8. Feature, label, tick, depth, statistics, and comparison geometry follow the
+     same record display transform. Source sequence, annotation, qualifiers,
+     biological identity, and source-file export remain unchanged. Compatible
+     LOSAT evidence is reused with zero additional executor jobs for a
+     transform-only operation.
+  9. Feature search and post-generation continuation remain available. Record
+     actions are keyboard-operable in both rich and simple popup surfaces, show
+     visible reason text, preserve the search query and stable target across
+     Result replacement, and remain usable at a 390 px viewport.
+  10. The request remains schema 7, and the existing Worker protocol and
+      rendering path remain unchanged. The implementation adds no second
+      request owner, Worker path, SVG admission path, History engine, or record
+      rotation engine.
+- Decision source: The complete `PRODUCT_DECISION` response from
+  `satoshikawato` dated `2026-09-22` for issue `#563`, reproduced below.
+  The receipt preserves the supplied fields without extending its rationale,
+  preservation, retirement, risk, owner, or date. This is a reviewable
+  serialization in the existing static authority document, not a new decision
+  store or a `BD-###` record. It cannot authorize dependent runtime until
+  merged into that runtime's base.
+
+```json
+{
+  "concern": "diagram-generation.feature-popup-record-rotation",
+  "scenarioRevision": 1,
+  "choice": "A / POPUP-RECORD-ROTATION",
+  "rationale": "Feature popupから対象featureを基準にrecordを直接回転できるようにし、sidebarとの往復や手動座標計算を減らす。source-coordinate preview、target-only適用、atomic Undo/Redoによって、操作結果を予測可能かつ安全にする。",
+  "mustPreserve": "Source sequence、annotation、qualifiers、biological identity、対象外recordのtransformとlayout、未適用のform edits、既存sidebar workflow、canonical request owner、Worker経路、SVG sanitizer/admission経路、ResultとHistoryのowner、RecordDisplayTransform、LOSAT evidence reuse、searchおよびpost-generation workflow、failure/cancel/stale/superseded時の直前Resultとrecord transform。",
+  "mayRetire": "none",
+  "acceptedResidualRisk": "Popup UIおよびSession catalog compatibility pathの追加に伴う限定的なUI・保守負担を受容する。この負担は既存ownerの再利用、catalog 3からcatalog 4への単一のbounded reader、390 px・keyboard acceptance、AC-01～AC-20、およびfull regression gatesで制限する。科学的意味の変更、source dataの変更、global-selection fallback、追加LOSAT executor jobは受容しない。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-09-22"
+}
+```
+
 ## Acceptance contract catalog
 
 | Contract | Required meaning |
@@ -1258,6 +1340,7 @@ corrected. Passing evidence does not make incorrect behavior normative.
 | `OIC-018` | Collinear inference defaults OFF; actual raw jobs exclude every self-comparison, including within multi-record source batches, and the real Python path skips orthogroup inference. ON retains the existing inference; request, cache, provenance, and legacy Session interpretation agree. |
 | `OIC-019` | Completed raw searches survive downstream cancellation for matching retries; member-only edits do not rerun LOSAT. Raw-setting/input changes, Clear Cache, and Session/History replacement prevent incompatible reuse; the committed Result remains intact. |
 | `OIC-020` | Linear File cards expose common Depth TSV assignment without expanding records. File-level apply and clear update only that File and logical series as one undoable operation; empty, common, and mixed states remain truthful. Per-record sparse overrides, logical indexes, canonical requests, Session replay, and regeneration remain unchanged. |
+| `OIC-021` | Feature-popup record rotation uses the explicit popup target and source coordinates, changes only one effectively circular record through a target-only atomic transaction, preserves pending edits and the prior artifact on every no-op path, round-trips the absolute transform, and reuses compatible LOSAT evidence without additional executor jobs. |
 
 ### OIC-020 required regression coverage
 
@@ -1275,6 +1358,31 @@ The normal automated PR gate must observe all of the following:
 - Save, fresh Load, canonical request construction, generation, and subsequent
   regeneration preserve common and mixed bindings without a new Session schema,
   request schema, Worker protocol, or rendering path.
+
+### OIC-021 required regression coverage
+
+| ID | Required observation |
+| --- | --- |
+| `AC-01` | The popup alone rotates the target feature's record and never consults another or global selection. |
+| `AC-02` | An effectively circular record resolves the same source request in Circular and Linear diagram modes. |
+| `AC-03` | Every non-target record and layout value remains unchanged, including same-file multi-record inputs. |
+| `AC-04` | Positive and negative offsets resolve relative to feature direction and wrap correctly. |
+| `AC-05` | Orientation intent is absolute and idempotent; leaving it off preserves the current value. |
+| `AC-06` | The 3-prime base anchor and feature-end placement remain distinct operations. |
+| `AC-07` | Multipart, origin-spanning, and odd/even covered midpoints follow exact covered traversal. |
+| `AC-08` | Unstranded, ambiguous, fuzzy, cropped, linear-topology, and stale cases expose operation-specific reasons. |
+| `AC-09` | Duplicate record IDs and split fragments retain stable source-bound identity. |
+| `AC-10` | One Undo or Redo restores or reapplies origin, orientation, provenance, and Result together. |
+| `AC-11` | Save and fresh Load restore the absolute transform and provenance. |
+| `AC-12` | Failed, canceled, stale, and superseded rendering preserves the previous Result and transform. |
+| `AC-13` | Unrelated pending edits remain pending and are neither applied nor discarded. |
+| `AC-14` | A transform-only operation adds zero LOSAT executor jobs and reuses compatible raw evidence. |
+| `AC-15` | Feature, label, tick, depth, statistics, and comparison geometry use the same transform. |
+| `AC-16` | Manual display-start or orientation changes clear stale anchor provenance. |
+| `AC-17` | Cancel changes no draft, Result, transform, provenance, or History state. |
+| `AC-18` | Search query and stable target re-identification survive replacement; popup actions remain keyboard- and 390 px-accessible. |
+| `AC-19` | Request schema 7, the Worker protocol, and the renderer path do not expand. |
+| `AC-20` | Product Impact and Architecture Ratchet evidence remain reviewable and all required gates pass. |
 
 ### OIC-015 required regression coverage
 
