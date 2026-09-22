@@ -73,7 +73,17 @@ export const migrateLegacyFeatureCatalog = (catalog) => {
   requireArray(migrated.items).forEach((item) => {
     requireArray(item?.biologicalFeatures).forEach((feature) => {
       if (!isObject(feature)) throw catalogError();
-      feature.anchorProfile = legacyAnchorProfile(feature);
+      const profile = legacyAnchorProfile(feature);
+      feature.anchorProfile = profile;
+      if (profile.precision === 'exact'
+        && !Array.isArray(feature.location_parts)
+        && !Array.isArray(feature.locationParts)) {
+        feature.location_parts = [{
+          start: Number(feature.start),
+          end: Number(feature.end),
+          strand: profile.strand
+        }];
+      }
     });
   });
   return migrated;

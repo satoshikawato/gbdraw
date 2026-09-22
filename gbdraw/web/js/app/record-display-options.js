@@ -185,6 +185,34 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     }
     Object.assign(draft, patch);
   });
+  const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
+    if (typeof reverseComplement !== 'boolean') {
+      throw new Error('Resolved record orientation must be boolean.');
+    }
+    const resolvedStart = parseRecordDisplayStart(startCoordinate);
+    const resolvedIntent = validateAnchorIntent(anchorIntent);
+    let draft = state.recordDisplayDrafts.find(
+      (entry) => recordDisplayKey(entry) === row.key
+    );
+    if (!draft) {
+      draft = {
+        scope: row.scope,
+        sourceUid: row.sourceUid,
+        selector: row.selector,
+        recordId: row.recordId,
+        topologyOverride: null,
+        startCoordinate: null,
+        reverseComplementOverride: null,
+        anchorIntent: null
+      };
+      state.recordDisplayDrafts.push(draft);
+    }
+    Object.assign(draft, {
+      startCoordinate: resolvedStart,
+      reverseComplementOverride: reverseComplement,
+      anchorIntent: resolvedIntent
+    });
+  };
   const matchesSavedSource = (file, resourceId) => {
     const expected = getCommittedSession()?.resources?.[resourceId];
     return matchesSessionResourceDescriptor(file, expected);
@@ -224,6 +252,9 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
         committedReverseComplement: selected.region
           ? Boolean(selected.region.reverseComplement)
           : Boolean(selected.presentation?.reverseComplement),
+        committedCropped: Boolean(selected.region),
+        canonicalRecordKey: selected.recordKey,
+        canonicalSource: selected.source,
         recordKey: selected.cardinality === 'all'
         && allRows.value.filter((entry) => entry.sourceUid === row.sourceUid).length > 1
         ? `${selected.recordKey}:${Number(row.selector.slice(1))}` : selected.recordKey }];
@@ -288,6 +319,70 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       catch { return true; }
     });
   });
+  const targetForFeature = (feature) => {
+    refreshCommittedRows();
+    const recordKey = String(feature?.record_key || '');
+    const matches = committedRows.filter((row) => row.recordKey === recordKey);
+    if (matches.length !== 1) {
+      throw new Error('The popup feature target is stale or ambiguous.');
+    }
+    const row = matches[0];
+    const members = committedRows
+      .filter((member) => member.scope === row.scope
+        && member.sourceUid === row.sourceUid
+        && member.canonicalRecordKey === row.canonicalRecordKey)
+      .map((member) => ({
+        canonicalRecordKey: member.canonicalRecordKey,
+        recordKey: member.recordKey,
+        selector: member.selector,
+        recordId: member.recordId,
+        recordLength: member.recordLength,
+        committedDisplay: { ...member.committedDisplay },
+        committedReverseComplement: member.committedReverseComplement
+      }));
+    return {
+      row,
+      target: {
+        scope: row.scope,
+        sourceUid: row.sourceUid,
+        selector: row.selector,
+        recordId: row.recordId,
+        recordLength: row.recordLength,
+        recordKey: row.recordKey,
+        canonicalRecordKey: row.canonicalRecordKey,
+        source: { ...row.canonicalSource },
+        effectiveCircular: row.committedDisplay?.isCircular
+          ?? row.detectedTopology === 'circular',
+        cropped: row.committedCropped,
+        committedReverseComplement: row.committedReverseComplement,
+        members
+      }
+    };
+  };
+  const captureTargetDraft = (row) => {
+    const key = recordDisplayKey(row);
+    const index = state.recordDisplayDrafts.findIndex(
+      (draft) => recordDisplayKey(draft) === key
+    );
+    return {
+      key,
+      index,
+      draft: index >= 0 ? structuredClone(state.recordDisplayDrafts[index]) : null
+    };
+  };
+  const restoreTargetDraft = (checkpoint) => {
+    const index = state.recordDisplayDrafts.findIndex(
+      (draft) => recordDisplayKey(draft) === checkpoint.key
+    );
+    if (index >= 0) state.recordDisplayDrafts.splice(index, 1);
+    if (checkpoint.draft) {
+      const insertAt = Math.max(0, Math.min(
+        checkpoint.index,
+        state.recordDisplayDrafts.length
+      ));
+      state.recordDisplayDrafts.splice(insertAt, 0, structuredClone(checkpoint.draft));
+    }
+  };
   return { rows, allRows, draftFor, surfaceFor, shortcutState, hasPendingChanges,
     applyShortcut: (row, shortcut) => {
       const result = shortcutState(row, shortcut);
@@ -313,11 +408,14 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     setReverseComplement: (row, value) => edit(row, {
       reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
     }, 'Change record orientation'),
-    setResolvedTransform: (row, { startCoordinate, reverseComplement, anchorIntent }) => edit(row, {
-      startCoordinate: parseRecordDisplayStart(startCoordinate),
-      reverseComplementOverride: Boolean(reverseComplement),
-      anchorIntent: validateAnchorIntent(anchorIntent)
-    }, 'Rotate record to feature') };
+    setResolvedTransform: (row, transform) => history.runUndoable(
+      'Rotate record to feature',
+      () => writeResolvedTransform(row, transform)
+    ),
+    commitResolvedTransform: writeResolvedTransform,
+    captureTargetDraft,
+    restoreTargetDraft,
+    targetForFeature };
 };
 
 export const selectedFeatureDisplayStart = ({ row, committedRow, feature, shortcut }) => {

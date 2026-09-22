@@ -126,6 +126,9 @@ test('schema-3 migration proves only exact single-part anchors and disables ambi
   assert.deepEqual(safe.items[0].biologicalFeatures[0].anchorProfile, {
     precision: 'exact', operator: 'single', partOrder: 'biological', strand: '-'
   });
+  assert.deepEqual(safe.items[0].biologicalFeatures[0].location_parts, [{
+    start: 1, end: 5, strand: '-'
+  }]);
   legacy.items[0].biologicalFeatures[0].location_parts = [
     { start: 1, end: 2, strand: '-' },
     { start: 4, end: 5, strand: '-' }

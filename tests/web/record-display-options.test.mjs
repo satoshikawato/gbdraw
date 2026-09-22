@@ -208,6 +208,31 @@ test('manual start and orientation edits clear feature provenance', () => {
   assert.equal(model.state.recordDisplayDrafts[0].anchorIntent, null);
 });
 
+test('explicit popup target and its draft checkpoint stay record-bound', () => {
+  const model = compositeControls();
+  const { row, target } = model.controls.targetForFeature(model.feature);
+  assert.equal(target.recordKey, 'record-2');
+  assert.equal(target.canonicalRecordKey, 'record-2');
+  assert.equal(target.source.resourceId, 'second');
+  assert.equal(target.recordLength, 100);
+  assert.equal(target.effectiveCircular, true);
+  assert.equal(target.committedReverseComplement, false);
+  assert.equal(target.members.length, 1);
+  const before = model.controls.captureTargetDraft(row);
+  model.controls.commitResolvedTransform(row, {
+    startCoordinate: 25,
+    reverseComplement: true,
+    anchorIntent
+  });
+  assert.equal(model.state.recordDisplayDrafts.length, 1);
+  model.controls.restoreTargetDraft(before);
+  assert.deepEqual(model.state.recordDisplayDrafts, []);
+  assert.throws(
+    () => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }),
+    /stale or ambiguous/
+  );
+});
+
 test('same-name, same-content source replacement does not retain old feature capability', () => {
   const model = compositeControls();
   assert.equal(model.enabled().length, 4);

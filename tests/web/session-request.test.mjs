@@ -16,6 +16,7 @@ const {
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
+  projectCommittedRecordTransform,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
@@ -2013,6 +2014,85 @@ assert.equal(
   Object.values(transformedOneSource.resources).filter((resource) => resource.kind === 'genbank').length,
   1
 );
+
+const committedBeforeProjection = structuredClone(unchangedOneSource);
+const collectionRecord = unchangedOneSource.renderRequest.records[0];
+const collectionMembers = [1, 2].map((index) => ({
+  canonicalRecordKey: collectionRecord.recordKey,
+  recordKey: `${collectionRecord.recordKey}:${index}`,
+  selector: `#${index}`,
+  recordId: 'duplicate',
+  recordLength: 100,
+  committedDisplay: structuredClone(collectionRecord.display),
+  committedReverseComplement: false
+}));
+const projectedTarget = {
+  ...collectionMembers[1],
+  scope: 'linear',
+  source: structuredClone(collectionRecord.source),
+  effectiveCircular: true,
+  cropped: false,
+  members: collectionMembers
+};
+const projected = projectCommittedRecordTransform({
+  committed: unchangedOneSource,
+  target: projectedTarget,
+  transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true }
+});
+assert.deepEqual(unchangedOneSource, committedBeforeProjection);
+assert.deepEqual(projected.receipt, {
+  recordKey: 'one-source:2', canonicalRecordKey: 'one-source', recordIndex: 1,
+  materialized: true, startCoordinate: 75, reverseComplement: true
+});
+assert.deepEqual(projected.canonical.renderRequest.records.map((record) => ({
+  recordKey: record.recordKey,
+  selector: record.selector,
+  start: record.display.startCoordinate,
+  reverse: record.presentation.reverseComplement
+})), [
+  { recordKey: 'one-source:1', selector: { kind: 'recordIndex', index: 0 }, start: null, reverse: false },
+  { recordKey: 'one-source:2', selector: { kind: 'recordIndex', index: 1 }, start: 75, reverse: true }
+]);
+for (const field of ['schema', 'mode', 'grouping', 'diagramOptions', 'layout', 'comparisons', 'output']) {
+  assert.deepEqual(
+    projected.canonical.renderRequest[field],
+    unchangedOneSource.renderRequest[field],
+    `target projection preserves renderRequest.${field}`
+  );
+}
+assert.deepEqual(projected.canonical.resources, unchangedOneSource.resources);
+
+const exactCommitted = structuredClone(projected.canonical);
+const exactTarget = {
+  ...projectedTarget,
+  canonicalRecordKey: 'one-source:2',
+  members: []
+};
+const exactProjected = projectCommittedRecordTransform({
+  committed: exactCommitted,
+  target: exactTarget,
+  transform: { recordLength: 100, startCoordinate: 20, reverseComplement: false }
+});
+assert.equal(exactProjected.receipt.materialized, false);
+assert.deepEqual(exactProjected.canonical.renderRequest.records[0], exactCommitted.renderRequest.records[0]);
+assert.equal(exactProjected.canonical.renderRequest.records[1].display.startCoordinate, 20);
+
+for (const [label, targetPatch, transformPatch, requestPatch] of [
+  ['missing', { canonicalRecordKey: 'missing' }, {}, {}],
+  ['duplicate', {}, {}, { records: [collectionRecord, structuredClone(collectionRecord)] }],
+  ['stale resource', { source: { kind: 'genbank', resourceId: 'stale' } }, {}, {}],
+  ['cropped', { cropped: true }, {}, {}],
+  ['non-circular', { effectiveCircular: false }, {}, {}],
+  ['length mismatch', {}, { recordLength: 99 }, {}]
+]) {
+  const committed = structuredClone(unchangedOneSource);
+  Object.assign(committed.renderRequest, requestPatch);
+  assert.throws(() => projectCommittedRecordTransform({
+    committed,
+    target: { ...projectedTarget, ...targetPatch },
+    transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true, ...transformPatch }
+  }), undefined, label);
+}
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');

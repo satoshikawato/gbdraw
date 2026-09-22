@@ -4410,6 +4410,199 @@ export const promoteCanonicalRenderRequestToCurrent = (request) => {
   }
   return promoted;
 };
+
+const sameCanonicalValue = (left, right) => (
+  JSON.stringify(left) === JSON.stringify(right)
+);
+
+const materializedRecordSelector = (selector) => {
+  const match = String(selector || '').match(/^#([1-9]\d*)$/);
+  if (!match) {
+    throw new Error('Target record materialization requires an exact record selector.');
+  }
+  return { kind: 'recordIndex', index: Number(match[1]) - 1 };
+};
+
+const validateRecordTransformTarget = (target, transform, mode) => {
+  if (!target || target.scope !== mode || typeof target.recordKey !== 'string'
+    || !target.recordKey || typeof target.canonicalRecordKey !== 'string'
+    || !target.canonicalRecordKey || !target.source || typeof target.source !== 'object') {
+    throw new Error('Record transform target is stale or incomplete.');
+  }
+  if (target.cropped) {
+    throw new Error('A cropped record cannot be rotated from a feature.');
+  }
+  if (target.effectiveCircular !== true) {
+    throw new Error('Feature-based record rotation requires a circular record.');
+  }
+  const recordLength = Number(target.recordLength);
+  if (!Number.isSafeInteger(recordLength) || recordLength < 1
+    || Number(transform?.recordLength) !== recordLength) {
+    throw new Error('The target record length changed after the feature popup opened.');
+  }
+  if (!Number.isSafeInteger(transform?.startCoordinate)
+    || transform.startCoordinate < 1 || transform.startCoordinate > recordLength
+    || typeof transform?.reverseComplement !== 'boolean') {
+    throw new Error('Resolved record transform is invalid for the target record.');
+  }
+};
+
+const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
+  const members = Array.isArray(target.members) ? target.members : [];
+  const identities = new Set();
+  const selectors = new Set();
+  const materialized = members.map((member) => {
+    const selector = materializedRecordSelector(member?.selector);
+    const recordKey = String(member?.recordKey || '');
+    if (!recordKey || identities.has(recordKey) || selectors.has(selector.index)
+      || member?.canonicalRecordKey !== target.canonicalRecordKey
+      || !Number.isSafeInteger(Number(member?.recordLength))
+      || Number(member.recordLength) < 1
+      || !member?.committedDisplay || typeof member.committedDisplay !== 'object'
+      || typeof member?.committedReverseComplement !== 'boolean') {
+      throw new Error('Committed record collection cannot be materialized safely.');
+    }
+    identities.add(recordKey);
+    selectors.add(selector.index);
+    return {
+      ...cloneCanonicalJsonValue(record),
+      recordKey,
+      cardinality: 'exactly_one',
+      selector,
+      display: cloneCanonicalJsonValue(member.committedDisplay),
+      presentation: {
+        ...(cloneCanonicalJsonValue(record.presentation) || {}),
+        reverseComplement: member.committedReverseComplement,
+        gridRow: record.presentation?.gridRow ?? recordIndex + 1
+      }
+    };
+  });
+  if (materialized.length < 2
+    || materialized.filter((entry) => entry.recordKey === target.recordKey).length !== 1) {
+    throw new Error('Target record collection does not resolve to exactly one record.');
+  }
+  return materialized;
+};
+
+const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) => (
+  (Array.isArray(comparisons) ? comparisons : []).map((comparison) => {
+    const shifted = cloneCanonicalJsonValue(comparison);
+    for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
+      const index = Number(shifted?.[field]);
+      if (Number.isInteger(index) && index > recordIndex) shifted[field] = index + expansion;
+    }
+    if (Array.isArray(shifted?.pairs)) {
+      shifted.pairs = shifted.pairs.map((pair) => {
+        const next = { ...pair };
+        for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
+          const index = Number(next[field]);
+          if (Number.isInteger(index) && index > recordIndex) next[field] = index + expansion;
+        }
+        return next;
+      });
+    }
+    return shifted;
+  })
+);
+
+/**
+ * Clone the last committed canonical Session and overlay one record transform.
+ * No live form state participates in this projection.
+ */
+export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
+  const request = committed?.renderRequest;
+  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
+    || !['circular', 'linear'].includes(request.mode)
+    || !committed?.resources || typeof committed.resources !== 'object') {
+    throw new Error('A current committed canonical Session is required.');
+  }
+  validateRecordTransformTarget(target, transform, request.mode);
+  const matchingIndexes = request.records
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => record?.recordKey === target.canonicalRecordKey);
+  if (matchingIndexes.length !== 1) {
+    throw new Error('Target record does not resolve uniquely in the committed request.');
+  }
+  const { record: sourceRecord, index: sourceIndex } = matchingIndexes[0];
+  if (!sameCanonicalValue(sourceRecord.source, target.source)) {
+    throw new Error('Target record resource binding is stale.');
+  }
+  if (sourceRecord.region || target.cropped) {
+    throw new Error('A cropped record cannot be rotated from a feature.');
+  }
+
+  const candidate = cloneCanonicalJsonValue(committed);
+  let records = candidate.renderRequest.records;
+  let targetIndex = sourceIndex;
+  let materialized = false;
+  if (sourceRecord.cardinality === 'all') {
+    const replacements = materializeCanonicalRecordCollection(
+      sourceRecord,
+      target,
+      sourceIndex
+    );
+    records.splice(sourceIndex, 1, ...replacements);
+    targetIndex = sourceIndex + replacements.findIndex(
+      (entry) => entry.recordKey === target.recordKey
+    );
+    const expansion = replacements.length - 1;
+    candidate.renderRequest.comparisons = shiftCanonicalComparisonIndexes(
+      candidate.renderRequest.comparisons,
+      sourceIndex,
+      expansion
+    );
+    const depthFiles = candidate.renderRequest.diagramOptions?.depthTrackFiles;
+    if (Array.isArray(depthFiles) && depthFiles.length === request.records.length) {
+      depthFiles.splice(
+        sourceIndex,
+        1,
+        ...replacements.map(() => cloneCanonicalJsonValue(depthFiles[sourceIndex]))
+      );
+    }
+    const metadata = candidate.webFiles?.linearRecordMetadata;
+    if (Array.isArray(metadata) && metadata.length === request.records.length) {
+      const sourceMetadata = metadata[sourceIndex] || {};
+      metadata.splice(sourceIndex, 1, ...replacements.map((entry) => ({
+        ...cloneCanonicalJsonValue(sourceMetadata),
+        recordKey: entry.recordKey
+      })));
+    }
+    materialized = true;
+  } else if (sourceRecord.cardinality !== 'exactly_one'
+    || target.recordKey !== target.canonicalRecordKey) {
+    throw new Error('Target record identity is stale.');
+  }
+
+  const candidateTarget = records[targetIndex];
+  candidateTarget.display = {
+    ...(candidateTarget.display || { isCircular: null }),
+    startCoordinate: transform.startCoordinate
+  };
+  candidateTarget.presentation = {
+    ...(candidateTarget.presentation || {}),
+    reverseComplement: transform.reverseComplement
+  };
+
+  projectCanonicalSessionRequest({
+    renderRequest: candidate.renderRequest,
+    resources: candidate.resources,
+    webFiles: candidate.webFiles || {},
+    storedConfig: candidate.config || null,
+    deferResourceContent: true
+  });
+  return {
+    canonical: candidate,
+    receipt: Object.freeze({
+      recordKey: target.recordKey,
+      canonicalRecordKey: target.canonicalRecordKey,
+      recordIndex: targetIndex,
+      materialized,
+      startCoordinate: transform.startCoordinate,
+      reverseComplement: transform.reverseComplement
+    })
+  };
+};
+
 const normalizePublicationRequestAliases = (request) => {
   const normalized = [5, 6].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
