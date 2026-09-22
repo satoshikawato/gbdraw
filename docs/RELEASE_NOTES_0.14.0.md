@@ -140,12 +140,6 @@ provides the versions published there; the source version alone does not establi
 package availability. [Installation](./INSTALL.md) explains how to check the
 distribution and install a checkout when the desired version is unavailable.
 
-The 0.14.0 conda recipe adds `losat ==0.1.0` as a runtime dependency on the
-initial `linux-64`, `osx-64`, and `osx-arm64` targets. Native protein comparisons
-prefer lowercase `bin/losat` from the running Python's conda prefix before the
-managed cache, so a conda installation does not need `gbdraw setup-losat`.
-Wheel and sdist metadata remain Python-only and do not declare native LOSAT.
-
 Wheel and sdist installation has been verified in isolated Linux environments
 on Python 3.10, 3.11, and 3.12, including CLI, Python API, session replay, and
 non-SVG exports. Installed wheel contents exclude development tests, private artifacts,

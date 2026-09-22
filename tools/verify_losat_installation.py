@@ -1,4 +1,4 @@
-"""Verify a public LOSAT install and offline searches from an installed gbdraw wheel."""
+"""Verify a public LOSAT install and offline searches with an installed gbdraw package."""
 
 from __future__ import annotations
 

@@ -65,9 +65,9 @@ Explicit native LOSAT executables must support CLI v2 (`-max_hsps`,
 `-max_target_seqs`, and `-num_threads`).
 
 Native executables are excluded from the platform-independent wheel and sdist.
-The conda package owns its `bin/losat`; PyPI metadata has no native LOSAT
-dependency. Existing source-checkout bundled discovery is retained. Web Wasm
-execution and its assets are unchanged.
+Conda packaging owns executables under its environment's `bin` directory;
+gbdraw's PyPI metadata has no native LOSAT dependency. Existing source-checkout
+bundled discovery is retained. Web Wasm execution and its assets are unchanged.
 
 
 ## Shared input rules
