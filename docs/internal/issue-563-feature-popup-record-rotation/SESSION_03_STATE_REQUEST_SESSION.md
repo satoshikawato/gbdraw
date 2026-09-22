@@ -26,7 +26,8 @@ branch、HEAD、upstream、statusを確認し、無関係な差分を保持す�
 ### Session goal
 
 per-record origin/orientation/provenanceを一つのrecord display stateへ統合し、canonical request schema 7へ
-正しくprojectする。feature catalog schema 4とSession v44を一度に導入し、v43を安全に読む。
+正しくprojectする。feature catalog schema 4とSession v44を一度に導入し、released v42/catalog 3を
+安全に読む。branch-onlyのv43は専用readerを追加せず、branch-owned artifactをv44へ書き換える。
 popup UIとcandidate execution/historyはまだ実装しない。
 
 ### State contract
@@ -50,7 +51,9 @@ reverseComplementOverride, anchorIntent
 
 1. Session 02のPython source profileをfeature metadata/catalogへ接続し、feature catalog schemaを3から4へ
    上げる。JS admission、compaction、tests、fixturesを同時に更新する。
-2. Session versionを43から44へ上げる。v43/catalog 3のpositive fixtureを保持する。
+2. Session versionを43から44へ上げる。mainに存在するv42/catalog 3のpositive fixtureを保持する。
+   v43がfirst-parent `main`またはrelease tagにない限りv43 readerを追加せず、branch-owned v43 artifactは
+   v44へ書き換える。
    - 保存済みResultを壊さない。
    - single exactなど既存dataから安全に証明できるcapabilityだけをmigrationする。
    - それ以外は再Generateが必要というexplicit disabled stateにする。
@@ -70,7 +73,7 @@ reverseComplementOverride, anchorIntent
 
 - canonical request schemaは7のまま。
 - Worker protocol、Python request codec、renderer pathは変更しない。
-- feature catalog 3 -> 4とSession 43 -> 44のnamespace、reader、fixture、removal conditionを
+- feature catalog 3 -> 4とreleased Session 42 -> 44のnamespace、reader、fixture、removal conditionを
   Session 01のarchitecture ledgerへ反映する。
 - schema numberを上げずにfieldの意味を変えない。
 - compatibility branchを複数fileへ散らさず、既存migration/admission ownerへ置く。
@@ -86,7 +89,7 @@ reverseComplementOverride, anchorIntent
 - tracks/comparison/resource bindingsの保存
 - schema 4 current catalog、catalog 3 legacy safe admission、invalid/future rejection
 - v44 save/fresh Load/regenerate
-- v43 positive fixture migrationと保存済みResult保持
+- released v42/catalog 3 positive fixture migrationと保存済みResult保持
 - request schemaが7であること
 
 ### Verification

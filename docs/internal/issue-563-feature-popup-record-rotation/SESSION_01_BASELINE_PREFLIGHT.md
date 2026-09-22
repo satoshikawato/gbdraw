@@ -73,8 +73,9 @@ runtime実装前の事実、authority、owner/path/compatibility境界、accepta
    - record coordinate transform
 4. architecture ratchetの通常/例外判定を記録する。
    - owner/pathは既存owner内のprivate decompositionとして増加させない。
-   - Session 44から見たv43 readerはcompatibility pathになるため、namespace、positive fixture、
-     removal condition、before/after CB setをpolicyどおり宣言する。
+   - Session 44から見たreleased v42/catalog 3 readerはcompatibility pathになるため、namespace、
+     positive fixture、removal condition、before/after CB setをpolicyどおり宣言する。計画時点で
+     branch-onlyのv43はreader対象にせず、branch-owned artifactをcurrent writerへ書き換える。
    - request schema 7、Worker protocol、renderer pathは不変とする。
 5. current source/testからfile-level implementation mapを作る。少なくとも次を含める。
    - `gbdraw/web_support/feature_metadata.py`

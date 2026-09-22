@@ -269,7 +269,9 @@ feature catalog schemaを4へ上げる。profileは少なくとも次を区別�
 profileはcapability factsのみを持ち、5′/midpoint/3′の座標やUI messageは持たない。
 その判断はJS pure resolver一箇所へ残す。
 
-catalog 4をSessionで保存するためSession versionは44へ上げる。v43/catalog 3のreaderは、現行の
+catalog 4をSessionで保存するためSession versionは44へ上げる。計画作成時点の`main` current writerは
+Session 42であり、Session 43は`origin/dev`だけの未release formatなので、v43専用readerは追加しない。
+branch-owned v43 artifactが存在する場合はv44へ書き換え、mainに存在するv42/catalog 3のreaderが
 保存済みResultを壊さず読み込む。既存partsから安全に証明できるsingle exact locationだけを
 限定的に復元し、それ以外のpopup rotationは`Generate again to refresh feature location metadata`
 相当の明示理由でdisableする。legacy dataを推測して完全対応に見せない。
@@ -410,8 +412,10 @@ Architecture ratchetでは、次のowner/pathを増やさないことを基本�
 - history transaction owner: `services/history.js`のまま1
 - record coordinate transform owner: Pythonの既存`RecordDisplayTransform`のまま1
 
-Session 44がv43 readerを新しいcompatibility pathにするため、Session 01でpolicyに従うbefore/after
-CB evidence、namespace、positive fixture、retirement conditionを記録する。schema bumpを避けるために
+Session 44がmainに存在するv42/catalog 3 readerを新しいcompatibility pathにするため、Session 01で
+policyに従うbefore/after CB evidence、namespace、positive fixture、retirement conditionを記録する。
+Session 43が実装開始前にfirst-parent `main`またはrelease tagへ到達した場合だけ、その時点の証拠に
+基づいてv43を同じcompatibility namespaceへ追加する。schema bumpを避けるために
 曖昧なmetadataを推測したり、schema 3へ意味を黙って追加したりしない。
 
 ## 9. Work packages and session order
@@ -453,7 +457,7 @@ parallel implementationを足さずに不足を補う。
 - `cardinality: all`から必要時だけexact-one materialization
 - duplicate record IDs、same file multi-record、same row multi-record
 - target以外のrequest subtree、tracks、comparison、resource IDsが不変
-- v44 save/fresh Load/reopen、v43 safe migration、future/invalid rejection
+- v44 save/fresh Load/reopen、released v42/catalog 3 safe migration、future/invalid rejection
 - Apply一件、Undo一件、Redo一件
 - render failure、cancel、stale/superseded completionでartifactとintentをrollback
 - unrelated pending form editsがcandidateへ入らず、Apply後もpendingのまま
