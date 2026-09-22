@@ -9,13 +9,15 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+from Bio.SeqFeature import BeforePosition, CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.regions import apply_region_specs, parse_region_specs
+from gbdraw.io.record_select import reverse_records
 from gbdraw.svg.ids import definition_group_svg_id
+from gbdraw.web_support.feature_metadata import _source_anchor_profile
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
@@ -397,6 +399,111 @@ def test_web_feature_extraction_adds_compound_location_parts(
         {"start": 6, "end": 9, "strand": "+", "display": "7..9"},
     ]
     assert feature["nucleotide_sequence"] == "AAAGGG"
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (
+            FeatureLocation(2, 8, strand=1),
+            {"precision": "exact", "operator": "single", "partOrder": "biological", "strand": "+"},
+        ),
+        (
+            FeatureLocation(2, 8, strand=-1),
+            {"precision": "exact", "operator": "single", "partOrder": "biological", "strand": "-"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(90, 100, strand=1), FeatureLocation(0, 5, strand=1)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "biological", "strand": "+"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(40, 50, strand=-1), FeatureLocation(10, 20, strand=-1)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "biological", "strand": "-"},
+        ),
+        (
+            FeatureLocation(2, 8, strand=None),
+            {"precision": "exact", "operator": "single", "partOrder": "source-forward", "strand": "unstranded"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=None), FeatureLocation(12, 16, strand=None)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "source-forward", "strand": "unstranded"},
+        ),
+    ],
+)
+def test_source_anchor_profile_classifies_exact_source_paths(
+    location: object,
+    expected: dict[str, str],
+) -> None:
+    assert _source_anchor_profile(SeqFeature(location, type="misc_feature")) == expected
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=1), FeatureLocation(12, 16, strand=-1)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "ambiguous", "strand": "mixed"},
+        ),
+        (
+            FeatureLocation(BeforePosition(2), 8, strand=1),
+            {"precision": "fuzzy", "operator": "single", "partOrder": "biological", "strand": "+"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=1), FeatureLocation(12, 16, strand=1)],
+                operator="order",
+            ),
+            {"precision": "exact", "operator": "order", "partOrder": "ambiguous", "strand": "+"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=1), FeatureLocation(12, 16, strand=1)],
+                operator="bond",
+            ),
+            {"precision": "exact", "operator": "unknown", "partOrder": "ambiguous", "strand": "+"},
+        ),
+    ],
+)
+def test_source_anchor_profile_classifies_unsafe_locations_conservatively(
+    location: object,
+    expected: dict[str, str],
+) -> None:
+    assert _source_anchor_profile(SeqFeature(location, type="misc_feature")) == expected
+
+
+def test_source_anchor_profile_survives_reverse_coordinate_mapping() -> None:
+    record = SeqRecord(Seq("A" * 100), id="NC_ANCHOR_PROFILE")
+    record.features.append(
+        SeqFeature(
+            CompoundLocation(
+                [FeatureLocation(90, 100, strand=1), FeatureLocation(0, 5, strand=1)],
+                operator="join",
+            ),
+            type="misc_feature",
+        )
+    )
+
+    reversed_feature = reverse_records([record], True)[0].features[0]
+
+    assert reversed_feature.location.strand == -1
+    assert _source_anchor_profile(reversed_feature) == {
+        "precision": "exact",
+        "operator": "join",
+        "partOrder": "biological",
+        "strand": "+",
+    }
 
 
 def test_web_feature_extraction_region_uses_absolute_display_coordinates(

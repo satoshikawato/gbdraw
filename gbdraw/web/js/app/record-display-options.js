@@ -1,5 +1,6 @@
 // Source-bound editable rotation intent. The request service owns serialization.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 
 export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
@@ -242,20 +243,25 @@ export const selectedFeatureDisplayStart = ({ row, committedRow, selectedFeature
   if (feature?.record_key !== committedRow.recordKey) throw new Error('Selected feature belongs to another record.');
   const parts = feature.location_parts;
   const strand = feature.strand;
-  if (!['+', '-'].includes(strand) || !Array.isArray(parts) || !parts.length
-    || !Number.isSafeInteger(row.recordLength) || row.recordLength <= 0
-    || parts.some((part) => part.strand !== strand
-      || !Number.isSafeInteger(part.start) || !Number.isSafeInteger(part.end)
-      || part.start < 0 || part.end <= part.start || part.end > row.recordLength)) {
-    throw new Error('Feature shortcut requires nonempty source parts with one known strand.');
-  }
   if (!['five-prime', 'midpoint'].includes(shortcut)) throw new Error('Unknown feature shortcut.');
-  const length = parts.reduce((sum, part) => sum + part.end - part.start, 0);
-  let offset = shortcut === 'five-prime' ? 0 : Math.floor((length - 1) / 2);
-  for (const part of parts) {
-    if (offset < part.end - part.start) {
-      return strand === '+' ? part.start + 1 + offset : part.end - offset;
-    }
-    offset -= part.end - part.start;
-  }
+  const result = resolveFeatureAnchor({
+    recordLength: row.recordLength,
+    effectiveCircular: true,
+    cropped: false,
+    currentReverseComplement: false,
+    identity: {
+      recordKey: committedRow.recordKey,
+      biologicalFeatureId: feature.biological_feature_id
+    },
+    parts,
+    profile: {
+      precision: 'exact',
+      operator: Array.isArray(parts) && parts.length === 1 ? 'single' : 'join',
+      partOrder: 'biological',
+      strand
+    },
+    intent: { placement: 'anchor', anchor: shortcut, offsetBp: 0, orientForward: false }
+  });
+  if (!result.eligibility.enabled) throw new Error(result.eligibility.message);
+  return result.startCoordinate;
 };

@@ -1,6 +1,6 @@
 # Issue #563 baseline and preflight
 
-- Status: `BLOCKED_PRODUCT_AUTHORITY`
+- Status: `CLEARED_FOR_SESSION_02`
 - Session: 01
 - Recorded: 2026-09-22
 - Branch: `issue-563-feature-popup-record-rotation-20260922`
@@ -22,6 +22,15 @@ base.
 
 The ready-to-review choices and required response are in
 `PRODUCT_DECISION_PACKET.md` beside this document.
+
+## Authority resolution
+
+The Product Decision Owner selected `A / POPUP-RECORD-ROTATION` in a complete
+receipt dated `2026-09-22`. That receipt is serialized as `PD-OI-032`, merged
+into `dev` by PR `#572` at
+`322197a2e792ad9cabf28326bc21b7fafa537fa0`, and present in this branch through
+merge commit `fbf195f2`. No conflicting authority appeared. The Product
+authority stop condition is therefore cleared for Session 02 runtime work.
 
 ## Repository and change baseline
 
@@ -326,16 +335,16 @@ cannot express an ambiguous Biopython location in memory.
 | `python /tmp/verify_issue563_session01_losat.py` | PASS equivalent Python Playwright journey after required sandbox escalation; counts `4, 4, 4, 0`, zero additional jobs after start/reverse and zero jobs after fresh Load. |
 | `git diff --check` | PASS |
 
-## Stop condition and resumption
+## Satisfied stop condition and resumption
 
-Do not begin Session 02 runtime work. Resume only after all of the following:
+Session 02 runtime work may begin because all of the following are satisfied:
 
-1. an identified Product Decision Owner supplies a complete response from
+1. `satoshikawato` supplied a complete response from
    `PRODUCT_DECISION_PACKET.md`;
-2. that choice is serialized without inferred fields in an authority-only
-   change;
-3. the authority-only change is merged and is present on the runtime branch's
-   base through an explicitly authorized branch update; and
+2. `PD-OI-032` serializes that choice without inferred fields in an
+   authority-only change;
+3. PR `#572` is merged and merge commit `fbf195f2` places that authority in the
+   runtime branch ancestry through the explicitly authorized branch update;
 4. no conflicting authority has appeared.
 
 The later compatibility exception still requires an exact-final-head

@@ -67,7 +67,8 @@ for (const strand of ['+', '-']) {
         const sequence = Array.from({ length: end - start }, (_, i) => start + i + 1);
         return strand === '-' ? sequence.reverse() : sequence;
       });
-      const feature = { record_key: 'instance', strand, location_parts: ordered.map(([start, end]) => ({ start, end, strand })) };
+      const feature = { record_key: 'instance', biological_feature_id: 'feature', strand,
+        location_parts: ordered.map(([start, end]) => ({ start, end, strand })) };
       const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, selectedFeatures: [feature] };
       assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'five-prime' }), bases[0]);
       assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'midpoint' }), bases[Math.floor((bases.length - 1) / 2)]);
@@ -76,7 +77,8 @@ for (const strand of ['+', '-']) {
 }
 
 test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-strand selections', () => {
-  const feature = { record_key: 'instance', strand: '+', location_parts: [{ start: 5, end: 10, strand: '+' }] };
+  const feature = { record_key: 'instance', biological_feature_id: 'feature', strand: '+',
+    location_parts: [{ start: 5, end: 10, strand: '+' }] };
   const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, selectedFeatures: [feature], shortcut: 'midpoint' };
   for (const changed of [
     { committedRow: null }, { committedRow: { ...args.committedRow, source: {} } },

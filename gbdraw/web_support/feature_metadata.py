@@ -12,6 +12,7 @@ from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _iter_source_features as _iter_features,
     _read_coord_map as _read_record_coord_map,
+    _source_feature_anchor_profile,
     _source_feature_index,
     _source_feature_location_parts,
 )
@@ -216,6 +217,18 @@ def _location_has_fuzzy_positions(location: Any) -> bool:
         if type(part.start).__name__ != "ExactPosition" or type(part.end).__name__ != "ExactPosition":
             return True
     return False
+
+
+def _source_anchor_profile(feature: Any, *, coord_step: int = 1) -> dict[str, str]:
+    """Return source capability facts without resolving any anchor coordinate."""
+
+    profile = _source_feature_anchor_profile(feature, coord_step=coord_step)
+    return {
+        "precision": profile.precision,
+        "operator": profile.operator,
+        "partOrder": profile.part_order,
+        "strand": profile.strand,
+    }
 
 
 def _extract_nucleotide_sequence(feature: Any, record: Any) -> tuple[str, list[str]]:
