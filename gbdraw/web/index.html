@@ -1132,6 +1132,16 @@
             font-weight: 700;
             line-height: 1.25rem;
         }
+        .linear-secondary-summary {
+            color: #475569;
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1rem;
+        }
+        [class~="text-[9px]"],
+        [class~="text-[10px]"] {
+            font-size: 0.6875rem !important;
+        }
         .linear-comparison-actions {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1215,7 +1225,7 @@
                         <i class="ph ph-arrow-u-up-right"></i>
                     </button>
                 </div>
-                <div class="app-file-actions flex gap-0.5">
+                <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
                     <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings">
                         <i class="ph ph-arrow-clockwise"></i> Reset Settings
                     </button>
@@ -1256,13 +1266,6 @@
                     <div class="card-header min-w-0">
                         <i class="ph ph-folder-open text-xl"></i>
                         <span class="min-w-0 flex-1">Input Genomes</span>
-                        <button
-                            v-if="mode === 'linear'"
-                            type="button"
-                            aria-label="Add sequence"
-                            @click="addLinearSeq()"
-                            class="btn btn-secondary shrink-0 px-2 py-1 text-xs"
-                        ><i class="ph ph-plus"></i> Add sequence</button>
                     </div>
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">Rotation, feature placement, or tolerance has changes pending Generate. The Result shows the last successful settings.</p>
@@ -1512,7 +1515,7 @@
                             >
                                 <div class="mb-2 flex min-w-0 items-center justify-between gap-2 text-[10px] font-semibold text-slate-500">
                                     <span class="shrink-0">File {{ sourceIndex + 1 }}</span>
-                                    <div class="flex shrink-0 items-center gap-1">
+                                    <div v-if="linearSourceGroups.length > 1" class="flex shrink-0 items-center gap-1">
                                         <button
                                             type="button"
                                             class="btn btn-secondary px-1.5 py-0.5 text-xs"
@@ -1539,7 +1542,7 @@
                                 </div>
                             <div v-if="lInputType === 'gb'" class="space-y-2">
                                 <file-uploader
-                                    label="GenBank File"
+                                    label="GenBank / DDBJ File"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
                                     accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gb"
@@ -1575,7 +1578,7 @@
                                         :value="getLinearSourceDefaultDefinition(source)"
                                         @input="setLinearSourceDefaultDefinition(source, $event.target.value)"
                                         :aria-label="`Default definition for file ${sourceIndex + 1}`"
-                                        placeholder="e.g., <i>Escherichia coli</i> O157:H7 Sakai"
+                                        placeholder="e.g., Escherichia coli O157:H7 Sakai"
                                         class="form-input px-1 py-0.5 text-xs"
                                     >
                                 </div>
@@ -1591,10 +1594,10 @@
                                     >
                                 </div>
                             </div>
-                            <details open class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
+                            <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-source-depth="source.uid">
                                 <summary
                                     role="button"
-                                    :aria-label="`Depth TSV assignments for file ${sourceIndex + 1}: ${linearSourceDepthSummary(source)}`"
+                                    :aria-label="`Depth tracks for file ${sourceIndex + 1}`"
                                     class="min-w-0 text-[10px]"
                                 >
                                     <span class="min-w-0 truncate">{{ linearSourceDepthSummary(source) }}</span>
@@ -1614,15 +1617,14 @@
                                                 :data-linear-source-depth-state="track.status.state"
                                             >
                                                 {{ track.status.state === 'common'
-                                                    ? 'Common'
+                                                    ? 'Attached to all records'
                                                     : track.status.state === 'mixed'
-                                                        ? 'Mixed'
-                                                        : 'Empty' }}
-                                                · {{ track.status.selectedCount }}/{{ track.status.recordCount }}
+                                                        ? 'Attached to some records'
+                                                        : 'Not attached' }}
                                             </span>
                                         </div>
                                         <p v-if="track.status.state === 'mixed'" class="rounded border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] leading-snug text-amber-800">
-                                            Records use different files or include empty bindings. Choosing a file replaces all record bindings for this File and series.
+                                            Some records use different files or have no depth track. Choosing a file applies it to every record in this File.
                                         </p>
                                         <file-uploader
                                             label="Depth TSV"
@@ -1642,7 +1644,7 @@
                                             @click="clearLinearSourceDepthFile(source, track.index)"
                                             class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"
                                         >
-                                            <i class="ph ph-trash"></i> Clear all record bindings
+                                            <i class="ph ph-trash"></i> Remove from all records
                                         </button>
                                     </div>
                                     <button
@@ -1670,7 +1672,7 @@
                                     :aria-label="`Linear sequence ${idx + 1}`"
                                 >
                             <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
-                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-primary-label">
+                                <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-secondary-summary">
                                     <i class="ph ph-sliders-horizontal"></i>
                                     <span v-if="source.records.length > 1" class="min-w-0 truncate" :title="linearComparisonRecordLabel(seq.uid)">{{ linearComparisonRecordLabel(seq.uid) }}</span>
                                     <span v-else>Record options</span>
@@ -1693,7 +1695,7 @@
                                     Per-record Depth TSV
                                     <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-400">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
-                                <p class="pt-1 text-[9px] leading-snug text-slate-400">Change this record without renumbering global series. A differing or empty binding makes the File-level status Mixed.</p>
+                                <p class="pt-1 text-[9px] leading-snug text-slate-400">Change this record without renumbering global series. Different or missing files are reported in the File-level depth summary.</p>
                                 <div class="space-y-1.5 pt-1">
                                     <div class="space-y-1.5">
                                         <div v-for="track in linearDepthTrackRows()" :key="`${seq.uid}-depth-${track.key}`" class="rounded border border-slate-200 bg-slate-50 p-2 space-y-1">
@@ -1715,7 +1717,7 @@
                                     <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">Using file default</span>
                                     <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="resetLinearRecordDefinition(seq)" class="text-[9px] font-normal text-slate-400 hover:text-slate-600">Reset to default</button>
                                 </div>
-                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultDefinition(source) || 'e.g., <i>Escherichia coli</i> O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs">
+                                <input type="text" v-model="seq.definition" :aria-label="`Definition for sequence ${idx + 1}`" :placeholder="getLinearSourceDefaultDefinition(source) || 'e.g., Escherichia coli O157:H7 Sakai'" class="form-input px-1 py-0.5 text-xs">
                             </div>
                             <div class="mt-2">
                                 <div class="flex items-center justify-between text-[10px] text-slate-500 font-bold mb-1">
@@ -1780,11 +1782,11 @@
                             </details>
                             </section>
                         </div>
-                        <div class="grid min-w-0 grid-cols-2 gap-2" role="group" aria-label="Linear File actions">
-                            <button type="button" aria-label="Add sequence" data-linear-file-add @click="addLinearSeq()" class="btn btn-secondary min-w-0 w-full py-2.5 text-sm font-bold"><i class="ph ph-plus"></i> Add sequence</button>
-                            <button type="button" aria-label="Remove last sequence" data-history-managed @click="removeLastLinearSeq($event)" :disabled="linearSourceGroups.length <= 1" class="btn btn-danger min-w-0 w-full py-2.5 text-sm font-bold"><i class="ph ph-minus"></i> Remove</button>
+                        <div :class="linearSourceGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'" class="grid min-w-0 gap-2" role="group" aria-label="Linear File actions">
+                            <button type="button" aria-label="Add sequence" data-linear-file-add @click="addLinearSeq()" class="btn btn-primary min-w-0 w-full bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700"><i class="ph ph-plus"></i> Add sequence</button>
+                            <button v-if="linearSourceGroups.length > 1" type="button" aria-label="Remove last sequence" data-history-managed @click="removeLastLinearSeq($event)" class="btn btn-danger min-w-0 w-full py-2.5 text-sm font-bold"><i class="ph ph-minus"></i> Remove</button>
                         </div>
-                        <details data-linear-depth-settings class="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+                        <details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" data-linear-depth-settings class="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                             <summary role="button" aria-label="Depth track settings" class="linear-primary-label">
                                 <i class="ph ph-chart-bar"></i>
                                 Depth track settings
@@ -1959,17 +1961,18 @@
                                 </div>
                             </div>
                             <div role="group" aria-label="Set all adjacent comparisons" data-history-managed data-capture="linear-blast-source" class="linear-comparison-actions">
-                                <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
+                                <button type="button" aria-label="Run LOSAT for all adjacent pairs" @click="setLinearComparisonGlobalAction('losat')" :disabled="!canRunLinearLosat" :title="canRunLinearLosat ? 'Run LOSAT for all adjacent pairs' : 'Requires at least 2 loaded sequences to compare'" :class="linearComparisonGlobalAction === 'losat' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Run LOSAT</button>
                                 <button type="button" aria-label="Set no comparison" @click="setLinearComparisonGlobalAction('none')" :class="linearComparisonGlobalAction === 'none' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">No comparison</button>
                                 <button type="button" aria-label="Use uploaded BLAST TSV for all adjacent pairs" @click="setLinearComparisonGlobalAction('upload')" :class="linearComparisonGlobalAction === 'upload' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'" class="btn rounded-lg border text-xs font-bold shadow-sm">Upload BLAST TSV</button>
                             </div>
+                            <p v-if="!canRunLinearLosat" class="text-[10px] leading-snug text-slate-500">Run LOSAT requires at least 2 loaded sequences.</p>
                             <div class="min-w-0 rounded border border-slate-200 bg-white px-2 py-2" role="status" aria-live="polite">
                                 <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                                     <span class="linear-primary-label min-w-0">{{ linearComparisonUi.currentStatusLabel }}</span>
                                     <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
                                     <span v-if="linearComparisonUi.errorBadge" class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{{ linearComparisonUi.errorBadge.label }}</span>
                                 </div>
-                                <p class="linear-comparison-summary mt-1 text-[10px] leading-snug text-slate-500">{{ linearComparisonUi.summaryText }}</p>
+                                <p v-if="linearComparisonUi.intentKey !== 'none'" class="linear-comparison-summary mt-1 text-[10px] leading-snug text-slate-500">{{ linearComparisonUi.summaryText }}</p>
                             </div>
                             <p v-if="!linearComparisonResolution.valid" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
                                 {{ linearComparisonResolution.error }}
@@ -2278,7 +2281,7 @@
                             <div class="grid grid-cols-2 gap-1.5">
                                 <div>
                                     <label for="circular-species" class="input-label">Species <help-tip text="Species name used in the circular center label when no custom plot title is set."></help-tip></label>
-                                    <input id="circular-species" type="text" v-model="form.species" class="form-input" placeholder="e.g. <i>Escherichia coli</i>">
+                                    <input id="circular-species" type="text" v-model="form.species" class="form-input" placeholder="e.g., Escherichia coli">
                                 </div>
                                 <div>
                                     <label class="input-label">Strain <help-tip text="Strain or isolate name used in the circular center label."></help-tip></label>
@@ -2718,7 +2721,7 @@
 
 
                 <div class="card bg-slate-50/50">
-                    <details open>
+                    <details :open="mode === 'linear'">
                         <summary aria-label="Layout"><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
@@ -3050,32 +3053,34 @@
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
                                         :class="enabledOptionClass"
+                                        title="Display features on separate strands for better distinction."
                                     >
                                         <input type="checkbox" v-model="form.separate_strands" class="form-checkbox" aria-label="Separate Strands">
-                                        <span class="inline-flex items-center gap-1">Separate Strands <help-tip text="Display features on separate strands for better distinction."></help-tip></span>
+                                        <span>Separate Strands</span>
                                     </label>
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
                                         :class="enabledOptionClass"
+                                        title="Shift features vertically to avoid overlap."
                                     >
                                         <input type="checkbox" v-model="adv.resolve_overlaps" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Resolve Overlaps <help-tip text="Shift features vertically to avoid overlap. Feature layout still applies: Tuckin shifts overlap tracks inward, Middle/Spreadout shift them outward."></help-tip></span>
+                                        <span>Resolve Overlaps</span>
                                     </label>
                                     <label class="text-xs">Feature overlap tolerance (bp)
                                         <input type="number" min="0" step="1" v-model.number="adv.feature_overlap_tolerance_bp" aria-label="Feature overlap tolerance (bp)" class="w-20 rounded border p-1">
                                     </label>
 
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Place multiple records on one shared circular canvas.">
                                         <input type="checkbox" v-model="form.multi_record_canvas" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Multi-Record Canvas <help-tip text="When multiple records are loaded, place them on one shared circular canvas as an automatic grid (default)."></help-tip></span>
+                                        <span>Multi-Record Canvas</span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC content track.">
                                         <input type="checkbox" :checked="form.suppress_gc" @change="setCircularGcSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Content">
-                                        <span class="inline-flex items-center gap-1">Hide GC Content <help-tip text="Suppress the GC content track."></help-tip></span>
+                                        <span>Hide GC Content</span>
                                     </label>
-                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none" title="Suppress the GC skew track.">
                                         <input type="checkbox" :checked="form.suppress_skew" @change="setCircularSkewSuppressed($event.target.checked, $event)" class="form-checkbox" aria-label="Hide GC Skew">
-                                        <span class="inline-flex items-center gap-1">Hide GC Skew <help-tip text="Suppress the GC skew track."></help-tip></span>
+                                        <span>Hide GC Skew</span>
                                     </label>
                                     <label
                                         class="option-label flex items-center gap-2 text-xs select-none"
@@ -3083,7 +3088,7 @@
                                         :title="adv.circular_track_slots_enabled ? 'Custom stack Depth rows control rendering. Disable the custom stack to change this simple control.' : (canShowDepthTrack ? '' : 'Upload a Depth TSV file to enable Show Depth.')"
                                     >
                                         <input type="checkbox" v-model="form.show_depth" :disabled="adv.circular_track_slots_enabled || !canShowDepthTrack" class="form-checkbox">
-                                        <span class="inline-flex items-center gap-1">Show Depth <help-tip text="Simple mode only. Display depth coverage from uploaded TSV files; use Reset to copy it into the custom stack."></help-tip></span>
+                                        <span>Show Depth</span>
                                     </label>
                                 </div>
 

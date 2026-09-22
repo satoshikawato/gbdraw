@@ -107,15 +107,15 @@ def _set_source_inputs(page: Page) -> None:
     first_fixture = GUI_HEPATOPLASMATACEAE_FIXTURES[0]
     page.get_by_test_id("linear-genbank-1").set_input_files(first_fixture[0])
     add_sequence = page.get_by_role("button", name="Add sequence", exact=True)
-    expect(add_sequence).to_have_count(2)
+    expect(add_sequence).to_have_count(1)
     for index, fixture in enumerate(
         GUI_HEPATOPLASMATACEAE_FIXTURES[1:], start=2
     ):
-        add_sequence.first.click()
+        add_sequence.click()
         page.get_by_test_id(f"linear-genbank-{index}").set_input_files(fixture[0])
 
     selected_files = page.get_by_role(
-        "group", name="GenBank File selection", exact=True
+        "group", name="GenBank / DDBJ File selection", exact=True
     )
     expect(selected_files).to_have_count(5)
     for index, fixture in enumerate(GUI_HEPATOPLASMATACEAE_FIXTURES):
@@ -469,12 +469,12 @@ def _boxes_overlap(left: Mapping[str, float], right: Mapping[str, float]) -> boo
 def _assert_input_capture_framing(page: Page) -> None:
     depth_disclosures = page.get_by_role(
         "button",
-        name=re.compile(r"^Depth TSV assignments for file \d+:"),
+        name=re.compile(r"^Depth tracks for file \d+$"),
     )
     for index in range(depth_disclosures.count()):
         depth_disclosures.nth(index).click()
     selected_files = page.get_by_role(
-        "group", name="GenBank File selection", exact=True
+        "group", name="GenBank / DDBJ File selection", exact=True
     )
     expect(selected_files).to_have_count(5)
     selected_files.nth(4).evaluate(

@@ -75,10 +75,7 @@ const openLinear = async (page) => {
   await expect(page.locator('[data-linear-comparison-card]')).toBeVisible();
 };
 
-const inputHeaderAdd = (page) => (
-  page.locator('.card-header').filter({ hasText: 'Input Genomes' })
-    .getByRole('button', { name: 'Add sequence' })
-);
+const inputAddAction = (page) => page.locator('[data-linear-file-add]');
 
 const comparisonCard = (page) => page.locator('[data-linear-comparison-card]');
 const comparisonCommands = (page) => comparisonCard(page).getByRole('group', {
@@ -148,15 +145,54 @@ const expectKeyboardFocusIndicator = async (locator) => {
   expect(indicator.outlineWidth).not.toBe('0px');
 };
 
+test('Phase 1 keeps secondary controls quiet until they are useful', { tag: '@pr-smoke' }, async ({ page }) => {
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+
+  const layoutSummary = page.locator('summary[aria-label="Layout"]');
+  expect(await layoutSummary.evaluate((summary) => summary.parentElement.open)).toBe(false);
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add sequence', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Remove last sequence', exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-linear-source-move]')).toHaveCount(0);
+  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(0);
+  await expect(page.locator('[data-linear-source-depth]').first()).not.toHaveAttribute('open', '');
+  await expect(page.locator('[data-linear-source-depth]').first().locator(':scope > summary'))
+    .toHaveText('No depth track attached');
+  await expect(page.getByPlaceholder('e.g., Escherichia coli O157:H7 Sakai').first())
+    .toBeVisible();
+
+  const typography = await page.evaluate(() => {
+    const secondary = document.querySelector('details[data-linear-record-options] > summary');
+    const helper = document.querySelector('[data-linear-source-defaults] label');
+    const add = document.querySelector('[data-linear-file-add]');
+    const fileActions = document.querySelector('.app-file-actions');
+    return {
+      secondarySize: getComputedStyle(secondary).fontSize,
+      secondaryWeight: getComputedStyle(secondary).fontWeight,
+      helperSize: getComputedStyle(helper).fontSize,
+      addBackground: getComputedStyle(add).backgroundColor,
+      toolbarSeparator: getComputedStyle(fileActions).borderLeftWidth
+    };
+  });
+  expect(typography).toEqual({
+    secondarySize: '12px',
+    secondaryWeight: '600',
+    helperSize: '11px',
+    addBackground: 'rgb(37, 99, 235)',
+    toolbarSeparator: '1px'
+  });
+});
+
 test('fresh Linear keeps primary input visible and uses command/status semantics', { tag: '@pr-smoke' }, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openLinear(page);
 
   const settingsPane = page.locator('.settings-pane');
   const firstUploader = page.getByRole('button', {
-    name: 'Choose GenBank File', exact: true
+    name: 'Choose GenBank / DDBJ File', exact: true
   }).first();
-  await expectInside(inputHeaderAdd(page), settingsPane);
   await expectInside(firstUploader, settingsPane);
 
   const commands = comparisonCommands(page);
@@ -171,9 +207,14 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
     await expect(button).toBeVisible();
     await expect(button).not.toHaveAttribute('aria-pressed');
   }
+  await expect(commands.getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs', exact: true
+  })).toBeDisabled();
+  await expect(comparisonCard(page)).toContainText(
+    'Run LOSAT requires at least 2 loaded sequences.'
+  );
   const currentStatus = comparisonCard(page).getByRole('status');
-  await expect(currentStatus).toContainText('Current: No comparison');
-  await expect(currentStatus).toContainText('No comparison');
+  await expect(currentStatus).toHaveText('Current: No comparison');
   await expect(commands.getByRole('status')).toHaveCount(0);
 
   await expect(comparisonSettings(page)).toHaveCount(1);
@@ -204,10 +245,17 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   });
   expect(order).toEqual({ present: true, ordered: true, pairInRecordList: 0 });
 
-  await inputHeaderAdd(page).click();
+  await inputAddAction(page).click();
   await expect(page.locator('[data-linear-record-card]')).toHaveCount(2);
-  await expectInside(inputHeaderAdd(page), settingsPane);
   await expectInside(firstUploader, settingsPane);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
+    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+  });
+  await expect(commands.getByRole('button', {
+    name: 'Run LOSAT for all adjacent pairs', exact: true
+  })).toBeEnabled();
   await expect(comparisonSettings(page)).not.toHaveAttribute('open', '');
   await expect(page.locator('[data-linear-record-list] [data-edge-key]')).toHaveCount(0);
 
@@ -235,10 +283,10 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
 
 test('uploader, comparison commands, and native summaries work from the keyboard', { tag: '@pr-smoke' }, async ({ page }) => {
   await openLinear(page);
-  await inputHeaderAdd(page).click();
+  await inputAddAction(page).click();
 
   const uploaders = page.getByRole('button', {
-    name: 'Choose GenBank File', exact: true
+    name: 'Choose GenBank / DDBJ File', exact: true
   });
   const firstUploader = uploaders.nth(0);
   await firstUploader.focus();
@@ -432,7 +480,12 @@ test('uploader, comparison commands, and native summaries work from the keyboard
 
 test('imported comparison resolutions are explicit and create one History entry each', async ({ page }) => {
   await openLinear(page);
-  await inputHeaderAdd(page).click();
+  await inputAddAction(page).click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
+    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+  });
   await comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs'
   }).click();
@@ -1168,7 +1221,12 @@ test('structured comparison errors open and focus their owning disclosure', asyn
 test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order drift', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openLinear(page);
-  await inputHeaderAdd(page).click();
+  await inputAddAction(page).click();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
+    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+  });
   await comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs'
   }).click();
@@ -1223,7 +1281,7 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   expect(geometry.pairInRecords).toBe(0);
 
   const firstUploader = page.getByRole('button', {
-    name: 'Choose GenBank File', exact: true
+    name: 'Choose GenBank / DDBJ File', exact: true
   }).first();
   await firstUploader.focus();
   const tabSections = ['input'];

@@ -86,11 +86,11 @@ def capture_first_linear(
             "Current: No comparison"
         )
 
-        page.get_by_label("GenBank File", exact=True).set_input_files(
+        page.get_by_label("GenBank / DDBJ File", exact=True).set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
         selected_file = page.get_by_role(
-            "group", name="GenBank File selection", exact=True
+            "group", name="GenBank / DDBJ File selection", exact=True
         )
         expect(selected_file).to_contain_text("NC_001416.gb")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(

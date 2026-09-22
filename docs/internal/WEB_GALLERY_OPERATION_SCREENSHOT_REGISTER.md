@@ -1,9 +1,21 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Linear input workflow cleanup (#568 Phase 1)
+
+The Lambda tutorial is the only Gallery example that shows the renamed Linear
+GenBank uploader and the single-record comparison state. Update its capture
+metadata and replace only the two affected operation crops; keep the remaining
+control and final-preview media.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Recapture | Exact Lambda session; one Linear row; **GenBank / DDBJ File** uploader containing `NC_001416.gb`; no record-reorder or source-card Remove action | Recaptured at DSF 3, quality 94; visually accepted |
+| `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Recapture | Exact Lambda session; **No comparison** command; one **Current: No comparison** status; disabled **Run LOSAT** with its two-input requirement | Recaptured at DSF 3, quality 94; visually accepted |
 
 ## Titles, Record Labels, and Legend regrouping (#562)
 

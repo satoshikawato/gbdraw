@@ -239,13 +239,15 @@ def _load_complete_linear_inputs(page: Page) -> None:
     add_sequence = page.get_by_role(
         "button", name="Add sequence", exact=True
     )
-    expect(add_sequence).to_have_count(2)
-    add_sequence.first.click()
+    expect(add_sequence).to_have_count(1)
+    add_sequence.click()
     page.get_by_test_id("linear-genbank-1").set_input_files(FIRST_LINEAR_FIXTURE_PATH)
     page.get_by_test_id("linear-genbank-2").set_input_files(
         GUI_LOSATN_DE3_FIXTURE_PATH
     )
-    selections = page.get_by_role("group", name="GenBank File selection", exact=True)
+    selections = page.get_by_role(
+        "group", name="GenBank / DDBJ File selection", exact=True
+    )
     expect(selections).to_have_count(2)
     expect(selections.nth(0)).to_contain_text("NC_001416.gb")
     expect(selections.nth(1)).to_contain_text("NC_042057.1.gb")
