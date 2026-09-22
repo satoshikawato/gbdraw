@@ -8,9 +8,16 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
-## Session 43: independent Linear record-label visibility
+## Session 44: feature anchors and independent record transforms
 
-Session 43 stores the selected visibility mode for Linear **Accession** and
+Session 44 stores source feature anchor capability metadata in feature catalog
+schema 4 and preserves per-record display start, absolute orientation, and
+feature-anchor provenance in one editable record-display draft. Released
+Session 42/catalog 3 documents remain readable. Exact single-part locations
+are migrated conservatively; ambiguous compound locations require Generate
+again before feature-based rotation. Development-only Session 43 is rejected.
+
+Session 44 also stores the selected visibility mode for Linear **Accession** and
 **Length / Coordinates** independently. Each field is `auto`, `show`, or `hide`.
 Auto shows the field while every effective rendered row contains one record and
 hides that field diagram-wide when any row contains two or more records.
@@ -54,14 +61,15 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 43 | 27–33 and 39–43 |
+| gbdraw session | 44 | 27–33, 39–42, and 44 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–43 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert full session versions 31–33 and 39–43 to
+The public typed-session bridge can convert full session versions 31–33,
+39–42, and 44 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -122,7 +130,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–43.
+remain 27–33, 39–42, and 44.
 
 ## Retired inputs
 

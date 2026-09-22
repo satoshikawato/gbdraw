@@ -118,6 +118,7 @@ import {
   isAdoptedFeatureCatalog,
   validateFeatureCatalog
 } from './feature-catalog.js';
+import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups
@@ -214,7 +215,7 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 43;
+export const SESSION_VERSION = 44;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
@@ -1598,9 +1599,18 @@ const preflightSessionImport = (rawData) => {
   )
     ? { ...data.renderRequest, comparisons: [] }
     : data.renderRequest;
-  const currentStoredConfig = sourceSessionVersion < SESSION_VERSION
+  let currentStoredConfig = sourceSessionVersion < SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
+  if (sourceSessionVersion < SESSION_VERSION && isPlainObject(currentStoredConfig)
+    && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
+    currentStoredConfig = {
+      ...currentStoredConfig,
+      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
+        currentStoredConfig.recordDisplayDrafts
+      )
+    };
+  }
   const runtimeStoredConfig = currentSession && Object.prototype.hasOwnProperty.call(data, 'config')
     ? migrateImportedLinearTrackSlots(
         migrateImportedCircularTrackSlots(withHistoricalPairwiseMatchStyleFallback(

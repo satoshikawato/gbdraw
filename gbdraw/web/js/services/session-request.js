@@ -139,7 +139,7 @@ import {
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
-import { recordDisplayKey, requestedRecordDisplay } from '../app/record-display-options.js';
+import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
 export const CANONICAL_REQUEST_SCHEMA = 7;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
@@ -2089,27 +2089,37 @@ export const buildCanonicalRenderRequest = ({
     const selector = record.region?.selector || record.selector;
     const selectedRows = sourceRows.filter((row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
-    const displayFor = (row) => requestedRecordDisplay(row,
+    const transformFor = (row) => requestedRecordTransform(row,
       drafts.find((draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
-      const displays = selectedRows.map(displayFor);
-      if (new Set(displays.map((display) => JSON.stringify(display))).size > 1) {
+      const transforms = selectedRows.map(transformFor);
+      if (new Set(transforms.map((transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((row, rowIndex) => ({ ...record,
           recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
-          presentation: { ...record.presentation, gridRow: record.presentation.gridRow ?? index + 1 },
-          display: displays[rowIndex] }));
+          presentation: { ...record.presentation,
+            reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,
+            gridRow: record.presentation.gridRow ?? index + 1 },
+          display: transforms[rowIndex].display }));
       }
     }
     const selected = selectedRows[0];
     const savedDraft = drafts.find((draft) => draft.scope === state.mode.value && draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
+    const transform = selected ? transformFor(selected) : {
+      display: record.display || { isCircular: savedDraft?.topologyOverride ?? null,
+        startCoordinate: savedDraft?.startCoordinate ?? null },
+      reverseComplement: record.region
+        ? Boolean(record.region.reverseComplement)
+        : savedDraft?.reverseComplementOverride ?? Boolean(record.presentation?.reverseComplement)
+    };
     sourceInputIndexes.push(index);
-    return [{ ...record, display: selected ? displayFor(selected)
-      : record.display || { isCircular: savedDraft?.topologyOverride ?? null,
-        startCoordinate: savedDraft?.startCoordinate ?? null } }];
+    return [{ ...record,
+      presentation: { ...record.presentation,
+        reverseComplement: record.region ? false : transform.reverseComplement },
+      display: transform.display }];
   });
   if (state.mode.value === 'linear' && records.length !== recordPlan.records.length) {
     records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
@@ -4270,7 +4280,9 @@ export const projectCanonicalSessionRequest = ({
         selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
         recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
         topologyOverride: record.display?.isCircular ?? null,
-        startCoordinate: record.display?.startCoordinate ?? null
+        startCoordinate: record.display?.startCoordinate ?? null,
+        reverseComplementOverride: null,
+        anchorIntent: null
       }] : []),
       featurePlacementOverrides: Object.fromEntries(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode

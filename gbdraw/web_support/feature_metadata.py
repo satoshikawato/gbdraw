@@ -463,6 +463,10 @@ def extract_features_from_records_payload(
                 "qualifiers": qualifiers,
                 "selector": selector,
                 "location_parts": location_parts,
+                "anchorProfile": _source_anchor_profile(
+                    feat,
+                    coord_step=coord_step,
+                ),
                 "nucleotide_sequence": nucleotide_sequence,
                 "amino_acid_sequence": amino_acid_sequence,
                 "sequence_warnings": sequence_warnings,

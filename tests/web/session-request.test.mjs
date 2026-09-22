@@ -1952,6 +1952,67 @@ assert.deepEqual(
   materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
   ['multi-source::record-1', 'multi-source::record-2']
 );
+
+const oneSourceFilesData = {
+  linearSeqs: [{
+    uid: 'one-source', gb: genbank, cardinality: 'all', losat_gencode: 1,
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false
+  }],
+  linearComparisons: []
+};
+const oneSourceRows = [1, 2].map((index) => ({
+  key: JSON.stringify(['linear', 'one-source', `#${index}`]),
+  scope: 'linear', sourceUid: 'one-source', selector: `#${index}`,
+  recordId: 'duplicate', recordLength: 100, detectedTopology: 'circular',
+  reverse: false, cropped: false
+}));
+const oneSourceState = {
+  ...state,
+  recordDisplayRows: ref(oneSourceRows),
+  recordDisplayDrafts: []
+};
+const oneSourceSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  sequences: oneSourceFilesData.linearSeqs
+});
+const unchangedOneSource = buildCanonicalRenderRequest({
+  state: oneSourceState,
+  filesData: oneSourceFilesData,
+  comparisonPlanSnapshot: oneSourceSnapshot
+});
+assert.equal(unchangedOneSource.renderRequest.schema, 7);
+assert.equal(unchangedOneSource.renderRequest.records.length, 1);
+assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
+
+oneSourceState.recordDisplayDrafts = [{
+  scope: 'linear', sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
+  topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
+  anchorIntent: null
+}];
+const transformedOneSource = buildCanonicalRenderRequest({
+  state: oneSourceState,
+  filesData: oneSourceFilesData,
+  comparisonPlanSnapshot: oneSourceSnapshot
+});
+assert.deepEqual(
+  transformedOneSource.renderRequest.records.map((record) => ({
+    selector: record.selector,
+    start: record.display.startCoordinate,
+    reverse: record.presentation.reverseComplement
+  })),
+  [
+    { selector: { kind: 'recordIndex', index: 0 }, start: null, reverse: false },
+    { selector: { kind: 'recordIndex', index: 1 }, start: 25, reverse: true }
+  ]
+);
+assert.equal(
+  transformedOneSource.renderRequest.records[0].source.resourceId,
+  transformedOneSource.renderRequest.records[1].source.resourceId
+);
+assert.equal(
+  Object.values(transformedOneSource.resources).filter((resource) => resource.kind === 'genbank').length,
+  1
+);
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');

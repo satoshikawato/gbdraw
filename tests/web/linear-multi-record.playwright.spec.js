@@ -2013,7 +2013,7 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
       ].join('')
     };
     const catalog = {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'candidate.svg',
@@ -2037,6 +2037,9 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
           start: 0,
           end: 10,
           strand: 1,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+          },
           qualifiers: {}
         }, {
           recordKey: 'record-1',
@@ -2048,6 +2051,9 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
           start: 20,
           end: 30,
           strand: 1,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+          },
           qualifiers: {}
         }],
         orthogroups: [],

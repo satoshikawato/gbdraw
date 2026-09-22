@@ -897,7 +897,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
   expect(loadProbe.metrics.currentWriterActiveConfigRestoreCount).toBe(1);
   expect(loadProbe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
-  expect(await featureCatalogSummary(page)).toEqual({ schema: 3, itemCount: 1 });
+  expect(await featureCatalogSummary(page)).toEqual({ schema: 4, itemCount: 1 });
   expect(preFirstGenerateActiveIntent.linearComparisonPlan).toEqual({
     mode: 'adjacent',
     defaultSource: 'losat',
@@ -1365,7 +1365,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     .toBe(true);
   expect(artifactFingerprints[1]).toBe(artifactFingerprints[0]);
   expect(generatedFeatureCatalogDigest).toMatchObject({
-    schema: 3,
+    schema: 4,
     itemCount: 1
   });
   expect(generatedFeatureCatalogDigest.sha256).toMatch(/^[0-9a-f]{64}$/);

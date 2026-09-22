@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 43
+CURRENT_SESSION_VERSION = 44
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
@@ -52,7 +52,7 @@ PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
-CURRENT_FEATURE_CATALOG_SCHEMA = 3
+CURRENT_FEATURE_CATALOG_SCHEMA = 4
 CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
     {
         "format",
@@ -663,7 +663,7 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
     if current and (session.get("version") not in (41, 42, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
-        raise ValidationError("Web binding schema 2 requires session 41, 42, or 43 and c_gb.")
+        raise ValidationError("Web binding schema 2 requires session 41, 42, or 44 and c_gb.")
     resources = session.get("resources", {})
 
     def metadata(value: Mapping[str, Any]) -> None:
@@ -987,7 +987,13 @@ def _validate_current_comparison_authority(
 def _validate_current_feature_catalog_authority(
     session: Mapping[str, Any],
 ) -> None:
-    """Require the v40 schema-3 catalog and reject duplicated derived payloads."""
+    """Require the version-owned catalog and reject duplicated payloads."""
+
+    catalog_schema = (
+        CURRENT_FEATURE_CATALOG_SCHEMA
+        if session.get("version") == CURRENT_SESSION_VERSION
+        else 3
+    )
 
     unknown_fields = sorted(
         str(field)
@@ -1047,11 +1053,11 @@ def _validate_current_feature_catalog_authority(
     if not results:
         if catalog is not None and (
             not isinstance(catalog, Mapping)
-            or catalog.get("schema") != CURRENT_FEATURE_CATALOG_SCHEMA
+            or catalog.get("schema") != catalog_schema
             or catalog.get("items") != []
         ):
             raise ValidationError(
-                "An empty Result set requires an empty schema-3 feature catalog."
+                "An empty Result set requires an empty feature catalog."
             )
         return
     if not isinstance(catalog, Mapping):
@@ -1060,12 +1066,12 @@ def _validate_current_feature_catalog_authority(
         )
     items = catalog.get("items")
     if (
-        catalog.get("schema") != CURRENT_FEATURE_CATALOG_SCHEMA
+        catalog.get("schema") != catalog_schema
         or not isinstance(items, list)
         or len(items) != len(results)
     ):
         raise ValidationError(
-            "Session feature catalog must contain one schema-3 item per Result."
+            "Session feature catalog must contain one version-compatible item per Result."
         )
 
     from .web_support.feature_catalog import select_feature_catalog_item
@@ -1101,6 +1107,7 @@ def _validate_current_feature_catalog_authority(
                 catalog,
                 result_index=result_index,
                 result_name=result_name,
+                expected_schema=catalog_schema,
             )
         except GbdrawError as exc:
             raise ValidationError(str(exc)) from exc

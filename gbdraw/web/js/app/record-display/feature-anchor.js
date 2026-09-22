@@ -28,11 +28,17 @@ const recordCapability = ({ recordLength, effectiveCircular, cropped, currentRev
 };
 
 const profileCapability = (profile) => {
-  if (!profile || !['exact', 'fuzzy'].includes(profile.precision)
+  if (!profile || !['exact', 'fuzzy', 'unavailable'].includes(profile.precision)
     || !['single', 'join', 'order', 'unknown'].includes(profile.operator)
     || !['biological', 'source-forward', 'ambiguous'].includes(profile.partOrder)
     || !['+', '-', 'unstranded', 'mixed'].includes(profile.strand)) {
     return unavailable('location-profile-invalid', 'Feature source-location capabilities are unavailable.');
+  }
+  if (profile.precision === 'unavailable') {
+    return unavailable(
+      'feature-metadata-refresh-required',
+      'Generate again to refresh feature location metadata before rotating this record.'
+    );
   }
   return available();
 };

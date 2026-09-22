@@ -32,7 +32,7 @@ from gbdraw.render.interactive_svg import (
     _validate_match_fragments,
 )
 
-FEATURE_CATALOG_SCHEMA = 3
+FEATURE_CATALOG_SCHEMA = 4
 
 _BIOLOGICAL_ALIAS_KEYS = {
     "id",
@@ -1979,7 +1979,7 @@ def build_feature_catalog_item(
 def build_feature_catalog(
     items: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    """Wrap normalized logical-result items in the schema-3 envelope."""
+    """Wrap normalized logical-result items in the schema-4 envelope."""
 
     return {
         "schema": FEATURE_CATALOG_SCHEMA,
@@ -1992,14 +1992,28 @@ def select_feature_catalog_item(
     *,
     result_index: int,
     result_name: str,
+    expected_schema: int | None = None,
 ) -> dict[str, object]:
-    """Return one validated schema-3 item matched to a logical Result."""
+    """Return one validated catalog item matched to a logical Result."""
 
+    catalog_schema = catalog.get("schema") if isinstance(catalog, Mapping) else None
+    allowed_schemas = (
+        {expected_schema}
+        if expected_schema is not None
+        else {3, FEATURE_CATALOG_SCHEMA}
+    )
     if (
         not isinstance(catalog, Mapping)
-        or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
+        or catalog_schema not in allowed_schemas
     ):
-        raise GbdrawError("Feature catalog must use schema 3.")
+        required = (
+            str(expected_schema)
+            if expected_schema is not None
+            else f"3 or {FEATURE_CATALOG_SCHEMA}"
+        )
+        raise GbdrawError(
+            f"Feature catalog must use schema {required}."
+        )
     items = catalog.get("items")
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
         raise GbdrawError("Feature catalog items must be an array.")
@@ -2097,6 +2111,28 @@ def select_feature_catalog_item(
             raise GbdrawError(
                 "Feature catalog contains an invalid source feature index."
             )
+        if catalog_schema >= 4:
+            profile = feature.get("anchorProfile")
+            if (
+                not isinstance(profile, Mapping)
+                or set(profile) != {
+                    "precision",
+                    "operator",
+                    "partOrder",
+                    "strand",
+                }
+                or profile.get("precision")
+                not in {"exact", "fuzzy", "unavailable"}
+                or profile.get("operator")
+                not in {"single", "join", "order", "unknown"}
+                or profile.get("partOrder")
+                not in {"biological", "source-forward", "ambiguous"}
+                or profile.get("strand")
+                not in {"+", "-", "unstranded", "mixed"}
+            ):
+                raise GbdrawError(
+                    "Feature catalog contains an invalid source anchor profile."
+                )
         stable_id = _text(feature.get("stableFeatureId")) or reference[1]
         source_feature_index = feature.get("sourceFeatureIndex")
         biological_source_indexes[(reference[0], stable_id)].append(

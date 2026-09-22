@@ -344,7 +344,7 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
-const featureCatalog = ref(null); // Validated schema-3 metadata for committed Results
+const featureCatalog = ref(null); // Validated schema-4 metadata for committed Results
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );

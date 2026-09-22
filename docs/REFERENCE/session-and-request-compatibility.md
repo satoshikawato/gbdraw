@@ -2,13 +2,13 @@
 
 # Session and request compatibility
 
-Current writers emit session version 43 and canonical `renderRequest` schema 7.
+Current writers emit session version 44 and canonical `renderRequest` schema 7.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 43 | 27–33 and 39–43 |
+| gbdraw session | 44 | 27–33, 39–42, and 44 |
 | Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–43 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -50,7 +50,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings retain their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–43. Unknown or malformed bindings reject
+Schema 2 is accepted with sessions 41–42 and 44. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
@@ -147,7 +147,8 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33 and 39–43;
+envelopes. Public typed session conversion accepts full versions 31–33,
+39–42, and 44;
 versions 27–30 are CLI replay inputs only. Canonical schema 7 retains schema 6's
 input cardinality, including selectorless `all` inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.

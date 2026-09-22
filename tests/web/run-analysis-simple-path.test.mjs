@@ -311,7 +311,7 @@ const result = (name, marker) => ({
 });
 
 const validCatalog = (name) => ({
-  schema: 3,
+  schema: 4,
   items: [{
     resultIndex: 0,
     resultName: name,
@@ -333,6 +333,9 @@ const validCatalog = (name) => ({
       start: 0,
       end: 9,
       strand: 1,
+      anchorProfile: {
+        precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+      },
       qualifiers: { product: ['audit protein'] }
     }],
     orthogroups: [],

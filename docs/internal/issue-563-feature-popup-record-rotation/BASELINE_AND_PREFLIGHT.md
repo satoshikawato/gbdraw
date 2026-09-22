@@ -245,6 +245,20 @@ Compatibility row:
   schema 3 on current `main`.
 - Reader location: the existing Session migration/admission owner only. Current
   runtime catalog admission remains schema 4 after normalization.
+- Implemented reader:
+  `gbdraw/web/js/services/feature-catalog.js::migrateLegacyFeatureCatalog()` is
+  the single bounded catalog 3 -> 4 reader;
+  `gbdraw/web/js/services/config.js::preflightSessionImport()` invokes that
+  existing admission owner while promoting released Session 42 to the Session
+  44 runtime state. There is no Session 43 reader.
+- Current writer and normalized runtime: Session 44, feature catalog 4, and
+  canonical request 7. Catalog 4 stores `anchorProfile`; legacy single-part
+  integer intervals are promoted conservatively, while compound legacy
+  locations receive the explicit `precision: unavailable` regeneration state.
+- Positive-fixture result: both named released Session 42/catalog 3 Gallery
+  documents remain unchanged on disk and are admitted through the bounded
+  reader without replacing their saved Results. A subsequent Save writes
+  Session 44/catalog 4.
 - Removal condition: remove after the repository's declared support window no
   longer includes any released Session capable of carrying catalog schema 3,
   with release/first-parent evidence and fixtures updated in the same change.

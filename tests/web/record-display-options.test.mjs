@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildRecordDisplayRows, createRecordDisplayControls, parseRecordDisplayStart, reconcileRecordDisplayDrafts,
-  recordDisplaySurface, selectedFeatureDisplayStart
+  effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface,
+  requestedRecordTransform, selectedFeatureDisplayStart, validateAnchorIntent,
+  validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/app/record-display-options.js';
 import { parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
 
@@ -48,6 +50,51 @@ test('blank remains null, explicit 1 survives, malformed input is never clamped'
   }
 });
 
+const anchorIntent = {
+  schema: 1,
+  recordKey: 'record-key',
+  biologicalFeatureId: 'feature-key',
+  placement: 'anchor',
+  anchor: 'five-prime',
+  offsetBp: 0,
+  orientForward: true
+};
+
+test('record display drafts use one exact transform and provenance contract', () => {
+  const draft = {
+    scope: 'linear', sourceUid: 'card-1', selector: '#1', recordId: 'same',
+    topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
+    anchorIntent
+  };
+  const drafts = [draft];
+  assert.equal(validateRecordDisplayDrafts(drafts), drafts);
+  assert.equal(validateAnchorIntent(anchorIntent), anchorIntent);
+  assert.deepEqual(migrateLegacyRecordDisplayDrafts([{
+    scope: 'linear', sourceUid: 'card-1', selector: '#1', recordId: 'same',
+    topologyOverride: null, startCoordinate: 25
+  }])[0], { ...draft, reverseComplementOverride: null, anchorIntent: null });
+  for (const invalid of [
+    { ...draft, extra: true },
+    { ...draft, reverseComplementOverride: 'true' },
+    { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
+  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]));
+});
+
+test('complete orientation override has one owner while cropped reverse stays region-owned', () => {
+  const row = { ...rows[0], reverse: false, cropped: false };
+  assert.equal(effectiveRecordReverseComplement(row, { reverseComplementOverride: true }), true);
+  assert.equal(effectiveRecordReverseComplement(
+    { ...row, reverse: true, cropped: true },
+    { reverseComplementOverride: false }
+  ), true);
+  assert.deepEqual(requestedRecordTransform(row, {
+    topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true
+  }), {
+    display: { isCircular: null, startCoordinate: 25 },
+    reverseComplement: true
+  });
+});
+
 test('detected topology, nullable reset, crop lock, and RC default stay separate from raw draft', () => {
   const draft = { topologyOverride: false, startCoordinate: 25 };
   assert.equal(recordDisplaySurface(rows[0], draft).startEnabled, false);
@@ -68,8 +115,10 @@ for (const strand of ['+', '-']) {
         return strand === '-' ? sequence.reverse() : sequence;
       });
       const feature = { record_key: 'instance', biological_feature_id: 'feature', strand,
+        anchorProfile: { precision: 'exact', operator: parts.length === 1 ? 'single' : 'join',
+          partOrder: 'biological', strand },
         location_parts: ordered.map(([start, end]) => ({ start, end, strand })) };
-      const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, selectedFeatures: [feature] };
+      const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, feature };
       assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'five-prime' }), bases[0]);
       assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'midpoint' }), bases[Math.floor((bases.length - 1) / 2)]);
     });
@@ -78,16 +127,17 @@ for (const strand of ['+', '-']) {
 
 test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-strand selections', () => {
   const feature = { record_key: 'instance', biological_feature_id: 'feature', strand: '+',
+    anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
     location_parts: [{ start: 5, end: 10, strand: '+' }] };
-  const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, selectedFeatures: [feature], shortcut: 'midpoint' };
+  const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, feature, shortcut: 'midpoint' };
   for (const changed of [
     { committedRow: null }, { committedRow: { ...args.committedRow, source: {} } },
     { committedRow: { ...args.committedRow, selector: '#2' } },
-    { selectedFeatures: [] }, { selectedFeatures: [feature, feature] },
-    { selectedFeatures: [{ ...feature, record_key: 'other' }] },
-    { selectedFeatures: [{ ...feature, strand: 'unknown' }] },
-    { selectedFeatures: [{ ...feature, location_parts: [] }] },
-    { selectedFeatures: [{ ...feature, location_parts: [{ start: 5, end: 10, strand: '-' }] }] }
+    { feature: null },
+    { feature: { ...feature, record_key: 'other' } },
+    { feature: { ...feature, anchorProfile: { ...feature.anchorProfile, strand: 'mixed' } } },
+    { feature: { ...feature, location_parts: [] } },
+    { feature: { ...feature, location_parts: [{ start: 5, end: 10, strand: '-' }] } }
   ]) assert.throws(() => selectedFeatureDisplayStart({ ...args, ...changed }));
 });
 
@@ -119,7 +169,7 @@ const compositeControls = () => {
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
   const feature = { record_key: 'record-2', biological_feature_id: 'logical-feature' };
-  return { state, actions, feature, file, makeFile,
+  return { state, actions, controls, feature, file, makeFile,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     commitCombined: async () => {
       const bytes = await readFileBytes(file);
@@ -140,6 +190,22 @@ test('same composite retains semantic capability when the committed resource bec
   await model.commitCombined();
   assert.deepEqual(model.enabled(), all);
   assert.equal(model.actions.valueFor(model.feature), 'main');
+});
+
+test('manual start and orientation edits clear feature provenance', () => {
+  const model = compositeControls();
+  const row = model.controls.allRows.value[0];
+  model.controls.setResolvedTransform(row, {
+    startCoordinate: 25, reverseComplement: true, anchorIntent
+  });
+  assert.deepEqual(model.state.recordDisplayDrafts[0].anchorIntent, anchorIntent);
+  model.controls.setStart(row, 10);
+  assert.equal(model.state.recordDisplayDrafts[0].anchorIntent, null);
+  model.controls.setResolvedTransform(row, {
+    startCoordinate: 25, reverseComplement: true, anchorIntent
+  });
+  model.controls.setReverseComplement(row, false);
+  assert.equal(model.state.recordDisplayDrafts[0].anchorIntent, null);
 });
 
 test('same-name, same-content source replacement does not retain old feature capability', () => {

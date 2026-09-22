@@ -142,6 +142,12 @@ test('ambiguous, fuzzy, and unordered locations disable only unsafe operations w
   assert.equal(fuzzy.eligibility.code, 'location-fuzzy');
   assert.equal(fuzzy.capabilities.orientForward.enabled, true);
 
+  const legacyUnavailable = resolve({ profile: {
+    precision: 'unavailable', operator: 'unknown', partOrder: 'ambiguous', strand: '+'
+  } });
+  assert.equal(legacyUnavailable.eligibility.code, 'feature-metadata-refresh-required');
+  assert.match(legacyUnavailable.eligibility.message, /Generate again/);
+
   const ordered = resolve({ profile: { operator: 'order', partOrder: 'ambiguous' }, intent: { anchor: 'midpoint' } });
   assert.equal(ordered.eligibility.code, 'location-order-ambiguous');
   const unknown = resolve({ profile: { operator: 'unknown', partOrder: 'ambiguous' }, intent: { anchor: 'midpoint' } });

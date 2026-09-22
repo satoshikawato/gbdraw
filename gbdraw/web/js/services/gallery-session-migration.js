@@ -591,7 +591,7 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const promoted = {
     ...session,
     format: 'gbdraw-session',
-    version: 43,
+    version: 44,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,

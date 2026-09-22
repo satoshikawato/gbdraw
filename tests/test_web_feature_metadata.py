@@ -331,6 +331,12 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
     assert feature["selector"]["record_location"] == "NC_000001:0..9:+"
     assert feature["selector"]["qualifiers"]["locus_tag"] == ["ABC_0001"]
     assert feature["location_parts"] == [{"start": 0, "end": 9, "strand": "+", "display": "1..9"}]
+    assert feature["anchorProfile"] == {
+        "precision": "exact",
+        "operator": "single",
+        "partOrder": "biological",
+        "strand": "+",
+    }
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
     assert feature["sequence_warnings"] == []

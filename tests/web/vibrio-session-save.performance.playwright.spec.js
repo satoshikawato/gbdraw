@@ -441,7 +441,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
-    version: 43,
+    version: 44,
     requestSchema: 7,
     resourceCount: 12,
     resultCount: 1,
@@ -500,7 +500,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshContext.close();
 
   const crossSurface = crossSurfaceAcceptance(savedPath, testInfo.outputPath('cross-surface'));
-  expect(crossSurface.reader).toEqual({ version: 43, mode: 'linear', records: 11 });
+  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 11 });
   expect(crossSurface.cliExitCode).toBe(0);
   expect(crossSurface.cliSvgBytes).toBeGreaterThan(0);
 
