@@ -66,7 +66,7 @@ The full PR job IDs are `web-change-budget`, `core-pr`, `recipes-standard`,
 
 `web-contracts-pr` groups the existing fast JS contracts and non-slow Python
 browser suite, which together took approximately 65–70 seconds historically.
-`web-pr-smoke` runs the ten selected Playwright cases and the common-nine Gallery
+`web-pr-smoke` runs the thirteen selected Playwright cases and the common-nine Gallery
 first-Generate parity command. The `web-contracts-pr` and `web-pr-smoke` jobs
 execute in parallel instead of sharing one 15-minute serialized budget. Both
 jobs keep independent working directories, dependency installs, wheels, and

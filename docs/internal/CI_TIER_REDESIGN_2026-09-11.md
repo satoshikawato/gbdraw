@@ -230,3 +230,13 @@ The inventory test checks actual Playwright collection from the contract npm
 command, full-suite inclusion, absence of duplicate smoke execution, and the
 pytest entry point and mandatory workflow invocation. No regression moves
 exclusively to a later tier. The workflow and job-selection policy are unchanged.
+
+## Phase 1 input-shell follow-up (2026-09-22)
+
+PR #569 adds one short browser assertion for the default Circular disclosure
+state and the fresh Linear input shell. It remains in PR smoke because these are
+the directly changed behaviors, expanding the selected inventory from 12 to 13.
+The preceding successful 12-case job spent 2.4 minutes in Playwright and 6:53
+wall time including setup and Gallery parity, within the unchanged 10-minute
+job timeout. The inventory guard now accepts 8–13 cases; further expansion still
+requires an explicit budget review instead of silently lengthening PR feedback.
