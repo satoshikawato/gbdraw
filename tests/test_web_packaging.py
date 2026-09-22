@@ -1194,6 +1194,17 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
+def test_losat_installation_ownership_is_split_between_conda_and_pypi() -> None:
+    meta_yaml = (REPO_ROOT / "recipe" / "meta.yaml").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    install_guide = (REPO_ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+
+    assert re.search(r"^\s+- losat ==0\.1\.0\s*$", meta_yaml, re.MULTILINE)
+    assert re.search(r"^\s+- losat --version\s*$", meta_yaml, re.MULTILINE)
+    assert "losat" not in pyproject.split("[project.urls]", 1)[0].lower()
+    assert "gbdraw setup-losat" in install_guide
+
+
 def test_hosted_web_uses_cloudflare_and_retains_browser_verification() -> None:
     deploy_yml = (REPO_ROOT / ".github" / "workflows" / "deploy_web.yml").read_text(
         encoding="utf-8"

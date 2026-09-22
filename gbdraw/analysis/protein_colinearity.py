@@ -460,7 +460,7 @@ class ProteinBlastpRuntime:
 
     kind: Literal["losat", "ncbi-blastp"]
     executable: str
-    source: Literal["explicit", "managed", "bundled", "path"]
+    source: Literal["explicit", "conda", "managed", "bundled", "path"]
 
 
 @dataclass(frozen=True)
@@ -3235,6 +3235,39 @@ def _path_executable(name: str) -> str | None:
     return shutil.which(str(name).strip())
 
 
+def _conda_losatp_runtime() -> ProteinBlastpRuntime | None:
+    prefix = Path(sys.prefix)
+    if not (prefix / "conda-meta").is_dir():
+        return None
+
+    candidate = (prefix / "bin" / "losat").absolute()
+    try:
+        mode = candidate.stat().st_mode
+    except FileNotFoundError:
+        if candidate.is_symlink():
+            raise ValidationError(
+                f"Conda LOSAT candidate is a broken symbolic link: {candidate}"
+            )
+        return None
+    except OSError as exc:
+        raise ValidationError(
+            f"Could not inspect the conda LOSAT candidate at {candidate}: {exc}"
+        ) from exc
+
+    if not stat.S_ISREG(mode):
+        raise ValidationError(
+            f"Conda LOSAT candidate is not a regular file: {candidate}"
+        )
+    if not os.access(candidate, os.X_OK):
+        raise ValidationError(
+            f"Conda LOSAT candidate is not executable: {candidate}"
+        )
+
+    runtime = ProteinBlastpRuntime("losat", str(candidate), "conda")
+    logger.debug("Using conda LOSAT blastp runtime: %s", runtime.executable)
+    return runtime
+
+
 def _protein_blastp_runtime_label(runtime: ProteinBlastpRuntime) -> str:
     if runtime.kind == "ncbi-blastp":
         return "NCBI BLAST+ blastp"
@@ -3299,6 +3332,10 @@ def _resolve_protein_blastp_runtime(
         runtime = ProteinBlastpRuntime("ncbi-blastp", requested_ncbi_bin, "explicit")
         logger.debug("Using explicit NCBI BLAST+ blastp runtime: %s", runtime.executable)
         return runtime
+
+    conda_runtime = _conda_losatp_runtime()
+    if conda_runtime is not None:
+        return conda_runtime
 
     from gbdraw.losat_setup import managed_losat
 
@@ -5970,6 +6007,10 @@ def _run_protein_blastp_subprocess(
         raise ValidationError(f"{runtime_label} executable not found: {command[0]}") from exc
     except PermissionError as exc:
         raise ValidationError(f"{runtime_label} executable is not executable: {command[0]}") from exc
+    except OSError as exc:
+        raise ValidationError(
+            f"{runtime_label} executable could not be started at {command[0]}: {exc}"
+        ) from exc
 
 
 def run_losatp_blastp(
@@ -6022,7 +6063,10 @@ def run_losatp_blastp(
         stderr = completed.stderr.strip()
         detail = f": {stderr}" if stderr else ""
         runtime_label = _protein_blastp_runtime_label(runtime)
-        raise ValidationError(f"{runtime_label} failed with exit code {completed.returncode}{detail}")
+        raise ValidationError(
+            f"{runtime_label} failed at {runtime.executable} "
+            f"with exit code {completed.returncode}{detail}"
+        )
     if raw_output_callback is not None:
         raw_output_callback(completed.stdout)
     return parse_losatp_outfmt6(completed.stdout)

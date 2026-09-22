@@ -137,9 +137,10 @@ def test_cache_corruption_does_not_fall_back(distribution, monkeypatch):
     monkeypatch.setattr(setup, "urlopen", Mock(side_effect=AssertionError("network forbidden")))
     with pytest.raises(ValidationError, match="binary checksum mismatch"):
         setup.setup_losat()
-    from gbdraw.analysis.protein_colinearity import _resolve_protein_blastp_runtime
+    from gbdraw.analysis import protein_colinearity as protein
+    monkeypatch.setattr(protein, "_conda_losatp_runtime", lambda: None)
     with ExitStack() as stack, pytest.raises(ValidationError, match="binary checksum mismatch"):
-        _resolve_protein_blastp_runtime("losat", None, stack)
+        protein._resolve_protein_blastp_runtime("losat", None, stack)
 
 
 def test_interrupted_download_can_be_retried(distribution, monkeypatch):
@@ -176,6 +177,7 @@ def test_managed_resolver_precedes_bundled_and_explicit_precedes_managed(distrib
     from gbdraw.analysis import protein_colinearity as protein
     distribution()
     binary = setup.setup_losat()
+    monkeypatch.setattr(protein, "_conda_losatp_runtime", lambda: None)
     monkeypatch.setattr(protein, "_bundled_losatp_resource", Mock(side_effect=AssertionError("bundled discovery")))
     with ExitStack() as stack:
         assert protein._resolve_protein_blastp_runtime("losat", None, stack).executable == str(binary)

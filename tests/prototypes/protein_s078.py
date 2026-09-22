@@ -25,14 +25,15 @@ def load_frozen(current):
         if isinstance(node, ast.ClassDef) and not node.name.startswith('_'):
             live_node = live[node.name]
             if node.name == 'ProteinBlastpRuntime':
-                # S07.7 predates the managed LOSAT source. Its addition expands
-                # only this Literal annotation, not the frozen execution path.
+                # S07.7 predates the managed and conda LOSAT sources. Their
+                # addition expands only this Literal annotation, not the frozen
+                # execution path.
                 live_source = next(
                     field for field in live_node.body
                     if isinstance(field, ast.AnnAssign)
                     and getattr(field.target, 'id', None) == 'source')
                 assert ast.unparse(live_source.annotation) == \
-                       "Literal['explicit', 'managed', 'bundled', 'path']"
+                       "Literal['explicit', 'conda', 'managed', 'bundled', 'path']"
                 live_source.annotation = next(
                     field.annotation for field in node.body
                     if isinstance(field, ast.AnnAssign)
