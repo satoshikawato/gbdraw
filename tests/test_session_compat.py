@@ -45,6 +45,7 @@ from gbdraw.session import (
     load_session_document,
     materialize_session,
     render_session,
+    save_session_document,
     session_to_request,
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
@@ -61,6 +62,12 @@ _VERSION_39_SESSION = (
     / "fixtures"
     / "sessions"
     / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
+)
+_VERSION_40_LEGACY_ALIGNMENT_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "BGC0000708-BGC0000713.v40-schema5.json"
 )
 _SYNTHETIC_CONSERVATION_SESSION = (
     Path(__file__).parent
@@ -128,6 +135,125 @@ def test_version_39_multiline_conservation_label_count_mismatch_stays_strict() -
     migrated = canonical_payload_for_session_decode(39, payload)
 
     assert migrated["diagramOptions"]["conservationLabels"] == labels
+
+
+@pytest.mark.parametrize(
+    "fixture_path",
+    (_VERSION_39_SESSION, _VERSION_40_LEGACY_ALIGNMENT_SESSION),
+    ids=("legacy-feature-groups", "current-feature-catalog"),
+)
+def test_released_legacy_alignment_session_promotes_to_current_typed_state(
+    fixture_path: Path,
+    tmp_path: Path,
+) -> None:
+    document = load_session_document(fixture_path)
+    current_path = tmp_path / f"{fixture_path.stem}.current.json"
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        assert isinstance(request, LinearDiagramRequest)
+        assert request.options.align_orthogroup_feature is None
+        assert request._legacy_similarity_alignment is not None
+        assert request._legacy_similarity_alignment.target == "og_1"
+        assert request.similarity_alignment is not None
+        assert request.similarity_alignment.group_id == "og_1"
+        assert request.layout is not None
+        assert [
+            (item.record_key, item.x, item.y)
+            for item in request.layout.record_translations
+        ] == [
+            (record.record_key, 0.0, 0.0)
+            for record in request.records
+        ]
+        adapted = adapt_session_request(request, document.to_dict())
+        assert adapted.request.options.align_orthogroup_feature == "og_1"
+        assert adapted.request.similarity_alignment == request.similarity_alignment
+        save_session_document(current_path, request)
+
+    current = load_session_document(current_path)
+    payload = current.to_dict()
+    serialized = json.dumps(payload)
+    assert current.version == CURRENT_SESSION_VERSION
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert "alignOrthogroupFeature" not in serialized
+    assert "align_orthogroup_feature" not in serialized
+    assert "selectedOrthogroupAlignmentFeature" not in serialized
+    with materialize_session(current, output_directory=tmp_path) as materialized:
+        reloaded = session_to_request(materialized)
+    assert isinstance(reloaded, LinearDiagramRequest)
+    assert reloaded._legacy_similarity_alignment is None
+    assert reloaded.similarity_alignment == request.similarity_alignment
+    assert reloaded.layout is not None
+    assert reloaded.layout.record_translations == request.layout.record_translations
+
+
+def test_released_legacy_alignment_session_rejects_conflicting_owners(
+    tmp_path: Path,
+) -> None:
+    payload = json.loads(_VERSION_40_LEGACY_ALIGNMENT_SESSION.read_text())
+    payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] = "og-conflict"
+    document = load_session_document(payload)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        with pytest.raises(
+            ValidationError,
+            match="conflicting similarity alignment owners",
+        ):
+            session_to_request(materialized)
+
+
+def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
+    tmp_path: Path,
+) -> None:
+    output_prefix = tmp_path / "legacy-aligned"
+    sidecar_path = tmp_path / "legacy-aligned.gbdraw-session.json"
+
+    linear_main(
+        [
+            "--session",
+            str(_VERSION_40_LEGACY_ALIGNMENT_SESSION),
+            "--output",
+            str(output_prefix),
+            "--format",
+            "svg",
+            "--session_output",
+            str(sidecar_path),
+        ]
+    )
+
+    assert output_prefix.with_suffix(".svg").is_file()
+    saved = load_session_document(sidecar_path)
+    payload = saved.to_dict()
+    serialized = json.dumps(payload)
+    assert saved.version == CURRENT_SESSION_VERSION
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert payload["renderRequest"]["layout"]["similarityAlignment"]["groupId"] == "og_1"
+    assert len(payload["renderRequest"]["layout"]["recordTranslations"]) == 5
+    assert "alignOrthogroupFeature" not in serialized
+    assert "align_orthogroup_feature" not in serialized
+    assert "selectedOrthogroupAlignmentFeature" not in serialized
+
+
+def test_released_legacy_alignment_session_rejects_ambiguous_group_metadata(
+    tmp_path: Path,
+) -> None:
+    payload = load_session_document(_VERSION_39_SESSION).to_dict()
+    target = "ambiguous-legacy-target"
+    payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] = target
+    payload["orthogroupState"]["groups"][0]["members"][0]["label"] = target
+    payload["orthogroupState"]["groups"][1]["members"][0]["label"] = target
+    for comparison in payload["renderRequest"]["comparisons"]:
+        settings = comparison.get("settings", {})
+        if settings.get("alignOrthogroupFeature") is not None:
+            settings["alignOrthogroupFeature"] = target
+    document = load_session_document(payload)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        with pytest.raises(
+            ValidationError,
+            match="absent or ambiguous",
+        ):
+            session_to_request(materialized)
 
 
 def _linear_request(

@@ -49,7 +49,7 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",
 )
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, 7, CANONICAL_REQUEST_SCHEMA})
 BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",

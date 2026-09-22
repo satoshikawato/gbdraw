@@ -15,6 +15,7 @@ from gbdraw.api.request_render import (
     _capture_request_render_diagnostics,
     render_request,
 )
+from gbdraw.api.session_compat import materialize_legacy_similarity_alignment_request
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
@@ -164,6 +165,7 @@ def _render_canonical_web_request(
             resource_paths=resource_paths,
             output_directory=output_root,
         )
+        request = materialize_legacy_similarity_alignment_request(request)
     with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
         rendered = render_request(request, include_feature_catalog=True)
     items: tuple[RequestRenderResult, ...]

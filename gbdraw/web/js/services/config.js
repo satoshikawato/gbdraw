@@ -214,11 +214,11 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 43;
+export const SESSION_VERSION = 44;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 43, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -1730,13 +1730,8 @@ const preflightSessionImport = (rawData) => {
     ? (() => {
         const artifactState = projectArtifactState(data);
         if (currentSession) artifactState.editorState = normalizedEditorState;
-        if (canonicalProjection.pipelineState) {
-          artifactState.orthogroupState = {
-            ...(artifactState.orthogroupState || {}),
-            selectedOrthogroupAlignmentFeature:
-              canonicalProjection.pipelineState.selectedOrthogroupAlignmentFeature
-          };
-        }
+        artifactState.legacySimilarityAlignment =
+          canonicalProjection.pipelineState?.legacySimilarityAlignment || null;
         return {
           documentMetadata: projectDocumentMetadata(data),
           renderState: {
@@ -1879,6 +1874,18 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
       .map((entry) => ({ uid: String(entry?.uid || ''), row: Number(entry?.row) }))
       .filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0)
   );
+  if (state.linearRecordTranslations) {
+    state.linearRecordTranslations.value = cloneJsonData(
+      Array.isArray(linearLayout?.recordTranslations)
+        ? linearLayout.recordTranslations
+        : []
+    );
+  }
+  if (state.similarityAlignmentPlan) {
+    state.similarityAlignmentPlan.value = linearLayout?.similarityAlignment
+      ? cloneJsonData(linearLayout.similarityAlignment)
+      : null;
+  }
   replaceLinearComparisonPlan(
     state.linearComparisonPlan,
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
@@ -3816,7 +3823,6 @@ export const applyFeatureStateData = (features = {}) => {
 export const buildOrthogroupStateData = () => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-  selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
   orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
   orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
 });
@@ -4058,7 +4064,15 @@ export const exportSession = async (
   if (committed && committed.renderRequest.schema < CANONICAL_REQUEST_SCHEMA) {
     const promoted = {
       ...committed,
-      renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest)
+      renderRequest: promoteCanonicalRenderRequestToCurrent(
+        committed.renderRequest,
+        {
+          featureCatalog: editorState.featureCatalog,
+          legacyOrthogroupState: {
+            groups: cloneJsonData(state.orthogroups.value || [])
+          }
+        }
+      )
     };
     committed = isAdoptedCanonicalSession(committed)
       ? adoptRuntimeCanonicalSession(promoted)
@@ -4129,7 +4143,6 @@ export const exportSession = async (
     editorState,
     orthogroupState: {
       selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-      selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
       orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
       orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
     },
@@ -4292,6 +4305,24 @@ export const importSession = async (e, options = {}) => {
         restoredConfig.form
       );
       applyConfigData(restoredConfig, { resolveTrackPlacements: !settingsOnly });
+    }
+    const canonicalLinearLayout = canonicalProjection?.config?.linearRecordLayout;
+    if (canonicalLinearLayout && state.linearRecordTranslations) {
+      state.linearRecordTranslations.value = cloneJsonData(
+        canonicalLinearLayout.recordTranslations || []
+      );
+    }
+    if (canonicalLinearLayout && state.similarityAlignmentPlan) {
+      state.similarityAlignmentPlan.value = canonicalLinearLayout.similarityAlignment
+        ? cloneJsonData(canonicalLinearLayout.similarityAlignment)
+        : null;
+    }
+    if (state.legacySimilarityAlignment) {
+      state.legacySimilarityAlignment.value = canonicalSession
+        ? cloneJsonData(
+            projectionResult.artifactState.legacySimilarityAlignment || null
+          )
+        : null;
     }
     reconcileImportedLinearTypographyLink({
       adv: state.adv,

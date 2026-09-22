@@ -320,8 +320,8 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   }
   assertSafeObjectKeys(sessionData, 'Session');
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
-  if (bindings?.schema === 2 && ![41, 42, 43].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41, 42, or 43.');
+  if (bindings?.schema === 2 && ![41, 42, 43, 44].includes(Number(version))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, 43, or 44.');
   }
   if (Number(version) < 31) return;
   if (

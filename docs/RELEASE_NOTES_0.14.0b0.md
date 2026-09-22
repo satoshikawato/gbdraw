@@ -13,6 +13,17 @@ These notes record what changed in this release. For the currently supported
 persisted versions and migration boundaries, see
 [Session and request compatibility](./SESSION_COMPATIBILITY.md).
 
+## Python/Web session version 44
+
+Current writers emit session version 44 and canonical `renderRequest` schema 8.
+Linear Similarity Group alignment is now canonical display state: the request
+layout stores finite X/Y base translations by stable record key and an optional
+resolved plan with exact feature identities and per-record decisions. Current
+writers no longer place the legacy alignment string in protein pipeline
+settings. Supported schemas 1, 2, 5, 6, and 7 retain a reader-only compatibility
+adapter, including released Gallery Sessions whose saved identity metadata can
+be materialized before a current save.
+
 ## Python/Web session version 41
 
 gbdraw 0.14.0b0 writes session version 41 and canonical `renderRequest` schema 7.

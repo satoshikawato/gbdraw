@@ -61,8 +61,13 @@ for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
-  assert.equal(result.session.version, 43, name);
-  assert.equal(result.session.renderRequest.schema, 7, name);
+  assert.equal(result.session.version, 44, name);
+  assert.equal(result.session.renderRequest.schema, 8, name);
+  assert.equal(
+    Object.hasOwn(result.session.orthogroupState || {}, 'selectedOrthogroupAlignmentFeature'),
+    false,
+    name
+  );
   assert.equal(result.equivalence.equivalent, true, name);
   assert.equal(JSON.stringify(source.renderRequest), committedBefore, name);
   assert.equal(result.session.cliInvocation, source.cliInvocation, name);
@@ -82,7 +87,7 @@ for (const name of sessionNames) {
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
-assert.equal(admitGallerySession(lambda).version, 43);
+assert.equal(admitGallerySession(lambda).version, 44);
 assert.equal(lambda.version, 42);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
@@ -165,10 +170,10 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   );
 }
 
-for (const version of [27, 30, 34, 38, 44]) {
+for (const version of [27, 30, 34, 38, 45]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 43 or historical versions 31-33\/39-42/
+    /supports current version 44 or historical versions 31-33\/39-43/
   );
 }
 

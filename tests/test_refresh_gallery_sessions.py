@@ -62,7 +62,7 @@ from tools.refresh_gallery_sessions import (
 
 pytestmark = pytest.mark.gallery
 
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, 7, CANONICAL_REQUEST_SCHEMA})
 BUNDLED_SESSION_VERSIONS = frozenset({41, 42, CURRENT_SESSION_VERSION})
 
 

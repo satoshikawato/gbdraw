@@ -1814,7 +1814,7 @@ ORIGIN
     'circularMultiRecordLegendPosition',
     'circularMultiRecordPlotTitlePosition'
   ];
-  expect(exportedSession.version).toBe(43);
+  expect(exportedSession.version).toBe(44);
   expect(exportedSession).not.toHaveProperty('files');
   expect(exportedSession.webFiles).toEqual(expect.any(Object));
   expect(exportedSession.webFiles.bindings.schema).toBe(2);
@@ -2268,7 +2268,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const initialSession = JSON.parse(
     gunzipSync(readFileSync(initialPath)).toString('utf8')
   );
-  expect(initialSession.version).toBe(43);
+  expect(initialSession.version).toBe(44);
   const expectedDraft = p3Draft(initialSession);
   expect(expectedDraft.circularEnabled).toBe(true);
   expect(expectedDraft.linearEnabled).toBe(false);

@@ -283,7 +283,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
   expectRenderedAtColors(paletteGenerate.svg);
 
   const { path: savedPath, saved } = await saveSessionThroughUi(page);
-  expect(saved.renderRequest.schema).toBe(7);
+  expect(saved.renderRequest.schema).toBe(8);
   expect(requestEvidence(saved.renderRequest).at.params).toEqual(expectedAtParams);
   expect(
     saved.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params

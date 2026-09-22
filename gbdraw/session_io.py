@@ -37,11 +37,11 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 43
+CURRENT_SESSION_VERSION = 44
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 43, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
@@ -601,7 +601,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, 43, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -662,8 +662,8 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
-        raise ValidationError("Web binding schema 2 requires session 41, 42, or 43 and c_gb.")
+    if current and (session.get("version") not in (41, 42, 43, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+        raise ValidationError("Web binding schema 2 requires session 41, 42, 43, or 44 and c_gb.")
     resources = session.get("resources", {})
 
     def metadata(value: Mapping[str, Any]) -> None:
@@ -2614,6 +2614,7 @@ def build_session_json(
         else {}
     )
     orthogroup_state.pop("groups", None)
+    orthogroup_state.pop("selectedOrthogroupAlignmentFeature", None)
     payload["orthogroupState"] = orthogroup_state
     payload["cliInvocation"] = {
         "schema": 1,

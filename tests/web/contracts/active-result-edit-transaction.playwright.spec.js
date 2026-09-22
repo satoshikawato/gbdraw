@@ -325,8 +325,8 @@ test.describe('active Result Feature fill transaction', () => {
     const savedSession = readSavedSession(savedSessionPath);
     expect(savedSession).toMatchObject({
       format: 'gbdraw-session',
-      version: 43,
-      renderRequest: { schema: 7 },
+      version: 44,
+      renderRequest: { schema: 8 },
       editorState: {
         legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }
       }

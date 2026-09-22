@@ -534,11 +534,44 @@ class CircularMultiRecordOptions:
 
 
 @dataclass(frozen=True)
+class LinearRecordTranslation:
+    """Persistent base translation for one displayed Linear record."""
+
+    record_key: str
+    x: float = 0.0
+    y: float = 0.0
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.record_key, str)
+            or not self.record_key.strip()
+            or "\0" in self.record_key
+        ):
+            raise ValidationError(
+                "record_key must be a non-empty string without NUL."
+            )
+        object.__setattr__(self, "record_key", self.record_key.strip())
+        for field_name in ("x", "y"):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise ValidationError(
+                    f"{field_name} must be a finite number."
+                )
+            normalized = float(value)
+            if not math.isfinite(normalized):
+                raise ValidationError(
+                    f"{field_name} must be a finite number."
+                )
+            object.__setattr__(self, field_name, normalized)
+
+
+@dataclass(frozen=True)
 class LinearMultiRecordOptions:
     """Layout values used only by Linear multi-record rows."""
 
     record_gap_px: float = 24.0
     multi_record_positions: Sequence[str] | None = None
+    record_translations: Sequence[LinearRecordTranslation] = ()
 
     def __post_init__(self) -> None:
         if isinstance(self.record_gap_px, bool) or not isinstance(
@@ -565,6 +598,26 @@ class LinearMultiRecordOptions:
             if not all(isinstance(item, str) and item.strip() for item in positions):
                 raise ValidationError("multi_record_positions must contain non-empty strings.")
             object.__setattr__(self, "multi_record_positions", positions)
+        if isinstance(self.record_translations, (str, bytes)) or not isinstance(
+            self.record_translations,
+            Sequence,
+        ):
+            raise ValidationError(
+                "record_translations must be a sequence of LinearRecordTranslation values."
+            )
+        translations = tuple(self.record_translations)
+        if not all(
+            isinstance(item, LinearRecordTranslation) for item in translations
+        ):
+            raise ValidationError(
+                "record_translations must contain LinearRecordTranslation values."
+            )
+        keys = [item.record_key for item in translations]
+        if len(set(keys)) != len(keys):
+            raise ValidationError(
+                "record_translations must not contain duplicate record keys."
+            )
+        object.__setattr__(self, "record_translations", translations)
 
 
 @dataclass(frozen=True)
@@ -1126,6 +1179,7 @@ __all__ = [
     "CircularRequestTrackOptions",
     "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearRecordTranslation",
     "LinearDiagramOptions",
     "LinearOutputOptions",
     "LinearRequestTrackOptions",

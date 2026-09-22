@@ -84,10 +84,13 @@ sessions retain their previous effective repeat shape.
 
 ## Session / replay / save compatibility
 
-Current writers emit session version 43 and canonical `renderRequest` schema 7.
+Current writers emit session version 44 and canonical `renderRequest` schema 8.
 Save Session also preserves settings before the first source is loaded. Supported
 older Sessions and legacy settings JSON remain readable; settings-only Sessions
 need a biological source before rendering.
+Schema 8 stores Linear Similarity alignment as an exact typed plan and finite
+per-record X/Y base translations. The old protein-setting string remains a
+reader-only compatibility input and is not written by current Sessions.
 These persisted-format numbers are separate from the package version. The
 [session and request compatibility reference](./REFERENCE/session-and-request-compatibility.md)
 owns the accepted-reader table and migration details.

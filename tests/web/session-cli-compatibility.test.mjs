@@ -65,8 +65,8 @@ for (const [label, mode, args, sourcePaths] of cases) {
         });
         const bytes = gunzipSync(await readFile(file));
         const session = JSON.parse(bytes);
-        assert.equal(session.version, 43);
-        assert.equal(session.renderRequest.schema, 7);
+        assert.equal(session.version, 44);
+        assert.equal(session.renderRequest.schema, 8);
         assert.equal(Object.hasOwn(session, 'config'), false);
         assert.equal(session.webFiles.bindings.schema, 2);
         const result = await load(bytes);

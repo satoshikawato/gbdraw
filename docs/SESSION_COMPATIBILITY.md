@@ -8,6 +8,25 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Session 44: typed Similarity alignment display state
+
+Session 44 and canonical request schema 8 move Linear Similarity Group alignment
+out of generated-protein pipeline settings. The Linear request layout now owns
+finite `x` and `y` base translations keyed by `recordKey`, plus an optional
+resolved `SimilarityAlignmentPlan`. The plan records the exact reference feature,
+one validated decision per displayed record, its rationale, and any effective
+orientation override. `RecordPresentation.reverse_complement` remains the base
+orientation owner.
+
+Current writers never emit `align_orthogroup_feature`,
+`alignOrthogroupFeature`, or the former Session-only
+`selectedOrthogroupAlignmentFeature` copy. Supported request schemas 1, 2, 5,
+6, and 7 retain a version-bounded reader for the old string. The reader keeps
+that value private
+until the historical selection can be materialized from saved stable feature and
+orthogroup metadata; a successful save writes only schema-8 plan and translation
+state. Loading a saved preview remains Worker-lazy.
+
 ## Session 43: independent Linear record-label visibility
 
 Session 43 stores the selected visibility mode for Linear **Accession** and
@@ -54,14 +73,14 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 43 | 27–33 and 39–43 |
-| Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–43 |
+| gbdraw session | 44 | 27–33 and 39–44 |
+| Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
+| Web file bindings | 2 | 1; 2 in sessions 41–44 |
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert full session versions 31–33 and 39–43 to
+The public typed-session bridge can convert full session versions 31–33 and 39–44 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -86,7 +105,7 @@ has one output object. A Circular batch has one resolved output object per
 record. `renderRequest.output.prefix` is the output-prefix owner.
 
 The Web projects a selectorless Linear schema-5 card to explicit `all` when it
-is saved with schemas 6 and 7. Legacy multi-record Web inputs already have explicit
+is saved with schemas 6–8. Legacy multi-record Web inputs already have explicit
 selectors, so this preserves the embedded source records shown by the card.
 
 Current sessions keep mode-specific layout values under
@@ -122,7 +141,7 @@ explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
 do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–43.
+remain 27–33 and 39–44.
 
 ## Retired inputs
 
@@ -175,7 +194,7 @@ Current sessions use these independent payload schemas:
 Typed resource readers 1 and 2 preserve their saved ortholog path tuples as
 explicit collections in the current model. Schema 3 writers store lossless DAGs
 for newly inferred paths and explicit collections for supplied legacy corpora.
-Counts are exact decimal strings. Request 7 and derived envelope 3 remain
+Counts are exact decimal strings. Request 8 and derived envelope 3 remain
 unchanged; derived identity includes `pathRepresentation` to prevent
 reusing an old analysis payload as a current helper result. Older releases that
 only support typed schemas 1 and 2 cannot read the new typed resources.

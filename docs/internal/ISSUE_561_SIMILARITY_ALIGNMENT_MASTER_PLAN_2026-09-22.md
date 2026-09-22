@@ -697,7 +697,7 @@ private conversation as evidence.
 | Planning | complete | base `11aae136694a4433cabc68c0dae31edf77222740` | Issue updated `2026-09-21T05:25:23Z`; code and policy audit on 2026-09-22 | S01 |
 | Authority | complete | `origin/dev@a9eaeadd105e0c26e46086626feaa695bdd33c94` | PR #570 merged six separate Product Decision receipts as `PD-OI-026`–`PD-OI-031`; branch rebased onto the merge | S01 may start |
 | S01 | complete | base `11e49d32accd0b00753ec7df9bcb6fb0c71d62f5`; head is the commit containing this ledger entry | Typed immutable plan/candidate/choice/edge/outcome models and one pure deterministic resolver; focused and existing identity/alignment tests pass | S02 may start; request/Session/runtime wiring remains intentionally absent |
-| S02 | pending | | | |
+| S02 | complete | base `0624eb821326f0022238b390a1b56f454c51151c`; head is the working-tree candidate containing this ledger entry | Canonical request schema 8 and Session 44 own the typed plan and finite record-keyed X/Y base translations; released v39/v40 legacy evidence materializes through one reader-only adapter; Python, Web, browser, recipe, documentation, and architecture checks pass | S03 may start; current renderer geometry, strict CLI/API resolution, and Web interaction remain intentionally absent |
 | S03 | pending | | | |
 | S04 | pending | | | |
 | S05 | pending | | | |
@@ -748,6 +748,75 @@ private conversation as evidence.
   released-Session migration boundary without creating a second writer or
   allowing current requests to enter the legacy resolver.
 - Next permitted session: S02 only.
+
+### S02 evidence — 2026-09-22
+
+- Authority/base: fetched `origin/issue-561-similarity-alignment` and
+  `origin/dev`; the worktree started clean with local and remote branch heads at
+  S01 commit `0624eb821326f0022238b390a1b56f454c51151c`. S01 was complete and
+  S02 was the first pending ledger row.
+- Current ownership: canonical request schema 8 stores one
+  `SimilarityAlignmentPlan` and one finite X/Y base translation for each stable
+  Linear `recordKey`; Session 44 projects that same request. Current Python and
+  Web writers reject or omit `align_orthogroup_feature`,
+  `alignOrthogroupFeature`, and the former Session-only selected-alignment
+  string. `RecordPresentation` remains the base-orientation owner. Renderer
+  application, strict CLI/API resolution, and Web interaction are deferred to
+  their planned later sessions.
+- Legacy boundary: schemas 1, 2, 5, 6, and 7 decode the old string only into a
+  private representation. The named Python and Web reader-only adapters use
+  saved stable feature/orthogroup metadata to produce schema-1 typed plans and
+  zero base translations before a current save; malformed, conflicting, or
+  ambiguous metadata fails closed. The historical renderer sees the string
+  only at its compatibility materialization boundary.
+- Released evidence: the schema-5/session-40 fixture has SHA-256
+  `4eb045e070d41243f29d5486ab01be08cf18e84c4ea9a0c28b852f5862e6321d`
+  and first-parent-main witness
+  `10d3a3d28b3c9faa42db01c8bd0bd36b9be8433c`; its catalog schema 3 has
+  stable biological IDs and source feature indexes for all five records. The
+  save-before-materialization audit also covers released session 39 fixture
+  SHA-256
+  `e2e8296807649b4da8af38fd1f13f0af211543b36cb03c8347691ff9583e0093`
+  at first-parent-main witness
+  `8228ffab272d6ea2a0728ae0e1d925424431b21d`; its five representatives have
+  record indexes, source feature indexes, and stable SVG identities. No valid
+  released legacy edge lacks the metadata needed for a current write, so the
+  S02 Product Decision Pack condition was not triggered.
+- Verification:
+  - the fast Python suite, excluding separately verified environment-specific
+    browser/exact-replay and baseline reference-output cases, completed with
+    6,143 passed, 1 skipped, and 11 deselected;
+  - focused request/Session/compatibility and recipe/reproduction checks passed,
+    including 39 Session compatibility tests, 34 recipe/reproduction tests, and
+    an isolated exact-replay test;
+  - all changed Node unit suites passed, and the canonical Session CLI browser
+    integration passed all four cases;
+  - a real Chromium/Pyodide flow loaded the released legacy Gallery Session
+    without constructing the Worker, saved schema 44/request 8 with the typed
+    five-record plan and no legacy fields, loaded it fresh without constructing
+    the Worker, and generated successfully through one Worker;
+  - `node tests/web/architecture-contracts.test.mjs` — 137 passed;
+  - `node tools/check-web-change-budget.mjs` — Gate PASS, Review REQUIRED,
+    zero blocking violations, zero import cycles, and no privileged, dependency,
+    vendor, binary, or guard violations; and
+  - focused Ruff checks and `git diff --check` passed. The unchanged S01 base
+    reproduces the same two label-binding reference-output mismatches, and its
+    existing `tests/test_session_io.py` E701 findings are unchanged.
+- Diff review: production, compatibility fixtures/generated Session examples,
+  tests, and documentation were reviewed separately. The generated examples
+  have only the Session 43/request 7 to Session 44/request 8 semantic change
+  (plus normal regenerated timestamps); public SVG output is unchanged. The one
+  added Web module is the isolated legacy reader;
+  the registered current render-request entry and semantic owner remain single,
+  and no second Worker or runtime render path was added. This is ordinary
+  architecture review with no exception.
+- Product Impact: `IMPLEMENT_EXISTING_AUTHORITY`; S02 serializes
+  `PD-OI-026`–`PD-OI-031` and the documented released compatibility result
+  without selecting a new Product outcome.
+- Remaining risks: S02 deliberately does not apply the plan in current renderer
+  geometry, replace the normal CLI/API string path, or add Web Align lifecycle
+  behavior. Those are S03, S04, and S06 responsibilities respectively.
+- Next permitted session: S03 only.
 
 ## 17. Handoff rules
 

@@ -497,6 +497,7 @@ def render_canonical_session_if_present(
         output_directory=output_directory,
     ) as materialized:
         request = session_to_request(materialized)
+        legacy_source_request = request
         request = with_request_output(
             request,
             output_prefix=output_path.name if output_path is not None else None,
@@ -633,6 +634,14 @@ def render_canonical_session_if_present(
                 else (rendered.drawing,)
             )
             rendered_request = rendered.request
+            from gbdraw.api.session_compat import (
+                project_legacy_similarity_alignment_for_current_write,
+            )
+
+            rendered_request = project_legacy_similarity_alignment_for_current_write(
+                rendered_request,
+                legacy_source=legacy_source_request,
+            )
             result_names = (
                 tuple(output.output_prefix for output in rendered_request.outputs)
                 if isinstance(rendered_request, CircularBatchRequest)
@@ -786,6 +795,59 @@ def _project_session_adjunct_for_current_write(
             "files",
         }
     }
+    orthogroup_state = adjunct.get("orthogroupState")
+    if isinstance(orthogroup_state, Mapping):
+        projected_orthogroup_state = dict(orthogroup_state)
+        projected_orthogroup_state.pop(
+            "selectedOrthogroupAlignmentFeature",
+            None,
+        )
+        adjunct["orthogroupState"] = projected_orthogroup_state
+    cli_invocation = adjunct.get("cliInvocation")
+    if isinstance(cli_invocation, Mapping):
+        projected_invocation = dict(cli_invocation)
+        args = cli_invocation.get("args")
+        bindings = cli_invocation.get("fileBindings")
+        if isinstance(args, list):
+            projected_args: list[str] = []
+            retained_indexes: dict[int, int] = {}
+            index = 0
+            while index < len(args):
+                token = str(args[index])
+                if token in {
+                    "--align_orthogroup_feature",
+                    "--align-orthogroup-feature",
+                }:
+                    index += 2
+                    continue
+                if token.startswith(
+                    ("--align_orthogroup_feature=", "--align-orthogroup-feature=")
+                ):
+                    index += 1
+                    continue
+                retained_indexes[index] = len(projected_args)
+                projected_args.append(token)
+                index += 1
+            projected_invocation["args"] = projected_args
+            if isinstance(bindings, list):
+                projected_bindings = []
+                for binding in bindings:
+                    if not isinstance(binding, Mapping):
+                        projected_bindings.append(binding)
+                        continue
+                    arg_index = binding.get("argIndex")
+                    if arg_index not in retained_indexes:
+                        raise ValidationError(
+                            "Legacy similarity alignment cannot own a CLI file binding."
+                        )
+                    projected_bindings.append(
+                        {
+                            **dict(binding),
+                            "argIndex": retained_indexes[arg_index],
+                        }
+                    )
+                projected_invocation["fileBindings"] = projected_bindings
+        adjunct["cliInvocation"] = projected_invocation
     web_file_inventory = _project_web_file_inventory(session)
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return adjunct, web_file_inventory

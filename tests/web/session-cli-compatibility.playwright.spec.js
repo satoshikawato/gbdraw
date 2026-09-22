@@ -109,8 +109,8 @@ for (const entry of cases) {
       if (phase === 'cli-replay') file = await cli(entry.mode, ['--session', file], testInfo, phase);
       if (phase === 'web-cli-replay') file = await cli(entry.mode, ['--session', webFile], testInfo, phase);
       const session = await readSession(file);
-      expect(session.version).toBe(43);
-      expect(session.renderRequest.schema).toBe(7);
+      expect(session.version).toBe(44);
+      expect(session.renderRequest.schema).toBe(8);
       expect(session.webFiles.bindings.schema).toBe(2);
       if (entry.name === 'composite') {
         expect(session.webFiles.bindings.c_gb.kind).toBe('composite');

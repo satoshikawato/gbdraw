@@ -21,7 +21,7 @@ const ENDPOINT_KINDS = new Set([
   'nucleotideBlast',
   'precomputedProteinComparison'
 ]);
-const PIPELINE_SETTING_FIELDS = new Set([
+const CURRENT_PIPELINE_SETTING_FIELDS = new Set([
   'collinearityParams',
   'collinearityUnitMode',
   'collinearityAnchorMode',
@@ -35,7 +35,10 @@ const PIPELINE_SETTING_FIELDS = new Set([
   'proteinBlastpCandidateLimit',
   'orthogroupMembershipMode',
   'orthogroupMemberMaxHits',
-  'collinearMaxParalogLinksPerOrthogroup',
+  'collinearMaxParalogLinksPerOrthogroup'
+]);
+const LEGACY_PIPELINE_SETTING_FIELDS = new Set([
+  ...CURRENT_PIPELINE_SETTING_FIELDS,
   'alignOrthogroupFeature'
 ]);
 const RESOURCE_KIND_BY_COMPARISON_KIND = Object.freeze({
@@ -113,7 +116,7 @@ const endpointIssue = (comparison, recordCount) => {
   return '';
 };
 
-const pipelineIssue = (comparison, recordCount) => {
+const pipelineIssue = (comparison, recordCount, requestSchema) => {
   if (
     !['none', 'pairwise', 'orthogroup', 'collinear'].includes(comparison?.mode)
     || !isObject(comparison?.settings)
@@ -121,10 +124,13 @@ const pipelineIssue = (comparison, recordCount) => {
   ) {
     return 'The saved protein comparison pipeline is incomplete or unsupported.';
   }
+  const acceptedFields = requestSchema >= 8
+    ? CURRENT_PIPELINE_SETTING_FIELDS
+    : LEGACY_PIPELINE_SETTING_FIELDS;
   const settingKeys = Object.keys(comparison.settings);
   if (
-    settingKeys.length !== PIPELINE_SETTING_FIELDS.size - (Object.prototype.hasOwnProperty.call(comparison.settings, 'collinearInferOrthogroups') ? 0 : 1)
-    || settingKeys.some((key) => !PIPELINE_SETTING_FIELDS.has(key))
+    settingKeys.length !== acceptedFields.size - (Object.prototype.hasOwnProperty.call(comparison.settings, 'collinearInferOrthogroups') ? 0 : 1)
+    || settingKeys.some((key) => !acceptedFields.has(key))
   ) {
     return 'The saved protein comparison pipeline is incomplete or unsupported.';
   }
@@ -257,7 +263,7 @@ export const classifyImportedComparisonIntent = ({
       const resourceIssue = comparisonResourceIssue(comparison, resources);
       if (resourceIssue) return decision(resourceIssue);
     } else if (kind === 'generatedProteinComparison') {
-      const issue = pipelineIssue(comparison, records.length);
+      const issue = pipelineIssue(comparison, records.length, Number(renderRequest?.schema));
       if (issue) return decision(issue);
       if (pipeline) return decision('The saved comparison contains more than one protein pipeline.');
       pipeline = comparison;

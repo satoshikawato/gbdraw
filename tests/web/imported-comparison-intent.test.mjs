@@ -72,6 +72,8 @@ const pipelineSettings = {
   collinearMaxParalogLinksPerOrthogroup: 2,
   alignOrthogroupFeature: null
 };
+const currentPipelineSettings = { ...pipelineSettings };
+delete currentPipelineSettings.alignOrthogroupFeature;
 
 const editable = classifyImportedComparisonIntent({
   renderRequest: request([{
@@ -97,6 +99,32 @@ const editablePipeline = classifyImportedComparisonIntent({
 assert.equal(
   editablePipeline.disposition,
   IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+);
+const currentEditablePipeline = classifyImportedComparisonIntent({
+  renderRequest: request([{
+    kind: 'generatedProteinComparison',
+    mode: 'pairwise',
+    pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }],
+    settings: currentPipelineSettings
+  }], { schema: 8 }),
+  resources
+});
+assert.equal(
+  currentEditablePipeline.disposition,
+  IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+);
+const currentPipelineWithLegacyAlignment = classifyImportedComparisonIntent({
+  renderRequest: request([{
+    kind: 'generatedProteinComparison',
+    mode: 'pairwise',
+    pairs: [{ queryRecordIndex: 0, subjectRecordIndex: 1 }],
+    settings: pipelineSettings
+  }], { schema: 8 }),
+  resources
+});
+assert.equal(
+  currentPipelineWithLegacyAlignment.disposition,
+  IMPORTED_COMPARISON_DISPOSITIONS.DECISION_REQUIRED
 );
 
 const preserved = classifyImportedComparisonIntent({

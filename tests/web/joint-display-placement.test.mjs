@@ -67,7 +67,7 @@ for (const mode of ['circular', 'linear']) {
     const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
     const result = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot: mode === 'linear'
       ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) : null });
-    assert.equal(result.renderRequest.schema, 7);
+    assert.equal(result.renderRequest.schema, 8);
     assert.deepEqual(result.renderRequest.records.map((record) => record.display.startCoordinate), [1, 71]);
     assert.deepEqual(result.renderRequest.diagramOptions.featurePlacements, [override]);
     assert.equal(new Set(result.renderRequest.records.map((record) => record.source.resourceId)).size, 1);
@@ -170,7 +170,7 @@ test('historical session 40 schema 6 promotes without Generate and preserves car
   assert.equal(session.renderRequest.schema, 6);
   const before = structuredClone(session.renderRequest);
   const current = promoteCanonicalRenderRequestToCurrent(session.renderRequest);
-  assert.equal(current.schema, 7);
+  assert.equal(current.schema, 8);
   assert.deepEqual(current.records.map((record) => record.cardinality), before.records.map((record) => record.cardinality));
   assert.ok(current.records.every((record) => record.display.isCircular === null && record.display.startCoordinate === null));
   assert.deepEqual(current.diagramOptions.featurePlacements, []);

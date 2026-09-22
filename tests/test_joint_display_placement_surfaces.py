@@ -99,7 +99,7 @@ def test_joint_canonical_round_trip(mode, tmp_path):
     )
     materialized = plan_request(request).request
     encoded = encode_canonical_request(materialized)
-    assert encoded.payload["schema"] == 7
+    assert encoded.payload["schema"] == 8
     assert encoded.payload["records"][0]["display"] == {
         "isCircular": None, "startCoordinate": 1,
     }
@@ -128,8 +128,8 @@ def test_historical_v40_schema6_typed_promotion_without_render(tmp_path):
         assert all(record.display == api.RecordDisplayOptions() for record in request.records)
         assert not request.options.feature_placements
         promoted = api.build_session_document(request).to_dict()
-    assert promoted["version"] == 43
-    assert promoted["renderRequest"]["schema"] == 7
+    assert promoted["version"] == 44
+    assert promoted["renderRequest"]["schema"] == 8
     assert [r["cardinality"] for r in promoted["renderRequest"]["records"]] == [
         r["cardinality"] for r in historical["renderRequest"]["records"]
     ]

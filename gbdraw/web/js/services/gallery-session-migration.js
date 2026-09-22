@@ -513,6 +513,11 @@ const preserveComparisonResources = (session, promoted) => {
     : [];
   const preservingSavedComparisons = comparisons.length > 0;
   if (preservingSavedComparisons) promoted.renderRequest.comparisons = comparisons;
+  for (const comparison of promoted.renderRequest.comparisons || []) {
+    if (comparison?.kind === 'generatedProteinComparison' && comparison.settings) {
+      delete comparison.settings.alignOrthogroupFeature;
+    }
+  }
   promoted.resources = {
     ...(session.resources || {}),
     ...promoted.resources
@@ -588,13 +593,20 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
     filesData,
     comparisonPlanSnapshot
   });
+  const orthogroupState = isPlainObject(session.orthogroupState)
+    ? cloneJson(session.orthogroupState)
+    : session.orthogroupState;
+  if (isPlainObject(orthogroupState)) {
+    delete orthogroupState.selectedOrthogroupAlignmentFeature;
+  }
   const promoted = {
     ...session,
     format: 'gbdraw-session',
-    version: 43,
+    version: 44,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
+    orthogroupState,
     webFiles: {
       ...(session.webFiles || {}),
       ...promotedCore.webFiles

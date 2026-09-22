@@ -1,11 +1,17 @@
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
-const CURRENT_VERSION = 43, CURRENT_REQUEST_SCHEMA = 7, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CURRENT_VERSION = 44, CURRENT_REQUEST_SCHEMA = 8, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const currentOrthogroupState = (value) => {
+  if (!isObject(value)) return value;
+  const current = clone(value);
+  delete current.selectedOrthogroupAlignmentFeature;
+  return current;
+};
 const regenerableProteinCache = (session) => session.renderRequest?.comparisons?.some(
   ({ kind }) => kind === 'generatedProteinComparison') && session.proteinIdentityManifest?.schema === 2
   && session.losatCache?.entries?.some((entry) => entry?.schema === 4 && entry?.kind === 'raw-losat' && entry?.program === 'blastp'
@@ -18,7 +24,7 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
 };
 const validateCurrent = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
-  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error('Gallery publication requires canonical renderRequest schema 7.'); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
+  if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error('Gallery publication requires canonical renderRequest schema 8.'); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
   return session;
 };
 const publicationConfig = (session, projection) => {
@@ -42,15 +48,26 @@ const publicationConfig = (session, projection) => {
   delete config.blastSource; delete config.adv.losatProgram;
   return config;
 };
-const publicationCanonicalRequest = (request, promoteRequest) => {
-  const current = promoteRequest(request);
+const publicationCanonicalRequest = (
+  request,
+  promoteRequest,
+  { featureCatalog = null, legacyOrthogroupState = null } = {}
+) => {
+  const current = promoteRequest(request, { featureCatalog, legacyOrthogroupState });
   if (Number(request?.schema) === 5) {
     current.records.forEach((record) => { record.cardinality = 'exactly_one'; });
   }
   return current;
 };
 const rebuildIntent = async (session, owners) => {
-  const renderRequest = publicationCanonicalRequest(session.renderRequest, owners.promoteRequest);
+  const renderRequest = publicationCanonicalRequest(
+    session.renderRequest,
+    owners.promoteRequest,
+    {
+      featureCatalog: session.editorState?.featureCatalog || null,
+      legacyOrthogroupState: session.orthogroupState || null
+    }
+  );
   const projection = owners.projectRequest({ renderRequest,
     resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: session.config,
     fileBindings: session.cliInvocation?.fileBindings, sessionResourceTable: adoptCurrentSessionResources(session.resources),
@@ -102,15 +119,29 @@ export const createGallerySessionPublication = (owners) => {
   const admit = (session) => {
     const version = Number(session?.version);
     if (version === CURRENT_VERSION) return validateCurrent(session);
-    if (version === 40 || version === 41 || version === 42) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
-      renderRequest: publicationCanonicalRequest(session.renderRequest, owners.promoteRequest) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 43 or historical versions 31-33/39-42; received ${String(session?.version)}.`);
+    if ([40, 41, 42, 43].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
+      renderRequest: publicationCanonicalRequest(
+        session.renderRequest,
+        owners.promoteRequest,
+        {
+          featureCatalog: session.editorState?.featureCatalog || null,
+          legacyOrthogroupState: session.orthogroupState || null
+        }
+      ) }));
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 44 or historical versions 31-33/39-43; received ${String(session?.version)}.`);
     return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
   };
   const rebuild = (session) => rebuildIntent(session, owners);
   const prepare = async (source) => {
     const admitted = admit(source), { config, rebuilt, equivalence } = await rebuild(admitted);
-    const session = { ...admitted, config, renderRequest: rebuilt.renderRequest, resources: rebuilt.resources, webFiles: rebuilt.webFiles };
+    const session = {
+      ...admitted,
+      config,
+      renderRequest: rebuilt.renderRequest,
+      resources: rebuilt.resources,
+      webFiles: rebuilt.webFiles,
+      orthogroupState: currentOrthogroupState(admitted.orthogroupState)
+    };
     return { session: validateCurrent(session), equivalence };
   };
   const finalize = async ({ prepared, replayed }) => {
