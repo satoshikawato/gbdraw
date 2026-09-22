@@ -86,6 +86,7 @@ def test_circular_label_drawer_uses_label_entry_font_size() -> None:
     config_dict = load_config_toml("gbdraw.data", "config.toml")
     cfg = GbdrawConfig.from_dict(config_dict)
     label = {
+        "feature_id": "circular-label-font-size",
         "label_text": "drawer_font_size_label",
         "middle": 250,
         "start_x": 100.0,

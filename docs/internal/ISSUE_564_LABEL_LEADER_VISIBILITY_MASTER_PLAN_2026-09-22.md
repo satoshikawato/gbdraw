@@ -559,10 +559,10 @@ command、pass/fail/skip件数、browser/wheel identity、未解決事項を省�
 | Session | 状態 | 対象HEAD／branch | 変更・判断 | 検証 | 次の開始条件 |
 | --- | --- | --- | --- | --- | --- |
 | Plan | 完了 | `11aae136694a4433cabc68c0dae31edf77222740` / `fix/issue-564-label-leader-visibility-20260922` | 現行Linear/Circularで再現。master planとsession promptsを作成。 | Issue/API、source audit、Chromium独立再現。runtime testは未実施。 | S0で最新base、authority、compatibility分類を再確認。 |
-| S0 | 未着手 | — | — | — | baselineとpreflightを完了する。 |
-| S1 | 未着手 | — | — | — | S0でcontractとarchitecture routeが確定している。 |
-| S2 | 未着手 | — | — | — | S1のrenderer identity contractがpassing。 |
-| S3 | 未着手 | — | — | — | S1/S2のfocused checksがpassing。 |
+| S0 | 完了 | `3dea935372da3444e394973b410c7c9abf028219` / `fix/issue-564-label-leader-visibility-20260922` | 最新base・Issue・authority・互換性を再確認。per-text schema `data-gbdraw-label-binding-schema="1"`を確定し、renderer failing contractを追加。Productは`IMPLEMENT_EXISTING_AUTHORITY`、architectureはordinary non-increasing、`delta(CB)=0`。 | Chromium再現: Linear 文字hidden／leader 1本visible、Circular 文字hidden／leader 2本visible。current Resultも同数visible、overrideはoff、force rerender 0。Python contractは期待どおり14 fail/1 pass（うちCircular marker 12 fail、Linear contract 2 fail）。 | Product／architecture未解決なし。S1開始可。 |
+| S1 | 完了 | `3dea935372da3444e394973b410c7c9abf028219`＋実装candidate / `fix/issue-564-label-leader-visibility-20260922` | Linear/Circularのlabel textと全leader partへexact rendered feature IDを投影し、textへbinding schema markerを追加した。Linear identity ownerはpairwise専用moduleからneutral ownerへ移した。 | renderer focused 123 pass。tracked SVGは新binding attributeを除いてbyte一致し、interactive metadataを持つ一例も既存metadataと新attributeを除いてbyte一致。exact replayとarrow examplesもpass。 | S2開始条件を充足。 |
+| S2 | 完了 | 同上 | Webのvisibility投影をcomplete binding単位のatomic helperへ集約。`off`は全partを隠し、`on`/`default`はpreview所有のstyleだけを解除する。incomplete legacy Resultは既存canonical force reflowへ一回だけ送り、失敗時は旧visualを保持する。 | affected Node contract 2 pass、right-drawer browser smoke 1 pass、sanitizer round-trip pass。新state、schema、watcher、queue、retry、lifecycleなし。 | S3開始条件を充足。 |
+| S3 | 完了 | 同上 | offline browser wheel、real-browser acceptance、owner artifact、全体gateを完了した。Gallery Sessionはschemaを維持し、binding metadataだけを追加した。 | Issue専用Playwright 5 pass、fast suite 6117 pass/17 skip/11 deselect、architecture 137 pass、`ruff` pass、build成功、Web change budget PASS、`git diff --check` pass。 | 未解決事項なし。commit、push、PR、merge可。 |
 
 ### 計画作成時の再現要約
 
@@ -570,3 +570,101 @@ command、pass/fail/skip件数、browser/wheel identity、未解決事項を省�
 - Circular: `HmmtDNA_basic_circular.gbdraw-session.json`、`fb8ff22d9`でtextのみhidden、二本のleader visible。
 - current Resultとexportがlive SVGをcloneするため、visible orphanもpersist/exportされる。
 - Auto reflowオンの独立完了証拠は未取得。S3の必須checkとする。
+
+### S0実施記録
+
+- `git fetch origin --prune`後も`origin/dev`は
+  `11aae136694a4433cabc68c0dae31edf77222740`で、実装branchは計画commitだけを一件積んだ
+  `3dea935372da3444e394973b410c7c9abf028219`だった。merge-baseは`origin/dev`と一致し、
+  ahead/behindは`0/1`、upstreamは同名remote branch、worktreeは開始時cleanだった。
+- Issue #564は`open`、comments 0、`updated_at=2026-09-21T09:41:40Z`で、本文と計画時の
+  authority前提に差はなかった。Product Impact mapのactive concernはcanonical render requestと
+  saved Session regenerationだけで、本変更がregistered subjectを変更する箇所はない。active
+  `BD-###`もない。Issue本文、Web live-edit contract、SVG semantic hookが同じ完全な結果を
+  指定するため、procedural classificationは`IMPLEMENT_EXISTING_AUTHORITY`である。
+- 最新sourceのtracked Gallery SessionをChromiumでLoadし、Editor同期後にAuto reflowをoffへ固定して
+  再現した。Linear `f40a677cb`はtextとResult textがhidden、leader 1本はmounted SVGとcurrent
+  Resultの双方でvisibleだった。Circular `fb8ff22d9`もtextだけがhiddenで、leader 2本は双方で
+  visibleだった。どちらもcanonical overrideは`off`、force rerender requestは0だった。
+- repository-wide collision検索では、計画書以外に`data-gbdraw-label-binding-schema`は存在しなかった。
+  contractは全partの`data-label-feature-id`一致と、text単位の
+  `data-gbdraw-label-binding-schema="1"`に確定した。document-root markerは採用しない。
+- Linearは既存`build_linear_feature_dom_index()`のrecord qualificationとduplicate source ordinalを
+  再利用し、label geometryはsource feature ordinalだけをopaqueに運ぶ。Circularは既存
+  `feature_id`をlineへ投影し、multi-record copyの既存attribute rebindをそのまま利用する。
+- `origin/main`のfirst-parent `4556e04e929a4a85ad28d1833ce7304bd764881c`にtracked
+  `lambda_basic_linear` Session 42が実在し、そのsaved Resultにはcomplete markerも
+  `data-label-feature-id`もない。これはpositive legacy fixtureとして使用できる。
+- metadata-free Resultでdirect projectionを拒否して既存force rerenderへ一度送る処理は、既存の
+  「mounted targetへ安全に直接適用できなければauthoritative rerender」というcanonical pathの
+  availability条件を厳密化するものである。新しいreader、migrator、schema、state、queue、retry、
+  lifecycleは増えず、owner/pathは一つのままなので`delta(OE)=0`、`delta(PE)=0`、
+  `delta(CB)=0`のordinary non-increasing correctionと分類した。
+- failing contractは`tests/test_linear_label_identity.py`と
+  `tests/test_circular_label_identity.py`へ置いた。LV-05〜LV-07、LV-12〜LV-14をrendererで、
+  LV-01〜LV-04とLV-08〜LV-11をWeb contract／browser ownerで守る。現行productionに対する
+  `pytest tests/test_linear_label_identity.py tests/test_circular_label_identity.py -q`は、test自身の
+  setup誤りを修正後、Linearのmarker欠落2件とCircularのmarker欠落12件が期待どおり失敗し、
+  unrelated repeated-table test 1件はpassした。tracked reference／Gallery artifactは変更していない。
+
+### S1実施記録
+
+- `gbdraw/render/label_binding.py`をbinding属性の唯一のwriterとし、label textへ
+  `data-label-feature-id`と`data-gbdraw-label-binding-schema="1"`、leader lineの全segmentへ同じ
+  exact IDを投影した。既存layer順を変えず、textとlineを新しいSVG groupへまとめていない。
+- Linearのexact rendered ID ownerを`pairwise_match.py`からneutralな
+  `gbdraw/render/groups/linear/feature_identity.py`へ移し、既存のrecord qualification、duplicate source
+  ordinal、embedded table ID contractをそのまま再利用した。label geometryからはsource ordinalだけを
+  運び、描画時に同じindexで解決する。Circularは既存`feature_id`を全leader segmentへ投影した。
+- `python -m pytest tests/test_linear_label_identity.py tests/test_circular_label_identity.py
+  tests/test_linear_label_placement.py tests/test_circular_label_placement.py
+  tests/test_output_comparison.py::TestOutputComparison -q`は123 passだった。multi-record duplicate、
+  embedded tableの0-leader、Circularの2-segment leader、repeated recordを含む。
+- owner recipeで更新したstatic SVGは、新binding属性だけを除くとtracked版とbyte一致した。
+  interactive BGC Gallery SVGも、既存のembedded interactive metadataと新binding属性を除くとbyte一致し、
+  geometry／paint／layer順の差はない。生成中に検出した本件外の5件の既存geometry driftは採用せず、
+  対象artifactへ戻した。
+- `tests/test_run_info_exact_replay.py`はcomplete bindingを含む新hash、bindingだけを除く旧hash、全label
+  identityを除くlegacy hashの三つを明示し、1 passだった。arrow example contractは2 passだった。
+
+### S2実施記録
+
+- `gbdraw/web/js/app/feature-editor/label-actions.js`へcomplete binding resolverとatomic visibility helperを
+  置いた。resolverは非空のexact IDとschema marker `1`を要求し、同じexact IDを持つ全partを列挙する。
+  IDをCSS selectorへ補間しないため、similar IDや特殊文字で別featureへ波及しない。
+- `off`はlabel textと0/1/2本の全leader partへpreview markerと`display: none`を付ける。`on`と
+  `default`はpreviewが所有したstyleだけを除去するため、author-authored `display: none`を復元しない。
+  direct editとsaved override replayは同じhelperを使い、text＋visibilityの複合editもserializeは一回だけである。
+- incomplete current／saved Resultでは部分的に隠さずfail closedとし、S0で認めた既存force reflowを
+  一回だけqueueする。force failure時もoverride intentと旧complete visualを保持し、既存error surfaceへ
+  通知する。新しいpublic state、Session/request schema、watcher、queue、retry、lifecycleは追加していない。
+- sanitizerへschema markerをallowlistし、round-trip contractを追加した。
+  `node --test tests/web/feature-label-visual-unit.test.mjs tests/web/svg-sanitization.test.mjs`は2 pass、
+  `npx playwright test tests/web/right-drawer.playwright.spec.js`の対象smokeは1 passだった。
+
+### S3実施記録
+
+- `python tools/prepare_browser_wheel.py`でcurrent sourceのoffline wheelを準備した。wheelはgitignoredの
+  generated assetでありcommit対象外である。
+- `tests/web/issue-564-label-leader-visibility.playwright.spec.js`は5 passだった。fresh Linearで
+  off、on/default、Auto reflow on/off、save/load、regeneration、exportを確認し、fresh Circularで
+  2-segment leaderを確認した。main first-parent由来のmetadata-free Session 42はcanonical refreshが
+  一回だけ発生し、failure injectionでは旧visual、override intent、errorが保持された。同名labelを持つ
+  2 recordとembedded tableもexact IDで分離された。
+- Linear hidden状態とCircular restored状態のscreenshotを可読scaleで目視し、前者にorphan leaderがなく、
+  後者ではtextと2本のleaderが一緒に復元されることを確認した。
+- Gallery 3例は旧Session schemaを保持したままcurrent rendererでsource SVGを再生し、owner toolで
+  interactive assetとmanifestを更新した。recursive normalized JSON比較ではbinding metadata以外の
+  Session差はなく、`python tools/gallery_artifact_manifest.py`はpassした。documented owner recipeの
+  Session artifactに含まれる`createdAt`／file `lastModified`は生成timestampとして保持した。
+- `python -m pytest tests/ -q -m "not slow"`は6117 pass、17 skip、11 deselectだった。
+  `node tests/web/architecture-contracts.test.mjs`相当のarchitecture contractは137 pass、
+  `ruff check gbdraw/`はpass、`python -m build`は成功、`node tools/check-web-change-budget.mjs`はPASSだった。
+  change budgetのreview表示はregistered Gallery Session 3件の更新によるもので、上記のschema-preserving
+  binding-only差分として監査済みである。`git diff --check`もpassし、Product／architectureの未解決事項はない。
+- 専用5-case browser specはfull functional acceptanceの所有とし、既存の
+  `right-drawer.playwright.spec.js` PR smokeがatomic label/leader投影を継続して守る。CI inventoryは
+  上限を変更せず13 PR casesに収まり、`node --test tests/ci/*.test.mjs`は59 passだった。
+- metadata-free Gallery Sessionのcommitted SVGとcurrent renderer出力を比較するpublication parityでは、
+  この修正の非visual binding 2属性だけを明示的に除外する。比較utilityの既定は変更せず、geometry、
+  paint、構造、その他のmetadata差分は従来どおり失敗させる。

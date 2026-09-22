@@ -6,11 +6,11 @@ from .depth import DepthGroup
 from .gc_content import GcContentGroup
 from .gc_skew import GcSkewGroup
 from .seq_record import SeqRecordGroup
-from .pairwise_match import (
+from .feature_identity import (
     LinearFeatureDomIndex,
-    PairWiseMatchGroup,
     build_linear_feature_dom_index,
 )
+from .pairwise_match import PairWiseMatchGroup
 from .legend import LegendGroup
 from .plot_title import PlotTitleGroup
 
@@ -27,5 +27,4 @@ __all__ = [
     "SeqRecordGroup",
     "build_linear_feature_dom_index",
 ]
-
 
