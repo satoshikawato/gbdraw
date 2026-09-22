@@ -24,6 +24,9 @@ export const EXCLUDED_GROUP_SELECTOR = [
   'g[id^="tick_"]'
 ].join(', ');
 const EDITABLE_LABEL_SELECTOR = 'text[data-label-editable="true"]';
+const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';
+const LABEL_BINDING_SCHEMA = '1';
+const LABEL_FEATURE_ID_ATTRIBUTE = 'data-label-feature-id';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
 
 export const requireUniqueEditableLabelBindings = (
@@ -550,46 +553,65 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     return changed;
   };
 
-  const applyLabelVisibilityPreview = (textEl, modeRaw) => {
-    if (!textEl) return false;
+  const resolveCompleteLabelVisualUnit = (svg, textEl) => {
+    if (!svg || !textEl) return null;
+    const featureId = String(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim();
+    if (!featureId) return null;
+    if (textEl.getAttribute(LABEL_BINDING_SCHEMA_ATTRIBUTE) !== LABEL_BINDING_SCHEMA) {
+      return null;
+    }
+    const parts = Array.from(svg.querySelectorAll(`[${LABEL_FEATURE_ID_ATTRIBUTE}]`))
+      .filter((element) => (
+        String(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || '').trim() === featureId
+      ));
+    if (!parts.includes(textEl)) return null;
+    return { featureId, parts };
+  };
+
+  const applyLabelVisibilityPreview = (svg, textEl, modeRaw) => {
+    const visualUnit = resolveCompleteLabelVisualUnit(svg, textEl);
+    if (!visualUnit) return { available: false, changed: false };
     const visibilityMode = normalizeVisibilityMode(modeRaw);
-    const previewHidden = textEl.hasAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE);
+    let changed = false;
     if (visibilityMode === 'off') {
-      let changed = false;
-      if (!previewHidden) {
-        textEl.setAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE, 'off');
-        changed = true;
-      }
-      if (textEl.getAttribute('display') !== 'none') {
-        textEl.setAttribute('display', 'none');
-        changed = true;
-      }
-      return changed;
+      visualUnit.parts.forEach((part) => {
+        if (part.getAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE) !== 'off') {
+          part.setAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE, 'off');
+          changed = true;
+        }
+        if (part.getAttribute('display') !== 'none') {
+          part.setAttribute('display', 'none');
+          changed = true;
+        }
+      });
+      return { available: true, changed };
     }
-    if (visibilityMode === 'on') {
-      const changed = previewHidden || textEl.getAttribute('display') === 'none';
-      textEl.removeAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE);
-      textEl.removeAttribute('display');
-      return changed;
-    }
-    if (!previewHidden) return false;
-    textEl.removeAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE);
-    textEl.removeAttribute('display');
-    return true;
+    visualUnit.parts.forEach((part) => {
+      if (!part.hasAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE)) return;
+      part.removeAttribute(LABEL_VISIBILITY_PREVIEW_ATTRIBUTE);
+      part.removeAttribute('display');
+      changed = true;
+    });
+    return { available: true, changed };
   };
 
   const applyStoredVisibilityOverridesToSvg = (svg) => {
     let changed = false;
+    let unavailableOverride = false;
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
-        textEl.getAttribute('data-label-feature-id') || ''
+        textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
       ).trim();
       const visibilityMode = featureId
         ? labelVisibilityOverrides[featureId]
         : 'default';
-      changed = applyLabelVisibilityPreview(textEl, visibilityMode) || changed;
+      const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode);
+      changed = projection.changed || changed;
+      if (normalizeVisibilityMode(visibilityMode) !== 'default' && !projection.available) {
+        unavailableOverride = true;
+      }
     });
-    return changed;
+    return { changed, unavailableOverride };
   };
 
   const refreshEditableList = (svg) => {
@@ -651,7 +673,8 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
 
   const syncLabelEditor = ({
     requiredFeatureIds = [],
-    optionalFeatureIds = []
+    optionalFeatureIds = [],
+    queueIncompleteVisibility = true
   } = {}) => {
     // The retained Result can outlive its active mode. Keep its label intent
     // dormant until its own mode can project and reconcile those identities.
@@ -707,11 +730,14 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     );
 
     const textChanged = applyStoredOverridesToSvg(svg);
-    const visibilityChanged = applyStoredVisibilityOverridesToSvg(svg);
+    const visibilityProjection = applyStoredVisibilityOverridesToSvg(svg);
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
-    if (textChanged || visibilityChanged) {
+    if (textChanged || visibilityProjection.changed) {
       serializeCurrentSvg(svg);
+    }
+    if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
+      queueLabelReflow('label-visibility-binding-refresh', true);
     }
   };
 
@@ -720,11 +746,14 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     if (!svg) return false;
     const resetChanged = resetLabelsToSourceText(svg);
     const overrideChanged = applyStoredOverridesToSvg(svg);
-    const visibilityChanged = applyStoredVisibilityOverridesToSvg(svg);
+    const visibilityProjection = applyStoredVisibilityOverridesToSvg(svg);
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
-    if (resetChanged || overrideChanged || visibilityChanged) serializeCurrentSvg(svg);
-    return resetChanged || overrideChanged || visibilityChanged;
+    if (resetChanged || overrideChanged || visibilityProjection.changed) serializeCurrentSvg(svg);
+    if (visibilityProjection.unavailableOverride) {
+      queueLabelReflow('label-visibility-binding-refresh', true);
+    }
+    return resetChanged || overrideChanged || visibilityProjection.changed;
   };
 
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
@@ -815,31 +844,28 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   };
 
   const applyDirectTextToCurrentSvg = (featureId, nextText) => {
-    if (!svgContainer.value) return false;
+    if (!svgContainer.value) return { svg: null, changed: false };
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
+    if (!svg) return { svg: null, changed: false };
     const entry = getEditableLabelByFeatureId(featureId);
-    if (!entry?.key) return false;
+    if (!entry?.key) return { svg, changed: false };
     const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
-    if (!targetEl) return false;
+    if (!targetEl) return { svg, changed: false };
     const currentText = getLabelText(targetEl);
-    if (currentText === nextText) return false;
+    if (currentText === nextText) return { svg, changed: false };
     setLabelText(targetEl, nextText);
-    serializeCurrentSvg(svg);
-    syncLabelEditor();
-    return true;
+    return { svg, changed: true };
   };
 
   const applyDirectVisibilityToCurrentSvg = (featureId, visibilityMode) => {
-    if (!svgContainer.value) return false;
+    if (!svgContainer.value) return { available: false, changed: false };
     const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
+    if (!svg) return { available: false, changed: false };
     const entry = getEditableLabelByFeatureId(featureId);
-    if (!entry?.key) return false;
+    if (!entry?.key) return { available: false, changed: false };
     const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(entry.key)}"]`);
-    if (!applyLabelVisibilityPreview(targetEl, visibilityMode)) return false;
-    serializeCurrentSvg(svg);
-    return true;
+    const projection = applyLabelVisibilityPreview(svg, targetEl, visibilityMode);
+    return { ...projection, svg };
   };
 
   const updateClickedFeatureLabelText = async () => {
@@ -854,12 +880,17 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     const visibilityChanged = applyClickedFeatureVisibilityOverride();
     const textChanged = applyDirectFeatureLabelOverride(featureId, nextText, sourceText, baselineText);
 
-    if (clickedFeature.value.hasEditableLabel) {
-      applyDirectTextToCurrentSvg(featureId, nextText);
-    }
-    const visibilityAppliedDirectly = visibilityChanged
+    const textProjection = clickedFeature.value.hasEditableLabel
+      ? applyDirectTextToCurrentSvg(featureId, nextText)
+      : { svg: null, changed: false };
+    const visibilityProjection = visibilityChanged
       ? applyDirectVisibilityToCurrentSvg(featureId, clickedFeature.value.labelVisibility)
-      : false;
+      : { available: true, changed: false, svg: null };
+    const mutatedSvg = visibilityProjection.svg || textProjection.svg;
+    if (mutatedSvg && (textProjection.changed || visibilityProjection.changed)) {
+      serializeCurrentSvg(mutatedSvg);
+      syncLabelEditor({ queueIncompleteVisibility: false });
+    }
 
     const requiresGlobalSelection = isGlobalLabelsOff() && (visibilityChanged || textChanged);
     if (requiresGlobalSelection) {
@@ -870,7 +901,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     }
 
     if (visibilityChanged || (!clickedFeature.value.hasEditableLabel && textChanged)) {
-      queueLabelReflow('label-visibility-apply', !visibilityAppliedDirectly);
+      queueLabelReflow('label-visibility-apply', !visibilityProjection.available);
       return;
     }
 

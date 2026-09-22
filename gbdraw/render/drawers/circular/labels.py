@@ -5,7 +5,6 @@ import math
 from typing import Literal, Tuple
 
 from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.params import Parameter
 from svgwrite.text import Text, TextPath  # type: ignore[reportMissingImports]
 
 from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
@@ -15,6 +14,7 @@ from ....layout.common import calculate_cds_ratio  # type: ignore[reportMissingI
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path  # type: ignore[reportMissingImports]
 from ....core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
+from ...label_binding import bind_label_part
 
 
 class LabelDrawer:
@@ -259,10 +259,8 @@ class LabelDrawer:
             group = self.add_label_on_the_rim(group, label, radius, record_length)
         # Each branch appends its text last. Bind that label to the same logical
         # rendered feature as its geometry, irrespective of multipart positions.
-        if label.get("feature_id"):
-            text = group.elements[-1]
-            text.set_parameter(Parameter(debug=False, profile=text.profile))
-            text.attribs["data-label-feature-id"] = label["feature_id"]
+        text = group.elements[-1]
+        bind_label_part(text, label["feature_id"], complete=True)
         return group
 
 

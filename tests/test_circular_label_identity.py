@@ -17,6 +17,10 @@ from gbdraw.api.requests import CircularDiagramRequest, InMemoryRecordSource, Re
 from gbdraw.features.ids import compute_feature_hash
 
 
+def _tag_name(element: ET.Element) -> str:
+    return str(element.tag).rsplit("}", 1)[-1]
+
+
 @pytest.mark.parametrize("placement", ["horizontal", "radial"])
 @pytest.mark.parametrize("rendering", ["auto", "external_only", "embedded_only"])
 @pytest.mark.parametrize("repeated_record", [False, True])
@@ -53,11 +57,25 @@ def test_labels_resolve_all_parts_and_disambiguate_equal_source_hashes(
     drawing = plan_request(request).build()
     root = ET.fromstring(drawing.tostring())
     paths = [node for node in root.iter() if node.get("data-gbdraw-feature-part") == "block"]
-    labels = [node for node in root.iter() if node.get("data-label-feature-id")]
+    labels = [
+        node for node in root.iter()
+        if _tag_name(node) == "text" and node.get("data-label-feature-id")
+    ]
+    leaders = [
+        node for node in root.iter()
+        if _tag_name(node) == "line" and node.get("data-label-feature-id")
+    ]
     assert len(labels) == 3 * count
     assert len({node.get("data-label-feature-id") for node in labels}) == 3 * count
     for label in labels:
         identity = label.get("data-label-feature-id")
+        assert label.get("data-gbdraw-label-binding-schema") == "1"
+        matching_leaders = [
+            leader for leader in leaders
+            if leader.get("data-label-feature-id") == identity
+        ]
+        is_embedded = any(_tag_name(child) == "textPath" for child in label.iter())
+        assert len(matching_leaders) == (0 if is_embedded else 2)
         members = [node for node in paths if (
             node.get("data-gbdraw-rendered-feature-id") or node.get("data-gbdraw-feature-id")
         ) == identity]
@@ -67,6 +85,9 @@ def test_labels_resolve_all_parts_and_disambiguate_equal_source_hashes(
         assert {node.get("data-gbdraw-feature-id") for node in members} == {
             compute_feature_hash(source, record_id=record.id)
         }
+    assert {leader.get("data-label-feature-id") for leader in leaders}.issubset(
+        {label.get("data-label-feature-id") for label in labels}
+    )
 
 
 def test_repeated_render_uses_current_label_table_after_filtering_was_prepared():
@@ -87,4 +108,4 @@ def test_repeated_render_uses_current_label_table_after_filtering_was_prepared()
         edited = replace(request, options=replace(request.options, label_override_table=table))
         root = ET.fromstring(plan_request(edited).build().tostring())
         assert ["".join(node.itertext()) for node in root.iter()
-            if node.get("data-label-feature-id")] == [replacement]
+            if _tag_name(node) == "text" and node.get("data-label-feature-id")] == [replacement]
