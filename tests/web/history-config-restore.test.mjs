@@ -39,4 +39,31 @@ for (const [domain, key, first, second] of [
 applyConfigData({ form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.form, 'unknown'), false);
 assert.equal({}.polluted, undefined);
+
+state.similarityAlignmentPlan.value = {
+  schema: 1,
+  mode: 'position',
+  groupId: 'og-history',
+  reference: {
+    recordKey: 'record-a', biologicalFeatureId: 'feature-a',
+    sourceFeatureIndex: 0, stableFeatureSvgId: 'feature-a'
+  },
+  records: []
+};
+state.linearRecordTranslations.value = [{ recordKey: 'record-a', x: 12, y: -3 }];
+await history.initializeIntentBaseline();
+await history.runUndoable('Clear alignment', () => {
+  state.similarityAlignmentPlan.value = null;
+  state.linearRecordTranslations.value = [{ recordKey: 'record-a', x: 21, y: 4 }];
+});
+await history.undo();
+assert.equal(state.similarityAlignmentPlan.value.groupId, 'og-history');
+assert.deepEqual(state.linearRecordTranslations.value, [
+  { recordKey: 'record-a', x: 12, y: -3 }
+]);
+await history.redo();
+assert.equal(state.similarityAlignmentPlan.value, null);
+assert.deepEqual(state.linearRecordTranslations.value, [
+  { recordKey: 'record-a', x: 21, y: 4 }
+]);
 console.log('History restores nullable config values and preserves key guards.');

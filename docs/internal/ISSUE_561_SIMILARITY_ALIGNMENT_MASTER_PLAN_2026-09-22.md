@@ -701,7 +701,7 @@ private conversation as evidence.
 | S03 | complete | base `9e319a8551e4c9df58cd79277e26fbd399ea2dcf`; head is the working-tree candidate containing this ledger entry | Typed plans now resolve effective orientation and transformed anchor centers during request planning, then drive one final per-record translation through the existing Linear geometry path; strict CLI resolution uses the shared resolver and reuses one completed analysis | S04 may start; Web Worker/controller interaction remains intentionally absent |
 | S04 | complete | base `be9d418b363bb43ce062bf9ddbabe081ae90324d`; head is the working-tree candidate containing this ledger entry | One Web controller sends validated current facts through one typed operation on the existing lazy diagram Worker to the S01 resolver, keeps immutable drafts ephemeral, and applies a completed plan through one existing undoable artifact replacement | S05 may start; complete UI/accessibility and S06 lifecycle/Reset behavior remain intentionally absent |
 | S05 | complete | base `e3e214fa2f9fbae6804b0c4a44bd41150434d9f0`; head is the working-tree candidate containing this ledger entry | Popup and drawer expose exact-reference `Align` / `Align & orient` journeys through the S04 controller; resolver-only ambiguity UI, preview, atomic Apply, live summary, read-only inspector, and accessible desktop/narrow behavior pass focused and real-browser checks | S06 may start; lifecycle invalidation, Reset/materialization, complete Undo/Redo lifecycle, and the legacy composition bridge remain intentionally deferred |
-| S06 | pending | | | |
+| S06 | complete | base `fe0e608dccba0676ee5fdf4c730e94a394b79ea8`; head is the working-tree candidate containing this ledger entry | The active plan is one overlay on record-keyed base translations and `RecordPresentation`; sequential Align, Reset, semantic invalidation, stable reorder, manual orientation/drag, complete History restoration, stale Generate repair, current/legacy composition materialization, and lazy Session round trips pass focused and real-browser checks | S07 may start; final acceptance, public documentation, and release work remain intentionally deferred |
 | S07 | pending | | | |
 
 ### S01 evidence — 2026-09-22
@@ -1026,6 +1026,88 @@ private conversation as evidence.
   lifecycle completion, and the legacy composition delta bridge remain S06.
   S06 may start; S07 remains pending.
 - Next permitted session: S06 only.
+
+### S06 evidence — 2026-09-23
+
+- Authority/base: fetched `origin/issue-561-similarity-alignment` and
+  `origin/dev`; the existing worktree started clean with local and remote heads
+  at S05 commit `fe0e608dccba0676ee5fdf4c730e94a394b79ea8`. Both heads
+  contained S05, S01–S05 were complete, and S06 was the first pending ledger
+  row.
+- Lifecycle and history: the S04 controller remains the sole alignment
+  orchestration owner. An active plan is one overlay on record-keyed base X/Y
+  translations and base `RecordPresentation`. A second Align materializes the
+  first plan's effective translations and orientations before installing the
+  replacement in one generated-artifact transaction. Reset renders the
+  immediate pre-align base without reviving an older plan. Manual orientation
+  and record drag materialize once, clear with an accessible reason, and stay
+  within the existing input/diagram History transaction. Generated artifact
+  snapshots restore plan, base translations, base orientations, and Result;
+  failed, canceled, superseded, stale, and no-op paths add no entry.
+- Invalidation and regeneration: source replacement, crop, selector, and source
+  type changes call explicit controller callbacks from their semantic owners.
+  Stable reorder remaps plan decisions and base translations by `recordKey`.
+  Ordinary Generate revalidates the plan through the shared Python resolver
+  without LOSATP; stale reference offers Reselect/Clear, stale targets require
+  Select/Skip, and repair retains the last successful Result and preview.
+- Composition and compatibility: current Linear record groups expose final
+  renderer-owned X/Y translations with stable `recordKey`. One composition
+  adapter combines those values with per-record user deltas and leaves legend,
+  title, length-bar, and whole-diagram placement under their existing owners.
+  Released pre-recordKey v40 output binds once through the resolved plan's
+  stable feature identity and renderer-authored transform; DOM order, row,
+  rendered record ID, and array position are not persisted identity. The
+  released five-record fixture materialized exact X values after DOM reorder,
+  rejected an unmappable anchor explicitly, and constructed no Worker.
+- Session and browser verification: current Session Save/fresh Load preserved
+  base translations, active plan, rationale, effective orientation, Result,
+  and Reset behavior; Load-only preview constructed no Worker. Python
+  Playwright 1.61 drove the real UI because Node `@playwright/test` was absent.
+  The browser flow covered Align A -> Align B -> Reset B -> Undo -> Redo,
+  manual orientation, source/crop/selector reasons, stale reference/target
+  repair, record drag, the following non-doubling Generate, and no page errors.
+  The disposable 1280x900 screenshot kept the lifecycle notice, both records,
+  preview controls, and editor content legible without clipping or overlap; no
+  tracked public visual was added.
+- Verification:
+  - focused resolver, rendering, Web adapter, request codec, Session
+    compatibility, and API Session tests — 251 passed;
+  - controller — 23 passed; composition, History core/input/config/canonical
+    owner, run-analysis, Worker protocol, orthogroup identity, record layout,
+    source/selector/drawer, Session request/authority/file/regeneration,
+    active-state, metadata, cache/resource, settings-only, and runtime-parity
+    suites — passed;
+  - canonical Session CLI compatibility — 4 passed;
+  - targeted current lifecycle and released-v40 Chromium checks — passed;
+  - focused Ruff, JavaScript syntax checks, and `git diff --check` — passed;
+  - `node tests/web/architecture-contracts.test.mjs` — 137 passed; and
+  - `node tools/check-web-change-budget.mjs` — Gate PASS, Review REQUIRED for
+    the intended adapter export, two controller presentation refs, nine touched
+    production files, and production net additions, with zero blocking
+    violations, privileged expansions, import cycles, dependency/vendor/binary
+    changes, or guard changes.
+- Baseline/reference evidence: `TestOutputComparison` retained the same two
+  previously documented circular label-binding metadata mismatches and passed
+  its other 14 cases. `tests/reference_outputs/`,
+  `examples/gbdraw_social_preview.png`, Session fixtures, `dist/`, and
+  `gbdraw.egg-info/` were not changed; the prepared browser wheel remained a
+  gitignored local test artifact.
+- Architecture evidence: the existing controller, canonical request/Session
+  codec, request planner/renderer, composition adapter, Result admission, and
+  generic generated-artifact History transaction retain their single owners.
+  Semantic mutation owners only notify the controller. No alternate resolver,
+  Worker, history stack, persistence path, affine transform, framework, build
+  step, or compatibility writer was added, and no superseded lifecycle path
+  remains.
+- Product Impact: `IMPLEMENT_EXISTING_AUTHORITY`; S06 realizes
+  `PD-OI-026`–`PD-OI-031` lifecycle, Reset/history, stale recovery, and
+  reader-only compatibility outcomes. The released fixture had sufficient
+  stable feature and transform metadata for the authorized reader-only bridge,
+  so no save-continuation choice or Product Decision Pack was required.
+- Remaining scope: S06 has no known implementation blocker. S07 final
+  end-to-end acceptance, public documentation, and release-readiness work
+  remain pending and were not started.
+- Next permitted session: S07 only.
 
 ## 17. Handoff rules
 

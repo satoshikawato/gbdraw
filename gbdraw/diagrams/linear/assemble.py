@@ -2739,6 +2739,8 @@ def assemble_linear_diagram(
                         feature_offset_y=resolved_slot.origin_y,
                         feature_lane_geometry=record_feature_lane_geometries[record_index],
                         record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                        record_translation_x=final_translations[record_index][0],
+                        record_translation_y=final_translations[record_index][1],
                     )
                     feature_rendered = True
                     continue
@@ -2924,6 +2926,8 @@ def assemble_linear_diagram(
                     record_local_ruler=multi_record_enabled,
                     feature_lane_geometry=record_feature_lane_geometries[record_index],
                     record_transform=(record_transforms[record_index] if record_transforms is not None else None),
+                    record_translation_x=final_translations[record_index][0],
+                    record_translation_y=final_translations[record_index][1],
                 )
             add_record_definition_group(
                 canvas,

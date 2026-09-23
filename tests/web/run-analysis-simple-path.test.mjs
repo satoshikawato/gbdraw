@@ -1607,6 +1607,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const alignmentTranslations = ['multi', 'middle', 'third'].map((recordKey) => ({
       recordKey, x: 0, y: 0
     }));
+    const alignmentOrientations = ['multi', 'middle', 'third'].map((recordKey) => ({
+      recordKey,
+      reverseComplement: recordKey === 'middle'
+    }));
     const helperRequestsBeforeAlignment = workerMessages.filter(({ type }) => type === 'helper')
       .length;
     const alignedResult = result('lazy-linear-aligned.svg', 'lazy-linear-aligned');
@@ -1614,7 +1618,8 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(
       await runner.runAnalysis(warmComparisonPlan, null, null, {
         similarityAlignmentPlan: alignmentPlan,
-        linearRecordTranslations: alignmentTranslations
+        linearRecordTranslations: alignmentTranslations,
+        linearRecordOrientations: alignmentOrientations
       }),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
@@ -1626,6 +1631,16 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .payload.request;
     assert.deepEqual(alignedRunRequest.layout.similarityAlignment, alignmentPlan);
     assert.deepEqual(alignedRunRequest.layout.recordTranslations, alignmentTranslations);
+    const alignedOrientation = Object.fromEntries(alignedRunRequest.records.map((record) => [
+      record.recordKey,
+      Boolean(record.region?.reverseComplement ?? record.presentation?.reverseComplement)
+    ]));
+    assert.equal(alignedOrientation.middle, true);
+    assert.equal(
+      state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse,
+      true,
+      'successful admission must install the materialized base orientation'
+    );
     assert.equal(
       workerMessages.filter(({ type }) => type === 'helper').length,
       helperRequestsBeforeAlignment,

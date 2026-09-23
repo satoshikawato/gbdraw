@@ -23,8 +23,8 @@ const artifactSnapshot = (page) => page.evaluate(async () => {
   };
 });
 
-test('Similarity alignment UI completes exact-reference, ambiguity, focus, summary, and narrow journeys', async ({ page }, testInfo) => {
-  test.setTimeout(300000);
+test('Similarity alignment UI completes exact-reference, ambiguity, focus, summary, and narrow journeys', async ({ page, browser }, testInfo) => {
+  test.setTimeout(600000);
   const directory = testInfo.outputPath('inparalog-fixture');
   mkdirSync(directory, { recursive: true });
   execFileSync('python', ['-c',
@@ -220,4 +220,151 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
   await expect(inspector).toContainText('Selected by user');
   await expect(inspector).toContainText('Exact reference');
   await page.screenshot({ path: testInfo.outputPath('narrow-final.png'), fullPage: true });
+
+  const savedState = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      plan: structuredClone(state.similarityAlignmentPlan.value),
+      translations: structuredClone(state.linearRecordTranslations.value),
+      orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
+        recordKey: uid, reverse: Boolean(reverse)
+      })),
+      results: state.results.value.map(({ name, content }) => ({ name, content }))
+    };
+  });
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 's06-active-alignment'; });
+  const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
+  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const download = await downloadPromise;
+  const savedPath = testInfo.outputPath('s06-active-alignment.gbdraw-session.json.gz');
+  await download.saveAs(savedPath);
+
+  const freshContext = await browser.newContext();
+  const freshPage = await freshContext.newPage();
+  const freshErrors = [];
+  freshPage.on('pageerror', (error) => freshErrors.push(String(error?.message || error)));
+  await freshPage.goto(new URL('/gbdraw/web/index.html', page.url()).href, {
+    waitUntil: 'domcontentloaded'
+  });
+  await freshPage.waitForFunction(() => window.__GBDRAW_APP__);
+  await importSession(
+    freshPage,
+    readFileSync(savedPath),
+    's06-active-alignment.gbdraw-session.json.gz'
+  );
+  const freshState = await freshPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      plan: structuredClone(state.similarityAlignmentPlan.value),
+      translations: structuredClone(state.linearRecordTranslations.value),
+      orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
+        recordKey: uid, reverse: Boolean(reverse)
+      })),
+      results: state.results.value.map(({ name, content }) => ({ name, content })),
+      workers: structuredClone(window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ || {
+        constructions: 0, instances: []
+      })
+    };
+  });
+  expect(freshState).toMatchObject({
+    plan: savedState.plan,
+    translations: savedState.translations,
+    orientations: savedState.orientations,
+    results: savedState.results
+  });
+  expect(freshState.workers.constructions).toBe(0);
+  expect(freshState.workers.instances).toHaveLength(0);
+
+  await freshPage.evaluate(() => {
+    window.__GBDRAW_APP__.showRightDrawer = true;
+    window.__GBDRAW_APP__.rightDrawerTab = 'orthogroups';
+  });
+  const freshInspector = freshPage.locator('[data-similarity-alignment-plan-inspector]');
+  await expect(freshInspector).toBeVisible();
+  await expect(freshInspector).toContainText('Selected by user');
+  const historyBeforeReset = await freshPage.evaluate(
+    () => window.__GBDRAW_HISTORY__.getUndoCount()
+  );
+  expect(await freshPage.evaluate(
+    () => window.__GBDRAW_APP__.resetSimilarityAlignment()
+  )).toMatchObject({ status: 'ok' });
+  expect(await freshPage.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      plan: state.similarityAlignmentPlan.value,
+      translations: structuredClone(state.linearRecordTranslations.value),
+      history: window.__GBDRAW_HISTORY__.getUndoCount()
+    };
+  })).toEqual({
+    plan: null,
+    translations: savedState.translations,
+    history: historyBeforeReset + 1
+  });
+  expect(freshErrors).toEqual([]);
+  await freshContext.close();
+});
+
+test('released v40 alignment materializes by stable feature identity without a Worker', async ({ page }) => {
+  const source = readFileSync(
+    'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json',
+    'utf8'
+  );
+  await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const observed = await page.evaluate(async (raw) => {
+    const session = JSON.parse(raw);
+    const { materializeLegacySimilarityAlignment } = await import(
+      './js/services/legacy-similarity-alignment.js'
+    );
+    const { materializeRecordTranslations } = await import(
+      './js/app/legend-layout/composition-actions.js'
+    );
+    const target = session.renderRequest.comparisons.find(
+      (comparison) => comparison.kind === 'generatedProteinComparison'
+    ).settings.alignOrthogroupFeature;
+    const plan = materializeLegacySimilarityAlignment({
+      target,
+      records: session.renderRequest.records,
+      featureCatalog: session.editorState.featureCatalog,
+      legacyOrthogroupState: session.orthogroupState
+    });
+    const svg = new DOMParser().parseFromString(
+      session.results[0].content,
+      'image/svg+xml'
+    ).documentElement;
+    const legacyRecordGroups = Array.from(svg.querySelectorAll(
+      '[data-gbdraw-composition-role="primary"][data-gbdraw-record-id]'
+    )).filter((group) => !group.hasAttribute('data-gbdraw-definition-part'));
+    legacyRecordGroups.reverse().forEach((group) => group.parentElement.append(group));
+    const recordKeys = session.renderRequest.records.map((record) => record.recordKey);
+    const base = recordKeys.map((recordKey) => ({ recordKey, x: 0, y: 0 }));
+    const translations = materializeRecordTranslations(svg, base, recordKeys, plan);
+    const malformed = structuredClone(plan);
+    malformed.records[0].anchor.biologicalFeatureId = 'missing-feature';
+    malformed.reference.biologicalFeatureId = 'missing-feature';
+    let malformedError = '';
+    try {
+      materializeRecordTranslations(svg, base, recordKeys, malformed);
+    } catch (error) {
+      malformedError = String(error?.message || error);
+    }
+    return {
+      translations,
+      malformedError,
+      workers: structuredClone(window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ || {
+        constructions: 0,
+        instances: []
+      })
+    };
+  }, source);
+  expect(observed.translations).toEqual([
+    { recordKey: 'record-1', x: 577, y: 0 },
+    { recordKey: 'record-2', x: 358.65497562715484, y: 0 },
+    { recordKey: 'record-3', x: 697.3384456862045, y: 0 },
+    { recordKey: 'record-4', x: 369.1372805453176, y: 0 },
+    { recordKey: 'record-5', x: 588.9882693298457, y: 0 }
+  ]);
+  expect(observed.malformedError).toMatch(/cannot bind alignment record "record-1"/);
+  expect(observed.workers.constructions).toBe(0);
+  expect(observed.workers.instances).toHaveLength(0);
 });

@@ -1494,8 +1494,8 @@
 
                     <div v-if="mode === 'linear'" class="space-y-4">
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gb" class="text-blue-600"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="lInputType" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
                             <i class="ph ph-warning-circle text-sm mt-0.5"></i>
@@ -1737,7 +1737,8 @@
                                         <div class="min-w-0">
                                             <label class="text-[9px] block">Record (optional)</label>
                                             <select
-                                                v-model="seq.region_record_id"
+                                                :value="seq.region_record_id"
+                                                @change="setLinearRecordSelector(seq, $event.target.value)"
                                                 :disabled="linearRecordSelectorDisabled(seq)"
                                                 :data-record-selector-uid="seq.uid"
                                                 :aria-label="`Record selector for sequence ${idx + 1}`"
@@ -1757,17 +1758,21 @@
                                             </p>
                                         </div>
                                         <label class="flex min-w-0 items-center gap-2 text-[10px] text-slate-600 pb-1">
-                                            <input type="checkbox" v-model="seq.region_reverse" :aria-label="`Reverse complement for sequence ${idx + 1}`" class="form-checkbox"> Reverse complement
+                                            <input type="checkbox"
+                                                   :checked="linearRecordOrientationValue(seq)"
+                                                   @change="setLinearRecordOrientation(seq, $event.target.checked)"
+                                                   :aria-label="`Reverse complement for sequence ${idx + 1}`"
+                                                   class="form-checkbox"> Reverse complement
                                         </label>
                                     </div>
                                     <div class="grid grid-cols-2 gap-2">
                                         <div>
                                             <label class="text-[9px] block">Start</label>
-                                            <input type="number" min="1" v-model.number="seq.region_start" :aria-label="`Region start for sequence ${idx + 1}`" placeholder="1028779" class="form-input px-1 py-0.5 text-xs">
+                                            <input type="number" min="1" :value="seq.region_start ?? ''" @change="setLinearRecordCrop(seq, 'region_start', $event.target.value)" :aria-label="`Region start for sequence ${idx + 1}`" placeholder="1028779" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                         <div>
                                             <label class="text-[9px] block">End</label>
-                                            <input type="number" min="1" v-model.number="seq.region_end" :aria-label="`Region end for sequence ${idx + 1}`" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
+                                            <input type="number" min="1" :value="seq.region_end ?? ''" @change="setLinearRecordCrop(seq, 'region_end', $event.target.value)" :aria-label="`Region end for sequence ${idx + 1}`" placeholder="1035047" class="form-input px-1 py-0.5 text-xs">
                                         </div>
                                     </div>
                                 </div>
@@ -4632,6 +4637,15 @@
                     </span>
                 </div>
 
+                <div v-if="similarityAlignmentNotice"
+                     data-similarity-alignment-notice
+                     role="status"
+                     aria-live="polite"
+                     aria-atomic="true"
+                     class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-2 text-xs text-amber-900 shrink-0">
+                    {{ similarityAlignmentNotice }}
+                </div>
+
                 <div v-show="resultPanelTab === 'preview'" class="preview-viewport relative flex-grow overflow-hidden bg-slate-50/30">
 
                     <div v-if="svgContent"
@@ -6395,6 +6409,16 @@
                                     Active plan · {{ similarityAlignmentPlanInspector.modeLabel }}
                                 </summary>
                                 <div class="mt-2 space-y-2 text-[10px] text-slate-600">
+                                    <div class="flex justify-end">
+                                        <button type="button"
+                                                data-history-managed
+                                                data-similarity-alignment-reset
+                                                @click="resetSimilarityAlignment"
+                                                :disabled="['resolving', 'applying'].includes(similarityAlignmentStatus)"
+                                                class="btn btn-secondary px-2 py-1 text-[10px]">
+                                            Reset Align
+                                        </button>
+                                    </div>
                                     <div>
                                         <span class="font-semibold text-slate-700">Exact reference:</span>
                                         <span class="font-mono break-all">
@@ -6418,6 +6442,26 @@
                                     </div>
                                 </div>
                             </details>
+                            <div v-if="similarityAlignmentRepair"
+                                 data-similarity-alignment-repair
+                                 role="alert"
+                                 class="rounded border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
+                                <p class="font-semibold">Saved alignment needs repair.</p>
+                                <p class="mt-1">{{ similarityAlignmentRepair.reason }}</p>
+                                <div v-if="similarityAlignmentRepair.kind === 'reference'" class="mt-2 flex gap-2">
+                                    <button type="button"
+                                            @click="reselectSimilarityAlignmentReference"
+                                            class="btn btn-secondary px-2 py-1 text-[10px]">
+                                        Reselect reference
+                                    </button>
+                                    <button type="button"
+                                            data-history-managed
+                                            @click="resetSimilarityAlignment"
+                                            class="btn btn-secondary px-2 py-1 text-[10px]">
+                                        Clear alignment
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="h-48 overflow-y-auto border-b border-slate-100 custom-scrollbar">

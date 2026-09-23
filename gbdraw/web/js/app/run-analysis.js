@@ -4367,9 +4367,26 @@ export const createRunAnalysis = ({
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
-      const candidateFiles = forceEmptyComparison
+      let candidateFiles = forceEmptyComparison
         ? { ...serializedFiles, linearCanonicalComparisons: [] }
         : serializedFiles;
+      if (Array.isArray(canonicalStateOverride?.linearRecordOrientations)) {
+        const orientationByRecord = new Map(
+          canonicalStateOverride.linearRecordOrientations.map((entry) => [
+            String(entry?.recordKey || ''),
+            Boolean(entry?.reverseComplement)
+          ])
+        );
+        candidateFiles = {
+          ...candidateFiles,
+          linearSeqs: (candidateFiles.linearSeqs || []).map((sequence) => ({
+            ...sequence,
+            region_reverse: orientationByRecord.has(String(sequence?.uid || ''))
+              ? orientationByRecord.get(String(sequence?.uid || ''))
+              : Boolean(sequence?.region_reverse)
+          }))
+        };
+      }
       const canonicalCircularConservation = resolvedCircularConservation.map((entry) => ({
         ...entry,
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
@@ -4691,7 +4708,10 @@ export const createRunAnalysis = ({
             ),
             linearRecordTranslations: cloneJsonData(
               canonicalStateOverride.linearRecordTranslations
-            ) || []
+            ) || [],
+            linearRecordOrientations: cloneJsonData(
+              canonicalStateOverride.linearRecordOrientations
+            ) || currentOwnerSet.linearRecordOrientations
           } : {}),
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
           proteinIdentityManifest: workingProteinIdentityManifest,

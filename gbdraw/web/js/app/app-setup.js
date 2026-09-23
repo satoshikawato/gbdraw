@@ -422,6 +422,7 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  let similarityAlignmentActions = null;
   const linearTypography = createLinearTypographyController({
     adv,
     linked: linearTypographyLinked
@@ -982,7 +983,7 @@ export const createAppSetup = () => {
     });
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
-    ]);
+    ], { alignmentMutation: 'record selector changed.' });
     expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
     return true;
   };
@@ -2054,7 +2055,15 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, legendActions, history });
+  const legendLayout = createLegendLayout({
+    state,
+    legendActions,
+    history,
+    similarityAlignmentLifecycle: {
+      beforeRecordDrag: () => similarityAlignmentActions?.beforeRecordDrag?.(),
+      afterRecordDrag: (options) => similarityAlignmentActions?.afterRecordDrag?.(options)
+    }
+  });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const shouldSyncMountedLabelEditor = () => (
     isFeatureDrawerMounted.value
@@ -2574,6 +2583,19 @@ export const createAppSetup = () => {
         await linearRecordSelector.refresh();
       }
     }
+    if (
+      !options?.skipSimilarityAlignmentValidation
+      && similarityAlignmentActions?.validateBeforeGenerate
+    ) {
+      const validation = await similarityAlignmentActions.validateBeforeGenerate();
+      if (validation?.status !== 'ok') {
+        failedGeneratePreservedResult.value = results.value.length > 0;
+        if (similarityAlignmentActions.dialogOpen.value) {
+          await focusSimilarityAlignmentDialog();
+        }
+        return validation;
+      }
+    }
     const comparisonPlanSnapshot = mode.value === 'linear'
       ? linearComparisonResolution.value
       : null;
@@ -2649,7 +2671,7 @@ export const createAppSetup = () => {
   };
 
   const orthogroupActions = createOrthogroupEditor({ state, runAnalysis });
-  const similarityAlignmentActions = createSimilarityAlignmentActions({
+  similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
@@ -2658,6 +2680,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
+    getCurrentSvg: () => svgContainer.value?.querySelector?.('svg') || null,
     previewCandidate: featureActions.previewAlignmentCandidate,
     clearCandidatePreview: featureActions.clearAlignmentCandidatePreview,
     onError: (error) => { errorLog.value = error; }
@@ -2798,6 +2821,14 @@ export const createAppSetup = () => {
     if (!orthogroupActions.selectOrthogroup(orthogroupId)) return false;
     rightDrawerActions.openRightDrawerTab('orthogroups');
     return true;
+  };
+
+  const reselectSimilarityAlignmentReference = () => {
+    const groupId = similarityAlignmentActions.repair.value?.groupId
+      || state.similarityAlignmentPlan.value?.groupId
+      || '';
+    similarityAlignmentActions.drawerReferenceKey.value = '';
+    return openOrthogroupInDrawer(groupId);
   };
 
   const openClickedOrthogroupInEditor = () => {
@@ -3505,7 +3536,11 @@ export const createAppSetup = () => {
 
   const applyLinearSeqMutation = (
     items,
-    { preserveLosatCacheInfo = false, layoutEntries = linearRecordRows } = {}
+    {
+      preserveLosatCacheInfo = false,
+      layoutEntries = linearRecordRows,
+      alignmentMutation = 'source set changed.'
+    } = {}
   ) => {
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
@@ -3530,6 +3565,13 @@ export const createAppSetup = () => {
     );
     invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
     linearReorderNotice.value = '';
+    if (alignmentMutation === 'stable-reorder') {
+      similarityAlignmentActions?.retainForStableReorder?.(
+        linearSeqs.map((sequence) => sequence.uid)
+      );
+    } else {
+      similarityAlignmentActions?.clearForMutation?.(alignmentMutation);
+    }
   };
 
   const addLinearSeq = () => {
@@ -3645,7 +3687,7 @@ export const createAppSetup = () => {
     applyLinearSeqMutation(linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )));
+    )), { alignmentMutation: 'source replaced.' });
     if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
     if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
@@ -3672,9 +3714,53 @@ export const createAppSetup = () => {
     return history.runUndoable('Move File', () => {
       applyLinearSeqMutation(next, {
         preserveLosatCacheInfo: true,
-        layoutEntries: plan.rows
+        layoutEntries: plan.rows,
+        alignmentMutation: 'stable-reorder'
       });
     });
+  };
+
+  const setLinearRecordSelector = (sequence, value) => {
+    if (!sequence) return false;
+    const next = String(value || '');
+    if (String(sequence.region_record_id || '') === next) return false;
+    similarityAlignmentActions?.clearForMutation?.('record selector changed.');
+    sequence.region_record_id = next;
+    return true;
+  };
+
+  const setLinearInputType = (value) => {
+    const next = value === 'gff' ? 'gff' : 'gb';
+    if (lInputType.value === next) return false;
+    similarityAlignmentActions?.clearForMutation?.('source type changed.');
+    lInputType.value = next;
+    return true;
+  };
+
+  const setLinearRecordCrop = (sequence, field, value) => {
+    if (!sequence || !['region_start', 'region_end'].includes(field)) return false;
+    const next = value === '' || value === null || value === undefined
+      ? null
+      : Number(value);
+    if (Object.is(sequence[field], next)) return false;
+    similarityAlignmentActions?.clearForMutation?.('record crop changed.');
+    sequence[field] = next;
+    return true;
+  };
+
+  const setLinearRecordOrientation = (sequence, reverseComplement) => (
+    similarityAlignmentActions?.setManualOrientation?.(sequence, reverseComplement)
+  );
+
+  const linearRecordOrientationValue = (sequence) => {
+    const recordKey = String(sequence?.uid || '');
+    const decision = state.similarityAlignmentPlan.value?.records?.find(
+      (entry) => entry.recordKey === recordKey
+    );
+    return decision?.effectiveReverseComplement === null
+      || decision?.effectiveReverseComplement === undefined
+      ? Boolean(sequence?.region_reverse)
+      : Boolean(decision.effectiveReverseComplement);
   };
 
   const resetLinearRecordDefinition = (seq) => {
@@ -3854,6 +3940,11 @@ export const createAppSetup = () => {
     linearSourceRemovalTargetName,
     linearSourceRemovalCanDelete,
     setLinearSeqPrimaryFile,
+    setLinearInputType,
+    setLinearRecordSelector,
+    setLinearRecordCrop,
+    setLinearRecordOrientation,
+    linearRecordOrientationValue,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
@@ -4045,12 +4136,16 @@ export const createAppSetup = () => {
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentError: similarityAlignmentActions.error,
     similarityAlignmentSummary: similarityAlignmentActions.summary,
+    similarityAlignmentNotice: similarityAlignmentActions.notice,
+    similarityAlignmentRepair: similarityAlignmentActions.repair,
     similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
     similarityAlignmentUnresolvedCount: similarityAlignmentActions.unresolvedCount,
     similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
     similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
     similarityAlignmentPlanInspector: similarityAlignmentActions.activePlanInspector,
     canApplySimilarityAlignment: similarityAlignmentActions.canApply,
+    resetSimilarityAlignment: similarityAlignmentActions.resetAlignment,
+    reselectSimilarityAlignmentReference,
     startSimilarityAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
     startSimilarityAlignmentFromDrawer,
     similarityAlignmentDrawerReferenceOptions: similarityAlignmentActions.drawerReferenceOptions,

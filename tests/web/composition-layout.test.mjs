@@ -9,6 +9,7 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   CompositionMetadataError,
   compositionUserDeltas,
+  materializeRecordTranslations,
   normalizeLegacyComposition,
   parseCompositionMetadata,
   planComposition,
@@ -56,9 +57,11 @@ class FakeElement {
 
   querySelectorAll(selector) {
     const roleMatch = selector.match(/^\[data-gbdraw-composition-role="([^"]+)"\]$/);
+    const attributeMatch = selector.match(/^\[([^=\]]+)\]$/);
     const matches = [];
     const visit = (node) => {
       if (roleMatch && node.getAttribute(COMPOSITION_ROLE_ATTRIBUTE) === roleMatch[1]) matches.push(node);
+      if (attributeMatch && node.getAttribute(attributeMatch[1]) !== null) matches.push(node);
       node.children.forEach(visit);
     };
     this.children.forEach(visit);
@@ -363,6 +366,105 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
   assert.equal(applyCompositionUserDeltas(svg, desired).changed, true);
   assert.deepEqual(compositionUserDeltas(svg), desired);
   assert.equal(applyCompositionUserDeltas(svg, desired).changed, false);
+}
+
+{
+  const { svg, primaryA, primaryB } = schemaOneSvg();
+  primaryA.setAttribute('data-record-key', 'record-b');
+  primaryA.setAttribute('data-record-translation-x', '100');
+  primaryA.setAttribute('data-record-translation-y', '5');
+  primaryB.setAttribute('data-record-key', 'record-a');
+  primaryB.setAttribute('data-record-translation-x', '10');
+  primaryB.setAttribute('data-record-translation-y', '2');
+  assert.deepEqual(
+    materializeRecordTranslations(svg, [], ['record-a', 'record-b']),
+    [
+      { recordKey: 'record-a', x: 10, y: 2 },
+      { recordKey: 'record-b', x: 104, y: 2 }
+    ]
+  );
+
+  primaryA.removeAttribute('data-record-translation-x');
+  primaryA.removeAttribute('data-record-translation-y');
+  primaryB.removeAttribute('data-record-translation-x');
+  primaryB.removeAttribute('data-record-translation-y');
+  assert.deepEqual(
+    materializeRecordTranslations(
+      svg,
+      [
+        { recordKey: 'record-a', x: 7, y: 8 },
+        { recordKey: 'record-b', x: 20, y: 30 }
+      ],
+      ['record-a', 'record-b']
+    ),
+    [
+      { recordKey: 'record-a', x: 7, y: 8 },
+      { recordKey: 'record-b', x: 24, y: 27 }
+    ]
+  );
+}
+
+{
+  const { svg, primaryA, primaryB } = schemaOneSvg();
+  const unrelated = new FakeElement({
+    id: 'comparison',
+    attributes: {
+      [COMPOSITION_ROLE_ATTRIBUTE]: 'primary',
+      transform: 'translate(6,36) translate(999,999)'
+    }
+  });
+  svg.children.unshift(unrelated);
+  primaryA.setAttribute('transform', 'translate(10,33) translate(101,70)');
+  primaryB.setAttribute('transform', 'translate(6,36) translate(-20,170)');
+  primaryA.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-stable-feature-id': 'stable-feature-b' }
+  }));
+  primaryB.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-stable-feature-id': 'stable-feature-a' }
+  }));
+  const plan = {
+    records: [
+      {
+        recordKey: 'record-a',
+        status: 'reference',
+        anchor: { biologicalFeatureId: 'feature-a', stableFeatureSvgId: 'stable-feature-a' }
+      },
+      {
+        recordKey: 'record-b',
+        status: 'aligned',
+        anchor: { biologicalFeatureId: 'feature-b', stableFeatureSvgId: 'stable-feature-b' }
+      }
+    ]
+  };
+  assert.deepEqual(
+    materializeRecordTranslations(
+      svg,
+      [
+        { recordKey: 'record-a', x: 0, y: 2 },
+        { recordKey: 'record-b', x: 0, y: 5 }
+      ],
+      ['record-a', 'record-b'],
+      plan
+    ),
+    [
+      { recordKey: 'record-a', x: -20, y: 2 },
+      { recordKey: 'record-b', x: 105, y: 2 }
+    ]
+  );
+
+  primaryB.children = [];
+  assert.throws(
+    () => materializeRecordTranslations(
+      svg,
+      [
+        { recordKey: 'record-a', x: 0, y: 2 },
+        { recordKey: 'record-b', x: 0, y: 5 }
+      ],
+      ['record-a', 'record-b'],
+      plan
+    ),
+    /cannot bind alignment record "record-a"/
+  );
 }
 
 {

@@ -2,6 +2,7 @@ import {
   featureIdentity,
   orthogroupIdStatus
 } from '../services/feature-identity.js';
+import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
 
 const { computed, ref } = window.Vue;
 
@@ -62,7 +63,7 @@ const rationaleLabels = Object.freeze({
 });
 
 const cloneJson = (value) => {
-  if (typeof structuredClone === 'function') return structuredClone(value);
+  if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
 };
 
@@ -551,6 +552,61 @@ const replacementTranslations = (state, recordKeys) => {
   return recordKeys.map((recordKey) => ({ recordKey, x: 0, y: 0 }));
 };
 
+const anchorsAgree = (left, right) => {
+  if (!left || !right) return false;
+  if (
+    left.recordKey !== right.recordKey
+    || left.biologicalFeatureId !== right.biologicalFeatureId
+  ) return false;
+  return ['sourceFeatureIndex', 'stableFeatureSvgId'].every((field) => (
+    left[field] === null
+    || left[field] === undefined
+    || right[field] === null
+    || right[field] === undefined
+    || left[field] === right[field]
+  ));
+};
+
+const orientationsFromRequest = (request, plan = null) => {
+  const decisions = new Map(
+    (Array.isArray(plan?.records) ? plan.records : [])
+      .map((decision) => [decision.recordKey, decision])
+  );
+  return (Array.isArray(request?.records) ? request.records : []).map((record) => {
+    const decision = decisions.get(record.recordKey);
+    return {
+      recordKey: record.recordKey,
+      reverseComplement: decision?.effectiveReverseComplement === null
+        || decision?.effectiveReverseComplement === undefined
+        ? baseReverseComplement(record)
+        : Boolean(decision.effectiveReverseComplement)
+    };
+  });
+};
+
+const requestWithOrientations = (request, orientations) => {
+  const byRecord = new Map(
+    (Array.isArray(orientations) ? orientations : [])
+      .map((entry) => [entry.recordKey, Boolean(entry.reverseComplement)])
+  );
+  return deepFreeze({
+    ...cloneJson(request),
+    records: request.records.map((record) => {
+      const reverseComplement = byRecord.get(record.recordKey);
+      return record.region
+        ? {
+            ...record,
+            region: { ...record.region, reverseComplement },
+            presentation: { ...record.presentation, reverseComplement: false }
+          }
+        : {
+            ...record,
+            presentation: { ...record.presentation, reverseComplement }
+          };
+    })
+  });
+};
+
 export const createSimilarityAlignmentActions = ({
   state,
   getOrthogroupById,
@@ -560,6 +616,7 @@ export const createSimilarityAlignmentActions = ({
   cancelRunAnalysis = null,
   runHelperOperation,
   resolveOperation,
+  getCurrentSvg = null,
   previewCandidate = null,
   clearCandidatePreview = null,
   onError = null
@@ -579,11 +636,16 @@ export const createSimilarityAlignmentActions = ({
   const status = ref('idle');
   const error = ref(null);
   const summary = ref(null);
+  const notice = ref('');
+  const repair = ref(null);
   const drawerReferenceKey = ref('');
   let actionId = 0;
   let activeRequest = null;
   let activeApply = null;
+  let activeBaseline = null;
   let reportedAmbiguities = [];
+  let materializedRecordDrag = false;
+  let pendingRecordDragBaseline = null;
 
   const publishError = (value) => {
     const normalized = value instanceof Error ? value : new Error(String(value || 'Alignment failed.'));
@@ -599,14 +661,86 @@ export const createSimilarityAlignmentActions = ({
     if (typeof clearCandidatePreview === 'function') clearCandidatePreview();
   };
 
+  const currentRequest = () => getCommittedRequest();
+
+  const currentRecordKeys = () => (
+    (Array.isArray(currentRequest()?.records) ? currentRequest().records : [])
+      .map(({ recordKey }) => String(recordKey || ''))
+      .filter(Boolean)
+  );
+
+  const currentSvg = () => (
+    typeof getCurrentSvg === 'function' ? getCurrentSvg() : null
+  );
+
+  const materializedTranslations = (recordKeys, plan = null) => {
+    const base = replacementTranslations(state, recordKeys);
+    const svg = currentSvg();
+    return svg ? materializeRecordTranslations(svg, base, recordKeys, plan) : base;
+  };
+
+  const baseline = ({ materializePlan = false } = {}) => {
+    const request = currentRequest();
+    const recordKeys = (request?.records || []).map(({ recordKey }) => recordKey);
+    const plan = materializePlan ? state.similarityAlignmentPlan?.value : null;
+    return {
+      request: materializePlan
+        ? requestWithOrientations(request, orientationsFromRequest(request, plan))
+        : request,
+      translations: materializePlan
+        ? materializedTranslations(recordKeys, plan)
+        : replacementTranslations(state, recordKeys),
+      orientations: orientationsFromRequest(request, plan)
+    };
+  };
+
+  const installBaseState = (value) => {
+    if (!value) return;
+    state.linearRecordTranslations.value = cloneJson(value.translations);
+    const orientations = new Map(
+      value.orientations.map((entry) => [entry.recordKey, entry.reverseComplement])
+    );
+    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).forEach((sequence) => {
+      const recordKey = String(sequence?.uid || '');
+      if (orientations.has(recordKey)) {
+        sequence.region_reverse = orientations.get(recordKey);
+      }
+    });
+  };
+
+  const publishNotice = (message) => {
+    notice.value = String(message || '');
+  };
+
+  const clearCommittedPlan = (reason) => {
+    const hadPlan = Boolean(state.similarityAlignmentPlan?.value);
+    if (activeApply && typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
+    actionId += 1;
+    clearDraft();
+    status.value = 'idle';
+    activeBaseline = null;
+    if (!hadPlan) return false;
+    state.similarityAlignmentPlan.value = null;
+    summary.value = null;
+    repair.value = null;
+    publishNotice(`Alignment cleared: ${reason}`);
+    return true;
+  };
+
   const applyPlan = async (plan, request, expectedActionId) => {
     if (expectedActionId !== actionId) return { status: 'stale' };
     status.value = 'applying';
     const recordKeys = request.records.map(({ recordKey }) => recordKey);
     const promise = runAnalysis({
+      skipSimilarityAlignmentValidation: true,
       canonicalStateOverride: {
         similarityAlignmentPlan: cloneJson(plan),
-        linearRecordTranslations: replacementTranslations(state, recordKeys)
+        linearRecordTranslations: cloneJson(
+          activeBaseline?.translations || replacementTranslations(state, recordKeys)
+        ),
+        linearRecordOrientations: cloneJson(
+          activeBaseline?.orientations || orientationsFromRequest(request)
+        )
       }
     });
     activeApply = promise;
@@ -621,12 +755,16 @@ export const createSimilarityAlignmentActions = ({
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (outcome?.status === 'ok') {
       summary.value = successfulSummary(plan);
+      repair.value = null;
+      notice.value = '';
+      activeBaseline = null;
       clearDraft();
       error.value = null;
       status.value = 'idle';
       return { status: 'ok' };
     }
     clearDraft();
+    activeBaseline = null;
     status.value = 'idle';
     if (outcome?.error) publishError(outcome.error);
     return { status: outcome?.status || 'error' };
@@ -692,12 +830,13 @@ export const createSimilarityAlignmentActions = ({
     try {
       const group = getOrthogroupById(id);
       if (!group) throw new Error('The selected Similarity Group is unavailable.');
+      activeBaseline = baseline({ materializePlan: true });
       const request = buildHelperRequest({
         group,
         members: getEnrichedOrthogroupMembers(group),
         reference,
         mode,
-        request: getCommittedRequest(),
+        request: activeBaseline.request,
         catalog: state.featureCatalog?.value,
         choices: []
       });
@@ -705,6 +844,7 @@ export const createSimilarityAlignmentActions = ({
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       status.value = 'idle';
+      activeBaseline = null;
       publishError(cause);
       return { status: 'rejected' };
     }
@@ -738,6 +878,7 @@ export const createSimilarityAlignmentActions = ({
     clearDraft();
     error.value = null;
     status.value = 'idle';
+    activeBaseline = null;
     return { status: 'canceled' };
   };
 
@@ -794,6 +935,243 @@ export const createSimilarityAlignmentActions = ({
     }
   });
 
+  const resetAlignment = async () => {
+    if (!state.similarityAlignmentPlan?.value) return { status: 'noop' };
+    const expectedActionId = ++actionId;
+    if (activeApply) {
+      if (typeof cancelRunAnalysis === 'function') cancelRunAnalysis();
+      await activeApply;
+    }
+    const current = baseline();
+    status.value = 'applying';
+    const promise = runAnalysis({
+      skipSimilarityAlignmentValidation: true,
+      canonicalStateOverride: {
+        similarityAlignmentPlan: null,
+        linearRecordTranslations: cloneJson(current.translations),
+        linearRecordOrientations: cloneJson(current.orientations)
+      }
+    });
+    activeApply = promise;
+    let outcome;
+    try {
+      outcome = await promise;
+    } catch (cause) {
+      outcome = { status: 'error', error: cause };
+    } finally {
+      if (activeApply === promise) activeApply = null;
+    }
+    if (expectedActionId !== actionId) return { status: 'stale' };
+    status.value = 'idle';
+    if (outcome?.status === 'ok') {
+      clearDraft();
+      repair.value = null;
+      summary.value = null;
+      publishNotice('Alignment reset to the immediate pre-align baseline.');
+    }
+    return outcome;
+  };
+
+  const planChoices = (plan, staleRecordKeys = new Set()) => (
+    plan.records
+      .filter(({ status, recordKey }) => status !== 'reference' && !staleRecordKeys.has(recordKey))
+      .map((decision) => ({
+        recordKey: decision.recordKey,
+        kind: decision.status === 'aligned' ? 'select' : 'skip',
+        anchor: decision.status === 'aligned' ? decision.anchor : null
+      }))
+  );
+
+  const markStaleReference = (reason) => {
+    clearDraft();
+    status.value = 'idle';
+    repair.value = deepFreeze({
+      kind: 'reference',
+      groupId: state.similarityAlignmentPlan?.value?.groupId || '',
+      reason: String(reason || 'The exact reference is no longer available.')
+    });
+    publishNotice(`Alignment needs repair: ${repair.value.reason}`);
+    return { status: 'blocked', reason: 'stale-reference' };
+  };
+
+  const prepareStaleTargetRepair = async (
+    plan,
+    request,
+    staleRecordKeys,
+    expectedActionId
+  ) => {
+    const repairRequest = deepFreeze({
+      ...cloneJson(request),
+      choices: planChoices(plan, staleRecordKeys)
+    });
+    let response;
+    try {
+      const helper = await runHelperOperation(resolveOperation, { request: repairRequest });
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      response = validateResolution(helper?.result, repairRequest);
+    } catch (cause) {
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      return markStaleReference(cause?.message || cause);
+    }
+    const byRecord = new Map(response.records.map((record) => [record.recordKey, record]));
+    const ambiguities = [];
+    for (const recordKey of request.records.map((record) => record.recordKey)) {
+      if (!staleRecordKeys.has(recordKey)) continue;
+      const result = byRecord.get(recordKey);
+      const candidates = result?.kind === 'ambiguous'
+        ? result.candidates
+        : result?.kind === 'decision' && result.status === 'aligned'
+          ? [{
+              anchor: result.anchor,
+              displayedStrand: null,
+              hidden: false,
+              representative: false,
+              role: ''
+            }]
+          : [];
+      ambiguities.push({
+        recordKey,
+        candidates: candidates.map((candidate) => candidateView(candidate, repairRequest)),
+        choice: null
+      });
+    }
+    activeRequest = repairRequest;
+    activeBaseline = baseline();
+    reportedAmbiguities = ambiguities;
+    draft.value = deepFreeze({
+      response,
+      choices: repairRequest.choices,
+      ambiguities,
+      repair: true
+    });
+    repair.value = deepFreeze({
+      kind: 'targets',
+      groupId: plan.groupId,
+      reason: 'One or more saved target anchors are no longer usable. Select or Skip each target.'
+    });
+    status.value = 'ambiguous';
+    publishNotice(`Alignment needs repair: ${repair.value.reason}`);
+    return { status: 'blocked', reason: 'stale-target' };
+  };
+
+  const validateBeforeGenerate = async () => {
+    const expectedActionId = ++actionId;
+    const plan = state.similarityAlignmentPlan?.value;
+    if (!plan) {
+      repair.value = null;
+      return { status: 'ok' };
+    }
+    const group = getOrthogroupById(plan.groupId);
+    if (!group) return markStaleReference('The saved Similarity Group is no longer available.');
+    const members = getEnrichedOrthogroupMembers(group);
+    let request;
+    try {
+      request = buildHelperRequest({
+        group,
+        members,
+        reference: plan.reference,
+        mode: plan.mode,
+        request: currentRequest(),
+        catalog: state.featureCatalog?.value,
+        choices: planChoices(plan)
+      });
+    } catch (cause) {
+      return markStaleReference(cause?.message || cause);
+    }
+    const currentAnchors = members.map((member) => {
+      try { return anchorFromSource(member, 'Current Similarity Group member'); } catch (_error) { return null; }
+    }).filter(Boolean);
+    const staleRecordKeys = new Set(
+      plan.records
+        .filter(({ status, anchor }) => (
+          status === 'aligned'
+          && !currentAnchors.some((candidate) => anchorsAgree(candidate, anchor))
+        ))
+        .map(({ recordKey }) => recordKey)
+    );
+    if (staleRecordKeys.size > 0) {
+      return prepareStaleTargetRepair(plan, request, staleRecordKeys, expectedActionId);
+    }
+    try {
+      const helper = await runHelperOperation(resolveOperation, { request });
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      validateResolution(helper?.result, request);
+    } catch (_cause) {
+      if (expectedActionId !== actionId) return { status: 'stale' };
+      const alignedKeys = new Set(
+        plan.records.filter(({ status }) => status === 'aligned').map(({ recordKey }) => recordKey)
+      );
+      if (alignedKeys.size > 0) {
+        return prepareStaleTargetRepair(plan, request, alignedKeys, expectedActionId);
+      }
+      return markStaleReference('The exact reference is no longer usable with current facts.');
+    }
+    repair.value = null;
+    return { status: 'ok' };
+  };
+
+  const retainForStableReorder = (recordKeys) => {
+    const orderedKeys = (Array.isArray(recordKeys) ? recordKeys : []).map(String);
+    const plan = state.similarityAlignmentPlan?.value;
+    if (plan) {
+      const decisions = new Map(plan.records.map((entry) => [entry.recordKey, entry]));
+      if (orderedKeys.every((recordKey) => decisions.has(recordKey))) {
+        state.similarityAlignmentPlan.value = {
+          ...cloneJson(plan),
+          records: orderedKeys.map((recordKey) => cloneJson(decisions.get(recordKey)))
+        };
+      }
+    }
+    const translations = new Map(
+      (state.linearRecordTranslations?.value || []).map((entry) => [entry.recordKey, entry])
+    );
+    if (orderedKeys.every((recordKey) => translations.has(recordKey))) {
+      state.linearRecordTranslations.value = orderedKeys.map(
+        (recordKey) => cloneJson(translations.get(recordKey))
+      );
+    }
+  };
+
+  const materializeAndClear = (reason) => {
+    if (!state.similarityAlignmentPlan?.value) return false;
+    const value = baseline({ materializePlan: true });
+    installBaseState(value);
+    return clearCommittedPlan(reason);
+  };
+
+  const beforeRecordDrag = () => {
+    pendingRecordDragBaseline = state.similarityAlignmentPlan?.value
+      ? baseline({ materializePlan: true })
+      : null;
+    return Boolean(pendingRecordDragBaseline);
+  };
+
+  const afterRecordDrag = ({ moved = true } = {}) => {
+    if (!pendingRecordDragBaseline || !moved) {
+      pendingRecordDragBaseline = null;
+      return false;
+    }
+    const materializedPlan = state.similarityAlignmentPlan?.value;
+    installBaseState(pendingRecordDragBaseline);
+    pendingRecordDragBaseline = null;
+    materializedRecordDrag = clearCommittedPlan('record moved manually.');
+    if (!materializedRecordDrag) return false;
+    const recordKeys = currentRecordKeys();
+    state.linearRecordTranslations.value = materializedTranslations(
+      recordKeys,
+      materializedPlan
+    );
+    materializedRecordDrag = false;
+    return true;
+  };
+
+  const setManualOrientation = (sequence, reverseComplement) => {
+    if (!sequence) return false;
+    materializeAndClear('record orientation changed.');
+    sequence.region_reverse = Boolean(reverseComplement);
+    return true;
+  };
+
   const unresolvedCount = computed(() => (
     Array.isArray(draft.value?.ambiguities)
       ? draft.value.ambiguities.filter(({ choice }) => choice === null).length
@@ -817,6 +1195,8 @@ export const createSimilarityAlignmentActions = ({
     status,
     error,
     summary,
+    notice,
+    repair,
     drawerReferenceKey,
     activePlanInspector,
     dialogOpen: computed(() => Boolean(
@@ -825,6 +1205,13 @@ export const createSimilarityAlignmentActions = ({
     unresolvedCount,
     applyDisabledReason,
     canApply: computed(() => status.value === 'ready' && Boolean(draft.value?.response?.plan)),
+    validateBeforeGenerate,
+    resetAlignment,
+    clearForMutation: clearCommittedPlan,
+    retainForStableReorder,
+    beforeRecordDrag,
+    afterRecordDrag,
+    setManualOrientation,
     startFromPopup: (options) => start({ ...options, source: 'popup' }),
     startFromDrawer: (options) => start({
       ...options,

@@ -2307,7 +2307,7 @@ const resolvedPlanReference = {
 };
 state.similarityAlignmentPlan.value = {
   schema: 1,
-  mode: 'position',
+  mode: 'position_and_orientation',
   groupId: 'og-resolved',
   reference: resolvedPlanReference,
   records: [
@@ -2325,7 +2325,7 @@ state.similarityAlignmentPlan.value = {
         recordKey: 'third', biologicalFeatureId: 'feature-third',
         sourceFeatureIndex: 2, stableFeatureSvgId: 'stable-third'
       },
-      effectiveReverseComplement: null
+      effectiveReverseComplement: true
     }
   ]
 };

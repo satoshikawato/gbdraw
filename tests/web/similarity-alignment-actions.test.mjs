@@ -103,6 +103,10 @@ const state = () => ({
   }),
   similarityAlignmentPlan: ref(null),
   linearRecordTranslations: ref([]),
+  linearSeqs: [
+    { uid: 'record-a', region_reverse: false },
+    { uid: 'record-b', region_reverse: false }
+  ],
   results: ref([{ name: 'committed.svg' }])
 });
 
@@ -178,7 +182,8 @@ const create = ({
   runAnalysis = async () => ({ status: 'ok' }),
   cancelRunAnalysis = () => {},
   previewCandidate = null,
-  clearCandidatePreview = null
+  clearCandidatePreview = null,
+  getCurrentSvg = null
 } = {}) => {
   const controllerState = state();
   const currentGroup = group(members, orthologEdges, relatedEdges);
@@ -190,6 +195,7 @@ const create = ({
     getCommittedRequest: () => renderRequest,
     runAnalysis,
     cancelRunAnalysis,
+    getCurrentSvg,
     previewCandidate,
     clearCandidatePreview,
     resolveOperation: 'resolveSimilarityAlignment',
@@ -649,4 +655,171 @@ test('a newer action cancels an in-flight Apply before publishing its own draft'
   assert.equal(fixture.actions.status.value, 'ambiguous');
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
   assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
+});
+
+test('Reset removes only the active overlay and restores its immediate base values', async () => {
+  let observedOverride = null;
+  const fixture = create({
+    helper: async () => { throw new Error('must not resolve'); },
+    runAnalysis: async ({ canonicalStateOverride }) => {
+      observedOverride = structuredClone(canonicalStateOverride);
+      fixture.state.similarityAlignmentPlan.value = canonicalStateOverride.similarityAlignmentPlan;
+      fixture.state.linearRecordTranslations.value = structuredClone(
+        canonicalStateOverride.linearRecordTranslations
+      );
+      return { status: 'ok' };
+    }
+  });
+  fixture.state.linearRecordTranslations.value = [
+    { recordKey: 'record-a', x: 11, y: 2 },
+    { recordKey: 'record-b', x: -7, y: 3 }
+  ];
+  fixture.state.similarityAlignmentPlan.value = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+
+  assert.deepEqual(await fixture.actions.resetAlignment(), { status: 'ok' });
+  assert.equal(observedOverride.similarityAlignmentPlan, null);
+  assert.deepEqual(observedOverride.linearRecordTranslations, [
+    { recordKey: 'record-a', x: 11, y: 2 },
+    { recordKey: 'record-b', x: -7, y: 3 }
+  ]);
+  assert.match(fixture.actions.notice.value, /immediate pre-align baseline/);
+  assert.deepEqual(await fixture.actions.resetAlignment(), { status: 'noop' });
+});
+
+test('manual orientation materializes effective orientation before clearing the plan', () => {
+  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
+  const response = resolvedResponse({
+    ...renderRequest,
+    mode: 'position_and_orientation',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  });
+  response.plan.records[1].effectiveReverseComplement = true;
+  fixture.state.similarityAlignmentPlan.value = response.plan;
+
+  assert.equal(fixture.actions.setManualOrientation(fixture.state.linearSeqs[1], false), true);
+  assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+  assert.equal(fixture.state.linearSeqs[1].region_reverse, false);
+  assert.match(fixture.actions.notice.value, /record orientation changed/);
+});
+
+test('stable reorder remaps the plan and translations by record key', () => {
+  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
+  fixture.state.similarityAlignmentPlan.value = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+  fixture.state.linearRecordTranslations.value = [
+    { recordKey: 'record-a', x: 1, y: 2 },
+    { recordKey: 'record-b', x: 3, y: 4 }
+  ];
+
+  fixture.actions.retainForStableReorder(['record-b', 'record-a']);
+  assert.deepEqual(
+    fixture.state.similarityAlignmentPlan.value.records.map(({ recordKey }) => recordKey),
+    ['record-b', 'record-a']
+  );
+  assert.deepEqual(
+    fixture.state.linearRecordTranslations.value.map(({ recordKey }) => recordKey),
+    ['record-b', 'record-a']
+  );
+});
+
+test('source, crop, and selector invalidation publish their semantic reason', () => {
+  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
+  const plan = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+  for (const reason of ['source replaced.', 'record crop changed.', 'record selector changed.']) {
+    fixture.state.similarityAlignmentPlan.value = structuredClone(plan);
+    assert.equal(fixture.actions.clearForMutation(reason), true);
+    assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+    assert.equal(fixture.actions.notice.value, `Alignment cleared: ${reason}`);
+  }
+});
+
+test('ordinary Generate validation preserves a current plan without running generation or LOSATP', async () => {
+  const fixture = create({
+    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) }),
+    runAnalysis: async () => { throw new Error('validation must not generate'); }
+  });
+  fixture.state.similarityAlignmentPlan.value = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.helperCalls.length, 1);
+  assert.equal(fixture.state.similarityAlignmentPlan.value.groupId, 'og-1');
+});
+
+test('stale reference blocks Generate and offers explicit reference repair or Reset', async () => {
+  const fixture = create({ helper: async () => { throw new Error('must not resolve'); } });
+  const plan = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+  plan.reference = anchor('record-a', 'removed-reference', 99);
+  plan.records[0].anchor = plan.reference;
+  // Vue exposes committed plans through a reactive Proxy; the controller's
+  // canonical JSON boundary must not feed that Proxy to structuredClone.
+  fixture.state.similarityAlignmentPlan.value = new Proxy(plan, {});
+
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), {
+    status: 'blocked', reason: 'stale-reference'
+  });
+  assert.equal(fixture.actions.repair.value.kind, 'reference');
+  assert.match(fixture.actions.notice.value, /needs repair/);
+});
+
+test('stale target blocks Generate and requires Select or Skip without replacing Result', async () => {
+  let call = 0;
+  const fixture = create({
+    members: [reference, targetA, targetB],
+    helper: async (_operation, { request }) => {
+      call += 1;
+      if (call === 1) return { result: ambiguityResponse(request) };
+      const records = [
+        decision('record-a', 'reference', 'reference', request.reference),
+        decision('record-b', 'skipped', 'skipped_by_user', null)
+      ];
+      return { result: {
+        schema: 1, status: 'resolved', mode: request.mode, groupId: request.groupId,
+        reference: request.reference, records,
+        plan: {
+          schema: 1, mode: request.mode, groupId: request.groupId,
+          reference: request.reference, records: records.map(planDecision)
+        }
+      } };
+    }
+  });
+  const plan = resolvedResponse({
+    ...renderRequest,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4)
+  }).plan;
+  plan.records[1].anchor = anchor('record-b', 'removed-target', 77);
+  fixture.state.similarityAlignmentPlan.value = new Proxy(plan, {});
+
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), {
+    status: 'blocked', reason: 'stale-target'
+  });
+  assert.equal(fixture.actions.dialogOpen.value, true);
+  assert.deepEqual(fixture.state.results.value, [{ name: 'committed.svg' }]);
+  assert.deepEqual(await fixture.actions.skipRecord('record-b'), { status: 'ready' });
 });

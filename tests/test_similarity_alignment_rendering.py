@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 import re
 from types import SimpleNamespace
 from xml.etree import ElementTree
@@ -467,6 +468,21 @@ def test_final_placements_align_anchors_and_bounds_do_not_clip(
     assert primary.max_y <= composition.canvas_bounds.max_y
     if positions is not None:
         assert geometry[1]["axisYpx"] - geometry[0]["axisYpx"] == pytest.approx(-7.0)
+
+    svg_root = ElementTree.fromstring(prepared.drawing.tostring())
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    rendered_translations = {
+        group.attrib["data-record-key"]: (
+            float(group.attrib["data-record-translation-x"]),
+            float(group.attrib["data-record-translation-y"]),
+        )
+        for group in svg_root.findall(".//svg:g", namespace)
+        if "data-record-key" in group.attrib
+    }
+    assert set(rendered_translations) == {"first", "second"}
+    assert rendered_translations["first"][1] == pytest.approx(4.0)
+    assert rendered_translations["second"][1] == pytest.approx(-3.0)
+    assert all(math.isfinite(x) for x, _y in rendered_translations.values())
 
 
 def test_final_translation_is_shared_by_every_record_geometry_consumer() -> None:

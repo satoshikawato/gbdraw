@@ -116,6 +116,8 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-record-index',
     'data-record-key',
     'data-record-row',
+    'data-record-translation-x',
+    'data-record-translation-y',
     'data-gbdraw-annotation-mark',
     'data-gbdraw-annotation-label',
     'data-gbdraw-role',

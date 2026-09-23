@@ -1153,3 +1153,123 @@ export const normalizeLegacyComposition = (
 };
 
 export const compositionUserDeltas = (svg) => userDeltas(bindCompositionMetadata(svg));
+
+const stableFeatureIds = (target) => new Set(
+  Array.from(target.querySelectorAll?.('[data-gbdraw-stable-feature-id]') || [])
+    .map((feature) => String(
+      feature.getAttribute?.('data-gbdraw-stable-feature-id') || ''
+    ).trim())
+    .filter(Boolean)
+);
+
+const legacyRecordKey = (target, decisions) => {
+  const available = stableFeatureIds(target);
+  if (available.size === 0) return '';
+  const matches = decisions.filter((decision) => {
+    const anchor = decision?.anchor;
+    return anchor && [anchor.stableFeatureSvgId, anchor.biologicalFeatureId]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .some((value) => available.has(value));
+  });
+  if (matches.length > 1) {
+    fail('Legacy composition metadata binds one record group to multiple alignment records.');
+  }
+  return matches.length === 1 ? String(matches[0].recordKey || '') : '';
+};
+
+const legacyRenderedTranslation = (target, fallbackValue) => {
+  // Before record-keyed translation metadata, ordinary Linear output stored
+  // the final X translation as the record group's second translate. Y was the
+  // renderer's row position, so the keyed Y baseline remains authoritative.
+  // Grid output already had data-record-key; it is intentionally rejected by
+  // this legacy-only path because its second translate also contains grid X.
+  const outer = readLeadingTranslate(target.getAttribute?.('transform') || '');
+  const inner = outer.found ? readLeadingTranslate(outer.tail) : { found: false };
+  if (!inner.found) {
+    fail('Legacy record composition has no materializable record translation.');
+  }
+  return { x: inner.x, y: fallbackValue.y };
+};
+
+// This is the only bridge from SVG composition placement to the record-keyed
+// translation owner. Current SVGs bind directly by recordKey. Released
+// pre-recordKey SVGs bind once through the active plan's stable feature IDs;
+// DOM order, row number, rendered record ID, and array position never become
+// persisted identity.
+export const materializeRecordTranslations = (
+  svg,
+  baseTranslations = [],
+  recordKeys = [],
+  activePlan = null
+) => {
+  const binding = bindCompositionMetadata(svg);
+  const deltas = userDeltas(binding).primary;
+  const fallback = new Map(
+    (Array.isArray(baseTranslations) ? baseTranslations : []).map((entry) => [
+      String(entry?.recordKey || ''),
+      { x: Number(entry?.x), y: Number(entry?.y) }
+    ])
+  );
+  const decisions = Array.isArray(activePlan?.records) ? activePlan.records : [];
+  const decisionByRecord = new Map(
+    decisions.map((decision) => [String(decision?.recordKey || ''), decision])
+  );
+  const byRecord = new Map();
+  binding.primary.targets.forEach((target, index) => {
+    const explicitRecordKey = String(
+      target.getAttribute?.('data-record-key') || ''
+    ).trim();
+    const recordKey = explicitRecordKey || legacyRecordKey(target, decisions);
+    if (!recordKey) return;
+    if (byRecord.has(recordKey)) {
+      fail(`Composition metadata binds duplicate record key ${JSON.stringify(recordKey)}.`);
+    }
+    const fallbackValue = fallback.get(recordKey) || { x: 0, y: 0 };
+    const rawRenderedX = target.getAttribute?.('data-record-translation-x');
+    const rawRenderedY = target.getAttribute?.('data-record-translation-y');
+    const renderedX = rawRenderedX === null ? Number.NaN : Number(rawRenderedX);
+    const renderedY = rawRenderedY === null ? Number.NaN : Number(rawRenderedY);
+    if ((rawRenderedX === null) !== (rawRenderedY === null)) {
+      fail(`Composition metadata has an incomplete translation for record ${JSON.stringify(recordKey)}.`);
+    }
+    let rendered = { x: fallbackValue.x, y: fallbackValue.y };
+    if (Number.isFinite(renderedX) && Number.isFinite(renderedY)) {
+      rendered = { x: renderedX, y: renderedY };
+    } else if (rawRenderedX !== null || rawRenderedY !== null) {
+      fail(`Composition metadata has a non-finite translation for record ${JSON.stringify(recordKey)}.`);
+    } else if (!explicitRecordKey && activePlan) {
+      rendered = legacyRenderedTranslation(target, fallbackValue);
+    } else if (explicitRecordKey && activePlan) {
+      fail(`Composition metadata cannot materialize record ${JSON.stringify(recordKey)}. Regenerate the diagram.`);
+    }
+    const [deltaX, deltaY] = deltas[index] || [0, 0];
+    byRecord.set(recordKey, {
+      recordKey,
+      x: rendered.x + deltaX,
+      y: rendered.y + deltaY
+    });
+  });
+  const orderedKeys = Array.isArray(recordKeys) && recordKeys.length > 0
+    ? recordKeys.map((key) => String(key || ''))
+    : [...byRecord.keys()];
+  return orderedKeys.map((recordKey) => {
+    const materialized = byRecord.get(recordKey) || fallback.get(recordKey);
+    const decision = decisionByRecord.get(recordKey);
+    if (
+      activePlan
+      && decision?.status !== 'skipped'
+      && !byRecord.has(recordKey)
+    ) {
+      fail(`Composition metadata cannot bind alignment record ${JSON.stringify(recordKey)}.`);
+    }
+    if (!materialized || !Number.isFinite(materialized.x) || !Number.isFinite(materialized.y)) {
+      fail(`Composition metadata has no translation for record ${JSON.stringify(recordKey)}.`);
+    }
+    return {
+      recordKey,
+      x: Number(materialized.x),
+      y: Number(materialized.y)
+    };
+  });
+};
