@@ -263,7 +263,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
   return matches.length === 1 ? matches[0].renderedId.value : '';
 };
 
-export const createOrthogroupEditor = ({ state, runAnalysis }) => {
+export const createOrthogroupEditor = ({ state, runAnalysis, alignSimilarityGroup = null }) => {
   const {
     orthogroups,
     orthogroupNameOverrides,
@@ -742,11 +742,16 @@ export const createOrthogroupEditor = ({ state, runAnalysis }) => {
     });
   };
 
-  const alignOrthogroupById = async (orthogroupId = selectedOrthogroupId.value) => {
+  const alignOrthogroupById = async (
+    orthogroupId = selectedOrthogroupId.value,
+    reference = null,
+    mode = 'position'
+  ) => {
     const id = normalizeText(orthogroupId);
-    if (!id || !getOrthogroupById(id)) return;
-    selectedOrthogroupAlignmentFeature.value = id;
-    if (typeof runAnalysis === 'function') await runAnalysis();
+    if (!id || !getOrthogroupById(id) || typeof alignSimilarityGroup !== 'function') {
+      return { status: 'rejected' };
+    }
+    return alignSimilarityGroup(id, reference, mode);
   };
 
   const resetOrthogroupAlignment = async () => {

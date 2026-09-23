@@ -1748,7 +1748,8 @@ export const createRunAnalysis = ({
     requestId = 0,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    canonicalStateOverride = null
   } = {}) => {
     const isReflow = runMode === 'reflow';
     if (!isReflow) {
@@ -4377,7 +4378,15 @@ export const createRunAnalysis = ({
         ...state,
         selectedOrthogroupAlignmentFeature: {
           value: workingSelectedOrthogroupAlignmentFeature
-        }
+        },
+        ...(canonicalStateOverride ? {
+          similarityAlignmentPlan: {
+            value: cloneJsonData(canonicalStateOverride.similarityAlignmentPlan)
+          },
+          linearRecordTranslations: {
+            value: cloneJsonData(canonicalStateOverride.linearRecordTranslations) || []
+          }
+        } : {})
       };
       recordSessionLifecycleEvent('canonical-request-construction-start');
       const canonical = buildCanonicalRenderRequest({
@@ -4676,6 +4685,14 @@ export const createRunAnalysis = ({
           collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
             ? candidateCommit.featureState.collinearGroups
             : [],
+          ...(canonicalStateOverride ? {
+            similarityAlignmentPlan: cloneJsonData(
+              canonicalStateOverride.similarityAlignmentPlan
+            ),
+            linearRecordTranslations: cloneJsonData(
+              canonicalStateOverride.linearRecordTranslations
+            ) || []
+          } : {}),
           trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
           proteinIdentityManifest: workingProteinIdentityManifest,
           legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
@@ -4904,7 +4921,8 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    canonicalStateOverride = null
   ) => {
     let outcome = null;
     processing.value = true;
@@ -4925,7 +4943,8 @@ export const createRunAnalysis = ({
         runMode: 'manual',
         comparisonPlanSnapshot,
         generatedArtifactHandle: beforeHandle || generatedArtifactHandle,
-        comparisonExecution
+        comparisonExecution,
+        canonicalStateOverride
       });
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(

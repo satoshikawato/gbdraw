@@ -701,6 +701,12 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
       collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentPlan: artifactOwnedValue(
+        getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
+      ),
+      linearRecordTranslations: artifactOwnedValue(
+        getGeneratedArtifactRef(state.linearRecordTranslations, null)
+      ),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -785,6 +791,14 @@ export const createHistorySnapshotService = ({
       ownerSet.featureOrthogroupIndex || new Map()
     );
     setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);
+    setGeneratedArtifactRef(
+      state.similarityAlignmentPlan,
+      ownerSet.similarityAlignmentPlan ?? null
+    );
+    setGeneratedArtifactRef(
+      state.linearRecordTranslations,
+      ownerSet.linearRecordTranslations || []
+    );
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -872,6 +886,8 @@ export const createHistorySnapshotService = ({
       'orthogroups',
       'featureOrthogroupIndex',
       'collinearGroups',
+      'similarityAlignmentPlan',
+      'linearRecordTranslations',
       'trackSlotResolvedGeometry',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',

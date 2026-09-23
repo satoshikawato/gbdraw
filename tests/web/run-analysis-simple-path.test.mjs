@@ -147,7 +147,7 @@ class AuditSimplePathWorker {
     }
     if (message.type === 'helper') {
       const response = workerHelperResponses.shift();
-      if (!response) throw new Error('missing helper worker response');
+      if (!response) throw new Error(`missing helper worker response for ${message.operation}`);
       Promise.resolve(response).then((payload) => this.emit('message', {
         type: 'helper',
         requestId: message.requestId,
@@ -1569,7 +1569,107 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
+    committedRenderRequest = {
+      ...committedRenderRequest,
+      comparisons: [{ kind: 'precomputedProteinComparison' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }]
+    };
+
+    const alignmentAnchor = (recordKey, featureId, sourceFeatureIndex) => ({
+      recordKey,
+      biologicalFeatureId: featureId,
+      sourceFeatureIndex,
+      stableFeatureSvgId: `stable-${featureId}`
+    });
+    const alignmentReference = alignmentAnchor('multi', 'reference-feature', 0);
+    const alignmentTarget = alignmentAnchor('middle', 'target-feature', 1);
+    const alignmentPlan = {
+      schema: 1,
+      mode: 'position',
+      groupId: 'og-web-action',
+      reference: alignmentReference,
+      records: [
+        {
+          recordKey: 'multi', status: 'reference', rationale: 'reference',
+          anchor: alignmentReference, effectiveReverseComplement: null
+        },
+        {
+          recordKey: 'middle', status: 'aligned', rationale: 'only_usable_candidate',
+          anchor: alignmentTarget, effectiveReverseComplement: null
+        },
+        {
+          recordKey: 'third', status: 'skipped', rationale: 'skipped_no_candidate',
+          anchor: null, effectiveReverseComplement: null
+        }
+      ]
+    };
+    const alignmentTranslations = ['multi', 'middle', 'third'].map((recordKey) => ({
+      recordKey, x: 0, y: 0
+    }));
+    const helperRequestsBeforeAlignment = workerMessages.filter(({ type }) => type === 'helper')
+      .length;
+    const alignedResult = result('lazy-linear-aligned.svg', 'lazy-linear-aligned');
+    workerResponses.push(response(alignedResult, validCatalog(alignedResult.name)));
+    assert.deepEqual(
+      await runner.runAnalysis(warmComparisonPlan, null, null, {
+        similarityAlignmentPlan: alignmentPlan,
+        linearRecordTranslations: alignmentTranslations
+      }),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 2, 'alignment Apply must reuse committed protein evidence');
+    assert.deepEqual(state.similarityAlignmentPlan.value, alignmentPlan);
+    assert.deepEqual(state.linearRecordTranslations.value, alignmentTranslations);
+    const alignedRunRequest = workerMessages.filter(({ type }) => type === 'run').at(-1)
+      .payload.request;
+    assert.deepEqual(alignedRunRequest.layout.similarityAlignment, alignmentPlan);
+    assert.deepEqual(alignedRunRequest.layout.recordTranslations, alignmentTranslations);
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'helper').length,
+      helperRequestsBeforeAlignment,
+      'alignment Apply must not schedule protein extraction or group inference'
+    );
+
+    const committedAlignedResult = state.results.value;
+    const committedAlignmentPlan = state.similarityAlignmentPlan.value;
+    committedRenderRequest = {
+      ...committedRenderRequest,
+      comparisons: [{ kind: 'precomputedProteinComparison' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }]
+    };
+    failLateArtifactAdoption = true;
+    const rejectedAlignedResult = result(
+      'lazy-linear-aligned-rejected.svg',
+      'lazy-linear-aligned-rejected'
+    );
+    workerResponses.push(response(
+      rejectedAlignedResult,
+      validCatalog(rejectedAlignedResult.name)
+    ));
+    assert.deepEqual(
+      await runner.runAnalysis(warmComparisonPlan, null, null, {
+        similarityAlignmentPlan: {
+          ...alignmentPlan,
+          groupId: 'og-rejected-candidate'
+        },
+        linearRecordTranslations: alignmentTranslations
+      }),
+      { status: 'error' }
+    );
+    failLateArtifactAdoption = false;
+    assert.match(
+      state.errorLog.value?.summary || '',
+      /injected LOSAT late artifact adoption failure/
+    );
+    assert.equal(state.results.value, committedAlignedResult);
+    assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
+    assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
   } finally {
+    state.similarityAlignmentPlan.value = null;
+    state.linearRecordTranslations.value = [];
     if (previousTestHooks === undefined) {
       delete globalThis.__GBDRAW_TEST_HOOKS__;
     } else {

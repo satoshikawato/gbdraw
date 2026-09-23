@@ -699,7 +699,7 @@ private conversation as evidence.
 | S01 | complete | base `11e49d32accd0b00753ec7df9bcb6fb0c71d62f5`; head is the commit containing this ledger entry | Typed immutable plan/candidate/choice/edge/outcome models and one pure deterministic resolver; focused and existing identity/alignment tests pass | S02 may start; request/Session/runtime wiring remains intentionally absent |
 | S02 | complete | base `0624eb821326f0022238b390a1b56f454c51151c`; head is the working-tree candidate containing this ledger entry | Canonical request schema 8 and Session 44 own the typed plan and finite record-keyed X/Y base translations; released v39/v40 legacy evidence materializes through one reader-only adapter; Python, Web, browser, recipe, documentation, and architecture checks pass | S03 may start; current renderer geometry, strict CLI/API resolution, and Web interaction remain intentionally absent |
 | S03 | complete | base `9e319a8551e4c9df58cd79277e26fbd399ea2dcf`; head is the working-tree candidate containing this ledger entry | Typed plans now resolve effective orientation and transformed anchor centers during request planning, then drive one final per-record translation through the existing Linear geometry path; strict CLI resolution uses the shared resolver and reuses one completed analysis | S04 may start; Web Worker/controller interaction remains intentionally absent |
-| S04 | pending | | | |
+| S04 | complete | base `be9d418b363bb43ce062bf9ddbabe081ae90324d`; head is the working-tree candidate containing this ledger entry | One Web controller sends validated current facts through one typed operation on the existing lazy diagram Worker to the S01 resolver, keeps immutable drafts ephemeral, and applies a completed plan through one existing undoable artifact replacement | S05 may start; complete UI/accessibility and S06 lifecycle/Reset behavior remain intentionally absent |
 | S05 | pending | | | |
 | S06 | pending | | | |
 | S07 | pending | | | |
@@ -899,6 +899,66 @@ private conversation as evidence.
 - Remaining scope: Web Worker resolver operation and the alignment controller
   are intentionally deferred. S04 may start; S05–S07 must remain pending.
 - Next permitted session: S04 only.
+
+### S04 evidence — 2026-09-23
+
+- Authority/base: fetched `origin/issue-561-similarity-alignment` and
+  `origin/dev`; the existing worktree started clean with local and remote heads
+  at S03 commit `be9d418b363bb43ce062bf9ddbabe081ae90324d`. The accepted
+  `PD-OI-026`–`PD-OI-031`, `PD-OI-016`, and `PD-OI-018` outcomes were already
+  present, S01–S03 were complete, and S04 was the first pending ledger row.
+- Worker and resolver path: `createSimilarityAlignmentActions` is the one new
+  alignment orchestration owner. The already-authorized `app-setup.js` Worker
+  client injects one typed `resolveSimilarityAlignment` operation into it; the
+  operation reuses the existing lazy diagram Worker and calls the S01 Python
+  resolver through a strict JSON adapter. No Worker, JavaScript resolver,
+  argv-shaped bridge, LOSATP dispatch, or group-inference path was added.
+- Identity and draft behavior: popup alignment uses the exact current
+  record/biological/source/stable feature identity and rejects non-unique
+  matches. Drawer calls without an exact reference are rejected before the
+  helper. Only current group members, direct group edges, record/crop/display
+  facts, and explicit Select/Skip choices cross the helper boundary. Strict
+  response validation rejects unknown fields, enums, combinations, coverage,
+  references, and group-member identities. Ambiguous state is deep-frozen and
+  ephemeral; Cancel, helper failure, stale completion, and supersession cannot
+  update canonical state or the current Result.
+- Apply and history: a completed plan plus complete record-keyed base
+  translations is injected into the existing Generate candidate without first
+  mutating state. The generated artifact owner set now carries the plan and
+  translations, so successful Result admission commits plan, canonical request,
+  Result, and history together. Render cancellation, error, stale work, and
+  late canonical admission failure restore the prior artifact. Compatible
+  committed protein evidence is reused; the focused integration test proves no
+  additional LOSATP execution or group inference occurs for alignment Apply.
+- Verification:
+  - focused controller, Worker lifecycle/protocol, orthogroup identity, Session
+    request, and run-analysis suites — 6 files passed, including 10 controller
+    behavior cases;
+  - shared resolver, Web adapter, and embedded Python helper tests — 58 passed;
+  - `ruff check gbdraw/` and `git diff --check` — passed;
+  - `node tests/web/architecture-contracts.test.mjs` — 137 passed; and
+  - `node tools/check-web-change-budget.mjs` — Gate PASS, Review REQUIRED for
+    the intended new module/reactive draft and net additions, with zero blocking
+    violations, privileged expansions, import cycles, dependency/vendor/binary
+    changes, or guard changes.
+- Architecture evidence: before S04, popup/drawer actions wrote the legacy
+  group string and called Generate directly. After S04, their only active Align
+  route is exact identity -> one controller -> injected existing Worker helper
+  -> shared Python resolver -> one existing generated-artifact replacement.
+  Group browsing, resolver ranking, canonical request encoding, rendering, and
+  generic history retain their existing owners. The new controller is the one
+  required semantic owner for the new Web interaction; no superseded Align,
+  resolver, Worker, render, or commit path remains. This is ordinary review
+  with no architecture exception.
+- Product Impact: `IMPLEMENT_EXISTING_AUTHORITY`; S04 realizes the accepted
+  exact-reference, ambiguity, atomic Apply, cancellation, and evidence-reuse
+  outcomes without selecting a new Product outcome. No Product Decision Pack
+  was required.
+- Remaining scope: complete popup/drawer controls, the ambiguity dialog,
+  candidate preview, plan inspector, summary, and accessibility are deferred to
+  S05. Lifecycle invalidation, Reset/materialization, and the legacy composition
+  bridge remain deferred to S06. S05 may start; S06–S07 must remain pending.
+- Next permitted session: S05 only.
 
 ## 17. Handoff rules
 

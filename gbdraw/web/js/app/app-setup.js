@@ -70,6 +70,7 @@ import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
+import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
@@ -2565,7 +2566,7 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (options = null) => {
     if (mode.value === 'linear') {
       if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
         await materializeAutomaticLinearRecords();
@@ -2590,7 +2591,8 @@ export const createAppSetup = () => {
     const result = await runGeneratedDiagramAnalysis(
       comparisonPlanSnapshot,
       null,
-      comparisonExecution
+      comparisonExecution,
+      options?.canonicalStateOverride || null
     );
     if (result?.status === 'error' && mode.value === 'linear') {
       await focusLinearComparisonIssue();
@@ -2646,9 +2648,25 @@ export const createAppSetup = () => {
     cancelRunAnalysis();
   };
 
+  let similarityAlignmentActions = null;
   const orthogroupActions = createOrthogroupEditor({
     state,
-    runAnalysis
+    runAnalysis,
+    alignSimilarityGroup: (groupId, reference, mode) => (
+      similarityAlignmentActions?.startFromDrawer({ groupId, reference, mode })
+      || Promise.resolve({ status: 'rejected' })
+    )
+  });
+  similarityAlignmentActions = createSimilarityAlignmentActions({
+    state,
+    getOrthogroupById: orthogroupActions.getOrthogroupById,
+    getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    runAnalysis,
+    cancelRunAnalysis,
+    runHelperOperation: runDiagramHelperOperation,
+    resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
+    onError: (error) => { errorLog.value = error; }
   });
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
@@ -2691,11 +2709,14 @@ export const createAppSetup = () => {
   });
 
   const alignByClickedOrthogroup = async () => {
-    const cf = clickedFeature.value;
-    if (!cf?.orthogroupId) return;
-    selectedOrthogroupAlignmentFeature.value = String(cf.orthogroupId || '').trim();
+    const detail = clickedOrthogroupDetail.value;
+    if (!detail?.id) return { status: 'rejected' };
     clickedFeature.value = null;
-    await runAnalysis();
+    return similarityAlignmentActions.startFromPopup({
+      groupId: detail.id,
+      reference: detail.currentMember,
+      mode: 'position'
+    });
   };
 
   const resetOrthogroupAlignment = async () => {
@@ -3962,6 +3983,18 @@ export const createAppSetup = () => {
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
     alignOrthogroupById: orthogroupActions.alignOrthogroupById,
+    similarityAlignmentDraft: similarityAlignmentActions.draft,
+    similarityAlignmentStatus: similarityAlignmentActions.status,
+    similarityAlignmentError: similarityAlignmentActions.error,
+    canApplySimilarityAlignment: similarityAlignmentActions.canApply,
+    startSimilarityAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
+    startSimilarityAlignmentFromDrawer: similarityAlignmentActions.startFromDrawer,
+    selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
+    skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
+    applySimilarityAlignmentDraft: similarityAlignmentActions.applyDraft,
+    cancelSimilarityAlignmentDraft: similarityAlignmentActions.cancel,
+    previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
+    clearSimilarityAlignmentCandidatePreview: similarityAlignmentActions.clearCandidatePreview,
     isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
     openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
     toggleRightDrawer: rightDrawerActions.toggleRightDrawer,

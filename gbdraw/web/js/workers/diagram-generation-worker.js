@@ -492,6 +492,15 @@ const callJsonHelper = (pyodide, helperName, args) => {
 const jsonArgument = (value, fallback) => JSON.stringify(value ?? fallback);
 
 const HELPER_OPERATION_SPECS = Object.freeze({
+  [DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT]: {
+    keys: ['request'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide,
+      'resolve_similarity_alignment_json',
+      [jsonArgument(payload.request, null)]
+    )
+  },
   [DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES]: {
     keys: ['features', 'rules', 'kind'],
     fileRoles: [],
