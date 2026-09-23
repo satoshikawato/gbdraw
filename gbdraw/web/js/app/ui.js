@@ -335,7 +335,12 @@ export const setupGlobalUiEvents = ({
   } = state;
 
   const closeFeaturePopup = (e) => {
-    if (!e.target.closest('.feature-popup') && !e.target.closest('.pairwise-match-popup') && !e.target.closest('.label-popup')) {
+    if (
+      !e.target.closest('.feature-popup')
+      && !e.target.closest('.pairwise-match-popup')
+      && !e.target.closest('.label-popup')
+      && !e.target.closest('[data-similarity-alignment-overlay]')
+    ) {
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;

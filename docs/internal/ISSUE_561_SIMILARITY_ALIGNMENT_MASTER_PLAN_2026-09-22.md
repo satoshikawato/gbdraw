@@ -700,7 +700,7 @@ private conversation as evidence.
 | S02 | complete | base `0624eb821326f0022238b390a1b56f454c51151c`; head is the working-tree candidate containing this ledger entry | Canonical request schema 8 and Session 44 own the typed plan and finite record-keyed X/Y base translations; released v39/v40 legacy evidence materializes through one reader-only adapter; Python, Web, browser, recipe, documentation, and architecture checks pass | S03 may start; current renderer geometry, strict CLI/API resolution, and Web interaction remain intentionally absent |
 | S03 | complete | base `9e319a8551e4c9df58cd79277e26fbd399ea2dcf`; head is the working-tree candidate containing this ledger entry | Typed plans now resolve effective orientation and transformed anchor centers during request planning, then drive one final per-record translation through the existing Linear geometry path; strict CLI resolution uses the shared resolver and reuses one completed analysis | S04 may start; Web Worker/controller interaction remains intentionally absent |
 | S04 | complete | base `be9d418b363bb43ce062bf9ddbabe081ae90324d`; head is the working-tree candidate containing this ledger entry | One Web controller sends validated current facts through one typed operation on the existing lazy diagram Worker to the S01 resolver, keeps immutable drafts ephemeral, and applies a completed plan through one existing undoable artifact replacement | S05 may start; complete UI/accessibility and S06 lifecycle/Reset behavior remain intentionally absent |
-| S05 | pending | | | |
+| S05 | complete | base `e3e214fa2f9fbae6804b0c4a44bd41150434d9f0`; head is the working-tree candidate containing this ledger entry | Popup and drawer expose exact-reference `Align` / `Align & orient` journeys through the S04 controller; resolver-only ambiguity UI, preview, atomic Apply, live summary, read-only inspector, and accessible desktop/narrow behavior pass focused and real-browser checks | S06 may start; lifecycle invalidation, Reset/materialization, complete Undo/Redo lifecycle, and the legacy composition bridge remain intentionally deferred |
 | S06 | pending | | | |
 | S07 | pending | | | |
 
@@ -959,6 +959,73 @@ private conversation as evidence.
   S05. Lifecycle invalidation, Reset/materialization, and the legacy composition
   bridge remain deferred to S06. S05 may start; S06–S07 must remain pending.
 - Next permitted session: S05 only.
+
+### S05 evidence — 2026-09-23
+
+- Authority/base: fetched `origin/issue-561-similarity-alignment` and
+  `origin/dev`; the existing worktree started clean with local and remote heads
+  at S04 commit `e3e214fa2f9fbae6804b0c4a44bd41150434d9f0`. Both heads
+  contained S04, S01–S04 were complete, and S05 was the first pending ledger
+  row.
+- UI journey: the feature popup now exposes separate exact-clicked-feature
+  `Align` and `Align & orient` actions with explicit orientation descriptions.
+  The drawer has no group-only alignment route: one exact record/feature must
+  be selected before either action is enabled. Both entry points call the S04
+  controller; `index.html` owns no resolver, decision, plan, persistence,
+  render, or history behavior.
+- Ambiguity and preview: only resolver-reported ambiguous records enter one
+  modal. Native radio choices require Select or Skip for every such record and
+  show exact feature ID, coordinates, displayed strand, representative/role,
+  and direct evidence without score ranking. Hover/focus delegates exact
+  identity preview to the existing SVG highlight owner and restores the prior
+  feature or match highlight on cleanup. Auto-resolved operations open no
+  modal; Cancel and Escape leave canonical state, Result, and history intact.
+- Apply and inspection: one successful Apply remains one existing generated
+  artifact/history transaction. A polite live region reports aligned,
+  unchanged, explicitly skipped, no-candidate, and reversed counts. The
+  read-only active-plan inspector shows the exact reference, each record's
+  anchor or Skip, and saved rationale; `rev` is derived from effective
+  source-relative orientation without a persisted indicator field. S06 Reset
+  and lifecycle behavior was not implemented.
+- Accessibility/browser verification: Python Playwright 1.61.0 drove the real
+  local Worker UI because Node `@playwright/test` was not installed. The
+  representative inparalog fixture passed popup and drawer entry, exact
+  selector gating, modal label/description, disabled reason association,
+  focus entry/trap/return, native Select/Skip, Escape no-op, candidate preview
+  cleanup, one-undo Apply, live summary, and inspector checks at 1600x1000 and
+  720x740. Disposable screenshots were reviewed: desktop and narrow dialogs
+  kept all candidate, Cancel, and Apply controls reachable; the narrow drawer
+  actions were raised above preview controls; the final summary and plan rows
+  remained legible. No public screenshot or reference output changed.
+- Verification:
+  - `node tests/web/similarity-alignment-actions.test.mjs` — 16 passed;
+  - focused Worker startup/protocol, run-analysis, History input/core,
+    orthogroup identity, and right-drawer suites — passed;
+  - shared resolver, rendering, and Web adapter — 59 passed;
+  - targeted Python Playwright real-browser acceptance — passed;
+  - `ruff check gbdraw/`, JavaScript syntax checks, and `git diff --check` —
+    passed;
+  - `node tests/web/architecture-contracts.test.mjs` — 137 passed; and
+  - `node tools/check-web-change-budget.mjs` — Gate PASS, Review REQUIRED for
+    five intended controller presentation refs/computed values and production
+    net additions, with zero blocking violations, privileged expansions,
+    import cycles, dependency/vendor/binary changes, or guard changes.
+- Architecture evidence: the S04 controller remains the sole alignment
+  orchestration owner. Popup/drawer/modal markup projects its state and actions;
+  the existing diagram Worker client, shared Python resolver, canonical request
+  codec, renderer, Result admission, generic history, and SVG highlighting
+  retain their existing responsibilities. The group-only drawer route was
+  removed in the same change. No alternate Worker, resolver, plan builder,
+  persistence path, history stack, framework, or build step was added.
+- Product Impact: `IMPLEMENT_EXISTING_AUTHORITY`; S05 realizes the already
+  accepted exact-reference, distinct-mode, explicit ambiguity, cancellation,
+  summary, inspector, and accessibility outcomes. No materially different
+  user-visible choice or Product Decision Pack was required.
+- Remaining scope: source/crop/selector/orientation/drag invalidation,
+  sequential materialization, complete Reset baseline behavior, Undo/Redo
+  lifecycle completion, and the legacy composition delta bridge remain S06.
+  S06 may start; S07 remains pending.
+- Next permitted session: S06 only.
 
 ## 17. Handoff rules
 

@@ -59,6 +59,32 @@ const targetB = {
   representative: false,
   role: 'inparalog'
 };
+const targetC = {
+  ...anchor('record-c', 'target-c', 3),
+  recordIndex: 2,
+  featureIndex: 3,
+  stableFeatureSvgId: 'stable-target-c',
+  start: 210,
+  end: 250,
+  strand: '-',
+  proteinId: 'protein-c1',
+  sourceProteinId: 'protein-c1',
+  representative: false,
+  role: 'coortholog'
+};
+const targetD = {
+  ...anchor('record-c', 'target-d', 5),
+  recordIndex: 2,
+  featureIndex: 5,
+  stableFeatureSvgId: 'stable-target-d',
+  start: 260,
+  end: 290,
+  strand: '+',
+  proteinId: 'protein-c2',
+  sourceProteinId: 'protein-c2',
+  representative: true,
+  role: 'anchor'
+};
 
 const renderRequest = {
   mode: 'linear',
@@ -150,7 +176,9 @@ const create = ({
   relatedEdges = [],
   helper,
   runAnalysis = async () => ({ status: 'ok' }),
-  cancelRunAnalysis = () => {}
+  cancelRunAnalysis = () => {},
+  previewCandidate = null,
+  clearCandidatePreview = null
 } = {}) => {
   const controllerState = state();
   const currentGroup = group(members, orthologEdges, relatedEdges);
@@ -162,6 +190,8 @@ const create = ({
     getCommittedRequest: () => renderRequest,
     runAnalysis,
     cancelRunAnalysis,
+    previewCandidate,
+    clearCandidatePreview,
     resolveOperation: 'resolveSimilarityAlignment',
     runHelperOperation: async (operation, payload) => {
       helperCalls.push({ operation, payload: structuredClone(payload) });
@@ -213,6 +243,7 @@ test('popup sends its exact clicked reference and auto-resolved Apply uses one g
     { recordKey: 'record-b', x: 0, y: 0 }
   ]);
   assert.equal(observedOverride.similarityAlignmentPlan.groupId, 'og-1');
+  assert.equal(fixture.actions.dialogOpen.value, false);
 });
 
 test('drawer rejects a group-only action before helper or generation', async () => {
@@ -226,6 +257,40 @@ test('drawer rejects a group-only action before helper or generation', async () 
   });
   assert.equal(fixture.helperCalls.length, 0);
   assert.equal(fixture.state.similarityAlignmentPlan.value, null);
+});
+
+test('drawer requires and resolves one exact reference before either explicit action', async () => {
+  const fixture = create({
+    helper: async (_operation, { request }) => ({ result: resolvedResponse(request) })
+  });
+  const options = fixture.actions.drawerReferenceOptions('og-1');
+  assert.equal(options.length, 2);
+  assert.match(options[0].label, /record-a.*clicked-inparalog.*11\.\.40.*\(\+\)/);
+  assert.match(fixture.actions.drawerDisabledReason('og-1'), /Select an exact reference/);
+  assert.equal(fixture.actions.setDrawerReference('og-1', options[0].key), true);
+  assert.equal(fixture.actions.drawerDisabledReason('og-1'), '');
+  assert.deepEqual(await fixture.actions.startFromDrawer({
+    groupId: 'og-1', mode: 'position_and_orientation'
+  }), { status: 'ok' });
+  assert.equal(fixture.helperCalls[0].payload.request.mode, 'position_and_orientation');
+  assert.deepEqual(fixture.helperCalls[0].payload.request.reference, options[0].anchor);
+});
+
+test('drawer does not offer duplicate canonical feature identities as exact references', () => {
+  const fixture = create({
+    members: [reference, {
+      ...reference,
+      sourceFeatureIndex: 5,
+      featureIndex: 5,
+      stableFeatureSvgId: 'stable-duplicate-clicked-inparalog'
+    }, targetA],
+    helper: async () => { throw new Error('must not resolve'); }
+  });
+
+  assert.deepEqual(
+    fixture.actions.drawerReferenceOptions('og-1').map(({ anchor: value }) => value),
+    [anchor('record-b', 'target-a', 1)]
+  );
 });
 
 test('ambiguity is immutable and Select returns to the same resolver before explicit Apply', async () => {
@@ -288,6 +353,211 @@ test('Skip returns to the Python resolver and does not synthesize a plan in Java
   await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
   assert.deepEqual(await fixture.actions.skipRecord('record-b'), { status: 'ready' });
   assert.equal(fixture.actions.draft.value.response.plan.records[1].rationale, 'skipped_by_user');
+});
+
+test('dialog state retains every resolver-reported ambiguity, facts, choices, and Apply reason', async () => {
+  const threeRecordRequest = {
+    ...renderRequest,
+    records: [
+      ...renderRequest.records,
+      { recordKey: 'record-c', region: null, presentation: { reverseComplement: false } }
+    ]
+  };
+  const currentGroup = group(
+    [reference, targetA, targetB, targetC, targetD],
+    [{
+      orthogroupId: 'og-1', queryProteinId: 'protein-a', subjectProteinId: 'protein-b1',
+      queryRecordIndex: 0, subjectRecordIndex: 1, edgeKind: 'coortholog'
+    }]
+  );
+  const helperCalls = [];
+  const controllerState = state();
+  const responseFor = (request) => {
+    const decisions = [decision('record-a', 'reference', 'reference', request.reference)];
+    const records = [decisions[0]];
+    for (const [recordKey, candidates] of [
+      ['record-b', [targetA, targetB]], ['record-c', [targetC, targetD]]
+    ]) {
+      const choice = request.choices.find((entry) => entry.recordKey === recordKey);
+      if (choice) {
+        const resolved = choice.kind === 'skip'
+          ? decision(recordKey, 'skipped', 'skipped_by_user', null)
+          : decision(recordKey, 'aligned', 'user_selected', choice.anchor);
+        decisions.push(resolved);
+        records.push(resolved);
+      } else {
+        records.push({
+          kind: 'ambiguous', recordKey,
+          candidates: candidates.map((member) => ({
+            anchor: anchor(member.recordKey, member.biologicalFeatureId, member.sourceFeatureIndex),
+            displayedStrand: member.strand === '-' ? -1 : 1,
+            hidden: false, representative: member.representative, role: member.role
+          })),
+          directRbhCandidates: []
+        });
+      }
+    }
+    return {
+      schema: 1,
+      status: records.some(({ kind }) => kind === 'ambiguous') ? 'ambiguous' : 'resolved',
+      mode: request.mode,
+      groupId: request.groupId,
+      reference: request.reference,
+      records,
+      plan: records.some(({ kind }) => kind === 'ambiguous') ? null : {
+        schema: 1, mode: request.mode, groupId: request.groupId,
+        reference: request.reference, records: decisions.map(planDecision)
+      }
+    };
+  };
+  const actions = createSimilarityAlignmentActions({
+    state: controllerState,
+    getOrthogroupById: () => currentGroup,
+    getEnrichedOrthogroupMembers: () => currentGroup.members,
+    getCommittedRequest: () => threeRecordRequest,
+    runAnalysis: async () => ({ status: 'ok' }),
+    resolveOperation: 'resolveSimilarityAlignment',
+    runHelperOperation: async (_operation, { request }) => {
+      helperCalls.push(structuredClone(request));
+      return { result: responseFor(request) };
+    }
+  });
+
+  await actions.startFromPopup({ groupId: 'og-1', reference });
+  assert.equal(actions.dialogOpen.value, true);
+  assert.equal(actions.canApply.value, false);
+  assert.match(actions.applyDisabledReason.value, /2 ambiguous records/);
+  assert.deepEqual(actions.draft.value.ambiguities.map(({ recordKey }) => recordKey), [
+    'record-b', 'record-c'
+  ]);
+  assert.deepEqual(actions.draft.value.ambiguities[0].candidates[0], {
+    key: JSON.stringify(anchor('record-b', 'target-a', 1)),
+    anchor: anchor('record-b', 'target-a', 1),
+    featureIdentifier: 'target-a',
+    coordinates: '101..130',
+    displayedStrand: '-',
+    representative: true,
+    role: 'anchor',
+    directEvidence: ['COORTHOLOG']
+  });
+
+  await actions.selectCandidate('record-b', anchor('record-b', 'target-b', 2));
+  assert.equal(actions.draft.value.ambiguities.length, 2);
+  assert.deepEqual(actions.draft.value.ambiguities[0].choice, {
+    kind: 'select', candidateKey: JSON.stringify(anchor('record-b', 'target-b', 2))
+  });
+  assert.match(actions.applyDisabledReason.value, /1 ambiguous record/);
+  await actions.skipRecord('record-c');
+  assert.equal(actions.canApply.value, true);
+  assert.equal(actions.applyDisabledReason.value, '');
+  assert.deepEqual(helperCalls.at(-1).choices.map(({ recordKey, kind }) => [recordKey, kind]), [
+    ['record-b', 'select'], ['record-c', 'skip']
+  ]);
+});
+
+test('successful Apply publishes the five-count live summary and source-relative plan inspector', async () => {
+  let appliedPlan = null;
+  const controllerState = state();
+  const actions = createSimilarityAlignmentActions({
+    state: controllerState,
+    getOrthogroupById: () => group(),
+    getEnrichedOrthogroupMembers: () => [reference, targetA],
+    getCommittedRequest: () => ({
+      ...renderRequest,
+      records: [renderRequest.records[0], {
+        ...renderRequest.records[1], presentation: { reverseComplement: false }
+      }]
+    }),
+    runAnalysis: async ({ canonicalStateOverride }) => {
+      appliedPlan = structuredClone(canonicalStateOverride.similarityAlignmentPlan);
+      controllerState.similarityAlignmentPlan.value = structuredClone(appliedPlan);
+      return { status: 'ok' };
+    },
+    resolveOperation: 'resolveSimilarityAlignment',
+    runHelperOperation: async (_operation, { request }) => {
+      const response = resolvedResponse(request);
+      response.records[1].effectiveReverseComplement = true;
+      response.plan.records[1].effectiveReverseComplement = true;
+      return { result: response };
+    }
+  });
+  assert.deepEqual(await actions.startFromPopup({
+    groupId: 'og-1', reference, mode: 'position_and_orientation'
+  }), { status: 'ok' });
+  assert.deepEqual(actions.summary.value, {
+    aligned: 1, unchanged: 1, explicitlySkipped: 0, noCandidate: 0, reversed: 1,
+    text: 'Alignment applied: 1 aligned, 1 unchanged, 0 explicitly skipped, 0 no-candidate, 1 reversed.'
+  });
+  assert.equal(appliedPlan.mode, 'position_and_orientation');
+  assert.equal(actions.activePlanInspector.value.reference.label, 'clicked-inparalog');
+  assert.deepEqual(
+    actions.activePlanInspector.value.records.map(({ anchorLabel, rationaleLabel, reversedFromSource }) => (
+      [anchorLabel, rationaleLabel, reversedFromSource]
+    )),
+    [
+      ['clicked-inparalog', 'Exact reference', false],
+      ['target-a', 'Only usable candidate', true]
+    ]
+  );
+});
+
+test('plan inspector shows Skip rationale and derives rev from effective source orientation', () => {
+  const controllerState = state();
+  controllerState.similarityAlignmentPlan.value = {
+    schema: 1,
+    mode: 'position',
+    groupId: 'og-1',
+    reference: anchor('record-a', 'clicked-inparalog', 4),
+    records: [
+      planDecision(decision(
+        'record-a', 'reference', 'reference', anchor('record-a', 'clicked-inparalog', 4)
+      )),
+      planDecision(decision('record-b', 'skipped', 'skipped_by_user', null))
+    ]
+  };
+  const actions = createSimilarityAlignmentActions({
+    state: controllerState,
+    getOrthogroupById: () => group(),
+    getEnrichedOrthogroupMembers: () => [reference, targetA],
+    getCommittedRequest: () => ({
+      ...renderRequest,
+      records: [renderRequest.records[0], {
+        ...renderRequest.records[1], presentation: { reverseComplement: true }
+      }]
+    }),
+    runAnalysis: async () => ({ status: 'ok' }),
+    resolveOperation: 'resolveSimilarityAlignment',
+    runHelperOperation: async () => { throw new Error('must not resolve'); }
+  });
+
+  assert.deepEqual(
+    actions.activePlanInspector.value.records.map((record) => ({
+      anchor: record.anchorLabel,
+      rationale: record.rationaleLabel,
+      rev: record.reversedFromSource
+    })),
+    [
+      { anchor: 'clicked-inparalog', rationale: 'Exact reference', rev: false },
+      { anchor: 'Skip', rationale: 'Skipped by user', rev: true }
+    ]
+  );
+});
+
+test('candidate preview delegates to the highlighting owner and Cancel restores it', async () => {
+  const previewed = [];
+  let clears = 0;
+  const fixture = create({
+    members: [reference, targetA, targetB],
+    helper: async (_operation, { request }) => ({ result: ambiguityResponse(request) }),
+    previewCandidate: (value) => previewed.push(value),
+    clearCandidatePreview: () => { clears += 1; }
+  });
+  await fixture.actions.startFromPopup({ groupId: 'og-1', reference });
+  fixture.actions.previewCandidate(anchor('record-b', 'target-b', 2));
+  assert.deepEqual(previewed, [anchor('record-b', 'target-b', 2)]);
+  fixture.actions.cancel();
+  assert.ok(clears >= 2);
+  assert.equal(fixture.actions.dialogOpen.value, false);
 });
 
 test('Cancel and stale helper completion discard drafts without changing the committed artifact', async () => {

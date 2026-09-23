@@ -2648,16 +2648,8 @@ export const createAppSetup = () => {
     cancelRunAnalysis();
   };
 
-  let similarityAlignmentActions = null;
-  const orthogroupActions = createOrthogroupEditor({
-    state,
-    runAnalysis,
-    alignSimilarityGroup: (groupId, reference, mode) => (
-      similarityAlignmentActions?.startFromDrawer({ groupId, reference, mode })
-      || Promise.resolve({ status: 'rejected' })
-    )
-  });
-  similarityAlignmentActions = createSimilarityAlignmentActions({
+  const orthogroupActions = createOrthogroupEditor({ state, runAnalysis });
+  const similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
     getOrthogroupById: orthogroupActions.getOrthogroupById,
     getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
@@ -2666,8 +2658,69 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
+    previewCandidate: featureActions.previewAlignmentCandidate,
+    clearCandidatePreview: featureActions.clearAlignmentCandidatePreview,
     onError: (error) => { errorLog.value = error; }
   });
+  let similarityAlignmentReturnFocus = null;
+  const rememberSimilarityAlignmentInvoker = (event) => {
+    similarityAlignmentReturnFocus = event?.currentTarget || document.activeElement || null;
+  };
+  const restoreSimilarityAlignmentFocus = async () => {
+    await nextTick();
+    const target = similarityAlignmentReturnFocus;
+    similarityAlignmentReturnFocus = null;
+    if (target?.isConnected && typeof target.focus === 'function') {
+      target.focus();
+      return;
+    }
+    document.querySelector('[data-similarity-alignment-drawer-reference]')?.focus();
+  };
+  const focusSimilarityAlignmentDialog = async () => {
+    await nextTick();
+    document.querySelector(
+      '[data-similarity-alignment-dialog] input:not(:disabled), '
+      + '[data-similarity-alignment-dialog] button:not(:disabled)'
+    )?.focus();
+  };
+  const similarityAlignmentFocusableControls = () => Array.from(
+    document.querySelectorAll(
+      '[data-similarity-alignment-dialog] '
+      + 'input:not(:disabled), [data-similarity-alignment-dialog] '
+      + 'select:not(:disabled), [data-similarity-alignment-dialog] '
+      + 'button:not(:disabled), [data-similarity-alignment-dialog] [tabindex="0"]'
+    )
+  ).filter((element) => !element.closest('[hidden], [aria-hidden="true"]'));
+  const trapSimilarityAlignmentFocus = (event) => {
+    const dialog = document.querySelector('[data-similarity-alignment-dialog]');
+    const controls = similarityAlignmentFocusableControls();
+    if (!dialog || !controls.length) return;
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  const startSimilarityAlignmentFromDrawer = async (groupId, mode, event = null) => {
+    rememberSimilarityAlignmentInvoker(event);
+    const outcome = await similarityAlignmentActions.startFromDrawer({ groupId, mode });
+    if (outcome.status === 'ambiguous') await focusSimilarityAlignmentDialog();
+    else similarityAlignmentReturnFocus = null;
+    return outcome;
+  };
+  const cancelSimilarityAlignmentDialog = async () => {
+    similarityAlignmentActions.cancel();
+    await restoreSimilarityAlignmentFocus();
+  };
+  const applySimilarityAlignmentDialog = async () => {
+    const outcome = await similarityAlignmentActions.applyDraft();
+    if (!similarityAlignmentActions.dialogOpen.value) await restoreSimilarityAlignmentFocus();
+    return outcome;
+  };
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
     return Boolean(
@@ -2708,15 +2761,21 @@ export const createAppSetup = () => {
     };
   });
 
-  const alignByClickedOrthogroup = async () => {
+  const alignByClickedOrthogroup = async (alignmentMode = 'position', event = null) => {
     const detail = clickedOrthogroupDetail.value;
     if (!detail?.id) return { status: 'rejected' };
-    clickedFeature.value = null;
-    return similarityAlignmentActions.startFromPopup({
+    rememberSimilarityAlignmentInvoker(event);
+    const outcome = await similarityAlignmentActions.startFromPopup({
       groupId: detail.id,
       reference: detail.currentMember,
-      mode: 'position'
+      mode: alignmentMode
     });
+    if (outcome.status === 'ambiguous') await focusSimilarityAlignmentDialog();
+    else {
+      similarityAlignmentReturnFocus = null;
+      if (outcome.status === 'ok') clickedFeature.value = null;
+    }
+    return outcome;
   };
 
   const resetOrthogroupAlignment = async () => {
@@ -3982,17 +4041,27 @@ export const createAppSetup = () => {
     setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
-    alignOrthogroupById: orthogroupActions.alignOrthogroupById,
     similarityAlignmentDraft: similarityAlignmentActions.draft,
     similarityAlignmentStatus: similarityAlignmentActions.status,
     similarityAlignmentError: similarityAlignmentActions.error,
+    similarityAlignmentSummary: similarityAlignmentActions.summary,
+    similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
+    similarityAlignmentUnresolvedCount: similarityAlignmentActions.unresolvedCount,
+    similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
+    similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
+    similarityAlignmentPlanInspector: similarityAlignmentActions.activePlanInspector,
     canApplySimilarityAlignment: similarityAlignmentActions.canApply,
     startSimilarityAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
-    startSimilarityAlignmentFromDrawer: similarityAlignmentActions.startFromDrawer,
+    startSimilarityAlignmentFromDrawer,
+    similarityAlignmentDrawerReferenceOptions: similarityAlignmentActions.drawerReferenceOptions,
+    setSimilarityAlignmentDrawerReference: similarityAlignmentActions.setDrawerReference,
+    similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
     selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
     skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
-    applySimilarityAlignmentDraft: similarityAlignmentActions.applyDraft,
-    cancelSimilarityAlignmentDraft: similarityAlignmentActions.cancel,
+    applySimilarityAlignmentDraft: applySimilarityAlignmentDialog,
+    cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
+    cancelSimilarityAlignmentDialog,
+    trapSimilarityAlignmentFocus,
     previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
     clearSimilarityAlignmentCandidatePreview: similarityAlignmentActions.clearCandidatePreview,
     isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
