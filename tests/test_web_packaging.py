@@ -22,6 +22,8 @@ import pytest
 from PIL import Image
 
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
+    CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
@@ -693,7 +695,12 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
         ), session_name
         assert "files" not in session, session_name
         assert results, session_name
-        assert feature_catalog.get("schema") == 3, session_name
+        expected_catalog_schema = (
+            CURRENT_FEATURE_CATALOG_SCHEMA
+            if session.get("version") == CURRENT_SESSION_VERSION
+            else 3
+        )
+        assert feature_catalog.get("schema") == expected_catalog_schema, session_name
         assert [
             (item.get("resultIndex"), item.get("resultName")) for item in catalog_items
         ] == [

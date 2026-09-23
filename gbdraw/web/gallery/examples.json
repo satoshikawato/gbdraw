@@ -17,7 +17,7 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "424 KB",
+    "fileSizeLabel": "423 KB",
     "command": "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular -f interactive_svg --separate_strands --track_type middle --labels out --species '<i>Homo sapiens</i>'",
     "commandKind": "runnable",
     "commandNote": "Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
