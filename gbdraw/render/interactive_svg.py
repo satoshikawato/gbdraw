@@ -22,8 +22,6 @@ INTERACTIVE_STYLE_ID = "gbdraw-interactive-feature-style"
 INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
-INTERACTIVE_SCHEMA = 3
-
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(r"__(?:part|line)\d+$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(r"__line\d+$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(r"_record_(\d+)$")
@@ -1723,7 +1721,7 @@ def enrich_svg(
 
     metadata = ET.SubElement(root, _svg_tag("metadata"))
     metadata.set("id", INTERACTIVE_METADATA_ID)
-    metadata.set("data-schema", str(INTERACTIVE_SCHEMA))
+    metadata.set("data-schema", str(catalog["schema"]))
     metadata.set("data-popup-mode", popup_mode)
     metadata.set("data-result-index", str(result_index))
     metadata.set("data-result-name", result_name)

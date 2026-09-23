@@ -313,7 +313,7 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   )?.[1];
   expect(encodedMetadata).toBeTruthy();
   const metadata = JSON.parse(gunzipSync(Buffer.from(encodedMetadata, 'base64')).toString('utf8'));
-  expect(metadata.schema).toBe(3);
+  expect(metadata.schema).toBe(4);
   expect(metadata.items).toHaveLength(1);
   expect(metadata.items[0].features).toHaveLength(24_945);
   expect(metadata.items[0].comparisonMatches).toHaveLength(579);

@@ -154,6 +154,7 @@ def test_enrich_svg_promotes_selected_schema_three_catalog_item_exactly() -> Non
     )
     assert metadata.get("data-result-index") == "1"
     assert metadata.get("data-result-name") == "selected.svg"
+    assert metadata.get("data-schema") == "4"
     feature = next(
         element
         for element in root.iter()

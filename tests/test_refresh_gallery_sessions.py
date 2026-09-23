@@ -173,7 +173,7 @@ def test_interactive_svg_measurements_decode_compressed_schema_four() -> None:
     output = (
         '<svg xmlns="http://www.w3.org/2000/svg">'
         '<metadata id="gbdraw-interactive-feature-metadata" '
-        'data-schema="3" data-encoding="gzip-base64">'
+        'data-schema="4" data-encoding="gzip-base64">'
         f"{base64.b64encode(compressed).decode('ascii')}"
         "</metadata></svg>"
     )

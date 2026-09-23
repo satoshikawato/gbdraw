@@ -444,7 +444,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
   expect(linear.anchorIntent.offsetBp).toBe(circular.anchorIntent.offsetBp);
 });
 
-test('browser export embeds the exact selected schema-3 item and expands references', async ({
+test('browser export embeds the exact selected schema-4 item and expands references', async ({
   page
 }, testInfo) => {
   await page.goto('/');
@@ -455,7 +455,7 @@ test('browser export embeds the exact selected schema-3 item and expands referen
     );
     const fullNote = `${'x'.repeat(49)}😀tail`;
     const catalog = {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'diagram.svg',
@@ -641,7 +641,7 @@ test('browser export embeds the exact selected schema-3 item and expands referen
   }, { origin });
 
   expect(exported.enriched).toBe(true);
-  expect(exported.embedded.schema).toBe(3);
+  expect(exported.embedded.schema).toBe(4);
   expect(exported.embedded.items).toHaveLength(1);
   expect(exported.embedded.items[0].features[0].displayLabel)
     .toBe('Edited visible label');
@@ -653,7 +653,7 @@ test('browser export embeds the exact selected schema-3 item and expands referen
   expect(exported.sourceDisplayLabel).toBeUndefined();
   expect(exported.sourceGroup.display_name).toBeUndefined();
   expect(exported.sourceGroup.description).toBe('Original group description');
-  expect(exported.schema).toBe('3');
+  expect(exported.schema).toBe('4');
   expect(exported.resultIndex).toBe('0');
   expect(exported.resultName).toBe('diagram.svg');
   expect(exported.svgText.match(/data-gbdraw-interactive-feature="true"/g)).toHaveLength(2);
@@ -944,7 +944,7 @@ test('standalone rejects conflicting compact provenance markers', async ({
       `${origin}/gbdraw/web/js/services/standalone-interactivity.js`
     );
     const makeCatalog = () => ({
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'invalid.svg',
@@ -1088,7 +1088,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       `${origin}/gbdraw/web/js/services/svg-serialization.js`
     );
     const catalog = {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'live.svg',
