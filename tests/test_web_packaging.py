@@ -483,7 +483,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "<i>Nicotiana tabacum</i> chloroplast genome regions",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
-        "<i>Vibrio</i> Harveyi group multi-record collinearity",
+        "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
         "Hepatoplasmataceae CDS protein-similarity links",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Majanivirus CDS protein-similarity links",
@@ -1000,20 +1000,15 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         not in remote_assets
     )
     assert (
-        remote_assets[
-            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-        ]
-        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        not in remote_assets
     )
-    assert (
-        remote_assets["gallery/examples/vibrio-harveyi-group-collinear.svg"]
-        == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
-    )
+    assert "gallery/examples/vibrio-harveyi-group-collinear.svg" not in remote_assets
     assert all("/main/" not in url for url in remote_assets.values())
     assert not (
         bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg"
     ).exists()
-    assert not (
+    assert (
         bundle_path / "gallery" / "examples" / "vibrio-harveyi-group-collinear.svg"
     ).exists()
     assert (
@@ -1022,7 +1017,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         / "sessions"
         / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     ).exists()
-    assert not (
+    assert (
         bundle_path
         / "gallery"
         / "sessions"

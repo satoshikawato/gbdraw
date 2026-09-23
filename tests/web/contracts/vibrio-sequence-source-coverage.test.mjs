@@ -41,12 +41,9 @@ test('real Vibrio catalog covers every sequence consumer with a valid sparse cat
   assert.deepEqual(coverage.invalidCatalogSources, []);
   assert.deepEqual(
     coverage.resolvedConsumers.map(({ expectedSource }) => expectedSource.recordIndex),
-    [0, 1, 3, 4, 5, 6, 7, 8, 9, 10]
+    [0, 1, 2, 3]
   );
-  assert.deepEqual(coverage.displayedRecordsWithoutConsumers, [{
-    recordIndex: 2,
-    recordKey: 'record-3'
-  }]);
+  assert.deepEqual(coverage.displayedRecordsWithoutConsumers, []);
 });
 
 test('real Vibrio session still projects its embedded records and presentation settings', () => {
@@ -60,10 +57,10 @@ test('real Vibrio session still projects its embedded records and presentation s
     linearTrackSlotSchemaVersion: Number(fixture.version) <= 32 ? 1 : 2
   });
 
-  assert.equal(projectedSession.files.linearSeqs.length, 11);
+  assert.equal(projectedSession.files.linearSeqs.length, 4);
   assert.equal(
     projectedSession.files.linearSeqs[0].gb.name,
-    'NZ_CP125875.1__GCF_030060435.1_ASM3006043v1_genomic.gbff'
+    'NC_004603.1__GCF_000196095.1_ASM19609v1_genomic.gbff'
   );
   assert.equal(projectedSession.config.adv.block_stroke_width, 0);
   assert.equal(projectedSession.config.adv.line_stroke_width, 1);

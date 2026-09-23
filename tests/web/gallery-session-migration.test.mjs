@@ -641,12 +641,23 @@ const promotedMajani = (await prepareGallerySessionForPublication(majani)).sessi
 const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
 const promotedVibrio = (await prepareGallerySessionForPublication(vibrio)).session;
 assert.equal(promotedVibrio.config.losat.blastp.collinearInferOrthogroups, true);
+assert.equal(
+  Object.hasOwn(
+    majani.renderRequest.comparisons.find(({ kind }) => kind === 'generatedProteinComparison').settings,
+    'collinearInferOrthogroups'
+  ),
+  false
+);
+assert.equal(
+  vibrio.renderRequest.comparisons.find(({ kind }) => kind === 'generatedProteinComparison')
+    .settings.collinearInferOrthogroups,
+  true
+);
 for (const source of [majani, vibrio]) {
   const originalRequest = JSON.stringify(source.renderRequest);
   for (const inference of [true, false]) {
     const explicitRequest = structuredClone(source.renderRequest);
     const pipeline = explicitRequest.comparisons.find(({ kind }) => kind === 'generatedProteinComparison');
-    assert.equal(Object.hasOwn(pipeline.settings, 'collinearInferOrthogroups'), false);
     pipeline.settings.collinearInferOrthogroups = inference;
     const comparison = await compareCanonicalRenderRequests({
       expectedRequest: source.renderRequest, expectedResources: source.resources,
