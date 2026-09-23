@@ -401,7 +401,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   expect(orderedLifecycle).toEqual([...orderedLifecycle].sort((left, right) => left - right));
   expect(downloadCount).toBe(1);
   expect(dialogs.filter(({ message }) => message.startsWith('Compressed session size is ')))
-    .toHaveLength(1);
+    .toHaveLength(0);
   expect(after.lifecycle.find(
     ({ name }) => name === 'session-save-catalog-preparation-end'
   )?.reusedCommittedSession).toBe(true);
@@ -454,29 +454,29 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   const savedSummary = inspectSession(savedPath);
   expect(sourceSummary).toMatchObject({
     format: 'gbdraw-session',
-    version: 41,
+    version: 44,
     requestSchema: 7,
-    catalogSchema: 3,
-    resourceCount: 12,
+    catalogSchema: 4,
+    resourceCount: 4,
     resultCount: 1,
     catalogItems: 1,
-    catalogBiologicalFeatures: 49_970,
-    catalogAnchorProfiles: 0,
-    catalogLocationParts: 19,
-    losatEntries: 59
+    catalogBiologicalFeatures: 18_782,
+    catalogAnchorProfiles: 18_782,
+    catalogLocationParts: 8,
+    losatEntries: 12
   });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
     requestSchema: 7,
     catalogSchema: 4,
-    resourceCount: 12,
+    resourceCount: 4,
     resultCount: 1,
     catalogItems: 1,
-    catalogBiologicalFeatures: 49_970,
-    catalogAnchorProfiles: 49_970,
-    catalogLocationParts: 49_970,
-    losatEntries: 59
+    catalogBiologicalFeatures: 18_782,
+    catalogAnchorProfiles: 18_782,
+    catalogLocationParts: 8,
+    losatEntries: 12
   });
   for (const authority of [
     'renderRequest',
@@ -486,7 +486,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   ]) {
     expect(savedSummary.hashes[authority], authority).toBe(sourceSummary.hashes[authority]);
   }
-  expect(savedSummary.hashes.featureCatalog).not.toBe(sourceSummary.hashes.featureCatalog);
+  expect(savedSummary.hashes.featureCatalog).toBe(sourceSummary.hashes.featureCatalog);
   expect(savedSummary.hashes.featureCatalogCompatibility)
     .toBe(sourceSummary.hashes.featureCatalogCompatibility);
   const sourceSvgPath = testInfo.outputPath('source-result.svg');
@@ -532,7 +532,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshContext.close();
 
   const crossSurface = crossSurfaceAcceptance(savedPath, testInfo.outputPath('cross-surface'));
-  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 11 });
+  expect(crossSurface.reader).toEqual({ version: 44, mode: 'linear', records: 4 });
   expect(crossSurface.cliExitCode).toBe(0);
   expect(crossSurface.cliSvgBytes).toBeGreaterThan(0);
 

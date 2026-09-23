@@ -211,8 +211,8 @@ def test_vibrio_gallery_interactive_svg_meets_regenerated_targets() -> None:
         < measurements["compressedMetadataBytes"]
         < measurements["decodedMetadataBytes"]
     )
-    assert measurements["renderedFeatureCount"] == 24_945
-    assert measurements["biologicalFeatureCount"] == 49_970
+    assert measurements["renderedFeatureCount"] == 9_375
+    assert measurements["biologicalFeatureCount"] == 18_782
 
 
 def test_session_artifact_measurements_report_component_bytes(

@@ -58,7 +58,7 @@ SESSION_ROOT = GALLERY_ROOT / "sessions"
 TEST_INPUT_SESSION_ROOT = REPO_ROOT / "tests" / "test_inputs"
 SESSION_PUBLICATION_BRIDGE = REPO_ROOT / "tools" / "publish_gallery_session.mjs"
 VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-VIBRIO_RAW_ENTRY_COUNT = 59
+VIBRIO_RAW_ENTRY_COUNT = 12
 VIBRIO_GZIP_HARD_LIMIT = 90_000_000
 VIBRIO_EXPANDED_HARD_LIMIT = 400_000_000
 VIBRIO_GZIP_REGRESSION_CEILING = 95_000_000
@@ -81,24 +81,13 @@ def _directed_cross_pairs(
     }
 
 
-_VIBRIO_RECORD_KEYS = tuple(f"record-{index}" for index in range(1, 12))
+_VIBRIO_RECORD_KEYS = tuple(f"record-{index}" for index in range(1, 5))
 _VIBRIO_ROW_GROUPS = (
-    _VIBRIO_RECORD_KEYS[0:3],
-    _VIBRIO_RECORD_KEYS[3:5],
-    _VIBRIO_RECORD_KEYS[5:7],
-    _VIBRIO_RECORD_KEYS[7:9],
-    _VIBRIO_RECORD_KEYS[9:11],
+    _VIBRIO_RECORD_KEYS[0:2],
+    _VIBRIO_RECORD_KEYS[2:4],
 )
 VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
     {(record_key, record_key) for record_key in _VIBRIO_RECORD_KEYS}
-    | {
-        pair
-        for index in range(len(_VIBRIO_RECORD_KEYS) - 1)
-        for pair in (
-            (_VIBRIO_RECORD_KEYS[index], _VIBRIO_RECORD_KEYS[index + 1]),
-            (_VIBRIO_RECORD_KEYS[index + 1], _VIBRIO_RECORD_KEYS[index]),
-        )
-    }
     | {
         pair
         for index in range(len(_VIBRIO_ROW_GROUPS) - 1)

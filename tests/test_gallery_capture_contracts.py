@@ -111,10 +111,10 @@ LAYOUT_RESULT_CAPTURES = {
         "viewport": {"width": 1800, "height": 1100},
         "state": {
             "mode": "linear",
-            "linearSeqs.length": 11,
+            "linearSeqs.length": 4,
             "linearRecordLayoutEnabled": True,
             "linearRecordGap": 48,
-            "linearRecordRows.length": 11,
+            "linearRecordRows.length": 4,
             "form.legend": "bottom",
             "form.plot_title": "",
             "form.linear_track_layout": "above",
@@ -124,7 +124,7 @@ LAYOUT_RESULT_CAPTURES = {
             "losat.blastp.mode": "collinear",
             "losat.blastp.collinearColorMode": "orientation_identity",
         },
-        "visible_text": {"Vibrio harveyi", "Vibrio owensii", "Vibrio campbellii", "Vibrio parahaemolyticus", "Vibrio alginolyticus", "Collinear", "Inverted"},
+        "visible_text": {"Vibrio parahaemolyticus", "Vibrio alginolyticus", "Collinear", "Inverted"},
     },
     "HmmtDNA_ATskew": {
         "src": "./media/HmmtDNA_ATskew/manual-09-01-atskew-preview.webp",

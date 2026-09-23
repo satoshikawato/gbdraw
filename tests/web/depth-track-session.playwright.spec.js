@@ -2155,6 +2155,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     app.sessionTitle = 'p3-drafts-v40';
   }, { genbankText: recordText, nestedStyle: styleOverride });
 
+  await page.locator('summary[aria-label="Layout"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -2301,6 +2302,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   await loadSession(initialPath);
   expect(await browserDraft()).toEqual(expectedDraft);
 
+  await page.locator('summary[aria-label="Layout"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -2374,6 +2376,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const thirdSession = await readSessionDownload(await thirdDownloadPromise);
   expect(p3Draft(thirdSession)).toEqual(expectedDraft);
 
+  await page.locator('summary[aria-label="Layout"]').click();
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
