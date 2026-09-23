@@ -2254,7 +2254,7 @@ def _assert_export_set(workdir: Path) -> None:
     if (
         len(scripts) != 1
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "3"
+        or metadata[0].attrib.get("data-schema") != "4"
         or any(
             token not in interactive_source
             for token in (
@@ -2339,7 +2339,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "3"
+        or metadata[0].attrib.get("data-schema") != "4"
         or "COX1" not in interactive_source
         or any(
             token not in interactive_source

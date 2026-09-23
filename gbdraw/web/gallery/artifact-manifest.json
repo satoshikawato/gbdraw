@@ -18,43 +18,43 @@
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1156331,
-      "sha256": "383763c7675b26294238cd6a055f6d53d952ede603f351bbeb55dc01ed516ced"
+      "sha256": "3d5177ccf3d24bdbe13ce0f70b87df4b6521517c8ee61db2cc6becf8e77874dc"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 485142,
-      "sha256": "d09712333b4499a0ad3c25bce45e8eead7fcb4f61867da116ccc540102f1c5c3"
+      "sha256": "c0f94e872b5fa6900569c3beb4662165c7164684a594eafb774f435738862855"
     },
     "gallery/examples/HmmtDNA_basic_circular.svg": {
       "bytes": 434431,
-      "sha256": "27d8854bb2b46ae89b9a0f21ac130e7ae9fc095f32c77c95f45837de6d74c9de"
+      "sha256": "f5e2dffcc05c978e61ca479c194e88b9669b346a5eba08694ae626de447afa63"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
       "bytes": 28804564,
-      "sha256": "167736e6fcd3ff9dcb164136db2196bc0c028f61dee32966fc472b3f84832ba2"
+      "sha256": "00a1f6bbbb84a5a826790fd86050ecad519350658a626315a5d36060b89ceac4"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 16462032,
-      "sha256": "7e86dd75e0cee7fd3d2987801f13da8b61d0ea2bdcfffc89301cf868d5c141a8"
+      "sha256": "fb383eb55a85712c58d3f295d501177f0b97b31e210b1e73278e24f234ebb246"
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
       "bytes": 19512014,
-      "sha256": "835166c1fed622e97415e361ce9929b3fea214f92a697a53008a9dfff2dc1100"
+      "sha256": "1b60d4992bcd11e1f47938f193956bd3e14c1fdfad9c352637f5a2ac80aecb6e"
     },
     "gallery/examples/lambda_basic_linear.svg": {
       "bytes": 806852,
-      "sha256": "21903b6de0025f6b8deda199c12fdee7cd95845164d8327def88d281d381082b"
+      "sha256": "ae3bffeddb3d155e91fcc01afa3b54b6e69e661fa71223a3f3280ac57af0dd8c"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
       "bytes": 7261265,
-      "sha256": "a756f6d6842fd48e8d01433e1827616241246c59b41838e372a0d45f5a60293b"
+      "sha256": "894c90b50eef700efb115f52713ae002724af0c8ff946e6445cb5051a24bb8cf"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
       "bytes": 1447162,
-      "sha256": "affbe3d2cd6530cf7eb2f40822bf19349943042e11846b365640f85350e0ec02"
+      "sha256": "81d3257d33e8850ac32652db98733f7abe5ed973ca75a0c42b8fcdf1ef95836b"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
       "bytes": 41191919,
-      "sha256": "cce2ddd4fb9cda08ebab08b52ff1466424556bf7f6a20a7cc1e7646fff3c9923"
+      "sha256": "49fc7c92ad0f7f46974a7cc9280a8545cf96c8e530106a5491bc1c1f05a112a2"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
       "bytes": 2852337,

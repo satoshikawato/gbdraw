@@ -415,7 +415,7 @@ const assertSemanticSnapshot = (snapshot) => {
   expect(snapshot).toMatchObject({
     resultCount: 1,
     selectedResultIndex: 0,
-    catalogSchema: 3,
+    catalogSchema: 4,
     catalogItemCount: 1,
     catalogResultIndex: 0,
     recordKeys: EXPECTED_RECORD_KEYS,
@@ -594,7 +594,7 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
       resultCount: 1,
       selectedResultIndex: 0,
       rootMounted: true,
-      catalogSchema: 3,
+      catalogSchema: 4,
       catalogItemCount: 1,
       catalogResultIndex: 0,
       activePlan: { mode: 'adjacent', defaultSource: 'losat', edgeCount: 0 },
@@ -614,7 +614,7 @@ test('exact saved Session regenerates twice with bounded work and fresh readines
       },
       state: {
         selectedResultCount: saved.resultCount,
-        currentCatalog: saved.catalogSchema === 3 && saved.catalogResultIndex === 0,
+        currentCatalog: saved.catalogSchema === 4 && saved.catalogResultIndex === 0,
         activeDraftCommittedDistinct: saved.activePlan.edgeCount === 0
           && saved.committedRequest.precomputedComparisonCount === 4,
         interactiveProbePassed: true

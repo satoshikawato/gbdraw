@@ -102,6 +102,21 @@ const text = bytes[0] === 0x1f && bytes[1] === 0x8b
 const document = JSON.parse(text);
 const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const catalog = document.editorState?.featureCatalog;
+const catalogFeatures = (catalog?.items || []).flatMap((item) => item.biologicalFeatures || []);
+const compatibilityCatalog = catalog ? {
+  ...catalog,
+  schema: 3,
+  items: (catalog.items || []).map((item) => ({
+    ...item,
+    biologicalFeatures: (item.biologicalFeatures || []).map((feature) => {
+      const projected = { ...feature };
+      delete projected.anchorProfile;
+      delete projected.location_parts;
+      delete projected.locationParts;
+      return projected;
+    })
+  }))
+} : catalog;
 const losatEntries = document.losatCache?.entries || [];
 process.stdout.write(JSON.stringify({
   format: document.format,
@@ -110,7 +125,13 @@ process.stdout.write(JSON.stringify({
   topLevelKeys: Object.keys(document).sort(),
   resourceCount: Object.keys(document.resources || {}).length,
   resultCount: (document.results || []).length,
+  catalogSchema: catalog?.schema,
   catalogItems: (catalog?.items || []).length,
+  catalogBiologicalFeatures: catalogFeatures.length,
+  catalogAnchorProfiles: catalogFeatures.filter((feature) => feature?.anchorProfile).length,
+  catalogLocationParts: catalogFeatures.filter((feature) => (
+    Array.isArray(feature?.location_parts) || Array.isArray(feature?.locationParts)
+  )).length,
   losatEntries: losatEntries.length,
   hashes: {
     renderRequest: digest(document.renderRequest),
@@ -118,6 +139,7 @@ process.stdout.write(JSON.stringify({
     webFiles: digest(document.webFiles),
     results: digest(document.results),
     featureCatalog: digest(catalog),
+    featureCatalogCompatibility: digest(compatibilityCatalog),
     losatRawTextAuthority: digest(losatEntries
       .map((entry) => [String(entry.key || ''), String(entry.text || '')])
       .sort(([left], [right]) => left.localeCompare(right))),
@@ -434,29 +456,39 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
     format: 'gbdraw-session',
     version: 41,
     requestSchema: 7,
+    catalogSchema: 3,
     resourceCount: 12,
     resultCount: 1,
     catalogItems: 1,
+    catalogBiologicalFeatures: 49_970,
+    catalogAnchorProfiles: 0,
+    catalogLocationParts: 19,
     losatEntries: 59
   });
   expect(savedSummary).toMatchObject({
     format: 'gbdraw-session',
     version: 44,
     requestSchema: 7,
+    catalogSchema: 4,
     resourceCount: 12,
     resultCount: 1,
     catalogItems: 1,
+    catalogBiologicalFeatures: 49_970,
+    catalogAnchorProfiles: 49_970,
+    catalogLocationParts: 49_970,
     losatEntries: 59
   });
   for (const authority of [
     'renderRequest',
     'resources',
-    'featureCatalog',
     'losatRawTextAuthority',
     'proteinIdentityManifest'
   ]) {
     expect(savedSummary.hashes[authority], authority).toBe(sourceSummary.hashes[authority]);
   }
+  expect(savedSummary.hashes.featureCatalog).not.toBe(sourceSummary.hashes.featureCatalog);
+  expect(savedSummary.hashes.featureCatalogCompatibility)
+    .toBe(sourceSummary.hashes.featureCatalogCompatibility);
   const sourceSvgPath = testInfo.outputPath('source-result.svg');
   const savedSvgPath = testInfo.outputPath('saved-result.svg');
   extractResultSvg(fixturePath, sourceSvgPath);

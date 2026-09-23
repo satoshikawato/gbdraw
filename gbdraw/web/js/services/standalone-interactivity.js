@@ -1,4 +1,5 @@
 import { normalizeStringArray } from '../app/feature-utils.js';
+import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
 
@@ -28,7 +29,6 @@ const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow'
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
 const FEATURE_RECORD_SUFFIX_RE = /_record_\d+$/;
 const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
-const INTERACTIVE_CATALOG_SCHEMA = 3;
 
 const compactWireValue = (value) => {
   if (Array.isArray(value)) {
@@ -336,7 +336,7 @@ const selectStandaloneCatalogItem = (context) => {
   const catalog = context?.featureCatalog;
   if (
     !catalog
-    || catalog.schema !== INTERACTIVE_CATALOG_SCHEMA
+    || catalog.schema !== FEATURE_CATALOG_SCHEMA
     || !Array.isArray(catalog.items)
   ) {
     return null;
@@ -1763,11 +1763,11 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
   metadata.setAttribute('data-popup-mode', normalizedPopupMode);
   if (catalogItem) {
-    metadata.setAttribute('data-schema', String(INTERACTIVE_CATALOG_SCHEMA));
+    metadata.setAttribute('data-schema', String(FEATURE_CATALOG_SCHEMA));
     metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
     metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
     metadata.textContent = JSON.stringify({
-      schema: INTERACTIVE_CATALOG_SCHEMA,
+      schema: FEATURE_CATALOG_SCHEMA,
       items: [catalogItem]
     });
   } else {
