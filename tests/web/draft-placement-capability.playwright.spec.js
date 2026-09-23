@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 for (const mode of ['circular', 'linear']) {
   test(`${mode} draft placement capability survives history and dirty session restore`, async ({ browser }, testInfo) => {
@@ -75,9 +75,9 @@ for (const mode of ['circular', 'linear']) {
     };
     const assertControl = async (changed) => {
       if (mode === 'circular') {
-        await expect(page.locator('#circular-track-preset')).toHaveValue(changed ? 'tuckin' : 'middle');
+        await expect(await reveal(page.locator('#circular-track-preset'))).toHaveValue(changed ? 'tuckin' : 'middle');
       } else {
-        await expect(page.getByRole('checkbox', { name: 'Separate Strands', exact: true })).toBeChecked({ checked: !changed });
+        await expect(await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }))).toBeChecked({ checked: !changed });
       }
     };
     try {
@@ -94,12 +94,12 @@ for (const mode of ['circular', 'linear']) {
       expect(await artifact()).toEqual(baseline);
 
       if (mode === 'circular') {
-        const preset = page.locator('#circular-track-preset');
+        const preset = await reveal(page.locator('#circular-track-preset'));
         await preset.focus();
         await preset.selectOption('tuckin');
         await preset.press('Tab');
       } else {
-        await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).uncheck();
+        await (await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }))).uncheck();
       }
       await assertControl(true);
       await checkChoices(mode === 'linear');

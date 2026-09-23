@@ -266,6 +266,15 @@ const openApp = async (
   return assertAppShellReady(page, { waitForPalette, checkErrors });
 };
 
+const reveal = async (locator) => {
+  for (const details of await locator.locator('xpath=ancestor::details').all()) {
+    if (await details.getAttribute('open') === null) {
+      await details.locator(':scope > summary').click();
+    }
+  }
+  return locator;
+};
+
 const assertDiagramWorkerIdle = async (page, label = 'Expected the diagram Worker to remain idle') => {
   const diagnostics = await getLifecycleDiagnostics(page);
   expect(
@@ -358,5 +367,6 @@ module.exports = {
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,
+  reveal,
   waitForAppShell
 };

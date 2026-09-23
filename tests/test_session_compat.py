@@ -70,6 +70,47 @@ _SYNTHETIC_CONSERVATION_SESSION = (
 )
 
 
+def test_cli_writer_projects_released_web_config_to_session_44() -> None:
+    source = {
+        "config": {
+            "adv": {
+                "linear_show_accession": True,
+                "linear_show_length": False,
+            },
+            "recordDisplayDrafts": [
+                {
+                    "scope": "circular",
+                    "sourceUid": "source-1",
+                    "selector": "#1",
+                    "recordId": "record-1",
+                    "topologyOverride": None,
+                    "startCoordinate": 3,
+                }
+            ],
+        }
+    }
+
+    adjunct, web_file_inventory = (
+        cli_session_module._project_session_adjunct_for_current_write(
+            source,
+            source_version=41,
+        )
+    )
+
+    assert web_file_inventory is None
+    assert adjunct["config"]["adv"] == {
+        "linear_accession_visibility": "show",
+        "linear_length_visibility": "hide",
+    }
+    assert adjunct["config"]["recordDisplayDrafts"][0][
+        "reverseComplementOverride"
+    ] is None
+    assert adjunct["config"]["recordDisplayDrafts"][0]["anchorIntent"] is None
+    assert "reverseComplementOverride" not in source["config"][
+        "recordDisplayDrafts"
+    ][0]
+
+
 def test_version_39_multiline_conservation_labels_expand_at_compat_boundary() -> None:
     payload = {
         "diagramOptions": {

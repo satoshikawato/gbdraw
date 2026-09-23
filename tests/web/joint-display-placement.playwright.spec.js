@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -113,7 +113,7 @@ for (const mode of ['circular', 'linear']) {
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(initial.result);
     await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
     await page.locator('.drawer-toggle').click();
-    const tolerance = page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true });
+    const tolerance = await reveal(page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true, includeHidden: true }));
     await tolerance.fill('1');
     await tolerance.press('Tab');
     await generateFromControl(page);
@@ -292,8 +292,8 @@ for (const mode of ['circular', 'linear']) {
     await expect(start).toHaveValue('71');
     await page.getByRole('button', { name: 'Reset start', exact: true }).click();
     await expect(start).toHaveValue('');
-    if (mode === 'circular') await page.locator('#circular-track-preset').selectOption('middle');
-    await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).uncheck();
+    if (mode === 'circular') await (await reveal(page.locator('#circular-track-preset'))).selectOption('middle');
+    await (await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }))).uncheck();
     await generateFromControl(page);
     const features = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ id: f.svg_id, stableId: f.stable_feature_id, parts: f.location_parts, strand: f.strand })));
     for (const feature of features) expect(feature.stableId).toBeTruthy();
@@ -374,7 +374,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
       await page.getByRole('combobox', { name: 'Feature placement', exact: true }).selectOption('main');
       await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
       await page.locator('.drawer-toggle').click();
-      const tolerance = page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true });
+      const tolerance = await reveal(page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true, includeHidden: true }));
       await tolerance.fill('1'); await tolerance.press('Tab');
     }
     await generateFromControl(page);

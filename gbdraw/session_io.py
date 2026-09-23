@@ -755,11 +755,15 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
+    current = session.get("version") == CURRENT_SESSION_VERSION
+    expected_fields = {
+        "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
+    }
+    if current:
+        expected_fields |= {"reverseComplementOverride", "anchorIntent"}
     keys = set()
     for row in drafts:
-        if not isinstance(row, Mapping) or set(row) != {
-            "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
-        }:
+        if not isinstance(row, Mapping) or set(row) != expected_fields:
             raise ValidationError("Invalid record display draft fields.")
         if row["scope"] not in {"circular", "linear"} or any(
             not isinstance(row[name], str) or "\0" in row[name]
@@ -768,6 +772,42 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
             raise ValidationError("Record display drafts require a source UID and exact selector.")
         RecordDisplayOptions(row["topologyOverride"], None)
         RecordDisplayOptions(None, row["startCoordinate"])
+        if current:
+            reverse = row["reverseComplementOverride"]
+            if reverse is not None and not isinstance(reverse, bool):
+                raise ValidationError(
+                    "Record display reverse override must be a boolean or null."
+                )
+            intent = row["anchorIntent"]
+            if intent is not None:
+                intent_fields = {
+                    "schema", "recordKey", "biologicalFeatureId", "placement",
+                    "anchor", "offsetBp", "orientForward",
+                }
+                offset = intent.get("offsetBp") if isinstance(intent, Mapping) else None
+                if (
+                    not isinstance(intent, Mapping)
+                    or set(intent) != intent_fields
+                    or intent.get("schema") != 1
+                    or isinstance(intent.get("schema"), bool)
+                    or not isinstance(intent.get("recordKey"), str)
+                    or not intent["recordKey"]
+                    or "\0" in intent["recordKey"]
+                    or not isinstance(intent.get("biologicalFeatureId"), str)
+                    or not intent["biologicalFeatureId"]
+                    or "\0" in intent["biologicalFeatureId"]
+                    or intent.get("placement") not in {"anchor", "feature-end"}
+                    or (
+                        intent.get("anchor") not in {"five-prime", "midpoint", "three-prime"}
+                        if intent.get("placement") == "anchor"
+                        else intent.get("anchor") is not None
+                    )
+                    or not isinstance(offset, int)
+                    or isinstance(offset, bool)
+                    or abs(offset) > 9_007_199_254_740_991
+                    or not isinstance(intent.get("orientForward"), bool)
+                ):
+                    raise ValidationError("Invalid record display anchor intent.")
         key = (row["scope"], row["sourceUid"], row["selector"])
         if key in keys:
             raise ValidationError("Duplicate record display draft identity.")
@@ -1157,8 +1197,13 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate current cache, manifest, and legacy artifact boundaries."""
 
-    validate_current_web_state_field_names(session.get("config"))
     session_version = session.get("version")
+    validate_current_web_state_field_names(
+        session.get("config"),
+        include_linear_label_visibility=(
+            session_version == CURRENT_SESSION_VERSION
+        ),
+    )
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
     seen_cache_keys: set[str] = set()
@@ -1245,7 +1290,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
 
 
 def migrate_persisted_web_state_field_names(config: object) -> object:
-    """Project released Web config field names without mutating persisted data."""
+    """Project released Web config into the current shape without mutation."""
 
     if not isinstance(config, Mapping):
         return config
@@ -1254,6 +1299,33 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
     adv = config.get("adv")
     if isinstance(adv, Mapping):
         migrated_adv = dict(adv)
+        for current, legacy, label in (
+            (
+                "linear_accession_visibility",
+                "linear_show_accession",
+                "Linear Accession visibility",
+            ),
+            (
+                "linear_length_visibility",
+                "linear_show_length",
+                "Linear Length / Coordinates visibility",
+            ),
+        ):
+            if current in migrated_adv:
+                value = str(migrated_adv[current]).strip().lower()
+                if value not in {"auto", "show", "hide"}:
+                    raise ValidationError(
+                        f"{label} must be one of: auto, show, hide."
+                    )
+                migrated_adv[current] = value
+            elif legacy in migrated_adv:
+                value = migrated_adv[legacy]
+                if not isinstance(value, bool):
+                    raise ValidationError(f"{label} legacy value must be a boolean.")
+                migrated_adv[current] = "show" if value else "hide"
+            else:
+                migrated_adv[current] = "show"
+            migrated_adv.pop(legacy, None)
         if "depth_tick_interval" in migrated_adv:
             migrated_adv.setdefault(
                 "depth_large_tick_interval",
@@ -1290,16 +1362,43 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
             migrated_losat = dict(losat)
             migrated_losat["blastp"] = migrated_blastp
             migrated["losat"] = migrated_losat
+    drafts = config.get("recordDisplayDrafts")
+    if isinstance(drafts, list):
+        migrated["recordDisplayDrafts"] = [
+            (
+                row
+                if not isinstance(row, Mapping)
+                or "reverseComplementOverride" in row
+                or "anchorIntent" in row
+                else {
+                    **row,
+                    "reverseComplementOverride": None,
+                    "anchorIntent": None,
+                }
+            )
+            for row in drafts
+        ]
     return migrated
 
 
-def validate_current_web_state_field_names(config: object) -> None:
+def validate_current_web_state_field_names(
+    config: object,
+    *,
+    include_linear_label_visibility: bool = True,
+) -> None:
     """Reject obsolete Web config names at current session write boundaries."""
 
     if not isinstance(config, Mapping):
         return
     adv = config.get("adv")
     if isinstance(adv, Mapping):
+        if include_linear_label_visibility:
+            for field in ("linear_show_accession", "linear_show_length"):
+                if field in adv:
+                    raise ValidationError(
+                        f"Web state field adv.{field} is obsolete; "
+                        "use the selected visibility mode."
+                    )
         if "depth_tick_interval" in adv:
             raise ValidationError(
                 "Web state field adv.depth_tick_interval is obsolete; "
@@ -2560,7 +2659,7 @@ def build_session_json(
     config = payload.get("config")
     if not isinstance(config, dict):
         config = {}
-    elif source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+    elif source_version is not None and source_version < CURRENT_SESSION_VERSION:
         migrated_config = migrate_persisted_web_state_field_names(config)
         assert isinstance(migrated_config, dict)
         config = migrated_config

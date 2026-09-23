@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { openApp, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, reveal } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 
@@ -23,13 +23,6 @@ const assertSourceFree = state => {
   expect(state.results).toBe(0);
   expect(state.catalog).toBeNull();
   expect(state.committed).toBeNull();
-};
-
-const reveal = async locator => {
-  for (const details of await locator.locator('xpath=ancestor::details').all()) {
-    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
-  }
-  return locator;
 };
 
 const save = async (page, testInfo, label) => {
