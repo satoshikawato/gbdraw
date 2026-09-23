@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const allPlacements = ['auto', 'main', 'outward', 'inward'];
@@ -147,6 +147,7 @@ for (const composite of [false, true]) {
         expect((await check('P6-generated')).placements).toEqual(edited.placements);
 
         // P8: capability follows draft track semantics, even while the selected value differs.
+        await reveal(page.locator('#circular-track-preset'));
         for (const separate of [false, true]) {
           await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).setChecked(separate);
           for (const preset of ['tuckin', 'spreadout', 'middle']) {

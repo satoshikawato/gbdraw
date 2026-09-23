@@ -5,7 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz';
 const loadTimeout = 300_000;
@@ -183,10 +183,11 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       }
       await generate(page);
       if (journey === 'grid-batch-grid') {
-        await page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true }).uncheck();
+        const multiRecordCanvas = await reveal(page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true, includeHidden: true }));
+        await multiRecordCanvas.uncheck();
         await generate(page);
         expect((await snapshot(page)).results).toHaveLength(recordCount);
-        await page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true }).check();
+        await multiRecordCanvas.check();
         await generate(page);
       }
       const generated = await snapshot(page);
@@ -194,7 +195,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated');
-      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([43, 2, 7]);
+      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([44, 2, 7]);
       const composite = session.webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
       expect(composite.components).toHaveLength(recordCount);
@@ -285,7 +286,7 @@ test('Session CLI sidecar preserves the six-source draft for fresh Web Load and 
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
     const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
-    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([43, 2, 7]);
+    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, 7]);
     const expected = session.webFiles.bindings.c_gb;
     const actual = replayed.webFiles.bindings.c_gb;
     expect(actual.components).toHaveLength(6);
