@@ -262,7 +262,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
 
   const firstGenerate = await generateThroughUi(page);
   expect(requestEvidence(firstGenerate.request)).toEqual({
-    schema: 7,
+    schema: 8,
     at: {
       id: AT_SLOT_ID,
       renderer: 'dinucleotide_skew',
